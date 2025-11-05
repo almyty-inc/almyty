@@ -567,7 +567,16 @@ export function ToolsPage() {
                   <Copy className="h-3 w-3 mr-1" />
                   Copy Endpoint
                 </Button>
-                <Button size="sm" variant="outline">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    // Close details dialog and open execution dialog
+                    setIsDetailsDialogOpen(false)
+                    setToolForExecution(selectedTool)
+                    setIsExecutionDialogOpen(true)
+                  }}
+                >
                   <Play className="h-3 w-3 mr-1" />
                   Test Tool
                 </Button>
@@ -575,11 +584,10 @@ export function ToolsPage() {
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    // Scroll to parameters section in the dialog
-                    const paramsSection = document.getElementById('tool-parameters-section')
-                    if (paramsSection) {
-                      paramsSection.scrollIntoView({ behavior: 'smooth' })
-                    }
+                    // Close details dialog and open execution dialog to show parameters
+                    setIsDetailsDialogOpen(false)
+                    setToolForExecution(selectedTool)
+                    setIsExecutionDialogOpen(true)
                   }}
                 >
                   <ExternalLink className="h-3 w-3 mr-1" />
