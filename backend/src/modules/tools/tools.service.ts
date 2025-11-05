@@ -322,6 +322,8 @@ export class ToolsService {
       .leftJoinAndSelect('tool.categories', 'category')
       .leftJoinAndSelect('tool.operation', 'operation')
       .leftJoinAndSelect('operation.api', 'api')
+      .leftJoinAndSelect('tool.gatewayAssociations', 'gatewayAssociation')
+      .leftJoinAndSelect('gatewayAssociation.gateway', 'gateway')
       .where('tool.organizationId = :organizationId', { organizationId: filters.organizationId });
 
     // Apply filters
