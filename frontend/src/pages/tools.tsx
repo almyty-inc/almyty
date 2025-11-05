@@ -542,10 +542,20 @@ export function ToolsPage() {
               </div>
 
               <div className="border-t pt-4">
-                <h4 className="text-sm font-medium mb-2">Gateway Assignment</h4>
-                <p className="text-sm text-muted-foreground">
-                  Go to the <a href="/gateways" className="underline">Gateways page</a> to assign this tool to MCP/UTCP/A2A gateways and make it accessible to LLMs.
-                </p>
+                <h4 className="text-sm font-medium mb-2">Assigned Gateways</h4>
+                <div className="flex gap-2 flex-wrap">
+                  {selectedTool?.gatewayAssociations?.length > 0 ? (
+                    selectedTool.gatewayAssociations.map((assoc: any) => (
+                      <Badge key={assoc.id} variant="secondary">
+                        {assoc.gateway?.name || 'Unknown'} ({assoc.gateway?.type?.toUpperCase() || 'N/A'})
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Not assigned to any gateway. Go to <a href="/gateways" className="underline">Gateways page</a> to assign this tool.
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-2 pt-4 border-t">
