@@ -378,6 +378,19 @@ export function GatewaysPage() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      title="Edit gateway"
+                      aria-label="Edit gateway"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedGateway(gateway)
+                        setGatewayDetailsOpen(true)
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       title="Copy endpoint"
                       aria-label="Copy endpoint"
                       onClick={async (e) => {
@@ -537,24 +550,24 @@ export function GatewaysPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Gateway Details Sheet */}
-      <Sheet open={gatewayDetailsOpen} onOpenChange={(open) => {
+      {/* Gateway Details Dialog */}
+      <Dialog open={gatewayDetailsOpen} onOpenChange={(open) => {
         setGatewayDetailsOpen(open)
         if (!open) setSelectedGateway(null)
       }}>
-        <SheetContent className="w-[900px] sm:w-[1000px] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
               <Router className="h-5 w-5" />
               {selectedGateway?.name}
               <Badge variant={selectedGateway?.status === 'active' ? 'default' : 'secondary'}>
                 {selectedGateway?.status}
               </Badge>
-            </SheetTitle>
-            <SheetDescription>
+            </DialogTitle>
+            <DialogDescription>
               Gateway configuration and tool scoping management
-            </SheetDescription>
-          </SheetHeader>
+            </DialogDescription>
+          </DialogHeader>
 
           {selectedGateway && (
             <Tabs defaultValue="overview" className="w-full mt-6">
@@ -839,8 +852,7 @@ export function GatewaysPage() {
                       </Select>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Authentication configuration is managed at the organization level.
-                      Contact your administrator to modify authentication settings.
+                      Configure authentication for this specific gateway. Each gateway can have its own authentication settings.
                     </p>
                   </CardContent>
                 </Card>
@@ -905,8 +917,8 @@ export function GatewaysPage() {
               </TabsContent>
             </Tabs>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* Remove All Tools Confirmation Dialog */}
       <AlertDialog open={removeAllToolsDialogOpen} onOpenChange={setRemoveAllToolsDialogOpen}>
