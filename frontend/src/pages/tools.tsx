@@ -571,14 +571,18 @@ export function ToolsPage() {
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    // Close details dialog and open execution dialog
-                    setIsDetailsDialogOpen(false)
-                    setToolForExecution(selectedTool)
-                    setIsExecutionDialogOpen(true)
+                    // Execute tool with empty parameters for quick test
+                    if (selectedTool) {
+                      executeToolMutation.mutate({
+                        toolId: selectedTool.id,
+                        parameters: {}
+                      })
+                    }
                   }}
+                  disabled={executeToolMutation.isPending}
                 >
                   <Play className="h-3 w-3 mr-1" />
-                  Test Tool
+                  {executeToolMutation.isPending ? 'Testing...' : 'Test Tool'}
                 </Button>
                 <Button
                   size="sm"
