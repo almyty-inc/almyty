@@ -563,7 +563,17 @@ export function ToolsPage() {
                   <Play className="h-3 w-3 mr-1" />
                   Test Tool
                 </Button>
-                <Button size="sm" variant="outline">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    // Scroll to parameters section in the dialog
+                    const paramsSection = document.getElementById('tool-parameters-section')
+                    if (paramsSection) {
+                      paramsSection.scrollIntoView({ behavior: 'smooth' })
+                    }
+                  }}
+                >
                   <ExternalLink className="h-3 w-3 mr-1" />
                   View Parameters
                 </Button>
