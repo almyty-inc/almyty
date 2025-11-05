@@ -729,7 +729,7 @@ export function ToolsPage() {
           {toolForExecution && (
             <div className="space-y-6">
               {/* Parameters Section */}
-              <div className="space-y-4">
+              <div id="tool-parameters-section" className="space-y-4">
                 <h4 className="text-sm font-medium">Parameters</h4>
 
                 {/* Simple parameter inputs - expand based on tool.parameters schema */}
