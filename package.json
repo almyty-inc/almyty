@@ -1,0 +1,70 @@
+{
+  "name": "apifai",
+  "version": "1.0.0",
+  "description": "apifai - Universal API to AI Tool Gateway System",
+  "main": "index.js",
+  "scripts": {
+    "backend:install": "cd backend && npm install",
+    "frontend:install": "cd frontend && npm install",
+    "backend:dev": "cd backend && npm run start:dev",
+    "frontend:dev": "cd frontend && npm run dev",
+    "backend:build": "cd backend && npm run build",
+    "frontend:build": "cd frontend && npm run build",
+    "backend:test": "cd backend && npm run test",
+    "frontend:test": "cd frontend && npm run test",
+    "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\"",
+    "build": "npm run backend:build && npm run frontend:build",
+    "setup": "npm run backend:install && npm run frontend:install",
+    
+    "test": "npm run test:backend && npm run test:frontend && npm run test:e2e",
+    "test:backend": "cd backend && npm run test:cov",
+    "test:frontend": "cd frontend && npm run test:coverage", 
+    "test:e2e": "cd frontend && npm run test:e2e",
+    "test:watch": "concurrently \"npm run test:watch:backend\" \"npm run test:watch:frontend\"",
+    "test:watch:backend": "cd backend && npm run test:watch",
+    "test:watch:frontend": "cd frontend && npm run test -- --watch",
+    
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "lint:backend": "cd backend && npm run lint",
+    "lint:frontend": "cd frontend && npm run lint",
+    
+    "clean": "npm run clean:backend && npm run clean:frontend",
+    "clean:backend": "cd backend && rimraf dist coverage node_modules",
+    "clean:frontend": "cd frontend && rimraf dist coverage node_modules playwright-report test-results",
+    
+    "playwright:install": "cd frontend && npx playwright install",
+    
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "migrate": "cd backend && npm run typeorm:migration:run",
+    "migrate:generate": "cd backend && npm run typeorm:migration:generate",
+    "seed": "cd backend && npm run seed"
+  },
+  "keywords": [
+    "apifai",
+    "api",
+    "ai",
+    "gateway",
+    "tools",
+    "llm",
+    "openai",
+    "claude",
+    "nestjs",
+    "react"
+  ],
+  "author": "frane",
+  "license": "BSL-1.1",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/frane/apifai.git"
+  }
+}

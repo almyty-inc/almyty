@@ -1,0 +1,289 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { buildSchema, GraphQLSchema, isObjectType, isScalarType, isEnumType, GraphQLObjectType, GraphQLField, GraphQLArgument } from 'graphql';
+
+import { Operation, OperationType, HttpMethod } from '../../../entities/operation.entity';
+import { Resource, ResourceType } from '../../../entities/resource.entity';
+import { SchemaParser, ParsedSchema, ParsedOperation, ParsedResource } from '../interfaces/parser.interface';
+
+@Injectable()
+export class GraphQLParserService implements SchemaParser {
+  private readonly logger = new Logger(GraphQLParserService.name);
+
+  async parseSchema(rawSchema: string, fileName?: string): Promise<ParsedSchema> {
+    try {
+      const schema = buildSchema(rawSchema);
+      
+      const operations = await this.extractOperationsFromGraphQL(schema);
+      const resources = await this.extractResourcesFromGraphQL(schema);
+
+      return {
+        version: '1.0.0', // GraphQL doesn't have versioning in schema
+        info: {
+          title: 'GraphQL API',
+          description: 'Generated from GraphQL schema',
+          version: '1.0.0',
+        },
+        operations,
+        resources,
+        metadata: {
+          fileName,
+          schemaType: 'graphql',
+          originalSchema: rawSchema,
+        },
+      };
+    } catch (error) {
+      this.logger.error(`Failed to parse GraphQL schema: ${error.message}`);
+      throw new Error(`Invalid GraphQL schema: ${error.message}`);
+    }
+  }
+
+  async validateSchema(schema: string): Promise<{ isValid: boolean; errors: string[] }> {
+    try {
+      buildSchema(schema);
+      return { isValid: true, errors: [] };
+    } catch (error) {
+      return {
+        isValid: false,
+        errors: [error.message],
+      };
+    }
+  }
+
+  async extractOperations(schema: ParsedSchema): Promise<Operation[]> {
+    const operations: Operation[] = [];
+
+    for (const parsedOp of schema.operations) {
+      const operation = new Operation();
+      operation.name = parsedOp.name;
+      operation.operationId = parsedOp.operationId;
+      operation.description = parsedOp.description;
+      operation.method = HttpMethod.POST; // GraphQL typically uses POST
+      operation.endpoint = '/graphql';
+      operation.type = parsedOp.method === 'query' ? OperationType.QUERY : OperationType.MUTATION;
+      operation.parameters = parsedOp.parameters;
+      operation.responses = parsedOp.responses;
+      operation.tags = parsedOp.tags;
+      operation.isActive = true;
+
+      operations.push(operation);
+    }
+
+    return operations;
+  }
+
+  async extractResources(schema: ParsedSchema): Promise<Resource[]> {
+    const resources: Resource[] = [];
+
+    for (const parsedResource of schema.resources) {
+      const resource = new Resource();
+      resource.name = parsedResource.name;
+      resource.description = parsedResource.description;
+      resource.type = parsedResource.type as ResourceType;
+      resource.properties = parsedResource.properties;
+      resource.schema = parsedResource.schema;
+      resource.isActive = true;
+
+      resources.push(resource);
+    }
+
+    return resources;
+  }
+
+  private async extractOperationsFromGraphQL(schema: GraphQLSchema): Promise<ParsedOperation[]> {
+    const operations: ParsedOperation[] = [];
+
+    // Extract queries
+    const queryType = schema.getQueryType();
+    if (queryType) {
+      const queryFields = queryType.getFields();
+      for (const [fieldName, field] of Object.entries(queryFields)) {
+        operations.push(this.createOperationFromField(fieldName, field, 'query'));
+      }
+    }
+
+    // Extract mutations
+    const mutationType = schema.getMutationType();
+    if (mutationType) {
+      const mutationFields = mutationType.getFields();
+      for (const [fieldName, field] of Object.entries(mutationFields)) {
+        operations.push(this.createOperationFromField(fieldName, field, 'mutation'));
+      }
+    }
+
+    // Extract subscriptions
+    const subscriptionType = schema.getSubscriptionType();
+    if (subscriptionType) {
+      const subscriptionFields = subscriptionType.getFields();
+      for (const [fieldName, field] of Object.entries(subscriptionFields)) {
+        operations.push(this.createOperationFromField(fieldName, field, 'subscription'));
+      }
+    }
+
+    return operations;
+  }
+
+  private createOperationFromField(fieldName: string, field: GraphQLField<any, any>, operationType: string): ParsedOperation {
+    return {
+      operationId: `${operationType}_${fieldName}`,
+      name: fieldName,
+      description: field.description,
+      method: operationType,
+      endpoint: `/graphql`,
+      parameters: {
+        body: {
+          query: {
+            type: 'string',
+            description: 'GraphQL query string',
+            required: true,
+          },
+          variables: {
+            type: 'object',
+            description: 'GraphQL variables',
+            properties: this.extractArgumentsAsProperties(field.args),
+          },
+        },
+      },
+      responses: {
+        '200': {
+          description: 'GraphQL response',
+          schema: {
+            type: 'object',
+            properties: {
+              data: this.convertGraphQLTypeToJsonSchema(field.type),
+              errors: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    message: { type: 'string' },
+                    path: { type: 'array' },
+                    extensions: { type: 'object' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      tags: [operationType],
+    };
+  }
+
+  private extractArgumentsAsProperties(args: readonly GraphQLArgument[]): Record<string, any> {
+    const properties: Record<string, any> = {};
+
+    for (const arg of args) {
+      properties[arg.name] = {
+        ...this.convertGraphQLTypeToJsonSchema(arg.type),
+        description: arg.description,
+      };
+    }
+
+    return properties;
+  }
+
+  private async extractResourcesFromGraphQL(schema: GraphQLSchema): Promise<ParsedResource[]> {
+    const resources: ParsedResource[] = [];
+    const typeMap = schema.getTypeMap();
+
+    for (const [typeName, type] of Object.entries(typeMap)) {
+      // Skip built-in GraphQL types
+      if (typeName.startsWith('__')) continue;
+
+      if (isObjectType(type) && !['Query', 'Mutation', 'Subscription'].includes(typeName)) {
+        const fields = type.getFields();
+        const properties: Record<string, any> = {};
+
+        for (const [fieldName, field] of Object.entries(fields)) {
+          properties[fieldName] = {
+            ...this.convertGraphQLTypeToJsonSchema(field.type),
+            description: field.description,
+            required: false, // GraphQL handles this differently
+          };
+        }
+
+        resources.push({
+          name: typeName,
+          description: type.description,
+          type: ResourceType.MODEL,
+          properties,
+          schema: {
+            type: 'object',
+            properties,
+            description: type.description,
+          },
+        });
+      } else if (isEnumType(type)) {
+        const enumValues = type.getValues().map(value => value.value);
+        
+        resources.push({
+          name: typeName,
+          description: type.description,
+          type: ResourceType.ENUM,
+          properties: {},
+          schema: {
+            type: 'string',
+            enum: enumValues,
+            description: type.description,
+          },
+        });
+      }
+    }
+
+    return resources;
+  }
+
+  private convertGraphQLTypeToJsonSchema(graphqlType: any): Record<string, any> {
+    // Handle NonNull types
+    if (graphqlType.ofType) {
+      return this.convertGraphQLTypeToJsonSchema(graphqlType.ofType);
+    }
+
+    // Handle List types
+    if (graphqlType.toString().startsWith('[')) {
+      return {
+        type: 'array',
+        items: this.convertGraphQLTypeToJsonSchema(graphqlType.ofType),
+      };
+    }
+
+    // Handle scalar types
+    if (isScalarType(graphqlType)) {
+      switch (graphqlType.name) {
+        case 'String':
+          return { type: 'string' };
+        case 'Int':
+        case 'Float':
+          return { type: 'number' };
+        case 'Boolean':
+          return { type: 'boolean' };
+        case 'ID':
+          return { type: 'string' };
+        default:
+          return { type: 'string' };
+      }
+    }
+
+    // Handle enum types
+    if (isEnumType(graphqlType)) {
+      return {
+        type: 'string',
+        enum: graphqlType.getValues().map(value => value.value),
+      };
+    }
+
+    // Handle object types
+    if (isObjectType(graphqlType)) {
+      return {
+        type: 'object',
+        description: graphqlType.description,
+      };
+    }
+
+    // Default fallback
+    return {
+      type: 'object',
+      description: 'GraphQL type',
+    };
+  }
+}

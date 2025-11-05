@@ -1,0 +1,79 @@
+# Business Source License 1.1
+
+## License
+
+Business Source License 1.1
+
+## Parameters
+
+**Licensor:** frane
+
+**Licensed Work:** apifai - Universal API to AI Tool Gateway System
+
+**Additional Use Grant:** You may use the Licensed Work for any purpose other than a Competing Use, and provided that your usage does not exceed the Usage Limits defined below.
+
+**Usage Limits:** You may use the Licensed Work in production environments with a maximum of 5 gateway instances per organization.
+
+**Change Date:** January 1, 2028
+
+**Change License:** MIT License
+
+## Terms
+
+The Business Source License (this document, or the "License") is not an Open Source license. However, the Licensed Work will eventually be made available under an Open Source License, as stated in this License.
+
+## License Grant
+
+Subject to the terms and conditions of this License, Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make non-production use of the Licensed Work. The foregoing rights are effective on the date Licensor first distributes or otherwise makes the Licensed Work available to a third party.
+
+Notwithstanding the above, you may not use the Licensed Work for a Competing Use or in excess of the Usage Limits. 
+
+A "Competing Use" means to use the Licensed Work to:
+(a) provide a commercial API gateway service to third parties;
+(b) offer LLM tool management or integration services as a business;
+(c) create any commercial service that substitutes for, or offers substantially similar functionality to, apifai;
+(d) redistribute apifai as part of a competing software product or service.
+
+"Usage Limits" means the Licensed Work may be used in production environments with a maximum of 5 active gateway instances per organization. A "gateway instance" is defined as a single deployed apifai backend service, regardless of load balancing or clustering configuration.
+
+## Additional Use Grant
+
+You may use the Licensed Work for any purpose other than a Competing Use and within the Usage Limits, including but not limited to:
+
+- Internal business use (up to 5 gateway instances)
+- Research and development
+- Educational purposes
+- Professional services for clients (using their apifai instances, not offering apifai-as-a-service)
+- Non-commercial personal projects
+
+## Future License
+
+On the Change Date, or the fourth anniversary of the first publicly available distribution of a specific version of the Licensed Work under this License, whichever comes first, the License rights granted to you for that version of the Licensed Work shall be made available under the terms of the Change License, and information regarding this may be found elsewhere.
+
+## Disclaimer
+
+THE LICENSED WORK IS PROVIDED "AS IS". LICENSOR HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
+
+MariaDB hereby grants you permission to use this License's text to license your works, and to refer to it using the trademark "Business Source License", as long as you comply with the Covenants of Licensor below.
+
+## Covenants of Licensor
+
+In consideration of the right to use this License's text and the "Business Source License" name and trademark, Licensor covenants to MariaDB, and to all other recipients of the licensed work to be provided by Licensor:
+
+1. To specify as the Change License the GPL Version 2.0 or any later version, or a license that is compatible with GPL Version 2.0 or a later version, where "compatible" means that software provided under the Change License can be included in a program with software provided under GPL Version 2.0 or a later version. Licensor may specify additional Change Licenses without limitation.
+
+2. To either: (a) specify an additional grant of rights to use that does not impose any additional restriction on the right granted in this License, as the Additional Use Grant; or (b) insert the text "None".
+
+3. To specify a Change Date.
+
+4. Not to modify this License in any other way.
+
+---
+
+**MIT License** (Effective January 1, 2028)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

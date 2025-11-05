@@ -1,0 +1,48 @@
+npm warn cli npm v11.5.1 does not support Node.js v22.3.0. This version of npm supports the following node versions: `^20.17.0 || >=22.9.0`. You can find the latest version at https://nodejs.org/.
+
+🚀 Starting E2E test environment setup...
+
+✓ Docker is running
+
+📦 Starting Docker Compose services...
+✓ Services already running
+
+⏳ Waiting for services to be healthy...
+✓ Backend API is healthy
+
+🗄️  Running database migrations...
+⚠ Migration failed (might already be up to date): Error: Command failed: cd ../backend && npm run migration:run
+npm warn cli npm v11.5.1 does not support Node.js v22.3.0. This version of npm supports the following node versions: `^20.17.0 || >=22.9.0`. You can find the latest version at https://nodejs.org/.
+npm error Missing script: "migration:run"
+npm error
+npm error To see a list of scripts, run:
+npm error   npm run
+npm error A complete log of this run can be found in: /Users/frane/.npm/_logs/2025-10-16T09_41_59_787Z-debug-0.log
+
+    at genericNodeError (node:internal/errors:983:15)
+    at wrappedFn (node:internal/errors:537:14)
+    at ChildProcess.exithandler (node:child_process:421:12)
+    at ChildProcess.emit (node:events:520:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Socket.<anonymous> (node:internal/child_process:457:11)
+    at Socket.emit (node:events:520:28)
+    at Pipe.<anonymous> (node:net:339:12) {
+  code: 1,
+  killed: false,
+  signal: null,
+  cmd: 'cd ../backend && npm run migration:run',
+  stdout: '',
+  stderr: 'npm warn cli npm v11.5.1 does not support Node.js v22.3.0. This version of npm supports the following node versions: `^20.17.0 || >=22.9.0`. You can find the latest version at https://nodejs.org/.\n' +
+    'npm error Missing script: "migration:run"\n' +
+    'npm error\n' +
+    'npm error To see a list of scripts, run:\n' +
+    'npm error   npm run\n' +
+    'npm error A complete log of this run can be found in: /Users/frane/.npm/_logs/2025-10-16T09_41_59_787Z-debug-0.log\n'
+}
+
+🧹 Cleaning test database...
+  - Removing test users...
+✓ Test database cleaned
+
+✅ E2E test environment ready!
+

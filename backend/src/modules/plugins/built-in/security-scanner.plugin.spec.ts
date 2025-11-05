@@ -1,0 +1,573 @@
+import { SecurityScannerPlugin } from './security-scanner.plugin';
+import { PluginContext, PluginHookType } from '../types/plugin.types';
+
+describe('SecurityScannerPlugin - Real Business Logic', () => {
+  let plugin: SecurityScannerPlugin;
+  let mockSettings: any;
+  let mockContext: PluginContext;
+  let consoleLogSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    plugin = new SecurityScannerPlugin();
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+
+    mockSettings = {
+      scanRequests: true,
+      scanResponses: true,
+      scanToolParameters: true,
+      scanApiCalls: true,
+      blockOnThreat: true,
+      logThreats: true,
+      alertOnCritical: true,
+      whitelistPatterns: [],
+      customPatterns: [],
+      severityThreshold: 'medium',
+    };
+
+    mockContext = {
+      hookType: PluginHookType.PRE_REQUEST,
+      userId: 'user-1',
+      organizationId: 'org-1',
+      requestId: 'req-1',
+      data: { test: 'clean data' },
+      metadata: {
+        timestamp: new Date().toISOString(),
+        plugin: {
+          id: 'plugin-1',
+          name: 'Security Scanner',
+          version: '1.0.0',
+        },
+        execution: {
+          attempt: 1,
+          timeout: 5000,
+          startTime: Date.now(),
+        },
+      },
+    };
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
+  });
+
+  describe('Plugin Definition', () => {
+    it('should return plugin definition with correct metadata', () => {
+      const definition = plugin.getPluginDefinition();
+
+      expect(definition.name).toBe('Security Scanner');
+      expect(definition.version).toBe('1.0.0');
+      expect(definition.isActive).toBe(true);
+      expect(definition.configuration.priority).toBe(95); // Very high priority
+    });
+
+    it('should define correct hook types', () => {
+      const definition = plugin.getPluginDefinition();
+
+      expect(definition.capabilities.hooks).toContain(PluginHookType.PRE_REQUEST);
+      expect(definition.capabilities.hooks).toContain(PluginHookType.POST_RESPONSE);
+      expect(definition.capabilities.hooks).toContain(PluginHookType.PRE_TOOL_EXECUTION);
+      expect(definition.capabilities.hooks).toContain(PluginHookType.DATA_VALIDATE);
+    });
+
+    it('should define hooks with correct handlers', () => {
+      const definition = plugin.getPluginDefinition();
+
+      expect(definition.hooks).toHaveLength(4);
+      expect(definition.hooks[0].handler).toBe('scanRequest');
+      expect(definition.hooks[1].handler).toBe('scanResponse');
+      expect(definition.hooks[2].handler).toBe('scanToolParameters');
+      expect(definition.hooks[3].handler).toBe('scanData');
+    });
+  });
+
+  describe('SQL Injection Detection', () => {
+    it('should detect SQL injection with UNION SELECT', async () => {
+      const contextWithSQLi = {
+        ...mockContext,
+        data: { query: "1' UNION SELECT * FROM users--" },
+      };
+
+      const result = await plugin.scanRequest(contextWithSQLi, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('SECURITY_THREAT_DETECTED');
+      expect(result.error?.message).toContain('SQL injection');
+      expect(result.nextAction).toBe('stop');
+    });
+
+    it('should detect SQL injection with OR 1=1', async () => {
+      const contextWithSQLi = {
+        ...mockContext,
+        data: { username: "admin' OR '1'='1" },
+      };
+
+      const result = await plugin.scanRequest(contextWithSQLi, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats.length).toBeGreaterThan(0);
+      expect(result.error?.details.threats[0].type).toBe('sql_injection');
+      expect(result.error?.details.threats[0].severity).toBe('high');
+    });
+
+    it('should detect SQL injection with comment markers', async () => {
+      const contextWithSQLi = {
+        ...mockContext,
+        data: "SELECT * FROM table WHERE id = '1'--",
+      };
+
+      const result = await plugin.scanRequest(contextWithSQLi, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].type).toBe('sql_injection');
+    });
+
+    it('should allow clean SQL-like queries', async () => {
+      const contextClean = {
+        ...mockContext,
+        data: { search: 'select a product from our catalog' },
+      };
+
+      const result = await plugin.scanRequest(contextClean, mockSettings);
+
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('XSS Detection', () => {
+    it('should detect XSS with script tags', async () => {
+      const contextWithXSS = {
+        ...mockContext,
+        data: { comment: '<script>alert("XSS")</script>' },
+      };
+
+      const result = await plugin.scanRequest(contextWithXSS, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('SECURITY_THREAT_DETECTED');
+      expect(result.error?.message).toContain('XSS');
+      expect(result.error?.details.threats[0].type).toBe('xss');
+    });
+
+    it('should detect XSS with javascript: protocol', async () => {
+      const contextWithXSS = {
+        ...mockContext,
+        data: { link: 'javascript:void(0)' },
+      };
+
+      const result = await plugin.scanRequest(contextWithXSS, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].type).toBe('xss');
+      expect(result.error?.details.threats[0].severity).toBe('high');
+    });
+
+    it('should detect XSS with event handlers', async () => {
+      const contextWithXSS = {
+        ...mockContext,
+        data: '<img src="x" onerror="alert(1)">',
+      };
+
+      const result = await plugin.scanRequest(contextWithXSS, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].type).toBe('xss');
+    });
+
+    it('should detect XSS with iframe tags', async () => {
+      const contextWithXSS = {
+        ...mockContext,
+        data: '<iframe src="evil.com"></iframe>',
+      };
+
+      const result = await plugin.scanRequest(contextWithXSS, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain('XSS');
+    });
+  });
+
+  describe('Command Injection Detection', () => {
+    it('should detect command injection with pipe', async () => {
+      const contextWithCmdInj = {
+        ...mockContext,
+        data: { filename: 'file.txt | cat /etc/passwd' },
+      };
+
+      const result = await plugin.scanRequest(contextWithCmdInj, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('SECURITY_THREAT_DETECTED');
+      expect(result.error?.details.threats[0].type).toBe('command_injection');
+      expect(result.error?.details.threats[0].severity).toBe('critical');
+    });
+
+    it('should detect command injection with semicolon', async () => {
+      const contextWithCmdInj = {
+        ...mockContext,
+        data: 'input.txt; rm -rf /',
+      };
+
+      const result = await plugin.scanRequest(contextWithCmdInj, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].severity).toBe('critical');
+    });
+
+    it('should detect command injection with backticks', async () => {
+      const contextWithCmdInj = {
+        ...mockContext,
+        data: { cmd: '`whoami`' },
+      };
+
+      const result = await plugin.scanRequest(contextWithCmdInj, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].type).toBe('command_injection');
+    });
+
+    it('should detect command injection with $() syntax', async () => {
+      const contextWithCmdInj = {
+        ...mockContext,
+        data: 'file$(ls -la)',
+      };
+
+      const result = await plugin.scanRequest(contextWithCmdInj, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].type).toBe('command_injection');
+    });
+  });
+
+  describe('Path Traversal Detection', () => {
+    it('should detect path traversal with ../', async () => {
+      const contextWithPathTraversal = {
+        ...mockContext,
+        data: { path: '../../etc/passwd' },
+      };
+
+      const result = await plugin.scanRequest(contextWithPathTraversal, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].type).toBe('path_traversal');
+      expect(result.error?.details.threats[0].severity).toBe('medium');
+    });
+
+    it('should detect path traversal with backslashes', async () => {
+      const contextWithPathTraversal = {
+        ...mockContext,
+        data: '..\\..\\windows\\system32',
+      };
+
+      const result = await plugin.scanRequest(contextWithPathTraversal, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].type).toBe('path_traversal');
+    });
+
+    it('should detect URL-encoded path traversal', async () => {
+      const contextWithPathTraversal = {
+        ...mockContext,
+        data: { file: '%2e%2e/secret.txt' },
+      };
+
+      const result = await plugin.scanRequest(contextWithPathTraversal, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].type).toBe('path_traversal');
+    });
+  });
+
+  describe('Custom Patterns', () => {
+    it('should detect custom security patterns', async () => {
+      const settingsWithCustom = {
+        ...mockSettings,
+        customPatterns: [
+          {
+            pattern: 'API_KEY_[A-Z0-9]{32}',
+            description: 'API key detected',
+            severity: 'high',
+            flags: 'i',
+          },
+        ],
+      };
+
+      const contextWithApiKey = {
+        ...mockContext,
+        data: { config: 'API_KEY_ABCDEF1234567890ABCDEF1234567890' },
+      };
+
+      const result = await plugin.scanRequest(contextWithApiKey, settingsWithCustom);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].type).toBe('suspicious_pattern');
+      expect(result.error?.details.threats[0].description).toBe('API key detected');
+      expect(result.error?.details.threats[0].severity).toBe('high');
+    });
+
+    it('should handle invalid custom regex gracefully', async () => {
+      const settingsWithInvalidRegex = {
+        ...mockSettings,
+        customPatterns: [
+          {
+            pattern: '[invalid(regex',
+            description: 'Invalid',
+            severity: 'low',
+          },
+        ],
+      };
+
+      const result = await plugin.scanRequest(mockContext, settingsWithInvalidRegex);
+
+      expect(result.success).toBe(true); // Should not fail on invalid regex
+    });
+  });
+
+  describe('Scanning Behavior', () => {
+    it('should skip scanning when scanRequests is false', async () => {
+      const settingsNoScan = { ...mockSettings, scanRequests: false };
+      const contextWithThreat = {
+        ...mockContext,
+        data: "'; DROP TABLE users--",
+      };
+
+      const result = await plugin.scanRequest(contextWithThreat, settingsNoScan);
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.executionTime).toBe(0);
+    });
+
+    it('should skip scanning responses when scanResponses is false', async () => {
+      const settingsNoScan = { ...mockSettings, scanResponses: false };
+      const contextWithThreat = {
+        ...mockContext,
+        data: '<script>alert(1)</script>',
+      };
+
+      const result = await plugin.scanResponse(contextWithThreat, settingsNoScan);
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.executionTime).toBe(0);
+    });
+
+    it('should skip scanning tool parameters when scanToolParameters is false', async () => {
+      const settingsNoScan = { ...mockSettings, scanToolParameters: false };
+      const contextWithThreat = {
+        ...mockContext,
+        data: { cmd: '| rm -rf /' },
+      };
+
+      const result = await plugin.scanToolParameters(contextWithThreat, settingsNoScan);
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.executionTime).toBe(0);
+    });
+
+    it('should log threats when logThreats is true', async () => {
+      const contextWithThreat = {
+        ...mockContext,
+        data: '<script>alert(1)</script>',
+      };
+
+      await plugin.scanRequest(contextWithThreat, mockSettings);
+
+      expect(consoleLogSpy).toHaveBeenCalled();
+      const loggedData = JSON.parse(consoleLogSpy.mock.calls[0][0]);
+      expect(loggedData.type).toBe('security_scan');
+      expect(loggedData.threats).toHaveLength(1);
+    });
+
+    it('should not log when logThreats is false', async () => {
+      const settingsNoLog = { ...mockSettings, logThreats: false };
+      const contextWithThreat = {
+        ...mockContext,
+        data: '<script>alert(1)</script>',
+      };
+
+      await plugin.scanRequest(contextWithThreat, settingsNoLog);
+
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Blocking Behavior', () => {
+    it('should block on critical threats when blockOnThreat is true', async () => {
+      const contextWithCritical = {
+        ...mockContext,
+        data: '| rm -rf /',
+      };
+
+      const result = await plugin.scanRequest(contextWithCritical, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.nextAction).toBe('stop');
+      expect(result.error?.details.blocked).toBe(true);
+    });
+
+    it('should not block when blockOnThreat is false', async () => {
+      const settingsNoBlock = { ...mockSettings, blockOnThreat: false };
+      const contextWithThreat = {
+        ...mockContext,
+        data: '<script>alert(1)</script>',
+      };
+
+      const result = await plugin.scanRequest(contextWithThreat, settingsNoBlock);
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.warnings).toHaveLength(1);
+      expect(result.metadata.warnings[0]).toContain('security threats detected but not blocked');
+    });
+
+    it('should respect severity threshold - high', async () => {
+      const settingsHighThreshold = { ...mockSettings, severityThreshold: 'high' };
+      const contextWithMediumThreat = {
+        ...mockContext,
+        data: '../etc/passwd',
+      };
+
+      const result = await plugin.scanRequest(contextWithMediumThreat, settingsHighThreshold);
+
+      // Medium threat should not be blocked with high threshold
+      expect(result.success).toBe(true);
+      expect(result.metadata.warnings).toHaveLength(1);
+    });
+
+    it('should respect severity threshold - medium', async () => {
+      const settingsMediumThreshold = { ...mockSettings, severityThreshold: 'medium' };
+      const contextWithMediumThreat = {
+        ...mockContext,
+        data: '../etc/passwd',
+      };
+
+      const result = await plugin.scanRequest(contextWithMediumThreat, settingsMediumThreshold);
+
+      // Medium threat should be blocked with medium threshold
+      expect(result.success).toBe(false);
+      expect(result.nextAction).toBe('stop');
+    });
+  });
+
+  describe('Multiple Threats', () => {
+    it('should detect multiple threat types', async () => {
+      const contextWithMultiple = {
+        ...mockContext,
+        data: {
+          sql: "' OR 1=1--",
+          xss: '<script>alert(1)</script>',
+          path: '../../secret',
+        },
+      };
+
+      const result = await plugin.scanRequest(contextWithMultiple, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats.length).toBeGreaterThan(1);
+    });
+
+    it('should list all threat descriptions in error message', async () => {
+      const contextWithMultiple = {
+        ...mockContext,
+        data: "' UNION SELECT * FROM users-- <script>alert(1)</script>",
+      };
+
+      const result = await plugin.scanRequest(contextWithMultiple, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats.length).toBeGreaterThan(1);
+      expect(result.error?.message).toContain('SQL injection');
+      expect(result.error?.message).toContain('XSS');
+    });
+  });
+
+  describe('Data Type Handling', () => {
+    it('should handle string data', async () => {
+      const contextWithString = {
+        ...mockContext,
+        data: '<script>alert(1)</script>',
+      };
+
+      const result = await plugin.scanRequest(contextWithString, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].type).toBe('xss');
+    });
+
+    it('should handle object data', async () => {
+      const contextWithObject = {
+        ...mockContext,
+        data: {
+          nested: { value: '<script>alert(1)</script>' },
+        },
+      };
+
+      const result = await plugin.scanRequest(contextWithObject, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.threats[0].type).toBe('xss');
+    });
+
+    it('should handle clean data', async () => {
+      const contextClean = {
+        ...mockContext,
+        data: { message: 'This is clean text' },
+      };
+
+      const result = await plugin.scanRequest(contextClean, mockSettings);
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.warnings).toHaveLength(0);
+    });
+  });
+
+  describe('scanData - Direct data validation', () => {
+    it('should scan data directly', async () => {
+      const contextWithThreat = {
+        ...mockContext,
+        data: '<script>alert(1)</script>',
+      };
+
+      const result = await plugin.scanData(contextWithThreat, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.details.scanType).toBe('data');
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle scan errors gracefully', async () => {
+      // Create circular reference to trigger JSON.stringify error
+      const circularData: any = { name: 'test' };
+      circularData.self = circularData;
+
+      const contextWithCircular = {
+        ...mockContext,
+        data: circularData,
+      };
+
+      const result = await plugin.scanRequest(contextWithCircular, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('SECURITY_SCAN_ERROR');
+      expect(result.data).toBe(circularData);
+    });
+  });
+
+  describe('Execution Time Tracking', () => {
+    it('should track execution time', async () => {
+      const result = await plugin.scanRequest(mockContext, mockSettings);
+
+      expect(result.metadata.executionTime).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should track execution time even on threats', async () => {
+      const contextWithThreat = {
+        ...mockContext,
+        data: '<script>alert(1)</script>',
+      };
+
+      const result = await plugin.scanRequest(contextWithThreat, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.metadata.executionTime).toBeGreaterThanOrEqual(0);
+    });
+  });
+});
