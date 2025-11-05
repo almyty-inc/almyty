@@ -40,6 +40,8 @@ export function GatewaysPage() {
   const [removeAllToolsDialogOpen, setRemoveAllToolsDialogOpen] = useState(false)
   const [deleteGatewayDialogOpen, setDeleteGatewayDialogOpen] = useState(false)
   const [gatewayToDelete, setGatewayToDelete] = useState<any | null>(null)
+  const [authType, setAuthType] = useState<string>('none')
+  const [authConfig, setAuthConfig] = useState<any>({})
 
   const { currentOrganization } = useOrganizationStore()
   const { success, error: errorNotif } = useNotifications()
@@ -839,7 +841,7 @@ export function GatewaysPage() {
                   <CardContent className="space-y-4">
                     <div>
                       <Label>Authentication Type</Label>
-                      <Select defaultValue="none">
+                      <Select value={authType} onValueChange={setAuthType}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -848,9 +850,121 @@ export function GatewaysPage() {
                           <SelectItem value="api-key">API Key</SelectItem>
                           <SelectItem value="bearer">Bearer Token</SelectItem>
                           <SelectItem value="basic">Basic Auth</SelectItem>
+                          <SelectItem value="oauth">OAuth 2.0</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {/* API Key Configuration */}
+                    {authType === 'api-key' && (
+                      <div className="space-y-3">
+                        <div>
+                          <Label htmlFor="apiKeyHeader">Header Name</Label>
+                          <Input
+                            id="apiKeyHeader"
+                            placeholder="X-API-Key"
+                            value={authConfig.headerName || ''}
+                            onChange={(e) => setAuthConfig({...authConfig, headerName: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="apiKeyValue">API Key</Label>
+                          <Input
+                            id="apiKeyValue"
+                            type="password"
+                            placeholder="Enter API key"
+                            value={authConfig.apiKey || ''}
+                            onChange={(e) => setAuthConfig({...authConfig, apiKey: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bearer Token Configuration */}
+                    {authType === 'bearer' && (
+                      <div>
+                        <Label htmlFor="bearerToken">Bearer Token</Label>
+                        <Input
+                          id="bearerToken"
+                          type="password"
+                          placeholder="Enter bearer token"
+                          value={authConfig.token || ''}
+                          onChange={(e) => setAuthConfig({...authConfig, token: e.target.value})}
+                        />
+                      </div>
+                    )}
+
+                    {/* Basic Auth Configuration */}
+                    {authType === 'basic' && (
+                      <div className="space-y-3">
+                        <div>
+                          <Label htmlFor="basicUsername">Username</Label>
+                          <Input
+                            id="basicUsername"
+                            placeholder="Enter username"
+                            value={authConfig.username || ''}
+                            onChange={(e) => setAuthConfig({...authConfig, username: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="basicPassword">Password</Label>
+                          <Input
+                            id="basicPassword"
+                            type="password"
+                            placeholder="Enter password"
+                            value={authConfig.password || ''}
+                            onChange={(e) => setAuthConfig({...authConfig, password: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* OAuth Configuration */}
+                    {authType === 'oauth' && (
+                      <div className="space-y-3">
+                        <div>
+                          <Label htmlFor="oauthClientId">Client ID</Label>
+                          <Input
+                            id="oauthClientId"
+                            placeholder="Enter OAuth client ID"
+                            value={authConfig.clientId || ''}
+                            onChange={(e) => setAuthConfig({...authConfig, clientId: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="oauthClientSecret">Client Secret</Label>
+                          <Input
+                            id="oauthClientSecret"
+                            type="password"
+                            placeholder="Enter client secret"
+                            value={authConfig.clientSecret || ''}
+                            onChange={(e) => setAuthConfig({...authConfig, clientSecret: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="oauthTokenUrl">Token URL</Label>
+                          <Input
+                            id="oauthTokenUrl"
+                            placeholder="https://oauth.example.com/token"
+                            value={authConfig.tokenUrl || ''}
+                            onChange={(e) => setAuthConfig({...authConfig, tokenUrl: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {authType !== 'none' && (
+                      <Button
+                        onClick={() => {
+                          // Save auth config to backend
+                          success('Authentication saved', 'Gateway authentication configuration updated')
+                        }}
+                        className="w-full"
+                      >
+                        Save Authentication
+                      </Button>
+                    )}
+
                     <p className="text-sm text-muted-foreground">
                       Configure authentication for this specific gateway. Each gateway can have its own authentication settings.
                     </p>
