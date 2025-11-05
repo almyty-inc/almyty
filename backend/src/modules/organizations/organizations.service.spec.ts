@@ -1,0 +1,899 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { OrganizationsService } from './organizations.service';
+import { Organization } from '../../entities/organization.entity';
+import { User } from '../../entities/user.entity';
+import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
+import { Team } from '../../entities/team.entity';
+import { UserTeam } from '../../entities/user-team.entity';
+
+describe('OrganizationsService', () => {
+  let service: OrganizationsService;
+  let organizationRepository: any;
+  let userRepository: any;
+  let userOrganizationRepository: any;
+  let teamRepository: any;
+  let userTeamRepository: any;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        OrganizationsService,
+        {
+          provide: getRepositoryToken(Organization),
+          useValue: {
+            findOne: jest.fn(),
+            find: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            delete: jest.fn(),
+            remove: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: {
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(UserOrganization),
+          useValue: {
+            findOne: jest.fn(),
+            find: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            delete: jest.fn(),
+            remove: jest.fn(),
+            count: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(Team),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            count: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(UserTeam),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            remove: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get<OrganizationsService>(OrganizationsService);
+    organizationRepository = module.get(getRepositoryToken(Organization));
+    userRepository = module.get(getRepositoryToken(User));
+    userOrganizationRepository = module.get(getRepositoryToken(UserOrganization));
+    teamRepository = module.get(getRepositoryToken(Team));
+    userTeamRepository = module.get(getRepositoryToken(UserTeam));
+  });
+
+  describe('findOne', () => {
+    it('should return organization by id', async () => {
+      const mockOrg = {
+        id: 'org-1',
+        name: 'Test Organization',
+        generateSlug: jest.fn(),
+        getOwners: jest.fn(),
+        getAdmins: jest.fn(),
+        canAddMoreApis: jest.fn(),
+        canAddMoreGateways: jest.fn(),
+        canAddMoreTools: jest.fn(),
+      } as any;
+
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+
+      const result = await service.findOne('org-1');
+
+      expect(result).toBe(mockOrg);
+    });
+
+    it('should throw NotFoundException if organization not found', async () => {
+      organizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.findOne('non-existent'))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+  });
+
+  describe('create', () => {
+    it('should create organization successfully', async () => {
+      const createDto = {
+        name: 'New Organization',
+        description: 'A new organization',
+      };
+
+      const mockOrg = {
+        id: 'org-1',
+        ...createDto,
+        generateSlug: jest.fn(),
+        getOwners: jest.fn(),
+        getAdmins: jest.fn(),
+        canAddMoreApis: jest.fn(),
+        canAddMoreGateways: jest.fn(),
+        canAddMoreTools: jest.fn(),
+      } as any;
+
+      const mockMembership = {
+        id: 'membership-1',
+        userId: 'user-1',
+        organizationId: 'org-1',
+        role: OrganizationRole.OWNER,
+      } as UserOrganization;
+
+      // Mock the duplicate check (should return null)
+      organizationRepository.findOne.mockResolvedValueOnce(null);
+
+      organizationRepository.create.mockReturnValue(mockOrg);
+      organizationRepository.save.mockResolvedValue(mockOrg);
+
+      // Mock the findOne call at the end of create (with relations)
+      organizationRepository.findOne.mockResolvedValueOnce(mockOrg);
+
+      userOrganizationRepository.create.mockReturnValue(mockMembership);
+      userOrganizationRepository.save.mockResolvedValue(mockMembership);
+
+      const result = await service.create(createDto, 'user-1');
+
+      expect(result).toBe(mockOrg);
+      expect(organizationRepository.create).toHaveBeenCalled();
+      expect(organizationRepository.save).toHaveBeenCalled();
+      expect(userOrganizationRepository.create).toHaveBeenCalled();
+      expect(userOrganizationRepository.save).toHaveBeenCalled();
+    });
+
+    it('should throw ConflictException when organization name already exists', async () => {
+      const existingOrg = { id: 'org-1', name: 'Test Org', slug: 'test-org' };
+      organizationRepository.findOne.mockResolvedValue(existingOrg);
+
+      await expect(
+        service.create({ name: 'Test Org', description: 'Duplicate' }, 'user-1')
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw ConflictException when organization slug already exists', async () => {
+      const existingOrg = { id: 'org-1', name: 'Other Org', slug: 'test-org' };
+      organizationRepository.findOne.mockResolvedValue(existingOrg);
+
+      await expect(
+        service.create({ name: 'New Org', slug: 'test-org' }, 'user-1')
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('findAll', () => {
+    it('should return all organizations for a user', async () => {
+      const mockMemberships = [
+        { organization: { id: 'org-1', name: 'Org 1' } },
+        { organization: { id: 'org-2', name: 'Org 2' } },
+      ];
+
+      userOrganizationRepository.find.mockResolvedValue(mockMemberships);
+
+      const result = await service.findAll('user-1');
+
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('org-1');
+      expect(result[1].id).toBe('org-2');
+    });
+  });
+
+  describe('update', () => {
+    it('should update organization successfully', async () => {
+      const mockOrg = { id: 'org-1', name: 'Old Name' };
+      const updateDto = { name: 'New Name' };
+
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+      organizationRepository.save.mockResolvedValue({ ...mockOrg, ...updateDto });
+
+      const result = await service.update('org-1', updateDto);
+
+      expect(result.name).toBe('New Name');
+      expect(organizationRepository.save).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if organization not found', async () => {
+      organizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.update('non-existent', { name: 'Test' }))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+
+    it('should throw ConflictException when updating to existing name', async () => {
+      const mockOrg = { id: 'org-1', name: 'Old Name' };
+      const existingOrg = { id: 'org-2', name: 'New Name' };
+
+      organizationRepository.findOne
+        .mockResolvedValueOnce(mockOrg)
+        .mockResolvedValueOnce(existingOrg);
+
+      await expect(service.update('org-1', { name: 'New Name' }))
+        .rejects
+        .toThrow(ConflictException);
+    });
+
+    it('should throw ConflictException when updating to existing slug', async () => {
+      const mockOrg = { id: 'org-1', slug: 'old-slug' };
+      const existingOrg = { id: 'org-2', slug: 'new-slug' };
+
+      organizationRepository.findOne
+        .mockResolvedValueOnce(mockOrg)
+        .mockResolvedValueOnce(existingOrg);
+
+      await expect(service.update('org-1', { slug: 'new-slug' }))
+        .rejects
+        .toThrow(ConflictException);
+    });
+
+    it('should allow updating to same name (no conflict)', async () => {
+      const mockOrg = { id: 'org-1', name: 'Test Org' };
+
+      organizationRepository.findOne
+        .mockResolvedValueOnce(mockOrg)
+        .mockResolvedValueOnce(mockOrg);
+      organizationRepository.save.mockResolvedValue(mockOrg);
+
+      const result = await service.update('org-1', { name: 'Test Org' });
+
+      expect(result).toBe(mockOrg);
+      expect(organizationRepository.save).toHaveBeenCalled();
+    });
+  });
+
+  describe('delete', () => {
+    it('should delete organization successfully', async () => {
+      const mockOrg = { id: 'org-1', name: 'Test Org' };
+
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+      organizationRepository.remove.mockResolvedValue(mockOrg);
+
+      await service.delete('org-1');
+
+      expect(organizationRepository.remove).toHaveBeenCalledWith(mockOrg);
+    });
+
+    it('should throw NotFoundException if organization not found', async () => {
+      organizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.delete('non-existent'))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when deleting organization with active APIs', async () => {
+      const mockOrg = {
+        id: 'org-1',
+        name: 'Test Org',
+        apis: [{ id: 'api-1', name: 'Active API' }],
+      };
+
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+
+      await expect(service.delete('org-1'))
+        .rejects
+        .toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException when deleting organization with active gateways', async () => {
+      const mockOrg = {
+        id: 'org-1',
+        name: 'Test Org',
+        apis: [],
+        gateways: [{ id: 'gateway-1', name: 'Active Gateway' }],
+      };
+
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+
+      await expect(service.delete('org-1'))
+        .rejects
+        .toThrow(ForbiddenException);
+    });
+  });
+
+  describe('getMembers', () => {
+    it('should return organization members', async () => {
+      const mockOrg = { id: 'org-1', name: 'Test Org' };
+      const mockRequestingUserMembership = {
+        userId: 'user-1',
+        organizationId: 'org-1',
+        role: OrganizationRole.OWNER
+      };
+      const mockMemberships = [
+        {
+          user: { id: 'user-1', email: 'user1@test.com' },
+          role: OrganizationRole.OWNER,
+          joinedAt: new Date()
+        },
+        {
+          user: { id: 'user-2', email: 'user2@test.com' },
+          role: OrganizationRole.MEMBER,
+          joinedAt: new Date()
+        },
+      ];
+
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+      userOrganizationRepository.findOne.mockResolvedValue(mockRequestingUserMembership);
+      userOrganizationRepository.find.mockResolvedValue(mockMemberships);
+
+      const result = await service.getMembers('org-1', 'user-1');
+
+      expect(result).toHaveLength(2);
+      expect(userOrganizationRepository.find).toHaveBeenCalled();
+    });
+
+    it('should throw ForbiddenException when user is not a member', async () => {
+      userOrganizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getMembers('org-1', 'non-member'))
+        .rejects
+        .toThrow(ForbiddenException);
+    });
+  });
+
+  describe('removeMember', () => {
+    it('should remove member successfully', async () => {
+      const mockOrg = { id: 'org-1', name: 'Test Org' };
+      const mockMembership = { id: 'membership-1', role: OrganizationRole.MEMBER };
+
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+      userOrganizationRepository.remove.mockResolvedValue(mockMembership);
+
+      await service.removeMember('org-1', 'user-1');
+
+      expect(userOrganizationRepository.remove).toHaveBeenCalledWith(mockMembership);
+    });
+
+    it('should throw ForbiddenException when removing last owner', async () => {
+      const mockOrg = { id: 'org-1', name: 'Test Org' };
+      const mockMembership = { id: 'membership-1', role: OrganizationRole.OWNER };
+
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+      userOrganizationRepository.count.mockResolvedValue(1); // Only one owner
+
+      await expect(service.removeMember('org-1', 'user-1'))
+        .rejects
+        .toThrow(ForbiddenException);
+    });
+  });
+
+  describe('updateMemberRole', () => {
+    it('should update member role successfully', async () => {
+      const mockMembership = {
+        id: 'membership-1',
+        role: OrganizationRole.MEMBER
+      };
+
+      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+      userOrganizationRepository.save.mockResolvedValue({
+        ...mockMembership,
+        role: OrganizationRole.ADMIN
+      });
+
+      await service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN);
+
+      expect(userOrganizationRepository.save).toHaveBeenCalled();
+    });
+
+    it('should update member role with permissions', async () => {
+      const mockMembership = {
+        id: 'membership-1',
+        role: OrganizationRole.MEMBER,
+        permissions: []
+      };
+
+      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+      userOrganizationRepository.save.mockResolvedValue({
+        ...mockMembership,
+        role: OrganizationRole.ADMIN,
+        permissions: ['manage_apis']
+      });
+
+      await service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN, ['manage_apis']);
+
+      expect(mockMembership.permissions).toEqual(['manage_apis']);
+      expect(userOrganizationRepository.save).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when member not found', async () => {
+      userOrganizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when changing role of last owner', async () => {
+      const mockMembership = {
+        id: 'membership-1',
+        role: OrganizationRole.OWNER
+      };
+
+      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+      userOrganizationRepository.count.mockResolvedValue(1); // Only one owner
+
+      await expect(service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN))
+        .rejects
+        .toThrow(ForbiddenException);
+    });
+  });
+
+  describe('getTeams', () => {
+    it('should return organization teams', async () => {
+      const mockTeams = [
+        { id: 'team-1', name: 'Team 1' },
+        { id: 'team-2', name: 'Team 2' },
+      ];
+
+      teamRepository.find.mockResolvedValue(mockTeams);
+
+      const result = await service.getTeams('org-1');
+
+      expect(result).toEqual(mockTeams);
+      expect(teamRepository.find).toHaveBeenCalled();
+    });
+  });
+
+  describe('userHasPermission', () => {
+    it('should return true for owner', async () => {
+      const mockMembership = {
+        role: OrganizationRole.OWNER,
+        hasPermission: jest.fn().mockReturnValue(true)
+      };
+
+      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+
+      const result = await service.userHasPermission('user-1', 'org-1', 'any');
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false for non-member', async () => {
+      userOrganizationRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.userHasPermission('user-1', 'org-1', 'any');
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('userHasRole', () => {
+    it('should return true if user has role', async () => {
+      const mockMembership = { role: OrganizationRole.ADMIN };
+
+      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+
+      const result = await service.userHasRole('user-1', 'org-1', [OrganizationRole.ADMIN, OrganizationRole.OWNER]);
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false if user does not have role', async () => {
+      const mockMembership = { role: OrganizationRole.MEMBER };
+
+      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+
+      const result = await service.userHasRole('user-1', 'org-1', [OrganizationRole.ADMIN]);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('inviteUser', () => {
+    it('should throw NotFoundException when user email not found', async () => {
+      userRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.inviteUser('org-1', { email: 'nonexistent@test.com', role: OrganizationRole.MEMBER }, 'user-1')
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ConflictException when user is already an active member', async () => {
+      const mockUser = { id: 'user-2', email: 'existing@test.com' };
+      const mockMembership = {
+        id: 'membership-1',
+        userId: 'user-2',
+        organizationId: 'org-1',
+        role: OrganizationRole.MEMBER,
+        isActive: true,
+      };
+
+      userRepository.findOne.mockResolvedValue(mockUser);
+      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+
+      await expect(
+        service.inviteUser('org-1', { email: 'existing@test.com', role: OrganizationRole.ADMIN }, 'user-1')
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should reactivate inactive membership', async () => {
+      const mockUser = { id: 'user-2', email: 'inactive@test.com' };
+      const mockMembership = {
+        id: 'membership-1',
+        userId: 'user-2',
+        organizationId: 'org-1',
+        role: OrganizationRole.MEMBER,
+        isActive: false,
+      };
+
+      userRepository.findOne.mockResolvedValue(mockUser);
+      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+      userOrganizationRepository.save.mockResolvedValue({
+        ...mockMembership,
+        isActive: true,
+        role: OrganizationRole.ADMIN,
+      });
+
+      await service.inviteUser('org-1', { email: 'inactive@test.com', role: OrganizationRole.ADMIN }, 'user-1');
+
+      expect(userOrganizationRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isActive: true,
+          role: OrganizationRole.ADMIN,
+        })
+      );
+    });
+
+    it('should create new membership for new user', async () => {
+      const mockUser = { id: 'user-2', email: 'newmember@test.com' };
+      const mockMembership = {
+        id: 'membership-1',
+        userId: 'user-2',
+        organizationId: 'org-1',
+        role: OrganizationRole.MEMBER,
+        invitedBy: 'user-1',
+        isActive: true,
+        inviteAccepted: false,
+      };
+
+      userRepository.findOne.mockResolvedValue(mockUser);
+      userOrganizationRepository.findOne.mockResolvedValue(null);
+      userOrganizationRepository.create.mockReturnValue(mockMembership);
+      userOrganizationRepository.save.mockResolvedValue(mockMembership);
+
+      await service.inviteUser('org-1', { email: 'newmember@test.com', role: OrganizationRole.MEMBER }, 'user-1');
+
+      expect(userOrganizationRepository.create).toHaveBeenCalled();
+      expect(userOrganizationRepository.save).toHaveBeenCalled();
+    });
+  });
+
+  describe('findBySlug', () => {
+    it('should return organization by slug', async () => {
+      const mockOrg = { id: 'org-1', slug: 'test-org' };
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+
+      const result = await service.findBySlug('test-org');
+
+      expect(result).toBe(mockOrg);
+    });
+
+    it('should throw NotFoundException when slug not found', async () => {
+      organizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.findBySlug('non-existent'))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+  });
+
+  describe('removeMember', () => {
+    it('should throw NotFoundException when member not found', async () => {
+      userOrganizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.removeMember('org-1', 'user-1'))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+  });
+
+  describe('create with slug generation', () => {
+    it('should generate slug when not provided', async () => {
+      const createDto = {
+        name: 'New Organization!!!',
+        description: 'Test',
+      };
+
+      const mockOrg = {
+        id: 'org-1',
+        ...createDto,
+        slug: 'new-organization',
+      };
+
+      organizationRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(mockOrg);
+      organizationRepository.create.mockReturnValue(mockOrg);
+      organizationRepository.save.mockResolvedValue(mockOrg);
+      userOrganizationRepository.create.mockReturnValue({} as any);
+      userOrganizationRepository.save.mockResolvedValue({} as any);
+
+      await service.create(createDto, 'user-1');
+
+      expect(organizationRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          slug: 'new-organization',
+        })
+      );
+    });
+  });
+
+  describe('updateTeam', () => {
+    it('should update team name', async () => {
+      const mockTeam = { id: 'team-1', name: 'Old Name', description: 'Desc' };
+      teamRepository.findOne.mockResolvedValue(mockTeam);
+      teamRepository.save.mockResolvedValue({ ...mockTeam, name: 'New Name' });
+
+      await service.updateTeam('team-1', { name: 'New Name' });
+
+      expect(mockTeam.name).toBe('New Name');
+      expect(teamRepository.save).toHaveBeenCalled();
+    });
+
+    it('should update team description', async () => {
+      const mockTeam = { id: 'team-1', name: 'Team', description: 'Old' };
+      teamRepository.findOne.mockResolvedValue(mockTeam);
+      teamRepository.save.mockResolvedValue({ ...mockTeam, description: 'New' });
+
+      await service.updateTeam('team-1', { description: 'New' });
+
+      expect(mockTeam.description).toBe('New');
+    });
+
+    it('should throw NotFoundException when team not found', async () => {
+      teamRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.updateTeam('team-1', { name: 'Test' }))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+  });
+
+  describe('addTeamMember', () => {
+    it('should throw ConflictException when user is already a team member', async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          OrganizationsService,
+          { provide: getRepositoryToken(Organization), useValue: organizationRepository },
+          { provide: getRepositoryToken(User), useValue: userRepository },
+          { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
+          { provide: getRepositoryToken(Team), useValue: teamRepository },
+          {
+            provide: getRepositoryToken(UserTeam),
+            useValue: {
+              findOne: jest.fn().mockResolvedValue({ id: 'existing' }),
+              create: jest.fn(),
+              save: jest.fn(),
+              remove: jest.fn(),
+            },
+          },
+        ],
+      }).compile();
+
+      const localService = module.get<OrganizationsService>(OrganizationsService);
+
+      await expect(localService.addTeamMember('team-1', 'user-1'))
+        .rejects
+        .toThrow(ConflictException);
+    });
+  });
+
+  describe('updateTeamMemberRole', () => {
+    it('should throw BadRequestException for invalid role', async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          OrganizationsService,
+          { provide: getRepositoryToken(Organization), useValue: organizationRepository },
+          { provide: getRepositoryToken(User), useValue: userRepository },
+          { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
+          { provide: getRepositoryToken(Team), useValue: teamRepository },
+          {
+            provide: getRepositoryToken(UserTeam),
+            useValue: {
+              findOne: jest.fn().mockResolvedValue({ id: 'membership-1' }),
+              save: jest.fn(),
+            },
+          },
+        ],
+      }).compile();
+
+      const localService = module.get<OrganizationsService>(OrganizationsService);
+
+      await expect(localService.updateTeamMemberRole('team-1', 'user-1', 'invalid'))
+        .rejects
+        .toThrow(BadRequestException);
+    });
+  });
+
+  describe('removeTeamMember', () => {
+    it('should throw NotFoundException when user is not a team member', async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          OrganizationsService,
+          { provide: getRepositoryToken(Organization), useValue: organizationRepository },
+          { provide: getRepositoryToken(User), useValue: userRepository },
+          { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
+          { provide: getRepositoryToken(Team), useValue: teamRepository },
+          {
+            provide: getRepositoryToken(UserTeam),
+            useValue: {
+              findOne: jest.fn().mockResolvedValue(null),
+              remove: jest.fn(),
+            },
+          },
+        ],
+      }).compile();
+
+      const localService = module.get<OrganizationsService>(OrganizationsService);
+
+      await expect(localService.removeTeamMember('team-1', 'user-1'))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+  });
+
+  describe('createTeam - Branch Coverage', () => {
+    it('should create a new team', async () => {
+      const mockTeam = {
+        id: 'team-1',
+        name: 'Test Team',
+        description: 'Test Description',
+        organizationId: 'org-1',
+      };
+
+      teamRepository.create.mockReturnValue(mockTeam);
+      teamRepository.save.mockResolvedValue(mockTeam);
+
+      const result = await service.createTeam('org-1', {
+        name: 'Test Team',
+        description: 'Test Description',
+      });
+
+      expect(result).toEqual(mockTeam);
+      expect(teamRepository.create).toHaveBeenCalledWith({
+        name: 'Test Team',
+        description: 'Test Description',
+        organizationId: 'org-1',
+      });
+      expect(teamRepository.save).toHaveBeenCalledWith(mockTeam);
+    });
+  });
+
+  describe('addTeamMember - Branch Coverage for existing member', () => {
+    it('should throw ConflictException when user is already a team member', async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          OrganizationsService,
+          { provide: getRepositoryToken(Organization), useValue: organizationRepository },
+          { provide: getRepositoryToken(User), useValue: userRepository },
+          { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
+          { provide: getRepositoryToken(Team), useValue: teamRepository },
+          {
+            provide: getRepositoryToken(UserTeam),
+            useValue: {
+              findOne: jest.fn().mockResolvedValue({ id: 'existing-membership' }),
+              create: jest.fn(),
+              save: jest.fn(),
+            },
+          },
+        ],
+      }).compile();
+
+      const localService = module.get<OrganizationsService>(OrganizationsService);
+
+      await expect(localService.addTeamMember('team-1', 'user-1'))
+        .rejects
+        .toThrow();
+    });
+  });
+
+  describe('updateTeamMemberRole - Branch Coverage', () => {
+    it('should throw when team member not found', async () => {
+      userTeamRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.updateTeamMemberRole('team-1', 'user-1', 'lead'))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+
+    it('should throw when invalid role provided', async () => {
+      userTeamRepository.findOne.mockResolvedValue({ id: 'membership-1' } as any);
+
+      await expect(service.updateTeamMemberRole('team-1', 'user-1', 'invalid-role'))
+        .rejects
+        .toThrow(BadRequestException);
+    });
+
+    it('should update role successfully', async () => {
+      const mockMembership = { id: 'membership-1', role: 'member' };
+      userTeamRepository.findOne.mockResolvedValue(mockMembership as any);
+      userTeamRepository.save.mockResolvedValue(mockMembership as any);
+
+      await service.updateTeamMemberRole('team-1', 'user-1', 'lead');
+
+      expect(mockMembership.role).toBe('lead');
+      expect(userTeamRepository.save).toHaveBeenCalledWith(mockMembership);
+    });
+  });
+
+  describe('removeTeamMember - Branch Coverage', () => {
+    it('should throw when team member not found', async () => {
+      userTeamRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.removeTeamMember('team-1', 'user-1'))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+
+    it('should remove team member successfully', async () => {
+      const mockMembership = { id: 'membership-1' };
+      userTeamRepository.findOne.mockResolvedValue(mockMembership as any);
+      userTeamRepository.remove.mockResolvedValue(mockMembership as any);
+
+      await service.removeTeamMember('team-1', 'user-1');
+
+      expect(userTeamRepository.remove).toHaveBeenCalledWith(mockMembership);
+    });
+  });
+
+  describe('getOrganizationStats - Branch Coverage', () => {
+    it('should return stats with no APIs', async () => {
+      const mockOrg = {
+        id: 'org-1',
+        name: 'Test Org',
+        plan: 'free',
+        apis: null,
+        gateways: [],
+      };
+
+      organizationRepository.findOne.mockResolvedValue(mockOrg as any);
+      userOrganizationRepository.count.mockResolvedValue(5);
+      teamRepository.count.mockResolvedValue(2);
+
+      const result = await service.getOrganizationStats('org-1');
+
+      expect(result.apisCount).toBe(0);
+      expect(result.gatewaysCount).toBe(0);
+      expect(result.membersCount).toBe(5);
+      expect(result.teamsCount).toBe(2);
+      expect(result.plan).toBe('free');
+    });
+
+    it('should return stats with APIs and gateways', async () => {
+      const mockOrg = {
+        id: 'org-1',
+        name: 'Test Org',
+        plan: 'pro',
+        apis: [{ id: 'api-1' }, { id: 'api-2' }],
+        gateways: [{ id: 'gw-1' }],
+      };
+
+      organizationRepository.findOne.mockResolvedValue(mockOrg as any);
+      userOrganizationRepository.count.mockResolvedValue(10);
+      teamRepository.count.mockResolvedValue(3);
+
+      const result = await service.getOrganizationStats('org-1');
+
+      expect(result.apisCount).toBe(2);
+      expect(result.gatewaysCount).toBe(1);
+      expect(result.membersCount).toBe(10);
+      expect(result.teamsCount).toBe(3);
+      expect(result.plan).toBe('pro');
+    });
+  });
+
+});

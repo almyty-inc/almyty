@@ -1,0 +1,396 @@
+npm warn cli npm v11.5.1 does not support Node.js v22.3.0. This version of npm supports the following node versions: `^20.17.0 || >=22.9.0`. You can find the latest version at https://nodejs.org/.
+
+> apifai-backend@1.0.0 test:cov
+> jest --coverage
+
+[31m[Nest] 286  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[PluginManagerService] [39m[31mPlugin execution failed: plugin_1760088744230_jb5sgufv6 - Plugin error[39m
+[31m[Nest] 286  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[PluginManagerService] [39m[31mPlugin execution failed: plugin_1760088744233_f91skm9be - Critical error[39m
+[31m[Nest] 286  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[PluginManagerService] [39m[31mFailed to load plugin configurations: Redis error[39m
+PASS src/modules/plugins/plugin-manager.service.spec.ts (7.071 s)
+[31m[Nest] 285  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[GatewayProtocolController] [39m[31mGateway request error: Database error[39m
+Error: Database error
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/gateways/gateway-protocol.controller.spec.ts:277:64)
+    at Promise.then.completed (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (<anonymous>)
+    at callAsyncCircusFn (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:121:9)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/testWorker.js:106:12)
+[31m[Nest] 285  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[GatewayProtocolController] [39m[31mHealth check error: Service error[39m
+[31m[Nest] 285  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[GatewayProtocolController] [39m[31mGateway info error: Config error[39m
+[31m[Nest] 285  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[GatewayProtocolController] [39m[31mSSE error: Header error[39m
+PASS src/modules/gateways/gateway-protocol.controller.spec.ts (7.219 s)
+PASS src/modules/organizations/organizations.controller.spec.ts (7.485 s)
+PASS src/modules/gateways/gateways.controller.spec.ts (7.489 s)
+[31m[Nest] 279  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[OpenAPIParserService] [39m[31mFailed to parse OpenAPI schema: Error opening file "/Users/frane/workspace/apifai/backend/not valid json"[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[SchemaParserService] [39m[31mFailed to parse openapi schema: Invalid OpenAPI schema: Error opening file "/Users/frane/workspace/apifai/backend/not valid json"[39m
+Error: Invalid OpenAPI schema: Error opening file "/Users/frane/workspace/apifai/backend/not valid json"
+    at OpenAPIParserService.parseSchema (/Users/frane/workspace/apifai/backend/src/modules/schema-parser/parsers/openapi-parser.service.ts:45:13)
+    at SchemaParserService.parseAndStore (/Users/frane/workspace/apifai/backend/src/modules/schema-parser/schema-parser.service.ts:47:28)
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/schema-parser/schema-parser.service.spec.ts:148:7)
+[31m[Nest] 279  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[GraphQLParserService] [39m[31mFailed to parse GraphQL schema: Syntax Error: Unexpected Name "syntax".[39m
+PASS src/modules/tools/tools.controller.spec.ts (7.604 s)
+[31m[Nest] 279  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[SchemaParserService] [39m[31mFailed to parse graphql schema: Invalid GraphQL schema: Syntax Error: Unexpected Name "syntax".[39m
+Error: Invalid GraphQL schema: Syntax Error: Unexpected Name "syntax".
+    at GraphQLParserService.parseSchema (/Users/frane/workspace/apifai/backend/src/modules/schema-parser/parsers/graphql-parser.service.ts:36:13)
+    at SchemaParserService.parseSchema [as parseAndStore] (/Users/frane/workspace/apifai/backend/src/modules/schema-parser/schema-parser.service.ts:47:41)
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/schema-parser/schema-parser.service.spec.ts:196:28)
+    at Promise.then.completed (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (<anonymous>)
+    at callAsyncCircusFn (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:316:40)
+    at _runTest (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:121:9)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/testWorker.js:106:12)
+PASS src/modules/llm-providers/llm-providers.controller.spec.ts (7.608 s)
+[31m[Nest] 279  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[OpenAPIParserService] [39m[31mFailed to parse OpenAPI schema: Error opening file "/Users/frane/workspace/apifai/backend/invalid schema"[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:24 AM [31m  ERROR[39m [38;5;3m[SchemaParserService] [39m[31mFailed to reparse schema: Invalid OpenAPI schema: Error opening file "/Users/frane/workspace/apifai/backend/invalid schema"[39m
+Error: Invalid OpenAPI schema: Error opening file "/Users/frane/workspace/apifai/backend/invalid schema"
+    at OpenAPIParserService.parseSchema (/Users/frane/workspace/apifai/backend/src/modules/schema-parser/parsers/openapi-parser.service.ts:45:13)
+    at SchemaParserService.reparse (/Users/frane/workspace/apifai/backend/src/modules/schema-parser/schema-parser.service.ts:121:28)
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/schema-parser/schema-parser.service.spec.ts:394:7)
+PASS src/modules/schema-parser/schema-parser.service.spec.ts (7.89 s)
+PASS src/modules/apis/apis.controller.spec.ts (7.98 s)
+PASS src/modules/auth/strategies/jwt.strategy.spec.ts
+PASS src/modules/mcp/utcp.service.spec.ts
+PASS src/modules/mcp/a2a.service.spec.ts
+PASS src/modules/users/users.controller.spec.ts
+PASS src/modules/auth/auth.controller.spec.ts
+[31m[Nest] 279  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[ApisService] [39m[31mFailed to import schema for API api-1: Invalid schema[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[ApisService] [39m[31mFailed to import schema for API api-1: Invalid schema[39m
+PASS src/modules/apis/apis.service.spec.ts
+PASS src/modules/mcp/controllers/a2a.controller.spec.ts
+PASS src/modules/mcp/transports/sse.transport.spec.ts
+PASS src/modules/mcp/mcp.controller.spec.ts
+[31m[Nest] 284  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[WebSocketTransport] [39m[31mWebSocket message handling error: Unexpected token 'i', "invalid json{" is not valid JSON[39m
+[31m[Nest] 281  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[MonitoringService] [39m[31mFailed to get latest metrics: Redis error[39m
+[31m[Nest] 281  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[MonitoringService] [39m[31mFailed to get metrics history: Redis error[39m
+PASS src/modules/mcp/transports/websocket.transport.spec.ts
+[31m[Nest] 281  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[MonitoringService] [39m[31mFailed to load alert rules: Redis connection error[39m
+PASS src/modules/monitoring/monitoring.service.spec.ts
+[31m[Nest] 283  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[ToolExecutorService] [39m[31mTool execution error: Tool not found[39m
+Error: Tool not found
+    at ToolExecutorService.executeTool (/Users/frane/workspace/apifai/backend/src/modules/tools/tool-executor.service.ts:82:15)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/tools/tool-executor.service.spec.ts:104:22)
+[31m[Nest] 283  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[ToolExecutorService] [39m[31mTool execution error: Tool is inactive, cannot execute[39m
+Error: Tool is inactive, cannot execute
+    at ToolExecutorService.executeTool (/Users/frane/workspace/apifai/backend/src/modules/tools/tool-executor.service.ts:86:15)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/tools/tool-executor.service.spec.ts:125:22)
+[31m[Nest] 283  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[ToolExecutorService] [39m[31mTool execution error: User does not have permission to use tools in this organization[39m
+Error: User does not have permission to use tools in this organization
+    at ToolExecutorService.executeTool (/Users/frane/workspace/apifai/backend/src/modules/tools/tool-executor.service.ts:96:15)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/tools/tool-executor.service.spec.ts:153:22)
+[31m[Nest] 283  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[ToolExecutorService] [39m[31mTool execution error: Invalid parameters: Missing required parameter: id[39m
+BadRequestException: Invalid parameters: Missing required parameter: id
+    at ToolExecutorService.executeTool (/Users/frane/workspace/apifai/backend/src/modules/tools/tool-executor.service.ts:102:15)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/tools/tool-executor.service.spec.ts:262:22)
+[31m[Nest] 283  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[ToolExecutorService] [39m[31mFailed to record tool execution: Database connection failed[39m
+[31m[Nest] 283  - [39m10/10/2025, 11:32:26 AM [31m  ERROR[39m [38;5;3m[ToolExecutorService] [39m[31mFailed to record tool execution: Database connection failed[39m
+PASS src/modules/tools/tool-executor.service.spec.ts
+PASS src/entities/usage-metric.entity.spec.ts
+PASS src/modules/monitoring/monitoring.controller.spec.ts
+PASS src/entities/tool-version.entity.spec.ts
+[31m[Nest] 279  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[GatewayAuthService] [39m[31mFailed to create gateway auth: Gateway not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[GatewayAuthService] [39m[31mFailed to create gateway auth: Gateway not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[GatewayAuthService] [39m[31mFailed to create gateway auth: API key auth requires keyHeader or keyQuery configuration[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[GatewayAuthService] [39m[31mFailed to update gateway auth: Gateway auth not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[GatewayAuthService] [39m[31mFailed to update gateway auth: Gateway auth not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[GatewayAuthService] [39m[31mFailed to update gateway auth: JWT auth requires secret configuration[39m
+PASS src/modules/auth/strategies/api-key.strategy.spec.ts
+PASS src/modules/gateways/gateway-auth.service.spec.ts
+PASS src/modules/users/users.service.spec.ts
+PASS src/modules/mcp/controllers/mcp-transport.controller.spec.ts
+[31m[Nest] 283  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[LlmProvidersService] [39m[31mFailed to create LLM provider: Organization not found[39m
+[31m[Nest] 283  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[LlmProvidersService] [39m[31mFailed to create LLM provider: User does not have permission to manage LLM providers[39m
+[31m[Nest] 283  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[LlmProvidersService] [39m[31mFailed to update LLM provider: LLM provider not found[39m
+[31m[Nest] 283  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[LlmProvidersService] [39m[31mChat request failed: LLM provider not found[39m
+NotFoundException: LLM provider not found
+    at LlmProvidersService.getProvider (/Users/frane/workspace/apifai/backend/src/modules/llm-providers/llm-providers.service.ts:229:13)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at LlmProvidersService.chat (/Users/frane/workspace/apifai/backend/src/modules/llm-providers/llm-providers.service.ts:325:24)
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/llm-providers/llm-providers.service.spec.ts:403:7)
+[31m[Nest] 283  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[LlmProvidersService] [39m[31mChat request failed: LLM provider is not healthy[39m
+BadRequestException: LLM provider is not healthy
+    at LlmProvidersService.chat (/Users/frane/workspace/apifai/backend/src/modules/llm-providers/llm-providers.service.ts:328:15)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/llm-providers/llm-providers.service.spec.ts:431:7)
+[31m[Nest] 283  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[LlmProvidersService] [39m[31mChat request failed: API rate limit exceeded[39m
+Error: API rate limit exceeded
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/llm-providers/llm-providers.service.spec.ts:688:9)
+    at Promise.then.completed (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (<anonymous>)
+    at callAsyncCircusFn (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:121:9)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/testWorker.js:106:12)
+PASS src/modules/llm-providers/llm-providers.service.spec.ts
+[31m[Nest] 280  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[ToolsService] [39m[31mFailed to create tool: Organization not found[39m
+[31m[Nest] 280  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[ToolsService] [39m[31mFailed to create tool: User does not have permission to create tools[39m
+[31m[Nest] 280  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[ToolsService] [39m[31mFailed to create tool: Organization has reached tool limit[39m
+[31m[Nest] 280  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[ToolsService] [39m[31mFailed to create tool: Some categories were not found[39m
+[31m[Nest] 280  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[ToolsService] [39m[31mFailed to create tool: Operation not found or not accessible[39m
+[31m[Nest] 280  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[ToolsService] [39m[31mFailed to update tool: Tool not found[39m
+[31m[Nest] 280  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[ToolsService] [39m[31mFailed to update tool: User does not have permission to edit this tool[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:27 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to associate tool with gateway: Gateway not found[39m
+PASS src/entities/resource.entity.spec.ts
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to associate tool with gateway: Tool not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to associate tool with gateway: Can only associate active tools[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to associate tool with gateway: Tool is already associated with this gateway[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to associate tool with gateway: User does not have permission to manage gateway tools[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to associate tool with gateway: Database error[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to update gateway tool: Gateway tool association not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to update gateway tool: Gateway tool association not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to update gateway tool: User does not have permission to manage gateway tools[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to dissociate tool from gateway: Gateway tool association not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to dissociate tool from gateway: User does not have permission to manage gateway tools[39m
+PASS src/modules/tools/tools.service.spec.ts
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to bulk associate tools: Gateway not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to bulk associate tools: User does not have permission to manage gateway tools[39m
+[31m[Nest] 285  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[RealtimeExecutorService] [39m[31mFailed to get execution status from Redis: Redis error[39m
+[31m[Nest] 285  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[RealtimeExecutorService] [39m[31mFailed to get execution stats: Redis error[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to copy tools between gateways: Source gateway not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to copy tools between gateways: Target gateway not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayToolService] [39m[31mFailed to copy tools between gateways: User does not have permission to manage gateway tools[39m
+PASS src/modules/gateways/gateway-tool.service.spec.ts
+PASS src/modules/mcp/realtime-executor.service.spec.ts
+[31m[Nest] 282  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GraphQLParserService] [39m[31mFailed to parse GraphQL schema: Syntax Error: Unexpected Name "invalid".[39m
+PASS src/modules/mcp/controllers/utcp.controller.spec.ts
+PASS src/modules/schema-parser/parsers/graphql-parser.service.spec.ts
+PASS src/modules/mcp/mcp.service.spec.ts
+[31m[Nest] 283  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[McpGatewayService] [39m[31mFailed to forward request to peer peer_1760088748589_jezoexzhy: Connection refused[39m
+[31m[Nest] 283  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[McpGatewayService] [39m[31mFailed to forward request to peer peer_1760088748590_sfhzvkn0s: Internal Server Error[39m
+[31m[Nest] 283  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[McpGatewayService] [39m[31mFailed to forward request to peer peer_1760088748592_nlud0vb5t: Connection failed[39m
+PASS src/modules/mcp/mcp-gateway.service.spec.ts
+PASS src/entities/json-schema.entity.spec.ts
+PASS src/entities/operation.entity.spec.ts
+[31m[Nest] 286  - [39m10/10/2025, 11:32:28 AM [31m  ERROR[39m [38;5;3m[GatewayProtocolService] [39m[31mProtocol request error: Database error[39m
+Error: Database error
+    at Object.<anonymous> (/Users/frane/workspace/apifai/backend/src/modules/gateways/gateway-protocol.service.spec.ts:214:51)
+    at Promise.then.completed (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (<anonymous>)
+    at callAsyncCircusFn (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:121:9)
+    at _runTestsForDescribeBlock (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/Users/frane/workspace/apifai/backend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/Users/frane/workspace/apifai/backend/node_modules/jest-runner/build/testWorker.js:106:12)
+PASS src/entities/llm-provider.entity.spec.ts
+PASS src/modules/gateways/gateway-protocol.service.spec.ts
+PASS src/entities/user-organization.entity.spec.ts
+PASS src/entities/organization.entity.spec.ts
+PASS src/modules/plugins/built-in/rate-limiter.plugin.spec.ts
+[31m[Nest] 281  - [39m10/10/2025, 11:32:29 AM [31m  ERROR[39m [38;5;3m[ProtobufParserService] [39m[31mFailed to parse Protobuf schema: illegal token 'invalid' (line 1)[39m
+PASS src/entities/tool-category.entity.spec.ts
+[31m[Nest] 279  - [39m10/10/2025, 11:32:29 AM [31m  ERROR[39m [38;5;3m[GatewaysService] [39m[31mFailed to create gateway: Organization not found[39m
+PASS src/modules/schema-parser/parsers/protobuf-parser.service.spec.ts
+[31m[Nest] 279  - [39m10/10/2025, 11:32:29 AM [31m  ERROR[39m [38;5;3m[GatewaysService] [39m[31mFailed to create gateway: User does not have permission to create gateways[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:29 AM [31m  ERROR[39m [38;5;3m[GatewaysService] [39m[31mFailed to create gateway: Organization has reached gateway limit[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:29 AM [31m  ERROR[39m [38;5;3m[GatewaysService] [39m[31mFailed to update gateway: Gateway not found[39m
+[31m[Nest] 279  - [39m10/10/2025, 11:32:29 AM [31m  ERROR[39m [38;5;3m[GatewaysService] [39m[31mFailed to update gateway: User does not have permission to edit gateways[39m
+PASS src/modules/json-schema-translator/json-schema-translator.service.spec.ts
+PASS src/modules/gateways/gateways.service.spec.ts
+[31m[Nest] 286  - [39m10/10/2025, 11:32:29 AM [31m  ERROR[39m [38;5;3m[ToolGeneratorService] [39m[31mFailed to generate tool from operation: Cannot read properties of undefined (reading 'id')[39m
+[31m[Nest] 286  - [39m10/10/2025, 11:32:29 AM [31m  ERROR[39m [38;5;3m[ToolGeneratorService] [39m[31mFailed to generate tool from operation: Cannot read properties of undefined (reading 'id')[39m
+PASS src/entities/request-log.entity.spec.ts
+PASS src/modules/tools/tool-generator.service.spec.ts
+PASS src/modules/plugins/built-in/pii-filter.plugin.spec.ts
+PASS src/modules/auth/guards/api-key-auth.guard.spec.ts
+PASS src/entities/gateway-tool.entity.spec.ts
+PASS src/entities/tool.entity.spec.ts
+PASS src/entities/api-key.entity.spec.ts
+PASS src/entities/gateway-auth.entity.spec.ts
+PASS src/modules/mcp/mcp-session.service.spec.ts
+PASS src/entities/llm-session.entity.spec.ts
+PASS src/modules/auth/strategies/local.strategy.spec.ts
+PASS src/modules/auth/auth.service.spec.ts (13.433 s)
+PASS src/modules/plugins/built-in/performance-monitor.plugin.spec.ts
+PASS src/modules/plugins/built-in/security-scanner.plugin.spec.ts
+[31m[Nest] 283  - [39m10/10/2025, 11:32:30 AM [31m  ERROR[39m [38;5;3m[SOAPParserService] [39m[31mFailed to parse SOAP/WSDL schema: Non-whitespace before first tag.
+Line: 0
+Column: 1
+Char: i[39m
+PASS src/entities/llm-message.entity.spec.ts
+PASS src/modules/schema-parser/parsers/soap-parser.service.spec.ts
+PASS src/modules/mcp/controllers/public.controller.spec.ts
+[31m[Nest] 280  - [39m10/10/2025, 11:32:31 AM [31m  ERROR[39m [38;5;3m[OpenAPIParserService] [39m[31mFailed to parse OpenAPI schema: Error opening file "/Users/frane/workspace/apifai/backend/{ invalid json }"[39m
+[31m[Nest] 280  - [39m10/10/2025, 11:32:31 AM [31m  ERROR[39m [38;5;3m[OpenAPIParserService] [39m[31mFailed to parse OpenAPI schema: [object Object] is not a valid Swagger API definition[39m
+PASS src/modules/auth/guards/roles.guard.spec.ts
+PASS src/modules/organizations/organizations.service.spec.ts
+PASS src/modules/schema-parser/parsers/openapi-parser.service.spec.ts
+PASS src/modules/auth/guards/jwt-auth.guard.spec.ts
+PASS src/modules/plugins/built-in/request-logger.plugin.spec.ts
+PASS src/entities/api.entity.spec.ts
+PASS src/entities/credential.entity.spec.ts
+PASS src/entities/tool-execution.entity.spec.ts
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------------------------------
+File                                | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                               
+------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------------------------------
+All files                           |   72.72 |    53.37 |   71.27 |   82.94 |                                                                                                 
+ common/decorators                  |   89.47 |      100 |      75 |   85.71 |                                                                                                 
+  current-user.decorator.ts         |      50 |      100 |       0 |      50 | 6-7                                                                                             
+  permissions.decorator.ts          |     100 |      100 |     100 |     100 |                                                                                                 
+  public.decorator.ts               |     100 |      100 |     100 |     100 |                                                                                                 
+  roles.decorator.ts                |     100 |      100 |     100 |     100 |                                                                                                 
+ config                             |       0 |        0 |     100 |       0 |                                                                                                 
+  database.config.ts                |       0 |        0 |     100 |       0 | 1-25                                                                                            
+ entities                           |   88.05 |     83.3 |   60.46 |   91.22 |                                                                                                 
+  api-key.entity.ts                 |   91.89 |      100 |      70 |   94.11 | 65,71                                                                                           
+  api-schema.entity.ts              |   67.44 |    15.38 |    7.69 |   71.05 | 84,90,98-129                                                                                    
+  api.entity.ts                     |   82.45 |      100 |   44.44 |   89.79 | 97,103,108,113,118                                                                              
+  credential.entity.ts              |   95.06 |      100 |   85.71 |   96.05 | 74,147,171                                                                                      
+  gateway-auth.entity.ts            |   94.73 |    95.91 |      80 |   95.89 | 87,128,222                                                                                      
+  gateway-tool.entity.ts            |   94.73 |      100 |   76.47 |   96.92 | 76,82                                                                                           
+  gateway.entity.ts                 |   52.87 |     9.09 |    8.33 |   56.41 | 135,141,146,151,154,159-254                                                                     
+  json-schema.entity.ts             |    87.5 |      100 |   53.84 |   91.83 | 71,77,80,119                                                                                    
+  llm-message.entity.ts             |   97.93 |    98.38 |   95.45 |   98.35 | 158,391,418                                                                                     
+  llm-provider.entity.ts            |   90.83 |    81.25 |      76 |   92.68 | 163,169,172,264,287-291,300-303                                                                 
+  llm-session.entity.ts             |   92.36 |    97.22 |   75.67 |   95.79 | 136,142,149,156,162                                                                             
+  operation.entity.ts               |   90.47 |      100 |      60 |   94.73 | 122,128,135                                                                                     
+  organization.entity.ts            |   77.14 |    81.25 |   33.33 |   85.45 | 79,82,85,88,91,94,97,100                                                                        
+  request-log.entity.ts             |    96.2 |       96 |   72.72 |   95.77 | 82,89,96                                                                                        
+  resource.entity.ts                |   94.28 |      100 |      75 |   96.82 | 95,101                                                                                          
+  team.entity.ts                    |      80 |      100 |       0 |    87.5 | 40,46                                                                                           
+  tool-category.entity.ts           |   95.12 |      100 |   66.66 |   97.36 | 59                                                                                              
+  tool-execution.entity.ts          |   93.61 |      100 |      85 |   93.33 | 76,80,84                                                                                        
+  tool-version.entity.ts            |   94.87 |      100 |      60 |   97.05 | 43                                                                                              
+  tool.entity.ts                    |   77.88 |    56.25 |   48.14 |   86.66 | 128,134,140,146,152,157,165,179,201,208,229,236                                                 
+  usage-metric.entity.ts            |   92.47 |      100 |   53.33 |   94.11 | 95,102,109,116,123                                                                              
+  user-organization.entity.ts       |   88.23 |      100 |      50 |   93.33 | 59,65                                                                                           
+  user-team.entity.ts               |      85 |      100 |      25 |   88.23 | 42,48                                                                                           
+  user.entity.ts                    |   67.64 |        0 |       0 |   72.41 | 60,63,68-87                                                                                     
+ modules/apis                       |   79.51 |    52.87 |      90 |   79.75 |                                                                                                 
+  apis.controller.ts                |   72.44 |    23.52 |    92.3 |   71.87 | 44,60,64,73,91,95,106,110,127,131,143,158,162,173,177,188,192,203,207,218,222,234-244           
+  apis.service.ts                   |    84.1 |    71.69 |   88.23 |   84.93 | 226-228,236-238,270-287,365,379-381,429-435                                                     
+ modules/auth                       |    96.7 |       85 |     100 |   96.62 |                                                                                                 
+  auth.controller.ts                |   90.47 |    57.14 |     100 |   90.16 | 54,144,256,287,320,347                                                                          
+  auth.service.ts                   |     100 |      100 |     100 |     100 |                                                                                                 
+ modules/auth/decorators            |     100 |      100 |     100 |     100 |                                                                                                 
+  roles.decorator.ts                |     100 |      100 |     100 |     100 |                                                                                                 
+ modules/auth/guards                |     100 |      100 |     100 |     100 |                                                                                                 
+  api-key-auth.guard.ts             |     100 |      100 |     100 |     100 |                                                                                                 
+  jwt-auth.guard.ts                 |     100 |      100 |     100 |     100 |                                                                                                 
+  local-auth.guard.ts               |     100 |      100 |     100 |     100 |                                                                                                 
+  roles.guard.ts                    |     100 |      100 |     100 |     100 |                                                                                                 
+ modules/auth/strategies            |   98.38 |    92.85 |     100 |   98.21 |                                                                                                 
+  api-key.strategy.ts               |   96.66 |     87.5 |     100 |   96.42 | 59                                                                                              
+  jwt.strategy.ts                   |     100 |      100 |     100 |     100 |                                                                                                 
+  local.strategy.ts                 |     100 |      100 |     100 |     100 |                                                                                                 
+ modules/gateways                   |   82.38 |    62.72 |    79.6 |   82.31 |                                                                                                 
+  gateway-auth.service.ts           |    70.7 |    64.75 |   69.23 |   70.25 | 220-329,409-457,523,565,587-618                                                                 
+  gateway-protocol.controller.ts    |   79.72 |    72.54 |      75 |   79.43 | 310,318-319,349-350,385-390,421-425,435,443-482                                                 
+  gateway-protocol.service.ts       |   81.74 |    74.28 |   81.81 |   80.83 | 232-241,256,313,387,422,428,468,512-529,550-551,558-571,581,585-591                             
+  gateway-tool.service.ts           |    99.5 |    98.03 |     100 |   99.48 | 519                                                                                             
+  gateways.controller.ts            |   86.58 |        0 |   78.26 |   86.41 | 318,324,347,355,361,411,445,475,512,542,571,600,631,660,695,724,760,795,831,860,889,917         
+  gateways.service.ts               |   76.03 |    46.96 |      75 |      77 | 171,229,287,294,298,437,537-559,571,574,579-591,633-636,666-668,674-680,687,692-698,719-721     
+ modules/gateways/dto               |       0 |      100 |     100 |       0 |                                                                                                 
+  index.ts                          |       0 |      100 |     100 |       0 | 1-55                                                                                            
+ modules/json-schema-translator     |   74.69 |    68.96 |   94.44 |   74.37 |                                                                                                 
+  json-schema-translator.service.ts |   74.69 |    68.96 |   94.44 |   74.37 | 28-67,89,108-109,131,150-151,199-200,229,421,433,441,445,449,453,457,461,465-467,472,495        
+ modules/llm-providers              |   57.89 |    20.36 |   47.82 |   58.43 |                                                                                                 
+  llm-providers.controller.ts       |   75.17 |     12.5 |   59.09 |   75.18 | 285,291,339,373,415,452,482,518,547,569-583,607-623,644-653,675-688,709-717,757-775             
+  llm-providers.service.ts          |   50.99 |    21.45 |   42.55 |   51.63 | 185,198,201,338,415,430-941,992-993,1008-1011,1028-1055,1097-1143,1158,1204,1276,1280           
+ modules/mcp                        |   84.18 |    58.51 |   82.35 |    83.9 |                                                                                                 
+  a2a.service.ts                    |   87.09 |    69.33 |    87.8 |   86.93 | 133,148,164,244-245,266-270,290,296-298,302,472-511,540,619,697,730,741,750,834,836,847,861-866 
+  mcp-gateway.service.ts            |     100 |    96.55 |     100 |     100 | 293                                                                                             
+  mcp-session.service.ts            |     100 |    95.45 |     100 |     100 | 175                                                                                             
+  mcp.controller.ts                 |     100 |    71.87 |     100 |     100 | 45-54,82,105-141                                                                                
+  mcp.service.ts                    |   89.28 |    68.62 |   95.45 |   88.78 | 97,122-123,143,223,232,262-269,362,383,412,426                                                  
+  realtime-executor.service.ts      |   80.79 |    75.75 |   68.57 |    80.4 | 118,122-123,127-128,136,169-212,245-281,307                                                     
+  utcp.service.ts                   |    54.6 |    26.86 |      50 |   54.36 | 71,77,155-278,294-311,337,341,375-466,594,605                                                   
+ modules/mcp/controllers            |   98.08 |       84 |     100 |      98 |                                                                                                 
+  a2a.controller.ts                 |   95.69 |    72.22 |     100 |    95.6 | 115,131,143,211                                                                                 
+  mcp-transport.controller.ts       |     100 |    88.23 |     100 |     100 | 113-117                                                                                         
+  public.controller.ts              |     100 |      100 |     100 |     100 |                                                                                                 
+  utcp.controller.ts                |     100 |     92.3 |     100 |     100 | 215                                                                                             
+ modules/mcp/transports             |   74.24 |    66.15 |   70.58 |   74.44 |                                                                                                 
+  sse.transport.ts                  |   75.92 |    66.66 |   73.33 |   76.19 | 80,84-85,101-102,172,180-181,188,212-229,239-242                                                
+  websocket.transport.ts            |    72.8 |    65.85 |   68.42 |   72.95 | 62,66-67,71-72,76-77,113,149-150,176,213,220-224,246,270-288,298-304                            
+ modules/mcp/types                  |     100 |      100 |     100 |     100 |                                                                                                 
+  a2a.types.ts                      |     100 |      100 |     100 |     100 |                                                                                                 
+  mcp.types.ts                      |     100 |      100 |     100 |     100 |                                                                                                 
+ modules/monitoring                 |   87.14 |    69.69 |   81.39 |   86.69 |                                                                                                 
+  monitoring.controller.ts          |     100 |       50 |     100 |     100 | 43,86-137                                                                                       
+  monitoring.service.ts             |   84.57 |    84.21 |      75 |   84.11 | 133-167,318-322,330,370-374,650-658                                                             
+ modules/organizations              |   74.85 |    44.18 |   82.05 |   73.96 |                                                                                                 
+  organizations.controller.ts       |     100 |      100 |     100 |     100 |                                                                                                 
+  organizations.service.ts          |   66.91 |    44.18 |   69.56 |   65.89 | 102-115,130,138,170,247,279,284-293,299,307-332,345-409,444                                     
+ modules/plugins                    |   73.54 |     57.3 |   63.41 |   74.19 |                                                                                                 
+  plugin-manager.service.ts         |   73.54 |     57.3 |   63.41 |   74.19 | 59,79,103,168-271,375-379,415,431-462,469-486,619-627,702                                       
+ modules/plugins/built-in           |   97.42 |    86.13 |     100 |   97.32 |                                                                                                 
+  performance-monitor.plugin.ts     |   94.56 |    74.28 |     100 |   94.04 | 262,300,304,310,314                                                                             
+  pii-filter.plugin.ts              |     100 |    92.85 |     100 |     100 | 153                                                                                             
+  rate-limiter.plugin.ts            |     100 |    91.66 |     100 |     100 | 215                                                                                             
+  request-logger.plugin.ts          |     100 |      100 |     100 |     100 |                                                                                                 
+  security-scanner.plugin.ts        |   96.29 |    90.62 |     100 |   96.15 | 132,147                                                                                         
+ modules/plugins/types              |     100 |      100 |     100 |     100 |                                                                                                 
+  plugin.types.ts                   |     100 |      100 |     100 |     100 |                                                                                                 
+ modules/schema-parser              |   92.15 |       60 |   92.85 |      92 |                                                                                                 
+  schema-parser.service.ts          |   92.15 |       60 |   92.85 |      92 | 52,65,197,297-309                                                                               
+ modules/schema-parser/parsers      |   95.36 |    73.72 |    98.3 |   97.89 |                                                                                                 
+  graphql-parser.service.ts         |      99 |    95.45 |     100 |   98.95 | 244                                                                                             
+  openapi-parser.service.ts         |   94.24 |       80 |     100 |    97.7 | 200-201,255                                                                                     
+  protobuf-parser.service.ts        |   95.69 |    89.18 |   95.45 |    95.5 | 264,284-288                                                                                     
+  soap-parser.service.ts            |   93.38 |    60.71 |     100 |   99.09 | 53                                                                                              
+ modules/tools                      |   93.58 |    76.13 |   93.47 |   93.53 |                                                                                                 
+  tool-executor.service.ts          |   97.75 |    91.89 |   91.66 |   98.14 | 222,504,606,753                                                                                 
+  tool-generator.service.ts         |    87.5 |    68.25 |     100 |   87.32 | 118-123,135-136,270-271,316,350,357-363,370-373,443,463                                         
+  tools.controller.ts               |   86.04 |     2.94 |   77.77 |   85.82 | 189,199,203,209,259,293,323,360,390,419,448,500,529,560,589,616,645,673                         
+  tools.service.ts                  |   97.01 |    86.17 |     100 |   96.88 | 231,443,697,828,846-848,856                                                                     
+ modules/users                      |   90.78 |    61.53 |   93.54 |   90.44 |                                                                                                 
+  users.controller.ts               |   93.93 |       60 |   93.75 |   93.75 | 140-145                                                                                         
+  users.service.ts                  |      88 |     61.9 |   93.33 |    87.5 | 51,59,124,138,179,183-191,261                                                                   
+ temp-coverage                      |       0 |        0 |       0 |       0 |                                                                                                 
+  block-navigation.js               |       0 |        0 |       0 |       0 | 2-87                                                                                            
+  prettify.js                       |       0 |        0 |       0 |       0 | 2                                                                                               
+  sorter.js                         |       0 |        0 |       0 |       0 | 2-210                                                                                           
+ temp-coverage/lcov-report          |       0 |        0 |       0 |       0 |                                                                                                 
+  block-navigation.js               |       0 |        0 |       0 |       0 | 2-87                                                                                            
+  prettify.js                       |       0 |        0 |       0 |       0 | 2                                                                                               
+  sorter.js                         |       0 |        0 |       0 |       0 | 2-210                                                                                           
+------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------------------------------
+Jest: "global" coverage threshold for statements (80%) not met: 72.72%
+Jest: "global" coverage threshold for branches (80%) not met: 53.37%
+Jest: "global" coverage threshold for functions (80%) not met: 71.27%
+
+Test Suites: 72 passed, 72 total
+Tests:       1987 passed, 1987 total
+Snapshots:   0 total
+Time:        21.786 s
+Ran all test suites.
