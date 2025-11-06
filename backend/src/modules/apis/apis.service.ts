@@ -336,24 +336,30 @@ export class ApisService {
       // Check if tool already exists
       const existingTool = await this.toolsService.findByName(toolName, api.organizationId);
 
-      if (existingTool) {
-        skippedExisting++;
-        this.logger.warn(`[TOOL-GEN] Tool ${toolName} already exists, skipping`);
-        return null;
-      }
-
       try {
-        this.logger.log(`[TOOL-GEN] Creating tool from operation: ${operation.name}`);
-        const tool = await this.toolsService.createFromOperation(operation, {
-          name: toolName,
-          description: toolDescription,
-          organizationId: api.organizationId,
-        });
-        this.logger.log(`[TOOL-GEN] Successfully created tool: ${toolName}`);
-        return tool;
+        if (existingTool) {
+          // Update existing tool with regenerated schemas
+          this.logger.log(`[TOOL-GEN] Updating existing tool: ${toolName}`);
+          const updatedTool = await this.toolsService.updateFromOperation(existingTool.id, operation, {
+            name: toolName,
+            description: toolDescription,
+            organizationId: api.organizationId,
+          });
+          this.logger.log(`[TOOL-GEN] Successfully updated tool: ${toolName}`);
+          return updatedTool;
+        } else {
+          this.logger.log(`[TOOL-GEN] Creating tool from operation: ${operation.name}`);
+          const tool = await this.toolsService.createFromOperation(operation, {
+            name: toolName,
+            description: toolDescription,
+            organizationId: api.organizationId,
+          });
+          this.logger.log(`[TOOL-GEN] Successfully created tool: ${toolName}`);
+          return tool;
+        }
       } catch (error) {
         errorCount++;
-        this.logger.error(`[TOOL-GEN] Failed to create tool from operation ${operation.name}: ${error.message}`, error.stack);
+        this.logger.error(`[TOOL-GEN] Failed to process tool from operation ${operation.name}: ${error.message}`, error.stack);
         return null;
       }
     });

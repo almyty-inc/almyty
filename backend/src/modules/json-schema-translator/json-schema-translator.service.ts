@@ -242,9 +242,23 @@ export class JsonSchemaTranslatorService {
       }
 
       // Body parameters
-      if (operation.parameters.body && operation.parameters.body.schema) {
-        if (typeof operation.parameters.body.schema === 'object') {
-          Object.assign(schema, operation.parameters.body.schema);
+      if (operation.parameters.body) {
+        // If body has schema property, use it
+        if (operation.parameters.body.schema) {
+          if (typeof operation.parameters.body.schema === 'object') {
+            Object.assign(schema, operation.parameters.body.schema);
+          }
+        }
+        // If body has properties directly (flattened structure), use those
+        else if (Object.keys(operation.parameters.body).length > 0) {
+          for (const [name, param] of Object.entries(operation.parameters.body)) {
+            if (name !== 'schema' && typeof param === 'object') {
+              schema.properties![name] = this.normalizePropertyToJsonSchema(param);
+              if (param.required) {
+                schema.required!.push(name);
+              }
+            }
+          }
         }
       }
     }

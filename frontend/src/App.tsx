@@ -16,8 +16,11 @@ import { useAuthStore } from '@/store/auth'
 // Dashboard pages
 import { DashboardPage } from '@/pages/dashboard'
 import { GatewaysPage } from '@/pages/gateways'
+import { GatewayDetailPage } from '@/pages/gateway-detail'
 import { ApisPage } from '@/pages/apis'
+import { ApiDetailPage } from '@/pages/api-detail'
 import { ToolsPage } from '@/pages/tools'
+import { ToolDetailPage } from '@/pages/tool-detail'
 import { LlmProvidersPage } from '@/pages/llm-providers'
 import { AnalyticsPage } from '@/pages/analytics'
 import { SettingsPage } from '@/pages/settings'
@@ -45,14 +48,29 @@ function App() {
             <GatewaysPage />
           </DashboardLayout>
         } />
+        <Route path="/gateways/:id" element={
+          <DashboardLayout>
+            <GatewayDetailPage />
+          </DashboardLayout>
+        } />
         <Route path="/apis" element={
           <DashboardLayout>
             <ApisPage />
           </DashboardLayout>
         } />
+        <Route path="/apis/:id" element={
+          <DashboardLayout>
+            <ApiDetailPage />
+          </DashboardLayout>
+        } />
         <Route path="/tools" element={
           <DashboardLayout>
             <ToolsPage />
+          </DashboardLayout>
+        } />
+        <Route path="/tools/:id" element={
+          <DashboardLayout>
+            <ToolDetailPage />
           </DashboardLayout>
         } />
         <Route path="/llm-providers" element={

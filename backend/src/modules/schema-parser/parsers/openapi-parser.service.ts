@@ -211,6 +211,14 @@ export class OpenAPIParserService implements SchemaParser {
           case 'header':
             result.header[param.name] = paramSchema;
             break;
+          case 'body':
+            // Swagger 2.0 body parameter
+            result.body = {
+              schema: param.schema,
+              required: param.required,
+              description: param.description,
+            };
+            break;
         }
       }
     }

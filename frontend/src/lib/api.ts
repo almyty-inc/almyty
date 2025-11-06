@@ -252,7 +252,7 @@ export const toolsApi = {
     return api.get('/tools')
   },
   
-  getById: (id: string) => api.get(`/tools/${id}`),
+  getById: (id: string, organizationId: string) => api.get(`/organizations/${organizationId}/tools/${id}`),
   
   create: (data: any) => api.post('/tools', data),
   
@@ -260,7 +260,7 @@ export const toolsApi = {
   
   delete: (id: string) => api.delete(`/tools/${id}`),
   
-  execute: (id: string, data: any) => api.post(`/tools/${id}/execute`, data),
+  execute: (id: string, data: any, organizationId: string) => api.post(`/organizations/${organizationId}/tools/${id}/execute`, data),
   
   getUsage: (id: string, params?: any) => api.get(`/tools/${id}/usage`, { params }),
   

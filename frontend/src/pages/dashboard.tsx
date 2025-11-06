@@ -1,5 +1,6 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import {
   BarChart3,
   Users,
@@ -9,24 +10,38 @@ import {
   TrendingDown,
   ArrowUpRight,
   ArrowDownRight,
+  Globe,
 } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { analyticsApi } from '@/lib/api'
+import { analyticsApi, gatewaysApi, toolsApi } from '@/lib/api'
 import { formatNumber, formatCurrency } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 
 export function DashboardPage() {
   const { currentOrganization } = useOrganizationStore()
+  const navigate = useNavigate()
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['dashboard', currentOrganization?.id],
     queryFn: () => analyticsApi.getDashboard(),
     enabled: !!currentOrganization,
     refetchInterval: 30000, // Refresh every 30 seconds
+  })
+
+  const { data: gatewaysData } = useQuery({
+    queryKey: ['gateways', currentOrganization?.id],
+    queryFn: () => gatewaysApi.getAll(),
+    enabled: !!currentOrganization,
+  })
+
+  const { data: toolsData } = useQuery({
+    queryKey: ['tools', currentOrganization?.id],
+    queryFn: () => toolsApi.getAll(currentOrganization?.id),
+    enabled: !!currentOrganization,
   })
 
   if (isLoading) {
@@ -38,6 +53,8 @@ export function DashboardPage() {
   }
 
   const dashboard = dashboardData?.data
+  const gateways = gatewaysData?.data?.data?.gateways || gatewaysData?.data?.data || []
+  const tools = toolsData?.data?.data?.tools || toolsData?.data?.tools || []
 
   return (
     <div className="space-y-8">
@@ -53,7 +70,7 @@ export function DashboardPage() {
           <Badge variant="outline">
             {currentOrganization?.name || 'No Organization'}
           </Badge>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => navigate('/analytics')}>
             <Activity className="mr-2 h-4 w-4" />
             View Analytics
           </Button>
@@ -206,17 +223,17 @@ export function DashboardPage() {
                 <span className="text-sm">Gateways</span>
               </div>
               <span className="text-2xl font-bold">
-                {dashboard?.totalGateways || 0}
+                {gateways.length}
               </span>
             </div>
-            
+
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Activity className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">Tools</span>
               </div>
               <span className="text-2xl font-bold">
-                {dashboard?.totalTools || 0}
+                {tools.length}
               </span>
             </div>
 
@@ -243,19 +260,35 @@ export function DashboardPage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Button className="h-24 flex-col space-y-2" variant="outline">
+            <Button
+              className="h-24 flex-col space-y-2"
+              variant="outline"
+              onClick={() => navigate('/gateways')}
+            >
               <Zap className="h-6 w-6" />
               <span>Create Gateway</span>
             </Button>
-            <Button className="h-24 flex-col space-y-2" variant="outline">
-              <Activity className="h-6 w-6" />
+            <Button
+              className="h-24 flex-col space-y-2"
+              variant="outline"
+              onClick={() => navigate('/apis')}
+            >
+              <Globe className="h-6 w-6" />
               <span>Add API</span>
             </Button>
-            <Button className="h-24 flex-col space-y-2" variant="outline">
+            <Button
+              className="h-24 flex-col space-y-2"
+              variant="outline"
+              onClick={() => navigate('/settings')}
+            >
               <Users className="h-6 w-6" />
               <span>Invite Team</span>
             </Button>
-            <Button className="h-24 flex-col space-y-2" variant="outline">
+            <Button
+              className="h-24 flex-col space-y-2"
+              variant="outline"
+              onClick={() => navigate('/analytics')}
+            >
               <BarChart3 className="h-6 w-6" />
               <span>View Analytics</span>
             </Button>

@@ -258,10 +258,42 @@ export class ToolExecutorService {
     try {
       // Build URL
       let url = `${api.baseUrl}${operation.endpoint}`;
-      const pathParams = parameters.path || {};
-      const queryParams = parameters.query || {};
-      const headerParams = parameters.header || {};
-      const bodyData = parameters.body;
+
+      // Handle both flattened and grouped parameters
+      let pathParams = {};
+      let queryParams = {};
+      let headerParams = {};
+      let bodyData = null;
+
+      if (parameters.path || parameters.query || parameters.header || parameters.body !== undefined) {
+        // Parameters are already grouped by type
+        pathParams = parameters.path || {};
+        queryParams = parameters.query || {};
+        headerParams = parameters.header || {};
+        bodyData = parameters.body;
+      } else {
+        // Parameters are flattened - need to determine which go where based on operation schema
+        // For POST/PUT/PATCH with body schema, all params go to body
+        if (['POST', 'PUT', 'PATCH'].includes(operation.method) && operation.parameters?.body) {
+          bodyData = parameters;
+        }
+        // For GET, params go to query or path based on endpoint
+        else {
+          // Extract path params from URL template
+          const pathParamNames = (operation.endpoint.match(/\{([^}]+)\}/g) || []).map(p => p.slice(1, -1));
+          pathParamNames.forEach(name => {
+            if (parameters[name] !== undefined) {
+              pathParams[name] = parameters[name];
+            }
+          });
+          // Rest go to query
+          Object.keys(parameters).forEach(key => {
+            if (!pathParamNames.includes(key)) {
+              queryParams[key] = parameters[key];
+            }
+          });
+        }
+      }
 
       // Replace path parameters
       for (const [key, value] of Object.entries(pathParams)) {

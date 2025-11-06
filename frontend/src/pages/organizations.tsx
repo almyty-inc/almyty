@@ -392,6 +392,11 @@ export function OrganizationsPage() {
             data={orgs}
             searchKey="name"
             searchPlaceholder="Search organizations..."
+            onRowClick={(org) => {
+              setSelectedOrg(org)
+              setSelectedOrgId(org.id)
+              setOrgDetailsOpen(true)
+            }}
           />
         </CardContent>
       </Card>

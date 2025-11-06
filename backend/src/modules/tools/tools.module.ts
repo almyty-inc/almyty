@@ -8,6 +8,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { Operation } from '../../entities/operation.entity';
 import { JsonSchema } from '../../entities/json-schema.entity';
 import { Api } from '../../entities/api.entity';
+import { ApiSchema } from '../../entities/api-schema.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -29,6 +30,7 @@ import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schem
       Operation,
       JsonSchema,
       Api,
+      ApiSchema,
       GatewayTool,
       User,
       Organization,
