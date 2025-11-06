@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Switch } from '@/components/ui/switch'
@@ -91,6 +92,7 @@ export function ToolsPage() {
   const { currentOrganization } = useOrganizationStore()
   const queryClient = useQueryClient()
   const notifications = useNotifications()
+  const navigate = useNavigate()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -185,20 +187,20 @@ export function ToolsPage() {
   }
 
   const handleViewDetails = (tool: Tool) => {
-    setSelectedTool(tool)
-    setIsDetailsDialogOpen(true)
+    navigate(`/tools/${tool.id}`)
   }
 
   const columns = [
-    createSelectColumn<Tool>('select'),
     {
       accessorKey: 'name',
       header: 'Name',
       cell: ({ row }: any) => {
         const tool = row.original
         return (
-          <div className="flex items-center gap-3">
-            <Code className="h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+              <Code className="h-5 w-5 text-primary" />
+            </div>
             <div>
               <div className="font-medium">{tool.name}</div>
               <div className="text-sm text-muted-foreground">
@@ -248,67 +250,36 @@ export function ToolsPage() {
         )
       },
     },
-    {
-      id: 'actions',
-      header: 'Actions',
-      cell: ({ row }: any) => {
-        const tool = row.original
-        return (
-          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setToolForExecution(tool)
-                setExecutionParameters({})
-                setExecutionResult(null)
-                setIsExecutionDialogOpen(true)
-              }}
-              aria-label="Test"
-            >
-              <Play className="h-4 w-4 mr-1" />
-              Test
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleViewDetails(tool)}
-              aria-label="View Details"
-            >
-              <Eye className="h-4 w-4 mr-1" />
-              View Details
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setToolForSettings(tool)
-                setIsSettingsDialogOpen(true)
-              }}
-              aria-label="Settings"
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleCopyEndpoint(tool)}
-              aria-label="Copy Endpoint"
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDeletingTool(tool)}
-              aria-label="Delete"
-            >
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </div>
-        )
-      },
-    },
+    createActionsColumn<Tool>(
+      (tool) => handleViewDetails(tool),
+      (tool) => setDeletingTool(tool),
+      [
+        {
+          label: 'View Details',
+          onClick: (tool) => handleViewDetails(tool),
+        },
+        {
+          label: 'Test Tool',
+          onClick: (tool) => {
+            setToolForExecution(tool)
+            setExecutionParameters({})
+            setExecutionResult(null)
+            setIsExecutionDialogOpen(true)
+          },
+        },
+        {
+          label: 'Settings',
+          onClick: (tool) => {
+            setToolForSettings(tool)
+            setIsSettingsDialogOpen(true)
+          },
+        },
+        {
+          label: 'Copy Endpoint',
+          onClick: (tool) => handleCopyEndpoint(tool),
+        },
+      ]
+    ),
   ]
 
   if (!currentOrganization) {
@@ -330,16 +301,22 @@ export function ToolsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Tools</h1>
-        <p className="text-muted-foreground">
-          AI tools generated from your APIs
-        </p>
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Tools</h1>
+          <p className="text-muted-foreground">
+            AI tools generated from your APIs
+          </p>
+        </div>
+        <Button onClick={() => navigate('/apis')}>
+          <Plus className="mr-2 h-4 w-4" />
+          Generate Tools
+        </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Total Tools</CardTitle>
@@ -372,88 +349,87 @@ export function ToolsPage() {
         </Card>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search tools..."
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-32">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-32" aria-label="Filter by Type">
-            <SelectValue placeholder="Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="REST_API">REST</SelectItem>
-            <SelectItem value="GRAPHQL">GraphQL</SelectItem>
-            <SelectItem value="SOAP">SOAP</SelectItem>
-          </SelectContent>
-        </Select>
-        {apiSources.length > 0 && (
-          <Select value={apiFilter} onValueChange={setApiFilter}>
-            <SelectTrigger className="w-48" aria-label="Filter by API">
-              <SelectValue placeholder="Filter by API" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All APIs</SelectItem>
-              {apiSources.map((apiName: string) => (
-                <SelectItem key={apiName} value={apiName}>
-                  {apiName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-
       {/* Tools Table */}
-      {filteredTools.length === 0 && searchQuery ? (
+      {tools.length === 0 ? (
         <Card>
-          <CardContent className="text-center py-8">
-            <Code className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">No tools found</h3>
-            <p className="text-muted-foreground">
-              No tools match your search criteria
-            </p>
-          </CardContent>
-        </Card>
-      ) : filteredTools.length === 0 ? (
-        <Card>
-          <CardContent className="text-center py-8">
-            <Code className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">No tools</h3>
-            <p className="text-muted-foreground mb-4">
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+              <Code className="h-8 w-8 text-primary" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">No tools</h3>
+            <p className="text-muted-foreground mb-6 text-center max-w-md">
               Generate tools from API schemas automatically. Create your first tool by importing an API.
             </p>
-            <Button asChild>
-              <a href="/apis">Go to APIs</a>
+            <Button size="lg" asChild>
+              <a href="/apis">
+                <Plus className="mr-2 h-4 w-4" />
+                Go to APIs
+              </a>
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <DataTable
-          columns={columns}
-          data={filteredTools}
-          loading={isLoading}
-          onRowClick={(tool) => handleViewDetails(tool)}
-        />
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            {/* Filters */}
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search tools..."
+                    className="pl-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-32" aria-label="Filter by Type">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="REST_API">REST</SelectItem>
+                  <SelectItem value="GRAPHQL">GraphQL</SelectItem>
+                  <SelectItem value="SOAP">SOAP</SelectItem>
+                </SelectContent>
+              </Select>
+              {apiSources.length > 0 && (
+                <Select value={apiFilter} onValueChange={setApiFilter}>
+                  <SelectTrigger className="w-48" aria-label="Filter by API">
+                    <SelectValue placeholder="Filter by API" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All APIs</SelectItem>
+                    {apiSources.map((apiName: string) => (
+                      <SelectItem key={apiName} value={apiName}>
+                        {apiName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            <DataTable
+              columns={columns}
+              data={filteredTools}
+              loading={isLoading}
+              onRowClick={(tool) => handleViewDetails(tool)}
+            />
+          </CardContent>
+        </Card>
       )}
 
       {/* Tool Details Dialog */}

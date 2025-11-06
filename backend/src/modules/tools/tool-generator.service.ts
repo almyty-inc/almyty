@@ -92,16 +92,22 @@ export class ToolGeneratorService {
             where: { operationId: operation.id },
           });
 
-          if (existingTool) {
-            result.skippedOperations.push({
-              operationId: operation.id,
-              reason: 'Tool already exists for this operation',
-            });
-            result.summary.skipped++;
-            continue;
-          }
+          let tool: Tool;
 
-          const tool = await this.generateToolFromOperation(operation, api, options);
+          if (existingTool) {
+            // Regenerate the existing tool with updated schemas
+            const inputSchema = await this.generateInputSchemaForOperation(operation, api.type);
+            const outputSchema = await this.generateOutputSchemaForOperation(operation, api.type);
+
+            existingTool.parameters = inputSchema ? inputSchema.schema : this.createFallbackParameters(operation);
+            existingTool.inputSchemaId = inputSchema?.id;
+            existingTool.outputSchemaId = outputSchema?.id;
+            existingTool.description = this.generateToolDescription(operation, api);
+
+            tool = await this.toolRepository.save(existingTool);
+          } else {
+            tool = await this.generateToolFromOperation(operation, api, options);
+          }
           
           if (tool) {
             result.generatedTools.push(tool);

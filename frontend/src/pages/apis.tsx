@@ -1,11 +1,12 @@
 import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { ColumnDef } from '@tanstack/react-table'
-import { 
-  Plus, Upload, FileCode, TestTube, Settings, Play, Pause, 
+import {
+  Plus, Upload, FileCode, TestTube, Settings, Play, Pause,
   CheckCircle, XCircle, AlertCircle, Globe, Database, Cloud,
-  Code, FileText, Zap, Activity, BarChart3, Shield, Key, 
-  RefreshCw, ExternalLink, Download, Eye, Edit, Trash2,
+  Code, FileText, Zap, Activity, BarChart3, Shield, Key,
+  Search, ExternalLink, Download, Eye, Edit, Trash2,
   Server, Webhook, Lock, Unlock, Copy, ChevronRight
 } from 'lucide-react'
 import { useForm, useController } from 'react-hook-form'
@@ -65,6 +66,16 @@ export function ApisPage() {
   const { currentOrganization } = useOrganizationStore()
   const { success, error } = useNotifications()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+
+  // Get all tools to show accurate counts per API
+  const { data: allToolsData } = useQuery({
+    queryKey: ['tools', currentOrganization?.id],
+    queryFn: () => import('@/lib/api').then(m => m.toolsApi.getAll(currentOrganization?.id)),
+    enabled: !!currentOrganization,
+  })
+
+  const allTools = allToolsData?.data?.data?.tools || allToolsData?.data?.tools || []
   
   const [selectedApi, setSelectedApi] = React.useState<Api | null>(null)
   const [editingApi, setEditingApi] = React.useState<Api | null>(null)
@@ -76,6 +87,9 @@ export function ApisPage() {
   const [uploadFile, setUploadFile] = React.useState<File | null>(null)
   const [selectedAuthType, setSelectedAuthType] = React.useState<ApiAuthType>(ApiAuthType.NONE)
   const [selectedApiType, setSelectedApiType] = React.useState<ApiType>(ApiType.OPENAPI)
+  const [searchQuery, setSearchQuery] = React.useState('')
+  const [typeFilter, setTypeFilter] = React.useState('all')
+  const [healthFilter, setHealthFilter] = React.useState('all')
 
   const { data: apisData, isLoading } = useQuery({
     queryKey: ['apis', currentOrganization?.id],
@@ -326,7 +340,6 @@ export function ApisPage() {
   }
 
   const apiColumns: ColumnDef<Api>[] = [
-    createSelectColumn('select'),
     {
       ...createSortableColumn('name', 'API'),
       cell: ({ row }) => {
@@ -370,24 +383,6 @@ export function ApisPage() {
       },
     },
     {
-      accessorKey: 'healthStatus',
-      header: 'Health',
-      cell: ({ row }) => {
-        const status = row.original.healthStatus || ApiHealthStatus.UNKNOWN
-        const colors = {
-          [ApiHealthStatus.HEALTHY]: 'success',
-          [ApiHealthStatus.DEGRADED]: 'warning',
-          [ApiHealthStatus.UNHEALTHY]: 'destructive',
-          [ApiHealthStatus.UNKNOWN]: 'secondary',
-        }
-        return (
-          <Badge variant={colors[status] as any}>
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-          </Badge>
-        )
-      },
-    },
-    {
       accessorKey: 'authentication.type',
       header: 'Auth',
       cell: ({ row }) => {
@@ -407,24 +402,26 @@ export function ApisPage() {
       accessorKey: 'tools',
       header: 'Tools',
       cell: ({ row }) => {
-        const toolCount = row.original.tools?.length || 0
+        const api = row.original
+        const apiToolCount = allTools.filter((tool: any) =>
+          tool.metadata?.sourceApi?.id === api.id || tool.apiId === api.id
+        ).length
         return (
           <div className="text-center">
-            <span className="font-medium">{toolCount}</span>
-            <span className="text-sm text-muted-foreground ml-1">tools</span>
+            <span className="font-medium">{apiToolCount}</span>
           </div>
         )
       },
     },
     {
-      accessorKey: 'lastTestedAt',
-      header: 'Last Tested',
+      accessorKey: 'operations',
+      header: 'Operations',
       cell: ({ row }) => {
-        const lastTested = row.original.lastTestedAt
-        return lastTested ? (
-          <span className="text-sm">{formatDateTime(lastTested)}</span>
-        ) : (
-          <span className="text-sm text-muted-foreground">Never</span>
+        const opCount = row.original.operations?.length || 0
+        return (
+          <div className="text-center">
+            <span className="font-medium">{opCount}</span>
+          </div>
         )
       },
     },
@@ -437,10 +434,7 @@ export function ApisPage() {
       [
         {
           label: 'View Details',
-          onClick: (api) => {
-            setSelectedApi(api)
-            setApiDetailsOpen(true)
-          },
+          onClick: (api) => navigate(`/apis/${api.id}`),
         },
         {
           label: 'Test Connection',
@@ -482,6 +476,18 @@ export function ApisPage() {
   const apis = apisData?.data?.apis || []
   const operations = apiOperations?.data || []
 
+  const filteredApis = apis.filter((api: Api) => {
+    const matchesSearch =
+      api.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (api.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      api.baseUrl.toLowerCase().includes(searchQuery.toLowerCase())
+
+    const matchesType = typeFilter === 'all' || api.type === typeFilter
+    const matchesHealth = healthFilter === 'all' || api.healthStatus === healthFilter
+
+    return matchesSearch && matchesType && matchesHealth
+  })
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -492,10 +498,6 @@ export function ApisPage() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" onClick={() => queryClient.invalidateQueries({ queryKey: ['apis'] })}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
           <Dialog open={createDialogOpen} onOpenChange={(open) => {
             setCreateDialogOpen(open)
             if (!open) setEditingApi(null)
@@ -778,88 +780,91 @@ export function ApisPage() {
               Create your first API to get started. We support OpenAPI, GraphQL, SOAP, and gRPC protocols.
             </p>
             <Button size="lg" onClick={() => setCreateDialogOpen(true)}>
-              <Plus className="mr-2 h-5 w-5" />
+              <Plus className="mr-2 h-4 w-4" />
               Connect Your First API
             </Button>
           </CardContent>
         </Card>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-3">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Connected APIs</CardTitle>
-                <Globe className="h-4 w-4 text-muted-foreground" />
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Total APIs</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{apis.length}</div>
-                <p className="text-xs text-muted-foreground">
-                  {apis.filter(a => a.isActive).length} active
-                </p>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Healthy APIs</CardTitle>
-                <CheckCircle className="h-4 w-4 text-muted-foreground" />
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Total Operations</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600">
-                  {apis.filter(a => a.healthStatus === ApiHealthStatus.HEALTHY).length}
+                <div className="text-2xl font-bold">
+                  {apis.reduce((sum, a) => sum + (a.operations?.length || 0), 0)}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {((apis.filter(a => a.healthStatus === ApiHealthStatus.HEALTHY).length / apis.length) * 100 || 0).toFixed(1)}% healthy
-                </p>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Generated Tools</CardTitle>
-                <Zap className="h-4 w-4 text-muted-foreground" />
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Tools Generated</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
                   {apis.reduce((sum, a) => sum + (a.tools?.length || 0), 0)}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  From API operations
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">API Types</CardTitle>
-                <Code className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {Object.values(ApiType).filter(type =>
-                    apis.some(api => api.type === type)
-                  ).length}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Different protocols
-                </p>
               </CardContent>
             </Card>
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Connected APIs</CardTitle>
-              <CardDescription>
-                Manage your API connections and generate tools
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6 space-y-4">
+              {/* Filters */}
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search APIs..."
+                      className="pl-10"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value={ApiType.OPENAPI}>OpenAPI</SelectItem>
+                    <SelectItem value={ApiType.GRAPHQL}>GraphQL</SelectItem>
+                    <SelectItem value={ApiType.SOAP}>SOAP</SelectItem>
+                    <SelectItem value={ApiType.GRPC}>gRPC</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={healthFilter} onValueChange={setHealthFilter}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Health" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value={ApiHealthStatus.HEALTHY}>Healthy</SelectItem>
+                    <SelectItem value={ApiHealthStatus.DEGRADED}>Degraded</SelectItem>
+                    <SelectItem value={ApiHealthStatus.UNHEALTHY}>Unhealthy</SelectItem>
+                    <SelectItem value={ApiHealthStatus.UNKNOWN}>Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <DataTable
                 columns={apiColumns}
-                data={apis}
-                searchKey="name"
-                searchPlaceholder="Search APIs..."
+                data={filteredApis}
+                onRowClick={(api) => navigate(`/apis/${api.id}`)}
               />
             </CardContent>
           </Card>
@@ -899,10 +904,10 @@ export function ApisPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Sheet open={apiDetailsOpen} onOpenChange={setApiDetailsOpen}>
-        <SheetContent className="w-[900px] sm:w-[1000px] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center space-x-2">
+      <Dialog open={apiDetailsOpen} onOpenChange={setApiDetailsOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
               {selectedApi && (
                 <>
                   <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -914,11 +919,11 @@ export function ApisPage() {
                   </Badge>
                 </>
               )}
-            </SheetTitle>
-            <SheetDescription>
+            </DialogTitle>
+            <DialogDescription>
               Manage API configuration, operations, and generated tools
-            </SheetDescription>
-          </SheetHeader>
+            </DialogDescription>
+          </DialogHeader>
 
           {selectedApi && (
             <Tabs defaultValue="overview" className="w-full mt-6">
@@ -1326,8 +1331,8 @@ export function ApisPage() {
               </TabsContent>
             </Tabs>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
