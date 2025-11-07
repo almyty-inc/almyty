@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { McpController } from './mcp.controller';
+import { GatewayMcpController } from './gateway-mcp.controller';
 import { McpTransportController } from './controllers/mcp-transport.controller';
 import { UtcpController } from './controllers/utcp.controller';
 import { A2AController } from './controllers/a2a.controller';
@@ -44,7 +45,7 @@ import { forwardRef } from '@nestjs/common';
     ]),
     forwardRef(() => ToolsModule),
   ],
-  controllers: [McpController, McpTransportController, UtcpController, A2AController, PublicController],
+  controllers: [McpController, GatewayMcpController, McpTransportController, UtcpController, A2AController, PublicController],
   providers: [
     McpService,
     McpGatewayService,
