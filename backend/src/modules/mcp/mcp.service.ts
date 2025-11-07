@@ -31,6 +31,8 @@ import {
 import { Tool } from '../../entities/tool.entity';
 import { Resource } from '../../entities/resource.entity';
 import { Organization } from '../../entities/organization.entity';
+import { Gateway } from '../../entities/gateway.entity';
+import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService, ToolExecutionResult } from '../tools/tool-executor.service';
 
@@ -46,16 +48,20 @@ export class McpService {
   constructor(
     @InjectRepository(Tool)
     private toolRepository: Repository<Tool>,
-    @InjectRepository(Resource) 
+    @InjectRepository(Resource)
     private resourceRepository: Repository<Resource>,
     @InjectRepository(Organization)
     private organizationRepository: Repository<Organization>,
+    @InjectRepository(Gateway)
+    private gatewayRepository: Repository<Gateway>,
+    @InjectRepository(GatewayTool)
+    private gatewayToolRepository: Repository<GatewayTool>,
     private toolsService: ToolsService,
     private toolExecutorService: ToolExecutorService,
   ) {}
 
   // Core JSON-RPC Handler
-  async handleJsonRpc(requestBody: any, organizationId: string, userId?: string): Promise<JsonRpcResponse> {
+  async handleJsonRpc(requestBody: any, organizationId: string, userId?: string, gatewayId?: string): Promise<JsonRpcResponse> {
     try {
       const request = this.validateJsonRpcRequest(requestBody);
       
@@ -73,7 +79,7 @@ export class McpService {
           break;
           
         case 'tools/list':
-          result = await this.handleToolsList(request.params, organizationId);
+          result = await this.handleToolsList(request.params, organizationId, gatewayId);
           break;
           
         case 'tools/call':
@@ -197,9 +203,23 @@ export class McpService {
     return {};
   }
 
-  private async handleToolsList(params: any, organizationId: string): Promise<McpToolsListResult> {
-    const { tools } = await this.toolsService.getTools({ organizationId });
-    
+  private async handleToolsList(params: any, organizationId: string, gatewayId?: string): Promise<McpToolsListResult> {
+    let tools: any[];
+
+    if (gatewayId) {
+      // Get tools assigned to this specific gateway
+      const gatewayTools = await this.gatewayToolRepository.find({
+        where: { gatewayId, isActive: true },
+        relations: ['tool'],
+      });
+      tools = gatewayTools.map((gt: any) => gt.tool).filter(Boolean);
+      this.logger.log(`[GATEWAY-SCOPE] Returning ${tools.length} tools for gateway ${gatewayId}`);
+    } else {
+      // Get all tools for organization
+      const result = await this.toolsService.getTools({ organizationId });
+      tools = result.tools;
+    }
+
     const mcpTools: McpTool[] = tools.map(tool => ({
       name: tool.name,
       description: tool.description,
