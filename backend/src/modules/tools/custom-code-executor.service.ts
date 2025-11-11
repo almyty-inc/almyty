@@ -38,13 +38,28 @@ export class CustomCodeExecutorService {
       const jail = context.global;
       await jail.set('parameters', new ivm.ExternalCopy(parameters).copyInto());
 
-      // For HTTP tools, inject axios functionality
+      // Inject required libraries based on code content
       if (code.includes('axios')) {
         const axios = require('axios');
         await jail.set('_axios', new ivm.Reference(axios));
         await context.eval(`
           const axios = function(config) {
             return _axios.applyIgnored(null, [config], { arguments: { copy: true }, result: { promise: true, copy: true } });
+          };
+          axios.post = function(url, data, config) {
+            return _axios.apply(undefined, ['post', url, data, config], { arguments: { copy: true }, result: { promise: true, copy: true } });
+          };
+        `);
+      }
+
+      if (code.includes('soap')) {
+        const soap = require('soap');
+        await jail.set('_soap', new ivm.Reference(soap));
+        await context.eval(`
+          const soap = {
+            createClientAsync: function(url) {
+              return _soap.apply(undefined, ['createClientAsync', url], { arguments: { copy: true }, result: { promise: true, copy: true } });
+            }
           };
         `);
       }
