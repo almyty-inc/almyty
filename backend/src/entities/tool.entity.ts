@@ -52,6 +52,9 @@ export class Tool {
   })
   type: ToolType;
 
+  @Column({ type: 'text', nullable: true })
+  code: string | null; // Custom JavaScript/TypeScript code for custom tools
+
   @Column({
     type: 'varchar',
     default: ToolStatus.DRAFT,
