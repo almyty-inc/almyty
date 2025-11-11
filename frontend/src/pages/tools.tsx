@@ -60,7 +60,6 @@ import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 const createToolSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
-  type: z.enum(['function', 'action', 'query']),
 })
 
 type CreateToolForm = z.infer<typeof createToolSchema>
@@ -152,7 +151,6 @@ export function ToolsPage() {
     defaultValues: {
       name: '',
       description: '',
-      type: 'function',
     },
   })
 
@@ -223,8 +221,17 @@ return { error: 'gRPC execution not yet implemented' };
 `;
       }
 
+      // Auto-assign tool type based on execution method
+      let type = 'function';
+      if (executionMethod === 'http') {
+        type = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpConfig.method) ? 'action' : 'query';
+      } else if (executionMethod === 'graphql') {
+        type = graphqlConfig.query.trim().startsWith('mutation') ? 'mutation' : 'query';
+      }
+
       return toolsApi.create({
         ...data,
+        type,
         parameters: toolParameters,
         code,
         executionMethod,
@@ -1039,23 +1046,6 @@ return { error: 'gRPC execution not yet implemented' };
                 placeholder="What does this tool do?"
                 {...createForm.register('description')}
               />
-            </div>
-
-            <div>
-              <Label htmlFor="tool-type">Tool Type</Label>
-              <Select
-                onValueChange={(value) => createForm.setValue('type', value as any)}
-                value={createForm.watch('type')}
-              >
-                <SelectTrigger id="tool-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="function">Function</SelectItem>
-                  <SelectItem value="action">Action</SelectItem>
-                  <SelectItem value="query">Query</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             {/* Configuration based on execution method */}
