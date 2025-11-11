@@ -34,20 +34,31 @@ export class CustomCodeExecutorService {
       const isolate = new ivm.Isolate({ memoryLimit });
       const context = await isolate.createContext();
 
-      // Inject parameters into the context
+      // Inject parameters and axios into the context
       const jail = context.global;
       await jail.set('parameters', new ivm.ExternalCopy(parameters).copyInto());
 
-      // Prepare the code with a wrapper that returns the result
+      // For HTTP tools, inject axios functionality
+      if (code.includes('axios')) {
+        const axios = require('axios');
+        await jail.set('_axios', new ivm.Reference(axios));
+        await context.eval(`
+          const axios = function(config) {
+            return _axios.applyIgnored(null, [config], { arguments: { copy: true }, result: { promise: true, copy: true } });
+          };
+        `);
+      }
+
+      // Prepare the code with async wrapper
       const wrappedCode = `
-        (function() {
+        (async function() {
           ${code}
         })()
       `;
 
       // Compile and run the script with timeout
       const script = await isolate.compileScript(wrappedCode);
-      const result = await script.run(context, { timeout });
+      const result = await script.run(context, { timeout, promise: true });
 
       const executionTime = Date.now() - startTime;
 
