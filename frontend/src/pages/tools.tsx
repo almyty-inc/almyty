@@ -125,12 +125,26 @@ export function ToolsPage() {
   const [executionResult, setExecutionResult] = useState<any>(null)
   const [toolParameters, setToolParameters] = useState<any>({ type: 'object', properties: {} })
   const [toolCode, setToolCode] = useState('')
-  const [toolMode, setToolMode] = useState<'custom' | 'http'>('http')
+  const [executionMethod, setExecutionMethod] = useState<'http' | 'graphql' | 'soap' | 'grpc' | 'custom'>('http')
   const [httpConfig, setHttpConfig] = useState({
     method: 'GET',
     url: '',
     headers: {},
     body: '',
+  })
+  const [graphqlConfig, setGraphqlConfig] = useState({
+    endpoint: '',
+    query: '',
+    variables: '',
+  })
+  const [soapConfig, setSoapConfig] = useState({
+    wsdlUrl: '',
+    operation: '',
+  })
+  const [grpcConfig, setGrpcConfig] = useState({
+    serviceUrl: '',
+    method: '',
+    protoFile: '',
   })
 
   const createForm = useForm<CreateToolForm>({
@@ -172,10 +186,10 @@ export function ToolsPage() {
   const createToolMutation = useMutation({
     mutationFn: (data: any) => {
       let code = undefined;
-      if (toolMode === 'custom') {
+
+      if (executionMethod === 'custom') {
         code = toolCode;
-      } else if (toolMode === 'http') {
-        // For HTTP tools, generate code that makes the HTTP request
+      } else if (executionMethod === 'http') {
         code = `
 const axios = require('axios');
 const response = await axios({
@@ -186,12 +200,34 @@ const response = await axios({
 });
 return response.data;
 `;
+      } else if (executionMethod === 'graphql') {
+        code = `
+const axios = require('axios');
+const response = await axios.post('${graphqlConfig.endpoint}', {
+  query: \`${graphqlConfig.query}\`,
+  variables: { ...${graphqlConfig.variables || '{}'}, ...parameters }
+});
+return response.data;
+`;
+      } else if (executionMethod === 'soap') {
+        code = `
+const soap = require('soap');
+const client = await soap.createClientAsync('${soapConfig.wsdlUrl}');
+const result = await client.${soapConfig.operation}Async(parameters);
+return result;
+`;
+      } else if (executionMethod === 'grpc') {
+        code = `
+// gRPC execution - requires grpc client setup
+return { error: 'gRPC execution not yet implemented' };
+`;
       }
 
       return toolsApi.create({
         ...data,
         parameters: toolParameters,
         code,
+        executionMethod,
       });
     },
     onSuccess: () => {
@@ -959,36 +995,29 @@ return response.data;
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={createForm.handleSubmit((data) => createToolMutation.mutate(data))} className="space-y-4">
-            <div className="pb-2 border-b">
-              <Label className="text-sm font-medium mb-2 block">Tool Type</Label>
-              <div className="flex gap-4">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    id="mode-http"
-                    checked={toolMode === 'http'}
-                    onChange={() => setToolMode('http')}
-                  />
-                  <Label htmlFor="mode-http" className="cursor-pointer font-normal">
-                    HTTP Request Tool
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    id="mode-custom"
-                    checked={toolMode === 'custom'}
-                    onChange={() => setToolMode('custom')}
-                  />
-                  <Label htmlFor="mode-custom" className="cursor-pointer font-normal">
-                    Custom JavaScript Tool
-                  </Label>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                {toolMode === 'http'
-                  ? 'Make HTTP requests to any endpoint with custom headers and body'
-                  : 'Write custom JavaScript code for data transformations and complex logic'}
+            <div>
+              <Label htmlFor="execution-method">Execution Method</Label>
+              <Select
+                value={executionMethod}
+                onValueChange={(value: any) => setExecutionMethod(value)}
+              >
+                <SelectTrigger id="execution-method">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="http">HTTP REST API</SelectItem>
+                  <SelectItem value="graphql">GraphQL</SelectItem>
+                  <SelectItem value="soap">SOAP</SelectItem>
+                  <SelectItem value="grpc">gRPC</SelectItem>
+                  <SelectItem value="custom">Custom JavaScript</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {executionMethod === 'http' && 'Make HTTP/REST requests to any API endpoint'}
+                {executionMethod === 'graphql' && 'Execute GraphQL queries and mutations'}
+                {executionMethod === 'soap' && 'Call SOAP web services'}
+                {executionMethod === 'grpc' && 'Invoke gRPC service methods'}
+                {executionMethod === 'custom' && 'Write custom JavaScript code for transformations and logic'}
               </p>
             </div>
             <div>
@@ -1029,18 +1058,14 @@ return response.data;
               </Select>
             </div>
 
-            {toolMode === 'http' ? (
+            {/* Configuration based on execution method */}
+            {executionMethod === 'http' && (
               <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label htmlFor="http-method">HTTP Method</Label>
-                    <Select
-                      value={httpConfig.method}
-                      onValueChange={(value) => setHttpConfig({ ...httpConfig, method: value })}
-                    >
-                      <SelectTrigger id="http-method">
-                        <SelectValue />
-                      </SelectTrigger>
+                    <Select value={httpConfig.method} onValueChange={(value) => setHttpConfig({ ...httpConfig, method: value })}>
+                      <SelectTrigger id="http-method"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="GET">GET</SelectItem>
                         <SelectItem value="POST">POST</SelectItem>
@@ -1052,37 +1077,67 @@ return response.data;
                   </div>
                   <div>
                     <Label htmlFor="http-url">URL</Label>
-                    <Input
-                      id="http-url"
-                      value={httpConfig.url}
-                      onChange={(e) => setHttpConfig({ ...httpConfig, url: e.target.value })}
-                      placeholder="https://api.example.com/endpoint"
-                    />
+                    <Input id="http-url" value={httpConfig.url} onChange={(e) => setHttpConfig({ ...httpConfig, url: e.target.value })} placeholder="https://api.example.com/endpoint" />
                   </div>
                 </div>
                 <div>
                   <Label htmlFor="http-body">Request Body (JSON)</Label>
-                  <Textarea
-                    id="http-body"
-                    value={httpConfig.body}
-                    onChange={(e) => setHttpConfig({ ...httpConfig, body: e.target.value })}
-                    placeholder='{"key": "value"}'
-                    className="font-mono text-xs"
-                    rows={4}
-                  />
+                  <Textarea id="http-body" value={httpConfig.body} onChange={(e) => setHttpConfig({ ...httpConfig, body: e.target.value })} placeholder='{"key": "value"}' className="font-mono text-xs" rows={4} />
                 </div>
               </div>
-            ) : (
+            )}
+
+            {executionMethod === 'graphql' && (
+              <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
+                <div>
+                  <Label htmlFor="graphql-endpoint">GraphQL Endpoint</Label>
+                  <Input id="graphql-endpoint" value={graphqlConfig.endpoint} onChange={(e) => setGraphqlConfig({ ...graphqlConfig, endpoint: e.target.value })} placeholder="https://api.example.com/graphql" />
+                </div>
+                <div>
+                  <Label htmlFor="graphql-query">Query/Mutation</Label>
+                  <Textarea id="graphql-query" value={graphqlConfig.query} onChange={(e) => setGraphqlConfig({ ...graphqlConfig, query: e.target.value })} placeholder="query { users { id name } }" className="font-mono text-sm" rows={6} />
+                </div>
+                <div>
+                  <Label htmlFor="graphql-variables">Variables (JSON)</Label>
+                  <Textarea id="graphql-variables" value={graphqlConfig.variables} onChange={(e) => setGraphqlConfig({ ...graphqlConfig, variables: e.target.value })} placeholder='{"limit": 10}' className="font-mono text-xs" rows={3} />
+                </div>
+              </div>
+            )}
+
+            {executionMethod === 'soap' && (
+              <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
+                <div>
+                  <Label htmlFor="soap-wsdl">WSDL URL</Label>
+                  <Input id="soap-wsdl" value={soapConfig.wsdlUrl} onChange={(e) => setSoapConfig({ ...soapConfig, wsdlUrl: e.target.value })} placeholder="https://api.example.com/service?wsdl" />
+                </div>
+                <div>
+                  <Label htmlFor="soap-operation">Operation Name</Label>
+                  <Input id="soap-operation" value={soapConfig.operation} onChange={(e) => setSoapConfig({ ...soapConfig, operation: e.target.value })} placeholder="GetUserInfo" />
+                </div>
+              </div>
+            )}
+
+            {executionMethod === 'grpc' && (
+              <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
+                <div>
+                  <Label htmlFor="grpc-url">Service URL</Label>
+                  <Input id="grpc-url" value={grpcConfig.serviceUrl} onChange={(e) => setGrpcConfig({ ...grpcConfig, serviceUrl: e.target.value })} placeholder="grpc://api.example.com:50051" />
+                </div>
+                <div>
+                  <Label htmlFor="grpc-method">Method</Label>
+                  <Input id="grpc-method" value={grpcConfig.method} onChange={(e) => setGrpcConfig({ ...grpcConfig, method: e.target.value })} placeholder="UserService/GetUser" />
+                </div>
+                <div>
+                  <Label htmlFor="grpc-proto">Proto Definition</Label>
+                  <Textarea id="grpc-proto" value={grpcConfig.protoFile} onChange={(e) => setGrpcConfig({ ...grpcConfig, protoFile: e.target.value })} placeholder="syntax = proto3; ..." className="font-mono text-xs" rows={6} />
+                </div>
+              </div>
+            )}
+
+            {executionMethod === 'custom' && (
               <div>
                 <Label htmlFor="tool-code">JavaScript Code</Label>
-                <Textarea
-                  id="tool-code"
-                  value={toolCode}
-                  onChange={(e) => setToolCode(e.target.value)}
-                  placeholder={`// Access parameters via 'parameters' object\n// Return the result\n\nreturn {\n  message: "Hello " + parameters.name,\n  timestamp: Date.now()\n};`}
-                  className="font-mono text-sm"
-                  rows={12}
-                />
+                <Textarea id="tool-code" value={toolCode} onChange={(e) => setToolCode(e.target.value)} placeholder={`// Access parameters via 'parameters' object\n// Return the result\n\nreturn {\n  message: "Hello " + parameters.name,\n  timestamp: Date.now()\n};`} className="font-mono text-sm" rows={12} />
                 <p className="text-xs text-muted-foreground mt-1">
                   Write JavaScript code. Access input via <code>parameters</code> object. Return result.
                 </p>

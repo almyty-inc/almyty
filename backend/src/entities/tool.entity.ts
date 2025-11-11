@@ -26,6 +26,14 @@ export enum ToolType {
   API = 'api',
 }
 
+export enum ToolExecutionMethod {
+  HTTP = 'http',
+  GRAPHQL = 'graphql',
+  SOAP = 'soap',
+  GRPC = 'grpc',
+  CUSTOM = 'custom',
+}
+
 export enum ToolStatus {
   DRAFT = 'draft',
   ACTIVE = 'active',
@@ -54,6 +62,18 @@ export class Tool {
 
   @Column({ type: 'text', nullable: true })
   code: string | null; // Custom JavaScript/TypeScript code for custom tools
+
+  @Column({
+    type: 'varchar',
+    nullable: true,
+  })
+  executionMethod: ToolExecutionMethod | null; // How this tool executes (http, graphql, soap, grpc, custom)
+
+  @Column({ type: 'json', nullable: true })
+  authConfig: {
+    type?: 'none' | 'basic' | 'bearer' | 'oauth2' | 'apiKey';
+    config?: Record<string, any>;
+  } | null; // Authentication configuration for manual tools
 
   @Column({
     type: 'varchar',
