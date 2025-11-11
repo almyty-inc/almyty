@@ -125,7 +125,13 @@ export function ToolsPage() {
   const [executionResult, setExecutionResult] = useState<any>(null)
   const [toolParameters, setToolParameters] = useState<any>({ type: 'object', properties: {} })
   const [toolCode, setToolCode] = useState('')
-  const [isCustomTool, setIsCustomTool] = useState(false)
+  const [toolMode, setToolMode] = useState<'custom' | 'http'>('http')
+  const [httpConfig, setHttpConfig] = useState({
+    method: 'GET',
+    url: '',
+    headers: {},
+    body: '',
+  })
 
   const createForm = useForm<CreateToolForm>({
     resolver: zodResolver(createToolSchema),
@@ -164,11 +170,30 @@ export function ToolsPage() {
   })
 
   const createToolMutation = useMutation({
-    mutationFn: (data: any) => toolsApi.create({
-      ...data,
-      parameters: toolParameters,
-      code: isCustomTool ? toolCode : undefined,
-    }),
+    mutationFn: (data: any) => {
+      let code = undefined;
+      if (toolMode === 'custom') {
+        code = toolCode;
+      } else if (toolMode === 'http') {
+        // For HTTP tools, generate code that makes the HTTP request
+        code = `
+const axios = require('axios');
+const response = await axios({
+  method: '${httpConfig.method}',
+  url: '${httpConfig.url}',
+  data: ${httpConfig.body || 'undefined'},
+  params: parameters
+});
+return response.data;
+`;
+      }
+
+      return toolsApi.create({
+        ...data,
+        parameters: toolParameters,
+        code,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tools'] })
       notifications.success('Success', 'Tool created successfully')
@@ -176,7 +201,8 @@ export function ToolsPage() {
       createForm.reset()
       setToolParameters({ type: 'object', properties: {} })
       setToolCode('')
-      setIsCustomTool(false)
+      setHttpConfig({ method: 'GET', url: '', headers: {}, body: '' })
+      setToolMode('http')
     },
     onError: (error: any) => {
       notifications.error('Error', error.response?.data?.message || 'Failed to create tool')
@@ -933,12 +959,37 @@ export function ToolsPage() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={createForm.handleSubmit((data) => createToolMutation.mutate(data))} className="space-y-4">
-            <div className="flex items-center space-x-2 pb-2 border-b">
-              <Switch
-                checked={isCustomTool}
-                onCheckedChange={setIsCustomTool}
-              />
-              <Label>Custom Code Tool (JavaScript)</Label>
+            <div className="pb-2 border-b">
+              <Label className="text-sm font-medium mb-2 block">Tool Type</Label>
+              <div className="flex gap-4">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    id="mode-http"
+                    checked={toolMode === 'http'}
+                    onChange={() => setToolMode('http')}
+                  />
+                  <Label htmlFor="mode-http" className="cursor-pointer font-normal">
+                    HTTP Request Tool
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    id="mode-custom"
+                    checked={toolMode === 'custom'}
+                    onChange={() => setToolMode('custom')}
+                  />
+                  <Label htmlFor="mode-custom" className="cursor-pointer font-normal">
+                    Custom JavaScript Tool
+                  </Label>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                {toolMode === 'http'
+                  ? 'Make HTTP requests to any endpoint with custom headers and body'
+                  : 'Write custom JavaScript code for data transformations and complex logic'}
+              </p>
             </div>
             <div>
               <Label htmlFor="tool-name">Tool Name</Label>
@@ -978,14 +1029,57 @@ export function ToolsPage() {
               </Select>
             </div>
 
-            {isCustomTool ? (
+            {toolMode === 'http' ? (
+              <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="http-method">HTTP Method</Label>
+                    <Select
+                      value={httpConfig.method}
+                      onValueChange={(value) => setHttpConfig({ ...httpConfig, method: value })}
+                    >
+                      <SelectTrigger id="http-method">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GET">GET</SelectItem>
+                        <SelectItem value="POST">POST</SelectItem>
+                        <SelectItem value="PUT">PUT</SelectItem>
+                        <SelectItem value="PATCH">PATCH</SelectItem>
+                        <SelectItem value="DELETE">DELETE</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="http-url">URL</Label>
+                    <Input
+                      id="http-url"
+                      value={httpConfig.url}
+                      onChange={(e) => setHttpConfig({ ...httpConfig, url: e.target.value })}
+                      placeholder="https://api.example.com/endpoint"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="http-body">Request Body (JSON)</Label>
+                  <Textarea
+                    id="http-body"
+                    value={httpConfig.body}
+                    onChange={(e) => setHttpConfig({ ...httpConfig, body: e.target.value })}
+                    placeholder='{"key": "value"}'
+                    className="font-mono text-xs"
+                    rows={4}
+                  />
+                </div>
+              </div>
+            ) : (
               <div>
                 <Label htmlFor="tool-code">JavaScript Code</Label>
                 <Textarea
                   id="tool-code"
                   value={toolCode}
                   onChange={(e) => setToolCode(e.target.value)}
-                  placeholder={`// Your code here\n// Access parameters via 'parameters' object\n// Return the result\n\nreturn {\n  message: "Hello " + parameters.name\n};`}
+                  placeholder={`// Access parameters via 'parameters' object\n// Return the result\n\nreturn {\n  message: "Hello " + parameters.name,\n  timestamp: Date.now()\n};`}
                   className="font-mono text-sm"
                   rows={12}
                 />
@@ -993,7 +1087,7 @@ export function ToolsPage() {
                   Write JavaScript code. Access input via <code>parameters</code> object. Return result.
                 </p>
               </div>
-            ) : null}
+            )}
 
             <div>
               <JsonSchemaBuilder
