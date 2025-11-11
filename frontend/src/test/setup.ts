@@ -52,11 +52,11 @@ Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
 // Mock Recharts ResponsiveContainer
 vi.mock('recharts', async () => {
   const actual = await vi.importActual('recharts')
+  const React = await import('react')
   return {
     ...actual,
-    ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
-      <div style={{ width: 400, height: 300 }}>{children}</div>
-    ),
+    ResponsiveContainer: ({ children }: { children: React.ReactNode }) =>
+      React.createElement('div', { style: { width: 400, height: 300 } }, children),
   }
 })
 
