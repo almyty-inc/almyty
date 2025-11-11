@@ -116,6 +116,14 @@ class UpdateGatewayBodyDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  endpoint?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
   @IsObject()
   configuration?: Record<string, any>;
 
@@ -889,6 +897,77 @@ export class GatewaysController {
           success: false,
           message: error.message,
           error: 'BULK_ASSOCIATION_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Delete(':gatewayId/tools/:toolId')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Remove tool from gateway' })
+  @ApiResponse({ status: 200, description: 'Tool removed successfully' })
+  async removeToolFromGateway(
+    @Param('gatewayId', ParseUUIDPipe) gatewayId: string,
+    @Param('toolId', ParseUUIDPipe) toolId: string,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      await this.gatewayToolService.removeTool(gatewayId, toolId, organizationId);
+
+      return {
+        success: true,
+        message: 'Tool removed from gateway successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'TOOL_REMOVAL_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Delete(':gatewayId/tools')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Remove all tools from gateway' })
+  @ApiResponse({ status: 200, description: 'All tools removed successfully' })
+  async removeAllToolsFromGateway(
+    @Param('gatewayId', ParseUUIDPipe) gatewayId: string,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      await this.gatewayToolService.removeAllTools(gatewayId, organizationId);
+
+      return {
+        success: true,
+        message: 'All tools removed from gateway successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'ALL_TOOLS_REMOVAL_FAILED',
         },
         error.status || HttpStatus.BAD_REQUEST,
       );

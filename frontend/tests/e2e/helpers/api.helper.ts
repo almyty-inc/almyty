@@ -9,7 +9,7 @@ export class APIHelper {
   private token?: string
   private organizationId?: string
 
-  constructor(baseURL: string = 'http://localhost:4000/api') {
+  constructor(baseURL: string = 'http://localhost:4000') {
     this.client = axios.create({
       baseURL,
       headers: {

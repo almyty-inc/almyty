@@ -43,6 +43,10 @@ export class UpdateGatewayDto {
   endpoint?: string;
 
   @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
   @IsObject()
   configuration?: Record<string, any>;
 

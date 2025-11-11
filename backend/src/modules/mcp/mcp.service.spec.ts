@@ -4,6 +4,8 @@ import { McpService } from './mcp.service';
 import { Tool } from '../../entities/tool.entity';
 import { Resource } from '../../entities/resource.entity';
 import { Organization } from '../../entities/organization.entity';
+import { Gateway } from '../../entities/gateway.entity';
+import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 
@@ -12,6 +14,8 @@ describe('McpService', () => {
   let toolRepository: any;
   let resourceRepository: any;
   let organizationRepository: any;
+  let gatewayRepository: any;
+  let gatewayToolRepository: any;
   let toolsService: any;
   let toolExecutorService: any;
 
@@ -40,10 +44,25 @@ describe('McpService', () => {
           },
         },
         {
+          provide: getRepositoryToken(Gateway),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(GatewayTool),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+          },
+        },
+        {
           provide: ToolsService,
           useValue: {
             getTools: jest.fn(),
             getTool: jest.fn(),
+            findByName: jest.fn(),
           },
         },
         {
@@ -59,6 +78,8 @@ describe('McpService', () => {
     toolRepository = module.get(getRepositoryToken(Tool));
     resourceRepository = module.get(getRepositoryToken(Resource));
     organizationRepository = module.get(getRepositoryToken(Organization));
+    gatewayRepository = module.get(getRepositoryToken(Gateway));
+    gatewayToolRepository = module.get(getRepositoryToken(GatewayTool));
     toolsService = module.get(ToolsService);
     toolExecutorService = module.get(ToolExecutorService);
   });
@@ -685,6 +706,207 @@ describe('McpService', () => {
 
       // Should not throw
       expect(service).toBeDefined();
+    });
+  });
+
+  describe('tool name sanitization in tools/list', () => {
+    it('should sanitize tool names with spaces', async () => {
+      const toolsWithSpaces = [
+        {
+          name: 'Get User Info',
+          description: 'Gets user information',
+          parameters: { type: 'object', properties: {} }
+        },
+        {
+          name: 'Delete User Account',
+          description: 'Deletes user account',
+          parameters: { type: 'object', properties: {} }
+        },
+      ];
+
+      toolsService.getTools.mockResolvedValue({ tools: toolsWithSpaces });
+
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'tools/list',
+        params: {},
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      expect(result.result.tools).toHaveLength(2);
+      expect(result.result.tools[0].name).toBe('Get_User_Info');
+      expect(result.result.tools[1].name).toBe('Delete_User_Account');
+    });
+
+    it('should sanitize tool names with special characters', async () => {
+      const toolsWithSpecialChars = [
+        {
+          name: 'api/v1/users',
+          description: 'API endpoint',
+          parameters: { type: 'object', properties: {} }
+        },
+        {
+          name: 'tool@#$name!',
+          description: 'Tool with special chars',
+          parameters: { type: 'object', properties: {} }
+        },
+      ];
+
+      toolsService.getTools.mockResolvedValue({ tools: toolsWithSpecialChars });
+
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'tools/list',
+        params: {},
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      expect(result.result.tools).toHaveLength(2);
+      expect(result.result.tools[0].name).toBe('api_v1_users');
+      expect(result.result.tools[1].name).toBe('tool_name');
+    });
+
+    it('should handle tool names starting with numbers', async () => {
+      const toolsStartingWithNumbers = [
+        {
+          name: '1get_user',
+          description: 'Gets user',
+          parameters: { type: 'object', properties: {} }
+        },
+      ];
+
+      toolsService.getTools.mockResolvedValue({ tools: toolsStartingWithNumbers });
+
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'tools/list',
+        params: {},
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      expect(result.result.tools[0].name).toBe('tool_1get_user');
+    });
+
+    it('should truncate tool names longer than 64 characters', async () => {
+      const longName = 'a'.repeat(70);
+      const toolsWithLongNames = [
+        {
+          name: longName,
+          description: 'Tool with long name',
+          parameters: { type: 'object', properties: {} }
+        },
+      ];
+
+      toolsService.getTools.mockResolvedValue({ tools: toolsWithLongNames });
+
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'tools/list',
+        params: {},
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      expect(result.result.tools[0].name).toHaveLength(64);
+      expect(result.result.tools[0].name).toBe('a'.repeat(64));
+    });
+
+    it('should handle empty or null tool names', async () => {
+      const toolsWithEmptyNames = [
+        {
+          name: '',
+          description: 'Empty name',
+          parameters: { type: 'object', properties: {} }
+        },
+        {
+          name: null,
+          description: 'Null name',
+          parameters: { type: 'object', properties: {} }
+        },
+      ];
+
+      toolsService.getTools.mockResolvedValue({ tools: toolsWithEmptyNames });
+
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'tools/list',
+        params: {},
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      expect(result.result.tools[0].name).toBe('unnamed_tool');
+      expect(result.result.tools[1].name).toBe('unnamed_tool');
+    });
+
+    it('should preserve valid tool names with underscores and hyphens', async () => {
+      const validTools = [
+        {
+          name: 'get_user_info',
+          description: 'Gets user info',
+          parameters: { type: 'object', properties: {} }
+        },
+        {
+          name: 'delete-user-account',
+          description: 'Deletes account',
+          parameters: { type: 'object', properties: {} }
+        },
+        {
+          name: 'list_user-accounts',
+          description: 'Lists accounts',
+          parameters: { type: 'object', properties: {} }
+        },
+      ];
+
+      toolsService.getTools.mockResolvedValue({ tools: validTools });
+
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'tools/list',
+        params: {},
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      expect(result.result.tools[0].name).toBe('get_user_info');
+      expect(result.result.tools[1].name).toBe('delete-user-account');
+      expect(result.result.tools[2].name).toBe('list_user-accounts');
+    });
+
+    it('should match MCP client pattern ^[a-zA-Z0-9_-]{1,64}$', async () => {
+      const variousTools = [
+        { name: 'Get User Info!', description: 'test', parameters: {} },
+        { name: 'api/v1/users', description: 'test', parameters: {} },
+        { name: 'tool@#$%^&*()', description: 'test', parameters: {} },
+        { name: '___leading___', description: 'test', parameters: {} },
+        { name: 'trailing___', description: 'test', parameters: {} },
+      ];
+
+      toolsService.getTools.mockResolvedValue({ tools: variousTools });
+
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'tools/list',
+        params: {},
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      // All sanitized names should match the MCP pattern
+      const mcpPattern = /^[a-zA-Z0-9_-]{1,64}$/;
+      result.result.tools.forEach(tool => {
+        expect(tool.name).toMatch(mcpPattern);
+      });
     });
   });
 });

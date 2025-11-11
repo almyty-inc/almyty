@@ -240,12 +240,14 @@ export function GatewaysPage() {
           onClick: (gateway) => navigate(`/gateways/${gateway.id}`),
         },
         {
-          label: 'Copy Endpoint',
+          label: 'Copy Full URL',
           onClick: async (gateway) => {
-            const endpoint = `${window.location.origin}${gateway.endpoint}`
+            const backendUrl = window.location.origin.replace(':3002', ':4000')
+            const simpleSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
+            const fullEndpoint = `${backendUrl}/mcp/${simpleSlug}${gateway.endpoint}`
             try {
-              await navigator.clipboard.writeText(endpoint)
-              success('Copied!', 'Gateway endpoint copied to clipboard')
+              await navigator.clipboard.writeText(fullEndpoint)
+              success('Copied!', 'Full MCP endpoint URL copied to clipboard')
             } catch (err) {
               errorNotif('Failed to copy', 'Could not copy endpoint to clipboard')
             }

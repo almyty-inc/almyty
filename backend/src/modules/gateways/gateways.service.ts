@@ -164,9 +164,14 @@ export class GatewaysService {
         throw new BadRequestException('Organization has reached gateway limit');
       }
 
+      // Ensure endpoint starts with /
+      const endpoint = createGatewayDto.endpoint.startsWith('/')
+        ? createGatewayDto.endpoint
+        : '/' + createGatewayDto.endpoint;
+
       // Validate endpoint uniqueness within organization
       const existingGateway = await this.gatewayRepository.findOne({
-        where: { endpoint: createGatewayDto.endpoint, organizationId },
+        where: { endpoint, organizationId },
       });
 
       if (existingGateway) {
@@ -179,6 +184,7 @@ export class GatewaysService {
       // Create the gateway
       const gateway = this.gatewayRepository.create({
         ...createGatewayDto,
+        endpoint,
         organizationId,
         status: GatewayStatus.ACTIVE,
       });

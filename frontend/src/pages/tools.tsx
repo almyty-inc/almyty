@@ -1,10 +1,15 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
 import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -49,6 +54,23 @@ import {
 import { toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
+
+// Form Schema for manual tool creation
+const createToolSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string().optional(),
+  type: z.enum(['function', 'action', 'query']),
+  parameters: z.string().optional().transform(val => {
+    if (!val) return { type: 'object', properties: {} };
+    try {
+      return JSON.parse(val);
+    } catch {
+      return { type: 'object', properties: {} };
+    }
+  }),
+})
+
+type CreateToolForm = z.infer<typeof createToolSchema>
 
 interface Tool {
   id: string
@@ -105,8 +127,19 @@ export function ToolsPage() {
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false)
   const [isExecutionDialogOpen, setIsExecutionDialogOpen] = useState(false)
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [executionParameters, setExecutionParameters] = useState<Record<string, any>>({})
   const [executionResult, setExecutionResult] = useState<any>(null)
+
+  const createForm = useForm<CreateToolForm>({
+    resolver: zodResolver(createToolSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      type: 'function',
+      parameters: '',
+    },
+  })
 
   const { data: toolsData, isLoading } = useQuery({
     queryKey: ['tools', currentOrganization?.id],
@@ -132,6 +165,19 @@ export function ToolsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tools'] })
       notifications.success('Success', 'Tool status updated')
+    },
+  })
+
+  const createToolMutation = useMutation({
+    mutationFn: (data: any) => toolsApi.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tools'] })
+      notifications.success('Success', 'Tool created successfully')
+      setIsCreateDialogOpen(false)
+      createForm.reset()
+    },
+    onError: (error: any) => {
+      notifications.error('Error', error.response?.data?.message || 'Failed to create tool')
     },
   })
 
@@ -309,9 +355,9 @@ export function ToolsPage() {
             AI tools generated from your APIs
           </p>
         </div>
-        <Button onClick={() => navigate('/apis')}>
+        <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!currentOrganization}>
           <Plus className="mr-2 h-4 w-4" />
-          Generate Tools
+          Create Tool
         </Button>
       </div>
 
@@ -874,6 +920,84 @@ export function ToolsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Tool Dialog */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create Manual Tool</DialogTitle>
+            <DialogDescription>
+              Create a custom tool manually. For API-based tools, import an API schema instead.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={createForm.handleSubmit((data) => createToolMutation.mutate(data))} className="space-y-4">
+            <div>
+              <Label htmlFor="tool-name">Tool Name</Label>
+              <Input
+                id="tool-name"
+                placeholder="my_custom_tool"
+                {...createForm.register('name')}
+              />
+              {createForm.formState.errors.name && (
+                <p className="text-sm text-red-500 mt-1">{createForm.formState.errors.name.message}</p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="tool-description">Description</Label>
+              <Textarea
+                id="tool-description"
+                placeholder="What does this tool do?"
+                {...createForm.register('description')}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="tool-type">Tool Type</Label>
+              <Select
+                onValueChange={(value) => createForm.setValue('type', value as any)}
+                value={createForm.watch('type')}
+              >
+                <SelectTrigger id="tool-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="function">Function</SelectItem>
+                  <SelectItem value="action">Action</SelectItem>
+                  <SelectItem value="query">Query</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="tool-parameters">Parameters (JSON Schema)</Label>
+              <Textarea
+                id="tool-parameters"
+                placeholder='{"type": "object", "properties": {"param1": {"type": "string"}}}'
+                className="font-mono text-sm"
+                rows={6}
+                {...createForm.register('parameters')}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Optional: JSON Schema for tool parameters. Leave empty for no parameters.
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createToolMutation.isPending}>
+                {createToolMutation.isPending ? 'Creating...' : 'Create Tool'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
