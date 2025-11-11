@@ -235,7 +235,7 @@ return { error: 'gRPC execution not yet implemented' };
         parameters: toolParameters,
         code,
         executionMethod,
-      });
+      }, currentOrganization?.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tools'] })

@@ -254,7 +254,12 @@ export const toolsApi = {
   
   getById: (id: string, organizationId: string) => api.get(`/organizations/${organizationId}/tools/${id}`),
   
-  create: (data: any) => api.post('/tools', data),
+  create: (data: any, organizationId?: string) => {
+    if (organizationId) {
+      return api.post(`/organizations/${organizationId}/tools`, data)
+    }
+    return api.post('/tools', data)
+  },
   
   update: (id: string, data: any) => api.patch(`/tools/${id}`, data),
   
