@@ -54,20 +54,13 @@ import {
 import { toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
+import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 
 // Form Schema for manual tool creation
 const createToolSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
   type: z.enum(['function', 'action', 'query']),
-  parameters: z.string().optional().transform(val => {
-    if (!val) return { type: 'object', properties: {} };
-    try {
-      return JSON.parse(val);
-    } catch {
-      return { type: 'object', properties: {} };
-    }
-  }),
 })
 
 type CreateToolForm = z.infer<typeof createToolSchema>
@@ -130,6 +123,7 @@ export function ToolsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [executionParameters, setExecutionParameters] = useState<Record<string, any>>({})
   const [executionResult, setExecutionResult] = useState<any>(null)
+  const [toolParameters, setToolParameters] = useState<any>({ type: 'object', properties: {} })
 
   const createForm = useForm<CreateToolForm>({
     resolver: zodResolver(createToolSchema),
@@ -137,7 +131,6 @@ export function ToolsPage() {
       name: '',
       description: '',
       type: 'function',
-      parameters: '',
     },
   })
 
@@ -169,12 +162,13 @@ export function ToolsPage() {
   })
 
   const createToolMutation = useMutation({
-    mutationFn: (data: any) => toolsApi.create(data),
+    mutationFn: (data: any) => toolsApi.create({ ...data, parameters: toolParameters }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tools'] })
       notifications.success('Success', 'Tool created successfully')
       setIsCreateDialogOpen(false)
       createForm.reset()
+      setToolParameters({ type: 'object', properties: {} })
     },
     onError: (error: any) => {
       notifications.error('Error', error.response?.data?.message || 'Failed to create tool')
@@ -970,17 +964,10 @@ export function ToolsPage() {
             </div>
 
             <div>
-              <Label htmlFor="tool-parameters">Parameters (JSON Schema)</Label>
-              <Textarea
-                id="tool-parameters"
-                placeholder='{"type": "object", "properties": {"param1": {"type": "string"}}}'
-                className="font-mono text-sm"
-                rows={6}
-                {...createForm.register('parameters')}
+              <JsonSchemaBuilder
+                value={toolParameters}
+                onChange={setToolParameters}
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Optional: JSON Schema for tool parameters. Leave empty for no parameters.
-              </p>
             </div>
 
             <div className="flex justify-end space-x-2">
