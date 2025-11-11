@@ -221,7 +221,7 @@ export class McpService {
     }
 
     const mcpTools: McpTool[] = tools.map(tool => ({
-      name: tool.name,
+      name: this.sanitizeToolName(tool.name),
       description: tool.description,
       inputSchema: tool.parameters || {
         type: 'object',
@@ -232,6 +232,39 @@ export class McpService {
     return {
       tools: mcpTools,
     };
+  }
+
+  /**
+   * Sanitize tool name to match MCP client pattern: ^[a-zA-Z0-9_-]{1,64}$
+   */
+  private sanitizeToolName(name: string): string {
+    if (!name) return 'unnamed_tool';
+
+    // Replace any character that's not alphanumeric, underscore, or hyphen with underscore
+    let sanitized = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    // Replace multiple consecutive underscores/hyphens with a single one
+    sanitized = sanitized.replace(/[-_]{2,}/g, '_');
+
+    // Remove leading/trailing underscores or hyphens
+    sanitized = sanitized.replace(/^[-_]+|[-_]+$/g, '');
+
+    // Ensure it doesn't start with a number
+    if (/^[0-9]/.test(sanitized)) {
+      sanitized = `tool_${sanitized}`;
+    }
+
+    // Ensure it's not empty after sanitization
+    if (!sanitized) {
+      sanitized = 'unnamed_tool';
+    }
+
+    // Truncate to 64 characters if necessary
+    if (sanitized.length > 64) {
+      sanitized = sanitized.substring(0, 64);
+    }
+
+    return sanitized;
   }
 
   private async handleToolCall(
@@ -246,48 +279,56 @@ export class McpService {
       );
     }
 
-    // Find the tool
-    const tool = await this.toolsService.findByName(params.name, organizationId);
+    // Find the tool - first try exact match, then try to find by sanitized name
+    let tool = await this.toolsService.findByName(params.name, organizationId);
+
     if (!tool) {
-      throw this.createJsonRpcError(
-        JsonRpcErrorCode.TOOL_NOT_FOUND,
-        `Tool not found: ${params.name}`,
-      );
+      // If not found, the client might have sent a sanitized name
+      // Get all tools and find one whose sanitized name matches
+      const allTools = await this.toolsService.getTools({ organizationId });
+      tool = allTools.tools.find(t => this.sanitizeToolName(t.name) === params.name);
+
+      if (!tool) {
+        throw this.createJsonRpcError(
+          JsonRpcErrorCode.TOOL_NOT_FOUND,
+          `Tool not found: ${params.name}`,
+        );
+      }
     }
 
     try {
       // Execute the tool using our existing tool execution service
+      // Note: userId can be null for MCP sessions without user auth
       const result = await this.toolExecutorService.executeTool(
         tool.id,
         params.arguments || {},
         {
-          userId: userId || 'mcp-session',
+          userId: userId || null,
           organizationId,
         }
       );
 
       // Convert result to MCP content format
-      const content: McpContent[] = [
-        {
-          type: 'text',
-          text: typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2),
-        } as McpTextContent,
-      ];
+      // MCP spec requires content array with type and text fields
+      const textContent = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
 
       return {
-        content,
+        content: [
+          {
+            type: 'text',
+            text: textContent,
+          },
+        ],
         isError: !result.success,
       };
     } catch (error) {
-      const content: McpContent[] = [
-        {
-          type: 'text',
-          text: `Tool execution failed: ${error.message}`,
-        } as McpTextContent,
-      ];
-
       return {
-        content,
+        content: [
+          {
+            type: 'text',
+            text: `Tool execution failed: ${error.message}`,
+          },
+        ],
         isError: true,
       };
     }

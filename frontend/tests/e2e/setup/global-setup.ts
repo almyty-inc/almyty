@@ -43,7 +43,7 @@ async function globalSetup(config: FullConfig) {
   console.log('\n⏳ Waiting for services to be healthy...')
   // PostgreSQL and Redis are confirmed running via docker-compose ps
   // Only check backend API health which has an actual HTTP endpoint
-  await waitForService('Backend API', 'http://localhost:4000/api/monitoring/health', 60000)
+  await waitForService('Backend API', 'http://localhost:4000/monitoring/health', 60000)
 
   // Run database migrations
   console.log('\n🗄️  Running database migrations...')

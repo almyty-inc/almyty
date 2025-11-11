@@ -16,7 +16,6 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 4000);
-  const apiPrefix = configService.get<string>('API_PREFIX', 'api');
 
   // Security middleware
   app.use(helmet({
@@ -42,8 +41,7 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
   });
 
-  // API prefix
-  app.setGlobalPrefix(apiPrefix);
+  // No API prefix - this is a pure API backend
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -85,16 +83,16 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup(`${apiPrefix}/docs`, app, document, {
+  SwaggerModule.setup('docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
     },
   });
 
   await app.listen(port);
-  
-  logger.log(`Application is running on: http://localhost:${port}/${apiPrefix}`);
-  logger.log(`Swagger documentation: http://localhost:${port}/${apiPrefix}/docs`);
+
+  logger.log(`Application is running on: http://localhost:${port}`);
+  logger.log(`Swagger documentation: http://localhost:${port}/docs`);
 }
 
 bootstrap();

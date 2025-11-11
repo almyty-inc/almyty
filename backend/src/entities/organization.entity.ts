@@ -109,9 +109,9 @@ export class Organization {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
 
-      // Add timestamp and random string to ensure uniqueness
-      const randomString = Math.random().toString(36).substring(2, 8);
-      this.slug = `${baseSlug}-${Date.now()}-${randomString}`;
+      // Use simple slug - uniqueness is enforced by database unique constraint
+      // If there's a collision, the database will throw an error
+      this.slug = baseSlug;
     }
   }
 

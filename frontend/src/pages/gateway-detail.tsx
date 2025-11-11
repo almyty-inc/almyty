@@ -1,18 +1,39 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Router, Copy, Zap } from 'lucide-react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
+import { ArrowLeft, Router, Copy, Zap, Edit2, Settings } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 
 import { gatewaysApi, toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
+
+// Form Schema
+const editGatewaySchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  endpoint: z.string().min(1, 'Endpoint is required').transform(val => {
+    // Auto-add leading slash if missing
+    return val.startsWith('/') ? val : `/${val}`;
+  }),
+  description: z.string().optional(),
+  status: z.enum(['active', 'inactive', 'maintenance', 'error']),
+})
+
+type EditGatewayForm = z.infer<typeof editGatewaySchema>
 
 export function GatewayDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -22,6 +43,7 @@ export function GatewayDetailPage() {
   const queryClient = useQueryClient()
 
   const [removeAllToolsDialogOpen, setRemoveAllToolsDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   const { data: gatewayData, isLoading } = useQuery({
     queryKey: ['gateway', id],
@@ -83,6 +105,45 @@ export function GatewayDetailPage() {
     },
   })
 
+  const removeAllToolsMutation = useMutation({
+    mutationFn: () => gatewaysApi.removeAllTools(id!),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['gateway-tools', id] })
+      await queryClient.invalidateQueries({ queryKey: ['gateway', id] })
+      await queryClient.invalidateQueries({ queryKey: ['gateways'] })
+      success('All tools removed', 'All tools have been removed from the gateway.')
+    },
+    onError: (err: any) => {
+      errorNotif('Failed to remove tools', err.response?.data?.message || 'Please try again.')
+    },
+  })
+
+  // Edit form setup - must be before early returns
+  const gateway = gatewayData?.data?.data || gatewayData?.data
+  const editForm = useForm<EditGatewayForm>({
+    resolver: zodResolver(editGatewaySchema),
+    values: {
+      name: gateway?.name || '',
+      endpoint: gateway?.endpoint || '',
+      description: gateway?.description || '',
+      status: gateway?.status || 'active',
+    }
+  })
+
+  // Edit gateway mutation
+  const editGatewayMutation = useMutation({
+    mutationFn: (data: EditGatewayForm) => gatewaysApi.update(id!, data),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['gateway', id] })
+      await queryClient.invalidateQueries({ queryKey: ['gateways'] })
+      success('Gateway updated', 'Gateway has been updated successfully.')
+      setEditDialogOpen(false)
+    },
+    onError: (err: any) => {
+      errorNotif('Failed to update gateway', err.response?.data?.message || 'Please try again.')
+    },
+  })
+
   const gatewayToolsRaw = gatewayToolsData?.data?.data?.gatewayTools || gatewayToolsData?.data?.data?.tools || gatewayToolsData?.data?.data || []
   const gatewayTools = Array.isArray(gatewayToolsRaw) ? gatewayToolsRaw : []
 
@@ -90,6 +151,12 @@ export function GatewayDetailPage() {
   const allTools = Array.isArray(allToolsRaw) ? allToolsRaw : []
 
   const applyScopingPreset = (preset: 'read-only' | 'admin' | 'public' | 'all' | 'none') => {
+    // Special case: 'none' should remove all tools
+    if (preset === 'none') {
+      removeAllToolsMutation.mutate()
+      return
+    }
+
     let toolsToAssign: string[] = []
 
     switch (preset) {
@@ -118,9 +185,6 @@ export function GatewayDetailPage() {
       case 'all':
         toolsToAssign = allTools.map((tool: any) => tool.id)
         break
-      case 'none':
-        toolsToAssign = []
-        break
     }
 
     bulkAssignToolsMutation.mutate({ toolIds: toolsToAssign })
@@ -148,8 +212,6 @@ export function GatewayDetailPage() {
     )
   }
 
-  const gateway = gatewayData.data
-
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -169,6 +231,10 @@ export function GatewayDetailPage() {
           </div>
         </div>
         <div className="flex items-center space-x-2">
+          <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
+            <Settings className="h-4 w-4 mr-2" />
+            Edit Gateway
+          </Button>
           <Badge variant={gateway.status === 'active' ? 'default' : 'secondary'}>
             {gateway.status}
           </Badge>
@@ -178,59 +244,54 @@ export function GatewayDetailPage() {
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Assigned Tools</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{gatewayTools.length}</div>
-            <p className="text-xs text-muted-foreground">of {allTools.length} available</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Total Requests</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{gateway.totalRequests || 0}</div>
-            <p className="text-xs text-muted-foreground">{gateway.successfulRequests || 0} successful</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Endpoint</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <code className="text-sm bg-muted px-2 py-1 rounded">{gateway.endpoint}</code>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-2"
-              onClick={async () => {
-                const endpoint = `${window.location.origin}${gateway.endpoint}`
-                try {
-                  await navigator.clipboard.writeText(endpoint)
-                  success('Copied!', 'Gateway endpoint copied to clipboard')
-                } catch (err) {
-                  errorNotif('Failed to copy', 'Could not copy endpoint to clipboard')
-                }
-              }}
-            >
-              <Copy className="h-3 w-3" />
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Gateway Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Configuration</CardTitle>
+          <CardDescription>Gateway endpoint and connection details</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground mb-2">MCP Endpoint URL</p>
+              <div className="flex gap-2">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">
+                  {(() => {
+                    const backendUrl = window.location.origin.replace(':3002', ':4000')
+                    const simpleSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
+                    return `${backendUrl}/mcp/${simpleSlug}${gateway.endpoint}`
+                  })()}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    const backendUrl = window.location.origin.replace(':3002', ':4000')
+                    const simpleSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
+                    const fullEndpoint = `${backendUrl}/mcp/${simpleSlug}${gateway.endpoint}`
+                    try {
+                      await navigator.clipboard.writeText(fullEndpoint)
+                      success('Copied!', 'Full MCP endpoint URL copied to clipboard')
+                    } catch (err) {
+                      errorNotif('Failed to copy', 'Could not copy endpoint to clipboard')
+                    }
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Path: <code className="bg-muted px-1 py-0.5 rounded text-xs">{gateway.endpoint}</code>
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Main Content */}
       <Tabs defaultValue="tools" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="tools">Tool Scoping</TabsTrigger>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="tools">Tool Scoping ({gatewayTools.length}/{allTools.length})</TabsTrigger>
           <TabsTrigger value="metrics">Metrics</TabsTrigger>
         </TabsList>
 
@@ -341,34 +402,6 @@ export function GatewayDetailPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="overview" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Gateway Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Type</span>
-                <Badge>{gateway.type?.toUpperCase()}</Badge>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Endpoint</span>
-                <code className="bg-muted px-2 py-1 rounded text-sm">{gateway.endpoint}</code>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Status</span>
-                <Badge variant={gateway.status === 'active' ? 'default' : 'secondary'}>
-                  {gateway.status}
-                </Badge>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Description</span>
-                <span className="text-sm">{gateway.description || 'No description'}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="metrics" className="space-y-4">
           <Card>
             <CardHeader>
@@ -403,6 +436,96 @@ export function GatewayDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Gateway Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Gateway</DialogTitle>
+            <DialogDescription>
+              Update gateway settings. Note: only the gateway type (MCP/A2A/UTCP) cannot be changed after creation.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={editForm.handleSubmit((data) => editGatewayMutation.mutate(data))} className="space-y-6">
+            <div>
+              <Label htmlFor="edit-name">Gateway Name</Label>
+              <Input
+                id="edit-name"
+                placeholder="Enter gateway name"
+                {...editForm.register('name')}
+              />
+              {editForm.formState.errors.name && (
+                <p className="text-sm text-red-500 mt-1">
+                  {editForm.formState.errors.name.message}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Type: <Badge variant="outline" className="ml-1">{gateway.type?.toUpperCase()}</Badge> (cannot be changed)
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="edit-endpoint">Endpoint Path</Label>
+              <Input
+                id="edit-endpoint"
+                placeholder="my-gateway"
+                {...editForm.register('endpoint')}
+              />
+              {editForm.formState.errors.endpoint && (
+                <p className="text-sm text-red-500 mt-1">
+                  {editForm.formState.errors.endpoint.message}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                The path for your gateway (slash is added automatically)
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                placeholder="Enter gateway description"
+                {...editForm.register('description')}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-status">Status</Label>
+              <Select
+                onValueChange={(value) => editForm.setValue('status', value as any)}
+                value={editForm.watch('status')}
+              >
+                <SelectTrigger id="edit-status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="maintenance">Maintenance</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end space-x-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={editGatewayMutation.isPending}
+              >
+                {editGatewayMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Remove All Tools Confirmation */}
       <AlertDialog open={removeAllToolsDialogOpen} onOpenChange={setRemoveAllToolsDialogOpen}>

@@ -712,4 +712,61 @@ export class GatewayToolService {
       throw error;
     }
   }
+
+  async removeTool(
+    gatewayId: string,
+    toolId: string,
+    organizationId: string,
+  ): Promise<void> {
+    try {
+      // Verify gateway belongs to organization
+      const gateway = await this.gatewayRepository.findOne({
+        where: { id: gatewayId, organizationId },
+      });
+
+      if (!gateway) {
+        throw new NotFoundException('Gateway not found');
+      }
+
+      // Find and delete the gateway-tool association
+      const gatewayTool = await this.gatewayToolRepository.findOne({
+        where: { gatewayId, toolId },
+      });
+
+      if (!gatewayTool) {
+        throw new NotFoundException('Tool not assigned to this gateway');
+      }
+
+      await this.gatewayToolRepository.remove(gatewayTool);
+
+      this.logger.log(`Removed tool ${toolId} from gateway ${gatewayId}`);
+    } catch (error) {
+      this.logger.error(`Failed to remove tool: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async removeAllTools(
+    gatewayId: string,
+    organizationId: string,
+  ): Promise<void> {
+    try {
+      // Verify gateway belongs to organization
+      const gateway = await this.gatewayRepository.findOne({
+        where: { id: gatewayId, organizationId },
+      });
+
+      if (!gateway) {
+        throw new NotFoundException('Gateway not found');
+      }
+
+      // Delete all gateway-tool associations for this gateway
+      await this.gatewayToolRepository.delete({ gatewayId });
+
+      this.logger.log(`Removed all tools from gateway ${gatewayId}`);
+    } catch (error) {
+      this.logger.error(`Failed to remove all tools: ${error.message}`);
+      throw error;
+    }
+  }
 }

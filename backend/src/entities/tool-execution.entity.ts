@@ -25,9 +25,9 @@ export class ToolExecution {
   @Index()
   toolId: string;
 
-  @Column('uuid')
+  @Column('uuid', { nullable: true })
   @Index()
-  userId: string;
+  userId: string | null;
 
   @Column('uuid')
   @Index()
@@ -77,9 +77,9 @@ export class ToolExecution {
   @JoinColumn({ name: 'toolId' })
   tool: Tool;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'userId' })
-  user: User;
+  user: User | null;
 
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organizationId' })

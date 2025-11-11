@@ -31,13 +31,13 @@ export class GatewayMcpController {
     @Req() req: any,
     @Body() body: any,
   ) {
-    // Extract the gateway path after /api/mcp/:orgId/
-    const fullPath = req.path; // e.g., /api/mcp/orgSlug/petstore-mcp
-    const gatewayPath = fullPath.replace(`/api/mcp/${orgSlugOrId}`, ''); // e.g., /petstore-mcp
+    // Extract the gateway path after /mcp/:orgId/
+    const fullPath = req.path; // e.g., /mcp/orgSlug/petstore-mcp
+    const gatewayPath = fullPath.replace(`/mcp/${orgSlugOrId}`, ''); // e.g., /petstore-mcp
 
     this.logger.log(`Gateway request: org=${orgSlugOrId}, path=${gatewayPath}, fullPath=${fullPath}`);
 
-    // Find organization by slug or ID
+    // Find organization by slug, simple slug from name, or ID
     let org: any;
     // Check if it's a UUID format
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgSlugOrId);
@@ -47,9 +47,18 @@ export class GatewayMcpController {
         where: { id: orgSlugOrId }
       });
     } else {
+      // Try exact slug match first
       org = await this.gatewayRepository.manager.getRepository('Organization').findOne({
         where: { slug: orgSlugOrId }
       });
+
+      // If not found, try to find by simple name-based slug
+      if (!org) {
+        const allOrgs = await this.gatewayRepository.manager.getRepository('Organization').find();
+        org = allOrgs.find(o =>
+          o.name?.toLowerCase().replace(/\s+/g, '-') === orgSlugOrId
+        );
+      }
     }
 
     if (!org) {

@@ -86,15 +86,19 @@ export class ToolExecutorService {
         throw new Error(`Tool is ${tool.status}, cannot execute`);
       }
 
-      // Validate user has access
-      const user = await this.userRepository.findOne({
-        where: { id: options.userId },
-        relations: ['organizationMemberships'],
-      });
+      // Validate user has access (skip for MCP sessions without user auth)
+      if (options.userId) {
+        const user = await this.userRepository.findOne({
+          where: { id: options.userId },
+          relations: ['organizationMemberships'],
+        });
 
-      if (!user?.hasPermissionInOrganization(options.organizationId, 'use_tools')) {
-        throw new Error('User does not have permission to use tools in this organization');
+        if (!user?.hasPermissionInOrganization(options.organizationId, 'use_tools')) {
+          throw new Error('User does not have permission to use tools in this organization');
+        }
       }
+      // Note: When userId is null (MCP unauthenticated sessions), we allow tool execution
+      // The gateway-level authentication should handle security
 
       // Validate parameters
       const validation = await this.validateParameters(tool, parameters);
