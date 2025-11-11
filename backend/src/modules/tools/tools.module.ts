@@ -16,6 +16,7 @@ import { Organization } from '../../entities/organization.entity';
 import { ToolsService } from './tools.service';
 import { ToolGeneratorService } from './tool-generator.service';
 import { ToolExecutorService } from './tool-executor.service';
+import { CustomCodeExecutorService } from './custom-code-executor.service';
 import { ToolsController } from './tools.controller';
 
 import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schema-translator.module';
@@ -37,8 +38,8 @@ import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schem
     ]),
     JsonSchemaTranslatorModule,
   ],
-  providers: [ToolsService, ToolGeneratorService, ToolExecutorService],
+  providers: [ToolsService, ToolGeneratorService, ToolExecutorService, CustomCodeExecutorService],
   controllers: [ToolsController],
-  exports: [ToolsService, ToolGeneratorService, ToolExecutorService],
+  exports: [ToolsService, ToolGeneratorService, ToolExecutorService, CustomCodeExecutorService],
 })
 export class ToolsModule {}

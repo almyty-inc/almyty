@@ -40,6 +40,10 @@ class CreateToolBodyDto {
   parameters: Record<string, any>;
 
   @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsOptional()
   @IsObject()
   configuration?: {
     timeout?: number;

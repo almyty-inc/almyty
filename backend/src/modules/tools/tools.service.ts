@@ -17,6 +17,7 @@ export interface CreateToolDto {
   description: string;
   type: ToolType;
   parameters: Record<string, any>;
+  code?: string; // Custom JavaScript code for custom tools
   configuration?: {
     timeout?: number;
     retries?: number;

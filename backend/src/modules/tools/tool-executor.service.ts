@@ -10,6 +10,7 @@ import { Api, ApiType } from '../../entities/api.entity';
 import { Operation } from '../../entities/operation.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { User } from '../../entities/user.entity';
+import { CustomCodeExecutorService } from './custom-code-executor.service';
 
 export interface ToolExecutionOptions {
   userId: string;
@@ -59,6 +60,7 @@ export class ToolExecutorService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     @InjectRedis() private readonly redis: Redis.Redis,
+    private customCodeExecutor: CustomCodeExecutorService,
   ) {}
 
   async executeTool(
@@ -143,7 +145,56 @@ export class ToolExecutorService {
         }
       }
 
-      // Execute with retries
+      // Check if this is a custom code tool
+      if (tool.code) {
+        // Execute custom code
+        try {
+          const codeResult = await this.customCodeExecutor.executeCode(
+            tool.code,
+            parameters,
+            {
+              timeout: options.timeout || tool.configuration?.timeout,
+            }
+          );
+
+          const executionResult = {
+            success: codeResult.success,
+            data: codeResult.data,
+            error: codeResult.error,
+            executionTime: codeResult.executionTime,
+            cached,
+            rateLimited,
+            retryCount: 0,
+          };
+
+          await this.recordExecution(tool, parameters, executionResult, options, {
+            executionTime: codeResult.executionTime,
+            cached,
+            retryCount: 0,
+          });
+
+          return executionResult;
+        } catch (error) {
+          const executionResult = {
+            success: false,
+            error: error.message,
+            executionTime: Date.now() - startTime,
+            cached,
+            rateLimited,
+            retryCount: 0,
+          };
+
+          await this.recordExecution(tool, parameters, executionResult, options, {
+            executionTime: Date.now() - startTime,
+            cached,
+            retryCount: 0,
+          });
+
+          return executionResult;
+        }
+      }
+
+      // Execute API-based tool with retries
       const maxRetries = options.retries ?? tool.configuration?.retries ?? 3;
       let lastError: Error;
 

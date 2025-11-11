@@ -124,6 +124,8 @@ export function ToolsPage() {
   const [executionParameters, setExecutionParameters] = useState<Record<string, any>>({})
   const [executionResult, setExecutionResult] = useState<any>(null)
   const [toolParameters, setToolParameters] = useState<any>({ type: 'object', properties: {} })
+  const [toolCode, setToolCode] = useState('')
+  const [isCustomTool, setIsCustomTool] = useState(false)
 
   const createForm = useForm<CreateToolForm>({
     resolver: zodResolver(createToolSchema),
@@ -162,13 +164,19 @@ export function ToolsPage() {
   })
 
   const createToolMutation = useMutation({
-    mutationFn: (data: any) => toolsApi.create({ ...data, parameters: toolParameters }),
+    mutationFn: (data: any) => toolsApi.create({
+      ...data,
+      parameters: toolParameters,
+      code: isCustomTool ? toolCode : undefined,
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tools'] })
       notifications.success('Success', 'Tool created successfully')
       setIsCreateDialogOpen(false)
       createForm.reset()
       setToolParameters({ type: 'object', properties: {} })
+      setToolCode('')
+      setIsCustomTool(false)
     },
     onError: (error: any) => {
       notifications.error('Error', error.response?.data?.message || 'Failed to create tool')
@@ -921,10 +929,17 @@ export function ToolsPage() {
           <DialogHeader>
             <DialogTitle>Create Manual Tool</DialogTitle>
             <DialogDescription>
-              Create a custom tool manually. For API-based tools, import an API schema instead.
+              Create a custom tool with JavaScript code or link to an API operation.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={createForm.handleSubmit((data) => createToolMutation.mutate(data))} className="space-y-4">
+            <div className="flex items-center space-x-2 pb-2 border-b">
+              <Switch
+                checked={isCustomTool}
+                onCheckedChange={setIsCustomTool}
+              />
+              <Label>Custom Code Tool (JavaScript)</Label>
+            </div>
             <div>
               <Label htmlFor="tool-name">Tool Name</Label>
               <Input
@@ -962,6 +977,23 @@ export function ToolsPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {isCustomTool ? (
+              <div>
+                <Label htmlFor="tool-code">JavaScript Code</Label>
+                <Textarea
+                  id="tool-code"
+                  value={toolCode}
+                  onChange={(e) => setToolCode(e.target.value)}
+                  placeholder={`// Your code here\n// Access parameters via 'parameters' object\n// Return the result\n\nreturn {\n  message: "Hello " + parameters.name\n};`}
+                  className="font-mono text-sm"
+                  rows={12}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Write JavaScript code. Access input via <code>parameters</code> object. Return result.
+                </p>
+              </div>
+            ) : null}
 
             <div>
               <JsonSchemaBuilder
