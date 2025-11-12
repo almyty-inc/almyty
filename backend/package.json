@@ -26,6 +26,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.17.1",
     "@apidevtools/swagger-parser": "^10.1.0",
+    "@grpc/grpc-js": "^1.14.1",
+    "@grpc/proto-loader": "^0.8.0",
     "@nestjs-modules/ioredis": "^2.0.2",
     "@nestjs/bull": "^10.2.3",
     "@nestjs/cache-manager": "^2.2.0",
