@@ -145,6 +145,13 @@ export function ToolsPage() {
     method: '',
     protoFile: '',
   })
+  const [authConfig, setAuthConfig] = useState({
+    type: 'none',
+    apiKey: '',
+    bearerToken: '',
+    username: '',
+    password: '',
+  })
 
   const createForm = useForm<CreateToolForm>({
     resolver: zodResolver(createToolSchema),
@@ -216,8 +223,23 @@ return result;
 `;
       } else if (executionMethod === 'grpc') {
         code = `
-// gRPC execution - requires grpc client setup
-return { error: 'gRPC execution not yet implemented' };
+const grpc = require('@grpc/grpc-js');
+const protoLoader = require('@grpc/proto-loader');
+
+// Load proto definition
+const packageDefinition = protoLoader.loadSync('${grpcConfig.protoFile}', {});
+const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
+
+// Create client
+const client = new protoDescriptor.${grpcConfig.method.split('/')[0]}('${grpcConfig.serviceUrl}', grpc.credentials.createInsecure());
+
+// Call method
+return new Promise((resolve, reject) => {
+  client.${grpcConfig.method.split('/')[1]}(parameters, (error, response) => {
+    if (error) reject(error);
+    else resolve(response);
+  });
+});
 `;
       }
 
@@ -1131,6 +1153,51 @@ return { error: 'gRPC execution not yet implemented' };
                 <p className="text-xs text-muted-foreground mt-1">
                   Write JavaScript code. Access input via <code>parameters</code> object. Return result.
                 </p>
+              </div>
+            )}
+
+            {/* Authentication Configuration */}
+            {executionMethod !== 'custom' && (
+              <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
+                <Label>Authentication</Label>
+                <Select value={authConfig.type} onValueChange={(value) => setAuthConfig({ ...authConfig, type: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Authentication</SelectItem>
+                    <SelectItem value="apiKey">API Key</SelectItem>
+                    <SelectItem value="bearer">Bearer Token</SelectItem>
+                    <SelectItem value="basic">Basic Auth</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {authConfig.type === 'apiKey' && (
+                  <div>
+                    <Label htmlFor="auth-apikey">API Key</Label>
+                    <Input id="auth-apikey" type="password" value={authConfig.apiKey} onChange={(e) => setAuthConfig({ ...authConfig, apiKey: e.target.value })} placeholder="your-api-key" />
+                  </div>
+                )}
+
+                {authConfig.type === 'bearer' && (
+                  <div>
+                    <Label htmlFor="auth-bearer">Bearer Token</Label>
+                    <Input id="auth-bearer" type="password" value={authConfig.bearerToken} onChange={(e) => setAuthConfig({ ...authConfig, bearerToken: e.target.value })} placeholder="eyJhbGc..." />
+                  </div>
+                )}
+
+                {authConfig.type === 'basic' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label htmlFor="auth-username">Username</Label>
+                      <Input id="auth-username" value={authConfig.username} onChange={(e) => setAuthConfig({ ...authConfig, username: e.target.value })} placeholder="username" />
+                    </div>
+                    <div>
+                      <Label htmlFor="auth-password">Password</Label>
+                      <Input id="auth-password" type="password" value={authConfig.password} onChange={(e) => setAuthConfig({ ...authConfig, password: e.target.value })} placeholder="password" />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
