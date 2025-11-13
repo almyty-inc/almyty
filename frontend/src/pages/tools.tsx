@@ -1167,7 +1167,7 @@ return new Promise((resolve, reject) => {
                 </div>
                 <div>
                   <Label htmlFor="graphql-query">Query/Mutation</Label>
-                  <Textarea id="graphql-query" value={graphqlConfig.query} onChange={(e) => setGraphqlConfig({ ...graphqlConfig, query: e.target.value })} placeholder="query { users { id name } }" className="font-mono text-sm" rows={6} />
+                  <CodeMirror value={graphqlConfig.query} height="150px" onChange={(value) => setGraphqlConfig({ ...graphqlConfig, query: value })} className="border rounded-md font-mono" />
                 </div>
                 <div>
                   <Label htmlFor="graphql-variables">Variables (JSON)</Label>
