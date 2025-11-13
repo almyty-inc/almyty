@@ -84,8 +84,8 @@ export class Tool {
   @Column({ default: '1.0.0' })
   version: string;
 
-  @Column()
-  operationId: string;
+  @Column({ nullable: true })
+  operationId: string | null;
 
   @Column()
   organizationId: string;
@@ -149,10 +149,11 @@ export class Tool {
   updatedAt: Date;
 
   @ManyToOne(() => Operation, operation => operation.tools, {
+    nullable: true,
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'operationId' })
-  operation: Operation;
+  operation: Operation | null;
 
   @ManyToOne(() => Organization, organization => organization.tools, {
     onDelete: 'CASCADE',
