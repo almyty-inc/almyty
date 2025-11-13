@@ -1125,7 +1125,36 @@ return new Promise((resolve, reject) => {
                 </div>
                 <div>
                   <Label htmlFor="http-body">Request Body (JSON)</Label>
-                  <CodeMirror value={httpConfig.body} height="100px" extensions={[json()]} onChange={(value) => setHttpConfig({ ...httpConfig, body: value })} className="border rounded-md" />
+                  <CodeMirror
+                    value={httpConfig.body}
+                    height="100px"
+                    extensions={[
+                      json(),
+                      autocompletion({
+                        override: [
+                          (context) => {
+                            const word = context.matchBefore(/\{\w*/);
+                            if (!word) return null;
+                            const paramNames = Object.keys(toolParameters.properties || {});
+                            return {
+                              from: word.from,
+                              options: paramNames.map((name) => ({
+                                label: `{${name}}`,
+                                type: 'variable',
+                                detail: 'parameter',
+                                apply: `{${name}}`,
+                              })),
+                            };
+                          },
+                        ],
+                      }),
+                    ]}
+                    onChange={(value) => setHttpConfig({ ...httpConfig, body: value })}
+                    className="border rounded-md"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Use <code>{'{paramName}'}</code> to inject parameters
+                  </p>
                 </div>
               </div>
             )}
@@ -1142,7 +1171,36 @@ return new Promise((resolve, reject) => {
                 </div>
                 <div>
                   <Label htmlFor="graphql-variables">Variables (JSON)</Label>
-                  <CodeMirror value={graphqlConfig.variables} height="80px" extensions={[json()]} onChange={(value) => setGraphqlConfig({ ...graphqlConfig, variables: value })} className="border rounded-md" />
+                  <CodeMirror
+                    value={graphqlConfig.variables}
+                    height="80px"
+                    extensions={[
+                      json(),
+                      autocompletion({
+                        override: [
+                          (context) => {
+                            const word = context.matchBefore(/\{\w*/);
+                            if (!word) return null;
+                            const paramNames = Object.keys(toolParameters.properties || {});
+                            return {
+                              from: word.from,
+                              options: paramNames.map((name) => ({
+                                label: `{${name}}`,
+                                type: 'variable',
+                                detail: 'parameter',
+                                apply: `{${name}}`,
+                              })),
+                            };
+                          },
+                        ],
+                      }),
+                    ]}
+                    onChange={(value) => setGraphqlConfig({ ...graphqlConfig, variables: value })}
+                    className="border rounded-md"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Use <code>{'{paramName}'}</code> to inject parameters
+                  </p>
                 </div>
               </div>
             )}
