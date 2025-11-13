@@ -55,6 +55,7 @@ import { toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
+import Editor from '@monaco-editor/react'
 
 // Form Schema for manual tool creation
 const createToolSchema = z.object({
@@ -1152,9 +1153,43 @@ return new Promise((resolve, reject) => {
             {executionMethod === 'custom' && (
               <div>
                 <Label htmlFor="tool-code">JavaScript Code</Label>
-                <Textarea id="tool-code" value={toolCode} onChange={(e) => setToolCode(e.target.value)} placeholder={`// Parameters are injected as variables\n// If you define: name, age, city\n// You can use them directly:\n\nreturn {\n  greeting: "Hello " + name,\n  info: age + " years old from " + city\n};`} className="font-mono text-sm" rows={12} />
+                <div className="border rounded-md overflow-hidden">
+                  <Editor
+                    height="400px"
+                    language="javascript"
+                    value={toolCode}
+                    onChange={(value) => setToolCode(value || '')}
+                    theme="vs-dark"
+                    options={{
+                      minimap: { enabled: false },
+                      fontSize: 13,
+                      lineNumbers: 'on',
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                      tabSize: 2,
+                      suggest: {
+                        showKeywords: true,
+                        showSnippets: true,
+                      },
+                    }}
+                    onMount={(editor, monaco) => {
+                      // Add parameter autocomplete
+                      const paramNames = Object.keys(toolParameters.properties || {});
+                      monaco.languages.registerCompletionItemProvider('javascript', {
+                        provideCompletionItems: () => ({
+                          suggestions: paramNames.map(name => ({
+                            label: name,
+                            kind: monaco.languages.CompletionItemKind.Variable,
+                            insertText: name,
+                            detail: `Parameter: ${toolParameters.properties[name]?.type || 'any'}`,
+                          })),
+                        }),
+                      });
+                    }}
+                  />
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Parameters are injected as variables. Access directly by name or via <code>parameters</code> object.
+                  Parameters: <code className="bg-muted px-1 rounded">{Object.keys(toolParameters.properties || {}).join(', ') || 'none defined'}</code>
                 </p>
               </div>
             )}
