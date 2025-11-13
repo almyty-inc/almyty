@@ -57,6 +57,9 @@ import { useNotifications } from '@/store/app'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 import CodeMirror from '@uiw/react-codemirror'
 import { javascript } from '@codemirror/lang-javascript'
+import { json } from '@codemirror/lang-json'
+import { autocompletion } from '@codemirror/autocomplete'
+import { useMemo } from 'react'
 
 // Form Schema for manual tool creation
 const createToolSchema = z.object({
@@ -127,6 +130,29 @@ export function ToolsPage() {
   const [toolParameters, setToolParameters] = useState<any>({ type: 'object', properties: {} })
   const [toolCode, setToolCode] = useState('')
   const [executionMethod, setExecutionMethod] = useState<'http' | 'graphql' | 'soap' | 'grpc' | 'custom'>('http')
+
+  // Create parameter autocomplete extension for CodeMirror
+  const parameterAutocomplete = useMemo(() => {
+    const paramNames = Object.keys(toolParameters.properties || {});
+    return autocompletion({
+      override: [
+        (context) => {
+          const word = context.matchBefore(/\w*/);
+          if (!word || (word.from === word.to && !context.explicit)) return null;
+
+          return {
+            from: word.from,
+            options: paramNames.map((name) => ({
+              label: name,
+              type: 'variable',
+              detail: toolParameters.properties[name]?.type || 'parameter',
+              info: toolParameters.properties[name]?.description || '',
+            })),
+          };
+        },
+      ],
+    });
+  }, [toolParameters])
   const [httpConfig, setHttpConfig] = useState({
     method: 'GET',
     url: '',
@@ -1099,7 +1125,7 @@ return new Promise((resolve, reject) => {
                 </div>
                 <div>
                   <Label htmlFor="http-body">Request Body (JSON)</Label>
-                  <Textarea id="http-body" value={httpConfig.body} onChange={(e) => setHttpConfig({ ...httpConfig, body: e.target.value })} placeholder='{"key": "value"}' className="font-mono text-xs" rows={4} />
+                  <CodeMirror value={httpConfig.body} height="100px" extensions={[json()]} onChange={(value) => setHttpConfig({ ...httpConfig, body: value })} className="border rounded-md" />
                 </div>
               </div>
             )}
@@ -1116,7 +1142,7 @@ return new Promise((resolve, reject) => {
                 </div>
                 <div>
                   <Label htmlFor="graphql-variables">Variables (JSON)</Label>
-                  <Textarea id="graphql-variables" value={graphqlConfig.variables} onChange={(e) => setGraphqlConfig({ ...graphqlConfig, variables: e.target.value })} placeholder='{"limit": 10}' className="font-mono text-xs" rows={3} />
+                  <CodeMirror value={graphqlConfig.variables} height="80px" extensions={[json()]} onChange={(value) => setGraphqlConfig({ ...graphqlConfig, variables: value })} className="border rounded-md" />
                 </div>
               </div>
             )}
@@ -1157,7 +1183,26 @@ return new Promise((resolve, reject) => {
                 <CodeMirror
                   value={toolCode}
                   height="300px"
-                  extensions={[javascript()]}
+                  extensions={[
+                    javascript(),
+                    autocompletion({
+                      override: [
+                        (context) => {
+                          const word = context.matchBefore(/\w+/);
+                          if (!word) return null;
+                          const paramNames = Object.keys(toolParameters.properties || {});
+                          return {
+                            from: word.from,
+                            options: paramNames.map((name) => ({
+                              label: name,
+                              type: 'variable',
+                              detail: toolParameters.properties[name]?.type,
+                            })),
+                          };
+                        },
+                      ],
+                    }),
+                  ]}
                   onChange={(value) => setToolCode(value)}
                   className="border rounded-md text-sm"
                   basicSetup={{
