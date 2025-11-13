@@ -55,7 +55,8 @@ import { toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
-import Editor from '@monaco-editor/react'
+import CodeMirror from '@uiw/react-codemirror'
+import { javascript } from '@codemirror/lang-javascript'
 
 // Form Schema for manual tool creation
 const createToolSchema = z.object({
@@ -1152,44 +1153,30 @@ return new Promise((resolve, reject) => {
 
             {executionMethod === 'custom' && (
               <div>
-                <Label htmlFor="tool-code">JavaScript Code</Label>
-                <div className="border rounded-md overflow-hidden">
-                  <Editor
-                    height="400px"
-                    language="javascript"
-                    value={toolCode}
-                    onChange={(value) => setToolCode(value || '')}
-                    theme="vs-dark"
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 13,
-                      lineNumbers: 'on',
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                      tabSize: 2,
-                      suggest: {
-                        showKeywords: true,
-                        showSnippets: true,
-                      },
-                    }}
-                    onMount={(editor, monaco) => {
-                      // Add parameter autocomplete
-                      const paramNames = Object.keys(toolParameters.properties || {});
-                      monaco.languages.registerCompletionItemProvider('javascript', {
-                        provideCompletionItems: () => ({
-                          suggestions: paramNames.map(name => ({
-                            label: name,
-                            kind: monaco.languages.CompletionItemKind.Variable,
-                            insertText: name,
-                            detail: `Parameter: ${toolParameters.properties[name]?.type || 'any'}`,
-                          })),
-                        }),
-                      });
-                    }}
-                  />
-                </div>
+                <Label>JavaScript Code</Label>
+                <CodeMirror
+                  value={toolCode}
+                  height="300px"
+                  extensions={[javascript()]}
+                  onChange={(value) => setToolCode(value)}
+                  className="border rounded-md text-sm"
+                  basicSetup={{
+                    lineNumbers: true,
+                    highlightActiveLineGutter: true,
+                    highlightSpecialChars: true,
+                    foldGutter: false,
+                    drawSelection: true,
+                    dropCursor: true,
+                    allowMultipleSelections: true,
+                    indentOnInput: true,
+                    bracketMatching: true,
+                    closeBrackets: true,
+                    autocompletion: true,
+                    highlightActiveLine: true,
+                  }}
+                />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Parameters: <code className="bg-muted px-1 rounded">{Object.keys(toolParameters.properties || {}).join(', ') || 'none defined'}</code>
+                  Available parameters: <code className="bg-muted px-1 rounded">{Object.keys(toolParameters.properties || {}).join(', ') || 'none - add below'}</code>
                 </p>
               </div>
             )}
