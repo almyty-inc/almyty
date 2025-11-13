@@ -34,9 +34,16 @@ export class CustomCodeExecutorService {
       const isolate = new ivm.Isolate({ memoryLimit });
       const context = await isolate.createContext();
 
-      // Inject parameters and axios into the context
+      // Inject parameters as individual variables AND as parameters object
       const jail = context.global;
+
+      // Set parameters object
       await jail.set('parameters', new ivm.ExternalCopy(parameters).copyInto());
+
+      // Also set each parameter as individual variable
+      for (const [key, value] of Object.entries(parameters)) {
+        await jail.set(key, new ivm.ExternalCopy(value).copyInto());
+      }
 
       // Inject required libraries based on code content
       if (code.includes('axios')) {

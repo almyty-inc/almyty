@@ -197,10 +197,11 @@ export function ToolsPage() {
       } else if (executionMethod === 'http') {
         code = `
 const axios = require('axios');
+// Parameters are available both as individual variables and as 'parameters' object
 const response = await axios({
   method: '${httpConfig.method}',
   url: '${httpConfig.url}',
-  data: ${httpConfig.body || 'undefined'},
+  data: ${httpConfig.body || 'parameters'},
   params: parameters
 });
 return response.data;
@@ -208,9 +209,10 @@ return response.data;
       } else if (executionMethod === 'graphql') {
         code = `
 const axios = require('axios');
+// Parameters available as variables
 const response = await axios.post('${graphqlConfig.endpoint}', {
   query: \`${graphqlConfig.query}\`,
-  variables: { ...${graphqlConfig.variables || '{}'}, ...parameters }
+  variables: parameters
 });
 return response.data;
 `;
@@ -218,6 +220,7 @@ return response.data;
         code = `
 const soap = require('soap');
 const client = await soap.createClientAsync('${soapConfig.wsdlUrl}');
+// Parameters available as variables
 const result = await client.${soapConfig.operation}Async(parameters);
 return result;
 `;
@@ -1149,9 +1152,9 @@ return new Promise((resolve, reject) => {
             {executionMethod === 'custom' && (
               <div>
                 <Label htmlFor="tool-code">JavaScript Code</Label>
-                <Textarea id="tool-code" value={toolCode} onChange={(e) => setToolCode(e.target.value)} placeholder={`// Access parameters via 'parameters' object\n// Return the result\n\nreturn {\n  message: "Hello " + parameters.name,\n  timestamp: Date.now()\n};`} className="font-mono text-sm" rows={12} />
+                <Textarea id="tool-code" value={toolCode} onChange={(e) => setToolCode(e.target.value)} placeholder={`// Parameters are injected as variables\n// If you define: name, age, city\n// You can use them directly:\n\nreturn {\n  greeting: "Hello " + name,\n  info: age + " years old from " + city\n};`} className="font-mono text-sm" rows={12} />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Write JavaScript code. Access input via <code>parameters</code> object. Return result.
+                  Parameters are injected as variables. Access directly by name or via <code>parameters</code> object.
                 </p>
               </div>
             )}
