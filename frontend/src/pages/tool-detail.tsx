@@ -132,12 +132,21 @@ export function ToolDetailPage() {
         </div>
       </div>
 
-      {/* Tool Overview */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Parameters</CardTitle>
-          </CardHeader>
+      {/* Tabs */}
+      <Tabs defaultValue="details" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="test">Test Tool</TabsTrigger>
+          <TabsTrigger value="gateways">Gateways ({tool.gatewayAssociations?.length || 0})</TabsTrigger>
+          <TabsTrigger value="stats">Stats</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="details">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Parameters</CardTitle>
+              </CardHeader>
           <CardContent>
             {tool.parameters?.properties && Object.keys(tool.parameters.properties).length > 0 ? (
               <div className="space-y-2">
@@ -250,22 +259,6 @@ export function ToolDetailPage() {
             )}
           </CardContent>
         </Card>
-      </div>
-
-      {/* Tabs */}
-      <Tabs defaultValue="details" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="test">Test Tool</TabsTrigger>
-          <TabsTrigger value="gateways">Gateways ({tool.gatewayAssociations?.length || 0})</TabsTrigger>
-          <TabsTrigger value="stats">Stats</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="details">
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              View parameters and configuration in the cards above, or use Test Tool tab to execute.
-            </p>
           </div>
         </TabsContent>
 
