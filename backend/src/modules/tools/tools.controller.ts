@@ -24,7 +24,7 @@ import { ToolExecutorService, ToolExecutionOptions } from './tool-executor.servi
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { ToolType, ToolStatus } from '../../entities/tool.entity';
+import { ToolType, ToolStatus, ToolExecutionMethod } from '../../entities/tool.entity';
 
 class CreateToolBodyDto {
   @IsString()
@@ -42,6 +42,14 @@ class CreateToolBodyDto {
   @IsOptional()
   @IsString()
   code?: string;
+
+  @IsOptional()
+  @IsEnum(ToolExecutionMethod)
+  executionMethod?: ToolExecutionMethod;
+
+  @IsOptional()
+  @IsObject()
+  authConfig?: any;
 
   @IsOptional()
   @IsObject()
