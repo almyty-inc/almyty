@@ -253,12 +253,21 @@ export function ToolDetailPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="test" className="space-y-4">
+      <Tabs defaultValue="details" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="test">Test Tool</TabsTrigger>
           <TabsTrigger value="gateways">Gateways ({tool.gatewayAssociations?.length || 0})</TabsTrigger>
           <TabsTrigger value="stats">Stats</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="details">
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              View parameters and configuration in the cards above, or use Test Tool tab to execute.
+            </p>
+          </div>
+        </TabsContent>
 
         {/* Test Tool Tab */}
         <TabsContent value="test">
