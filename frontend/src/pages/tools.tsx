@@ -59,6 +59,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
 import { autocompletion } from '@codemirror/autocomplete'
+import { githubLight } from '@uiw/codemirror-theme-github'
 import { useMemo } from 'react'
 
 // Form Schema for manual tool creation
@@ -1125,7 +1126,7 @@ return new Promise((resolve, reject) => {
                 </div>
                 <div>
                   <Label htmlFor="http-body">Request Body (JSON)</Label>
-                  <CodeMirror
+                  <CodeMirror theme={githubLight}
                     value={httpConfig.body}
                     height="100px"
                     extensions={[
@@ -1167,11 +1168,11 @@ return new Promise((resolve, reject) => {
                 </div>
                 <div>
                   <Label htmlFor="graphql-query">Query/Mutation</Label>
-                  <CodeMirror value={graphqlConfig.query} height="150px" onChange={(value) => setGraphqlConfig({ ...graphqlConfig, query: value })} className="border rounded-md font-mono" />
+                  <CodeMirror theme={githubLight} value={graphqlConfig.query} height="150px" onChange={(value) => setGraphqlConfig({ ...graphqlConfig, query: value })} className="border rounded-md font-mono" />
                 </div>
                 <div>
                   <Label htmlFor="graphql-variables">Variables (JSON)</Label>
-                  <CodeMirror
+                  <CodeMirror theme={githubLight}
                     value={graphqlConfig.variables}
                     height="80px"
                     extensions={[
@@ -1238,7 +1239,7 @@ return new Promise((resolve, reject) => {
             {executionMethod === 'custom' && (
               <div>
                 <Label>JavaScript Code</Label>
-                <CodeMirror
+                <CodeMirror theme={githubLight}
                   value={toolCode}
                   height="300px"
                   extensions={[
