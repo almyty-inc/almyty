@@ -174,30 +174,79 @@ export function ToolDetailPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Underlying Operation</CardTitle>
+            <CardTitle className="text-sm">
+              {tool.executionMethod === 'custom' ? 'Custom Code' :
+               tool.executionMethod ? `${tool.executionMethod.toUpperCase()} Configuration` :
+               'Underlying Operation'}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Badge className="font-mono">{tool.operation?.method || 'GET'}</Badge>
-              <code className="text-sm font-mono">{tool.operation?.endpoint || '/unknown'}</code>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">API Source</span>
-              <span>{tool.operation?.api?.name || 'Unknown'}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Base URL</span>
-              <code className="text-xs">{tool.operation?.api?.baseUrl || 'Unknown'}</code>
-            </div>
-            {tool.operation?.id && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full mt-2"
-                onClick={() => navigate(`/apis/${tool.operation.api.id}`)}
-              >
-                View in API Details
-              </Button>
+            {tool.executionMethod === 'custom' ? (
+              <>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Execution Method</span>
+                  <Badge>Custom JavaScript</Badge>
+                </div>
+                {tool.code && (
+                  <div className="mt-2">
+                    <span className="text-xs text-muted-foreground">Code Preview:</span>
+                    <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-32 overflow-auto">{tool.code.substring(0, 200)}...</pre>
+                  </div>
+                )}
+              </>
+            ) : tool.executionMethod === 'http' ? (
+              <>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Execution Method</span>
+                  <Badge>HTTP REST</Badge>
+                </div>
+                {tool.metadata?.httpConfig && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Badge>{tool.metadata.httpConfig.method}</Badge>
+                      <code className="text-xs">{tool.metadata.httpConfig.url}</code>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : tool.executionMethod === 'graphql' ? (
+              <>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Execution Method</span>
+                  <Badge>GraphQL</Badge>
+                </div>
+                {tool.metadata?.graphqlConfig && (
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Endpoint:</span>
+                    <code className="ml-2">{tool.metadata.graphqlConfig.endpoint}</code>
+                  </div>
+                )}
+              </>
+            ) : tool.operation ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <Badge className="font-mono">{tool.operation.method}</Badge>
+                  <code className="text-sm font-mono">{tool.operation.endpoint}</code>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">API Source</span>
+                  <span>{tool.operation.api?.name}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Base URL</span>
+                  <code className="text-xs">{tool.operation.api?.baseUrl}</code>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-2"
+                  onClick={() => navigate(`/apis/${tool.operation.api.id}`)}
+                >
+                  View in API Details
+                </Button>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">No operation configured</p>
             )}
           </CardContent>
         </Card>
