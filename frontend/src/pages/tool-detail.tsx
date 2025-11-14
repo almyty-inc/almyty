@@ -118,6 +118,10 @@ export function ToolDetailPage() {
           </div>
         </div>
         <div className="flex items-center space-x-2">
+          <Button variant="outline" size="sm" onClick={() => navigate(`/tools/${id}/edit`)}>
+            <Settings className="h-4 w-4 mr-2" />
+            Edit Tool
+          </Button>
           <Badge variant={tool.status === 'active' ? 'default' : 'secondary'}>
             {tool.status}
           </Badge>
