@@ -189,8 +189,8 @@ export function ToolDetailPage() {
                 </div>
                 {tool.code && (
                   <div className="mt-2">
-                    <span className="text-xs text-muted-foreground">Code Preview:</span>
-                    <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-32 overflow-auto">{tool.code.substring(0, 200)}...</pre>
+                    <span className="text-xs text-muted-foreground">Code:</span>
+                    <pre className="text-xs bg-muted p-3 rounded mt-1 max-h-64 overflow-auto font-mono">{tool.code}</pre>
                   </div>
                 )}
               </>
