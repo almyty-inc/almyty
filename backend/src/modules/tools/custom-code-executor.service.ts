@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import ivm from 'isolated-vm';
+import * as ivm from 'isolated-vm';
 
 export interface CustomCodeExecutionResult {
   success: boolean;
