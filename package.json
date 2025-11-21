@@ -15,25 +15,20 @@
     "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\"",
     "build": "npm run backend:build && npm run frontend:build",
     "setup": "npm run backend:install && npm run frontend:install",
-    
     "test": "npm run test:backend && npm run test:frontend && npm run test:e2e",
     "test:backend": "cd backend && npm run test:cov",
-    "test:frontend": "cd frontend && npm run test:coverage", 
+    "test:frontend": "cd frontend && npm run test:coverage",
     "test:e2e": "cd frontend && npm run test:e2e",
     "test:watch": "concurrently \"npm run test:watch:backend\" \"npm run test:watch:frontend\"",
     "test:watch:backend": "cd backend && npm run test:watch",
     "test:watch:frontend": "cd frontend && npm run test -- --watch",
-    
     "lint": "npm run lint:backend && npm run lint:frontend",
     "lint:backend": "cd backend && npm run lint",
     "lint:frontend": "cd frontend && npm run lint",
-    
     "clean": "npm run clean:backend && npm run clean:frontend",
     "clean:backend": "cd backend && rimraf dist coverage node_modules",
     "clean:frontend": "cd frontend && rimraf dist coverage node_modules playwright-report test-results",
-    
     "playwright:install": "cd frontend && npx playwright install",
-    
     "docker:build": "docker-compose build",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
