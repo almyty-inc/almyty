@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsObject, IsNumber, IsUrl, IsBoolean, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsObject, IsNumber, IsBoolean, ValidateNested, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiType } from '../../../entities/api.entity';
 
@@ -32,7 +32,8 @@ export class CreateApiDto {
   @IsString()
   description?: string;
 
-  @IsUrl()
+  @Matches(/^https?:\/\/.+/, { message: 'baseUrl must be a valid HTTP or HTTPS URL' })
+  @IsString()
   baseUrl: string;
 
   @IsOptional()
@@ -79,7 +80,8 @@ export class UpdateApiDto {
   description?: string;
 
   @IsOptional()
-  @IsUrl()
+  @Matches(/^https?:\/\/.+/, { message: 'baseUrl must be a valid HTTP or HTTPS URL' })
+  @IsString()
   baseUrl?: string;
 
   @IsOptional()
@@ -119,7 +121,8 @@ export class ImportSchemaDto {
   schemaContent?: string;
 
   @IsOptional()
-  @IsUrl()
+  @Matches(/^https?:\/\/.+/, { message: 'schemaUrl must be a valid HTTP or HTTPS URL' })
+  @IsString()
   schemaUrl?: string;
 
   @IsOptional()

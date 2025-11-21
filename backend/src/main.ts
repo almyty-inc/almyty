@@ -50,7 +50,7 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
       transform: true,
       transformOptions: {
-        enableImplicitConversion: true,
+        enableImplicitConversion: false, // Disabled for performance - use explicit @Type() decorators
       },
     }),
   );
