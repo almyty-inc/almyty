@@ -34,13 +34,16 @@ test.describe('APIs - CRUD Operations', () => {
 
     // Authentication defaults to "No Authentication" - no need to set
 
+    // Set up response listener BEFORE clicking submit (API is now very fast!)
+    const responsePromise = page.waitForResponse(response =>
+      response.url().includes('/apis') && response.request().method() === 'POST'
+    )
+
     // Submit form
     await page.getByRole('button', { name: /connect api|add api|create api|save/i }).click()
 
     // Wait for API creation request
-    const createResponse = await page.waitForResponse(response =>
-      response.url().includes('/api/apis') && response.request().method() === 'POST'
-    )
+    const createResponse = await responsePromise
 
     const status = createResponse.status()
     console.log(`API creation response status: ${status}`)
@@ -77,10 +80,13 @@ test.describe('APIs - CRUD Operations', () => {
     await page.getByRole('combobox').first().click()
     await page.getByRole('option', { name: /graphql/i }).click()
 
+    // Set up response listener BEFORE clicking (API is very fast now!)
+    const responsePromise = page.waitForResponse(r => r.url().includes('/apis') && r.request().method() === 'POST')
+
     await page.getByRole('button', { name: /connect api|add api|create api|save/i }).click()
 
     // Check response status
-    const response = await page.waitForResponse(r => r.url().includes('/api/apis') && r.request().method() === 'POST')
+    const response = await responsePromise
     expect(response.status()).toBe(201)
 
     // Schema import dialog opens automatically
@@ -101,9 +107,12 @@ test.describe('APIs - CRUD Operations', () => {
     await page.getByRole('combobox').first().click()
     await page.getByRole('option', { name: /soap/i }).click()
 
+    // Set up response listener BEFORE clicking
+    const responsePromise = page.waitForResponse(r => r.url().includes('/apis') && r.request().method() === 'POST')
+
     await page.getByRole('button', { name: /connect api|add api|create api|save/i }).click()
 
-    const response = await page.waitForResponse(r => r.url().includes('/api/apis') && r.request().method() === 'POST')
+    const response = await responsePromise
     expect(response.status()).toBe(201)
 
     // Schema import dialog opens automatically
