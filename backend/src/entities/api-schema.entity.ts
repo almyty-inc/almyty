@@ -8,6 +8,7 @@ import {
   JoinColumn,
   BeforeInsert,
   BeforeUpdate,
+  Index,
 } from 'typeorm';
 import { Api } from './api.entity';
 import { JsonSchema } from './json-schema.entity';
@@ -22,6 +23,8 @@ export enum SchemaFormat {
 }
 
 @Entity('api_schemas')
+@Index(['apiId'])
+@Index(['apiId', 'version'])
 export class ApiSchema {
   @PrimaryGeneratedColumn('uuid')
   id: string;

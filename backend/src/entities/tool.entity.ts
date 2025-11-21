@@ -44,6 +44,9 @@ export enum ToolStatus {
 
 @Entity('tools')
 @Index(['name', 'operationId'])
+@Index(['organizationId', 'name'])
+@Index(['organizationId', 'status'])
+@Index(['organizationId', 'createdAt'])
 export class Tool {
   @PrimaryGeneratedColumn('uuid')
   id: string;

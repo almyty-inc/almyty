@@ -7,6 +7,7 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Api } from './api.entity';
 import { Operation } from './operation.entity';
@@ -38,6 +39,8 @@ export enum ResourceType {
 }
 
 @Entity('resources')
+@Index(['apiId'])
+@Index(['apiId', 'type'])
 export class Resource {
   @PrimaryGeneratedColumn('uuid')
   id: string;

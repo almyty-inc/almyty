@@ -88,17 +88,22 @@ export class ApisService {
   ) {}
 
   async create(createApiData: CreateApiData): Promise<Api> {
-    // Check if organization exists and has capacity
+    // Check if organization exists
     const organization = await this.organizationRepository.findOne({
       where: { id: createApiData.organizationId },
-      relations: ['apis'],
     });
 
     if (!organization) {
       throw new NotFoundException('Organization not found');
     }
 
-    if (!organization.canAddMoreApis()) {
+    // Check API limit using COUNT instead of loading all relations
+    const apiCount = await this.apiRepository.count({
+      where: { organizationId: createApiData.organizationId },
+    });
+
+    const maxApis = organization.settings?.maxApis;
+    if (maxApis && apiCount >= maxApis) {
       throw new BadRequestException('API limit exceeded for organization');
     }
 
@@ -229,24 +234,22 @@ export class ApisService {
 
       const savedSchema = await this.apiSchemaRepository.save(apiSchema);
 
-      // Extract and save operations using BATCH operations
+      // Extract operations and resources in parallel for better performance
       const parser = this.schemaParserService.getParserForApiType(api.type);
-      const operations = await parser.extractOperations(parsedSchema);
+      const [operations, resources] = await Promise.all([
+        parser.extractOperations(parsedSchema),
+        parser.extractResources(parsedSchema),
+      ]);
 
-      // Set apiId for all operations
+      // Set apiId for all operations and resources
       operations.forEach(op => op.apiId = apiId);
-
-      // Save all operations in one batch query
-      const savedOperations = await this.operationRepository.save(operations);
-
-      // Extract and save resources using BATCH operations
-      const resources = await parser.extractResources(parsedSchema);
-
-      // Set apiId for all resources
       resources.forEach(res => res.apiId = apiId);
 
-      // Save all resources in one batch query
-      const savedResources = await this.resourceRepository.save(resources);
+      // Save operations and resources in parallel
+      const [savedOperations, savedResources] = await Promise.all([
+        this.operationRepository.save(operations),
+        this.resourceRepository.save(resources),
+      ]);
 
       // Update API status if it was draft
       if (api.status === ApiStatus.DRAFT) {
