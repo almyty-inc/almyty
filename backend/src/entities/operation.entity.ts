@@ -7,6 +7,7 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Api } from './api.entity';
 import { Resource } from './resource.entity';
@@ -30,6 +31,9 @@ export enum OperationType {
 }
 
 @Entity('operations')
+@Index(['apiId'])
+@Index(['apiId', 'isActive'])
+@Index(['apiId', 'deprecated'])
 export class Operation {
   @PrimaryGeneratedColumn('uuid')
   id: string;

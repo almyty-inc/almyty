@@ -13,6 +13,9 @@ import { Tool } from './tool.entity';
 
 @Entity('gateway_tools')
 @Index(['gatewayId', 'toolId'], { unique: true })
+@Index(['toolId', 'isActive'])
+@Index(['gatewayId', 'isActive'])
+@Index(['gatewayId', 'usageCount'])
 export class GatewayTool {
   @PrimaryGeneratedColumn('uuid')
   id: string;
