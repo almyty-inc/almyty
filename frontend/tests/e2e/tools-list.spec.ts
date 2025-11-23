@@ -191,8 +191,14 @@ test.describe('Tools - List & Management', () => {
       generateTools: true,
     })
 
+    // Wait for async job to complete
+    await page.waitForTimeout(5000)
+
     await page.reload()
     await assertHelper.waitForLoadingComplete()
+
+    // Ensure tools actually loaded
+    await expect(page.locator('table tbody tr').first()).toBeVisible({ timeout: 10000 })
 
     // Click on first tool to view details
     const firstToolRow = page.locator('table tbody tr').first()
