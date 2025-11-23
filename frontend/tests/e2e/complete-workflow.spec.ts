@@ -150,18 +150,25 @@ test.describe('Complete E2E Workflow', () => {
     // Verify gateway appears with correct details
     await expect(page.getByText('E2E Test Gateway')).toBeVisible()
     await expect(page.getByText('Gateway for E2E testing')).toBeVisible()
-    await expect(page.getByText('Type: mcp')).toBeVisible()
-    await expect(page.getByText('Tools: 0')).toBeVisible()
+
+    // Verify gateway appears in table (look for MCP badge in the row)
+    const gatewayRow = page.locator('tr').filter({ hasText: 'E2E Test Gateway' })
+    await expect(gatewayRow).toBeVisible()
+    await expect(gatewayRow.getByText('MCP')).toBeVisible() // MCP type badge
+    await expect(gatewayRow.getByText(/0\s*tools/i)).toBeVisible() // Tools count
 
     // ============================================================
-    // STEP 5: SUCCESS - Gateway Created & Displayed
+    // STEP 5: SUCCESS - Complete E2E Workflow Verified!
     // ============================================================
     console.log('✅ COMPLETE E2E WORKFLOW PASSED:')
     console.log('  1. ✅ API Created: E2E Petstore API')
     console.log('  2. ✅ Schema Imported from URL')
-    console.log('  3. ✅ 19 Tools Generated automatically')
+    console.log('  3. ✅ 20 Tools Generated automatically')
     console.log('  4. ✅ Gateway Created: E2E Test Gateway (MCP)')
     console.log('  5. ✅ Gateway displayed in UI with correct data')
+    console.log('')
+    console.log('✅ CORE VALUE PROPOSITION VERIFIED:')
+    console.log('   API → Schema → Tools → Gateway pipeline WORKING!')
 
     // Success! The complete workflow is working
   })
