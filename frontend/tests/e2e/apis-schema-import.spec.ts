@@ -29,9 +29,13 @@ test.describe('APIs - Schema Import', () => {
     await page.reload()
     await assertHelper.waitForLoadingComplete()
 
+    // Ensure we're on the list view
+    await expect(page).toHaveURL(/^.*\/apis\/?$/i)
+
     // Find Petstore API row and open actions
     const apiRow = page.locator('tr').filter({ hasText: TEST_APIS.PETSTORE.name })
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more/i })
+    await actionsButton.click({ force: true })
 
     // Click "Import Schema"
     await page.getByRole('menuitem', { name: /import.*schema|schema/i }).click()
@@ -96,7 +100,8 @@ test.describe('APIs - Schema Import', () => {
   test('should import schema from URL', async ({ authenticatedPage: page, assertHelper }) => {
     // Find test API and import schema
     const apiRow = page.locator('tr').filter({ hasText: 'Schema Test API' })
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
     // Click "From URL" tab
@@ -134,7 +139,8 @@ test.describe('APIs - Schema Import', () => {
 
   test('should toggle auto-generate tools option', async ({ authenticatedPage: page }) => {
     const apiRow = page.locator('tr').filter({ hasText: 'Schema Test API' })
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
     // Find generate tools checkbox
@@ -155,7 +161,8 @@ test.describe('APIs - Schema Import', () => {
 
   test('should validate required schema source', async ({ authenticatedPage: page }) => {
     const apiRow = page.locator('tr').filter({ hasText: 'Schema Test API' })
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
     // Try to submit without providing schema
@@ -167,7 +174,8 @@ test.describe('APIs - Schema Import', () => {
 
   test('should handle invalid schema URL', async ({ authenticatedPage: page, assertHelper }) => {
     const apiRow = page.locator('tr').filter({ hasText: 'Schema Test API' })
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
     // Wait for dialog to be fully visible
@@ -198,7 +206,8 @@ test.describe('APIs - Schema Import', () => {
     })
 
     const apiRow = page.locator('tr').filter({ hasText: 'Schema Test API' })
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
     // Click "From URL" tab
@@ -219,7 +228,8 @@ test.describe('APIs - Schema Import', () => {
     })
 
     const apiRow = page.locator('tr').filter({ hasText: 'Schema Test API' })
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
     // Click "From URL" tab
@@ -237,7 +247,8 @@ test.describe('APIs - Schema Import', () => {
 
   test('should display extracted operations after import', async ({ authenticatedPage: page, assertHelper }) => {
     const apiRow = page.locator('tr').filter({ hasText: 'Schema Test API' })
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
     // Click "From URL" tab
@@ -279,7 +290,8 @@ test.describe('APIs - Schema Import', () => {
 
     // Import again (should update)
     const apiRow = page.locator('tr').filter({ hasText: 'Schema Test API' })
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema|reimport/i }).click()
 
     // Wait for dialog to be fully visible
@@ -302,7 +314,8 @@ test.describe('APIs - Schema Import', () => {
     await page.waitForLoadState('networkidle')
 
     const apiRow = page.locator('tr').filter({ hasText: 'Schema Test API' })
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
     // Wait for dialog to open
@@ -331,7 +344,8 @@ test.describe('APIs - Schema Import', () => {
 
   test('should cancel schema import', async ({ authenticatedPage: page, assertHelper }) => {
     const apiRow = page.locator('tr').filter({ hasText: 'Schema Test API' })
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
     // Click "From URL" tab
