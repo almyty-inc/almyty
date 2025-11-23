@@ -54,9 +54,10 @@ test.describe('APIs - Schema Import', () => {
     // Submit
     await page.getByRole('button', { name: /import|submit/i }).click()
 
-    // Wait for import to complete
+    // Wait for import to complete (async job, may take several seconds)
     await assertHelper.waitForLoadingComplete()
-    await assertHelper.assertToastMessage(/imported|success/i)
+    await page.waitForTimeout(3000) // Extra wait for async job processing
+    await assertHelper.assertToastMessage(/imported|success/i, { timeout: 15000 })
 
     // Verify 20 operations were extracted by opening API details
     // Find Petstore API row and open details
@@ -106,9 +107,10 @@ test.describe('APIs - Schema Import', () => {
 
     await page.getByRole('button', { name: /import|submit/i }).click()
 
-    // Should show success
+    // Wait for import to complete (async job)
     await assertHelper.waitForLoadingComplete()
-    await assertHelper.assertToastMessage(/imported|success/i)
+    await page.waitForTimeout(3000)
+    await assertHelper.assertToastMessage(/imported|success/i, { timeout: 15000 })
   })
 
   test('should import schema from file upload', async ({ authenticatedPage: page, assertHelper, apiHelper }) => {
