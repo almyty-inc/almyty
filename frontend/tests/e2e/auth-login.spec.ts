@@ -175,7 +175,7 @@ test.describe('Authentication - Login', () => {
 
   test('should handle network errors gracefully', async ({ page }) => {
     // Intercept and fail the login request
-    await page.route('**/api/auth/login', route => {
+    await page.route('**/auth/login', route => {
       route.abort('failed')
     })
 
@@ -189,7 +189,7 @@ test.describe('Authentication - Login', () => {
 
   test('should handle server 500 error gracefully', async ({ page }) => {
     // Intercept and return 500 error
-    await page.route('**/api/auth/login', route => {
+    await page.route('**/auth/login', route => {
       route.fulfill({
         status: 500,
         body: JSON.stringify({ message: 'Internal server error' }),
