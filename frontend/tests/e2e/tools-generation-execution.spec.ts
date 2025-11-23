@@ -18,6 +18,8 @@ test.describe('Tools - Generation & Execution', () => {
       generateTools: true,
     })
 
+    // Wait for async job to complete
+    await page.waitForTimeout(5000)
     // Navigate to tools page
     await page.goto('/tools')
     await assertHelper.waitForLoadingComplete()
@@ -76,6 +78,8 @@ test.describe('Tools - Generation & Execution', () => {
       generateTools: true,
     })
 
+    // Wait for async job to complete
+    await page.waitForTimeout(5000)
     await page.goto('/tools')
     await assertHelper.waitForLoadingComplete()
 
@@ -117,6 +121,8 @@ test.describe('Tools - Generation & Execution', () => {
       generateTools: true,
     })
 
+    // Wait for async job to complete
+    await page.waitForTimeout(5000)
     await page.goto('/tools')
     await assertHelper.waitForLoadingComplete()
 
@@ -295,6 +301,8 @@ test.describe('Tools - Generation & Execution', () => {
       generateTools: true,
     })
 
+    // Wait for async job to complete
+    await page.waitForTimeout(5000)
     await page.goto('/tools')
     await assertHelper.waitForLoadingComplete()
 
