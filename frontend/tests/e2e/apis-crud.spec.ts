@@ -171,13 +171,17 @@ test.describe('APIs - CRUD Operations', () => {
     await page.getByLabel('Description').clear()
     await page.getByLabel('Description').fill('Updated description')
 
+    // Set up response listener before submitting
+    const updatePromise = page.waitForResponse(r => r.url().includes(`/apis/${api.id}`) && (r.request().method() === 'PUT' || r.request().method() === 'PATCH'))
+
     await page.getByRole('button', { name: /save|update/i }).click()
 
-    // Wait for dialog to close and table to refresh
+    // Wait for update to complete
+    await updatePromise
     await assertHelper.waitForLoadingComplete()
 
     // Should show updated name
-    await expect(page.getByText('Updated Name')).toBeVisible()
+    await expect(page.getByText('Updated Name')).toBeVisible({ timeout: 5000 })
     await expect(page.getByText('Original Name')).not.toBeVisible()
   })
 
@@ -198,13 +202,20 @@ test.describe('APIs - CRUD Operations', () => {
     await page.getByRole('menuitem', { name: /delete/i }).click()
 
     // Should show confirmation dialog
-    await expect(page.getByRole('alertdialog')).toBeVisible()
+    await expect(page.getByRole('alertdialog')).toBeVisible({ timeout: 5000 })
+
+    // Set up response listener before confirming
+    const deletePromise = page.waitForResponse(r => r.url().includes(`/apis/${api.id}`) && r.request().method() === 'DELETE')
 
     // Confirm deletion
     await page.getByRole('button', { name: /delete|confirm/i }).click()
 
+    // Wait for deletion to complete
+    await deletePromise
+    await assertHelper.waitForLoadingComplete()
+
     // Should remove from list
-    await expect(page.getByText('To Delete')).not.toBeVisible()
+    await expect(page.getByText('To Delete')).not.toBeVisible({ timeout: 5000 })
     await assertHelper.assertToastMessage(/deleted|removed/i)
   })
 
@@ -222,11 +233,17 @@ test.describe('APIs - CRUD Operations', () => {
     await apiRow.getByRole('button', { name: /actions|more|menu/i }).click()
     await page.getByRole('menuitem', { name: /delete/i }).click()
 
+    // Wait for confirmation dialog
+    await expect(page.getByRole('alertdialog')).toBeVisible({ timeout: 5000 })
+
     // Cancel deletion
     await page.getByRole('button', { name: /cancel/i }).click()
 
+    // Wait for dialog to close
+    await expect(page.getByRole('alertdialog')).not.toBeVisible({ timeout: 5000 })
+
     // Should still be visible
-    await expect(page.getByText('Not To Delete')).toBeVisible()
+    await expect(page.getByText('Not To Delete')).toBeVisible({ timeout: 5000 })
   })
 
   test('should search APIs by name', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
