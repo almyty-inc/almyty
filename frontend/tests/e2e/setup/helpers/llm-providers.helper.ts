@@ -41,7 +41,7 @@ export class LLMProvidersHelper {
     }
 
     try {
-      const response = await fetch(`${process.env.E2E_BASE_URL || 'http://localhost:3002'}/api/llm-providers`, {
+      const response = await fetch(`http://localhost:4000/llm-providers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
