@@ -160,9 +160,13 @@ test.describe('APIs - CRUD Operations', () => {
     await page.reload()
     await assertHelper.waitForLoadingComplete()
 
-    // Find and click edit button
+    // Ensure we're on the list view, not detail view
+    await expect(page).toHaveURL(/^.*\/apis\/?$/i)
+
+    // Find and click edit button - be very specific to avoid clicking the row
     const apiRow = page.locator('tr').filter({ hasText: 'Original Name' })
-    await apiRow.getByRole('button', { name: /actions|more|menu/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more|menu/i })
+    await actionsButton.click({ force: true }) // Force to ensure we click the button, not the row
     await page.getByRole('menuitem', { name: /^Edit$/i }).click()
 
     // Wait for edit dialog to open
@@ -200,9 +204,13 @@ test.describe('APIs - CRUD Operations', () => {
     await page.reload()
     await assertHelper.waitForLoadingComplete()
 
+    // Ensure we're on the list view
+    await expect(page).toHaveURL(/^.*\/apis\/?$/i)
+
     // Find and click delete button
     const apiRow = page.locator('tr').filter({ hasText: 'To Delete' })
-    await apiRow.getByRole('button', { name: /actions|more|menu/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more|menu/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /delete/i }).click()
 
     // Should show confirmation dialog
@@ -233,8 +241,12 @@ test.describe('APIs - CRUD Operations', () => {
     await page.reload()
     await assertHelper.waitForLoadingComplete()
 
+    // Ensure we're on the list view
+    await expect(page).toHaveURL(/^.*\/apis\/?$/i)
+
     const apiRow = page.locator('tr').filter({ hasText: 'Not To Delete' })
-    await apiRow.getByRole('button', { name: /actions|more|menu/i }).click()
+    const actionsButton = apiRow.getByRole('button', { name: /actions|more|menu/i })
+    await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /delete/i }).click()
 
     // Wait for confirmation dialog
