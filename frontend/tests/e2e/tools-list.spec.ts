@@ -192,7 +192,7 @@ test.describe('Tools - List & Management', () => {
     })
 
     // Wait for async job to complete
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(10000)
 
     await page.reload()
     await assertHelper.waitForLoadingComplete()
