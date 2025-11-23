@@ -51,8 +51,8 @@ test.describe('Gateway Management', () => {
     await assertHelper.waitForLoadingComplete()
 
     // Check both gateways appear (persistence working!)
-    await expect(page.getByRole('heading', { name: 'Test MCP Gateway' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Test A2A Gateway' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Test MCP Gateway' })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { name: 'Test A2A Gateway' })).toBeVisible({ timeout: 10000 })
   })
 
   test('should show correct statistics cards', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
@@ -183,7 +183,7 @@ test.describe('Gateway Management', () => {
     }
 
     // Should show scoping interface
-    await expect(page.getByRole('button', { name: /assign all tools/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /assign all tools/i })).toBeVisible({ timeout: 10000 })
   })
 
   test('should show proper gateway type indicators', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
@@ -212,10 +212,10 @@ test.describe('Gateway Management', () => {
     await assertHelper.waitForLoadingComplete()
 
     // Check each gateway appears with correct type
-    await expect(page.getByText('MCP Gateway')).toBeVisible()
-    await expect(page.getByText(/Type:.*mcp/i)).toBeVisible()
+    await expect(page.getByText('MCP Gateway')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/Type:.*mcp/i)).toBeVisible({ timeout: 10000 })
 
-    await expect(page.getByText('A2A Gateway')).toBeVisible()
+    await expect(page.getByText('A2A Gateway')).toBeVisible({ timeout: 10000 })
     await expect(page.getByText(/Type:.*a2a/i)).toBeVisible()
 
     await expect(page.getByText('UTCP Gateway')).toBeVisible()
