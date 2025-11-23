@@ -163,7 +163,11 @@ test.describe('APIs - CRUD Operations', () => {
     // Find and click edit button
     const apiRow = page.locator('tr').filter({ hasText: 'Original Name' })
     await apiRow.getByRole('button', { name: /actions|more|menu/i }).click()
-    await page.getByRole('menuitem', { name: /edit/i }).click()
+    await page.getByRole('menuitem', { name: /^Edit$/i }).click()
+
+    // Wait for edit dialog to open
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('heading', { name: /edit.*api/i })).toBeVisible()
 
     // Update fields
     await page.getByLabel('API Name').clear()
