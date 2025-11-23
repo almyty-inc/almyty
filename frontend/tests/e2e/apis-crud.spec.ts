@@ -167,6 +167,10 @@ test.describe('APIs - CRUD Operations', () => {
     const apiRow = page.locator('tr').filter({ hasText: 'Original Name' })
     const actionsButton = apiRow.getByRole('button', { name: /actions|more|menu/i })
     await actionsButton.click({ force: true }) // Force to ensure we click the button, not the row
+
+    // Wait for menu to appear and click Edit - search in the visible menu
+    const menu = page.locator('[role="menu"]').or(page.locator('[role="menuitem"]').first().locator('..'))
+    await expect(menu).toBeVisible({ timeout: 3000 })
     await page.getByRole('menuitem', { name: /^Edit$/i }).click()
 
     // Wait for edit dialog to open
