@@ -34,7 +34,7 @@ export default defineConfig({
   ],
 
   /* Global timeout for each test - API operations can be slow */
-  timeout: 45000, // 45 seconds per test (some tests are slow)
+  timeout: 90000, // 90 seconds per test (async jobs need time)
 
   /* Expect timeout for assertions */
   expect: {
