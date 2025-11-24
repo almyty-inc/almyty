@@ -47,16 +47,12 @@ test.describe('Authentication - Session Management', () => {
     await page.goto('/dashboard')
 
     // Intercept API requests and return 401
-    await page.route('**/api/**', (route) => {
-      // Only return 401 for non-auth endpoints
-      if (!route.request().url().includes('/auth/')) {
-        route.fulfill({
-          status: 401,
-          body: JSON.stringify({ message: 'Unauthorized' }),
-        })
-      } else {
-        route.continue()
-      }
+    await page.route('**/{apis,gateways,tools,organizations}/**', (route) => {
+      // Return 401 for protected endpoints
+      route.fulfill({
+        status: 401,
+        body: JSON.stringify({ message: 'Unauthorized' }),
+      })
     })
 
     // Try to navigate to another page (will trigger API call)
@@ -153,9 +149,9 @@ test.describe('Authentication - Session Management', () => {
 
     // Set up multiple API routes to return 401
     let callCount = 0
-    await page.route('**/api/**', (route) => {
+    await page.route('**/{apis,gateways,tools,organizations}/**', (route) => {
       callCount++
-      if (callCount <= 3 && !route.request().url().includes('/auth/')) {
+      if (callCount <= 3) {
         route.fulfill({ status: 401, body: JSON.stringify({ message: 'Unauthorized' }) })
       } else {
         route.continue()
