@@ -163,15 +163,22 @@ test.describe('APIs - CRUD Operations', () => {
     // Ensure we're on the list view, not detail view
     await expect(page).toHaveURL(/^.*\/apis\/?$/i)
 
-    // Find and click edit button - be very specific to avoid clicking the row
-    const apiRow = page.locator('tr').filter({ hasText: 'Original Name' })
-    const actionsButton = apiRow.getByRole('button', { name: /actions|more|menu/i })
-    await actionsButton.click({ force: true }) // Force to ensure we click the button, not the row
+    // Find the actions button without triggering row click
+    const actionsButton = page.locator('tr').filter({ hasText: 'Original Name' }).getByRole('button', { name: /actions|more|menu/i }).first()
 
-    // Wait for menu to appear and click Edit - search in the visible menu
-    const menu = page.locator('[role="menu"]').or(page.locator('[role="menuitem"]').first().locator('..'))
-    await expect(menu).toBeVisible({ timeout: 3000 })
-    await page.getByRole('menuitem', { name: /^Edit$/i }).click()
+    // Click actions button
+    await actionsButton.click()
+
+    // Wait for dropdown menu to be visible
+    await page.waitForTimeout(500)
+
+    // Find Edit menuitem (should be after separator, below custom actions)
+    const editMenuItem = page.getByRole('menuitem', { name: 'Edit' })
+    await editMenuItem.waitFor({ state: 'visible', timeout: 5000 })
+    await editMenuItem.click()
+
+    // Verify we stayed on /apis (didn't navigate away)
+    await expect(page).toHaveURL(/^.*\/apis\/?$/i)
 
     // Wait for edit dialog to open
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 })
@@ -211,11 +218,15 @@ test.describe('APIs - CRUD Operations', () => {
     // Ensure we're on the list view
     await expect(page).toHaveURL(/^.*\/apis\/?$/i)
 
-    // Find and click delete button
-    const apiRow = page.locator('tr').filter({ hasText: 'To Delete' })
-    const actionsButton = apiRow.getByRole('button', { name: /actions|more|menu/i })
-    await actionsButton.click({ force: true })
-    await page.getByRole('menuitem', { name: /delete/i }).click()
+    // Click actions without triggering row
+    const actionsButton = page.locator('tr').filter({ hasText: 'To Delete' }).getByRole('button', { name: /actions|more|menu/i }).first()
+    await actionsButton.click()
+    await page.waitForTimeout(500)
+
+    // Click Delete menuitem
+    const deleteMenuItem = page.getByRole('menuitem', { name: 'Delete' })
+    await deleteMenuItem.waitFor({ state: 'visible', timeout: 5000 })
+    await deleteMenuItem.click()
 
     // Should show confirmation dialog
     await expect(page.getByRole('alertdialog')).toBeVisible({ timeout: 5000 })
@@ -248,10 +259,15 @@ test.describe('APIs - CRUD Operations', () => {
     // Ensure we're on the list view
     await expect(page).toHaveURL(/^.*\/apis\/?$/i)
 
-    const apiRow = page.locator('tr').filter({ hasText: 'Not To Delete' })
-    const actionsButton = apiRow.getByRole('button', { name: /actions|more|menu/i })
-    await actionsButton.click({ force: true })
-    await page.getByRole('menuitem', { name: /delete/i }).click()
+    // Click actions without triggering row
+    const actionsButton = page.locator('tr').filter({ hasText: 'Not To Delete' }).getByRole('button', { name: /actions|more|menu/i }).first()
+    await actionsButton.click()
+    await page.waitForTimeout(500)
+
+    // Click Delete menuitem
+    const deleteMenuItem = page.getByRole('menuitem', { name: 'Delete' })
+    await deleteMenuItem.waitFor({ state: 'visible', timeout: 5000 })
+    await deleteMenuItem.click()
 
     // Wait for confirmation dialog
     await expect(page.getByRole('alertdialog')).toBeVisible({ timeout: 5000 })
