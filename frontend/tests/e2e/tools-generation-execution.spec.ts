@@ -19,7 +19,7 @@ test.describe('Tools - Generation & Execution', () => {
     })
 
     // Wait for async job to complete
-    await page.waitForTimeout(10000)
+    await page.waitForTimeout(15000)
     // Navigate to tools page
     await page.goto('/tools')
     await assertHelper.waitForLoadingComplete()
@@ -79,7 +79,7 @@ test.describe('Tools - Generation & Execution', () => {
     })
 
     // Wait for async job to complete
-    await page.waitForTimeout(10000)
+    await page.waitForTimeout(15000)
     await page.goto('/tools')
     await assertHelper.waitForLoadingComplete()
 
@@ -122,7 +122,7 @@ test.describe('Tools - Generation & Execution', () => {
     })
 
     // Wait for async job to complete
-    await page.waitForTimeout(10000)
+    await page.waitForTimeout(15000)
     await page.goto('/tools')
     await assertHelper.waitForLoadingComplete()
 
@@ -302,7 +302,7 @@ test.describe('Tools - Generation & Execution', () => {
     })
 
     // Wait for async job to complete
-    await page.waitForTimeout(10000)
+    await page.waitForTimeout(15000)
     await page.goto('/tools')
     await assertHelper.waitForLoadingComplete()
 
