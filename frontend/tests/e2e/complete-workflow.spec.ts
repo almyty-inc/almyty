@@ -71,7 +71,7 @@ test.describe('Complete E2E Workflow', () => {
     // STEP 3: Verify Tools Generated
     // ============================================================
     // Wait for tool generation to complete (async process)
-    await page.waitForTimeout(10000) // Give backend time to generate tools
+    await page.waitForTimeout(15000) // Give backend time to generate tools
 
     await page.goto('/tools')
     await assertHelper.waitForLoadingComplete()
