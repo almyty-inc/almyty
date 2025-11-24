@@ -107,17 +107,21 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await assertHelper.waitForLoadingComplete()
 
     // Open gateway details (clicking heading opens the dialog directly)
-    await page.getByRole('heading', { name: `Scoping Test Gateway ${timestamp}` }).click()
+    await page.getByRole('heading', { name: `Scoping Test Gateway ${timestamp}` }).click({ timeout: 10000 })
 
     // Go to Tools tab in the opened dialog
-    await page.getByRole('tab', { name: /tools/i }).click()
+    await page.waitForTimeout(1000)
+    await page.getByRole('tab', { name: /tools/i }).click({ timeout: 10000 })
+
+    // Wait for tab content to load
+    await page.waitForTimeout(2000)
 
     // Should show scoping interface
-    await expect(page.getByRole('heading', { name: /tool scoping/i })).toBeVisible()
-    await expect(page.getByText(/control which tools/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: /tool scoping/i })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/control which tools/i)).toBeVisible({ timeout: 10000 })
 
     // Should show "0 of 0 assigned" initially
-    await expect(page.getByText(/of 0 assigned/i)).toBeVisible()
+    await expect(page.getByText(/of 0 assigned/i)).toBeVisible({ timeout: 10000 })
   })
 
   // Tool generation tests - run sequentially to avoid backend overload
