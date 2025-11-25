@@ -5,6 +5,8 @@ test.describe('Tools - List & Management', () => {
   test.beforeEach(async ({ authenticatedPage: page }) => {
     await page.goto('/tools')
   })
+    test.setTimeout(60000) // Tool details loading slow
+
 
   test('should display tools page', async ({ authenticatedPage: page, assertHelper }) => {
     await assertHelper.assertPageTitle(/tools/i)

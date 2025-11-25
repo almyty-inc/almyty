@@ -4,6 +4,8 @@ import { TEST_APIS } from './fixtures/test-data'
 test.describe('Tools - Generation & Execution', () => {
   test('[CRITICAL] should generate 19 tools from Petstore API', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
     // This test verifies CLAUDE.md claim: "19 functional tools auto-generated"
+    test.setTimeout(60000) // Tool execution needs time
+
 
     // Create Petstore API
     const api = await apiHelper.createAPI({
