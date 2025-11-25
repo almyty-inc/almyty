@@ -268,12 +268,18 @@ export function createActionsColumn<T = any>(
             ))}
             <DropdownMenuSeparator />
             {onEdit && (
-              <DropdownMenuItem onClick={() => onEdit(item)}>
+              <DropdownMenuItem onClick={(e) => {
+                e.stopPropagation()
+                onEdit(item)
+              }}>
                 Edit
               </DropdownMenuItem>
             )}
             {onDelete && (
-              <DropdownMenuItem onClick={() => onDelete(item)}>
+              <DropdownMenuItem onClick={(e) => {
+                e.stopPropagation()
+                onDelete(item)
+              }}>
                 Delete
               </DropdownMenuItem>
             )}
