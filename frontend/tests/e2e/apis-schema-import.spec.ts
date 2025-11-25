@@ -131,6 +131,8 @@ test.describe('APIs - Schema Import', () => {
       generateTools: true,
     })
 
+    // Wait for backend async job AND UI refresh
+    await page.waitForTimeout(15000)
     // Navigate to tools page to verify import succeeded
     await page.goto('/tools')
     await assertHelper.waitForLoadingComplete()
@@ -287,6 +289,8 @@ test.describe('APIs - Schema Import', () => {
       generateTools: false,
     })
 
+    // Wait for backend async job AND UI refresh
+    await page.waitForTimeout(15000)
     await page.reload()
     await assertHelper.waitForLoadingComplete()
 
