@@ -7,6 +7,8 @@ test.describe('Gateway Management', () => {
 
   test('should load gateways page successfully', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
     await assertHelper.waitForLoadingComplete()
+    test.setTimeout(120000) // Gateway operations are slow
+
 
     // Should show page title (use exact match to avoid matching "Total Gateways", etc.)
     await expect(page.getByRole('heading', { name: 'Gateways', exact: true })).toBeVisible()

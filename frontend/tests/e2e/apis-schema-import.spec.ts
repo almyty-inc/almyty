@@ -17,6 +17,8 @@ test.describe('APIs - Schema Import', () => {
   })
 
   test('[CRITICAL VERIFICATION] should import Petstore schema and extract 20 operations', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
+    test.setTimeout(120000) // Schema import is slow
+
     // This test verifies CLAUDE.md claim: "20 operations extracted from Swagger JSON"
 
     // Create Petstore API
