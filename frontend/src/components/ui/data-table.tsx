@@ -261,7 +261,10 @@ export function createActionsColumn<T = any>(
             {customActions?.map((action, index) => (
               <DropdownMenuItem
                 key={index}
-                onClick={() => action.onClick(item)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  action.onClick(item)
+                }}
               >
                 {action.label}
               </DropdownMenuItem>
