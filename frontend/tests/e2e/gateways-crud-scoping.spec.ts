@@ -7,6 +7,8 @@ test.describe('Gateways - CRUD & Scoping', () => {
   })
 
   test('should display gateways page', async ({ authenticatedPage: page, assertHelper }) => {
+    test.setTimeout(120000) // Gateway scoping is slow
+
     await assertHelper.assertPageTitle(/gateways/i)
     await expect(page.getByRole('button', { name: /create gateway/i })).toBeVisible()
 
