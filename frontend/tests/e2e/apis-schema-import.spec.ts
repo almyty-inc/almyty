@@ -42,6 +42,9 @@ test.describe('APIs - Schema Import', () => {
     // Click "Import Schema"
     await page.getByRole('menuitem', { name: /import.*schema|schema/i }).click()
 
+    // Wait for import dialog to appear
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10000 })
+    await page.waitForTimeout(500)
     // Should open import dialog
     await assertHelper.assertDialogOpen(/import.*schema/i)
 
