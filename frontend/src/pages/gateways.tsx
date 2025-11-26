@@ -17,6 +17,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { DataTable, createSelectColumn, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
@@ -41,6 +43,8 @@ export function GatewaysPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteGatewayDialogOpen, setDeleteGatewayDialogOpen] = useState(false)
   const [gatewayToDelete, setGatewayToDelete] = useState<any | null>(null)
+  const [selectedGateway, setSelectedGateway] = useState<any | null>(null)
+  const [gatewayDetailsOpen, setGatewayDetailsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -505,6 +509,52 @@ export function GatewaysPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Gateway Details Sheet */}
+      <Sheet open={gatewayDetailsOpen} onOpenChange={setGatewayDetailsOpen}>
+        <SheetContent className="sm:max-w-2xl">
+          <SheetHeader>
+            <SheetTitle>{selectedGateway?.name || 'Gateway Details'}</SheetTitle>
+            <SheetDescription>{selectedGateway?.description}</SheetDescription>
+          </SheetHeader>
+          <div className="mt-6">
+            <Tabs defaultValue="info">
+              <TabsList>
+                <TabsTrigger value="info">Information</TabsTrigger>
+                <TabsTrigger value="tools">Tools</TabsTrigger>
+              </TabsList>
+              <TabsContent value="info" className="space-y-4">
+                <div>
+                  <h3 className="font-semibold mb-2">Gateway Configuration</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Type:</span>
+                      <span className="font-medium">{selectedGateway?.type?.toUpperCase()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Endpoint:</span>
+                      <span className="font-mono text-sm">{selectedGateway?.endpoint}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Status:</span>
+                      <span>{selectedGateway?.status}</span>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+              <TabsContent value="tools" className="space-y-4">
+                <div>
+                  <h3 className="font-semibold mb-2">Tool Scoping</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Control which tools are available through this gateway
+                  </p>
+                  <div className="text-sm">0 of 0 assigned</div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
