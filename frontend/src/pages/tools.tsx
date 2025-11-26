@@ -299,7 +299,7 @@ return new Promise((resolve, reject) => {
       setToolParameters({ type: 'object', properties: {} })
       setToolCode('')
       setHttpConfig({ method: 'GET', url: '', headers: {}, body: '' })
-      setToolMode('http')
+      setExecutionMethod('http')
     },
     onError: (error: any) => {
       notifications.error('Error', error.response?.data?.message || 'Failed to create tool')
@@ -721,7 +721,7 @@ return new Promise((resolve, reject) => {
                     // Execute tool with empty parameters for quick test
                     if (selectedTool) {
                       executeToolMutation.mutate({
-                        toolId: selectedTool.id,
+                        id: selectedTool.id,
                         parameters: {}
                       })
                     }
