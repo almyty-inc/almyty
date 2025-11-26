@@ -105,11 +105,14 @@ test.describe('Gateways - CRUD & Scoping', () => {
     })
 
     // Navigate to gateways page (forces fresh query, avoids stale cache)
-    await page.goto('/gateways')
+    await page.goto('/gateways', { waitUntil: 'networkidle' })
     await assertHelper.waitForLoadingComplete()
+    await page.waitForTimeout(3000) // Ensure gateways fetched and rendered
 
     // Open gateway details (clicking heading opens the dialog directly)
-    await page.getByRole('heading', { name: `Scoping Test Gateway ${timestamp}` }).click({ timeout: 10000 })
+    const gatewayHeading = page.getByRole('heading', { name: `Scoping Test Gateway ${timestamp}` })
+    await expect(gatewayHeading).toBeVisible({ timeout: 15000 })
+    await gatewayHeading.click()
 
     // Go to Tools tab in the opened dialog
     await page.waitForTimeout(1000)
