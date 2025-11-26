@@ -167,6 +167,8 @@ export function ApisPage() {
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       queryClient.invalidateQueries({ queryKey: ['api-operations'] })
+      queryClient.invalidateQueries({ queryKey: ['tools'] })
+      queryClient.invalidateQueries({ queryKey: ['tools', currentOrganization?.id] })
       const result = response.data
       // Handle both direct result and async job result formats
       // For async jobs: response.data.result contains the job's returnvalue
@@ -187,6 +189,7 @@ export function ApisPage() {
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
+      queryClient.invalidateQueries({ queryKey: ['tools', currentOrganization?.id] })
       const toolCount = response.data?.length || 0
       success('Tools generated', `${toolCount} tools have been generated successfully.`)
     },
