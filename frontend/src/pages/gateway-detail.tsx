@@ -299,11 +299,9 @@ export function GatewayDetailPage() {
           {/* Scoping Status */}
           <Card>
             <CardHeader>
-              <CardTitle>Scoping Status</CardTitle>
+              <CardTitle>Tool Scoping</CardTitle>
               <CardDescription>
-                {gatewayTools.length === 0 && 'No tools assigned - gateway will block all requests'}
-                {gatewayTools.length > 0 && gatewayTools.length < allTools.length && `Scoped to ${gatewayTools.length} of ${allTools.length} tools`}
-                {gatewayTools.length > 0 && gatewayTools.length === allTools.length && 'Full access to all tools'}
+                Control which tools are available through this gateway. {gatewayTools.length} of {allTools.length} assigned
               </CardDescription>
             </CardHeader>
             <CardContent>
