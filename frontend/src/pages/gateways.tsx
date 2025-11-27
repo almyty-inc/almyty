@@ -517,11 +517,11 @@ export function GatewaysPage() {
           </SheetHeader>
           <div className="mt-6">
             <Tabs defaultValue="info">
-              <TabsList>
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="info">Information</TabsTrigger>
                 <TabsTrigger value="tools">Tools</TabsTrigger>
               </TabsList>
-              <TabsContent value="info" className="space-y-4">
+              <TabsContent value="info" className="space-y-4 mt-4">
                 <div>
                   <h3 className="font-semibold mb-2">Gateway Configuration</h3>
                   <div className="space-y-2">
@@ -540,13 +540,14 @@ export function GatewaysPage() {
                   </div>
                 </div>
               </TabsContent>
-              <TabsContent value="tools" className="space-y-4">
+              <TabsContent value="tools" className="space-y-4 mt-4">
                 <div>
                   <h3 className="font-semibold mb-2">Tool Scoping</h3>
                   <p className="text-sm text-muted-foreground mb-4">
                     Control which tools are available through this gateway
                   </p>
-                  <div className="text-sm">0 of 0 assigned</div>
+                  <div className="text-sm mb-4">0 of 0 assigned</div>
+                  <Button variant="outline" size="sm">Assign All Tools</Button>
                 </div>
               </TabsContent>
             </Tabs>
