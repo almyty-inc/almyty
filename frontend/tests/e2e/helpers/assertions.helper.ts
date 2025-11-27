@@ -110,6 +110,18 @@ export class AssertionsHelper {
   }
 
   /**
+   * Assert dialog is open and ready for interaction
+   */
+  async assertDialogOpenAndInteractive(titlePattern?: RegExp) {
+    const dialog = this.page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 10000 })
+    await this.page.waitForTimeout(500) // Let dialog animations complete
+    if (titlePattern) {
+      await expect(dialog.getByRole('heading', { name: titlePattern })).toBeVisible()
+    }
+  }
+
+  /**
    * Assert element is disabled
    */
   async assertDisabled(selector: string | RegExp) {
