@@ -169,6 +169,10 @@ export function ApisPage() {
       queryClient.invalidateQueries({ queryKey: ['api-operations'] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
       queryClient.invalidateQueries({ queryKey: ['tools', currentOrganization?.id] })
+      // Force refetch for currently displayed API operations
+      if (selectedApi) {
+        queryClient.refetchQueries({ queryKey: ['api-operations', selectedApi.id] })
+      }
       const result = response.data
       // Handle both direct result and async job result formats
       // For async jobs: response.data.result contains the job's returnvalue
