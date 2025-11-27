@@ -160,7 +160,7 @@ export function GatewaysPage() {
               <Router className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <div className="font-medium">{gateway.name}</div>
+              <h3 className="font-medium text-base">{gateway.name}</h3>
               <div className="text-sm text-muted-foreground">{gateway.description || 'API Gateway'}</div>
             </div>
           </div>
