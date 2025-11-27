@@ -421,6 +421,25 @@ return new Promise((resolve, reject) => {
         )
       },
     },
+    {
+      id: 'test',
+      header: '',
+      cell: ({ row }) => (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={(e) => {
+            e.stopPropagation()
+            setToolForExecution(row.original)
+            setExecutionParameters({})
+            setExecutionResult(null)
+            setIsExecutionDialogOpen(true)
+          }}
+        >
+          Test
+        </Button>
+      ),
+    },
     createActionsColumn<Tool>(
       (tool) => handleViewDetails(tool),
       (tool) => setDeletingTool(tool),
