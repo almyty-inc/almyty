@@ -14,9 +14,13 @@ test.describe('APIs - Schema Import', () => {
     })
 
     await page.goto('/apis')
-    // Close any lingering dialogs from previous tests
+    // Close ALL lingering dialogs/menus from previous tests
     await page.keyboard.press('Escape')
-    await page.waitForTimeout(300)
+    await page.keyboard.press('Escape') // Press twice
+    await page.waitForTimeout(500)
+    // Click away to clear focus
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+    await page.waitForLoadState('networkidle')
   })
 
   test('[CRITICAL VERIFICATION] should import Petstore schema and extract 20 operations', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
