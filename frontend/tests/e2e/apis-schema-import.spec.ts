@@ -57,7 +57,6 @@ test.describe('APIs - Schema Import', () => {
 
     // Click "From URL" tab to access URL input
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
-    await page.waitForTimeout(800) // Wait for tab content animation
 
     // Fill schema URL
     await page.getByRole('textbox', { name: /schema.*url/i }).fill(TEST_APIS.PETSTORE.schemaUrl)
@@ -87,7 +86,6 @@ test.describe('APIs - Schema Import', () => {
 
     // Click Operations tab in the details sheet
     await page.getByRole('tab', { name: /operations/i }).click()
-    await page.waitForTimeout(800) // Wait for tab content animation
 
     // Wait for operations to load
     await page.waitForTimeout(1000)
@@ -120,7 +118,6 @@ test.describe('APIs - Schema Import', () => {
 
     // Click "From URL" tab
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
-    await page.waitForTimeout(800) // Wait for tab content animation
 
     // Fill schema URL
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://petstore.swagger.io/v2/swagger.json')
@@ -200,7 +197,6 @@ test.describe('APIs - Schema Import', () => {
 
     // Click "From URL" tab
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
-    await page.waitForTimeout(800) // Wait for tab content animation
     await page.waitForTimeout(500) // Wait for tab switch
 
     // Invalid URL
@@ -230,7 +226,6 @@ test.describe('APIs - Schema Import', () => {
 
     // Click "From URL" tab
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
-    await page.waitForTimeout(800) // Wait for tab content animation
 
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://example.com/malformed.json')
     await page.getByRole('button', { name: /import|submit/i }).click()
@@ -253,7 +248,6 @@ test.describe('APIs - Schema Import', () => {
 
     // Click "From URL" tab
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
-    await page.waitForTimeout(800) // Wait for tab content animation
 
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://petstore.swagger.io/v2/swagger.json')
     await page.getByRole('button', { name: /import|submit/i }).click()
@@ -273,7 +267,6 @@ test.describe('APIs - Schema Import', () => {
 
     // Click "From URL" tab
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
-    await page.waitForTimeout(800) // Wait for tab content animation
 
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://petstore.swagger.io/v2/swagger.json')
     await page.getByRole('button', { name: /import|submit/i }).click()
@@ -291,7 +284,6 @@ test.describe('APIs - Schema Import', () => {
 
     // Click Operations tab
     await page.getByRole('tab', { name: /operations/i }).click()
-    await page.waitForTimeout(800) // Wait for tab content animation
 
     // Should show operations count
     await expect(page.getByText(/\d+ operations/)).toBeVisible()
@@ -323,7 +315,6 @@ test.describe('APIs - Schema Import', () => {
 
     // Click "From URL" tab
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
-    await page.waitForTimeout(800) // Wait for tab content animation
     await page.waitForTimeout(500) // Wait for tab switch
 
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://petstore.swagger.io/v2/swagger.json')
@@ -348,7 +339,6 @@ test.describe('APIs - Schema Import', () => {
 
     // Click "From URL" tab
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
-    await page.waitForTimeout(800) // Wait for tab content animation
     await page.waitForTimeout(500)
 
     // Use Petstore API which is within limits (20 operations)
@@ -376,7 +366,6 @@ test.describe('APIs - Schema Import', () => {
 
     // Click "From URL" tab
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
-    await page.waitForTimeout(800) // Wait for tab content animation
 
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://petstore.swagger.io/v2/swagger.json')
 
