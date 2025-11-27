@@ -88,9 +88,12 @@ test.describe('Tools - Generation & Execution', () => {
     // Wait for tools to be visible
     await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 10000 })
 
-    // Find a GET tool (simpler to test) and click Test button
+    // Find a GET tool (simpler to test) and click Actions to open menu
     const getToolRow = page.locator('tr').filter({ hasText: /GET/i }).first()
-    await getToolRow.getByRole('button', { name: 'Test' }).click()
+    await getToolRow.getByRole('button', { name: /actions/i }).click()
+
+    // Click Test Tool from the menu
+    await page.getByRole('menuitem', { name: /test tool/i }).click()
 
     // Should open execution dialog
     await assertHelper.assertDialogOpen(/test tool/i)
