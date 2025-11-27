@@ -109,14 +109,20 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await assertHelper.waitForLoadingComplete()
     await page.waitForTimeout(3000) // Ensure gateways fetched and rendered
 
-    // Open gateway details (clicking heading opens the dialog directly)
+    // Open gateway details (clicking heading navigates to detail page)
     const gatewayHeading = page.getByRole('heading', { name: `Scoping Test Gateway ${timestamp}` })
     await expect(gatewayHeading).toBeVisible({ timeout: 15000 })
     await gatewayHeading.click()
 
-    // Go to Tools tab in the opened dialog
-    await page.waitForTimeout(1000)
-    await page.getByRole('tab', { name: /tools/i }).click({ timeout: 10000 })
+    // Wait for navigation to gateway detail page
+    await page.waitForURL(/\/gateways\/[^/]+$/, { timeout: 10000 })
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
+
+    // Go to Tools tab (now using "Tool Scoping" from gateway-detail.tsx)
+    const toolsTab = page.getByRole('tab', { name: /tool scoping/i })
+    await expect(toolsTab).toBeVisible({ timeout: 10000 })
+    await toolsTab.click()
 
     // Wait for tab content to load
     await page.waitForTimeout(2000)
