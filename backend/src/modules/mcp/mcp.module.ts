@@ -25,6 +25,7 @@ import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
+import { ToolCategory } from '../../entities/tool-category.entity';
 
 // Import related modules
 import { ToolsModule } from '../tools/tools.module';
@@ -42,6 +43,7 @@ import { forwardRef } from '@nestjs/common';
       User,
       Gateway,
       GatewayTool,
+      ToolCategory,
     ]),
     forwardRef(() => ToolsModule),
   ],

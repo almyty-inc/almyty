@@ -30,11 +30,12 @@ import {
   McpTextContent,
 } from './types/mcp.types';
 
-import { Tool } from '../../entities/tool.entity';
+import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { Resource } from '../../entities/resource.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
+import { ToolCategory } from '../../entities/tool-category.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService, ToolExecutionResult } from '../tools/tool-executor.service';
 
@@ -58,6 +59,8 @@ export class McpService {
     private gatewayRepository: Repository<Gateway>,
     @InjectRepository(GatewayTool)
     private gatewayToolRepository: Repository<GatewayTool>,
+    @InjectRepository(ToolCategory)
+    private toolCategoryRepository: Repository<ToolCategory>,
     private toolsService: ToolsService,
     private toolExecutorService: ToolExecutorService,
     @InjectRedis() private readonly redis: Redis.Redis,
@@ -84,7 +87,19 @@ export class McpService {
         case 'tools/list':
           result = await this.handleToolsList(request.params, organizationId, gatewayId);
           break;
-          
+
+        case 'tools/discover':
+          result = await this.handleToolsDiscover(request.params, organizationId, gatewayId);
+          break;
+
+        case 'tools/search':
+          result = await this.handleToolsSearch(request.params, organizationId, gatewayId);
+          break;
+
+        case 'tools/get':
+          result = await this.handleToolGet(request.params, organizationId);
+          break;
+
         case 'tools/call':
           result = await this.handleToolCall(request.params as McpCallToolRequest, organizationId, userId);
           break;
@@ -191,6 +206,10 @@ export class McpService {
           universalApiTranslation: true,
           multiProtocolSupport: ['mcp', 'utcp', 'a2a'],
           apiFormats: ['openapi', 'graphql', 'soap', 'protobuf'],
+          progressiveDiscovery: {
+            methods: ['tools/discover', 'tools/search', 'tools/get'],
+            description: 'Use tools/discover for categories, tools/search for filtered results, tools/get for full schema',
+          },
         },
       },
     };
@@ -254,6 +273,195 @@ export class McpService {
 
     return result;
   }
+
+  // ==================== Progressive Tool Discovery ====================
+
+  /**
+   * tools/discover - Returns tool categories and summaries without full schemas.
+   * Tier 1: Categories with tool counts (minimal tokens)
+   * Tier 2: Tool summaries (name + description, no schemas)
+   */
+  private async handleToolsDiscover(params: any, organizationId: string, gatewayId?: string): Promise<any> {
+    const category = params?.category as string | undefined;
+    const depth = (params?.depth as string) || 'categories';
+
+    // Get all active tools for this org/gateway
+    const tools = await this.getToolsForScope(organizationId, gatewayId);
+
+    // Get categories for this organization
+    const categories = await this.toolCategoryRepository.find({
+      where: { organizationId, isActive: true },
+      relations: ['tools'],
+      order: { sortOrder: 'ASC', name: 'ASC' },
+    });
+
+    if (depth === 'categories') {
+      // Tier 1: Just categories with counts
+      const categoryList = categories.map(cat => ({
+        id: cat.id,
+        name: cat.name,
+        slug: cat.slug,
+        description: cat.description,
+        icon: cat.icon,
+        toolCount: cat.tools?.filter(t => t.status === ToolStatus.ACTIVE).length || 0,
+      }));
+
+      // Count uncategorized tools
+      const categorizedToolIds = new Set(categories.flatMap(c => c.tools?.map(t => t.id) || []));
+      const uncategorizedCount = tools.filter(t => !categorizedToolIds.has(t.id)).length;
+
+      return {
+        categories: categoryList,
+        uncategorizedCount,
+        totalTools: tools.length,
+      };
+    }
+
+    // Tier 2: Tool summaries (optionally filtered by category)
+    let filteredTools = tools;
+    if (category) {
+      const cat = categories.find(c => c.slug === category || c.id === category);
+      if (cat) {
+        const catToolIds = new Set(cat.tools?.map(t => t.id) || []);
+        filteredTools = tools.filter(t => catToolIds.has(t.id));
+      } else if (category === 'uncategorized') {
+        const categorizedToolIds = new Set(categories.flatMap(c => c.tools?.map(t => t.id) || []));
+        filteredTools = tools.filter(t => !categorizedToolIds.has(t.id));
+      }
+    }
+
+    return {
+      tools: filteredTools.map(tool => ({
+        name: this.sanitizeToolName(tool.name),
+        description: tool.description,
+        type: tool.type,
+        category: tool.categories?.[0]?.name || null,
+        usageCount: tool.usageCount || 0,
+        successRate: tool.successRate || 0,
+        averageResponseTime: tool.averageResponseTime || 0,
+      })),
+      totalTools: filteredTools.length,
+    };
+  }
+
+  /**
+   * tools/search - Search tools by query string with optional filters.
+   * Returns summaries + schemas for matched tools.
+   */
+  private async handleToolsSearch(params: any, organizationId: string, gatewayId?: string): Promise<any> {
+    const query = params?.query as string;
+    const limit = Math.min(params?.limit || 20, 100);
+    const page = params?.page || 1;
+
+    if (!query) {
+      throw this.createJsonRpcError(
+        JsonRpcErrorCode.INVALID_PARAMS,
+        'Missing required parameter: query',
+      );
+    }
+
+    // Use existing search infrastructure
+    const result = await this.toolsService.getTools({
+      organizationId,
+      search: query,
+      status: ToolStatus.ACTIVE,
+      page,
+      limit,
+    });
+
+    // If gateway-scoped, filter to only gateway tools
+    let tools = result.tools;
+    if (gatewayId) {
+      const gatewayTools = await this.gatewayToolRepository.find({
+        where: { gatewayId, isActive: true },
+      });
+      const gatewayToolIds = new Set(gatewayTools.map(gt => gt.toolId));
+      tools = tools.filter(t => gatewayToolIds.has(t.id));
+    }
+
+    return {
+      tools: tools.map(tool => ({
+        name: this.sanitizeToolName(tool.name),
+        description: tool.description,
+        inputSchema: tool.parameters || { type: 'object', properties: {} },
+        type: tool.type,
+        usageCount: tool.usageCount || 0,
+        successRate: tool.successRate || 0,
+      })),
+      total: result.total,
+      page,
+      hasMore: page * limit < result.total,
+    };
+  }
+
+  /**
+   * tools/get - Get full tool details including schema, stats, and metadata.
+   * Use this to load the complete schema for a specific tool before calling it.
+   */
+  private async handleToolGet(params: any, organizationId: string): Promise<any> {
+    const toolName = params?.name as string;
+
+    if (!toolName) {
+      throw this.createJsonRpcError(
+        JsonRpcErrorCode.INVALID_PARAMS,
+        'Missing required parameter: name',
+      );
+    }
+
+    // Find tool by sanitized name match
+    const allTools = await this.toolRepository.find({
+      where: { status: ToolStatus.ACTIVE },
+      relations: ['categories', 'operation'],
+    });
+
+    const tool = allTools.find(t => this.sanitizeToolName(t.name) === toolName);
+
+    if (!tool) {
+      throw this.createJsonRpcError(
+        JsonRpcErrorCode.INTERNAL_ERROR,
+        `Tool not found: ${toolName}`,
+      );
+    }
+
+    return {
+      name: this.sanitizeToolName(tool.name),
+      description: tool.description,
+      inputSchema: tool.parameters || { type: 'object', properties: {} },
+      type: tool.type,
+      version: tool.version,
+      status: tool.status,
+      categories: tool.categories?.map(c => ({ name: c.name, slug: c.slug })) || [],
+      metadata: {
+        operationMethod: tool.operation?.method,
+        operationEndpoint: tool.operation?.endpoint,
+        createdAt: tool.createdAt,
+        updatedAt: tool.updatedAt,
+        lastUsedAt: tool.lastUsedAt,
+      },
+      usage: {
+        totalExecutions: tool.usageCount || 0,
+        successRate: tool.successRate || 0,
+        averageResponseTime: tool.averageResponseTime || 0,
+      },
+    };
+  }
+
+  /**
+   * Helper: Get active tools for an org or gateway scope.
+   */
+  private async getToolsForScope(organizationId: string, gatewayId?: string): Promise<Tool[]> {
+    if (gatewayId) {
+      const gatewayTools = await this.gatewayToolRepository.find({
+        where: { gatewayId, isActive: true },
+        relations: ['tool', 'tool.categories'],
+      });
+      return gatewayTools.map((gt: any) => gt.tool).filter(Boolean);
+    }
+    const result = await this.toolsService.getTools({ organizationId, status: ToolStatus.ACTIVE });
+    return result.tools;
+  }
+
+  // ==================== End Progressive Tool Discovery ====================
 
   /**
    * Sanitize tool name to match MCP client pattern: ^[a-zA-Z0-9_-]{1,64}$
