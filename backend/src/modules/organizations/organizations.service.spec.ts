@@ -496,12 +496,12 @@ describe('OrganizationsService', () => {
   });
 
   describe('inviteUser', () => {
-    it('should throw NotFoundException when user email not found', async () => {
+    it('should resolve without error when user email not found (pending invitation)', async () => {
       userRepository.findOne.mockResolvedValue(null);
 
       await expect(
         service.inviteUser('org-1', { email: 'nonexistent@test.com', role: OrganizationRole.MEMBER }, 'user-1')
-      ).rejects.toThrow(NotFoundException);
+      ).resolves.toBeUndefined();
     });
 
     it('should throw ConflictException when user is already an active member', async () => {

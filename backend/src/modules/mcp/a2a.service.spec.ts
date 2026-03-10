@@ -119,12 +119,18 @@ describe('A2AService - Real Business Logic', () => {
 
   describe('Pure Functions - Request Builders', () => {
     describe('buildOpenAIRequest - Real message transformation', () => {
-      it('should transform A2A message to OpenAI format', () => {
+      it('should transform A2A message to OpenAI format', async () => {
         const config: any = {
           url: '',
           data: {},
           headers: {},
         };
+
+        // Mock tool resolution
+        toolRepository.find.mockResolvedValue([
+          { name: 'search', toOpenAPITool: () => ({ type: 'function', function: { name: 'search', description: 'Search', parameters: {} } }) },
+          { name: 'filter', toOpenAPITool: () => ({ type: 'function', function: { name: 'filter', description: 'Filter', parameters: {} } }) },
+        ]);
 
         const message: A2AMessage = {
           id: 'msg-1',
@@ -146,10 +152,10 @@ describe('A2AService - Real Business Logic', () => {
           },
         };
 
-        const result = service['buildOpenAIRequest'](config, message);
+        const result = await service['buildOpenAIRequest'](config, message);
 
         expect(result.url).toBe('https://api.openai.com/v1/chat/completions');
-        expect(result.data.model).toBe('gpt-4');
+        expect(result.data.model).toBe('gpt-4o');
         expect(result.data.messages).toHaveLength(1);
         expect(result.data.messages[0].role).toBe('user');
         expect(result.data.tools).toHaveLength(2);
@@ -157,7 +163,7 @@ describe('A2AService - Real Business Logic', () => {
         expect(result.data.tools[0].function.name).toBe('search');
       });
 
-      it('should handle message without tools', () => {
+      it('should handle message without tools', async () => {
         const config: any = { url: '', data: {}, headers: {} };
         const message: A2AMessage = {
           id: 'msg-1',
@@ -169,15 +175,23 @@ describe('A2AService - Real Business Logic', () => {
           metadata: { timestamp: new Date().toISOString() },
         };
 
-        const result = service['buildOpenAIRequest'](config, message);
+        toolRepository.find.mockResolvedValue([]);
+
+        const result = await service['buildOpenAIRequest'](config, message);
 
         expect(result.data.tools).toBeUndefined();
       });
     });
 
     describe('buildAnthropicRequest - Real message transformation', () => {
-      it('should transform A2A message to Anthropic format', () => {
+      it('should transform A2A message to Anthropic format', async () => {
         const config: any = { url: '', data: {}, headers: {} };
+
+        // Mock tool resolution
+        toolRepository.find.mockResolvedValue([
+          { name: 'search', toAnthropicTool: () => ({ name: 'search', description: 'Search', input_schema: {} }) },
+        ]);
+
         const message: A2AMessage = {
           id: 'msg-1',
           fromAgentId: 'agent-1',
@@ -188,12 +202,12 @@ describe('A2AService - Real Business Logic', () => {
           metadata: { timestamp: new Date().toISOString() },
         };
 
-        const result = service['buildAnthropicRequest'](config, message);
+        const result = await service['buildAnthropicRequest'](config, message);
 
         expect(result.url).toBe('https://api.anthropic.com/v1/messages');
         expect(result.headers['anthropic-version']).toBe('2023-06-01');
-        expect(result.data.model).toBe('claude-3-sonnet-20240229');
-        expect(result.data.max_tokens).toBe(1000);
+        expect(result.data.model).toBe('claude-sonnet-4-20250514');
+        expect(result.data.max_tokens).toBe(4096);
         expect(result.data.messages).toHaveLength(1);
         expect(result.data.tools).toHaveLength(1);
         expect(result.data.tools[0].name).toBe('search');
@@ -1144,10 +1158,11 @@ describe('A2AService - Real Business Logic', () => {
           metadata: { timestamp: new Date().toISOString() },
         };
 
+        toolRepository.find.mockResolvedValue([]);
         const config = await service['buildAgentRequest'](agent, message);
 
         expect(config.url).toBe('https://api.openai.com/v1/chat/completions');
-        expect(config.data.model).toBe('gpt-4');
+        expect(config.data.model).toBe('gpt-4o');
       });
 
       it('should build request for ANTHROPIC agent type', async () => {
@@ -1174,11 +1189,12 @@ describe('A2AService - Real Business Logic', () => {
           metadata: { timestamp: new Date().toISOString() },
         };
 
+        toolRepository.find.mockResolvedValue([]);
         const config = await service['buildAgentRequest'](agent, message);
 
         expect(config.url).toBe('https://api.anthropic.com/v1/messages');
         expect(config.headers['anthropic-version']).toBe('2023-06-01');
-        expect(config.data.model).toBe('claude-3-sonnet-20240229');
+        expect(config.data.model).toBe('claude-sonnet-4-20250514');
       });
 
       it('should build request for CUSTOM_LLM agent type', async () => {
@@ -1371,8 +1387,11 @@ describe('A2AService - Real Business Logic', () => {
         };
 
         redis.get.mockResolvedValue(JSON.stringify(agent));
+        const mockTool = { id: 'tool-1', name: 'Test Agent_search' };
+        toolRepository.create.mockReturnValue(mockTool);
+        toolRepository.save.mockResolvedValue(mockTool);
 
-        await service.registerAgentTool('agent-1', {
+        const result = await service.registerAgentTool('agent-1', {
           agentId: 'agent-1',
           toolName: 'search',
           description: 'Search tool',
@@ -1382,7 +1401,9 @@ describe('A2AService - Real Business Logic', () => {
           method: 'POST',
         });
 
-        // Should complete without throwing
+        expect(result).toBe(mockTool);
+        expect(toolRepository.create).toHaveBeenCalled();
+        expect(toolRepository.save).toHaveBeenCalledWith(mockTool);
       });
     });
 

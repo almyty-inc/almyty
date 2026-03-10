@@ -73,7 +73,7 @@ describe('GatewaysController', () => {
 
   describe('getGateways', () => {
     it('should return paginated gateways', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
       const mockResult = {
         gateways: [],
         total: 0,
@@ -84,7 +84,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.getGateways.mockResolvedValue(mockResult);
 
-      const result = await controller.getGateways('org-1', { page: 1, limit: 10 }, mockRequest);
+      const result = await controller.getGateways({ page: 1, limit: 10 }, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult);
@@ -93,7 +93,7 @@ describe('GatewaysController', () => {
 
   describe('getGateway', () => {
     it('should return gateway by id', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
       const mockGateway = {
         id: 'gateway-1',
         name: 'Test Gateway',
@@ -105,7 +105,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.getGateway.mockResolvedValue(mockGateway);
 
-      const result = await controller.getGateway('org-1', 'gateway-1', mockRequest);
+      const result = await controller.getGateway('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockGateway);
@@ -114,7 +114,7 @@ describe('GatewaysController', () => {
 
   describe('createGateway', () => {
     it('should create gateway successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const createDto = {
         name: 'New Gateway',
         type: 'mcp' as any,
@@ -131,7 +131,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.createGateway.mockResolvedValue(mockGateway);
 
-      const result = await controller.createGateway('org-1', createDto, mockRequest);
+      const result = await controller.createGateway(createDto, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockGateway);
@@ -140,7 +140,7 @@ describe('GatewaysController', () => {
 
   describe('updateGateway', () => {
     it('should update gateway successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const updateDto = { description: 'Updated' };
       const mockGateway = {
         id: 'gateway-1',
@@ -151,7 +151,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.updateGateway.mockResolvedValue(mockGateway);
 
-      const result = await controller.updateGateway('org-1', 'gateway-1', updateDto, mockRequest);
+      const result = await controller.updateGateway('gateway-1', updateDto, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockGateway);
@@ -160,11 +160,11 @@ describe('GatewaysController', () => {
 
   describe('deleteGateway', () => {
     it('should delete gateway successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewaysService.deleteGateway.mockResolvedValue();
 
-      const result = await controller.deleteGateway('org-1', 'gateway-1', mockRequest);
+      const result = await controller.deleteGateway('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Gateway deleted successfully');
@@ -173,12 +173,12 @@ describe('GatewaysController', () => {
 
   describe('performHealthCheck', () => {
     it('should perform health check', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
       const mockResult = { isHealthy: true, responseTime: 200 };
 
       gatewaysService.performHealthCheck.mockResolvedValue(mockResult);
 
-      const result = await controller.performHealthCheck('org-1', 'gateway-1', mockRequest);
+      const result = await controller.performHealthCheck('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult);
@@ -187,12 +187,12 @@ describe('GatewaysController', () => {
 
   describe('activateGateway', () => {
     it('should activate gateway successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const mockGateway = { id: 'gateway-1', status: 'active' } as any;
 
       gatewaysService.activateGateway.mockResolvedValue(mockGateway);
 
-      const result = await controller.activateGateway('org-1', 'gateway-1', mockRequest);
+      const result = await controller.activateGateway('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockGateway);
@@ -201,12 +201,12 @@ describe('GatewaysController', () => {
 
   describe('deactivateGateway', () => {
     it('should deactivate gateway successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const mockGateway = { id: 'gateway-1', status: 'inactive' } as any;
 
       gatewaysService.deactivateGateway.mockResolvedValue(mockGateway);
 
-      const result = await controller.deactivateGateway('org-1', 'gateway-1', mockRequest);
+      const result = await controller.deactivateGateway('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockGateway);
@@ -215,7 +215,7 @@ describe('GatewaysController', () => {
 
   describe('getGatewayStats', () => {
     it('should return gateway statistics', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
       const mockStats = {
         totalRequests: 1000,
         successfulRequests: 950,
@@ -232,7 +232,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.getGatewayStats.mockResolvedValue(mockStats);
 
-      const result = await controller.getGatewayStats('org-1', 'gateway-1', 'day', mockRequest);
+      const result = await controller.getGatewayStats('gateway-1', 'day', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockStats);
@@ -242,13 +242,13 @@ describe('GatewaysController', () => {
 
   describe('associateTool', () => {
     it('should associate tool with gateway', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const associateDto = { toolId: 'tool-1', configuration: {} };
       const mockResult = { id: 'gateway-tool-1', gatewayId: 'gateway-1', toolId: 'tool-1' };
 
       (gatewayToolService as any).associateTool = jest.fn().mockResolvedValue(mockResult);
 
-      const result = await controller.associateTool('org-1', 'gateway-1', associateDto as any, mockRequest);
+      const result = await controller.associateTool('gateway-1', associateDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Tool associated with gateway successfully');
@@ -258,7 +258,7 @@ describe('GatewaysController', () => {
 
   describe('getGatewayTools', () => {
     it('should return tools associated with gateway', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
       const query = { page: 1, limit: 10 };
       const mockTools = [
         { id: 'tool-1', name: 'Tool 1' },
@@ -267,7 +267,7 @@ describe('GatewaysController', () => {
 
       gatewayToolService.getGatewayTools.mockResolvedValue(mockTools as any);
 
-      const result = await controller.getGatewayTools('org-1', 'gateway-1', query, mockRequest);
+      const result = await controller.getGatewayTools('gateway-1', query, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockTools);
@@ -282,7 +282,7 @@ describe('GatewaysController', () => {
 
   describe('createGatewayAuth', () => {
     it('should create auth configuration for gateway', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const authDto = {
         type: 'bearer' as any,
         config: { token: 'test-token' },
@@ -295,7 +295,7 @@ describe('GatewaysController', () => {
 
       gatewayAuthService.createGatewayAuth.mockResolvedValue(mockAuthConfig as any);
 
-      const result = await controller.createGatewayAuth('org-1', 'gateway-1', authDto as any, mockRequest);
+      const result = await controller.createGatewayAuth('gateway-1', authDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAuthConfig);
@@ -304,7 +304,7 @@ describe('GatewaysController', () => {
 
   describe('getGatewayAuths', () => {
     it('should return gateway auth configurations', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
       const mockAuthConfigs = [
         { id: 'auth-1', type: 'bearer', config: {} },
         { id: 'auth-2', type: 'oauth2', config: {} },
@@ -312,7 +312,7 @@ describe('GatewaysController', () => {
 
       gatewayAuthService.getGatewayAuths.mockResolvedValue(mockAuthConfigs as any);
 
-      const result = await controller.getGatewayAuths('org-1', 'gateway-1', mockRequest);
+      const result = await controller.getGatewayAuths('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAuthConfigs);
@@ -321,7 +321,7 @@ describe('GatewaysController', () => {
 
   describe('bulkAssociateTools', () => {
     it('should bulk associate tools with gateway', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const bulkDto = {
         toolIds: ['tool-1', 'tool-2', 'tool-3'],
         configuration: { timeout: 5000 },
@@ -333,7 +333,7 @@ describe('GatewaysController', () => {
 
       gatewayToolService.bulkAssociateTools.mockResolvedValue(mockResult as any);
 
-      const result = await controller.bulkAssociateTools('org-1', 'gateway-1', bulkDto as any, mockRequest);
+      const result = await controller.bulkAssociateTools('gateway-1', bulkDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult);
@@ -349,7 +349,7 @@ describe('GatewaysController', () => {
 
   describe('getAvailableTools', () => {
     it('should return available tools for gateway', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
       const mockTools = {
         tools: [
           { id: 'tool-1', name: 'Available Tool 1', status: 'active' },
@@ -360,7 +360,7 @@ describe('GatewaysController', () => {
 
       (gatewayToolService as any).getAvailableTools = jest.fn().mockResolvedValue(mockTools);
 
-      const result = await controller.getAvailableTools('org-1', 'gateway-1', mockRequest);
+      const result = await controller.getAvailableTools('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockTools);
@@ -369,7 +369,7 @@ describe('GatewaysController', () => {
 
   describe('getGatewayToolStats', () => {
     it('should return gateway tool statistics', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
       const mockStats = {
         totalTools: 10,
         activeTools: 8,
@@ -386,7 +386,7 @@ describe('GatewaysController', () => {
 
       (gatewayToolService as any).getGatewayToolStats = jest.fn().mockResolvedValue(mockStats);
 
-      const result = await controller.getGatewayToolStats('org-1', 'gateway-1', mockRequest);
+      const result = await controller.getGatewayToolStats('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockStats);
@@ -395,7 +395,7 @@ describe('GatewaysController', () => {
 
   describe('getOrganizationStats', () => {
     it('should return organization gateway statistics', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
       const mockStats = {
         totalGateways: 5,
         activeGateways: 4,
@@ -414,7 +414,7 @@ describe('GatewaysController', () => {
 
       (gatewaysService as any).getOrganizationGatewayStats = jest.fn().mockResolvedValue(mockStats);
 
-      const result = await controller.getOrganizationStats('org-1', mockRequest);
+      const result = await controller.getOrganizationStats(mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockStats);
@@ -424,184 +424,184 @@ describe('GatewaysController', () => {
   // Error handling tests for all branches
   describe('createGateway - error handling', () => {
     it('should handle creation error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const createDto = { name: 'Gateway', type: 'mcp' as any, endpoint: '', configuration: {} };
 
       gatewaysService.createGateway.mockRejectedValue(new Error('Creation failed'));
 
-      await expect(controller.createGateway('org-1', createDto, mockRequest))
+      await expect(controller.createGateway(createDto, mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('getGateways - error handling', () => {
     it('should handle retrieval error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewaysService.getGateways.mockRejectedValue(new Error('Retrieval failed'));
 
-      await expect(controller.getGateways('org-1', {} as any, mockRequest))
+      await expect(controller.getGateways({} as any, mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('getGateway - error handling', () => {
     it('should handle not found error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewaysService.getGateway.mockRejectedValue(new Error('Not found'));
 
-      await expect(controller.getGateway('org-1', 'gateway-1', mockRequest))
+      await expect(controller.getGateway('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('updateGateway - error handling', () => {
     it('should handle update error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewaysService.updateGateway.mockRejectedValue(new Error('Update failed'));
 
-      await expect(controller.updateGateway('org-1', 'gateway-1', {} as any, mockRequest))
+      await expect(controller.updateGateway('gateway-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('deleteGateway - error handling', () => {
     it('should handle deletion error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewaysService.deleteGateway.mockRejectedValue(new Error('Deletion failed'));
 
-      await expect(controller.deleteGateway('org-1', 'gateway-1', mockRequest))
+      await expect(controller.deleteGateway('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('activateGateway - error handling', () => {
     it('should handle activation error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewaysService.activateGateway.mockRejectedValue(new Error('Activation failed'));
 
-      await expect(controller.activateGateway('org-1', 'gateway-1', mockRequest))
+      await expect(controller.activateGateway('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('deactivateGateway - error handling', () => {
     it('should handle deactivation error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewaysService.deactivateGateway.mockRejectedValue(new Error('Deactivation failed'));
 
-      await expect(controller.deactivateGateway('org-1', 'gateway-1', mockRequest))
+      await expect(controller.deactivateGateway('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('getGatewayStats - error handling', () => {
     it('should handle stats error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewaysService.getGatewayStats.mockRejectedValue(new Error('Stats failed'));
 
-      await expect(controller.getGatewayStats('org-1', 'gateway-1', 'day', mockRequest))
+      await expect(controller.getGatewayStats('gateway-1', 'day', mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('performHealthCheck - error handling', () => {
     it('should handle health check error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewaysService.performHealthCheck.mockRejectedValue(new Error('Health check failed'));
 
-      await expect(controller.performHealthCheck('org-1', 'gateway-1', mockRequest))
+      await expect(controller.performHealthCheck('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('createGatewayAuth - error handling', () => {
     it('should handle auth creation error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewayAuthService.createGatewayAuth.mockRejectedValue(new Error('Auth creation failed'));
 
-      await expect(controller.createGatewayAuth('org-1', 'gateway-1', {} as any, mockRequest))
+      await expect(controller.createGatewayAuth('gateway-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('getGatewayAuths - error handling', () => {
     it('should handle auth retrieval error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewayAuthService.getGatewayAuths.mockRejectedValue(new Error('Auth retrieval failed'));
 
-      await expect(controller.getGatewayAuths('org-1', 'gateway-1', mockRequest))
+      await expect(controller.getGatewayAuths('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('associateTool - error handling', () => {
     it('should handle association error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       (gatewayToolService as any).associateTool = jest.fn().mockRejectedValue(new Error('Association failed'));
 
-      await expect(controller.associateTool('org-1', 'gateway-1', {} as any, mockRequest))
+      await expect(controller.associateTool('gateway-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('bulkAssociateTools - error handling', () => {
     it('should handle bulk association error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewayToolService.bulkAssociateTools.mockRejectedValue(new Error('Bulk association failed'));
 
-      await expect(controller.bulkAssociateTools('org-1', 'gateway-1', {} as any, mockRequest))
+      await expect(controller.bulkAssociateTools('gateway-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('getGatewayTools - error handling', () => {
     it('should handle tools retrieval error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       gatewayToolService.getGatewayTools.mockRejectedValue(new Error('Tools retrieval failed'));
 
-      await expect(controller.getGatewayTools('org-1', 'gateway-1', {} as any, mockRequest))
+      await expect(controller.getGatewayTools('gateway-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('getAvailableTools - error handling', () => {
     it('should handle available tools error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       (gatewayToolService as any).getAvailableTools = jest.fn().mockRejectedValue(new Error('Available tools failed'));
 
-      await expect(controller.getAvailableTools('org-1', 'gateway-1', mockRequest))
+      await expect(controller.getAvailableTools('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('getGatewayToolStats - error handling', () => {
     it('should handle stats error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       (gatewayToolService as any).getGatewayToolStats = jest.fn().mockRejectedValue(new Error('Stats failed'));
 
-      await expect(controller.getGatewayToolStats('org-1', 'gateway-1', mockRequest))
+      await expect(controller.getGatewayToolStats('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('getOrganizationStats - error handling', () => {
     it('should handle organization stats error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       (gatewaysService as any).getOrganizationGatewayStats = jest.fn().mockRejectedValue(new Error('Org stats failed'));
 
-      await expect(controller.getOrganizationStats('org-1', mockRequest))
+      await expect(controller.getOrganizationStats(mockRequest))
         .rejects.toThrow();
     });
   });

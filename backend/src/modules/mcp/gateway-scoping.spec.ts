@@ -13,6 +13,7 @@ import { ToolExecutorService } from '../tools/tool-executor.service';
 describe('MCP Gateway Tool Scoping', () => {
   let mcpService: McpService;
   let gatewayToolRepository: Repository<GatewayTool>;
+  let module: TestingModule;
 
   const mockGatewayTools = [
     {
@@ -31,7 +32,7 @@ describe('MCP Gateway Tool Scoping', () => {
   ];
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         McpService,
         {
@@ -66,6 +67,10 @@ describe('MCP Gateway Tool Scoping', () => {
           provide: ToolExecutorService,
           useValue: {},
         },
+        {
+          provide: 'default_IORedisModuleConnectionToken',
+          useValue: { get: jest.fn().mockResolvedValue(null), setex: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -77,7 +82,7 @@ describe('MCP Gateway Tool Scoping', () => {
     const result = await mcpService['handleToolsList']({}, 'org-1', 'gateway-1');
 
     expect(result.tools).toHaveLength(1);
-    expect(result.tools[0].name).toBe('Petstore_Place an order');
+    expect(result.tools[0].name).toBe('Petstore_Place_an_order');
     expect(gatewayToolRepository.find).toHaveBeenCalledWith({
       where: { gatewayId: 'gateway-1', isActive: true },
       relations: ['tool'],

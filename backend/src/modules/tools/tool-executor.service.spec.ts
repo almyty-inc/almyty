@@ -7,6 +7,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { Api, ApiType } from '../../entities/api.entity';
 import { Operation } from '../../entities/operation.entity';
 import { User } from '../../entities/user.entity';
+import { CustomCodeExecutorService } from './custom-code-executor.service';
 import axios from 'axios';
 
 jest.mock('axios', () => {
@@ -79,6 +80,13 @@ describe('ToolExecutorService', () => {
         {
           provide: 'default_IORedisModuleConnectionToken',
           useValue: mockRedis,
+        },
+        {
+          provide: CustomCodeExecutorService,
+          useValue: {
+            executeCode: jest.fn().mockResolvedValue({ success: true, data: null, executionTime: 0 }),
+            validateCode: jest.fn().mockReturnValue({ valid: true }),
+          },
         },
       ],
     }).compile();

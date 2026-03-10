@@ -135,7 +135,8 @@
       "!**/*.interface.ts",
       "!**/*.dto.ts",
       "!**/main.ts",
-      "!**/migrations/**"
+      "!**/migrations/**",
+      "!**/temp-coverage/**"
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
