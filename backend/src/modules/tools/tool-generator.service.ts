@@ -9,6 +9,7 @@ import { JsonSchema, JsonSchemaType } from '../../entities/json-schema.entity';
 import { Api, ApiType } from '../../entities/api.entity';
 
 import { JsonSchemaTranslatorService } from '../json-schema-translator/json-schema-translator.service';
+import { computeToolHash } from '../../common/security/tool-integrity';
 
 export interface ToolGenerationOptions {
   includeOperations?: string[]; // Specific operation IDs to include
@@ -108,6 +109,10 @@ export class ToolGeneratorService {
               existingTool.outputSchemaId = outputSchema?.id;
               existingTool.description = this.generateToolDescription(operation, api);
 
+              // Recompute integrity hash on update
+              const { hash } = computeToolHash(existingTool);
+              existingTool.definitionHash = hash;
+
               return this.toolRepository.save(existingTool);
             } else {
               return this.generateToolFromOperation(operation, api, options);
@@ -206,6 +211,11 @@ export class ToolGeneratorService {
       });
 
       const savedTool = await this.toolRepository.save(tool);
+
+      // Compute and store integrity hash
+      const { hash } = computeToolHash(savedTool);
+      savedTool.definitionHash = hash;
+      await this.toolRepository.save(savedTool);
 
       // Create initial version
       await this.createToolVersion(savedTool, 'Initial tool generation');

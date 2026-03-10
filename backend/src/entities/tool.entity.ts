@@ -127,6 +127,9 @@ export class Tool {
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
 
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  definitionHash: string | null; // SHA-256 hash of tool definition for integrity verification
+
   @Column({ default: 0 })
   usageCount: number;
 

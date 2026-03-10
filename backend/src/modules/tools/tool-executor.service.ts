@@ -11,6 +11,9 @@ import { Operation } from '../../entities/operation.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { User } from '../../entities/user.entity';
 import { CustomCodeExecutorService } from './custom-code-executor.service';
+import { validateUrl, sanitizeHeaders, validateResponseSize } from '../../common/security/url-validator';
+import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
+import { verifyToolIntegrity } from '../../common/security/tool-integrity';
 
 export interface ToolExecutionOptions {
   userId: string;
@@ -106,6 +109,25 @@ export class ToolExecutorService {
       const validation = await this.validateParameters(tool, parameters);
       if (!validation.isValid) {
         throw new BadRequestException(`Invalid parameters: ${validation.errors.join(', ')}`);
+      }
+
+      // Security: Sanitize parameters against injection attacks
+      const sanitization = sanitizeToolParameters(parameters);
+      if (!sanitization.safe) {
+        this.logger.warn(`Blocked dangerous parameters for tool ${tool.name}: ${sanitization.warnings.join('; ')}`);
+        throw new BadRequestException(`Parameter security violation: ${sanitization.warnings.filter(w => w.startsWith('[block]')).join('; ')}`);
+      }
+      if (sanitization.warnings.length > 0) {
+        this.logger.warn(`Parameter warnings for tool ${tool.name}: ${sanitization.warnings.join('; ')}`);
+      }
+
+      // Security: Verify tool integrity if hash is stored
+      if (tool.definitionHash) {
+        const integrity = verifyToolIntegrity(tool, tool.definitionHash);
+        if (!integrity.valid) {
+          this.logger.error(`Tool integrity check FAILED for ${tool.name} (${tool.id}). Stored hash does not match current definition.`);
+          throw new BadRequestException('Tool integrity verification failed. The tool definition may have been tampered with.');
+        }
       }
 
       // Check rate limits
@@ -311,6 +333,20 @@ export class ToolExecutorService {
     options: ToolExecutionOptions
   ): Promise<ToolExecutionResult> {
     try {
+      // Security: Validate base URL against SSRF
+      const baseUrlCheck = validateUrl(api.baseUrl);
+      if (!baseUrlCheck.valid) {
+        this.logger.warn(`SSRF blocked for tool ${tool.name}: ${baseUrlCheck.error}`);
+        return {
+          success: false,
+          error: `Blocked: ${baseUrlCheck.error}`,
+          executionTime: 0,
+          cached: false,
+          rateLimited: false,
+          retryCount: 0,
+        };
+      }
+
       // Build URL
       let url = `${api.baseUrl}${operation.endpoint}`;
 
@@ -355,16 +391,35 @@ export class ToolExecutorService {
         url = url.replace(`{${key}}`, encodeURIComponent(String(value)));
       }
 
+      // Security: Validate fully-constructed URL
+      const fullUrlCheck = validateUrl(url);
+      if (!fullUrlCheck.valid) {
+        this.logger.warn(`SSRF blocked for constructed URL (tool ${tool.name}): ${fullUrlCheck.error}`);
+        return {
+          success: false,
+          error: `Blocked: ${fullUrlCheck.error}`,
+          executionTime: 0,
+          cached: false,
+          rateLimited: false,
+          retryCount: 0,
+        };
+      }
+
+      // Security: Sanitize user-provided headers
+      const safeHeaders = sanitizeHeaders(headerParams as Record<string, string>);
+
       // Build request config
       const config: AxiosRequestConfig = {
         method: operation.method.toLowerCase() as any,
         url,
         timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
+        maxContentLength: 10 * 1024 * 1024, // 10MB response limit
+        maxBodyLength: 10 * 1024 * 1024,
         params: queryParams,
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'LLM-Tool-Gateway/1.0',
-          ...headerParams,
+          ...safeHeaders,
         },
       };
 
@@ -425,6 +480,13 @@ export class ToolExecutorService {
     options: ToolExecutionOptions
   ): Promise<ToolExecutionResult> {
     try {
+      // Security: Validate GraphQL endpoint URL
+      const urlCheck = validateUrl(api.baseUrl);
+      if (!urlCheck.valid) {
+        this.logger.warn(`SSRF blocked for GraphQL tool ${tool.name}: ${urlCheck.error}`);
+        return { success: false, error: `Blocked: ${urlCheck.error}`, executionTime: 0, cached: false, rateLimited: false, retryCount: 0 };
+      }
+
       const graphqlRequest: GraphQLRequest = {
         query: parameters.query || operation.metadata?.query,
         variables: parameters.variables || parameters,
@@ -507,8 +569,18 @@ export class ToolExecutorService {
     options: ToolExecutionOptions
   ): Promise<ToolExecutionResult> {
     try {
+      // Security: Validate SOAP endpoint URL
+      const urlCheck = validateUrl(api.baseUrl);
+      if (!urlCheck.valid) {
+        this.logger.warn(`SSRF blocked for SOAP tool ${tool.name}: ${urlCheck.error}`);
+        return { success: false, error: `Blocked: ${urlCheck.error}`, executionTime: 0, cached: false, rateLimited: false, retryCount: 0 };
+      }
+
       const soapRequest: SOAPRequest = parameters as SOAPRequest;
-      
+
+      // Security: Sanitize SOAP user-provided headers
+      const safeSoapHeaders = soapRequest.headers ? sanitizeHeaders(soapRequest.headers) : {};
+
       const config: AxiosRequestConfig = {
         method: 'POST',
         url: api.baseUrl,
@@ -517,7 +589,7 @@ export class ToolExecutorService {
           'Content-Type': 'text/xml; charset=utf-8',
           'SOAPAction': soapRequest.action || `"${operation.name}"`,
           'User-Agent': 'LLM-Tool-Gateway/1.0',
-          ...soapRequest.headers,
+          ...safeSoapHeaders,
         },
         data: soapRequest.envelope,
       };
@@ -572,10 +644,18 @@ export class ToolExecutorService {
     options: ToolExecutionOptions
   ): Promise<ToolExecutionResult> {
     try {
+      // Security: Validate gRPC endpoint URL
+      const grpcUrl = `${api.baseUrl}${operation.endpoint}`;
+      const urlCheck = validateUrl(grpcUrl);
+      if (!urlCheck.valid) {
+        this.logger.warn(`SSRF blocked for gRPC tool ${tool.name}: ${urlCheck.error}`);
+        return { success: false, error: `Blocked: ${urlCheck.error}`, executionTime: 0, cached: false, rateLimited: false, retryCount: 0 };
+      }
+
       // For gRPC calls, we'd need grpc library, but for now simulate with HTTP/2
       const config: AxiosRequestConfig = {
         method: 'POST',
-        url: `${api.baseUrl}${operation.endpoint}`,
+        url: grpcUrl,
         timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
         headers: {
           'Content-Type': 'application/grpc+proto',
