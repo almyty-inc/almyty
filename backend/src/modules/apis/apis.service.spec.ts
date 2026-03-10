@@ -90,10 +90,11 @@ describe('ApisService', () => {
 
       const mockOrganization = {
         id: 'org-1',
-        canAddMoreApis: jest.fn().mockReturnValue(true),
+        settings: null,
       };
 
       organizationRepository.findOne.mockResolvedValue(mockOrganization as any);
+      apiRepository.count.mockResolvedValue(0);
       apiRepository.findOne.mockResolvedValue(null);
       apiRepository.create.mockReturnValue(createApiData as any);
       apiRepository.save.mockResolvedValue({ ...createApiData, id: 'api-1' } as any);
@@ -130,10 +131,11 @@ describe('ApisService', () => {
 
       const mockOrganization = {
         id: 'org-1',
-        canAddMoreApis: jest.fn().mockReturnValue(true),
+        settings: null,
       };
 
       organizationRepository.findOne.mockResolvedValue(mockOrganization as any);
+      apiRepository.count.mockResolvedValue(0);
       apiRepository.findOne.mockResolvedValue({ id: 'existing-api' } as any);
 
       await expect(service.create(createApiData)).rejects.toThrow(BadRequestException);
@@ -149,10 +151,11 @@ describe('ApisService', () => {
 
       const mockOrganization = {
         id: 'org-1',
-        canAddMoreApis: jest.fn().mockReturnValue(false),
+        settings: { maxApis: 5 },
       };
 
       organizationRepository.findOne.mockResolvedValue(mockOrganization as any);
+      apiRepository.count.mockResolvedValue(5); // At limit
 
       await expect(service.create(createApiData)).rejects.toThrow(BadRequestException);
       await expect(service.create(createApiData)).rejects.toThrow('API limit exceeded');

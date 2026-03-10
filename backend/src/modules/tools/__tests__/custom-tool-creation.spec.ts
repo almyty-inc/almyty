@@ -2,7 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ToolsService } from '../tools.service';
 import { Tool, ToolType } from '../../../entities/tool.entity';
+import { ToolVersion } from '../../../entities/tool-version.entity';
+import { ToolCategory } from '../../../entities/tool-category.entity';
+import { ToolExecution } from '../../../entities/tool-execution.entity';
 import { Api } from '../../../entities/api.entity';
+import { ApiSchema } from '../../../entities/api-schema.entity';
+import { Operation } from '../../../entities/operation.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { User } from '../../../entities/user.entity';
 
@@ -50,12 +55,11 @@ describe('ToolsService - Custom Tool Creation', () => {
           },
         },
         // Add other required repositories as mocks
-        { provide: getRepositoryToken('ToolVersion'), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken('ToolCategory'), useValue: { find: jest.fn(() => Promise.resolve([])) } },
-        { provide: getRepositoryToken('Operation'), useValue: { findOne: jest.fn() } },
-        { provide: getRepositoryToken('ToolExecution'), useValue: {} },
-        { provide: getRepositoryToken('ApiSchema'), useValue: {} },
-        { provide: 'REDIS_CLIENT', useValue: {} },
+        { provide: getRepositoryToken(ToolVersion), useValue: { create: jest.fn(() => ({})), save: jest.fn((v) => Promise.resolve(v)) } },
+        { provide: getRepositoryToken(ToolCategory), useValue: { find: jest.fn(() => Promise.resolve([])) } },
+        { provide: getRepositoryToken(Operation), useValue: { findOne: jest.fn() } },
+        { provide: getRepositoryToken(ToolExecution), useValue: {} },
+        { provide: getRepositoryToken(ApiSchema), useValue: {} },
       ],
     }).compile();
 
@@ -74,7 +78,7 @@ describe('ToolsService - Custom Tool Creation', () => {
       executionMethod: 'custom',
     };
 
-    const result = await service.createTool(createDto, 'org-123', 'user-123');
+    const result = await service.createTool(createDto as any, 'org-123', 'user-123');
 
     expect(result).toHaveProperty('id');
     expect(toolRepository.create).toHaveBeenCalledWith(
@@ -96,7 +100,7 @@ describe('ToolsService - Custom Tool Creation', () => {
       executionMethod: 'http',
     };
 
-    await service.createTool(createDto, 'org-123', 'user-123');
+    await service.createTool(createDto as any, 'org-123', 'user-123');
 
     // Should auto-create API
     expect(apiRepository.create).toHaveBeenCalledWith(
@@ -118,7 +122,7 @@ describe('ToolsService - Custom Tool Creation', () => {
       executionMethod: 'graphql',
     };
 
-    const result = await service.createTool(createDto, 'org-123', 'user-123');
+    const result = await service.createTool(createDto as any, 'org-123', 'user-123');
 
     expect(result).toBeDefined();
     expect(toolRepository.create).toHaveBeenCalledWith(
@@ -142,7 +146,7 @@ describe('ToolsService - Custom Tool Creation', () => {
       },
     };
 
-    await service.createTool(createDto, 'org-123', 'user-123');
+    await service.createTool(createDto as any, 'org-123', 'user-123');
 
     expect(toolRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({

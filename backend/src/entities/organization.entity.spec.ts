@@ -39,7 +39,7 @@ describe('Organization Entity', () => {
       expect(org.slug).toBe('existing-slug');
     });
 
-    it('should generate unique slug with timestamp and random string', () => {
+    it('should generate deterministic slug from name', () => {
       const org1 = new Organization();
       org1.name = 'Test';
       org1.generateSlug();
@@ -48,8 +48,9 @@ describe('Organization Entity', () => {
       org2.name = 'Test';
       org2.generateSlug();
 
-      // Slugs should be different due to timestamp and random component
-      expect(org1.slug).not.toBe(org2.slug);
+      // Slugs are deterministic - uniqueness is enforced by DB constraint
+      expect(org1.slug).toBe('test');
+      expect(org2.slug).toBe('test');
     });
 
     it('should not generate slug if name is not set', () => {

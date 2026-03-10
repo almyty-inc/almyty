@@ -15,17 +15,15 @@ const mockCreateContext = jest.fn().mockResolvedValue({
 const mockDispose = jest.fn();
 
 jest.mock('isolated-vm', () => ({
-  default: {
-    Isolate: jest.fn().mockImplementation(() => ({
-      createContext: mockCreateContext,
-      compileScript: mockCompileScript,
-      dispose: mockDispose,
-    })),
-    ExternalCopy: jest.fn().mockImplementation((value) => ({
-      copyInto: () => value,
-    })),
-    Reference: jest.fn().mockImplementation((value) => value),
-  },
+  Isolate: jest.fn().mockImplementation(() => ({
+    createContext: mockCreateContext,
+    compileScript: mockCompileScript,
+    dispose: mockDispose,
+  })),
+  ExternalCopy: jest.fn().mockImplementation((value) => ({
+    copyInto: () => value,
+  })),
+  Reference: jest.fn().mockImplementation((value) => value),
 }));
 
 describe('CustomCodeExecutorService', () => {

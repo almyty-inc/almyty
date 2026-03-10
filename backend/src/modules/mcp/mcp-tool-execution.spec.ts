@@ -66,6 +66,17 @@ describe('McpService - Tool Execution', () => {
             executeTool: jest.fn(),
           },
         },
+        {
+          provide: 'default_IORedisModuleConnectionToken',
+          useValue: {
+            get: jest.fn(),
+            set: jest.fn(),
+            del: jest.fn(),
+            exists: jest.fn(),
+            expire: jest.fn(),
+            keys: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

@@ -395,11 +395,11 @@ describe('A2AController - Real Business Logic', () => {
         a2aService.getAgent.mockResolvedValue(mockAgent);
 
         const req = createMockRequest();
-        const result = await controller.getAgentMessages('agent-1', req);
+        a2aService.getAgentMessages = jest.fn().mockResolvedValue([]);
+        const result = await controller.getAgentMessages('agent-1', '50', req);
 
-        // Controller returns empty array as TODO
         expect(result).toEqual([]);
-        expect(a2aService.getAgent).toHaveBeenCalledWith('agent-1');
+        expect(a2aService.getAgentMessages).toHaveBeenCalledWith('agent-1', 50);
       });
     });
   });

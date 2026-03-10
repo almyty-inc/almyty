@@ -85,6 +85,26 @@ export const mockAxios = {
 
 jest.mock('axios', () => mockAxios);
 
+// Mock isolated-vm (native module that doesn't load in Jest)
+jest.mock('isolated-vm', () => ({
+  Isolate: jest.fn().mockImplementation(() => ({
+    createContextSync: jest.fn().mockReturnValue({
+      global: {
+        setSync: jest.fn(),
+        getSync: jest.fn(),
+      },
+      evalSync: jest.fn(),
+      evalClosureSync: jest.fn(),
+      release: jest.fn(),
+    }),
+    compileScriptSync: jest.fn().mockReturnValue({
+      runSync: jest.fn(),
+      release: jest.fn(),
+    }),
+    dispose: jest.fn(),
+  })),
+}));
+
 // Mock Redis
 export const mockRedis = {
   get: jest.fn(),

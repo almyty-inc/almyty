@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bull';
 import { ApisController } from './apis.controller';
 import { ApisService } from './apis.service';
 import { SchemaParserService } from '../schema-parser/schema-parser.service';
@@ -37,6 +38,13 @@ describe('ApisController', () => {
         {
           provide: SchemaParserService,
           useValue: mockSchemaParserService,
+        },
+        {
+          provide: getQueueToken('schema-import'),
+          useValue: {
+            add: jest.fn().mockResolvedValue({ id: 'job-1' }),
+            getJob: jest.fn(),
+          },
         },
       ],
     })
@@ -201,50 +209,41 @@ describe('ApisController', () => {
       const mockApi = { id: 'api-1', organizationId: 'org-1' } as any;
       const mockFile = { buffer: Buffer.from('schema content'), originalname: 'schema.json' };
       const importDto = { generateTools: true };
-      const mockResult = { api: mockApi, schema: {}, operations: [], resources: [] } as any;
 
       apisService.findOne.mockResolvedValue(mockApi);
-      apisService.importSchema.mockResolvedValue(mockResult);
 
       const result = await controller.importSchema(mockRequest, 'api-1', importDto, mockFile);
 
-      expect(result).toBe(mockResult);
-      expect(apisService.importSchema).toHaveBeenCalledWith('api-1', 'schema content', {
-        fileName: 'schema.json',
-        description: undefined,
-        generateTools: true,
-      });
+      expect(result).toHaveProperty('jobId');
+      expect(result).toHaveProperty('status', 'processing');
+      expect(result).toHaveProperty('message');
     });
 
     it('should import schema from URL', async () => {
       const mockRequest = { user: { currentOrganizationId: 'org-1' } };
       const mockApi = { id: 'api-1', organizationId: 'org-1' } as any;
       const importDto = { schemaUrl: 'https://api.example.com/schema.json', generateTools: true };
-      const mockResult = { api: mockApi, schema: {}, operations: [], resources: [] } as any;
 
       apisService.findOne.mockResolvedValue(mockApi);
       apisService.fetchSchemaFromUrl = jest.fn().mockResolvedValue('fetched schema');
-      apisService.importSchema.mockResolvedValue(mockResult);
 
       const result = await controller.importSchema(mockRequest, 'api-1', importDto);
 
-      expect(result).toBe(mockResult);
-      expect(apisService.importSchema).toHaveBeenCalledWith('api-1', 'fetched schema', expect.any(Object));
+      expect(result).toHaveProperty('jobId');
+      expect(result).toHaveProperty('status', 'processing');
     });
 
     it('should import schema from content', async () => {
       const mockRequest = { user: { currentOrganizationId: 'org-1' } };
       const mockApi = { id: 'api-1', organizationId: 'org-1' } as any;
       const importDto = { schemaContent: 'inline schema', generateTools: false };
-      const mockResult = { api: mockApi, schema: {}, operations: [], resources: [] } as any;
 
       apisService.findOne.mockResolvedValue(mockApi);
-      apisService.importSchema.mockResolvedValue(mockResult);
 
       const result = await controller.importSchema(mockRequest, 'api-1', importDto);
 
-      expect(result).toBe(mockResult);
-      expect(apisService.importSchema).toHaveBeenCalledWith('api-1', 'inline schema', expect.any(Object));
+      expect(result).toHaveProperty('jobId');
+      expect(result).toHaveProperty('status', 'processing');
     });
   });
 

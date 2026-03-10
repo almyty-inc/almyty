@@ -61,6 +61,19 @@ describe('UtcpService', () => {
             executeTool: jest.fn(),
           },
         },
+        {
+          provide: 'default_IORedisModuleConnectionToken',
+          useValue: {
+            get: jest.fn().mockResolvedValue(null),
+            set: jest.fn().mockResolvedValue('OK'),
+            setex: jest.fn().mockResolvedValue('OK'),
+            del: jest.fn().mockResolvedValue(1),
+            keys: jest.fn().mockResolvedValue([]),
+            lpush: jest.fn().mockResolvedValue(1),
+            ltrim: jest.fn().mockResolvedValue('OK'),
+            llen: jest.fn().mockResolvedValue(0),
+          },
+        },
       ],
     }).compile();
 

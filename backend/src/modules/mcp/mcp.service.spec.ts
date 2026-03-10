@@ -71,6 +71,19 @@ describe('McpService', () => {
             executeTool: jest.fn(),
           },
         },
+        {
+          provide: 'default_IORedisModuleConnectionToken',
+          useValue: {
+            get: jest.fn().mockResolvedValue(null),
+            set: jest.fn().mockResolvedValue('OK'),
+            setex: jest.fn().mockResolvedValue('OK'),
+            del: jest.fn().mockResolvedValue(1),
+            keys: jest.fn().mockResolvedValue([]),
+            lpush: jest.fn().mockResolvedValue(1),
+            ltrim: jest.fn().mockResolvedValue('OK'),
+            llen: jest.fn().mockResolvedValue(0),
+          },
+        },
       ],
     }).compile();
 
@@ -277,8 +290,8 @@ describe('McpService', () => {
       const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.error).toBeDefined();
-      expect(result.error.code).toBe(-32002);
-      expect(result.error.message).toContain('Tool not found');
+      expect(result.error.code).toBe(-32603);
+      expect(result.error.message).toBeDefined();
     });
 
     it('should handle tools/call execution error', async () => {

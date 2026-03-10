@@ -40,7 +40,7 @@ describe('LlmProvidersController', () => {
 
   describe('createProvider', () => {
     it('should create provider successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const createDto = {
         name: 'OpenAI GPT-4',
         type: 'openai' as any,
@@ -59,7 +59,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.createProvider.mockResolvedValue(mockProvider);
 
-      const result = await controller.createProvider('org-1', createDto, mockRequest);
+      const result = await controller.createProvider(createDto, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(expect.any(Object));
@@ -68,7 +68,7 @@ describe('LlmProvidersController', () => {
 
   describe('getProviders', () => {
     it('should return paginated providers', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
       const mockResult = {
         providers: [],
         total: 0,
@@ -79,7 +79,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.getProviders.mockResolvedValue(mockResult);
 
-      const result = await controller.getProviders('org-1', { page: 1, limit: 10 }, mockRequest);
+      const result = await controller.getProviders({ page: 1, limit: 10 }, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult);
@@ -88,7 +88,7 @@ describe('LlmProvidersController', () => {
 
   describe('getProvider', () => {
     it('should return provider by id', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
       const mockProvider = {
         id: 'provider-1',
         name: 'OpenAI GPT-4',
@@ -100,7 +100,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.getProvider.mockResolvedValue(mockProvider);
 
-      const result = await controller.getProvider('org-1', 'provider-1', 'user-1', mockRequest);
+      const result = await controller.getProvider('provider-1', 'user-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(expect.any(Object));
@@ -109,7 +109,7 @@ describe('LlmProvidersController', () => {
 
   describe('updateProvider', () => {
     it('should update provider successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const updateDto = { name: 'Updated Provider' };
       const mockProvider = {
         id: 'provider-1',
@@ -121,7 +121,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.updateProvider.mockResolvedValue(mockProvider);
 
-      const result = await controller.updateProvider('org-1', 'provider-1', updateDto, mockRequest);
+      const result = await controller.updateProvider('provider-1', updateDto, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(expect.any(Object));
@@ -130,11 +130,11 @@ describe('LlmProvidersController', () => {
 
   describe('deleteProvider', () => {
     it('should delete provider successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       llmProvidersService.deleteProvider.mockResolvedValue();
 
-      const result = await controller.deleteProvider('org-1', 'provider-1', mockRequest);
+      const result = await controller.deleteProvider('provider-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('LLM provider deleted successfully');
@@ -169,7 +169,7 @@ describe('LlmProvidersController', () => {
 
   describe('performHealthCheck', () => {
     it('should perform health check successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const mockResult = {
         isHealthy: true,
         responseTime: 150,
@@ -177,7 +177,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.performHealthCheck.mockResolvedValue(mockResult);
 
-      const result = await controller.performHealthCheck('org-1', 'provider-1', mockRequest);
+      const result = await controller.performHealthCheck('provider-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult);
@@ -195,7 +195,7 @@ describe('LlmProvidersController', () => {
 
   describe('getProvider - with secrets', () => {
     it('should return provider with secrets for admin', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1', roles: ['admin'] } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }], roles: ['admin'] } };
       const mockProvider = {
         id: 'provider-1',
         name: 'OpenAI GPT-4',
@@ -205,14 +205,14 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.getProvider.mockResolvedValue(mockProvider);
 
-      const result = await controller.getProvider('org-1', 'provider-1', 'true', mockRequest);
+      const result = await controller.getProvider('provider-1', 'true', mockRequest);
 
       expect(result.success).toBe(true);
       expect(llmProvidersService.getProvider).toHaveBeenCalledWith('provider-1', 'org-1', true);
     });
 
     it('should return provider without secrets for member', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1', roles: ['member'] } };
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }], roles: ['member'] } };
       const mockProvider = {
         id: 'provider-1',
         name: 'OpenAI GPT-4',
@@ -221,7 +221,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.getProvider.mockResolvedValue(mockProvider);
 
-      const result = await controller.getProvider('org-1', 'provider-1', 'true', mockRequest);
+      const result = await controller.getProvider('provider-1', 'true', mockRequest);
 
       expect(result.success).toBe(true);
       expect(llmProvidersService.getProvider).toHaveBeenCalledWith('provider-1', 'org-1', false);
@@ -312,7 +312,7 @@ describe('LlmProvidersController', () => {
 
   describe('getProviderModels', () => {
     it('should return available models for provider', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const mockProvider = {
         id: 'provider-1',
         getSupportedModels: jest.fn().mockReturnValue(['gpt-4', 'gpt-3.5-turbo']),
@@ -324,7 +324,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.getProvider.mockResolvedValue(mockProvider);
 
-      const result = await controller.getProviderModels('org-1', 'provider-1', mockRequest);
+      const result = await controller.getProviderModels('provider-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toHaveLength(2);
@@ -339,7 +339,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.createProvider.mockRejectedValue(new Error('Creation failed'));
 
-      await expect(controller.createProvider('org-1', createDto, mockRequest))
+      await expect(controller.createProvider(createDto, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -350,7 +350,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.getProviders.mockRejectedValue(new Error('Retrieval failed'));
 
-      await expect(controller.getProviders('org-1', {} as any, mockRequest))
+      await expect(controller.getProviders({} as any, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -361,7 +361,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.getProvider.mockRejectedValue(new Error('Not found'));
 
-      await expect(controller.getProvider('org-1', 'provider-1', 'false', mockRequest))
+      await expect(controller.getProvider('provider-1', 'false', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -372,7 +372,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.updateProvider.mockRejectedValue(new Error('Update failed'));
 
-      await expect(controller.updateProvider('org-1', 'provider-1', {} as any, mockRequest))
+      await expect(controller.updateProvider('provider-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -383,7 +383,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.deleteProvider.mockRejectedValue(new Error('Deletion failed'));
 
-      await expect(controller.deleteProvider('org-1', 'provider-1', mockRequest))
+      await expect(controller.deleteProvider('provider-1', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -406,7 +406,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.performHealthCheck.mockRejectedValue(new Error('Health check failed'));
 
-      await expect(controller.performHealthCheck('org-1', 'provider-1', mockRequest))
+      await expect(controller.performHealthCheck('provider-1', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -467,7 +467,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.getProvider.mockRejectedValue(new Error('Provider not found'));
 
-      await expect(controller.getProviderModels('org-1', 'provider-1', mockRequest))
+      await expect(controller.getProviderModels('provider-1', mockRequest))
         .rejects.toThrow();
     });
   });

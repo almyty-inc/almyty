@@ -74,7 +74,6 @@ describe('JwtStrategy', () => {
         relations: [
           'organizationMemberships',
           'organizationMemberships.organization',
-          'apiKeys'
         ],
       });
     });
