@@ -939,6 +939,49 @@ export class GatewaysController {
     }
   }
 
+  @Patch(':gatewayId/tools/:gatewayToolId')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Update gateway tool configuration (security policy, overrides, etc.)' })
+  @ApiResponse({ status: 200, description: 'Gateway tool updated successfully' })
+  async updateGatewayTool(
+    @Param('gatewayId', ParseUUIDPipe) gatewayId: string,
+    @Param('gatewayToolId', ParseUUIDPipe) gatewayToolId: string,
+    @Body() updateDto: any,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const updated = await this.gatewayToolService.updateGatewayTool(
+        gatewayToolId,
+        updateDto as UpdateGatewayToolDto,
+        organizationId,
+        req.user.id,
+      );
+
+      return {
+        success: true,
+        data: updated,
+        message: 'Gateway tool updated successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'GATEWAY_TOOL_UPDATE_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   @Delete(':gatewayId/tools')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Remove all tools from gateway' })

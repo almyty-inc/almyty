@@ -4,13 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { ArrowLeft, Router, Copy, Zap, Edit2, Settings } from 'lucide-react'
+import { ArrowLeft, Router, Copy, Zap, Edit2, Settings, Download, Terminal, FileCode, BookOpen, Check, Package, Shield } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -35,6 +36,302 @@ const editGatewaySchema = z.object({
 
 type EditGatewayForm = z.infer<typeof editGatewaySchema>
 
+function SecurityPolicyForm({ initialPolicy, onSave, isSaving }: {
+  initialPolicy: any;
+  onSave: (policy: any) => void;
+  isSaving: boolean;
+}) {
+  const [allowedDomains, setAllowedDomains] = useState(initialPolicy?.allowedDomains?.join(', ') || '')
+  const [blockedDomains, setBlockedDomains] = useState(initialPolicy?.blockedDomains?.join(', ') || '')
+  const [allowedMethods, setAllowedMethods] = useState(initialPolicy?.allowedHttpMethods?.join(', ') || '')
+  const [maxResponseSize, setMaxResponseSize] = useState(initialPolicy?.maxResponseSizeBytes?.toString() || '')
+  const [requireHttps, setRequireHttps] = useState(initialPolicy?.requireHttps || false)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const policy: any = {}
+    if (allowedDomains.trim()) policy.allowedDomains = allowedDomains.split(',').map((d: string) => d.trim()).filter(Boolean)
+    if (blockedDomains.trim()) policy.blockedDomains = blockedDomains.split(',').map((d: string) => d.trim()).filter(Boolean)
+    if (allowedMethods.trim()) policy.allowedHttpMethods = allowedMethods.split(',').map((m: string) => m.trim().toUpperCase()).filter(Boolean)
+    if (maxResponseSize.trim()) policy.maxResponseSizeBytes = parseInt(maxResponseSize, 10)
+    policy.requireHttps = requireHttps
+    onSave(Object.keys(policy).length > 1 || requireHttps ? policy : null)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="allowed-domains">Allowed Domains</Label>
+        <Input
+          id="allowed-domains"
+          placeholder="api.example.com, cdn.example.com"
+          value={allowedDomains}
+          onChange={(e) => setAllowedDomains(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground mt-1">Comma-separated list of allowed target domains. Leave empty to allow all.</p>
+      </div>
+      <div>
+        <Label htmlFor="blocked-domains">Blocked Domains</Label>
+        <Input
+          id="blocked-domains"
+          placeholder="internal.corp, admin.example.com"
+          value={blockedDomains}
+          onChange={(e) => setBlockedDomains(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground mt-1">Comma-separated list of blocked domains.</p>
+      </div>
+      <div>
+        <Label htmlFor="allowed-methods">Allowed HTTP Methods</Label>
+        <Input
+          id="allowed-methods"
+          placeholder="GET, POST"
+          value={allowedMethods}
+          onChange={(e) => setAllowedMethods(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground mt-1">Comma-separated. Leave empty to allow all methods.</p>
+      </div>
+      <div>
+        <Label htmlFor="max-response-size">Max Response Size (bytes)</Label>
+        <Input
+          id="max-response-size"
+          type="number"
+          placeholder="10485760"
+          value={maxResponseSize}
+          onChange={(e) => setMaxResponseSize(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground mt-1">Maximum response body size. Default: 10MB.</p>
+      </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <Label htmlFor="require-https">Require HTTPS</Label>
+          <p className="text-xs text-muted-foreground">Block HTTP requests, enforce HTTPS only</p>
+        </div>
+        <Switch id="require-https" checked={requireHttps} onCheckedChange={setRequireHttps} />
+      </div>
+      <div className="flex justify-end gap-2 pt-2">
+        <Button type="submit" disabled={isSaving}>
+          {isSaving ? 'Saving...' : 'Save Policy'}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: string; gateway: any; orgSlug: string }) {
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [cliFormat, setCliFormat] = useState<'bash' | 'node'>('bash')
+
+  const { data: skillsData, isLoading: skillsLoading } = useQuery({
+    queryKey: ['gateway-skills', gatewayId],
+    queryFn: () => gatewaysApi.getSkills(gatewayId),
+  })
+
+  const { data: cliData, isLoading: cliLoading } = useQuery({
+    queryKey: ['gateway-cli', gatewayId, cliFormat],
+    queryFn: () => gatewaysApi.getCliBundle(gatewayId, cliFormat),
+  })
+
+  const { data: sdkData, isLoading: sdkLoading } = useQuery({
+    queryKey: ['gateway-sdk', gatewayId],
+    queryFn: () => gatewaysApi.getSdk(gatewayId),
+  })
+
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedField(field)
+      setTimeout(() => setCopiedField(null), 2000)
+    } catch {}
+  }
+
+  const downloadFile = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const backendUrl = window.location.origin.replace(':3002', ':4000')
+  const mcpEndpoint = `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`
+
+  const skillsContent = skillsData?.data?.data || skillsData?.data || ''
+  const cliContent = cliData?.data?.data || cliData?.data || ''
+  const sdkContent = sdkData?.data?.data || sdkData?.data || ''
+
+  return (
+    <div className="space-y-6">
+      {/* MCP / npx Setup */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5 text-orange-500" />
+            MCP Integration
+          </CardTitle>
+          <CardDescription>Connect this gateway to AI agents via MCP protocol</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium">MCP Endpoint</Label>
+            <div className="flex gap-2 mt-1">
+              <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">
+                {mcpEndpoint}
+              </code>
+              <Button size="sm" variant="outline" onClick={() => copyToClipboard(mcpEndpoint, 'mcp-endpoint')}>
+                {copiedField === 'mcp-endpoint' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+          <div>
+            <Label className="text-sm font-medium">Claude Code Configuration</Label>
+            <pre className="text-xs bg-muted p-3 rounded mt-1 overflow-x-auto font-mono">
+{`{
+  "mcpServers": {
+    "${gateway.name?.toLowerCase().replace(/\\s+/g, '-') || 'gateway'}": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/mcp-client", "${mcpEndpoint}"],
+      "env": { "MCP_AUTH_TOKEN": "<your-jwt-token>" }
+    }
+  }
+}`}
+            </pre>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              onClick={() => copyToClipboard(JSON.stringify({
+                mcpServers: {
+                  [gateway.name?.toLowerCase().replace(/\s+/g, '-') || 'gateway']: {
+                    command: 'npx',
+                    args: ['-y', '@anthropic-ai/mcp-client', mcpEndpoint],
+                    env: { MCP_AUTH_TOKEN: '<your-jwt-token>' }
+                  }
+                }
+              }, null, 2), 'mcp-config')}
+            >
+              {copiedField === 'mcp-config' ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+              Copy Config
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Skills Bundle */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BookOpen className="h-5 w-5 text-purple-500" />
+              Skills Bundle
+            </CardTitle>
+            <CardDescription>YAML + Markdown skill files for all gateway tools</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {skillsLoading ? (
+              <div className="flex justify-center py-4"><LoadingSpinner /></div>
+            ) : skillsContent ? (
+              <>
+                <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono">
+                  {typeof skillsContent === 'string' ? skillsContent.slice(0, 500) : JSON.stringify(skillsContent, null, 2).slice(0, 500)}
+                  {(typeof skillsContent === 'string' ? skillsContent.length : JSON.stringify(skillsContent).length) > 500 ? '\n...' : ''}
+                </pre>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => copyToClipboard(typeof skillsContent === 'string' ? skillsContent : JSON.stringify(skillsContent, null, 2), 'skills')}>
+                    {copiedField === 'skills' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                    Copy
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => downloadFile(typeof skillsContent === 'string' ? skillsContent : JSON.stringify(skillsContent, null, 2), `${gateway.name}-skills.md`)}>
+                    <Download className="h-4 w-4 mr-1" />
+                    Download
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground py-4">No skills generated yet. Assign tools first.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* CLI Bundle */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Terminal className="h-5 w-5 text-green-500" />
+              CLI Bundle
+            </CardTitle>
+            <CardDescription>Shell scripts for all gateway tools</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex gap-1 mb-2">
+              <Button size="sm" variant={cliFormat === 'bash' ? 'default' : 'outline'} onClick={() => setCliFormat('bash')}>Bash</Button>
+              <Button size="sm" variant={cliFormat === 'node' ? 'default' : 'outline'} onClick={() => setCliFormat('node')}>Node</Button>
+            </div>
+            {cliLoading ? (
+              <div className="flex justify-center py-4"><LoadingSpinner /></div>
+            ) : cliContent ? (
+              <>
+                <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono">
+                  {typeof cliContent === 'string' ? cliContent.slice(0, 500) : JSON.stringify(cliContent, null, 2).slice(0, 500)}
+                  {(typeof cliContent === 'string' ? cliContent.length : JSON.stringify(cliContent).length) > 500 ? '\n...' : ''}
+                </pre>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => copyToClipboard(typeof cliContent === 'string' ? cliContent : JSON.stringify(cliContent, null, 2), 'cli')}>
+                    {copiedField === 'cli' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                    Copy
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => downloadFile(typeof cliContent === 'string' ? cliContent : JSON.stringify(cliContent, null, 2), `${gateway.name}-cli.${cliFormat === 'bash' ? 'sh' : 'js'}`)}>
+                    <Download className="h-4 w-4 mr-1" />
+                    Download
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground py-4">No CLI bundle generated yet. Assign tools first.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* TypeScript SDK */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileCode className="h-5 w-5 text-blue-500" />
+              TypeScript SDK
+            </CardTitle>
+            <CardDescription>Typed SDK for programmatic access</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {sdkLoading ? (
+              <div className="flex justify-center py-4"><LoadingSpinner /></div>
+            ) : sdkContent ? (
+              <>
+                <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono">
+                  {typeof sdkContent === 'string' ? sdkContent.slice(0, 500) : JSON.stringify(sdkContent, null, 2).slice(0, 500)}
+                  {(typeof sdkContent === 'string' ? sdkContent.length : JSON.stringify(sdkContent).length) > 500 ? '\n...' : ''}
+                </pre>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => copyToClipboard(typeof sdkContent === 'string' ? sdkContent : JSON.stringify(sdkContent, null, 2), 'sdk')}>
+                    {copiedField === 'sdk' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                    Copy
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => downloadFile(typeof sdkContent === 'string' ? sdkContent : JSON.stringify(sdkContent, null, 2), `${gateway.name}-sdk.ts`)}>
+                    <Download className="h-4 w-4 mr-1" />
+                    Download
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground py-4">No SDK generated yet. Assign tools first.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
 export function GatewayDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -44,6 +341,8 @@ export function GatewayDetailPage() {
 
   const [removeAllToolsDialogOpen, setRemoveAllToolsDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [securityDialogOpen, setSecurityDialogOpen] = useState(false)
+  const [securityTarget, setSecurityTarget] = useState<{ gatewayToolId: string; toolName: string; policy: any } | null>(null)
 
   const { data: gatewayData, isLoading } = useQuery({
     queryKey: ['gateway', id],
@@ -141,6 +440,20 @@ export function GatewayDetailPage() {
     },
     onError: (err: any) => {
       errorNotif('Failed to update gateway', err.response?.data?.message || 'Please try again.')
+    },
+  })
+
+  const updateToolConfigMutation = useMutation({
+    mutationFn: ({ gatewayToolId, data }: { gatewayToolId: string; data: any }) =>
+      gatewaysApi.updateToolConfig(id!, gatewayToolId, data),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['gateway-tools', id] })
+      success('Security policy updated', 'Tool security policy has been saved.')
+      setSecurityDialogOpen(false)
+      setSecurityTarget(null)
+    },
+    onError: (err: any) => {
+      errorNotif('Failed to update security policy', err.response?.data?.message || 'Please try again.')
     },
   })
 
@@ -293,6 +606,7 @@ export function GatewayDetailPage() {
         <TabsList>
           <TabsTrigger value="tools">Tool Scoping ({gatewayTools.length}/{allTools.length})</TabsTrigger>
           <TabsTrigger value="metrics">Metrics</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="tools" className="space-y-6">
@@ -378,20 +692,39 @@ export function GatewayDetailPage() {
                           </Badge>
                         )}
                       </div>
-                      <Button
-                        variant={isAssigned ? 'destructive' : 'default'}
-                        size="sm"
-                        onClick={() => {
-                          if (isAssigned) {
-                            removeToolMutation.mutate({ toolId: tool.id })
-                          } else {
-                            assignToolMutation.mutate({ toolId: tool.id })
-                          }
-                        }}
-                        disabled={assignToolMutation.isPending || removeToolMutation.isPending}
-                      >
-                        {isAssigned ? 'Remove' : 'Assign'}
-                      </Button>
+                      <div className="flex gap-2">
+                        {isAssigned && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const gt = gatewayTools.find((gt: any) => gt.id === tool.id || gt.toolId === tool.id)
+                              setSecurityTarget({
+                                gatewayToolId: gt?.gatewayToolId || gt?.id || tool.id,
+                                toolName: tool.name,
+                                policy: gt?.securityPolicy || null,
+                              })
+                              setSecurityDialogOpen(true)
+                            }}
+                          >
+                            <Shield className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          variant={isAssigned ? 'destructive' : 'default'}
+                          size="sm"
+                          onClick={() => {
+                            if (isAssigned) {
+                              removeToolMutation.mutate({ toolId: tool.id })
+                            } else {
+                              assignToolMutation.mutate({ toolId: tool.id })
+                            }
+                          }}
+                          disabled={assignToolMutation.isPending || removeToolMutation.isPending}
+                        >
+                          {isAssigned ? 'Remove' : 'Assign'}
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 )
@@ -432,6 +765,10 @@ export function GatewayDetailPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="integrations" className="space-y-6">
+          <IntegrationsSection gatewayId={id!} gateway={gateway} orgSlug={currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'} />
         </TabsContent>
       </Tabs>
 
@@ -547,6 +884,33 @@ export function GatewayDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Security Policy Dialog */}
+      <Dialog open={securityDialogOpen} onOpenChange={(open) => { setSecurityDialogOpen(open); if (!open) setSecurityTarget(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Security Policy: {securityTarget?.toolName}
+            </DialogTitle>
+            <DialogDescription>
+              Configure security constraints for this tool in the gateway.
+            </DialogDescription>
+          </DialogHeader>
+          {securityTarget && (
+            <SecurityPolicyForm
+              initialPolicy={securityTarget.policy}
+              onSave={(policy) => {
+                updateToolConfigMutation.mutate({
+                  gatewayToolId: securityTarget.gatewayToolId,
+                  data: { securityPolicy: policy },
+                })
+              }}
+              isSaving={updateToolConfigMutation.isPending}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

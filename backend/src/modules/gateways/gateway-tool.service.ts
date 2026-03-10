@@ -68,6 +68,13 @@ export interface UpdateGatewayToolDto {
     headerMapping?: Record<string, string>;
   };
   metadata?: Record<string, any>;
+  securityPolicy?: {
+    allowedDomains?: string[];
+    blockedDomains?: string[];
+    maxResponseSizeBytes?: number;
+    allowedHttpMethods?: string[];
+    requireHttps?: boolean;
+  } | null;
 }
 
 export interface BulkAssociateToolsDto {

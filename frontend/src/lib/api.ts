@@ -173,6 +173,9 @@ export const gatewaysApi = {
   removeAllTools: (gatewayId: string) =>
     api.delete(`/gateways/${gatewayId}/tools`),
 
+  updateToolConfig: (gatewayId: string, gatewayToolId: string, data: any) =>
+    api.patch(`/gateways/${gatewayId}/tools/${gatewayToolId}`, data),
+
   getToolStats: (gatewayId: string) => api.get(`/gateways/${gatewayId}/tools/stats`),
 
   // Gateway operations
@@ -183,6 +186,11 @@ export const gatewaysApi = {
   testConnection: (id: string) => api.post(`/gateways/${id}/health-check`),
 
   getMetrics: (id: string, params?: any) => api.get(`/gateways/${id}/stats`, { params }),
+
+  // Export formats
+  getSkills: (id: string) => api.get(`/gateways/${id}/skills`),
+  getCliBundle: (id: string, format: 'bash' | 'node' = 'bash') => api.get(`/gateways/${id}/cli-bundle`, { params: { format } }),
+  getSdk: (id: string) => api.get(`/gateways/${id}/sdk`),
 }
 
 // APIs API
@@ -274,8 +282,13 @@ export const toolsApi = {
   execute: (id: string, data: any, organizationId: string) => api.post(`/organizations/${organizationId}/tools/${id}/execute`, data),
   
   getUsage: (id: string, params?: any) => api.get(`/tools/${id}/usage`, { params }),
-  
+
   getSchema: (id: string) => api.get(`/tools/${id}/schema`),
+
+  // Export formats
+  getSkill: (id: string) => api.get(`/tools/${id}/skill`),
+  getCli: (id: string, format: 'bash' | 'node' = 'bash') => api.get(`/tools/${id}/cli`, { params: { format } }),
+  getSdk: (id: string) => api.get(`/tools/${id}/sdk`),
 }
 
 // LLM Providers API

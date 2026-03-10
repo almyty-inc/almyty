@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Code, Play, Zap, Settings } from 'lucide-react'
+import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, BookOpen, Copy, Check } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -141,6 +141,7 @@ export function ToolDetailPage() {
         <TabsList>
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="test">Test Tool</TabsTrigger>
+          <TabsTrigger value="exports">Exports</TabsTrigger>
           <TabsTrigger value="gateways">Gateways ({tool.gatewayAssociations?.length || 0})</TabsTrigger>
           <TabsTrigger value="stats">Stats</TabsTrigger>
         </TabsList>
@@ -417,6 +418,11 @@ export function ToolDetailPage() {
           </Card>
         </TabsContent>
 
+        {/* Exports Tab */}
+        <TabsContent value="exports">
+          <ExportsSection toolId={id!} toolName={tool.name} />
+        </TabsContent>
+
         {/* Gateways Tab */}
         <TabsContent value="gateways">
           <Card>
@@ -491,6 +497,256 @@ export function ToolDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string }) {
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [cliFormat, setCliFormat] = useState<'bash' | 'node'>('bash')
+
+  const { data: skillData, isLoading: skillLoading } = useQuery({
+    queryKey: ['tool-skill', toolId],
+    queryFn: () => toolsApi.getSkill(toolId),
+  })
+
+  const { data: cliData, isLoading: cliLoading } = useQuery({
+    queryKey: ['tool-cli', toolId, cliFormat],
+    queryFn: () => toolsApi.getCli(toolId, cliFormat),
+  })
+
+  const { data: sdkData, isLoading: sdkLoading } = useQuery({
+    queryKey: ['tool-sdk', toolId],
+    queryFn: () => toolsApi.getSdk(toolId),
+  })
+
+  const copyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedField(field)
+    setTimeout(() => setCopiedField(null), 2000)
+  }
+
+  const downloadFile = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const skill = skillData?.data?.data || skillData?.data
+  const cli = cliData?.data?.data || cliData?.data
+  const sdk = sdkData?.data?.data || sdkData?.data
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {/* Skill Card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-5 w-5 text-purple-500" />
+            <CardTitle className="text-sm">Skill File</CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            YAML + Markdown that teaches LLMs how to use this tool
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {skillLoading ? (
+            <LoadingSpinner size="sm" />
+          ) : skill?.content ? (
+            <div className="space-y-3">
+              <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono whitespace-pre-wrap">
+                {skill.content.slice(0, 500)}{skill.content.length > 500 ? '...' : ''}
+              </pre>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => copyToClipboard(skill.content, 'skill')}
+                >
+                  {copiedField === 'skill' ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+                  Copy
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => downloadFile(skill.content, `${skill.name || toolName}.skill.md`)}
+                >
+                  <Download className="h-3 w-3 mr-1" />
+                  Download
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Not available</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* CLI Card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Terminal className="h-5 w-5 text-green-500" />
+            <CardTitle className="text-sm">CLI Script</CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            Executable command-line wrapper for this tool
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-1 mb-3">
+            <Button
+              variant={cliFormat === 'bash' ? 'default' : 'outline'}
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => setCliFormat('bash')}
+            >
+              Bash
+            </Button>
+            <Button
+              variant={cliFormat === 'node' ? 'default' : 'outline'}
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => setCliFormat('node')}
+            >
+              Node.js
+            </Button>
+          </div>
+          {cliLoading ? (
+            <LoadingSpinner size="sm" />
+          ) : cli?.content ? (
+            <div className="space-y-3">
+              <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono whitespace-pre-wrap">
+                {cli.content.slice(0, 500)}{cli.content.length > 500 ? '...' : ''}
+              </pre>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => copyToClipboard(cli.content, 'cli')}
+                >
+                  {copiedField === 'cli' ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+                  Copy
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => downloadFile(cli.content, `${cli.name || toolName}.${cliFormat === 'bash' ? 'sh' : 'mjs'}`)}
+                >
+                  <Download className="h-3 w-3 mr-1" />
+                  Download
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Not available</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* SDK Card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <FileCode className="h-5 w-5 text-blue-500" />
+            <CardTitle className="text-sm">TypeScript SDK</CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            Typed TypeScript module for this tool
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {sdkLoading ? (
+            <LoadingSpinner size="sm" />
+          ) : sdk?.content ? (
+            <div className="space-y-3">
+              <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono whitespace-pre-wrap">
+                {sdk.content.slice(0, 500)}{sdk.content.length > 500 ? '...' : ''}
+              </pre>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => copyToClipboard(sdk.content, 'sdk')}
+                >
+                  {copiedField === 'sdk' ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+                  Copy
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => downloadFile(sdk.content, `${sdk.name || toolName}.ts`)}
+                >
+                  <Download className="h-3 w-3 mr-1" />
+                  Download
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Not available</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* MCP Setup Card */}
+      <Card className="md:col-span-2 lg:col-span-3">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-orange-500" />
+            <CardTitle className="text-sm">npx Integration</CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            Use this tool directly in Claude Code, Cursor, Windsurf, Copilot, and other MCP-compatible clients
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <Label className="text-xs text-muted-foreground">Install & run</Label>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="flex-1 text-xs bg-muted p-2 rounded font-mono">
+                npx @apifai/mcp-server
+              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => copyToClipboard('npx @apifai/mcp-server', 'npx')}
+              >
+                {copiedField === 'npx' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">Claude Code config (~/.claude/settings.json)</Label>
+            <div className="flex items-center gap-2 mt-1">
+              <pre className="flex-1 text-xs bg-muted p-2 rounded font-mono overflow-auto">
+{`"mcpServers": {
+  "apifai": { "command": "npx", "args": ["@apifai/mcp-server"] }
+}`}
+              </pre>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => copyToClipboard(
+                  `"mcpServers": {\n  "apifai": { "command": "npx", "args": ["@apifai/mcp-server"] }\n}`,
+                  'claude-config'
+                )}
+              >
+                {copiedField === 'claude-config' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
