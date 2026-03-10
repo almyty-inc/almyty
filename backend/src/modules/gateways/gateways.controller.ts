@@ -22,6 +22,9 @@ import { Transform, Type } from 'class-transformer';
 import { GatewaysService, CreateGatewayDto, UpdateGatewayDto, GatewaySearchFilters } from './gateways.service';
 import { GatewayAuthService, CreateGatewayAuthDto, UpdateGatewayAuthDto } from './gateway-auth.service';
 import { GatewayToolService, CreateGatewayToolDto, UpdateGatewayToolDto, BulkAssociateToolsDto, GatewayToolSearchFilters } from './gateway-tool.service';
+import { SkillGeneratorService } from '../tools/skill-generator.service';
+import { CliGeneratorService } from '../tools/cli-generator.service';
+import { CodegenService } from '../tools/codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -391,6 +394,9 @@ export class GatewaysController {
     private readonly gatewaysService: GatewaysService,
     private readonly gatewayAuthService: GatewayAuthService,
     private readonly gatewayToolService: GatewayToolService,
+    private readonly skillGeneratorService: SkillGeneratorService,
+    private readonly cliGeneratorService: CliGeneratorService,
+    private readonly codegenService: CodegenService,
   ) {}
 
   @Post()
@@ -1161,6 +1167,90 @@ export class GatewaysController {
           success: false,
           message: error.message,
           error: 'ORG_GATEWAY_STATS_RETRIEVAL_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  // === Gateway Export Endpoints ===
+
+  @Get(':gatewayId/skills')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Generate skill bundle for all tools in a gateway' })
+  @ApiResponse({ status: 200, description: 'Gateway skills generated successfully' })
+  async getGatewaySkills(
+    @Param('gatewayId', ParseUUIDPipe) gatewayId: string,
+    @Request() req: any,
+  ) {
+    try {
+      const skills = await this.skillGeneratorService.generateGatewaySkills(gatewayId);
+      return {
+        success: true,
+        data: skills,
+        message: 'Gateway skills generated successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'GATEWAY_SKILLS_GENERATION_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get(':gatewayId/cli-bundle')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Generate CLI bundle for all tools in a gateway' })
+  @ApiResponse({ status: 200, description: 'Gateway CLI bundle generated successfully' })
+  async getGatewayCliBundle(
+    @Param('gatewayId', ParseUUIDPipe) gatewayId: string,
+    @Query('format') format: 'bash' | 'node' = 'bash',
+    @Request() req: any,
+  ) {
+    try {
+      const cli = await this.cliGeneratorService.generateGatewayCliBunde(gatewayId, format);
+      return {
+        success: true,
+        data: cli,
+        message: 'Gateway CLI bundle generated successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'GATEWAY_CLI_GENERATION_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get(':gatewayId/sdk')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Generate TypeScript SDK for all tools in a gateway' })
+  @ApiResponse({ status: 200, description: 'Gateway SDK generated successfully' })
+  async getGatewaySdk(
+    @Param('gatewayId', ParseUUIDPipe) gatewayId: string,
+    @Request() req: any,
+  ) {
+    try {
+      const sdk = await this.codegenService.generateGatewaySdk(gatewayId);
+      return {
+        success: true,
+        data: sdk,
+        message: 'Gateway SDK generated successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'GATEWAY_SDK_GENERATION_FAILED',
         },
         error.status || HttpStatus.BAD_REQUEST,
       );

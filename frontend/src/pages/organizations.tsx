@@ -1,7 +1,7 @@
 import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef } from '@tanstack/react-table'
-import { Plus, Users, Settings, CreditCard, Shield, MoreVertical, Eye, Edit, Trash2, UserPlus, Crown, Mail } from 'lucide-react'
+import { Plus, Users, Settings, Shield, MoreVertical, Eye, Edit, Trash2, UserPlus, Crown, Mail } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -112,6 +112,21 @@ export function OrganizationsPage() {
     },
   })
 
+  const [editOrgName, setEditOrgName] = React.useState('')
+  const [editOrgDescription, setEditOrgDescription] = React.useState('')
+
+  const updateOrgMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name: string; description: string } }) =>
+      organizationsApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organizations'] })
+      success('Organization updated', 'Settings saved successfully.')
+    },
+    onError: (err: any) => {
+      error('Failed to update organization', err.response?.data?.message || 'Please try again.')
+    },
+  })
+
   const deleteOrgMutation = useMutation({
     mutationFn: organizationsApi.delete,
     onSuccess: () => {
@@ -208,6 +223,8 @@ export function OrganizationsPage() {
       (org) => {
         setSelectedOrg(org)
         setSelectedOrgId(org.id)
+        setEditOrgName(org.name)
+        setEditOrgDescription(org.description || '')
         setOrgDetailsOpen(true)
       },
       (org) => deleteOrgMutation.mutate(org.id),
@@ -423,16 +440,15 @@ export function OrganizationsPage() {
               )}
             </SheetTitle>
             <SheetDescription>
-              Manage organization settings, members, and billing
+              Manage organization settings and members
             </SheetDescription>
           </SheetHeader>
 
           {selectedOrg && (
             <Tabs defaultValue="overview" className="w-full mt-6">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="members">Members</TabsTrigger>
-                <TabsTrigger value="billing">Billing</TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
               </TabsList>
 
@@ -604,55 +620,6 @@ export function OrganizationsPage() {
                 )}
               </TabsContent>
 
-              <TabsContent value="billing" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                      <CreditCard className="h-5 w-5" />
-                      <span>Billing Information</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <Label>Current Plan</Label>
-                        <p className="text-lg font-medium capitalize">{selectedOrg.plan ? String(selectedOrg.plan) : 'free'}</p>
-                      </div>
-                      {selectedOrg.billingInfo && (
-                        <div>
-                          <Label>Billing Period</Label>
-                          <p className="text-sm">
-                            {formatDate(selectedOrg.billingInfo.currentPeriodStart)} - {formatDate(selectedOrg.billingInfo.currentPeriodEnd)}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="pt-4 border-t">
-                      <h4 className="font-medium mb-2">Usage This Month</h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span>API Calls</span>
-                          <span>12,450 / 50,000</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Tool Executions</span>
-                          <span>3,280 / 10,000</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Storage Used</span>
-                          <span>2.3 GB / 10 GB</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-4">
-                      <Button>Upgrade Plan</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
               <TabsContent value="settings" className="space-y-4">
                 <Card>
                   <CardHeader>
@@ -661,14 +628,30 @@ export function OrganizationsPage() {
                   <CardContent className="space-y-4">
                     <div>
                       <Label htmlFor="orgName">Organization Name</Label>
-                      <Input id="orgName" defaultValue={selectedOrg.name} />
+                      <Input
+                        id="orgName"
+                        value={editOrgName}
+                        onChange={(e) => setEditOrgName(e.target.value)}
+                      />
                     </div>
                     <div>
                       <Label htmlFor="orgDescription">Description</Label>
                       <Textarea
                         id="orgDescription"
-                        defaultValue={selectedOrg.description}
+                        value={editOrgDescription}
+                        onChange={(e) => setEditOrgDescription(e.target.value)}
                       />
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={() => updateOrgMutation.mutate({
+                          id: selectedOrg.id,
+                          data: { name: editOrgName, description: editOrgDescription },
+                        })}
+                        disabled={updateOrgMutation.isPending || (editOrgName === selectedOrg.name && editOrgDescription === (selectedOrg.description || ''))}
+                      >
+                        {updateOrgMutation.isPending ? 'Saving...' : 'Save Changes'}
+                      </Button>
                     </div>
                     <div className="flex items-center justify-between pt-4 border-t">
                       <div>

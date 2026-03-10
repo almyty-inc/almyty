@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apifai-config
+  namespace: apifai
+data:
+  # Database Configuration
+  DATABASE_HOST: "apifai-postgres"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "apifai"
+
+  # Redis Configuration
+  REDIS_HOST: "apifai-redis"
+  REDIS_PORT: "6379"
+
+  # API Configuration
+  PORT: "3000"
+  NODE_ENV: "production"
+  SWAGGER_ENABLED: "false"
+  LOG_LEVEL: "info"
+
+  # Rate Limiting
+  RATE_LIMIT_TTL: "60"
+  RATE_LIMIT_MAX: "100"
+
+  # JWT Configuration
+  JWT_EXPIRES_IN: "24h"
+
+  # CORS
+  CORS_ORIGIN: "https://app.apifai.io"

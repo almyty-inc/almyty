@@ -1,0 +1,93 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: apifai-dev
+
+namePrefix: dev-
+
+resources:
+  - ../../base
+  - secret.yaml
+
+patches:
+  - target:
+      kind: Namespace
+      name: apifai
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: apifai-dev
+
+  - target:
+      kind: ConfigMap
+      name: apifai-config
+    patch: |-
+      - op: replace
+        path: /data/NODE_ENV
+        value: production
+      - op: replace
+        path: /data/SWAGGER_ENABLED
+        value: "true"
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: debug
+      - op: replace
+        path: /data/CORS_ORIGIN
+        value: "https://dev.app.apifai.io"
+
+  - target:
+      kind: Deployment
+      name: api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  - target:
+      kind: Deployment
+      name: frontend
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  # Development uses in-cluster postgres
+  - target:
+      kind: Deployment
+      name: postgres
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  - target:
+      kind: Ingress
+      name: apifai-ingress
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-staging
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: dev.api.apifai.io
+      - op: replace
+        path: /spec/tls/0/secretName
+        value: dev-api-apifai-io-tls
+      - op: replace
+        path: /spec/tls/1/hosts/0
+        value: dev.app.apifai.io
+      - op: replace
+        path: /spec/tls/1/secretName
+        value: dev-app-apifai-io-tls
+      - op: replace
+        path: /spec/rules/0/host
+        value: dev.api.apifai.io
+      - op: replace
+        path: /spec/rules/1/host
+        value: dev.app.apifai.io
+
+images:
+  - name: ghcr.io/frane/apifai/api
+    newTag: dev-latest
+  - name: ghcr.io/frane/apifai/frontend
+    newTag: dev-latest

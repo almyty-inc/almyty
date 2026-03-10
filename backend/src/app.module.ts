@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { CacheModule } from '@nestjs/cache-manager';
 import { BullModule } from '@nestjs/bull';
 import { RedisModule } from '@nestjs-modules/ioredis';
@@ -43,6 +44,7 @@ import { LlmProvidersModule } from './modules/llm-providers/llm-providers.module
 import { McpModule } from './modules/mcp/mcp.module';
 import { PluginsModule } from './modules/plugins/plugins.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
+import { HealthModule } from './modules/health/health.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 
 // Configuration
@@ -141,6 +143,13 @@ import { databaseConfig } from './config/database.config';
     JobsModule,
     PluginsModule,
     MonitoringModule,
+    HealthModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}
