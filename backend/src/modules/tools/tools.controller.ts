@@ -21,6 +21,7 @@ import { Transform, Type } from 'class-transformer';
 import { ToolsService, CreateToolDto, UpdateToolDto, ToolSearchFilters } from './tools.service';
 import { ToolGeneratorService, ToolGenerationOptions } from './tool-generator.service';
 import { ToolExecutorService, ToolExecutionOptions } from './tool-executor.service';
+import { SkillGeneratorService } from './skill-generator.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -242,6 +243,7 @@ export class ToolsController {
     private readonly toolsService: ToolsService,
     private readonly toolGeneratorService: ToolGeneratorService,
     private readonly toolExecutorService: ToolExecutorService,
+    private readonly skillGeneratorService: SkillGeneratorService,
   ) {}
 
   @Post()
@@ -687,6 +689,35 @@ export class ToolsController {
           success: false,
           message: error.message,
           error: 'ORG_STATS_RETRIEVAL_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get(':toolId/skill')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Generate skill file for a tool' })
+  @ApiResponse({ status: 200, description: 'Skill generated successfully' })
+  async getToolSkill(
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
+    @Param('toolId', ParseUUIDPipe) toolId: string,
+    @Request() req: any,
+  ) {
+    try {
+      const skill = await this.skillGeneratorService.generateToolSkill(toolId);
+
+      return {
+        success: true,
+        data: skill,
+        message: 'Skill generated successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'SKILL_GENERATION_FAILED',
         },
         error.status || HttpStatus.BAD_REQUEST,
       );

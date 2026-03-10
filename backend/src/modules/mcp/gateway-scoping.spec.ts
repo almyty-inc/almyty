@@ -10,6 +10,7 @@ import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { ToolCategory } from '../../entities/tool-category.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
+import { SkillGeneratorService } from '../tools/skill-generator.service';
 
 describe('MCP Gateway Tool Scoping', () => {
   let mcpService: McpService;
@@ -73,6 +74,13 @@ describe('MCP Gateway Tool Scoping', () => {
         {
           provide: ToolExecutorService,
           useValue: {},
+        },
+        {
+          provide: SkillGeneratorService,
+          useValue: {
+            generateToolSkill: jest.fn(),
+            generateGatewaySkills: jest.fn(),
+          },
         },
         {
           provide: 'default_IORedisModuleConnectionToken',
