@@ -1,0 +1,40 @@
+{
+  "name": "@apifai/mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server proxy for apifai - serves AI tools from any API via the Model Context Protocol",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "apifai-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-tools",
+    "api-gateway",
+    "openapi",
+    "graphql",
+    "apifai",
+    "claude",
+    "cursor",
+    "copilot",
+    "codex"
+  ],
+  "author": "apifai",
+  "license": "BSL-1.1",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "tsx": "^4.7.0"
+  }
+}
