@@ -19,6 +19,7 @@ import { ToolGeneratorService } from './tool-generator.service';
 import { ToolExecutorService } from './tool-executor.service';
 import { CustomCodeExecutorService } from './custom-code-executor.service';
 import { SkillGeneratorService } from './skill-generator.service';
+import { CliGeneratorService } from './cli-generator.service';
 import { ToolsController } from './tools.controller';
 
 import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schema-translator.module';
@@ -41,8 +42,8 @@ import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schem
     ]),
     JsonSchemaTranslatorModule,
   ],
-  providers: [ToolsService, ToolGeneratorService, ToolExecutorService, CustomCodeExecutorService, SkillGeneratorService],
+  providers: [ToolsService, ToolGeneratorService, ToolExecutorService, CustomCodeExecutorService, SkillGeneratorService, CliGeneratorService],
   controllers: [ToolsController],
-  exports: [ToolsService, ToolGeneratorService, ToolExecutorService, CustomCodeExecutorService, SkillGeneratorService],
+  exports: [ToolsService, ToolGeneratorService, ToolExecutorService, CustomCodeExecutorService, SkillGeneratorService, CliGeneratorService],
 })
 export class ToolsModule {}

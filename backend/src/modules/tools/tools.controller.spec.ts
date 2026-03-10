@@ -4,6 +4,7 @@ import { ToolsService } from './tools.service';
 import { ToolGeneratorService } from './tool-generator.service';
 import { ToolExecutorService } from './tool-executor.service';
 import { SkillGeneratorService } from './skill-generator.service';
+import { CliGeneratorService } from './cli-generator.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 
@@ -56,6 +57,13 @@ describe('ToolsController', () => {
           useValue: {
             generateToolSkill: jest.fn(),
             generateGatewaySkills: jest.fn(),
+          },
+        },
+        {
+          provide: CliGeneratorService,
+          useValue: {
+            generateToolCli: jest.fn(),
+            generateGatewayCliBunde: jest.fn(),
           },
         },
       ],
