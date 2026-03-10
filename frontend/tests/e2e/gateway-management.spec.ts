@@ -175,17 +175,19 @@ test.describe('Gateway Management', () => {
     await page.reload()
     await assertHelper.waitForLoadingComplete()
 
-    // Open gateway details
+    // Open gateway details (clicking navigates to /gateways/:id)
     await page.getByText('Scoping Test Gateway').click()
 
-    // Navigate to tools tab if exists
-    const toolsTab = page.getByRole('tab', { name: /tools|scoping/i })
+    // Navigate to tools tab - tab is labeled "Tool Scoping (N/M)" in gateway-detail.tsx
+    const toolsTab = page.getByRole('tab', { name: /tool scoping/i })
     if (await toolsTab.isVisible()) {
       await toolsTab.click()
     }
 
     // Should show scoping interface
-    await expect(page.getByRole('button', { name: /assign all tools/i })).toBeVisible({ timeout: 10000 })
+    // Buttons available: "Read Only", "Admin Tools", "Public API", "All Tools", "Remove All"
+    // "All Tools" is the button that assigns all tools (not "Assign All Tools")
+    await expect(page.getByRole('button', { name: /^all tools$/i })).toBeVisible({ timeout: 10000 })
   })
 
   test('should show proper gateway type indicators', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
@@ -214,13 +216,14 @@ test.describe('Gateway Management', () => {
     await assertHelper.waitForLoadingComplete()
 
     // Check each gateway appears with correct type
+    // Types are shown as badges (e.g. "MCP", "A2A", "UTCP") in the DataTable, not as "Type: MCP" text
     await expect(page.getByText('MCP Gateway')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText(/Type:.*mcp/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('table').getByText('MCP').first()).toBeVisible({ timeout: 10000 })
 
     await expect(page.getByText('A2A Gateway')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText(/Type:.*a2a/i)).toBeVisible()
+    await expect(page.locator('table').getByText('A2A').first()).toBeVisible()
 
     await expect(page.getByText('UTCP Gateway')).toBeVisible()
-    await expect(page.getByText(/Type:.*utcp/i)).toBeVisible()
+    await expect(page.locator('table').getByText('UTCP').first()).toBeVisible()
   })
 })

@@ -86,47 +86,55 @@ export class ToolGeneratorService {
 
       result.summary.total = operations.length;
 
-      for (const operation of operations) {
-        try {
-          const existingTool = await this.toolRepository.findOne({
-            where: { operationId: operation.id },
-          });
+      // Process operations in parallel (batches of 10 to avoid overwhelming DB)
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < operations.length; i += BATCH_SIZE) {
+        const batch = operations.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.allSettled(
+          batch.map(async (operation) => {
+            const existingTool = await this.toolRepository.findOne({
+              where: { operationId: operation.id },
+            });
 
-          let tool: Tool;
+            if (existingTool) {
+              // Regenerate with updated schemas (input + output in parallel)
+              const [inputSchema, outputSchema] = await Promise.all([
+                this.generateInputSchemaForOperation(operation, api.type),
+                this.generateOutputSchemaForOperation(operation, api.type),
+              ]);
 
-          if (existingTool) {
-            // Regenerate the existing tool with updated schemas
-            const inputSchema = await this.generateInputSchemaForOperation(operation, api.type);
-            const outputSchema = await this.generateOutputSchemaForOperation(operation, api.type);
+              existingTool.parameters = inputSchema ? inputSchema.schema : this.createFallbackParameters(operation);
+              existingTool.inputSchemaId = inputSchema?.id;
+              existingTool.outputSchemaId = outputSchema?.id;
+              existingTool.description = this.generateToolDescription(operation, api);
 
-            existingTool.parameters = inputSchema ? inputSchema.schema : this.createFallbackParameters(operation);
-            existingTool.inputSchemaId = inputSchema?.id;
-            existingTool.outputSchemaId = outputSchema?.id;
-            existingTool.description = this.generateToolDescription(operation, api);
+              return this.toolRepository.save(existingTool);
+            } else {
+              return this.generateToolFromOperation(operation, api, options);
+            }
+          }),
+        );
 
-            tool = await this.toolRepository.save(existingTool);
-          } else {
-            tool = await this.generateToolFromOperation(operation, api, options);
-          }
-          
-          if (tool) {
-            result.generatedTools.push(tool);
+        for (let j = 0; j < batchResults.length; j++) {
+          const br = batchResults[j];
+          const operation = batch[j];
+          if (br.status === 'fulfilled' && br.value) {
+            result.generatedTools.push(br.value);
             result.summary.generated++;
-          } else {
+          } else if (br.status === 'fulfilled') {
             result.skippedOperations.push({
               operationId: operation.id,
               reason: 'Failed to generate tool schema',
             });
             result.summary.skipped++;
+          } else {
+            this.logger.error(`Failed to generate tool for operation ${operation.id}: ${(br.reason as Error).message}`);
+            result.errors.push({
+              operationId: operation.id,
+              error: (br.reason as Error).message,
+            });
+            result.summary.errors++;
           }
-
-        } catch (error) {
-          this.logger.error(`Failed to generate tool for operation ${operation.id}: ${error.message}`);
-          result.errors.push({
-            operationId: operation.id,
-            error: error.message,
-          });
-          result.summary.errors++;
         }
       }
 

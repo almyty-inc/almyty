@@ -132,9 +132,11 @@ test.describe('Tools - Generation & Execution', () => {
     await assertHelper.waitForLoadingComplete()
 
     // Mock successful execution
-    await page.route('**/api/tools/*/execute', (route) => {
+    // The actual URL is /api/organizations/:orgId/tools/:toolId/execute
+    await page.route('**/organizations/*/tools/*/execute', (route) => {
       route.fulfill({
         status: 200,
+        contentType: 'application/json',
         body: JSON.stringify({
           success: true,
           data: { message: 'Success!', result: { id: 1, name: 'Test' } },
@@ -177,7 +179,7 @@ test.describe('Tools - Generation & Execution', () => {
     await page.goto('/tools')
 
     // Mock failed execution
-    await page.route('**/api/tools/*/execute', (route) => {
+    await page.route('**/organizations/*/tools/*/execute', (route) => {
       route.fulfill({
         status: 200,
         body: JSON.stringify({
@@ -210,7 +212,7 @@ test.describe('Tools - Generation & Execution', () => {
     await page.goto('/tools')
 
     // Mock execution with time
-    await page.route('**/api/tools/*/execute', (route) => {
+    await page.route('**/organizations/*/tools/*/execute', (route) => {
       route.fulfill({
         status: 200,
         body: JSON.stringify({
@@ -242,7 +244,7 @@ test.describe('Tools - Generation & Execution', () => {
     await page.goto('/tools')
 
     let callCount = 0
-    await page.route('**/api/tools/*/execute', (route) => {
+    await page.route('**/organizations/*/tools/*/execute', (route) => {
       callCount++
       route.fulfill({
         status: 200,
@@ -273,7 +275,7 @@ test.describe('Tools - Generation & Execution', () => {
     await page.goto('/tools')
 
     // Mock rate limit error
-    await page.route('**/api/tools/*/execute', (route) => {
+    await page.route('**/organizations/*/tools/*/execute', (route) => {
       route.fulfill({
         status: 429,
         body: JSON.stringify({
@@ -315,10 +317,14 @@ test.describe('Tools - Generation & Execution', () => {
     await page.waitForLoadState('networkidle')
     await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 10000 })
 
-    // Click the Settings button using aria-label (button has no text, only icon)
+    // Settings is in the actions dropdown, not a direct button in the row.
+    // Click the MoreHorizontal actions button (aria-label "Actions")
     await page.waitForTimeout(500)
     const toolRow = page.locator('tbody tr').first()
-    await toolRow.getByRole('button', { name: 'Settings' }).click()
+    await toolRow.getByRole('button', { name: /actions/i }).click()
+
+    // Click "Settings" from the dropdown menu
+    await page.getByRole('menuitem', { name: /^settings$/i }).click()
 
     // Wait for settings dialog to open - get the last dialog (settings dialog)
     const settingsDialog = page.locator('[role="dialog"]').filter({ hasText: /settings|config/i }).last()

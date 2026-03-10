@@ -196,12 +196,23 @@ export class APIHelper {
   }
 
   async getTools(organizationId?: string) {
-    // Use the organization-scoped endpoint if organizationId is provided
-    const endpoint = organizationId ? `/organizations/${organizationId}/tools` : '/tools'
+    // Use the organization-scoped endpoint if organizationId is provided,
+    // or fall back to the stored organizationId from login/register.
+    // NOTE: There is NO /tools endpoint - always use organization-scoped endpoint.
+    const orgId = organizationId || this.organizationId
+    if (!orgId) {
+      console.warn('[APIHelper] getTools: no organizationId available, cannot fetch tools')
+      return { data: [] }
+    }
+    const endpoint = `/organizations/${orgId}/tools`
     console.log(`[APIHelper] getTools: calling ${endpoint}`)
     const response = await this.client.get(endpoint)
     console.log(`[APIHelper] getTools: status=${response.status}, data=`, JSON.stringify(response.data, null, 2))
-    return response.data
+    // Normalize response: backend returns { success, data: { tools: [...], total: N } }
+    // We extract the tools array and return it as { data: [...] } for backward compatibility
+    const rawData = response.data
+    const toolsArray = rawData?.data?.tools || rawData?.data || rawData?.tools || []
+    return { data: Array.isArray(toolsArray) ? toolsArray : [] }
   }
 
   async waitForTools(minCount: number = 1, timeout: number = 30000) {

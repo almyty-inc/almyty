@@ -8,6 +8,9 @@ const RETRY_DELAY = 1000
 const RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504]
 const RETRYABLE_ERROR_CODES = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ENETUNREACH']
 
+// Guard against multiple concurrent 401 redirects
+let isRedirectingToLogin = false
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -35,11 +38,14 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const config = error.config as any
 
-    // Handle auth errors
-    if (error.response?.status === 401) {
+    // Handle auth errors — redirect to login once, not per-request
+    if (error.response?.status === 401 && !isRedirectingToLogin) {
+      isRedirectingToLogin = true
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      // Also clear persisted Zustand auth store
+      localStorage.removeItem('auth-storage')
+      window.location.href = '/auth/login'
       return Promise.reject(error)
     }
 

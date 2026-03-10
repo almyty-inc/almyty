@@ -84,14 +84,14 @@ test.describe('APIs - Schema Import', () => {
     await petstoreRow.getByRole('button', { name: /actions|more/i }).click()
     await page.getByRole('menuitem', { name: /view.*details|details/i }).click()
 
-    // Click Operations tab in the details sheet
-    await page.getByRole('tab', { name: /operations/i }).click()
-
+    // The API detail page uses a card-based layout, NOT tabs.
+    // Operations are shown in the "API Operations" card.
     // Wait for operations to load
     await page.waitForTimeout(1000)
 
     // Count operations (should be 20 as per CLAUDE.md)
-    const operationsText = await page.getByText(/\d+ operations/).textContent()
+    // Operations are shown as "{N} operations parsed from schema" text in the card
+    const operationsText = await page.getByText(/\d+ operations parsed from schema/).textContent()
     const count = parseInt(operationsText?.match(/\d+/)?.[0] || '0')
     expect(count).toBe(TEST_APIS.PETSTORE.expectedOperations)
 
@@ -231,7 +231,11 @@ test.describe('APIs - Schema Import', () => {
     await page.getByRole('button', { name: /import|submit/i }).click()
 
     // Should show error about malformed schema
-    await expect(page.getByText(/invalid.*schema|malformed|parse.*error/i).first()).toBeVisible()
+    // The backend returns { message: 'Invalid schema format' } with 400 status
+    // The frontend shows this as a toast: "Failed to import schema" / "Invalid schema format"
+    await expect(
+      page.locator('li[role="status"], [role="alert"]').filter({ hasText: /failed.*import|invalid.*schema|invalid schema format/i }).first()
+    ).toBeVisible({ timeout: 10000 })
   })
 
   test('should show loading state during import', async ({ authenticatedPage: page }) => {
@@ -282,11 +286,10 @@ test.describe('APIs - Schema Import', () => {
     await apiRow.getByRole('button', { name: /actions|more/i }).click()
     await page.getByRole('menuitem', { name: /view.*details|details/i }).click()
 
-    // Click Operations tab
-    await page.getByRole('tab', { name: /operations/i }).click()
-
-    // Should show operations count
-    await expect(page.getByText(/\d+ operations/)).toBeVisible()
+    // The API detail page uses a card-based layout (NO tabs).
+    // Operations are shown in the "API Operations" card.
+    // Should show operations count in the card description
+    await expect(page.getByText(/\d+ operations parsed from schema/)).toBeVisible()
 
     // Should show operation details (method, endpoint, etc.)
     await expect(page.getByText(/GET|POST|PUT|DELETE|PATCH/).first()).toBeVisible()

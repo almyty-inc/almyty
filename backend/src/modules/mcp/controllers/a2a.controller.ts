@@ -171,12 +171,16 @@ export class A2AController {
   }
 
   @Get('/messages/:agentId')
-  async getAgentMessages(@Param('agentId') agentId: string, @Request() req): Promise<A2AMessage[]> {
+  async getAgentMessages(
+    @Param('agentId') agentId: string,
+    @Query('limit') limit: string,
+    @Request() req,
+  ): Promise<A2AMessage[]> {
     // Verify agent access
-    const agent = await this.getAgent(agentId, req);
-    
-    // Get messages for agent (simplified - would use proper pagination in production)
-    return []; // TODO: Implement message retrieval
+    await this.getAgent(agentId, req);
+
+    const messageLimit = limit ? parseInt(limit, 10) : 50;
+    return this.a2aService.getAgentMessages(agentId, messageLimit);
   }
 
   // Session Management
@@ -220,10 +224,10 @@ export class A2AController {
     @Param('agentId') agentId: string,
     @Body() toolRegistration: A2AToolRegistration,
     @Request() req,
-  ): Promise<void> {
+  ) {
     // Verify agent access
     await this.getAgent(agentId, req);
-    
+
     return this.a2aService.registerAgentTool(agentId, toolRegistration);
   }
 

@@ -142,32 +142,25 @@ test.describe('Authentication - Session Management', () => {
     await expect(newPage).toHaveURL(/\/dashboard/)
   })
 
-  test('should handle concurrent requests with expired token', async ({ page, authHelper }) => {
-    // Login
+  test('should handle concurrent requests with expired token', async ({ page, authHelper, assertHelper }) => {
+    // Login first
     await authHelper.loginViaAPI(testUserCredentials.email, testUserCredentials.password)
     await page.goto('/dashboard')
+    await assertHelper.waitForLoadingComplete()
 
-    // Set up multiple API routes to return 401
-    let callCount = 0
-    await page.route('**/{apis,gateways,tools,organizations}/**', (route) => {
-      callCount++
-      if (callCount <= 3) {
-        route.fulfill({ status: 401, body: JSON.stringify({ message: 'Unauthorized' }) })
-      } else {
-        route.continue()
-      }
+    // Intercept all API calls to return 401 (simulates expired token)
+    await page.route('**/{apis,gateways,tools,monitoring,organizations}/**', (route) => {
+      route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Unauthorized' }),
+      })
     })
 
-    // Make multiple API requests concurrently
-    await Promise.all([
-      page.goto('/apis'),
-      page.goto('/tools'),
-      page.goto('/gateways'),
-    ]).catch(() => {
-      // Expected to fail due to 401
-    })
+    // Navigate to a page that triggers multiple concurrent API calls
+    await page.goto('/dashboard')
 
-    // Should only redirect to login once (not multiple times)
-    await expect(page).toHaveURL(/\/auth\/login/)
+    // Should redirect to login after 401 (only once, not per-request)
+    await assertHelper.assertOnLoginPage()
   })
 })
