@@ -9,6 +9,7 @@ import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { ToolCategory } from '../../entities/tool-category.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
+import { SkillGeneratorService } from '../tools/skill-generator.service';
 
 describe('McpService - Tool Execution', () => {
   let service: McpService;
@@ -72,6 +73,13 @@ describe('McpService - Tool Execution', () => {
           provide: ToolExecutorService,
           useValue: {
             executeTool: jest.fn(),
+          },
+        },
+        {
+          provide: SkillGeneratorService,
+          useValue: {
+            generateToolSkill: jest.fn(),
+            generateGatewaySkills: jest.fn(),
           },
         },
         {

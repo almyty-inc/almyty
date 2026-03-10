@@ -130,6 +130,29 @@ export class McpController {
     });
   }
 
+  // Skills endpoints
+  @Post('/skills/list')
+  @UseGuards(JwtAuthGuard)
+  async listSkills(@Request() req, @Body() body: any): Promise<JsonRpcResponse> {
+    return this.handleMcp(req, {
+      jsonrpc: '2.0',
+      id: body.id || 1,
+      method: 'skills/list',
+      params: body.params || body,
+    });
+  }
+
+  @Post('/skills/get')
+  @UseGuards(JwtAuthGuard)
+  async getSkill(@Request() req, @Body() body: any): Promise<JsonRpcResponse> {
+    return this.handleMcp(req, {
+      jsonrpc: '2.0',
+      id: body.id || 1,
+      method: 'skills/get',
+      params: body.params || body,
+    });
+  }
+
   // Resources endpoints
   @Post('/resources/list')
   @UseGuards(JwtAuthGuard)

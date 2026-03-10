@@ -38,6 +38,7 @@ import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { ToolCategory } from '../../entities/tool-category.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService, ToolExecutionResult } from '../tools/tool-executor.service';
+import { SkillGeneratorService } from '../tools/skill-generator.service';
 
 @Injectable()
 export class McpService {
@@ -63,6 +64,7 @@ export class McpService {
     private toolCategoryRepository: Repository<ToolCategory>,
     private toolsService: ToolsService,
     private toolExecutorService: ToolExecutorService,
+    private skillGeneratorService: SkillGeneratorService,
     @InjectRedis() private readonly redis: Redis.Redis,
   ) {}
 
@@ -119,7 +121,15 @@ export class McpService {
         case 'prompts/get':
           result = await this.handlePromptGet(request.params as McpGetPromptRequest, organizationId);
           break;
-          
+
+        case 'skills/list':
+          result = await this.handleSkillsList(request.params, organizationId, gatewayId);
+          break;
+
+        case 'skills/get':
+          result = await this.handleSkillGet(request.params, organizationId);
+          break;
+
         default:
           throw this.createJsonRpcError(
             JsonRpcErrorCode.METHOD_NOT_FOUND,
@@ -209,6 +219,10 @@ export class McpService {
           progressiveDiscovery: {
             methods: ['tools/discover', 'tools/search', 'tools/get'],
             description: 'Use tools/discover for categories, tools/search for filtered results, tools/get for full schema',
+          },
+          skills: {
+            methods: ['skills/list', 'skills/get'],
+            description: 'Generate procedural skill files (YAML frontmatter + markdown) for tools and gateways',
           },
         },
       },
@@ -730,6 +744,52 @@ export class McpService {
         description: tool.description,
       },
     }));
+  }
+
+  // Skills handlers
+
+  private async handleSkillsList(params: any, organizationId: string, gatewayId?: string): Promise<any> {
+    // If gatewayId is provided, generate a gateway skill bundle
+    if (gatewayId) {
+      const skill = await this.skillGeneratorService.generateGatewaySkills(gatewayId);
+      return {
+        skills: [skill],
+      };
+    }
+
+    // Otherwise, list skills for all active tools in the org
+    const tools = await this.getToolsForScope(organizationId);
+
+    const skills = await Promise.all(
+      tools.slice(0, params?.limit || 50).map(async (tool) => {
+        try {
+          return await this.skillGeneratorService.generateToolSkill(tool.id);
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    return {
+      skills: skills.filter(Boolean),
+    };
+  }
+
+  private async handleSkillGet(params: any, organizationId: string): Promise<any> {
+    const { toolId, gatewayId } = params || {};
+
+    if (gatewayId) {
+      return this.skillGeneratorService.generateGatewaySkills(gatewayId);
+    }
+
+    if (toolId) {
+      return this.skillGeneratorService.generateToolSkill(toolId);
+    }
+
+    throw this.createJsonRpcError(
+      JsonRpcErrorCode.INVALID_PARAMS,
+      'Either toolId or gatewayId is required',
+    );
   }
 
   // Health check
