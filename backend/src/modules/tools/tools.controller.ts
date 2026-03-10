@@ -22,6 +22,7 @@ import { ToolsService, CreateToolDto, UpdateToolDto, ToolSearchFilters } from '.
 import { ToolGeneratorService, ToolGenerationOptions } from './tool-generator.service';
 import { ToolExecutorService, ToolExecutionOptions } from './tool-executor.service';
 import { SkillGeneratorService } from './skill-generator.service';
+import { CliGeneratorService } from './cli-generator.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -244,6 +245,7 @@ export class ToolsController {
     private readonly toolGeneratorService: ToolGeneratorService,
     private readonly toolExecutorService: ToolExecutorService,
     private readonly skillGeneratorService: SkillGeneratorService,
+    private readonly cliGeneratorService: CliGeneratorService,
   ) {}
 
   @Post()
@@ -718,6 +720,37 @@ export class ToolsController {
           success: false,
           message: error.message,
           error: 'SKILL_GENERATION_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get(':toolId/cli')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Generate CLI script for a tool' })
+  @ApiQuery({ name: 'format', enum: ['bash', 'node'], required: false })
+  @ApiResponse({ status: 200, description: 'CLI script generated successfully' })
+  async getToolCli(
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
+    @Param('toolId', ParseUUIDPipe) toolId: string,
+    @Query('format') format: 'bash' | 'node' = 'bash',
+    @Request() req: any,
+  ) {
+    try {
+      const cli = await this.cliGeneratorService.generateToolCli(toolId, format);
+
+      return {
+        success: true,
+        data: cli,
+        message: 'CLI script generated successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'CLI_GENERATION_FAILED',
         },
         error.status || HttpStatus.BAD_REQUEST,
       );
