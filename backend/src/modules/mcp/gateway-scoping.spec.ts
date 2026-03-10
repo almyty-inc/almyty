@@ -7,6 +7,7 @@ import { Resource } from '../../entities/resource.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
+import { ToolCategory } from '../../entities/tool-category.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 
@@ -55,6 +56,12 @@ describe('MCP Gateway Tool Scoping', () => {
           provide: getRepositoryToken(GatewayTool),
           useValue: {
             find: jest.fn().mockResolvedValue(mockGatewayTools),
+          },
+        },
+        {
+          provide: getRepositoryToken(ToolCategory),
+          useValue: {
+            find: jest.fn().mockResolvedValue([]),
           },
         },
         {

@@ -96,6 +96,40 @@ export class McpController {
     });
   }
 
+  // Progressive tool discovery endpoints
+  @Post('/tools/discover')
+  @UseGuards(JwtAuthGuard)
+  async discoverTools(@Request() req, @Body() body: any): Promise<JsonRpcResponse> {
+    return this.handleMcp(req, {
+      jsonrpc: '2.0',
+      id: body.id || 1,
+      method: 'tools/discover',
+      params: body.params || body,
+    });
+  }
+
+  @Post('/tools/search')
+  @UseGuards(JwtAuthGuard)
+  async searchTools(@Request() req, @Body() body: any): Promise<JsonRpcResponse> {
+    return this.handleMcp(req, {
+      jsonrpc: '2.0',
+      id: body.id || 1,
+      method: 'tools/search',
+      params: body.params || body,
+    });
+  }
+
+  @Post('/tools/get')
+  @UseGuards(JwtAuthGuard)
+  async getToolDetails(@Request() req, @Body() body: any): Promise<JsonRpcResponse> {
+    return this.handleMcp(req, {
+      jsonrpc: '2.0',
+      id: body.id || 1,
+      method: 'tools/get',
+      params: body.params || body,
+    });
+  }
+
   // Resources endpoints
   @Post('/resources/list')
   @UseGuards(JwtAuthGuard)
