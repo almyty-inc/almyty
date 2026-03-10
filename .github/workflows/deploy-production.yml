@@ -1,0 +1,164 @@
+name: Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to deploy (e.g., v1.0.0)'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io/frane/apifai
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push API
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: production
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/api:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/api:${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}
+            ${{ env.REGISTRY }}/api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: production
+          push: true
+          build-args: |
+            VITE_API_BASE_URL=https://api.apifai.io
+          tags: |
+            ${{ env.REGISTRY }}/frontend:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/frontend:${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}
+            ${{ env.REGISTRY }}/frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save DigitalOcean kubeconfig
+        run: doctl kubernetes cluster kubeconfig save ${{ secrets.DIGITALOCEAN_CLUSTER_NAME }}
+
+      - name: Create ImagePullSecret for GHCR
+        run: |
+          kubectl create namespace apifai-production --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret docker-registry ghcr-secret \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GHCR_PAT }} \
+            --namespace=apifai-production \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Update image tags with version
+        run: |
+          cd k8s/overlays/production
+          sed -i "s/newTag: .*/newTag: ${{ steps.version.outputs.version }}/g" kustomization.yaml
+          cat kustomization.yaml
+
+      - name: Deploy to production
+        run: |
+          kubectl apply -k k8s/overlays/production
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/prod-api -n apifai-production --timeout=10m
+          kubectl rollout status deployment/prod-frontend -n apifai-production --timeout=5m
+
+      - name: Deployment summary
+        run: |
+          echo "🚀 Deployed to production!"
+          echo "📦 Version: ${{ steps.version.outputs.version }}"
+          echo ""
+          echo "🌐 URLs:"
+          echo "  API: https://api.apifai.io"
+          echo "  App: https://app.apifai.io"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: github.event_name == 'push'
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: |
+            ## Deployed to Production
+
+            **Version:** ${{ steps.version.outputs.version }}
+
+            ### URLs
+            - API: https://api.apifai.io
+            - App: https://app.apifai.io
+
+            ### Images
+            - `ghcr.io/frane/apifai/api:${{ steps.version.outputs.version }}`
+            - `ghcr.io/frane/apifai/frontend:${{ steps.version.outputs.version }}`
+          draft: false
+          prerelease: false

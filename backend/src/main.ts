@@ -15,7 +15,7 @@ async function bootstrap() {
   });
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT', 4000);
+  const port = configService.get<number>('PORT', 3000);
 
   // Security middleware
   app.use(helmet({
@@ -35,7 +35,7 @@ async function bootstrap() {
 
   // CORS configuration
   app.enableCors({
-    origin: configService.get<string>('CORS_ORIGIN', 'http://localhost:4001'),
+    origin: configService.get<string>('CORS_ORIGIN', 'http://localhost:3002'),
     credentials: configService.get<boolean>('CORS_CREDENTIALS', true),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
@@ -55,44 +55,50 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger documentation
-  const config = new DocumentBuilder()
-    .setTitle('apifai API')
-    .setDescription('apifai - Universal API to AI Tool Gateway System')
-    .setVersion('1.0')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        name: 'JWT',
-        description: 'Enter JWT token',
-        in: 'header',
-      },
-      'JWT-auth',
-    )
-    .addApiKey(
-      {
-        type: 'apiKey',
-        name: 'X-API-Key',
-        in: 'header',
-        description: 'API Key for service authentication',
-      },
-      'API-Key',
-    )
-    .build();
+  // Swagger documentation (disabled in production via SWAGGER_ENABLED=false)
+  const swaggerEnabled = configService.get<string>('SWAGGER_ENABLED', 'true') === 'true';
+  if (swaggerEnabled) {
+    const config = new DocumentBuilder()
+      .setTitle('apifai API')
+      .setDescription('apifai - Universal API to AI Tool Gateway System')
+      .setVersion('1.0')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          name: 'JWT',
+          description: 'Enter JWT token',
+          in: 'header',
+        },
+        'JWT-auth',
+      )
+      .addApiKey(
+        {
+          type: 'apiKey',
+          name: 'X-API-Key',
+          in: 'header',
+          description: 'API Key for service authentication',
+        },
+        'API-Key',
+      )
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-    },
-  });
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
+    });
+    logger.log(`Swagger documentation: http://localhost:${port}/docs`);
+  }
+
+  // Graceful shutdown hooks for k8s SIGTERM
+  app.enableShutdownHooks();
 
   await app.listen(port);
 
   logger.log(`Application is running on: http://localhost:${port}`);
-  logger.log(`Swagger documentation: http://localhost:${port}/docs`);
 }
 
 bootstrap();

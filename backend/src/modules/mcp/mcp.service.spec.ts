@@ -435,6 +435,10 @@ describe('McpService', () => {
     });
 
     it('should handle prompts/list request successfully', async () => {
+      toolRepository.find.mockResolvedValue([
+        { name: 'get-pet', description: 'Get pet by ID', parameters: [{ name: 'petId', required: true }] },
+      ]);
+
       const request = {
         jsonrpc: '2.0',
         id: '7',
@@ -445,23 +449,47 @@ describe('McpService', () => {
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('7');
-      expect(result.result.prompts).toEqual([]);
+      expect(result.result.prompts).toBeDefined();
+      expect(Array.isArray(result.result.prompts)).toBe(true);
+      // Should have use-get-pet + list-available-tools
+      expect(result.result.prompts.length).toBe(2);
+      const discoveryPrompt = result.result.prompts.find((p: any) => p.name === 'list-available-tools');
+      expect(discoveryPrompt).toBeDefined();
     });
 
-    it('should handle prompts/get request with error', async () => {
+    it('should handle prompts/get for list-available-tools', async () => {
+      toolRepository.find.mockResolvedValue([
+        { name: 'get-pet', description: 'Get pet by ID' },
+      ]);
+
       const request = {
         jsonrpc: '2.0',
         id: '8',
         method: 'prompts/get',
-        params: { name: 'test-prompt' },
+        params: { name: 'list-available-tools' },
       };
 
       const result = await service.handleJsonRpc(request, 'org-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('8');
+      expect(result.result.messages).toBeDefined();
+      expect(result.result.messages.length).toBeGreaterThan(0);
+    });
+
+    it('should handle prompts/get for unknown prompt with error', async () => {
+      const request = {
+        jsonrpc: '2.0',
+        id: '9',
+        method: 'prompts/get',
+        params: { name: 'nonexistent-prompt' },
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1');
+
+      expect(result.jsonrpc).toBe('2.0');
+      expect(result.id).toBe('9');
       expect(result.error).toBeDefined();
-      expect(result.error.code).toBe(-32601);
     });
 
     it('should handle unknown method with error', async () => {

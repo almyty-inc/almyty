@@ -1,5 +1,5 @@
 # Multi-stage build for production optimization
-FROM node:18-alpine AS base
+FROM node:22-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -20,7 +20,7 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-EXPOSE 4000
+EXPOSE 3000
 
 CMD ["npm", "run", "start:dev"]
 
@@ -56,5 +56,8 @@ USER nestjs
 EXPOSE 3000
 
 ENV NODE_ENV=production
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "const http = require('http'); http.get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
 CMD ["node", "dist/main"]

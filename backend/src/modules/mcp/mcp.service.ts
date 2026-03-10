@@ -644,19 +644,100 @@ export class McpService {
   }
 
   private async handlePromptsList(params: any, organizationId: string): Promise<McpPromptsListResult> {
-    // For now, return empty prompts - we can enhance this later
-    return {
-      prompts: [],
-    };
+    // Generate prompts from available tools in the organization
+    const tools = await this.toolRepository.find({
+      where: { organization: { id: organizationId }, status: ToolStatus.ACTIVE },
+      relations: ['api'],
+    });
+
+    const prompts: McpPrompt[] = [];
+
+    // Create a prompt for each tool that has parameters
+    for (const tool of tools) {
+      const parameters = (tool.parameters as any[]) || [];
+      prompts.push({
+        name: `use-${tool.name}`,
+        description: `Execute the ${tool.name} tool${tool.description ? ': ' + tool.description : ''}`,
+        arguments: parameters.map((p) => ({
+          name: p.name,
+          description: p.description || `Parameter: ${p.name}`,
+          required: p.required || false,
+        })),
+      });
+    }
+
+    // Add a discovery prompt
+    prompts.push({
+      name: 'list-available-tools',
+      description: 'List all available tools and their capabilities',
+      arguments: [],
+    });
+
+    return { prompts };
   }
 
   private async handlePromptGet(
     params: McpGetPromptRequest,
     organizationId: string,
   ): Promise<McpGetPromptResult> {
+    if (params.name === 'list-available-tools') {
+      const tools = await this.toolRepository.find({
+        where: { organization: { id: organizationId }, status: ToolStatus.ACTIVE },
+      });
+
+      const toolList = tools.map((t) => `- **${t.name}**: ${t.description || 'No description'}`).join('\n');
+
+      return {
+        description: 'List of all available tools',
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: `Here are the available tools in this organization:\n\n${toolList}\n\nWhich tool would you like to use?`,
+            } as McpTextContent,
+          },
+        ],
+      };
+    }
+
+    // Handle use-{toolName} prompts
+    if (params.name.startsWith('use-')) {
+      const toolName = params.name.replace('use-', '');
+      const tool = await this.toolRepository.findOne({
+        where: { name: toolName, organization: { id: organizationId } },
+      });
+
+      if (!tool) {
+        throw this.createJsonRpcError(
+          JsonRpcErrorCode.RESOURCE_NOT_FOUND,
+          `Tool '${toolName}' not found`,
+        );
+      }
+
+      const parameters = (tool.parameters as any[]) || [];
+      const argsList = parameters.map((p) => {
+        const value = params.arguments?.[p.name] || `<${p.name}>`;
+        return `- ${p.name}: ${value}`;
+      }).join('\n');
+
+      return {
+        description: `Execute ${tool.name}`,
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: `Please execute the **${tool.name}** tool${tool.description ? ' (' + tool.description + ')' : ''} with the following parameters:\n\n${argsList}`,
+            } as McpTextContent,
+          },
+        ],
+      };
+    }
+
     throw this.createJsonRpcError(
-      JsonRpcErrorCode.METHOD_NOT_FOUND,
-      'Prompts not implemented yet',
+      JsonRpcErrorCode.RESOURCE_NOT_FOUND,
+      `Prompt '${params.name}' not found`,
     );
   }
 

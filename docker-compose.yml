@@ -34,11 +34,11 @@ services:
       dockerfile: Dockerfile
       target: development
     ports:
-      - "4000:4000"
+      - "4000:3000"
     environment:
       - NODE_ENV=development
       - NODE_OPTIONS=--max-old-space-size=4096
-      - PORT=4000
+      - PORT=3000
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_USERNAME=postgres

@@ -1,0 +1,112 @@
+name: Deploy to Development
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io/frane/apifai
+  TAG: dev-${{ github.sha }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push API
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: production
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/api:${{ env.TAG }}
+            ${{ env.REGISTRY }}/api:dev-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: production
+          push: true
+          build-args: |
+            VITE_API_BASE_URL=https://dev.api.apifai.io
+          tags: |
+            ${{ env.REGISTRY }}/frontend:${{ env.TAG }}
+            ${{ env.REGISTRY }}/frontend:dev-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save DigitalOcean kubeconfig
+        run: doctl kubernetes cluster kubeconfig save ${{ secrets.DIGITALOCEAN_CLUSTER_NAME }}
+
+      - name: Create ImagePullSecret for GHCR
+        run: |
+          kubectl create namespace apifai-dev --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret docker-registry ghcr-secret \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GHCR_PAT }} \
+            --namespace=apifai-dev \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Update image tags with git SHA
+        run: |
+          cd k8s/overlays/development
+          sed -i "s/newTag: dev-.*/newTag: dev-${{ github.sha }}/g" kustomization.yaml
+          cat kustomization.yaml
+
+      - name: Deploy to development
+        run: |
+          kubectl apply -k k8s/overlays/development
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/dev-api -n apifai-dev --timeout=5m
+          kubectl rollout status deployment/dev-frontend -n apifai-dev --timeout=5m
+
+      - name: Deployment summary
+        run: |
+          echo "🚀 Deployed to development!"
+          echo "📦 Version: dev-${{ github.sha }}"
+          echo ""
+          echo "🌐 URLs:"
+          echo "  API: https://dev.api.apifai.io"
+          echo "  App: https://dev.app.apifai.io"

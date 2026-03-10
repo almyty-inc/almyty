@@ -3,6 +3,9 @@ import { GatewaysController } from './gateways.controller';
 import { GatewaysService } from './gateways.service';
 import { GatewayAuthService } from './gateway-auth.service';
 import { GatewayToolService } from './gateway-tool.service';
+import { SkillGeneratorService } from '../tools/skill-generator.service';
+import { CliGeneratorService } from '../tools/cli-generator.service';
+import { CodegenService } from '../tools/codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 
@@ -56,6 +59,18 @@ describe('GatewaysController', () => {
         {
           provide: GatewayToolService,
           useValue: mockGatewayToolService,
+        },
+        {
+          provide: SkillGeneratorService,
+          useValue: { generateGatewaySkills: jest.fn() },
+        },
+        {
+          provide: CliGeneratorService,
+          useValue: { generateGatewayCliBunde: jest.fn() },
+        },
+        {
+          provide: CodegenService,
+          useValue: { generateGatewaySdk: jest.fn() },
         },
       ],
     })
