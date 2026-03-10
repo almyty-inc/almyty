@@ -23,6 +23,7 @@ import { ToolGeneratorService, ToolGenerationOptions } from './tool-generator.se
 import { ToolExecutorService, ToolExecutionOptions } from './tool-executor.service';
 import { SkillGeneratorService } from './skill-generator.service';
 import { CliGeneratorService } from './cli-generator.service';
+import { CodegenService } from './codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -246,6 +247,7 @@ export class ToolsController {
     private readonly toolExecutorService: ToolExecutorService,
     private readonly skillGeneratorService: SkillGeneratorService,
     private readonly cliGeneratorService: CliGeneratorService,
+    private readonly codegenService: CodegenService,
   ) {}
 
   @Post()
@@ -751,6 +753,35 @@ export class ToolsController {
           success: false,
           message: error.message,
           error: 'CLI_GENERATION_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get(':toolId/sdk')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Generate TypeScript SDK for a tool' })
+  @ApiResponse({ status: 200, description: 'SDK generated successfully' })
+  async getToolSdk(
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
+    @Param('toolId', ParseUUIDPipe) toolId: string,
+    @Request() req: any,
+  ) {
+    try {
+      const sdk = await this.codegenService.generateToolSdk(toolId);
+
+      return {
+        success: true,
+        data: sdk,
+        message: 'SDK generated successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'SDK_GENERATION_FAILED',
         },
         error.status || HttpStatus.BAD_REQUEST,
       );
