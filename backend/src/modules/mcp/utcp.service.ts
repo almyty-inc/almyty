@@ -1,6 +1,8 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import * as Redis from 'ioredis';
 
 import {
   UtcpManual,
@@ -36,10 +38,18 @@ export class UtcpService {
     private organizationRepository: Repository<Organization>,
     private toolsService: ToolsService,
     private toolExecutorService: ToolExecutorService,
+    @InjectRedis() private readonly redis: Redis.Redis,
   ) {}
 
-  // Generate UTCP Manual for Organization
+  // Generate UTCP Manual for Organization (cached + parallelized)
   async generateManual(organizationId: string): Promise<UtcpManual> {
+    // Check Redis cache (5 min TTL)
+    const cacheKey = `utcp:manual:${organizationId}`;
+    try {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (e) { /* cache miss */ }
+
     const organization = await this.organizationRepository.findOne({
       where: { id: organizationId },
       relations: ['tools', 'apis'],
@@ -50,35 +60,38 @@ export class UtcpService {
     }
 
     // Get all active tools for this organization
-    const { tools } = await this.toolsService.getTools({ 
+    const { tools } = await this.toolsService.getTools({
       organizationId,
       status: ToolStatus.ACTIVE,
     });
 
-    // Convert tools to UTCP format
+    // Process all tools in parallel instead of sequentially
+    const toolResults = await Promise.allSettled(
+      tools.map(async (tool) => {
+        const [utcpTool, callTemplate, authScheme] = await Promise.all([
+          this.convertToolToUtcp(tool),
+          this.generateCallTemplate(tool),
+          this.extractAuthenticationScheme(tool),
+        ]);
+        return { utcpTool, callTemplate, authScheme };
+      }),
+    );
+
     const utcpTools: UtcpTool[] = [];
     const callTemplates: UtcpCallTemplate[] = [];
-    const authSchemes: UtcpAuthenticationScheme[] = [];
+    const authSchemeMap = new Map<string, UtcpAuthenticationScheme>();
 
-    for (const tool of tools) {
-      // Generate UTCP tool definition
-      const utcpTool = await this.convertToolToUtcp(tool);
+    for (const r of toolResults) {
+      if (r.status !== 'fulfilled') continue;
+      const { utcpTool, callTemplate, authScheme } = r.value;
       utcpTools.push(utcpTool);
-
-      // Generate call template for direct API access
-      const callTemplate = await this.generateCallTemplate(tool);
-      if (callTemplate) {
-        callTemplates.push(callTemplate);
-      }
-
-      // Extract authentication schemes
-      const authScheme = await this.extractAuthenticationScheme(tool);
-      if (authScheme && !authSchemes.find(s => s.id === authScheme.id)) {
-        authSchemes.push(authScheme);
+      if (callTemplate) callTemplates.push(callTemplate);
+      if (authScheme && !authSchemeMap.has(authScheme.id)) {
+        authSchemeMap.set(authScheme.id, authScheme);
       }
     }
 
-    return {
+    const manual: UtcpManual = {
       version: this.version,
       info: {
         title: `${organization.name} API Tools`,
@@ -95,7 +108,7 @@ export class UtcpService {
       },
       tools: utcpTools,
       callTemplates,
-      authentication: authSchemes,
+      authentication: Array.from(authSchemeMap.values()),
       metadata: {
         generatedAt: new Date().toISOString(),
         organizationId,
@@ -108,6 +121,13 @@ export class UtcpService {
         },
       },
     };
+
+    // Cache for 5 minutes
+    try {
+      await this.redis.setex(cacheKey, 300, JSON.stringify(manual));
+    } catch (e) { /* non-critical */ }
+
+    return manual;
   }
 
   // Convert our Tool entity to UTCP format

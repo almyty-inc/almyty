@@ -18,6 +18,7 @@ import {
   A2AMetrics,
   A2AToolRegistration,
   A2AEvent,
+  A2AContext,
 } from './types/a2a.types';
 
 import { Tool } from '../../entities/tool.entity';
@@ -279,10 +280,10 @@ export class A2AService extends EventEmitter {
       headers: {
         'Content-Type': 'application/json',
         'User-Agent': 'apifai-a2a/1.0.0',
-        ...agent.configuration.headers,
+        ...agent.configuration?.headers,
       },
       data: message,
-      timeout: agent.configuration.timeout || 30000,
+      timeout: agent.configuration?.timeout || 30000,
     };
 
     // Apply authentication
@@ -293,9 +294,9 @@ export class A2AService extends EventEmitter {
     // Handle different agent types
     switch (agent.type) {
       case A2AAgentType.OPENAI:
-        return this.buildOpenAIRequest(config, message);
+        return await this.buildOpenAIRequest(config, message);
       case A2AAgentType.ANTHROPIC:
-        return this.buildAnthropicRequest(config, message);
+        return await this.buildAnthropicRequest(config, message);
       case A2AAgentType.CUSTOM_LLM:
         return this.buildCustomLLMRequest(config, message);
       default:
@@ -303,50 +304,55 @@ export class A2AService extends EventEmitter {
     }
   }
 
-  private buildOpenAIRequest(config: AxiosRequestConfig, message: A2AMessage): AxiosRequestConfig {
-    // Convert A2A message to OpenAI format
+  private async buildOpenAIRequest(config: AxiosRequestConfig, message: A2AMessage): Promise<AxiosRequestConfig> {
     config.url = 'https://api.openai.com/v1/chat/completions';
+
+    // Resolve real tool schemas from context
+    const tools = await this.resolveToolsFromContext(message.context);
+    const openaiTools = tools.length > 0
+      ? tools.map(t => t.toOpenAPITool())
+      : undefined;
+
+    // Use model from agent metadata or message context, default to gpt-4o
+    const model = message.context?.preferences?.model || 'gpt-4o';
+
+    // Build user content — prefer text, fall back to JSON serialization
+    const userContent = message.content.text || JSON.stringify(message.content.data || message.content);
+
     config.data = {
-      model: 'gpt-4',
+      model,
       messages: [
-        {
-          role: 'user',
-          content: JSON.stringify(message.content),
-        },
+        { role: 'user', content: userContent },
       ],
-      tools: message.context?.tools?.map(toolName => ({
-        type: 'function',
-        function: {
-          name: toolName,
-          description: `Tool: ${toolName}`,
-        },
-      })),
+      ...(openaiTools && { tools: openaiTools }),
     };
 
     return config;
   }
 
-  private buildAnthropicRequest(config: AxiosRequestConfig, message: A2AMessage): AxiosRequestConfig {
-    // Convert A2A message to Anthropic format
+  private async buildAnthropicRequest(config: AxiosRequestConfig, message: A2AMessage): Promise<AxiosRequestConfig> {
     config.url = 'https://api.anthropic.com/v1/messages';
     config.headers['anthropic-version'] = '2023-06-01';
+
+    // Resolve real tool schemas from context
+    const tools = await this.resolveToolsFromContext(message.context);
+    const anthropicTools = tools.length > 0
+      ? tools.map(t => t.toAnthropicTool())
+      : undefined;
+
+    // Use model from agent metadata or message context
+    const model = message.context?.preferences?.model || 'claude-sonnet-4-20250514';
+    const maxTokens = message.context?.preferences?.maxTokens || 4096;
+
+    const userContent = message.content.text || JSON.stringify(message.content.data || message.content);
+
     config.data = {
-      model: 'claude-3-sonnet-20240229',
-      max_tokens: 1000,
+      model,
+      max_tokens: maxTokens,
       messages: [
-        {
-          role: 'user',
-          content: JSON.stringify(message.content),
-        },
+        { role: 'user', content: userContent },
       ],
-      tools: message.context?.tools?.map(toolName => ({
-        name: toolName,
-        description: `Tool: ${toolName}`,
-        input_schema: {
-          type: 'object',
-          properties: {},
-        },
-      })),
+      ...(anthropicTools && { tools: anthropicTools }),
     };
 
     return config;
@@ -381,14 +387,22 @@ export class A2AService extends EventEmitter {
     }
   }
 
-  // Handle agent responses
+  // Handle agent responses — including LLM tool call loops
   private async handleAgentResponse(originalMessage: A2AMessage, responseData: any): Promise<void> {
+    const toAgent = await this.getAgent(originalMessage.toAgentId);
+
+    // For LLM agents, process tool call loop before delivering final response
+    let finalData = responseData;
+    if (toAgent && (toAgent.type === A2AAgentType.OPENAI || toAgent.type === A2AAgentType.ANTHROPIC)) {
+      finalData = await this.processLLMToolCallLoop(toAgent, originalMessage, responseData);
+    }
+
     const responseMessage: A2AMessage = {
       id: uuidv4(),
       fromAgentId: originalMessage.toAgentId,
       toAgentId: originalMessage.fromAgentId,
       type: A2AMessageType.RESPONSE,
-      content: { data: responseData },
+      content: { data: finalData },
       context: {
         ...originalMessage.context,
         parentMessageId: originalMessage.id,
@@ -406,6 +420,252 @@ export class A2AService extends EventEmitter {
     this.messageQueue.get(originalMessage.fromAgentId)!.push(responseMessage);
 
     this.emit('messageReceived', responseMessage);
+  }
+
+  /**
+   * Process LLM tool call loop: execute tool calls from LLM responses
+   * and feed results back until the LLM produces a final text response.
+   */
+  private async processLLMToolCallLoop(
+    agent: A2AAgent,
+    originalMessage: A2AMessage,
+    initialResponse: any,
+    maxIterations = 10,
+  ): Promise<any> {
+    let currentResponse = initialResponse;
+    let messages: any[] = [];
+
+    // Build initial conversation from the original message
+    const userContent = originalMessage.content.text
+      || JSON.stringify(originalMessage.content.data || originalMessage.content);
+    messages.push({ role: 'user', content: userContent });
+
+    for (let i = 0; i < maxIterations; i++) {
+      const toolCalls = this.extractToolCalls(agent.type, currentResponse);
+
+      if (toolCalls.length === 0) {
+        return currentResponse; // No more tool calls — final response
+      }
+
+      this.logger.debug(`LLM tool call loop iteration ${i + 1}: ${toolCalls.length} tool calls`);
+
+      // Execute all tool calls
+      const toolResults = await this.executeToolCalls(toolCalls, agent.organizationId);
+
+      // Append assistant message (with tool calls) and tool results to conversation
+      messages = this.appendToolCallRound(agent.type, messages, currentResponse, toolCalls, toolResults);
+
+      // Resolve tools for the next request
+      const tools = await this.resolveToolsFromContext(originalMessage.context);
+
+      // Build and send the next LLM request
+      const nextConfig = this.buildLLMFollowUpRequest(agent, messages, tools);
+      const response = await axios(nextConfig);
+      currentResponse = response.data;
+    }
+
+    this.logger.warn(`LLM tool call loop exceeded ${maxIterations} iterations for agent ${agent.id}`);
+    return currentResponse;
+  }
+
+  /**
+   * Extract tool calls from an LLM response, supporting both OpenAI and Anthropic formats.
+   */
+  private extractToolCalls(agentType: A2AAgentType, responseData: any): Array<{
+    id: string;
+    name: string;
+    arguments: Record<string, any>;
+  }> {
+    if (agentType === A2AAgentType.OPENAI) {
+      // OpenAI format: choices[0].message.tool_calls
+      const toolCalls = responseData?.choices?.[0]?.message?.tool_calls;
+      if (!toolCalls || !Array.isArray(toolCalls)) return [];
+      return toolCalls.map((tc: any) => ({
+        id: tc.id,
+        name: tc.function.name,
+        arguments: typeof tc.function.arguments === 'string'
+          ? JSON.parse(tc.function.arguments)
+          : tc.function.arguments,
+      }));
+    }
+
+    if (agentType === A2AAgentType.ANTHROPIC) {
+      // Anthropic format: content[] with type === 'tool_use'
+      const contentBlocks = responseData?.content;
+      if (!contentBlocks || !Array.isArray(contentBlocks)) return [];
+      return contentBlocks
+        .filter((block: any) => block.type === 'tool_use')
+        .map((block: any) => ({
+          id: block.id,
+          name: block.name,
+          arguments: block.input || {},
+        }));
+    }
+
+    return [];
+  }
+
+  /**
+   * Execute tool calls via the ToolExecutorService.
+   */
+  private async executeToolCalls(
+    toolCalls: Array<{ id: string; name: string; arguments: Record<string, any> }>,
+    organizationId: string,
+  ): Promise<Array<{ id: string; name: string; result: any; error?: string }>> {
+    const results = await Promise.allSettled(
+      toolCalls.map(async (tc) => {
+        // Look up tool by name within the organization
+        const tool = await this.toolRepository.findOne({
+          where: { name: tc.name, organizationId, status: 'active' as any },
+        });
+
+        if (!tool) {
+          return { id: tc.id, name: tc.name, result: null, error: `Tool '${tc.name}' not found` };
+        }
+
+        try {
+          const execResult = await this.toolExecutorService.executeTool(
+            tool.id,
+            tc.arguments,
+            { userId: null, organizationId, skipRateLimit: false },
+          );
+          return {
+            id: tc.id,
+            name: tc.name,
+            result: execResult.success ? execResult.data : null,
+            error: execResult.error,
+          };
+        } catch (err) {
+          this.logger.error(`A2A tool execution failed for ${tc.name}: ${err.message}`);
+          return { id: tc.id, name: tc.name, result: null, error: err.message };
+        }
+      }),
+    );
+
+    return results.map((r) =>
+      r.status === 'fulfilled'
+        ? r.value
+        : { id: '', name: '', result: null, error: (r.reason as Error).message },
+    );
+  }
+
+  /**
+   * Append a tool call round (assistant tool_calls + tool results) to the conversation.
+   */
+  private appendToolCallRound(
+    agentType: A2AAgentType,
+    messages: any[],
+    responseData: any,
+    toolCalls: Array<{ id: string; name: string; arguments: Record<string, any> }>,
+    toolResults: Array<{ id: string; name: string; result: any; error?: string }>,
+  ): any[] {
+    if (agentType === A2AAgentType.OPENAI) {
+      // Append the assistant message with tool_calls
+      messages.push(responseData.choices[0].message);
+      // Append each tool result
+      for (const tr of toolResults) {
+        messages.push({
+          role: 'tool',
+          tool_call_id: tr.id,
+          content: JSON.stringify(tr.error ? { error: tr.error } : tr.result),
+        });
+      }
+      return messages;
+    }
+
+    if (agentType === A2AAgentType.ANTHROPIC) {
+      // Append assistant message (all content blocks including tool_use)
+      messages.push({ role: 'assistant', content: responseData.content });
+      // Append tool results as a user message with tool_result blocks
+      messages.push({
+        role: 'user',
+        content: toolResults.map((tr) => ({
+          type: 'tool_result',
+          tool_use_id: tr.id,
+          content: tr.error ? JSON.stringify({ error: tr.error }) : JSON.stringify(tr.result),
+          is_error: !!tr.error,
+        })),
+      });
+      return messages;
+    }
+
+    return messages;
+  }
+
+  /**
+   * Build a follow-up LLM request with the full conversation history.
+   */
+  private buildLLMFollowUpRequest(
+    agent: A2AAgent,
+    messages: any[],
+    tools: Tool[],
+  ): AxiosRequestConfig {
+    const config: AxiosRequestConfig = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      timeout: agent.configuration?.timeout || 60000,
+    };
+
+    if (agent.authentication) {
+      this.applyAuthentication(config, agent.authentication);
+    }
+
+    if (agent.type === A2AAgentType.OPENAI) {
+      config.url = 'https://api.openai.com/v1/chat/completions';
+      const model = agent.metadata?.model || 'gpt-4o';
+      const openaiTools = tools.length > 0 ? tools.map(t => t.toOpenAPITool()) : undefined;
+      config.data = { model, messages, ...(openaiTools && { tools: openaiTools }) };
+    } else if (agent.type === A2AAgentType.ANTHROPIC) {
+      config.url = 'https://api.anthropic.com/v1/messages';
+      config.headers['anthropic-version'] = '2023-06-01';
+      const model = agent.metadata?.model || 'claude-sonnet-4-20250514';
+      const anthropicTools = tools.length > 0 ? tools.map(t => t.toAnthropicTool()) : undefined;
+      config.data = {
+        model,
+        max_tokens: 4096,
+        messages,
+        ...(anthropicTools && { tools: anthropicTools }),
+      };
+    }
+
+    return config;
+  }
+
+  /**
+   * Resolve Tool entities from message context (tool names or IDs).
+   */
+  private async resolveToolsFromContext(context?: A2AContext): Promise<Tool[]> {
+    if (!context) return [];
+
+    const orgId = context.organizationId;
+    if (!orgId) return [];
+
+    // Support both tool names and tool IDs
+    const toolNames = context.tools || [];
+    if (toolNames.length === 0) return [];
+
+    // Try loading by name first (most common in context)
+    const tools = await this.toolRepository.find({
+      where: toolNames.map(name => ({
+        name,
+        organizationId: orgId,
+        status: 'active' as any,
+      })),
+    });
+
+    // If no results by name, try by ID
+    if (tools.length === 0) {
+      const toolsById = await this.toolRepository.find({
+        where: toolNames.map(id => ({
+          id,
+          organizationId: orgId,
+          status: 'active' as any,
+        })),
+      });
+      return toolsById;
+    }
+
+    return tools;
   }
 
   // Session Management
@@ -479,20 +739,20 @@ export class A2AService extends EventEmitter {
   async registerAgentTool(
     agentId: string,
     toolRegistration: A2AToolRegistration,
-  ): Promise<void> {
+  ): Promise<Tool> {
     const agent = await this.getAgent(agentId);
     if (!agent) {
       throw new NotFoundException('Agent not found');
     }
 
-    // Create tool in our system based on agent registration
-    const toolData = {
+    // Create tool directly via repository (system-level operation, no user context)
+    const tool = this.toolRepository.create({
       name: `${agent.name}_${toolRegistration.toolName}`,
       description: toolRegistration.description || `Tool from agent ${agent.name}`,
       parameters: toolRegistration.inputSchema,
-      outputSchema: toolRegistration.outputSchema,
       type: 'function' as any,
-      operationId: null,
+      status: 'active' as any,
+      organizationId: agent.organizationId,
       metadata: {
         a2aAgent: {
           agentId,
@@ -500,15 +760,23 @@ export class A2AService extends EventEmitter {
           endpoint: toolRegistration.endpoint,
           method: toolRegistration.method,
         },
+        outputSchema: toolRegistration.outputSchema,
         autoGenerated: true,
         source: 'a2a_agent',
       },
-    };
+    });
 
-    // Register tool via tools service
-    // await this.toolsService.createTool(toolData, agent.organizationId, 'system');
+    const savedTool = await this.toolRepository.save(tool);
 
-    this.logger.log(`Tool registered for A2A agent ${agentId}: ${toolRegistration.toolName}`);
+    this.logger.log(`Tool registered for A2A agent ${agentId}: ${toolRegistration.toolName} (tool ID: ${savedTool.id})`);
+    return savedTool;
+  }
+
+  // Message retrieval
+  async getAgentMessages(agentId: string, limit = 50): Promise<A2AMessage[]> {
+    const messages = this.messageQueue.get(agentId) || [];
+    // Return most recent messages, up to limit
+    return messages.slice(-limit);
   }
 
   // Agent Discovery and Health Monitoring

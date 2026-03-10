@@ -82,10 +82,15 @@ export class AssertionsHelper {
 
   /**
    * Assert badge with text is visible
+   * Supports shadcn/ui Badge component (uses CVA classes, not literal "badge" class)
    */
   async assertBadge(text: string | RegExp) {
-    const badge = this.page.locator('.badge, [class*="badge"]').filter({ hasText: text })
-    await expect(badge).toBeVisible()
+    // shadcn/ui Badge renders as a div/span with inline-flex and rounded-full classes
+    // Try common badge selectors first, then fall back to any inline-flex rounded element
+    const badge = this.page.locator(
+      '.badge, [class*="badge"], div[class*="rounded-full"], span[class*="rounded-full"]'
+    ).filter({ hasText: text })
+    await expect(badge.first()).toBeVisible()
   }
 
   /**

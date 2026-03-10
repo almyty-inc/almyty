@@ -85,7 +85,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    navigate('/auth/login')
   }
 
   const handleOrgChange = (org: any) => {

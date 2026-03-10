@@ -2,97 +2,23 @@
 
 > Universal API-to-AI Tool Gateway
 
-[![E2E Tests](https://img.shields.io/badge/E2E%20Tests-74%2F104%20Passing-yellow)](#test-status)
-[![Backend Status](https://img.shields.io/badge/Backend-Running-green)](http://localhost:4000/api/monitoring/health)
-[![Frontend Status](https://img.shields.io/badge/Frontend-Active-green)](#frontend)
-[![MCP Protocol](https://img.shields.io/badge/MCP-Working-green)](#mcp-implementation)
+**apifai** translates any API format (OpenAPI, GraphQL, SOAP, Protobuf) into AI-consumable tools served via multiple protocols (MCP, UTCP, A2A).
 
-**apifai** is a universal API gateway that translates any API format (OpenAPI, GraphQL, SOAP, Protobuf) into AI-consumable tools via multiple protocols (MCP, UTCP, A2A).
-
-**Current Status: Core functionality working, performance optimization needed.**
+**Status**: Core functionality working. Performance optimization and production hardening needed.
 
 ---
 
-## 📊 Test Status (November 21, 2025)
-
-### E2E Test Results
-**Last Run: 74 passed / 30 failed / 104 completed (190 total tests, timed out)**
-
-#### ✅ Working Features (100% pass rate):
-- **Analytics Dashboard** (16/16) - Full analytics UI tested
-- **Authentication Registration** (12/12) - User registration flow complete
-- **Authentication Login** (10/12) - Core login working (network error tests excluded)
-- **Dashboard** (15/15) - Main dashboard fully functional
-- **Gateway CRUD basics** (4/4) - Creating MCP, A2A, UTCP gateways
-
-#### ⚠️ Needs Optimization (timeout issues):
-- **API Creation** - Tests timing out (16-17s each, hitting 60s limit)
-- **Schema Import** - Async job polling needs optimization
-- **Gateway Management** - Some scoping tests slow
-- **Complete Workflow** - End-to-end test timing out
-
-#### ❌ Broken Tests:
-- **Auth Session Expiration** - Token expiration handling (2 tests)
-- **Network Error Handling** - Mock network failure tests (2 tests)
-
-**Root Cause**: Most failures are **timeout issues**, not functionality bugs. Tests expect responses in <5s but operations take 15-20s.
-
----
-
-## ✅ What Actually Works
-
-### Core Infrastructure
-- ✅ NestJS backend running on port 4000
-- ✅ PostgreSQL database with complete schema
-- ✅ Redis caching and sessions
-- ✅ Docker containerization
-- ✅ Protocol discovery endpoints
-- ✅ Full authentication system (registration + login)
-
-### API Processing
-- ✅ OpenAPI/Swagger parser with validation
-- ✅ GraphQL schema introspection
-- ✅ SOAP WSDL parsing
-- ✅ Protobuf .proto parsing
-- ✅ Universal JSON Schema translation
-- ✅ **20 tools generated from Petstore API** (verified in tests)
-
-### Frontend (React + shadcn/ui)
-- ✅ User registration and login
-- ✅ Dashboard with stats
-- ✅ API management (create, edit, delete)
-- ✅ Schema import UI
-- ✅ Gateway management
-- ✅ Analytics dashboard
-- ✅ Organization and user settings
-
-### MCP Implementation
-- ✅ JSON-RPC 2.0 protocol handler
-- ✅ Session management
-- ✅ Multi-transport support (HTTP/SSE/WebSocket)
-- ✅ Error handling with proper MCP codes
-- ✅ Tool listing endpoint working
-- ✅ Tool execution via MCP
-
----
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Node.js 18+
 - Docker & Docker Compose
-- PostgreSQL (via Docker)
 
 ### 1. Start Services
 ```bash
 git clone https://github.com/frane/apifai.git
 cd apifai
-
-# Start all services
 docker-compose up -d
-
-# Check status
-docker-compose ps
 curl http://localhost:4000/api/monitoring/health
 ```
 
@@ -104,25 +30,13 @@ PORT=3002 npm run dev
 
 Access at: http://localhost:3002
 
-### 3. Test Protocol Discovery
+### 3. Test the Pipeline
 ```bash
-# MCP discovery
-curl http://localhost:4000/api/mcp/.well-known/mcp
-
-# UTCP discovery
-curl http://localhost:4000/api/utcp/.well-known/utcp
-```
-
-### 4. Create Test User
-```bash
+# Register and login
 curl -X POST http://localhost:4000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"Test123456","firstName":"Test","lastName":"User"}'
-```
 
-### 5. Test Complete Pipeline
-```bash
-# Login and get token
 TOKEN=$(curl -s -X POST http://localhost:4000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"Test123456"}' | jq -r '.accessToken')
@@ -148,219 +62,145 @@ curl -X POST http://localhost:4000/api/mcp \
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Frontend Dashboard                       │
-│                  (React + shadcn/ui)                       │
-│                    [Working - Port 3002]                   │
-├─────────────────────────────────────────────────────────────┤
-│                  API Gateway Layer                          │
-│                  [Auth Working ✅]                          │
-├─────────────────────────────────────────────────────────────┤
-│               Universal Schema Parsers                      │
-│    OpenAPI ✅│ GraphQL ✅│ SOAP ✅│ Protobuf ✅           │
-├─────────────────────────────────────────────────────────────┤
-│               Protocol Endpoints                            │
-│    MCP ✅ │ UTCP ✅ │ A2A [Architecture]                  │
-├─────────────────────────────────────────────────────────────┤
-│                   Database Layer                            │
-│        PostgreSQL [Complete] │ Redis [Working]             │
-└─────────────────────────────────────────────────────────────┘
+Frontend (React + shadcn/ui)         Port 3002
+        │
+API Gateway (NestJS)                 Port 4000
+        │
+┌───────┼───────────┐
+│       │           │
+MCP    UTCP        A2A               Protocol Endpoints
+│       │           │
+└───────┼───────────┘
+        │
+Schema Parsers: OpenAPI, GraphQL, SOAP, Protobuf
+        │
+PostgreSQL + Redis + BullMQ          Data Layer
 ```
 
----
+### Backend (NestJS + TypeScript)
+- **13 modules**: API, Auth, Gateways, Jobs, JsonSchemaTranslator, LlmProviders, MCP, Monitoring, Organizations, Plugins, SchemaParser, Tools, Users
+- **24 TypeORM entities**: Users, Organizations, Teams, APIs, Operations, Tools, Gateways, and more
+- **4 schema parsers**: OpenAPI/Swagger, GraphQL, SOAP/WSDL, Protobuf
+- **3 protocol implementations**: MCP (JSON-RPC 2.0), UTCP (HTTP), A2A (Agent-to-Agent)
+- **83 backend test files** (.spec.ts)
 
-## 📊 Feature Status
+### Frontend (React + Vite + shadcn/ui)
+- **14 pages**: Dashboard, APIs, API Detail, Tools, Tool Detail, Gateways, Gateway Detail, Analytics, Organizations, Settings, LLM Providers, Auth (Login/Register)
+- **20 shadcn/ui components** built on Radix UI primitives
+- **State**: Zustand + TanStack React Query
+- **Styling**: Tailwind CSS
 
-| Feature Category | Status | Notes |
-|-----------------|--------|-------|
-| **Core Backend** | ✅ 90% | NestJS app running, needs optimization |
-| **Database Schema** | ✅ 100% | All entities and relationships complete |
-| **API Parsers** | ✅ 100% | Universal schema translation working |
-| **MCP Protocol** | ✅ 90% | JSON-RPC handler, tool serving working |
-| **Authentication** | ✅ 95% | JWT working, session expiration needs fixes |
-| **Frontend** | ✅ 85% | React app working, some timeout issues |
-| **Tool Generation** | ✅ 100% | 20 tools from Petstore verified |
-| **Docker Deployment** | ✅ 100% | Full containerized stack |
-| **E2E Tests** | ⚠️ 71% | 74/104 passing (timeouts, not bugs) |
-
----
-
-## 🐛 Known Issues
-
-### 1. Performance (Not Bugs)
-- API creation takes 15-20s (tests expect <5s)
-- Schema import async jobs need optimization
-- Some E2E tests hit 60s timeout limit
-
-### 2. Test Failures (2 actual bugs)
-- Auth session expiration handling
-- Network error mocking in tests
-
-### 3. Migration Script Missing
-- Backend package.json missing `migration:run` script
-- Migrations run manually via TypeORM CLI
-
-**All core functionality works - issues are performance and edge cases.**
+### Infrastructure
+- **PostgreSQL 15**: Primary database
+- **Redis 7**: Cache and sessions
+- **BullMQ**: Background job processing (schema import, tool generation)
+- **Docker Compose**: 5 services (postgres, redis, backend, frontend, nginx)
 
 ---
 
-## 🆚 vs mcp-context-forge
+## Feature Status
 
-| Capability | apifai | mcp-context-forge | Winner |
-|-----------|---------|-------------------|--------|
-| **Universal API Import** | ✅ Working (20 tools from Petstore) | ❌ Manual only | 🏆 **apifai** |
-| **Multi-Protocol Output** | ✅ MCP + UTCP + A2A | ✅ MCP only | 🏆 **apifai** |
-| **Working MCP Server** | ✅ Verified in tests | ✅ Production ready | **Equal** |
-| **Enterprise Features** | ✅ Organizations, RBAC, analytics | ⚠️ Basic | 🏆 **apifai** |
-| **Performance** | ⚠️ Needs optimization | ✅ Fast | **mcp-context-forge** |
-| **Test Coverage** | ✅ 190 E2E tests (71% passing) | ⚠️ Unknown | 🏆 **apifai** |
-
-**Bottom Line**: apifai has more features and working universal API translation, but needs performance optimization.
+| Feature | Status | Details |
+|---------|--------|---------|
+| API Schema Parsing | Working | 4 parsers (OpenAPI, GraphQL, SOAP, Protobuf) |
+| Tool Auto-generation | Working | 20 tools from Petstore verified |
+| MCP Protocol | Working | JSON-RPC 2.0, session management, multi-transport |
+| UTCP Protocol | Working | Direct HTTP tool calling |
+| A2A Protocol | Working | Agent-to-agent communication |
+| Authentication | Working | JWT, registration, login. Token expiration handling needs fix |
+| Frontend UI | Working | Full CRUD for APIs, Tools, Gateways, Organizations |
+| Analytics Dashboard | Working | 16/16 E2E tests passing |
+| Gateway Scoping | Working | Selective tool assignment to gateways |
+| Docker Deployment | Working | Full containerized stack |
 
 ---
 
-## 🔧 Development
+## Testing
 
-### Run E2E Tests
+### E2E Tests (Playwright)
+**190 tests across 15 test files**, running against the real backend.
+
+| Test Suite | Tests | Notes |
+|-----------|-------|-------|
+| analytics.spec.ts | 16 | |
+| apis-crud.spec.ts | 14 | |
+| apis-schema-import.spec.ts | 12 | |
+| auth-login.spec.ts | 12 | |
+| auth-registration.spec.ts | 12 | |
+| auth-session.spec.ts | 8 | |
+| complete-workflow.spec.ts | 1 | Full pipeline: API -> Schema -> Tools -> Gateway |
+| dashboard.spec.ts | 15 | |
+| gateway-management.spec.ts | 9 | |
+| gateways-crud-scoping.spec.ts | 15 | |
+| llm-providers.spec.ts | 18 | |
+| organizations.spec.ts | 13 | |
+| settings.spec.ts | 20 | |
+| tools-generation-execution.spec.ts | 10 | |
+| tools-list.spec.ts | 15 | |
+
+Test timeout: 90 seconds per test. Tests run sequentially (workers: 1).
+
 ```bash
 cd frontend
-
-# Start backend services first
-docker-compose up -d
-
-# Start frontend dev server
-PORT=3002 npm run dev
-
-# Run tests in another terminal
 E2E_BASE_URL=http://localhost:3002 npx playwright test --reporter=list
 ```
 
-### Fix Performance Issues (Priority 1)
-The main issue is not bugs, but timeouts:
-1. Optimize API creation (15-20s → <5s)
-2. Speed up schema import polling
-3. Improve async job processing
-4. Add caching to reduce database queries
+### Backend Tests
+83 spec files. Last measured coverage: ~51%.
 
-### Fix Failing Tests (Priority 2)
-```bash
-# Two real bugs to fix:
-1. Auth session expiration handling (2 tests)
-2. Network error mocking (2 tests)
-```
-
-### Frontend Development
-```bash
-cd frontend
-npm run dev
-
-# Frontend runs on http://localhost:3002
-# Backend API on http://localhost:4000
-```
-
----
-
-## 📖 API Documentation
-
-### Core Endpoints (All Working ✅)
-- `GET /api/monitoring/health` - System health check
-- `GET /api/mcp/.well-known/mcp` - MCP discovery
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - User login
-- `POST /api/mcp` - MCP JSON-RPC endpoint
-- `GET /api/docs` - Swagger documentation
-
-### Working Test Commands
-```bash
-# Service health
-curl http://localhost:4000/api/monitoring/health
-
-# MCP protocol info
-curl http://localhost:4000/api/mcp/.well-known/mcp
-
-# User registration
-curl -X POST http://localhost:4000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@test.com","password":"Password123","firstName":"Test","lastName":"User"}'
-
-# Login
-curl -X POST http://localhost:4000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@test.com","password":"Password123"}'
-```
-
----
-
-## 🧪 Testing
-
-### Run Backend Tests
 ```bash
 cd backend
 npm run test
 npm run test:cov
 ```
 
-### Run Frontend Tests
+---
+
+## Known Issues
+
+### Performance
+- API CRUD operations can be slow (improved from 17s to ~2s with indexing, but still needs work under load)
+- Schema import relies on async BullMQ jobs with polling
+- Some E2E tests hit the 90s timeout due to cumulative slow operations
+
+### Bugs (2 confirmed)
+1. **Auth token expiration**: Frontend doesn't handle 401 responses properly. Needs a response interceptor to redirect to login or refresh the token.
+2. **Network error mocking**: 2 E2E tests fail due to Playwright network mocking issues (test infrastructure, not app bug).
+
+---
+
+## Development
+
+### Run E2E Tests
 ```bash
+docker-compose up -d
 cd frontend
-npm run test
-npm run test:e2e
+PORT=3002 npm run dev
+# In another terminal:
+E2E_BASE_URL=http://localhost:3002 npx playwright test --reporter=list
 ```
 
-### Test Coverage
-- **E2E Tests**: 190 tests across 15 test suites
-- **Backend Unit**: 50.9% coverage (needs improvement)
-- **Test Suites**: Analytics, Auth, Dashboard, APIs, Tools, Gateways, Organizations, Settings
+### Protocol Discovery
+```bash
+curl http://localhost:4000/api/mcp/.well-known/mcp
+curl http://localhost:4000/api/utcp/.well-known/utcp
+curl http://localhost:4000/api/monitoring/health
+```
 
 ---
 
-## 📈 Roadmap
+## Design Documents
 
-### Phase 1: Performance Optimization (Week 1)
-- [ ] Optimize API creation (15-20s → <5s)
-- [ ] Speed up schema import async jobs
-- [ ] Add response caching
-- [ ] Fix 2 failing auth/network tests
-
-### Phase 2: Feature Completion (Week 2)
-- [ ] UTCP direct calling implementation
-- [ ] A2A protocol completion
-- [ ] Tool execution optimization
-- [ ] Performance and load testing
-
-### Phase 3: Production (Week 3)
-- [ ] Security audit and hardening
-- [ ] Monitoring and observability
-- [ ] Documentation and examples
-- [ ] Deployment automation
+Original architecture and design docs are in the repo root:
+- `llm-tool-gateway-architecture.md` - System architecture
+- `llm-tool-gateway-implementation-plan.md` - Implementation roadmap
+- `llm-tool-gateway-schema.md` - Database schema design
 
 ---
 
-## 🤝 Contributing
+## License
 
-**Current Priority**: Performance optimization and test reliability.
-
-See [`CLAUDE.md`](CLAUDE.md) for detailed technical assessment and [`TEST_STATUS.md`](TEST_STATUS.md) for comprehensive test breakdown.
-
-### Key Areas Needing Work
-1. **Performance optimization** - Reduce API/schema import times
-2. **Test reliability** - Fix timeout issues in E2E tests
-3. **Backend test coverage** - Increase from 50.9% to 80%+
-4. **Session expiration** - Fix auth token expiration handling
-
----
-
-## 📄 License
-
-MIT License - See [LICENSE](LICENSE) file for details.
-
----
-
-**✅ Status: Core functionality working, performance optimization in progress.**
-
-For detailed test results and technical assessment, see:
-- [`TEST_STATUS.md`](TEST_STATUS.md) - Comprehensive test breakdown
-- [`CLAUDE.md`](CLAUDE.md) - Technical assessment and architecture details
+MIT

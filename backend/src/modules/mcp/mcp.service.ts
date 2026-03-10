@@ -1,6 +1,8 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import * as Redis from 'ioredis';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -58,6 +60,7 @@ export class McpService {
     private gatewayToolRepository: Repository<GatewayTool>,
     private toolsService: ToolsService,
     private toolExecutorService: ToolExecutorService,
+    @InjectRedis() private readonly redis: Redis.Redis,
   ) {}
 
   // Core JSON-RPC Handler
@@ -204,6 +207,17 @@ export class McpService {
   }
 
   private async handleToolsList(params: any, organizationId: string, gatewayId?: string): Promise<McpToolsListResult> {
+    // Check Redis cache first (60s TTL)
+    const cacheKey = `mcp:tools:${organizationId}:${gatewayId || 'all'}`;
+    try {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (e) {
+      // Cache miss or Redis error — continue to query
+    }
+
     let tools: any[];
 
     if (gatewayId) {
@@ -229,9 +243,16 @@ export class McpService {
       },
     }));
 
-    return {
-      tools: mcpTools,
-    };
+    const result = { tools: mcpTools };
+
+    // Cache for 60 seconds
+    try {
+      await this.redis.setex(cacheKey, 60, JSON.stringify(result));
+    } catch (e) {
+      // Non-critical — log and continue
+    }
+
+    return result;
   }
 
   /**

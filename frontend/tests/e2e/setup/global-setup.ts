@@ -12,47 +12,50 @@ const execAsync = promisify(exec)
 async function globalSetup(config: FullConfig) {
   console.log('\n🚀 Starting E2E test environment setup...\n')
 
-  // Check if Docker is running
+  // Check if backend is already running (local dev mode)
+  const backendHealthUrl = 'http://localhost:4000/monitoring/health'
+  let backendRunning = false
   try {
-    await execAsync('docker ps')
-    console.log('✓ Docker is running')
-  } catch (error) {
-    console.error('✗ Docker is not running. Please start Docker.')
-    throw new Error('Docker is required for E2E tests')
+    await axios.get(backendHealthUrl, { timeout: 3000 })
+    backendRunning = true
+    console.log('✓ Backend already running locally')
+  } catch {
+    backendRunning = false
   }
 
-  // Start Docker Compose services if not already running
-  console.log('\n📦 Starting Docker Compose services...')
-  try {
-    const rootDir = process.cwd().includes('/frontend') ? '..' : '.'
-    const { stdout } = await execAsync(`cd ${rootDir} && docker-compose ps --services --filter "status=running"`)
-    const runningServices = stdout.trim().split('\n').filter(Boolean)
+  if (!backendRunning) {
+    // Check if Docker is running
+    try {
+      await execAsync('docker ps')
+      console.log('✓ Docker is running')
+    } catch (error) {
+      console.error('✗ Docker is not running and backend is not running locally.')
+      throw new Error('Either start the backend locally or ensure Docker is running')
+    }
 
-    if (runningServices.length < 3) {
+    // Start Docker Compose services
+    console.log('\n📦 Starting Docker Compose services...')
+    try {
+      const rootDir = process.cwd().includes('/frontend') ? '..' : '.'
       console.log('Starting services: postgres, redis, backend...')
       await execAsync(`cd ${rootDir} && docker-compose up -d postgres redis backend`)
-    } else {
-      console.log('✓ Services already running')
+    } catch (error) {
+      console.error('✗ Failed to start Docker Compose services:', error)
+      throw error
     }
-  } catch (error) {
-    console.error('✗ Failed to start Docker Compose services:', error)
-    throw error
-  }
 
-  // Wait for services to be healthy
-  console.log('\n⏳ Waiting for services to be healthy...')
-  // PostgreSQL and Redis are confirmed running via docker-compose ps
-  // Only check backend API health which has an actual HTTP endpoint
-  await waitForService('Backend API', 'http://localhost:4000/monitoring/health', 60000)
+    // Wait for backend to be healthy
+    await waitForService('Backend API', backendHealthUrl, 60000)
+  }
 
   // Run database migrations
   console.log('\n🗄️  Running database migrations...')
   try {
     const rootDir = process.cwd().includes('/frontend') ? '..' : '.'
-    await execAsync(`cd ${rootDir}/backend && npm run migration:run`)
+    await execAsync(`cd ${rootDir}/backend && npm run typeorm:migration:run`)
     console.log('✓ Migrations completed')
   } catch (error) {
-    console.warn('⚠ Migration failed (might already be up to date):', error)
+    console.warn('⚠ Migration failed (might already be up to date)')
   }
 
   // Clean test database (remove old test data)

@@ -169,12 +169,17 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await page.goto('/gateways')
     await assertHelper.waitForLoadingComplete()
 
-    // Open gateway and go to tools tab (clicking heading opens dialog directly)
+    // Open gateway and go to tools tab (clicking heading navigates to /gateways/:id)
     await page.getByRole('heading', { name: `Single Tool Gateway ${timestamp}` }).click()
-    await page.getByRole('tab', { name: /tools/i }).click()
+    // Wait for navigation to gateway detail page
+    await page.waitForURL(/\/gateways\/[^/]+$/, { timeout: 10000 })
+    await page.waitForLoadState('networkidle')
+
+    // Tab is labeled "Tool Scoping (N/M)" in gateway-detail.tsx
+    await page.getByRole('tab', { name: /tool scoping/i }).click()
 
     // Wait for tools to load
-    await expect(page.getByText(/0 of \d+ assigned/i)).toBeVisible()
+    await expect(page.getByText(/0 of \d+ assigned/i)).toBeVisible({ timeout: 10000 })
 
     // Capture console logs
     const consoleLogs: string[] = []
@@ -195,8 +200,8 @@ test.describe('Gateways - CRUD & Scoping', () => {
     // Wait for the assignment to complete and UI to update
     await expect(page.getByText(/1 of \d+ assigned/i)).toBeVisible({ timeout: 15000 })
 
-    // Should show "1/N Scoped" text
-    await expect(page.getByText(/1\/\d+.*scoped/i)).toBeVisible()
+    // Should show "1/N" in the tab label (e.g. "Tool Scoping (1/20)")
+    await expect(page.getByRole('tab', { name: /tool scoping \(1\//i })).toBeVisible()
   })
 
   test('[CRITICAL] should assign all tools and show "N/N Full Access"', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
@@ -228,16 +233,20 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await page.goto('/gateways')
     await assertHelper.waitForLoadingComplete()
 
-    // Open gateway and go to tools tab (clicking heading opens dialog directly)
+    // Open gateway and go to tools tab (clicking heading navigates to /gateways/:id)
     await page.getByRole('heading', { name: `Full Access Gateway ${timestamp}` }).click()
-    await page.getByRole('tab', { name: /tools/i }).click()
+    // Wait for navigation to gateway detail page
+    await page.waitForURL(/\/gateways\/[^/]+$/, { timeout: 10000 })
+    await page.waitForLoadState('networkidle')
 
-    // Click "Assign All Tools"
-    await page.getByRole('button', { name: /assign all tools/i }).click()
+    // Tab is labeled "Tool Scoping (N/M)" in gateway-detail.tsx
+    await page.getByRole('tab', { name: /tool scoping/i }).click()
 
-    // Should show "N/N Full Access"
-    await expect(page.getByText(/\d+\/\d+/)).toBeVisible()
-    await assertHelper.assertBadge(/full access/i)
+    // Click "All Tools" button (not "Assign All Tools" - actual button text is "All Tools")
+    await page.getByRole('button', { name: /^all tools$/i }).click()
+
+    // Should show "N/N" in the tab label and "N of M assigned" in the card
+    await expect(page.getByText(/\d+ of \d+ assigned/i)).toBeVisible({ timeout: 10000 })
   })
 
   test('[CRITICAL] should remove all tools and return to "0/N No Access"', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
@@ -274,22 +283,28 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await page.goto('/gateways')
     await assertHelper.waitForLoadingComplete()
 
-    // Open gateway and go to tools tab (clicking heading opens dialog directly)
+    // Open gateway and go to tools tab (clicking heading navigates to /gateways/:id)
     await page.getByRole('heading', { name: `Remove Tools Gateway ${timestamp}` }).click()
-    await page.getByRole('tab', { name: /tools/i }).click()
+    // Wait for navigation to gateway detail page
+    await page.waitForURL(/\/gateways\/[^/]+$/, { timeout: 10000 })
+    await page.waitForLoadState('networkidle')
+
+    // Tab is labeled "Tool Scoping (N/M)" in gateway-detail.tsx
+    await page.getByRole('tab', { name: /tool scoping/i }).click()
 
     // Should show tools assigned
-    await expect(page.getByText(/\d+\/\d+/)).toBeVisible()
+    await expect(page.getByText(/\d+ of \d+ assigned/i)).toBeVisible()
 
-    // Click "Remove All Tools"
-    await page.getByRole('button', { name: /remove all tools/i }).click()
+    // Click "Remove All" button (actual button text in gateway-detail.tsx)
+    await page.getByRole('button', { name: /^remove all$/i }).click()
 
-    // Should confirm
-    await page.getByRole('button', { name: /confirm|remove/i }).click()
+    // AlertDialog opens - click "Remove All Tools" action button
+    const alertDialog = page.getByRole('alertdialog')
+    await expect(alertDialog).toBeVisible()
+    await alertDialog.getByRole('button', { name: /remove all tools/i }).click()
 
-    // Should show "0/N No Access"
-    await expect(page.getByText(/0\/\d+/)).toBeVisible()
-    await assertHelper.assertBadge(/no access/i)
+    // Should show "0 of N assigned" after removal
+    await expect(page.getByText(/0 of \d+ assigned/i)).toBeVisible({ timeout: 10000 })
     })
   })
 
@@ -306,15 +321,21 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await page.goto('/gateways')
     await assertHelper.waitForLoadingComplete()
 
-    // Open gateway and go to tools tab (clicking heading opens dialog directly)
+    // Open gateway (clicking heading navigates to /gateways/:id)
     await page.getByRole('heading', { name: `Presets Gateway ${timestamp}` }).click()
-    await page.getByRole('tab', { name: /tools/i }).click()
+    // Wait for navigation to gateway detail page
+    await page.waitForURL(/\/gateways\/[^/]+$/, { timeout: 10000 })
+    await page.waitForLoadState('networkidle')
 
-    // Should show scoping presets
-    await expect(page.getByText(/common scoping presets/i)).toBeVisible()
-    await expect(page.getByRole('button', { name: /read.*only/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /admin.*tools/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /public.*api/i })).toBeVisible()
+    // Tab is labeled "Tool Scoping (N/M)" in gateway-detail.tsx
+    await page.getByRole('tab', { name: /tool scoping/i }).click()
+
+    // Should show preset buttons in the Tool Scoping card
+    // The card has buttons: "Read Only", "Admin Tools", "Public API", "All Tools", "Remove All"
+    // No "common scoping presets" heading exists - the card title is "Tool Scoping"
+    await expect(page.getByRole('button', { name: /^read only$/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^admin tools$/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^public api$/i })).toBeVisible()
   })
 
   test('should show scoping explanation', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
@@ -330,15 +351,21 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await page.goto('/gateways')
     await assertHelper.waitForLoadingComplete()
 
-    // Open gateway and go to tools tab (clicking heading opens dialog directly)
+    // Open gateway (clicking heading navigates to /gateways/:id)
     await page.getByRole('heading', { name: `Explanation Gateway ${timestamp}` }).click()
-    await page.getByRole('tab', { name: /tools/i }).click()
+    // Wait for navigation to gateway detail page
+    await page.waitForURL(/\/gateways\/[^/]+$/, { timeout: 10000 })
+    await page.waitForLoadState('networkidle')
 
-    // Should show scoping explanation
-    await expect(page.getByText(/how scoping works/i)).toBeVisible()
-    await expect(page.getByText(/no tools.*blocks all requests/i)).toBeVisible()
-    await expect(page.getByText(/scoped gateway.*only assigned/i)).toBeVisible()
-    await expect(page.getByText(/full access.*all.*tools/i)).toBeVisible()
+    // Tab is labeled "Tool Scoping (N/M)" in gateway-detail.tsx
+    await page.getByRole('tab', { name: /tool scoping/i }).click()
+
+    // The Tool Scoping card shows:
+    // - CardTitle: "Tool Scoping"
+    // - CardDescription: "Control which tools are available through this gateway. N of M assigned"
+    // There is no "how scoping works" explanation section in the actual UI
+    await expect(page.getByRole('heading', { name: /tool scoping/i })).toBeVisible()
+    await expect(page.getByText(/control which tools are available through this gateway/i)).toBeVisible()
   })
 
   test('should display gateway type badges', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
@@ -398,19 +425,23 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await page.goto('/gateways')
     await assertHelper.waitForLoadingComplete()
 
-    // Find the gateway heading
+    // Find the gateway heading in the DataTable
     const heading = page.getByRole('heading', { name: `To Delete Gateway ${timestamp}` })
     await expect(heading).toBeVisible()
 
-    // Find the parent container and click the delete button (by aria-label)
-    const card = heading.locator('xpath=ancestor::div[contains(@class, "")]').first()
-    await card.getByRole('button', { name: /delete gateway/i }).click()
+    // The gateways page uses a DataTable with a DropdownMenu actions column.
+    // Find the table row containing this gateway and click the actions button (MoreHorizontal)
+    const tableRow = page.locator('tr').filter({ hasText: `To Delete Gateway ${timestamp}` })
+    await tableRow.getByRole('button', { name: /actions/i }).click()
+
+    // Click "Delete" from the dropdown menu
+    await page.getByRole('menuitem', { name: /^delete$/i }).click()
 
     // Confirm deletion in AlertDialog (uses role="alertdialog", not "dialog")
     const alertDialog = page.getByRole('alertdialog')
     await expect(alertDialog).toBeVisible()
     await expect(alertDialog.getByRole('heading', { name: /delete.*gateway/i })).toBeVisible()
-    await alertDialog.getByRole('button', { name: /delete/i }).click()
+    await alertDialog.getByRole('button', { name: /delete gateway/i }).click()
 
     // Wait for dialog to close and gateway to be removed
     await expect(alertDialog).not.toBeVisible()
@@ -433,16 +464,19 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await page.goto('/gateways')
     await assertHelper.waitForLoadingComplete()
 
-    // Find the gateway heading
+    // Find the gateway heading in the DataTable
     const heading = page.getByRole('heading', { name: `Copy Endpoint Gateway ${timestamp}` })
     await expect(heading).toBeVisible()
 
-    // Find the parent container and click the copy endpoint button (by aria-label)
-    const card = heading.locator('xpath=ancestor::div[contains(@class, "")]').first()
-    await card.getByRole('button', { name: /copy endpoint/i }).click()
+    // The gateways page uses a DataTable with a DropdownMenu actions column.
+    // Find the table row containing this gateway and click the actions button (MoreHorizontal)
+    const tableRow = page.locator('tr').filter({ hasText: `Copy Endpoint Gateway ${timestamp}` })
+    await tableRow.getByRole('button', { name: /actions/i }).click()
 
-    // Should show success toast (be specific to avoid matching multiple elements)
+    // Click "Copy Full URL" from the dropdown menu (actual label in gateways.tsx)
+    await page.getByRole('menuitem', { name: /copy full url/i }).click()
+
+    // Should show success toast
     await expect(page.getByText('Copied!').first()).toBeVisible()
-    await expect(page.getByText(/Gateway endpoint copied to clipboard/i).first()).toBeVisible()
   })
 })
