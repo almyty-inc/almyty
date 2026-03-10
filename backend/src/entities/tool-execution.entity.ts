@@ -33,6 +33,10 @@ export class ToolExecution {
   @Index()
   organizationId: string;
 
+  @Column('uuid', { nullable: true })
+  @Index()
+  gatewayId: string | null;
+
   @Column('json')
   parameters: Record<string, any>;
 
@@ -63,6 +67,10 @@ export class ToolExecution {
     apiCallId?: string;
     userAgent?: string;
     clientIp?: string;
+    // Security audit fields
+    securityWarnings?: string[]; // Input sanitization warnings
+    ssrfBlocked?: boolean; // Whether SSRF protection was triggered
+    integrityVerified?: boolean; // Whether tool hash was verified
     [key: string]: any;
   };
 

@@ -68,6 +68,15 @@ export class GatewayTool {
   lastUsedAt: Date;
 
   @Column({ type: 'json', nullable: true })
+  securityPolicy: {
+    allowedDomains?: string[]; // Restrict tool to only call these domains
+    blockedDomains?: string[]; // Block tool from calling these domains
+    maxResponseSizeBytes?: number; // Per-tool response size limit
+    allowedHttpMethods?: string[]; // Restrict HTTP methods (GET, POST, etc.)
+    requireHttps?: boolean; // Force HTTPS only
+  } | null;
+
+  @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
 
   @CreateDateColumn()
