@@ -66,11 +66,11 @@ import { databaseConfig } from './config/database.config';
 
         return {
           type: 'postgres' as const,
-          host: configService.get('DATABASE_HOST', 'localhost'),
-          port: parseInt(configService.get('DATABASE_PORT', '5432')),
-          username: configService.get('DATABASE_USERNAME', 'postgres'),
-          password: configService.get('DATABASE_PASSWORD', 'password'),
-          database: configService.get('DATABASE_NAME', 'apifai'),
+          host: configService.get<string>('DATABASE_HOST', 'localhost'),
+          port: parseInt(configService.get<string>('DATABASE_PORT', '5432')),
+          username: configService.get<string>('DATABASE_USERNAME', 'postgres'),
+          password: configService.get<string>('DATABASE_PASSWORD', 'password'),
+          database: configService.get<string>('DATABASE_NAME', 'apifai'),
           entities: [__dirname + '/entities/*.entity{.ts,.js}'],
           synchronize: configService.get('NODE_ENV') === 'development',
           logging: configService.get('NODE_ENV') === 'development',
