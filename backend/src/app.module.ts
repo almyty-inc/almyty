@@ -64,6 +64,9 @@ import { databaseConfig } from './config/database.config';
       useFactory: (configService: ConfigService) => ({
         ...databaseConfig,
         url: configService.get('DATABASE_URL'),
+        ssl: configService.get('NODE_ENV') === 'production'
+          ? { rejectUnauthorized: false }
+          : false,
       }),
     }),
 
