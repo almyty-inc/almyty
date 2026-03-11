@@ -61,13 +61,19 @@ import { databaseConfig } from './config/database.config';
     // Database
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        ...databaseConfig,
-        url: configService.get('DATABASE_URL'),
-        ssl: (configService.get('DATABASE_URL') || '').includes('sslmode=require')
-          ? { rejectUnauthorized: false }
-          : false,
-      }),
+      useFactory: (configService: ConfigService) => {
+        const databaseUrl = configService.get('DATABASE_URL');
+        const dbSsl = configService.get('DB_SSL', 'false') === 'true';
+
+        return {
+          ...databaseConfig,
+          ...(databaseUrl && { url: databaseUrl }),
+          ssl: dbSsl ? { rejectUnauthorized: false } : false,
+          extra: {
+            ...(dbSsl && { ssl: { rejectUnauthorized: false } }),
+          },
+        };
+      },
     }),
 
     // Entities registration

@@ -43,6 +43,9 @@ patches:
       - op: replace
         path: /data/REDIS_HOST
         value: "staging-apifai-redis"
+      - op: replace
+        path: /data/DB_SSL
+        value: "true"
 
   - target:
       kind: Deployment

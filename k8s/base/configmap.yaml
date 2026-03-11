@@ -8,6 +8,7 @@ data:
   DATABASE_HOST: "apifai-postgres"
   DATABASE_PORT: "5432"
   DATABASE_NAME: "apifai"
+  DB_SSL: "false"
 
   # Redis Configuration
   REDIS_HOST: "apifai-redis"
