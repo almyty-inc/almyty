@@ -7,7 +7,7 @@ namePrefix: staging-
 
 resources:
   - ../../base
-  - secret.yaml
+  # secret.yaml removed — secrets managed via kubectl in CI/CD workflow
 
 patches:
   - target:

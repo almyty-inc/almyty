@@ -87,6 +87,18 @@ jobs:
             --namespace=apifai-staging \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Create application secrets
+        run: |
+          kubectl create secret generic apifai-secrets \
+            --from-literal=DATABASE_USERNAME=${{ secrets.STAGING_DATABASE_USERNAME }} \
+            --from-literal=DATABASE_PASSWORD=${{ secrets.STAGING_DATABASE_PASSWORD }} \
+            --from-literal=DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }} \
+            --from-literal=REDIS_PASSWORD="" \
+            --from-literal=REDIS_URL="redis://staging-apifai-redis:6379" \
+            --from-literal=JWT_SECRET=${{ secrets.STAGING_JWT_SECRET }} \
+            --namespace=apifai-staging \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Update image tags with git SHA
         run: |
           cd k8s/overlays/staging
