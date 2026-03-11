@@ -27,4 +27,4 @@ data:
   JWT_EXPIRES_IN: "24h"
 
   # CORS
-  CORS_ORIGIN: "https://app.apifai.io"
+  CORS_ORIGIN: "https://app.apif.ai"

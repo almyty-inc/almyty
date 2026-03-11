@@ -33,7 +33,7 @@ patches:
         value: warn
       - op: replace
         path: /data/CORS_ORIGIN
-        value: "https://app.apifai.io"
+        value: "https://app.apif.ai"
 
   - target:
       kind: Deployment
@@ -69,16 +69,16 @@ patches:
         value: letsencrypt-prod
       - op: replace
         path: /spec/tls/0/hosts/0
-        value: api.apifai.io
+        value: api.apif.ai
       - op: replace
         path: /spec/tls/1/hosts/0
-        value: app.apifai.io
+        value: app.apif.ai
       - op: replace
         path: /spec/rules/0/host
-        value: api.apifai.io
+        value: api.apif.ai
       - op: replace
         path: /spec/rules/1/host
-        value: app.apifai.io
+        value: app.apif.ai
 
 images:
   - name: ghcr.io/frane/apifai/api

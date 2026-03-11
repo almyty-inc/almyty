@@ -53,7 +53,7 @@ jobs:
           target: production
           push: true
           build-args: |
-            VITE_API_BASE_URL=https://dev.api.apifai.io
+            VITE_API_BASE_URL=https://api.dev.apif.ai
           tags: |
             ${{ env.REGISTRY }}/frontend:${{ env.TAG }}
             ${{ env.REGISTRY }}/frontend:dev-latest
@@ -108,5 +108,5 @@ jobs:
           echo "📦 Version: dev-${{ github.sha }}"
           echo ""
           echo "🌐 URLs:"
-          echo "  API: https://dev.api.apifai.io"
-          echo "  App: https://dev.app.apifai.io"
+          echo "  API: https://api.dev.apif.ai"
+          echo "  App: https://app.dev.apif.ai"
