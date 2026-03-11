@@ -159,11 +159,16 @@ spec:
             configMapKeyRef:
               name: apifai-config
               key: DATABASE_HOST
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: apifai-config
+              key: DATABASE_PORT
         command:
         - sh
         - -c
         - |
-          until pg_isready -h $DATABASE_HOST -p 5432 -U postgres; do
+          until pg_isready -h $DATABASE_HOST -p $DATABASE_PORT -U postgres; do
             echo "Waiting for postgres..."
             sleep 2
           done

@@ -36,7 +36,10 @@ patches:
         value: "https://app.staging.apif.ai"
       - op: replace
         path: /data/DATABASE_HOST
-        value: "staging-apifai-postgres"
+        value: "apifai-db-do-user-4308986-0.j.db.ondigitalocean.com"
+      - op: replace
+        path: /data/DATABASE_PORT
+        value: "25060"
       - op: replace
         path: /data/REDIS_HOST
         value: "staging-apifai-redis"
