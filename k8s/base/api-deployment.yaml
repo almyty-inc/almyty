@@ -153,21 +153,33 @@ spec:
       initContainers:
       - name: wait-for-postgres
         image: postgres:16-alpine
+        env:
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: apifai-config
+              key: DATABASE_HOST
         command:
         - sh
         - -c
         - |
-          until pg_isready -h apifai-postgres -p 5432 -U postgres; do
+          until pg_isready -h $DATABASE_HOST -p 5432 -U postgres; do
             echo "Waiting for postgres..."
             sleep 2
           done
       - name: wait-for-redis
         image: redis:7-alpine
+        env:
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: apifai-config
+              key: REDIS_HOST
         command:
         - sh
         - -c
         - |
-          until redis-cli -h apifai-redis ping; do
+          until redis-cli -h $REDIS_HOST ping; do
             echo "Waiting for redis..."
             sleep 2
           done

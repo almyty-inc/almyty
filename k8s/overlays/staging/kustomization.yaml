@@ -34,6 +34,12 @@ patches:
       - op: replace
         path: /data/CORS_ORIGIN
         value: "https://app.staging.apif.ai"
+      - op: replace
+        path: /data/DATABASE_HOST
+        value: "staging-apifai-postgres"
+      - op: replace
+        path: /data/REDIS_HOST
+        value: "staging-apifai-redis"
 
   - target:
       kind: Deployment
