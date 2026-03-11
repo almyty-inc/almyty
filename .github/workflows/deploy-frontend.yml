@@ -2,7 +2,7 @@ name: Deploy Frontend (Quick)
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'frontend/**'
   workflow_dispatch:
@@ -42,7 +42,7 @@ jobs:
           target: production
           push: true
           build-args: |
-            VITE_API_BASE_URL=https://api.staging.apifai.io
+            VITE_API_BASE_URL=https://api.staging.apif.ai
           tags: |
             ${{ env.REGISTRY }}/frontend:${{ env.TAG }}
             ${{ env.REGISTRY }}/frontend:staging-latest

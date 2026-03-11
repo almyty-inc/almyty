@@ -33,7 +33,7 @@ patches:
         value: debug
       - op: replace
         path: /data/CORS_ORIGIN
-        value: "https://dev.app.apifai.io"
+        value: "https://app.dev.apif.ai"
 
   - target:
       kind: Deployment
@@ -69,22 +69,22 @@ patches:
         value: letsencrypt-staging
       - op: replace
         path: /spec/tls/0/hosts/0
-        value: dev.api.apifai.io
+        value: api.dev.apif.ai
       - op: replace
         path: /spec/tls/0/secretName
-        value: dev-api-apifai-io-tls
+        value: api-dev-apif-ai-tls
       - op: replace
         path: /spec/tls/1/hosts/0
-        value: dev.app.apifai.io
+        value: app.dev.apif.ai
       - op: replace
         path: /spec/tls/1/secretName
-        value: dev-app-apifai-io-tls
+        value: app-dev-apif-ai-tls
       - op: replace
         path: /spec/rules/0/host
-        value: dev.api.apifai.io
+        value: api.dev.apif.ai
       - op: replace
         path: /spec/rules/1/host
-        value: dev.app.apifai.io
+        value: app.dev.apif.ai
 
 images:
   - name: ghcr.io/frane/apifai/api
