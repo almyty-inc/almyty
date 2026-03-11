@@ -58,16 +58,23 @@ import { databaseConfig } from './config/database.config';
       envFilePath: ['.env.local', '.env'],
     }),
 
-    // Database
+    // Database — use individual params (not URL) for proper SSL control
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const databaseUrl = configService.get('DATABASE_URL');
         const dbSsl = configService.get('DB_SSL', 'false') === 'true';
 
         return {
-          ...databaseConfig,
-          ...(databaseUrl && { url: databaseUrl }),
+          type: 'postgres' as const,
+          host: configService.get('DATABASE_HOST', 'localhost'),
+          port: parseInt(configService.get('DATABASE_PORT', '5432')),
+          username: configService.get('DATABASE_USERNAME', 'postgres'),
+          password: configService.get('DATABASE_PASSWORD', 'password'),
+          database: configService.get('DATABASE_NAME', 'apifai'),
+          entities: [__dirname + '/entities/*.entity{.ts,.js}'],
+          synchronize: configService.get('NODE_ENV') === 'development',
+          logging: configService.get('NODE_ENV') === 'development',
+          autoLoadEntities: true,
           ssl: dbSsl ? { rejectUnauthorized: false } : false,
           extra: {
             ...(dbSsl && { ssl: { rejectUnauthorized: false } }),
