@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { ArrowLeft, Router, Copy, Zap, Edit2, Settings, Download, Terminal, FileCode, BookOpen, Check, Package, Shield } from 'lucide-react'
+import { ArrowLeft, Router, Copy, Zap, Edit2, Settings, BookOpen, Check, Package, Shield } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -119,21 +119,12 @@ function SecurityPolicyForm({ initialPolicy, onSave, isSaving }: {
 
 function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: string; gateway: any; orgSlug: string }) {
   const [copiedField, setCopiedField] = useState<string | null>(null)
-  const [cliFormat, setCliFormat] = useState<'bash' | 'node'>('bash')
+  const [showSkillPreview, setShowSkillPreview] = useState(false)
 
   const { data: skillsData, isLoading: skillsLoading } = useQuery({
     queryKey: ['gateway-skills', gatewayId],
     queryFn: () => gatewaysApi.getSkills(gatewayId),
-  })
-
-  const { data: cliData, isLoading: cliLoading } = useQuery({
-    queryKey: ['gateway-cli', gatewayId, cliFormat],
-    queryFn: () => gatewaysApi.getCliBundle(gatewayId, cliFormat),
-  })
-
-  const { data: sdkData, isLoading: sdkLoading } = useQuery({
-    queryKey: ['gateway-sdk', gatewayId],
-    queryFn: () => gatewaysApi.getSdk(gatewayId),
+    enabled: (gateway.type || '').toLowerCase() === 'skills',
   })
 
   const copyToClipboard = async (text: string, field: string) => {
@@ -144,251 +135,257 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
     } catch {}
   }
 
-  const downloadFile = (content: string, filename: string) => {
-    const blob = new Blob([content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const backendUrl = window.location.origin.replace(':3002', ':4000')
+  const backendUrl = window.location.origin.replace(':3002', ':4000').replace(':8080', ':3000')
   const gatewayType = (gateway.type || 'mcp').toLowerCase()
-
-  // Protocol-specific endpoint and discovery URL
-  const protocolEndpoints: Record<string, { endpoint: string; discovery: string; label: string; description: string }> = {
-    mcp: {
-      endpoint: `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`,
-      discovery: `${backendUrl}/api/mcp/.well-known/mcp`,
-      label: 'MCP (Model Context Protocol)',
-      description: 'JSON-RPC 2.0 protocol for AI agent tool access',
-    },
-    a2a: {
-      endpoint: `${backendUrl}/api/a2a/${orgSlug}${gateway.endpoint}`,
-      discovery: `${backendUrl}/.well-known/a2a`,
-      label: 'A2A (Agent-to-Agent)',
-      description: 'Agent-to-Agent protocol for inter-agent communication',
-    },
-    utcp: {
-      endpoint: `${backendUrl}/api/utcp/${orgSlug}${gateway.endpoint}`,
-      discovery: `${backendUrl}/.well-known/utcp`,
-      label: 'UTCP (Universal Tool Call Protocol)',
-      description: 'REST-based protocol for universal tool execution',
-    },
-  }
-
-  const protocol = protocolEndpoints[gatewayType] || protocolEndpoints.mcp
-  const mcpEndpoint = protocol.endpoint
-
   const skillsContent = skillsData?.data?.data || skillsData?.data || ''
-  const cliContent = cliData?.data?.data || cliData?.data || ''
-  const sdkContent = sdkData?.data?.data || sdkData?.data || ''
 
-  return (
-    <div className="space-y-6">
-      {/* Section A: Protocol Endpoint — conditional on gateway type */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Router className="h-5 w-5 text-orange-500" />
-            {protocol.label}
-          </CardTitle>
-          <CardDescription>{protocol.description}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label className="text-sm font-medium">Endpoint</Label>
-            <div className="flex gap-2 mt-1">
-              <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">
-                {protocol.endpoint}
-              </code>
-              <Button size="sm" variant="outline" onClick={() => copyToClipboard(protocol.endpoint, 'protocol-endpoint')}>
-                {copiedField === 'protocol-endpoint' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </Button>
-            </div>
-          </div>
-          <div>
-            <Label className="text-sm font-medium">Discovery URL</Label>
-            <div className="flex gap-2 mt-1">
-              <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">
-                {protocol.discovery}
-              </code>
-              <Button size="sm" variant="outline" onClick={() => copyToClipboard(protocol.discovery, 'discovery-url')}>
-                {copiedField === 'discovery-url' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </Button>
-            </div>
-          </div>
+  // Skills gateway
+  if (gatewayType === 'skills') {
+    const installCommand = `npx @apifai/skills install --gateway ${gatewayId}`
+    const loginCommand = `npx @apifai/skills login`
 
-          {/* MCP-specific: Claude Code config */}
-          {gatewayType === 'mcp' && (
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-purple-500" />
+              Skills Installation
+            </CardTitle>
+            <CardDescription>
+              Install SKILL.md files into your AI coding agent's skill directory.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
             <div>
-              <Label className="text-sm font-medium">Claude Code Configuration</Label>
-              <pre className="text-xs bg-muted p-3 rounded mt-1 overflow-x-auto font-mono">
-{`{
-  "mcpServers": {
-    "${gateway.name?.toLowerCase().replace(/\\s+/g, '-') || 'gateway'}": {
-      "command": "npx",
-      "args": ["-y", "@anthropic-ai/mcp-client", "${mcpEndpoint}"],
-      "env": { "MCP_AUTH_TOKEN": "<your-jwt-token>" }
-    }
-  }
-}`}
-              </pre>
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2"
-                onClick={() => copyToClipboard(JSON.stringify({
-                  mcpServers: {
-                    [gateway.name?.toLowerCase().replace(/\s+/g, '-') || 'gateway']: {
-                      command: 'npx',
-                      args: ['-y', '@anthropic-ai/mcp-client', mcpEndpoint],
-                      env: { MCP_AUTH_TOKEN: '<your-jwt-token>' }
-                    }
-                  }
-                }, null, 2), 'mcp-config')}
-              >
-                {copiedField === 'mcp-config' ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
-                Copy Config
-              </Button>
-            </div>
-          )}
-
-          {/* A2A-specific: Agent Card hint */}
-          {gatewayType === 'a2a' && (
-            <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded">
-              Use the discovery URL to fetch the Agent Card, which describes capabilities and supported protocols for this gateway.
-            </div>
-          )}
-
-          {/* UTCP-specific: REST hint */}
-          {gatewayType === 'utcp' && (
-            <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded">
-              UTCP tools are accessible via REST. Use the discovery URL to list available tools and their execute endpoints.
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Section B: Exports — always shown, protocol-agnostic */}
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Exports</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Download this gateway's tools as standalone files. These exports are protocol-independent.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Skills Bundle */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <BookOpen className="h-5 w-5 text-purple-500" />
-                Skills Bundle
-              </CardTitle>
-              <CardDescription>Standalone skill files (YAML + Markdown)</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {skillsLoading ? (
-                <div className="flex justify-center py-4"><LoadingSpinner /></div>
-              ) : skillsContent ? (
-                <>
-                  <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono">
-                    {typeof skillsContent === 'string' ? skillsContent.slice(0, 500) : JSON.stringify(skillsContent, null, 2).slice(0, 500)}
-                    {(typeof skillsContent === 'string' ? skillsContent.length : JSON.stringify(skillsContent).length) > 500 ? '\n...' : ''}
-                  </pre>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => copyToClipboard(typeof skillsContent === 'string' ? skillsContent : JSON.stringify(skillsContent, null, 2), 'skills')}>
-                      {copiedField === 'skills' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
-                      Copy
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => downloadFile(typeof skillsContent === 'string' ? skillsContent : JSON.stringify(skillsContent, null, 2), `${gateway.name}-skills.md`)}>
-                      <Download className="h-4 w-4 mr-1" />
-                      Download
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground py-4">No skills generated yet. Assign tools first.</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* CLI Bundle */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Terminal className="h-5 w-5 text-green-500" />
-                CLI Bundle
-              </CardTitle>
-              <CardDescription>Executable scripts (Bash / Node.js)</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex gap-1 mb-2">
-                <Button size="sm" variant={cliFormat === 'bash' ? 'default' : 'outline'} onClick={() => setCliFormat('bash')}>Bash</Button>
-                <Button size="sm" variant={cliFormat === 'node' ? 'default' : 'outline'} onClick={() => setCliFormat('node')}>Node</Button>
+              <Label className="text-sm font-medium">Install</Label>
+              <p className="text-xs text-muted-foreground mb-2">Run in your project root:</p>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{installCommand}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(installCommand, 'install-cmd')}>
+                  {copiedField === 'install-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
               </div>
-              {cliLoading ? (
-                <div className="flex justify-center py-4"><LoadingSpinner /></div>
-              ) : cliContent ? (
-                <>
-                  <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono">
-                    {typeof cliContent === 'string' ? cliContent.slice(0, 500) : JSON.stringify(cliContent, null, 2).slice(0, 500)}
-                    {(typeof cliContent === 'string' ? cliContent.length : JSON.stringify(cliContent).length) > 500 ? '\n...' : ''}
-                  </pre>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => copyToClipboard(typeof cliContent === 'string' ? cliContent : JSON.stringify(cliContent, null, 2), 'cli')}>
-                      {copiedField === 'cli' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
-                      Copy
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => downloadFile(typeof cliContent === 'string' ? cliContent : JSON.stringify(cliContent, null, 2), `${gateway.name}-cli.${cliFormat === 'bash' ? 'sh' : 'js'}`)}>
-                      <Download className="h-4 w-4 mr-1" />
-                      Download
-                    </Button>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">First-Time Setup</Label>
+              <p className="text-xs text-muted-foreground mb-2">Authenticate once (or use APIFAI_TOKEN env var):</p>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{loginCommand}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(loginCommand, 'login-cmd')}>
+                  {copiedField === 'login-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Agent Directories</Label>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {[
+                  { agent: 'Claude Code', dir: '.claude/skills/' },
+                  { agent: 'Cursor', dir: '.agents/skills/' },
+                  { agent: 'Windsurf', dir: '.windsurf/skills/' },
+                  { agent: 'Copilot / Codex', dir: '.agents/skills/' },
+                ].map(({ agent, dir }) => (
+                  <div key={agent} className="flex items-center gap-2 text-xs bg-muted/50 px-3 py-2 rounded">
+                    <code className="font-mono text-purple-600 dark:text-purple-400">{dir}</code>
+                    <span className="text-muted-foreground">({agent})</span>
                   </div>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground py-4">No CLI bundle generated yet. Assign tools first.</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* TypeScript SDK */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <FileCode className="h-5 w-5 text-blue-500" />
-                TypeScript SDK
-              </CardTitle>
-              <CardDescription>Typed SDK for programmatic access</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {sdkLoading ? (
-                <div className="flex justify-center py-4"><LoadingSpinner /></div>
-              ) : sdkContent ? (
-                <>
-                  <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono">
-                    {typeof sdkContent === 'string' ? sdkContent.slice(0, 500) : JSON.stringify(sdkContent, null, 2).slice(0, 500)}
-                    {(typeof sdkContent === 'string' ? sdkContent.length : JSON.stringify(sdkContent).length) > 500 ? '\n...' : ''}
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">SKILL.md Preview</Label>
+                <Button size="sm" variant="ghost" onClick={() => setShowSkillPreview(!showSkillPreview)}>
+                  {showSkillPreview ? 'Hide' : 'Show'}
+                </Button>
+              </div>
+              {showSkillPreview && (
+                skillsLoading ? (
+                  <div className="flex justify-center py-4"><LoadingSpinner /></div>
+                ) : skillsContent ? (
+                  <pre className="text-xs bg-muted p-3 rounded max-h-64 overflow-auto font-mono mt-2">
+                    {typeof skillsContent === 'string' ? skillsContent.slice(0, 800) : JSON.stringify(skillsContent, null, 2).slice(0, 800)}
+                    {(typeof skillsContent === 'string' ? skillsContent.length : JSON.stringify(skillsContent).length) > 800 ? '\n...' : ''}
                   </pre>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => copyToClipboard(typeof sdkContent === 'string' ? sdkContent : JSON.stringify(sdkContent, null, 2), 'sdk')}>
-                      {copiedField === 'sdk' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
-                      Copy
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => downloadFile(typeof sdkContent === 'string' ? sdkContent : JSON.stringify(sdkContent, null, 2), `${gateway.name}-sdk.ts`)}>
-                      <Download className="h-4 w-4 mr-1" />
-                      Download
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground py-4">No SDK generated yet. Assign tools first.</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-4">No skills generated yet. Assign tools first.</p>
+                )
               )}
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+    )
+  }
+
+  // MCP gateway
+  if (gatewayType === 'mcp') {
+    const mcpEndpoint = `${backendUrl}/api/mcp/${orgSlug}${gateway.endpoint}`
+    const sseEndpoint = `${backendUrl}/api/mcp/sse`
+    const discoveryUrl = `${backendUrl}/api/mcp/.well-known/mcp`
+
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Router className="h-5 w-5 text-orange-500" />
+              MCP Endpoint
+            </CardTitle>
+            <CardDescription>JSON-RPC 2.0 protocol for AI agent tool access</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">JSON-RPC Endpoint</Label>
+              <p className="text-xs text-muted-foreground mb-1">POST with JSON-RPC 2.0 payloads</p>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{mcpEndpoint}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(mcpEndpoint, 'mcp-endpoint')}>
+                  {copiedField === 'mcp-endpoint' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">SSE Transport</Label>
+              <p className="text-xs text-muted-foreground mb-1">Server-Sent Events for streaming</p>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{sseEndpoint}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(sseEndpoint, 'sse-endpoint')}>
+                  {copiedField === 'sse-endpoint' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Discovery</Label>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{discoveryUrl}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'discovery')}>
+                  {copiedField === 'discovery' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
+              <strong>Auth:</strong> Include <code className="font-mono">Authorization: Bearer &lt;jwt&gt;</code> header.
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // A2A gateway
+  if (gatewayType === 'a2a') {
+    const a2aBase = `${backendUrl}/api/a2a`
+    const discoveryUrl = `${backendUrl}/a2a/.well-known/a2a`
+
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Router className="h-5 w-5 text-orange-500" />
+              A2A Endpoints
+            </CardTitle>
+            <CardDescription>Agent-to-Agent protocol for inter-agent communication</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">Discovery (public)</Label>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{discoveryUrl}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'a2a-discovery')}>
+                  {copiedField === 'a2a-discovery' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Agent Registration</Label>
+              <p className="text-xs text-muted-foreground mb-1">POST to register, GET to list</p>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{a2aBase}/agents</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${a2aBase}/agents`, 'a2a-agents')}>
+                  {copiedField === 'a2a-agents' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Messaging</Label>
+              <p className="text-xs text-muted-foreground mb-1">POST to send messages between agents</p>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{a2aBase}/messages</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${a2aBase}/messages`, 'a2a-messages')}>
+                  {copiedField === 'a2a-messages' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
+              <strong>Auth:</strong> Include <code className="font-mono">Authorization: Bearer &lt;jwt&gt;</code> header. Discovery is public.
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // UTCP gateway
+  if (gatewayType === 'utcp') {
+    const discoveryUrl = `${backendUrl}/api/utcp/.well-known/utcp`
+    const orgId = gateway.organizationId || orgSlug
+
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Router className="h-5 w-5 text-orange-500" />
+              UTCP Endpoints
+            </CardTitle>
+            <CardDescription>Universal Tool Call Protocol — REST-based tool execution</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">Discovery (public)</Label>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{discoveryUrl}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'utcp-discovery')}>
+                  {copiedField === 'utcp-discovery' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Execute Tool</Label>
+              <p className="text-xs text-muted-foreground mb-1">POST to execute a tool via UTCP</p>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{backendUrl}/api/utcp/{orgId}/execute</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${backendUrl}/api/utcp/${orgId}/execute`, 'utcp-execute')}>
+                  {copiedField === 'utcp-execute' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Tool Manual</Label>
+              <p className="text-xs text-muted-foreground mb-1">GET to retrieve the UTCP manual</p>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{backendUrl}/api/utcp/{orgId}/manual</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${backendUrl}/api/utcp/${orgId}/manual`, 'utcp-manual')}>
+                  {copiedField === 'utcp-manual' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
+              <strong>Auth:</strong> Include <code className="font-mono">Authorization: Bearer &lt;jwt&gt;</code> header. Discovery is public.
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Fallback
+  return (
+    <div className="text-sm text-muted-foreground py-8 text-center">
+      No integration instructions available for gateway type "{gatewayType}".
     </div>
   )
 }
