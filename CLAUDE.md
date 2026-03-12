@@ -4,7 +4,7 @@
 
 **apifai** is a universal API-to-AI tool gateway. It parses API schemas (OpenAPI, GraphQL, SOAP, Protobuf), auto-generates tools, and serves them via MCP, UTCP, and A2A protocols.
 
-**Last active**: March 10, 2026. **Project started**: November 5, 2025.
+**Last active**: March 12, 2026. **Project started**: November 5, 2025.
 
 ---
 
@@ -34,8 +34,21 @@
 - **Kubernetes**: Kustomize base + 3 overlays (development, staging, production)
 - **CI/CD**: 5 GitHub Actions workflows (production, staging, dev, quick-api, quick-frontend)
 - **Registry**: ghcr.io/frane/apifai
-- **Cloud**: DigitalOcean Kubernetes
+- **Cloud**: DigitalOcean Kubernetes (3 nodes, fra1 region)
+- **Domain**: apif.ai (primary), apifai.ai + apifai.com (redirect to apif.ai)
+- **DNS**: Namecheap — wildcard A records → LB IP 129.212.254.179
+- **TLS**: Let's Encrypt via cert-manager (HTTP-01 challenge)
 - **Testing**: Playwright for E2E, Jest for backend unit/integration
+
+---
+
+## Live Environments
+
+| Environment | API | Frontend | Database | Deploy Trigger |
+|-------------|-----|----------|----------|----------------|
+| **Dev** | https://api.dev.apif.ai | https://app.dev.apif.ai | In-cluster postgres (ephemeral) | Push to `develop` |
+| **Staging** | https://api.staging.apif.ai | https://app.staging.apif.ai | DO Managed PostgreSQL (persistent) | Push to `master` |
+| **Production** | https://api.apif.ai | https://app.apif.ai | DO Managed PostgreSQL (not yet provisioned) | Tag `v*.*.*` |
 
 ---
 
@@ -73,18 +86,19 @@ frontend/tests/e2e/
 └── 15 spec files      # 190 Playwright tests
 
 k8s/
-├── base/              # 10 manifests (namespace, configmap, secret, deployments, services, ingress, cert-manager)
-└── overlays/
-    ├── development/   # In-cluster postgres, 1 replica, debug logging
-    ├── staging/       # Managed DB, 2 replicas, swagger enabled
-    └── production/    # Managed DB, 3 API replicas, manual approval deploy
+├── base/              # Namespace, configmap, deployments, services, ingress, cert-manager
+├── overlays/
+│   ├── development/   # In-cluster postgres, 1 replica, debug logging
+│   ├── staging/       # Managed DB, 2 replicas, swagger enabled
+│   └── production/    # Managed DB, 3 API replicas, manual approval deploy
+└── redirect-ingress.yaml  # 301 redirects: apifai.ai + apifai.com → apif.ai
 
 .github/workflows/
 ├── deploy-production.yml  # Tag v*.*.* → build → manual approval → deploy + GitHub Release
-├── deploy-staging.yml     # Push to main → auto-deploy staging
+├── deploy-staging.yml     # Push to master → auto-deploy staging + redirect ingress
 ├── deploy-development.yml # Push to develop → auto-deploy dev
-├── deploy-api.yml         # Quick API-only deploy (backend/** changes on main)
-└── deploy-frontend.yml    # Quick frontend-only deploy (frontend/** changes on main)
+├── deploy-api.yml         # Quick API-only deploy (backend/** changes on master)
+└── deploy-frontend.yml    # Quick frontend-only deploy (frontend/** changes on master)
 ```
 
 ---
@@ -117,8 +131,10 @@ k8s/
 - Graceful shutdown (SIGTERM handling for k8s)
 - Global rate limiting (ThrottlerGuard)
 - Docker deployment with production-grade multi-stage builds
-- Kubernetes manifests validated for all 3 environments
-- GitHub Actions CI/CD for automated deployments
+- Kubernetes: dev + staging deployed and healthy
+- GitHub Actions CI/CD: fully automated deploys on push
+- TLS: real Let's Encrypt certs on all environments
+- Domain redirects: apifai.ai + apifai.com → apif.ai (301)
 
 ---
 
@@ -130,6 +146,49 @@ k8s/
 | Frontend | 3002 (dev) | 8080 (nginx) | Vite dev server / nginx production |
 | PostgreSQL | 5432 | 5432 | |
 | Redis | 6379 | 6379 | |
+
+---
+
+## Database Configuration
+
+TypeORM connects via **individual params** (not DATABASE_URL) for proper SSL control:
+- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `DATABASE_NAME` from configmap/secrets
+- `DB_SSL` env var: `"true"` for staging/production (DO Managed PG), `"false"` for dev
+- When `DB_SSL=true`: sets `ssl: { rejectUnauthorized: false }` at both top-level and `extra` (required for DO self-signed certs)
+
+### Managed Database (Staging)
+- **Provider**: DigitalOcean Managed PostgreSQL
+- **DB ID**: `370b28a0-6af0-4245-85f3-3dac149d15dc`
+- **Host**: `apifai-db-do-user-4308986-0.j.db.ondigitalocean.com`
+- **Port**: 25060
+- **Database**: `apifai`
+- **SSL**: Required (DO enforces even within VPC)
+
+---
+
+## Secrets Management
+
+Secrets are **NOT stored in git**. They are managed via:
+- **GitHub Secrets** → injected by CI/CD workflows via `kubectl create secret`
+- Secret name in k8s: `apifai-secrets` (no kustomize namePrefix since removed from kustomization resources)
+
+### Required GitHub Secrets
+
+**Infrastructure:**
+- `GHCR_PAT` — GitHub Container Registry personal access token
+- `DIGITALOCEAN_ACCESS_TOKEN` — DigitalOcean API token
+- `DIGITALOCEAN_CLUSTER_NAME` — K8s cluster name (`k8s-1-34-1-do-3-fra1-1771511973577`)
+
+**Staging:**
+- `STAGING_DATABASE_USERNAME` — DB username
+- `STAGING_DATABASE_PASSWORD` — DB password
+- `STAGING_DATABASE_URL` — Full connection URL (used by migrations only)
+- `STAGING_JWT_SECRET` — JWT signing secret
+
+**Production (not yet set):**
+- `PROD_DATABASE_USERNAME`, `PROD_DATABASE_PASSWORD`, `PROD_DATABASE_URL`
+- `PROD_REDIS_PASSWORD`, `PROD_REDIS_URL`
+- `PROD_JWT_SECRET`
 
 ---
 
@@ -149,10 +208,13 @@ cd backend && npm run test:cov
 # E2E tests
 cd frontend && E2E_BASE_URL=http://localhost:3002 npx playwright test --reporter=list
 
-# Health checks
+# Health checks (local)
 curl http://localhost:4000/health          # Full health (DB + Redis + memory)
 curl http://localhost:4000/health/live     # Liveness (memory only)
 curl http://localhost:4000/health/ready    # Readiness (DB + Redis)
+
+# Health checks (staging)
+curl https://api.staging.apif.ai/health
 
 # MCP discovery
 curl http://localhost:4000/api/mcp/.well-known/mcp
@@ -171,23 +233,24 @@ docker build --target production -t apifai-frontend:test --build-arg VITE_API_BA
 
 ## Deployment
 
-### Production Deploy
+### Staging Deploy (auto on push to master)
+```bash
+git push origin master
+# GitHub Actions: builds images → creates secrets → deploys to k8s + redirect ingress
+```
+
+### Development Deploy (auto on push to develop)
+```bash
+git push origin develop
+# GitHub Actions: builds images → deploys to k8s
+```
+
+### Production Deploy (manual tag)
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 # GitHub Actions: builds images → manual approval gate → deploys to k8s → creates GitHub Release
 ```
-
-### Staging Deploy
-```bash
-git push origin main
-# GitHub Actions: auto-builds and deploys to staging
-```
-
-### Required GitHub Secrets
-- `GHCR_PAT` — GitHub Container Registry personal access token
-- `DIGITALOCEAN_ACCESS_TOKEN` — DigitalOcean API token
-- `DIGITALOCEAN_CLUSTER_NAME` — K8s cluster name
 
 ---
 
