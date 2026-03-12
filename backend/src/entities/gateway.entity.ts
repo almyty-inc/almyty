@@ -17,8 +17,9 @@ import { UsageMetric } from './usage-metric.entity';
 
 export enum GatewayType {
   MCP = 'mcp',
-  A2A = 'a2a', 
+  A2A = 'a2a',
   UTCP = 'utcp',
+  SKILLS = 'skills',
 }
 
 export enum GatewayStatus {
@@ -213,6 +214,8 @@ export class Gateway {
         return ['http', 'grpc'].includes(protocol);
       case GatewayType.UTCP:
         return ['http', 'tcp'].includes(protocol);
+      case GatewayType.SKILLS:
+        return ['cli', 'file'].includes(protocol);
       default:
         return false;
     }
@@ -248,6 +251,13 @@ export class Gateway {
           ...baseConfig,
           protocol: this.configuration.protocol || 'http',
           encoding: this.configuration.encoding || 'json',
+        };
+
+      case GatewayType.SKILLS:
+        return {
+          ...baseConfig,
+          format: 'skill-md',
+          installCommand: `npx @apifai/skills install --gateway ${this.id}`,
         };
 
       default:

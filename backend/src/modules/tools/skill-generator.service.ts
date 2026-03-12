@@ -12,6 +12,12 @@ export interface SkillOutput {
   toolCount: number;
 }
 
+export interface IndividualSkill {
+  name: string;
+  fileName: string;
+  content: string;
+}
+
 @Injectable()
 export class SkillGeneratorService {
   private readonly logger = new Logger(SkillGeneratorService.name);
@@ -26,7 +32,7 @@ export class SkillGeneratorService {
   ) {}
 
   /**
-   * Generate a skill file for a single tool.
+   * Generate a SKILL.md file for a single tool (Agent Skills standard).
    */
   async generateToolSkill(toolId: string): Promise<SkillOutput> {
     const tool = await this.toolRepository.findOne({
@@ -38,7 +44,7 @@ export class SkillGeneratorService {
       throw new NotFoundException(`Tool not found: ${toolId}`);
     }
 
-    const content = this.renderToolSkill(tool);
+    const content = this.renderToolSkillMd(tool);
     return {
       name: this.slugify(tool.name),
       content,
@@ -47,7 +53,7 @@ export class SkillGeneratorService {
   }
 
   /**
-   * Generate a skill bundle for all tools in a gateway.
+   * Generate a combined skill bundle for a gateway (single markdown file).
    */
   async generateGatewaySkills(gatewayId: string): Promise<SkillOutput> {
     const gateway = await this.gatewayRepository.findOne({
@@ -58,12 +64,7 @@ export class SkillGeneratorService {
       throw new NotFoundException(`Gateway not found: ${gatewayId}`);
     }
 
-    const gatewayTools = await this.gatewayToolRepository.find({
-      where: { gatewayId, isActive: true },
-      relations: ['tool', 'tool.categories', 'tool.operation'],
-    });
-
-    const tools = gatewayTools.map(gt => gt.tool).filter(Boolean);
+    const tools = await this.getGatewayTools(gatewayId);
 
     if (tools.length === 0) {
       return {
@@ -82,31 +83,53 @@ export class SkillGeneratorService {
   }
 
   /**
-   * Render a single tool skill as markdown with YAML frontmatter.
+   * Generate individual SKILL.md files per tool for a gateway.
+   * Used by the skills CLI to install into agent directories.
    */
-  private renderToolSkill(tool: Tool): string {
+  async generateIndividualSkills(gatewayId: string): Promise<IndividualSkill[]> {
+    const gateway = await this.gatewayRepository.findOne({
+      where: { id: gatewayId },
+    });
+
+    if (!gateway) {
+      throw new NotFoundException(`Gateway not found: ${gatewayId}`);
+    }
+
+    const tools = await this.getGatewayTools(gatewayId);
+
+    return tools.map(tool => ({
+      name: this.slugify(tool.name),
+      fileName: `apifai-${this.slugify(tool.name)}`,
+      content: this.renderToolSkillMd(tool),
+    }));
+  }
+
+  private async getGatewayTools(gatewayId: string): Promise<Tool[]> {
+    const gatewayTools = await this.gatewayToolRepository.find({
+      where: { gatewayId, isActive: true },
+      relations: ['tool', 'tool.categories', 'tool.operation'],
+    });
+
+    return gatewayTools.map(gt => gt.tool).filter(Boolean);
+  }
+
+  /**
+   * Render a SKILL.md following the Agent Skills open standard.
+   * https://agentskills.io / https://code.claude.com/docs/en/skills
+   */
+  private renderToolSkillMd(tool: Tool): string {
     const params = tool.parameters as any;
     const properties = params?.properties || {};
     const required = params?.required || [];
-    const categories = tool.categories?.map(c => c.name) || [];
-    const method = tool.operation?.method || 'GET';
+    const method = tool.operation?.method || '';
     const endpoint = tool.operation?.endpoint || '';
 
     const lines: string[] = [];
 
-    // YAML frontmatter
+    // YAML frontmatter (Agent Skills standard)
     lines.push('---');
     lines.push(`name: ${this.slugify(tool.name)}`);
-    lines.push(`description: ${this.escapeYaml(tool.description || '')}`);
-    lines.push(`tools: [${this.slugify(tool.name)}]`);
-    lines.push(`type: ${tool.type || 'api'}`);
-    if (categories.length > 0) {
-      lines.push(`categories: [${categories.join(', ')}]`);
-    }
-    if (method && endpoint) {
-      lines.push(`method: ${method}`);
-      lines.push(`endpoint: ${endpoint}`);
-    }
+    lines.push(`description: ${this.escapeYaml(this.buildDescription(tool))}`);
     lines.push('---');
     lines.push('');
 
@@ -116,8 +139,6 @@ export class SkillGeneratorService {
 
     // Description
     if (tool.description) {
-      lines.push('## Description');
-      lines.push('');
       lines.push(tool.description);
       lines.push('');
     }
@@ -128,25 +149,29 @@ export class SkillGeneratorService {
     lines.push(this.generateWhenToUse(tool));
     lines.push('');
 
-    // Parameters
+    // Tool call instructions
+    lines.push('## Tool call');
+    lines.push('');
+    lines.push(`Call \`apifai_execute\` with:`);
+    lines.push(`- \`tool_name\`: \`"${tool.name}"\``);
+
     if (Object.keys(properties).length > 0) {
-      lines.push('## Parameters');
-      lines.push('');
+      lines.push(`- \`parameters\`:`);
       for (const [name, schema] of Object.entries(properties)) {
         const paramSchema = schema as any;
         const isRequired = required.includes(name);
         const typeStr = paramSchema.type || 'string';
         const desc = paramSchema.description || '';
-        const reqLabel = isRequired ? '**required**' : 'optional';
-        lines.push(`- \`${name}\` (${typeStr}, ${reqLabel}): ${desc}`);
+        const reqLabel = isRequired ? ', **required**' : '';
+        lines.push(`  - \`${name}\` (${typeStr}${reqLabel}): ${desc}`);
       }
-      lines.push('');
     }
-
-    // Steps
-    lines.push('## Steps');
     lines.push('');
-    lines.push(this.generateSteps(tool, properties, required));
+
+    // Example
+    lines.push('## Example');
+    lines.push('');
+    lines.push(this.generateExample(tool, properties, required));
     lines.push('');
 
     // Error handling
@@ -167,25 +192,21 @@ export class SkillGeneratorService {
     // YAML frontmatter
     lines.push('---');
     lines.push(`name: ${this.slugify(gateway.name)}`);
-    lines.push(`description: Skills for ${gateway.name} gateway`);
-    lines.push(`tools: [${tools.map(t => this.slugify(t.name)).join(', ')}]`);
-    lines.push(`gateway: ${gateway.id}`);
-    lines.push(`toolCount: ${tools.length}`);
+    lines.push(`description: ${this.escapeYaml(`API skills for ${gateway.name}. ${tools.length} tools available.`)}`);
     lines.push('---');
     lines.push('');
 
     // Overview
     lines.push(`# ${gateway.name}`);
     lines.push('');
-    lines.push(`This gateway provides ${tools.length} tools.`);
+    lines.push(`This gateway provides ${tools.length} tools. Use \`apifai_execute\` to call any tool, or \`apifai_search\` to find tools by keyword.`);
     lines.push('');
 
     // Tool index
     lines.push('## Available tools');
     lines.push('');
     for (const tool of tools) {
-      const type = tool.type || 'api';
-      lines.push(`- **${tool.name}** (${type}): ${tool.description || 'No description'}`);
+      lines.push(`- **${tool.name}**: ${tool.description || 'No description'}`);
     }
     lines.push('');
 
@@ -203,6 +224,9 @@ export class SkillGeneratorService {
       const params = tool.parameters as any;
       const properties = params?.properties || {};
       const required = params?.required || [];
+
+      lines.push(`Call \`apifai_execute\` with \`tool_name: "${tool.name}"\``);
+      lines.push('');
 
       if (Object.keys(properties).length > 0) {
         lines.push('**Parameters:**');
@@ -223,10 +247,7 @@ export class SkillGeneratorService {
     return [
       '---',
       `name: ${this.slugify(gateway.name)}`,
-      `description: Skills for ${gateway.name} gateway`,
-      'tools: []',
-      `gateway: ${gateway.id}`,
-      'toolCount: 0',
+      `description: ${this.escapeYaml(`API skills for ${gateway.name}`)}`,
       '---',
       '',
       `# ${gateway.name}`,
@@ -236,51 +257,90 @@ export class SkillGeneratorService {
     ].join('\n');
   }
 
+  private buildDescription(tool: Tool): string {
+    const base = tool.description || `Use the ${tool.name} tool`;
+    // Keep it concise — description is used by agents to decide when to load the skill
+    if (base.length > 200) {
+      return base.substring(0, 197) + '...';
+    }
+    return base;
+  }
+
   private generateWhenToUse(tool: Tool): string {
     const type = tool.type;
     const name = tool.name;
+    const desc = tool.description || '';
+
+    const lines: string[] = [];
 
     switch (type) {
       case ToolType.QUERY:
-        return `Use this when the user wants to retrieve or look up data using ${name}.`;
+        lines.push(`- User wants to retrieve or look up data`);
+        break;
       case ToolType.MUTATION:
-        return `Use this when the user wants to create, update, or modify data using ${name}.`;
+        lines.push(`- User wants to create, update, or modify data`);
+        break;
       case ToolType.ACTION:
-        return `Use this when the user wants to perform an action using ${name}.`;
+        lines.push(`- User wants to perform an action or trigger a workflow`);
+        break;
       default:
-        return `Use this when the user needs to interact with the ${name} API endpoint.`;
+        lines.push(`- User needs to interact with this API endpoint`);
+    }
+
+    // Add context from the description
+    if (desc) {
+      lines.push(`- Request relates to: ${desc.substring(0, 100)}`);
+    }
+
+    return lines.join('\n');
+  }
+
+  private generateExample(tool: Tool, properties: Record<string, any>, required: string[]): string {
+    const exampleParams: Record<string, any> = {};
+    for (const [name, schema] of Object.entries(properties)) {
+      const paramSchema = schema as any;
+      if (required.includes(name) || Object.keys(properties).length <= 3) {
+        exampleParams[name] = this.getExampleValue(name, paramSchema);
+      }
+    }
+
+    const paramsStr = JSON.stringify(exampleParams, null, 2);
+    return `\`\`\`\napifai_execute({\n  tool_name: "${tool.name}",\n  parameters: ${paramsStr}\n})\n\`\`\``;
+  }
+
+  private getExampleValue(name: string, schema: any): any {
+    if (schema.enum && schema.enum.length > 0) return schema.enum[0];
+    if (schema.default !== undefined) return schema.default;
+
+    const type = schema.type || 'string';
+    const nameLower = name.toLowerCase();
+
+    switch (type) {
+      case 'integer':
+      case 'number':
+        if (nameLower.includes('id')) return 1;
+        if (nameLower.includes('limit')) return 10;
+        if (nameLower.includes('page')) return 1;
+        return 0;
+      case 'boolean':
+        return true;
+      case 'array':
+        return [];
+      case 'object':
+        return {};
+      default:
+        if (nameLower.includes('name')) return 'example';
+        if (nameLower.includes('email')) return 'user@example.com';
+        if (nameLower.includes('status')) return 'active';
+        return 'string';
     }
   }
 
-  private generateSteps(tool: Tool, properties: Record<string, any>, required: string[]): string {
-    const steps: string[] = [];
-    let stepNum = 1;
-
-    if (required.length > 0) {
-      steps.push(`${stepNum}. Collect required parameters: ${required.map(r => `\`${r}\``).join(', ')}`);
-      stepNum++;
-    }
-
-    const optional = Object.keys(properties).filter(k => !required.includes(k));
-    if (optional.length > 0) {
-      steps.push(`${stepNum}. Optionally collect: ${optional.map(o => `\`${o}\``).join(', ')}`);
-      stepNum++;
-    }
-
-    steps.push(`${stepNum}. Call \`${this.slugify(tool.name)}\` with the collected parameters`);
-    stepNum++;
-
-    steps.push(`${stepNum}. Return the result to the user`);
-
-    return steps.join('\n');
-  }
-
-  private generateErrorHandling(tool: Tool): string {
+  private generateErrorHandling(_tool: Tool): string {
     const lines: string[] = [];
     lines.push('- **400 Bad Request**: Check that all required parameters are provided and valid');
     lines.push('- **401 Unauthorized**: Authentication credentials may be missing or expired');
     lines.push('- **404 Not Found**: The requested resource may not exist');
-    lines.push('- **429 Too Many Requests**: Rate limit exceeded, wait before retrying');
     lines.push('- **500 Internal Server Error**: Server-side issue, retry after a brief wait');
     return lines.join('\n');
   }
@@ -295,8 +355,8 @@ export class SkillGeneratorService {
   }
 
   private escapeYaml(str: string): string {
-    if (str.includes(':') || str.includes('#') || str.includes("'") || str.includes('"')) {
-      return `"${str.replace(/"/g, '\\"')}"`;
+    if (str.includes(':') || str.includes('#') || str.includes("'") || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
     }
     return str;
   }

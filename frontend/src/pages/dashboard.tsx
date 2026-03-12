@@ -110,7 +110,7 @@ export function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{apis.length}</div>
             <p className="text-xs text-muted-foreground">
-              Connected and parsed
+              {apis.filter((a: any) => a.status === 'active').length} active
             </p>
           </CardContent>
         </Card>

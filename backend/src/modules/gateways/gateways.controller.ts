@@ -1202,6 +1202,33 @@ export class GatewaysController {
     }
   }
 
+  @Get(':gatewayId/skills/individual')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Generate individual SKILL.md files for each tool in a gateway' })
+  @ApiResponse({ status: 200, description: 'Individual skills generated successfully' })
+  async getGatewayIndividualSkills(
+    @Param('gatewayId', ParseUUIDPipe) gatewayId: string,
+    @Request() req: any,
+  ) {
+    try {
+      const skills = await this.skillGeneratorService.generateIndividualSkills(gatewayId);
+      return {
+        success: true,
+        data: { skills },
+        message: `Generated ${skills.length} individual skills`,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'GATEWAY_INDIVIDUAL_SKILLS_GENERATION_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   @Get(':gatewayId/cli-bundle')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Generate CLI bundle for all tools in a gateway' })

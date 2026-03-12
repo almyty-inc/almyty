@@ -87,29 +87,31 @@ describe('SkillGeneratorService', () => {
   });
 
   describe('generateToolSkill', () => {
-    it('should generate a skill for a query tool', async () => {
+    it('should generate a SKILL.md with Agent Skills standard format', async () => {
       toolRepository.findOne.mockResolvedValue(mockTool);
 
       const result = await service.generateToolSkill('tool-1');
 
       expect(result.name).toBe('getpetbyid');
       expect(result.toolCount).toBe(1);
+      // YAML frontmatter — Agent Skills standard (name + description only)
       expect(result.content).toContain('---');
       expect(result.content).toContain('name: getpetbyid');
       expect(result.content).toContain('description: Find pet by ID');
-      expect(result.content).toContain('tools: [getpetbyid]');
-      expect(result.content).toContain('type: query');
-      expect(result.content).toContain('categories: [Pets]');
-      expect(result.content).toContain('method: GET');
-      expect(result.content).toContain('endpoint: /pet/{petId}');
+      // Content sections
       expect(result.content).toContain('# getPetById');
-      expect(result.content).toContain('## Description');
       expect(result.content).toContain('## When to use');
       expect(result.content).toContain('retrieve or look up data');
-      expect(result.content).toContain('## Parameters');
+      // Tool call instructions via apifai_execute
+      expect(result.content).toContain('## Tool call');
+      expect(result.content).toContain('apifai_execute');
+      expect(result.content).toContain('`tool_name`: `"getPetById"`');
       expect(result.content).toContain('`petId` (integer, **required**)');
-      expect(result.content).toContain('`format` (string, optional)');
-      expect(result.content).toContain('## Steps');
+      expect(result.content).toContain('`format` (string)');
+      // Example
+      expect(result.content).toContain('## Example');
+      expect(result.content).toContain('tool_name: "getPetById"');
+      // Error handling
       expect(result.content).toContain('## Error handling');
     });
 
@@ -119,6 +121,7 @@ describe('SkillGeneratorService', () => {
       const result = await service.generateToolSkill('tool-2');
 
       expect(result.content).toContain('create, update, or modify data');
+      expect(result.content).toContain('`tool_name`: `"addPet"`');
     });
 
     it('should generate a skill for an action tool', async () => {
@@ -132,29 +135,6 @@ describe('SkillGeneratorService', () => {
       expect(result.content).toContain('perform an action');
     });
 
-    it('should handle tool with no categories', async () => {
-      toolRepository.findOne.mockResolvedValue({
-        ...mockTool,
-        categories: [],
-      });
-
-      const result = await service.generateToolSkill('tool-1');
-
-      expect(result.content).not.toContain('categories:');
-    });
-
-    it('should handle tool with no operation', async () => {
-      toolRepository.findOne.mockResolvedValue({
-        ...mockTool,
-        operation: null,
-      });
-
-      const result = await service.generateToolSkill('tool-1');
-
-      expect(result.content).not.toContain('method:');
-      expect(result.content).not.toContain('endpoint:');
-    });
-
     it('should handle tool with no parameters', async () => {
       toolRepository.findOne.mockResolvedValue({
         ...mockTool,
@@ -163,7 +143,8 @@ describe('SkillGeneratorService', () => {
 
       const result = await service.generateToolSkill('tool-1');
 
-      expect(result.content).not.toContain('## Parameters');
+      // Should not have parameters section
+      expect(result.content).not.toContain('`parameters`');
     });
 
     it('should throw NotFoundException for missing tool', async () => {
@@ -181,17 +162,6 @@ describe('SkillGeneratorService', () => {
       const result = await service.generateToolSkill('tool-1');
 
       expect(result.content).toContain('description: "Find pet: by \\"ID\\""');
-    });
-
-    it('should generate steps with required and optional params', async () => {
-      toolRepository.findOne.mockResolvedValue(mockTool);
-
-      const result = await service.generateToolSkill('tool-1');
-
-      expect(result.content).toContain('Collect required parameters: `petId`');
-      expect(result.content).toContain('Optionally collect: `format`');
-      expect(result.content).toContain('Call `getpetbyid`');
-      expect(result.content).toContain('Return the result');
     });
   });
 
@@ -214,9 +184,7 @@ describe('SkillGeneratorService', () => {
       expect(result.content).toContain('**addPet**');
       expect(result.content).toContain('### getPetById');
       expect(result.content).toContain('### addPet');
-      expect(result.content).toContain('tools: [getpetbyid, addpet]');
-      expect(result.content).toContain('gateway: gw-1');
-      expect(result.content).toContain('toolCount: 2');
+      expect(result.content).toContain('apifai_execute');
     });
 
     it('should generate an empty skill for a gateway with no tools', async () => {
@@ -227,7 +195,6 @@ describe('SkillGeneratorService', () => {
 
       expect(result.toolCount).toBe(0);
       expect(result.content).toContain('No tools are currently assigned');
-      expect(result.content).toContain('tools: []');
     });
 
     it('should throw NotFoundException for missing gateway', async () => {
@@ -259,6 +226,41 @@ describe('SkillGeneratorService', () => {
       expect(result.content).toContain('**Parameters:**');
       expect(result.content).toContain('`petId` (integer, required)');
       expect(result.content).toContain('`format` (string)');
+    });
+  });
+
+  describe('generateIndividualSkills', () => {
+    it('should generate individual SKILL.md files per tool', async () => {
+      gatewayRepository.findOne.mockResolvedValue(mockGateway);
+      gatewayToolRepository.find.mockResolvedValue([
+        { tool: mockTool, isActive: true },
+        { tool: mockMutationTool, isActive: true },
+      ]);
+
+      const result = await service.generateIndividualSkills('gw-1');
+
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe('getpetbyid');
+      expect(result[0].fileName).toBe('apifai-getpetbyid');
+      expect(result[0].content).toContain('name: getpetbyid');
+      expect(result[0].content).toContain('apifai_execute');
+      expect(result[1].name).toBe('addpet');
+      expect(result[1].fileName).toBe('apifai-addpet');
+    });
+
+    it('should throw NotFoundException for missing gateway', async () => {
+      gatewayRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.generateIndividualSkills('nonexistent')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return empty array for gateway with no tools', async () => {
+      gatewayRepository.findOne.mockResolvedValue(mockGateway);
+      gatewayToolRepository.find.mockResolvedValue([]);
+
+      const result = await service.generateIndividualSkills('gw-1');
+
+      expect(result).toHaveLength(0);
     });
   });
 });

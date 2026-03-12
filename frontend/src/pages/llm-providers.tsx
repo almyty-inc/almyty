@@ -38,7 +38,9 @@ import {
   Copy,
   RefreshCw,
   Power,
-  PowerOff
+  PowerOff,
+  Send,
+  RotateCcw
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -770,6 +772,18 @@ export function LlmProvidersPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
 
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<Array<{
+    role: 'user' | 'assistant' | 'tool'
+    content: string
+    toolCalls?: any[]
+    toolCallId?: string
+  }>>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null)
+  const [isSending, setIsSending] = useState(false)
+  const chatEndRef = React.useRef<HTMLDivElement>(null)
+
   const queryClient = useQueryClient()
   const notifications = useNotifications()
 
@@ -1385,8 +1399,9 @@ export function LlmProvidersPage() {
           
           {selectedProvider && (
             <Tabs defaultValue="overview" className="mt-6">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="chat">Chat</TabsTrigger>
                 <TabsTrigger value="models">Models</TabsTrigger>
                 <TabsTrigger value="usage">Usage</TabsTrigger>
                 <TabsTrigger value="configuration">Config</TabsTrigger>
@@ -1781,6 +1796,159 @@ export function LlmProvidersPage() {
                     </div>
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              {/* Chat Tab */}
+              <TabsContent value="chat" className="space-y-4">
+                {/* Session info */}
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    {chatSessionId ? (
+                      <span>Session: <code className="font-mono text-xs">{chatSessionId.slice(0, 8)}...</code></span>
+                    ) : (
+                      <span>New conversation</span>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setChatMessages([])
+                      setChatSessionId(null)
+                      setChatInput('')
+                    }}
+                    className="gap-1"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    New Chat
+                  </Button>
+                </div>
+
+                {/* Messages area */}
+                <div className="border rounded-lg h-[400px] flex flex-col">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {chatMessages.length === 0 && (
+                      <div className="text-sm text-muted-foreground text-center py-12">
+                        Send a message to start chatting with {selectedProvider.name}.
+                        <br />
+                        <span className="text-xs">Model: {selectedProvider.configuration?.model || 'default'}</span>
+                      </div>
+                    )}
+                    {chatMessages.map((msg, i) => (
+                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                          msg.role === 'user'
+                            ? 'bg-primary text-primary-foreground'
+                            : msg.role === 'tool'
+                            ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
+                            : 'bg-muted'
+                        }`}>
+                          {msg.role === 'tool' && (
+                            <div className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-1">
+                              Tool: {msg.toolCallId || 'call'}
+                            </div>
+                          )}
+                          {msg.content && (
+                            <div className="whitespace-pre-wrap">{msg.content}</div>
+                          )}
+                          {msg.toolCalls && msg.toolCalls.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {msg.toolCalls.map((tc: any, j: number) => (
+                                <div key={j} className="text-xs bg-background/50 rounded p-2 border">
+                                  <div className="font-medium">{tc.function?.name || tc.name || 'tool_call'}</div>
+                                  <pre className="text-xs mt-1 overflow-x-auto">
+                                    {JSON.stringify(tc.function?.arguments || tc.arguments || tc, null, 2).slice(0, 300)}
+                                  </pre>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {isSending && (
+                      <div className="flex justify-start">
+                        <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground">
+                          Thinking...
+                        </div>
+                      </div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
+
+                  {/* Input area */}
+                  <div className="border-t p-3">
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault()
+                        if (!chatInput.trim() || isSending || !selectedProvider) return
+
+                        const userMessage = chatInput.trim()
+                        setChatInput('')
+
+                        // Add user message
+                        const newMessages = [...chatMessages, { role: 'user' as const, content: userMessage }]
+                        setChatMessages(newMessages)
+                        setIsSending(true)
+
+                        // Scroll to bottom
+                        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+
+                        try {
+                          const response = await llmProvidersApi.chat(selectedProvider.id, {
+                            messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+                            sessionId: chatSessionId || undefined,
+                          })
+
+                          const data = response.data?.data || response.data
+                          const assistantMsg = data?.message
+
+                          if (assistantMsg) {
+                            setChatMessages(prev => [...prev, {
+                              role: 'assistant',
+                              content: assistantMsg.content || '',
+                              toolCalls: assistantMsg.toolCalls,
+                            }])
+                          }
+
+                          if (data?.sessionId) {
+                            setChatSessionId(data.sessionId)
+                          }
+                        } catch (err: any) {
+                          setChatMessages(prev => [...prev, {
+                            role: 'assistant',
+                            content: `Error: ${err.response?.data?.message || err.message || 'Failed to get response'}`,
+                          }])
+                        } finally {
+                          setIsSending(false)
+                          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+                        }
+                      }}
+                      className="flex gap-2"
+                    >
+                      <Textarea
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder="Send a message..."
+                        className="min-h-[40px] max-h-[120px] resize-none"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            e.currentTarget.form?.requestSubmit()
+                          }
+                        }}
+                      />
+                      <Button type="submit" size="sm" disabled={!chatInput.trim() || isSending} className="self-end">
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </form>
+                  </div>
+                </div>
+
+                {/* Usage info */}
+                <div className="text-xs text-muted-foreground">
+                  Provider: {selectedProvider.type} | Model: {selectedProvider.configuration?.model || 'default'} | Enter to send, Shift+Enter for newline
+                </div>
               </TabsContent>
             </Tabs>
           )}

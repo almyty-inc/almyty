@@ -363,6 +363,7 @@ export function GatewaysPage() {
                   <SelectItem value="mcp">MCP</SelectItem>
                   <SelectItem value="a2a">A2A</SelectItem>
                   <SelectItem value="utcp">UTCP</SelectItem>
+                  <SelectItem value="skills">Skills</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -431,6 +432,7 @@ export function GatewaysPage() {
                   <SelectItem value="mcp">MCP - Model Context Protocol</SelectItem>
                   <SelectItem value="a2a">A2A - Agent-to-Agent</SelectItem>
                   <SelectItem value="utcp">UTCP - Universal Tool Call Protocol</SelectItem>
+                  <SelectItem value="skills">Skills - Agent Skills (SKILL.md)</SelectItem>
                 </SelectContent>
               </Select>
               {createForm.formState.errors.type && (
