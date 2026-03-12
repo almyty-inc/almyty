@@ -72,7 +72,7 @@ patches:
     patch: |-
       - op: replace
         path: /metadata/annotations/cert-manager.io~1cluster-issuer
-        value: letsencrypt-staging
+        value: dev-letsencrypt-staging
       - op: replace
         path: /spec/tls/0/hosts/0
         value: api.dev.apif.ai
