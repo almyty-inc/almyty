@@ -173,11 +173,11 @@ npm run typeorm:migration:run
 ### Environment Configuration
 ```bash
 # Backend .env
-DATABASE_URL=postgresql://postgres:password@localhost:5432/llm_gateway
+DATABASE_URL=postgresql://postgres:<your-password>@localhost:5432/llm_gateway
 REDIS_URL=redis://localhost:6379
-JWT_SECRET=your-super-secret-key
-OPENAI_API_KEY=your-openai-key
-ANTHROPIC_API_KEY=your-anthropic-key
+JWT_SECRET=<your-secret-key>
+OPENAI_API_KEY=<your-openai-key>
+ANTHROPIC_API_KEY=<your-anthropic-key>
 
 # Frontend .env
 REACT_APP_API_BASE_URL=http://localhost:3000
