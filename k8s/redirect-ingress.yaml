@@ -1,0 +1,57 @@
+# Redirect ingress for alternate domains → apif.ai
+# Applied standalone (not via kustomize) to apifai-staging namespace.
+# DNS A records for these domains point to the same LB IP as apif.ai.
+#
+# Note: Ingress wildcards only match ONE subdomain level.
+# *.apifai.ai matches foo.apifai.ai but NOT foo.bar.apifai.ai.
+# So we add explicit *.staging. and *.dev. rules for multi-level subdomains.
+#
+# TLS certs issued for bare domains only (apifai.ai, apifai.com).
+# Wildcard subdomains redirect on HTTP only (no cert = HTTPS cert warning).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apifai-redirect
+  namespace: apifai-staging
+  annotations:
+    nginx.ingress.kubernetes.io/permanent-redirect: "https://apif.ai"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    cert-manager.io/cluster-issuer: staging-letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - apifai.ai
+    secretName: apifai-ai-redirect-tls
+  - hosts:
+    - apifai.com
+    secretName: apifai-com-redirect-tls
+  rules:
+  # Bare domains
+  - host: apifai.ai
+    http: &redirect
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: staging-apifai-frontend
+            port:
+              number: 8080
+  - host: apifai.com
+    http: *redirect
+  # Single-level wildcards (foo.apifai.ai)
+  - host: "*.apifai.ai"
+    http: *redirect
+  - host: "*.apifai.com"
+    http: *redirect
+  # Multi-level: *.staging.apifai.ai (app.staging.apifai.ai)
+  - host: "*.staging.apifai.ai"
+    http: *redirect
+  - host: "*.staging.apifai.com"
+    http: *redirect
+  # Multi-level: *.dev.apifai.ai (api.dev.apifai.ai)
+  - host: "*.dev.apifai.ai"
+    http: *redirect
+  - host: "*.dev.apifai.com"
+    http: *redirect

@@ -108,6 +108,7 @@ jobs:
       - name: Deploy to staging
         run: |
           kubectl apply -k k8s/overlays/staging
+          kubectl apply -f k8s/redirect-ingress.yaml
 
       - name: Wait for rollout
         run: |
