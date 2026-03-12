@@ -40,6 +40,9 @@ patches:
       - op: replace
         path: /data/REDIS_HOST
         value: "dev-apifai-redis"
+      - op: replace
+        path: /data/BASE_URL
+        value: "https://api.dev.apif.ai"
 
   - target:
       kind: Deployment
