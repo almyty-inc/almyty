@@ -585,7 +585,7 @@ export function AnalyticsPage() {
                   {sla.uptime != null ? `${(sla.uptime * 100).toFixed(2)}%` : '--'}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {sla.availabilityTarget ? `target: ${(sla.availabilityTarget * 100).toFixed(1)}%` : ''}
+                  {sla.availabilityTarget ? `target: ${sla.availabilityTarget}%` : ''}
                 </div>
               </div>
             </div>
