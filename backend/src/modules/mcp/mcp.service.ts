@@ -647,7 +647,6 @@ export class McpService {
     // Generate prompts from available tools in the organization
     const tools = await this.toolRepository.find({
       where: { organization: { id: organizationId }, status: ToolStatus.ACTIVE },
-      relations: ['api'],
     });
 
     const prompts: McpPrompt[] = [];

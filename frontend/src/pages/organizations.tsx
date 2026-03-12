@@ -300,7 +300,7 @@ export function OrganizationsPage() {
       cell: ({ row }) => formatDate(row.original.joinedAt),
     },
     createActionsColumn<OrganizationMembership>(
-      undefined,
+      () => {},
       (member) => handleRemoveMember(member.userId),
       [
         {

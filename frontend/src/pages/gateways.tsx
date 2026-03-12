@@ -304,7 +304,7 @@ export function GatewaysPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {gateways.filter(g => g.status === 'active').length}
+              {gateways.filter((g: any) => g.status === 'active').length}
             </div>
           </CardContent>
         </Card>
@@ -315,7 +315,7 @@ export function GatewaysPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {gateways.reduce((sum, g) => sum + (g.tools?.length || 0), 0)}
+              {gateways.reduce((sum: number, g: any) => sum + (g.tools?.length || 0), 0)}
             </div>
           </CardContent>
         </Card>

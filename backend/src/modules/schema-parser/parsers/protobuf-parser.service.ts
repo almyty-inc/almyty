@@ -93,70 +93,74 @@ export class ProtobufParserService implements SchemaParser {
   private async extractOperationsFromProtobuf(root: protobuf.Root): Promise<ParsedOperation[]> {
     const operations: ParsedOperation[] = [];
 
-    // Extract services and their methods
-    if (root.nestedArray) {
-      root.nestedArray.forEach(nested => {
-      if (nested instanceof protobuf.Service) {
-        const service = nested as protobuf.Service;
-        
-        service.methodsArray.forEach(method => {
-          const operationName = `${service.name}_${method.name}`;
-          
-          operations.push({
-            operationId: operationName,
-            name: method.name,
-            description: method.comment || `${service.name} service method: ${method.name}`,
-            method: 'grpc',
-            endpoint: `/grpc/${service.name}/${method.name}`,
-            parameters: {
-              body: {
-                message: {
-                  type: 'object',
-                  description: `Request message of type: ${method.requestType}`,
-                  properties: this.getMessageProperties(root, method.requestType),
-                },
+    // Recursively traverse to find all services (including inside package namespaces)
+    this.traverseServices(root, (service) => {
+      service.methodsArray.forEach(method => {
+        const operationName = `${service.name}_${method.name}`;
+
+        operations.push({
+          operationId: operationName,
+          name: method.name,
+          description: method.comment || `${service.name} service method: ${method.name}`,
+          method: 'grpc',
+          endpoint: `/grpc/${service.name}/${method.name}`,
+          parameters: {
+            body: {
+              message: {
+                type: 'object',
+                description: `Request message of type: ${method.requestType}`,
+                properties: this.getMessageProperties(root, method.requestType),
               },
-              header: {
-                'Content-Type': {
-                  type: 'string',
-                  default: 'application/grpc',
-                },
-                'grpc-encoding': {
-                  type: 'string',
-                  description: 'gRPC encoding',
-                  enum: ['identity', 'gzip'],
+            },
+            header: {
+              'Content-Type': {
+                type: 'string',
+                default: 'application/grpc',
+              },
+              'grpc-encoding': {
+                type: 'string',
+                description: 'gRPC encoding',
+                enum: ['identity', 'gzip'],
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'gRPC response',
+              schema: {
+                type: 'object',
+                description: `Response message of type: ${method.responseType}`,
+                properties: this.getMessageProperties(root, method.responseType),
+              },
+            },
+            'default': {
+              description: 'gRPC error',
+              schema: {
+                type: 'object',
+                properties: {
+                  code: { type: 'integer', description: 'gRPC status code' },
+                  message: { type: 'string', description: 'Error message' },
+                  details: { type: 'array', description: 'Error details' },
                 },
               },
             },
-            responses: {
-              '200': {
-                description: 'gRPC response',
-                schema: {
-                  type: 'object',
-                  description: `Response message of type: ${method.responseType}`,
-                  properties: this.getMessageProperties(root, method.responseType),
-                },
-              },
-              'default': {
-                description: 'gRPC error',
-                schema: {
-                  type: 'object',
-                  properties: {
-                    code: { type: 'integer', description: 'gRPC status code' },
-                    message: { type: 'string', description: 'Error message' },
-                    details: { type: 'array', description: 'Error details' },
-                  },
-                },
-              },
-            },
-            tags: ['grpc', service.name],
-          });
+          },
+          tags: ['grpc', service.name],
         });
-      }
       });
-    }
+    });
 
     return operations;
+  }
+
+  private traverseServices(object: protobuf.ReflectionObject, callback: (service: protobuf.Service) => void): void {
+    if (object instanceof protobuf.Service) {
+      callback(object);
+    }
+
+    if ((object as any).nestedArray) {
+      (object as any).nestedArray.forEach(nested => this.traverseServices(nested, callback));
+    }
   }
 
   private async extractResourcesFromProtobuf(root: protobuf.Root): Promise<ParsedResource[]> {

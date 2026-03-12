@@ -59,6 +59,15 @@ function OrganizationTab({ organization }: { organization: any }) {
   const [orgName, setOrgName] = useState('')
   const [orgDescription, setOrgDescription] = useState('')
 
+  // Fetch full organization details (store may not include createdAt from auth response)
+  const { data: orgDetails } = useQuery({
+    queryKey: ['organization-details', organization?.id],
+    queryFn: () => organizationsApi.getById(organization.id),
+    enabled: !!organization?.id,
+  })
+
+  const fullOrg = orgDetails?.data || organization
+
   // Initialize form values when organization data loads
   React.useEffect(() => {
     if (organization) {
@@ -161,7 +170,7 @@ function OrganizationTab({ organization }: { organization: any }) {
         <div className="grid grid-cols-2 gap-6">
           <div>
             <label className="text-sm font-medium text-muted-foreground">Plan</label>
-            <div className="text-sm font-medium mt-1">{organization.plan || 'free'}</div>
+            <div className="text-sm font-medium mt-1">{fullOrg.plan || 'free'}</div>
           </div>
           <div>
             <label className="text-sm font-medium text-muted-foreground">Status</label>
@@ -175,7 +184,7 @@ function OrganizationTab({ organization }: { organization: any }) {
         <div>
           <label className="text-sm font-medium text-muted-foreground">Created</label>
           <div className="text-sm mt-1">
-            {organization.createdAt ? new Date(organization.createdAt).toLocaleDateString() : 'Unknown'}
+            {fullOrg.createdAt ? new Date(fullOrg.createdAt).toLocaleDateString() : 'Unknown'}
           </div>
         </div>
       </CardContent>
