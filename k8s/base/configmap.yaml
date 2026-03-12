@@ -9,6 +9,7 @@ data:
   DATABASE_PORT: "5432"
   DATABASE_NAME: "apifai"
   DB_SSL: "false"
+  DB_SYNC: "false"
 
   # Redis Configuration
   REDIS_HOST: "apifai-redis"

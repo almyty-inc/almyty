@@ -49,6 +49,9 @@ patches:
       - op: replace
         path: /data/BASE_URL
         value: "https://api.staging.apif.ai"
+      - op: replace
+        path: /data/DB_SYNC
+        value: "true"
 
   - target:
       kind: Deployment
