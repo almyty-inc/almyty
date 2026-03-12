@@ -1,4 +1,5 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
@@ -64,6 +65,7 @@ export class ToolExecutorService {
     private userRepository: Repository<User>,
     @InjectRedis() private readonly redis: Redis.Redis,
     private customCodeExecutor: CustomCodeExecutorService,
+    private moduleRef: ModuleRef,
   ) {}
 
   async executeTool(
@@ -164,6 +166,105 @@ export class ToolExecutorService {
             retryCount: 0,
             executionTime: Date.now() - startTime,
           };
+        }
+      }
+
+      // Check if this is an LLM tool
+      if (tool.llmConfig?.providerId && tool.llmConfig?.promptTemplate) {
+        try {
+          // Interpolate prompt template with parameters
+          let prompt = tool.llmConfig.promptTemplate;
+          for (const [key, value] of Object.entries(parameters)) {
+            prompt = prompt.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value));
+          }
+
+          const messages: any[] = [];
+          if (tool.llmConfig.systemPrompt) {
+            let sysPrompt = tool.llmConfig.systemPrompt;
+            if (tool.llmConfig.outputMode === 'json' && tool.llmConfig.outputSchema) {
+              sysPrompt += `\n\nYou MUST respond with valid JSON matching this schema:\n${JSON.stringify(tool.llmConfig.outputSchema, null, 2)}`;
+            }
+            messages.push({ role: 'system', content: sysPrompt });
+          } else if (tool.llmConfig.outputMode === 'json' && tool.llmConfig.outputSchema) {
+            messages.push({ role: 'system', content: `Respond with valid JSON matching this schema:\n${JSON.stringify(tool.llmConfig.outputSchema, null, 2)}` });
+          }
+          messages.push({ role: 'user', content: prompt });
+
+          // Dynamic import to avoid circular dependency
+          const { LlmProvidersService } = await import('../llm-providers/llm-providers.service');
+          const llmService = this.moduleRef?.get(LlmProvidersService, { strict: false });
+
+          if (!llmService) {
+            throw new Error('LLM providers service not available');
+          }
+
+          const chatResponse = await llmService.chat(
+            tool.llmConfig.providerId,
+            {
+              messages,
+              model: tool.llmConfig.model,
+              maxTokens: tool.llmConfig.maxTokens,
+              temperature: tool.llmConfig.temperature,
+            },
+            options.organizationId,
+            options.userId,
+          );
+
+          let responseData: any = chatResponse.message?.content || '';
+
+          // Parse JSON if output mode is json
+          if (tool.llmConfig.outputMode === 'json' && typeof responseData === 'string') {
+            try {
+              // Try to extract JSON from response
+              const jsonMatch = responseData.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+              if (jsonMatch) {
+                responseData = JSON.parse(jsonMatch[0]);
+              }
+            } catch {
+              // If parse fails, return raw text with a note
+              responseData = { raw: responseData, parseError: 'Could not parse as JSON' };
+            }
+          }
+
+          const executionResult = {
+            success: true,
+            data: responseData,
+            executionTime: Date.now() - startTime,
+            cached,
+            rateLimited,
+            retryCount: 0,
+            metadata: {
+              outputMode: tool.llmConfig.outputMode,
+              provider: tool.llmConfig.providerId,
+              model: tool.llmConfig.model,
+              usage: chatResponse.usage,
+            },
+          };
+
+          await this.recordExecution(tool, parameters, executionResult, options, {
+            executionTime: Date.now() - startTime,
+            cached,
+            retryCount: 0,
+          });
+
+          return executionResult;
+        } catch (error) {
+          const executionResult = {
+            success: false,
+            error: error.message || 'LLM execution failed',
+            executionTime: Date.now() - startTime,
+            cached,
+            rateLimited,
+            retryCount: 0,
+          };
+
+          await this.recordExecution(tool, parameters, executionResult, options, {
+            executionTime: Date.now() - startTime,
+            cached,
+            retryCount: 0,
+          });
+
+          return executionResult;
         }
       }
 

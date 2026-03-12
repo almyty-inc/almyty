@@ -32,6 +32,7 @@ export enum ToolExecutionMethod {
   SOAP = 'soap',
   GRPC = 'grpc',
   CUSTOM = 'custom',
+  LLM = 'llm',
 }
 
 export enum ToolStatus {
@@ -126,6 +127,18 @@ export class Tool {
 
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
+
+  @Column({ type: 'json', nullable: true })
+  llmConfig: {
+    providerId: string;
+    promptTemplate: string;
+    model?: string;
+    maxTokens?: number;
+    temperature?: number;
+    systemPrompt?: string;
+    outputMode: 'text' | 'json';
+    outputSchema?: Record<string, any>;
+  } | null;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
   definitionHash: string | null; // SHA-256 hash of tool definition for integrity verification

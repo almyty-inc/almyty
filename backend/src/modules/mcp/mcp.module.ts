@@ -6,6 +6,8 @@ import { GatewayMcpController } from './gateway-mcp.controller';
 import { McpTransportController } from './controllers/mcp-transport.controller';
 import { UtcpController } from './controllers/utcp.controller';
 import { A2AController } from './controllers/a2a.controller';
+import { GatewayUtcpController } from './controllers/gateway-utcp.controller';
+import { GatewayA2AController } from './controllers/gateway-a2a.controller';
 import { PublicController } from './controllers/public.controller';
 import { McpService } from './mcp.service';
 import { McpGatewayService } from './mcp-gateway.service';
@@ -47,7 +49,7 @@ import { forwardRef } from '@nestjs/common';
     ]),
     forwardRef(() => ToolsModule),
   ],
-  controllers: [McpController, GatewayMcpController, McpTransportController, UtcpController, A2AController, PublicController],
+  controllers: [McpController, GatewayMcpController, McpTransportController, UtcpController, GatewayUtcpController, A2AController, GatewayA2AController, PublicController],
   providers: [
     McpService,
     McpGatewayService,
