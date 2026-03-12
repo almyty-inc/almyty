@@ -677,7 +677,7 @@ services:
     environment:
       POSTGRES_DB: llm_gateway
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     
@@ -694,7 +694,7 @@ services:
       - postgres
       - redis
     environment:
-      DATABASE_URL: postgresql://postgres:password@postgres:5432/llm_gateway
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/llm_gateway
       REDIS_URL: redis://redis:6379
       
   frontend:
