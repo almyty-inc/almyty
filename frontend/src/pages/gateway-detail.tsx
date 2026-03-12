@@ -615,45 +615,62 @@ export function GatewayDetailPage() {
         </div>
       </div>
 
-      {/* Gateway Configuration */}
+      {/* Gateway Configuration — type-specific */}
       <Card>
         <CardHeader>
           <CardTitle>Configuration</CardTitle>
-          <CardDescription>Gateway endpoint and connection details</CardDescription>
+          <CardDescription>
+            {gateway.type === 'skills' ? 'Install command and setup' : 'Gateway endpoint and connection details'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div>
-              <p className="text-sm font-medium text-muted-foreground mb-2">MCP Endpoint URL</p>
+              <p className="text-sm font-medium text-muted-foreground mb-2">
+                {gateway.type === 'mcp' && 'MCP Endpoint URL'}
+                {gateway.type === 'utcp' && 'UTCP Manual URL'}
+                {gateway.type === 'a2a' && 'A2A Discovery URL'}
+                {gateway.type === 'skills' && 'Install Command'}
+              </p>
               <div className="flex gap-2">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">
                   {(() => {
-                    const backendUrl = window.location.origin.replace(':3002', ':4000')
-                    const simpleSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
-                    return `${backendUrl}/mcp/${simpleSlug}${gateway.endpoint}`
+                    const backendUrl = window.location.origin.replace(':3002', ':4000').replace('app.', 'api.')
+                    const orgSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
+                    if (gateway.type === 'mcp') return `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`
+                    if (gateway.type === 'utcp') return `${backendUrl}/utcp/${orgSlug}${gateway.endpoint}/manual`
+                    if (gateway.type === 'a2a') return `${backendUrl}/a2a/${orgSlug}${gateway.endpoint}/.well-known/a2a`
+                    if (gateway.type === 'skills') return `npx @apifai/skills install --gateway ${gateway.id}`
+                    return gateway.endpoint
                   })()}
                 </code>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={async () => {
-                    const backendUrl = window.location.origin.replace(':3002', ':4000')
-                    const simpleSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
-                    const fullEndpoint = `${backendUrl}/mcp/${simpleSlug}${gateway.endpoint}`
+                    const backendUrl = window.location.origin.replace(':3002', ':4000').replace('app.', 'api.')
+                    const orgSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
+                    let fullEndpoint = gateway.endpoint
+                    if (gateway.type === 'mcp') fullEndpoint = `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`
+                    else if (gateway.type === 'utcp') fullEndpoint = `${backendUrl}/utcp/${orgSlug}${gateway.endpoint}/manual`
+                    else if (gateway.type === 'a2a') fullEndpoint = `${backendUrl}/a2a/${orgSlug}${gateway.endpoint}/.well-known/a2a`
+                    else if (gateway.type === 'skills') fullEndpoint = `npx @apifai/skills install --gateway ${gateway.id}`
                     try {
                       await navigator.clipboard.writeText(fullEndpoint)
-                      success('Copied!', 'Full MCP endpoint URL copied to clipboard')
+                      success('Copied!', 'Endpoint copied to clipboard')
                     } catch (err) {
-                      errorNotif('Failed to copy', 'Could not copy endpoint to clipboard')
+                      errorNotif('Failed to copy', 'Could not copy to clipboard')
                     }
                   }}
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Path: <code className="bg-muted px-1 py-0.5 rounded text-xs">{gateway.endpoint}</code>
-              </p>
+              {gateway.type !== 'skills' && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Path: <code className="bg-muted px-1 py-0.5 rounded text-xs">{gateway.endpoint}</code>
+                </p>
+              )}
             </div>
           </div>
         </CardContent>

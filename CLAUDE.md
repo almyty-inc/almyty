@@ -34,10 +34,9 @@
 - **Kubernetes**: Kustomize base + 3 overlays (development, staging, production)
 - **CI/CD**: 5 GitHub Actions workflows (production, staging, dev, quick-api, quick-frontend)
 - **Registry**: ghcr.io/frane/apifai
-- **Cloud**: DigitalOcean Kubernetes (3 nodes, fra1 region)
-- **Domain**: apif.ai (primary), apifai.ai + apifai.com (redirect to apif.ai)
-- **DNS**: Namecheap — wildcard A records → LB IP 129.212.254.179
-- **TLS**: Let's Encrypt via cert-manager (HTTP-01 challenge)
+- **Cloud**: DigitalOcean Kubernetes
+- **Domain**: apif.ai (primary)
+- **TLS**: Let's Encrypt via cert-manager
 - **Testing**: Playwright for E2E, Jest for backend unit/integration
 
 ---
@@ -151,44 +150,18 @@ k8s/
 
 ## Database Configuration
 
-TypeORM connects via **individual params** (not DATABASE_URL) for proper SSL control:
-- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `DATABASE_NAME` from configmap/secrets
-- `DB_SSL` env var: `"true"` for staging/production (DO Managed PG), `"false"` for dev
-- When `DB_SSL=true`: sets `ssl: { rejectUnauthorized: false }` at both top-level and `extra` (required for DO self-signed certs)
-
-### Managed Database (Staging)
-- **Provider**: DigitalOcean Managed PostgreSQL
-- **DB ID**: `370b28a0-6af0-4245-85f3-3dac149d15dc`
-- **Host**: `apifai-db-do-user-4308986-0.j.db.ondigitalocean.com`
-- **Port**: 25060
-- **Database**: `apifai`
-- **SSL**: Required (DO enforces even within VPC)
+TypeORM connects via individual params (not DATABASE_URL) for proper SSL control:
+- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `DATABASE_NAME`
+- `DB_SSL` env var: `"true"` for managed databases, `"false"` for local dev
 
 ---
 
 ## Secrets Management
 
 Secrets are **NOT stored in git**. They are managed via:
-- **GitHub Secrets** → injected by CI/CD workflows via `kubectl create secret`
-- Secret name in k8s: `apifai-secrets` (no kustomize namePrefix since removed from kustomization resources)
-
-### Required GitHub Secrets
-
-**Infrastructure:**
-- `GHCR_PAT` — GitHub Container Registry personal access token
-- `DIGITALOCEAN_ACCESS_TOKEN` — DigitalOcean API token
-- `DIGITALOCEAN_CLUSTER_NAME` — K8s cluster name (`k8s-1-34-1-do-3-fra1-1771511973577`)
-
-**Staging:**
-- `STAGING_DATABASE_USERNAME` — DB username
-- `STAGING_DATABASE_PASSWORD` — DB password
-- `STAGING_DATABASE_URL` — Full connection URL (used by migrations only)
-- `STAGING_JWT_SECRET` — JWT signing secret
-
-**Production (not yet set):**
-- `PROD_DATABASE_USERNAME`, `PROD_DATABASE_PASSWORD`, `PROD_DATABASE_URL`
-- `PROD_REDIS_PASSWORD`, `PROD_REDIS_URL`
-- `PROD_JWT_SECRET`
+- **GitHub Secrets** → injected by CI/CD workflows
+- **k8s secrets** → created at deploy time
+- See `.github/workflows/` for secret references
 
 ---
 

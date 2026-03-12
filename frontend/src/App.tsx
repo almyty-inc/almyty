@@ -25,6 +25,8 @@ import { LlmProvidersPage } from '@/pages/llm-providers'
 import { AnalyticsPage } from '@/pages/analytics'
 import { SettingsPage } from '@/pages/settings'
 import { OrganizationsPage } from '@/pages/organizations'
+import { ChatPage } from '@/pages/chat'
+import { AgentsPage } from '@/pages/agents'
 
 function App() {
   const { checkAuth } = useAuthStore()
@@ -71,6 +73,16 @@ function App() {
         <Route path="/tools/:id" element={
           <DashboardLayout>
             <ToolDetailPage />
+          </DashboardLayout>
+        } />
+        <Route path="/agents" element={
+          <DashboardLayout>
+            <AgentsPage />
+          </DashboardLayout>
+        } />
+        <Route path="/chat" element={
+          <DashboardLayout>
+            <ChatPage />
           </DashboardLayout>
         } />
         <Route path="/llm-providers" element={

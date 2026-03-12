@@ -51,7 +51,7 @@ import {
   createActionsColumn,
   createSortableColumn,
 } from '@/components/ui/data-table'
-import { toolsApi } from '@/lib/api'
+import { toolsApi, llmProvidersApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
@@ -130,7 +130,17 @@ export function ToolsPage() {
   const [executionResult, setExecutionResult] = useState<any>(null)
   const [toolParameters, setToolParameters] = useState<any>({ type: 'object', properties: {} })
   const [toolCode, setToolCode] = useState('')
-  const [executionMethod, setExecutionMethod] = useState<'http' | 'graphql' | 'soap' | 'grpc' | 'custom'>('http')
+  const [executionMethod, setExecutionMethod] = useState<'http' | 'graphql' | 'soap' | 'grpc' | 'custom' | 'llm'>('http')
+  const [llmConfig, setLlmConfig] = useState({
+    providerId: '',
+    promptTemplate: '',
+    systemPrompt: '',
+    model: '',
+    maxTokens: 1024,
+    temperature: 0.7,
+    outputMode: 'text' as 'text' | 'json',
+    outputSchema: '',
+  })
 
   // Create parameter autocomplete extension for CodeMirror
   const parameterAutocomplete = useMemo(() => {
@@ -195,6 +205,14 @@ export function ToolsPage() {
     queryFn: () => toolsApi.getAll(currentOrganization?.id),
     enabled: !!currentOrganization,
   })
+
+  const { data: providersData } = useQuery({
+    queryKey: ['llm-providers'],
+    queryFn: () => llmProvidersApi.getAll(),
+    enabled: !!currentOrganization,
+  })
+  const llmProviders = providersData?.data?.data?.providers || providersData?.data?.data || providersData?.data || []
+  const activeProviders = Array.isArray(llmProviders) ? llmProviders.filter((p: any) => p.status === 'active' || p.isActive) : []
 
   const deleteToolMutation = useMutation({
     mutationFn: (id: string) => toolsApi.delete(id),
@@ -283,12 +301,30 @@ return new Promise((resolve, reject) => {
         type = graphqlConfig.query.trim().startsWith('mutation') ? 'mutation' : 'query';
       }
 
+      // Build LLM config if LLM execution method
+      let llmConfigPayload = undefined;
+      if (executionMethod === 'llm') {
+        llmConfigPayload = {
+          providerId: llmConfig.providerId,
+          promptTemplate: llmConfig.promptTemplate,
+          systemPrompt: llmConfig.systemPrompt || undefined,
+          model: llmConfig.model || undefined,
+          maxTokens: llmConfig.maxTokens,
+          temperature: llmConfig.temperature,
+          outputMode: llmConfig.outputMode,
+          outputSchema: llmConfig.outputMode === 'json' && llmConfig.outputSchema
+            ? JSON.parse(llmConfig.outputSchema)
+            : undefined,
+        };
+      }
+
       return toolsApi.create({
         ...data,
         type,
         parameters: toolParameters,
         code,
         executionMethod,
+        llmConfig: llmConfigPayload,
       }, currentOrganization?.id);
     },
     onSuccess: () => {
@@ -1090,6 +1126,7 @@ return new Promise((resolve, reject) => {
                   <SelectItem value="soap">SOAP</SelectItem>
                   <SelectItem value="grpc">gRPC</SelectItem>
                   <SelectItem value="custom">Custom JavaScript</SelectItem>
+                  <SelectItem value="llm">LLM Prompt</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-1">
@@ -1098,6 +1135,7 @@ return new Promise((resolve, reject) => {
                 {executionMethod === 'soap' && 'Call SOAP web services'}
                 {executionMethod === 'grpc' && 'Invoke gRPC service methods'}
                 {executionMethod === 'custom' && 'Write custom JavaScript code for transformations and logic'}
+                {executionMethod === 'llm' && 'Prompt an LLM provider and return the response'}
               </p>
             </div>
             <div>
@@ -1304,8 +1342,105 @@ return new Promise((resolve, reject) => {
               </div>
             )}
 
+            {executionMethod === 'llm' && (
+              <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+                <Label className="text-base font-semibold">LLM Configuration</Label>
+
+                <div>
+                  <Label>Provider</Label>
+                  <Select value={llmConfig.providerId} onValueChange={(v) => setLlmConfig({ ...llmConfig, providerId: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select LLM provider..." /></SelectTrigger>
+                    <SelectContent>
+                      {activeProviders.map((p: any) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name} ({p.provider})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>System Prompt (optional)</Label>
+                  <Textarea
+                    placeholder="You are a helpful assistant that..."
+                    value={llmConfig.systemPrompt}
+                    onChange={(e) => setLlmConfig({ ...llmConfig, systemPrompt: e.target.value })}
+                    rows={2}
+                  />
+                </div>
+
+                <div>
+                  <Label>Prompt Template</Label>
+                  <Textarea
+                    placeholder="Analyze the following data: {{input}}&#10;&#10;Use {{parameter}} placeholders for tool parameters."
+                    value={llmConfig.promptTemplate}
+                    onChange={(e) => setLlmConfig({ ...llmConfig, promptTemplate: e.target.value })}
+                    rows={4}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Use <code className="bg-muted px-1 rounded">{'{{paramName}}'}</code> to inject parameters. Available: {Object.keys(toolParameters.properties || {}).map(k => `{{${k}}}`).join(', ') || 'add parameters below'}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Output Mode</Label>
+                    <Select value={llmConfig.outputMode} onValueChange={(v: 'text' | 'json') => setLlmConfig({ ...llmConfig, outputMode: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="text">Raw Text</SelectItem>
+                        <SelectItem value="json">Structured JSON</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Model Override (optional)</Label>
+                    <Input
+                      placeholder="e.g. gpt-4o"
+                      value={llmConfig.model}
+                      onChange={(e) => setLlmConfig({ ...llmConfig, model: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Temperature ({llmConfig.temperature})</Label>
+                    <Input
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.1"
+                      value={llmConfig.temperature}
+                      onChange={(e) => setLlmConfig({ ...llmConfig, temperature: parseFloat(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Max Tokens</Label>
+                    <Input
+                      type="number"
+                      value={llmConfig.maxTokens}
+                      onChange={(e) => setLlmConfig({ ...llmConfig, maxTokens: parseInt(e.target.value) || 1024 })}
+                    />
+                  </div>
+                </div>
+
+                {llmConfig.outputMode === 'json' && (
+                  <div>
+                    <Label>Output JSON Schema</Label>
+                    <Textarea
+                      placeholder={'{\n  "type": "object",\n  "properties": {\n    "summary": { "type": "string" }\n  }\n}'}
+                      value={llmConfig.outputSchema}
+                      onChange={(e) => setLlmConfig({ ...llmConfig, outputSchema: e.target.value })}
+                      rows={5}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Authentication Configuration */}
-            {executionMethod !== 'custom' && (
+            {executionMethod !== 'custom' && executionMethod !== 'llm' && (
               <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
                 <Label>Authentication</Label>
                 <Select value={authConfig.type} onValueChange={(value) => setAuthConfig({ ...authConfig, type: value })}>
