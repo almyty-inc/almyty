@@ -46,6 +46,9 @@ patches:
       - op: replace
         path: /data/DB_SSL
         value: "true"
+      - op: replace
+        path: /data/BASE_URL
+        value: "https://api.staging.apif.ai"
 
   - target:
       kind: Deployment

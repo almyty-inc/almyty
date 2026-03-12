@@ -132,6 +132,11 @@ spec:
             configMapKeyRef:
               name: apifai-config
               key: DB_SSL
+        - name: BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: apifai-config
+              key: BASE_URL
         livenessProbe:
           httpGet:
             path: /health/live

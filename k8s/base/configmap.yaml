@@ -29,3 +29,6 @@ data:
 
   # CORS
   CORS_ORIGIN: "https://app.apif.ai"
+
+  # Base URL (used by MCP discovery, CLI exports, protocol endpoints)
+  BASE_URL: "https://api.apif.ai"
