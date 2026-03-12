@@ -51,7 +51,7 @@ export function DashboardPage() {
 
   const gateways = gatewaysData?.data?.data?.gateways || gatewaysData?.data?.data || []
   const tools = toolsData?.data?.data?.tools || toolsData?.data?.tools || []
-  const apis = apisData?.data?.data?.apis || apisData?.data?.data || apisData?.data || []
+  const apis = apisData?.data?.data?.apis || apisData?.data?.apis || apisData?.data?.data || []
 
   return (
     <div className="space-y-8">
@@ -110,7 +110,7 @@ export function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{apis.length}</div>
             <p className="text-xs text-muted-foreground">
-              {apis.filter((a: any) => a.status === 'active').length} active
+              {Array.isArray(apis) ? apis.filter((a: any) => a.status === 'active').length : 0} active
             </p>
           </CardContent>
         </Card>
