@@ -312,9 +312,14 @@ export const llmProvidersApi = {
   getUsage: (id: string, params?: any) => api.get(`/llm-providers/${id}/usage`, { params }),
 }
 
-// Analytics API
+// Analytics / Monitoring API
 export const analyticsApi = {
   getDashboard: () => api.get('/monitoring/enterprise/dashboard'),
+  getLiveStats: () => api.get('/monitoring/stats/live'),
+  getMetrics: () => api.get('/monitoring/metrics'),
+  getMetricsHistory: (hours = 1) => api.get(`/monitoring/metrics/history?hours=${hours}`),
+  getAlerts: () => api.get('/monitoring/alerts'),
+  getHealth: () => api.get('/monitoring/health'),
 }
 
 // Users API (admin)
