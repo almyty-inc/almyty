@@ -75,7 +75,7 @@ patches:
     patch: |-
       - op: replace
         path: /metadata/annotations/cert-manager.io~1cluster-issuer
-        value: letsencrypt-prod
+        value: prod-letsencrypt-prod
       - op: replace
         path: /spec/tls/0/hosts/0
         value: api.apif.ai
