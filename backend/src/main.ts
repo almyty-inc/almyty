@@ -38,7 +38,7 @@ async function bootstrap() {
     origin: configService.get<string>('CORS_ORIGIN', 'http://localhost:3002'),
     credentials: configService.get<boolean>('CORS_CREDENTIALS', true),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Retry-Count'],
   });
 
   // No API prefix - this is a pure API backend
