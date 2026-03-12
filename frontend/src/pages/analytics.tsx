@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { gatewaysApi, toolsApi, apisApi, analyticsApi } from '@/lib/api'
+import { gatewaysApi, toolsApi, apisApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
@@ -33,16 +33,6 @@ function formatDate(date: string | null): string {
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
   return d.toLocaleDateString()
-}
-
-function formatUptime(seconds: number): string {
-  if (!seconds) return '--'
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  const mins = Math.floor((seconds % 3600) / 60)
-  if (days > 0) return `${days}d ${hours}h`
-  if (hours > 0) return `${hours}h ${mins}m`
-  return `${mins}m`
 }
 
 const protocolColors: Record<string, string> = {
@@ -85,14 +75,6 @@ export function AnalyticsPage() {
     },
   })
 
-  const { data: metrics } = useQuery({
-    queryKey: ['monitoring-metrics'],
-    queryFn: async () => {
-      try { return (await analyticsApi.getMetrics()).data } catch { return null }
-    },
-    refetchInterval: 30000,
-  })
-
   const isLoading = loadingTools || loadingGateways || loadingApis
   if (isLoading) {
     return <div className="flex items-center justify-center h-96"><LoadingSpinner size="lg" /></div>
@@ -120,26 +102,17 @@ export function AnalyticsPage() {
 
   const sortedTools = [...filteredTools].sort((a: any, b: any) => (b.usageCount || 0) - (a.usageCount || 0))
   const protocols = [...new Set(gatewayList.map((g: any) => g.type))] as string[]
-  const uptime = metrics?.system?.uptime
 
   return (
     <div className="space-y-4">
       {/* Header row */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-          <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-            <span>{apiList.length} APIs · {totalOps} operations</span>
-            <span>{toolList.length} tools · {totalUsage} calls</span>
-            <span>{gatewayList.length} gateways · {totalGwReqs} requests</span>
-          </div>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+        <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+          <span>{apiList.length} APIs · {totalOps} operations</span>
+          <span>{toolList.length} tools · {totalUsage} calls</span>
+          <span>{gatewayList.length} gateways · {totalGwReqs} requests</span>
         </div>
-        {uptime != null && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            Up {formatUptime(uptime)}
-          </div>
-        )}
       </div>
 
       {/* Tab bar */}
@@ -202,28 +175,29 @@ export function AnalyticsPage() {
                 : <>No tools yet. <Link to="/apis" className="text-primary hover:underline">Import an API</Link> to generate tools.</>}
             </div>
           ) : (
+            <div className="rounded-lg border bg-card">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-2 font-medium">Name</th>
-                  <th className="pb-2 font-medium">Method</th>
-                  <th className="pb-2 font-medium">Served via</th>
-                  <th className="pb-2 font-medium text-right">Calls</th>
-                  <th className="pb-2 font-medium text-right">Success</th>
-                  <th className="pb-2 font-medium text-right">Avg Time</th>
-                  <th className="pb-2 font-medium text-right">Last Used</th>
+                <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Method</th>
+                  <th className="px-4 py-3 font-medium">Served via</th>
+                  <th className="px-4 py-3 font-medium text-right">Calls</th>
+                  <th className="px-4 py-3 font-medium text-right">Success</th>
+                  <th className="px-4 py-3 font-medium text-right">Avg Time</th>
+                  <th className="px-4 py-3 font-medium text-right">Last Used</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedTools.map((tool: any) => {
                   const onGateways = gatewayList.filter((gw: any) => gw.tools?.some((t: any) => t.id === tool.id))
                   return (
-                    <tr key={tool.id} className="border-b last:border-0 hover:bg-muted/50">
-                      <td className="py-2">
+                    <tr key={tool.id} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="px-4 py-2.5">
                         <Link to={`/tools/${tool.id}`} className="font-medium hover:underline text-xs">{tool.name}</Link>
                       </td>
-                      <td className="py-2 text-xs text-muted-foreground capitalize">{tool.executionMethod || 'http'}</td>
-                      <td className="py-2">
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground capitalize">{tool.executionMethod || 'http'}</td>
+                      <td className="px-4 py-2.5">
                         <div className="flex gap-1">
                           {onGateways.length > 0 ? onGateways.map((gw: any) => (
                             <Badge key={gw.id} variant="outline" className={cn('text-[10px] uppercase px-1.5 py-0', protocolColors[gw.type])}>
@@ -232,21 +206,22 @@ export function AnalyticsPage() {
                           )) : <span className="text-xs text-muted-foreground">--</span>}
                         </div>
                       </td>
-                      <td className="py-2 text-right font-medium">{(tool.usageCount || 0).toLocaleString()}</td>
-                      <td className="py-2 text-right">
+                      <td className="px-4 py-2.5 text-right font-medium">{(tool.usageCount || 0).toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right">
                         {tool.usageCount > 0 ? (
                           <span className={cn('font-medium',
                             tool.successRate >= 90 ? 'text-green-600' : tool.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'
                           )}>{tool.successRate}%</span>
                         ) : <span className="text-muted-foreground">--</span>}
                       </td>
-                      <td className="py-2 text-right text-muted-foreground">{formatMs(tool.averageResponseTime)}</td>
-                      <td className="py-2 text-right text-xs text-muted-foreground">{formatDate(tool.lastUsedAt)}</td>
+                      <td className="px-4 py-2.5 text-right text-muted-foreground">{formatMs(tool.averageResponseTime)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">{formatDate(tool.lastUsedAt)}</td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
@@ -259,18 +234,19 @@ export function AnalyticsPage() {
               No gateways. <Link to="/gateways" className="text-primary hover:underline">Create one</Link>.
             </div>
           ) : (
+            <div className="rounded-lg border bg-card">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-2 font-medium">Name</th>
-                  <th className="pb-2 font-medium">Protocol</th>
-                  <th className="pb-2 font-medium">Endpoint</th>
-                  <th className="pb-2 font-medium text-right">Tools</th>
-                  <th className="pb-2 font-medium text-right">Requests</th>
-                  <th className="pb-2 font-medium text-right">Success Rate</th>
-                  <th className="pb-2 font-medium text-right">Last Request</th>
-                  <th className="pb-2 font-medium text-center">Health</th>
-                  <th className="pb-2 font-medium">Auth</th>
+                <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Protocol</th>
+                  <th className="px-4 py-3 font-medium">Endpoint</th>
+                  <th className="px-4 py-3 font-medium text-right">Tools</th>
+                  <th className="px-4 py-3 font-medium text-right">Requests</th>
+                  <th className="px-4 py-3 font-medium text-right">Success Rate</th>
+                  <th className="px-4 py-3 font-medium text-right">Last Request</th>
+                  <th className="px-4 py-3 font-medium text-center">Health</th>
+                  <th className="px-4 py-3 font-medium">Auth</th>
                 </tr>
               </thead>
               <tbody>
@@ -281,24 +257,24 @@ export function AnalyticsPage() {
                   const rate = total > 0 ? ((success / total) * 100).toFixed(1) + '%' : '--'
                   const authTypes = gw.authConfigs?.map((a: any) => a.type).filter(Boolean) || []
                   return (
-                    <tr key={gw.id} className="border-b last:border-0 hover:bg-muted/50">
-                      <td className="py-2">
+                    <tr key={gw.id} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="px-4 py-2.5">
                         <Link to={`/gateways/${gw.id}`} className="font-medium hover:underline text-sm">{gw.name}</Link>
                       </td>
-                      <td className="py-2">
+                      <td className="px-4 py-2.5">
                         <Badge variant="outline" className={cn('text-xs uppercase', protocolColors[gw.type])}>{gw.type}</Badge>
                       </td>
-                      <td className="py-2 text-xs text-muted-foreground font-mono">{gw.endpoint}</td>
-                      <td className="py-2 text-right font-medium">{toolCount}</td>
-                      <td className="py-2 text-right font-medium">{total.toLocaleString()}</td>
-                      <td className="py-2 text-right">{rate}</td>
-                      <td className="py-2 text-right text-xs text-muted-foreground">{formatDate(gw.lastRequestAt)}</td>
-                      <td className="py-2 text-center">
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">{gw.endpoint}</td>
+                      <td className="px-4 py-2.5 text-right font-medium">{toolCount}</td>
+                      <td className="px-4 py-2.5 text-right font-medium">{total.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right">{rate}</td>
+                      <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">{formatDate(gw.lastRequestAt)}</td>
+                      <td className="px-4 py-2.5 text-center">
                         {gw.isHealthy !== false
                           ? <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />
                           : <XCircle className="h-4 w-4 text-red-500 mx-auto" />}
                       </td>
-                      <td className="py-2">
+                      <td className="px-4 py-2.5">
                         {authTypes.length > 0 ? (
                           <span className="text-xs capitalize flex items-center gap-1">
                             <Shield className="h-3 w-3 text-muted-foreground" />{authTypes.join(', ')}
@@ -310,6 +286,7 @@ export function AnalyticsPage() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
@@ -322,17 +299,18 @@ export function AnalyticsPage() {
               No APIs connected. <Link to="/apis" className="text-primary hover:underline">Import one</Link>.
             </div>
           ) : (
+            <div className="rounded-lg border bg-card">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-2 font-medium">Name</th>
-                  <th className="pb-2 font-medium">Type</th>
-                  <th className="pb-2 font-medium">Base URL</th>
-                  <th className="pb-2 font-medium text-right">Operations</th>
-                  <th className="pb-2 font-medium text-right">Tools</th>
-                  <th className="pb-2 font-medium">Auth</th>
-                  <th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 font-medium text-right">Added</th>
+                <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Type</th>
+                  <th className="px-4 py-3 font-medium">Base URL</th>
+                  <th className="px-4 py-3 font-medium text-right">Operations</th>
+                  <th className="px-4 py-3 font-medium text-right">Tools</th>
+                  <th className="px-4 py-3 font-medium">Auth</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium text-right">Added</th>
                 </tr>
               </thead>
               <tbody>
@@ -346,28 +324,29 @@ export function AnalyticsPage() {
                   const toolCount = apiTools.length > 0 ? apiTools.length : (opCount > 0 ? opCount : 0)
                   const authType = api.authentication?.type || 'none'
                   return (
-                    <tr key={api.id} className="border-b last:border-0 hover:bg-muted/50">
-                      <td className="py-2">
+                    <tr key={api.id} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="px-4 py-2.5">
                         <Link to={`/apis/${api.id}`} className="font-medium hover:underline text-sm">{api.name}</Link>
                       </td>
-                      <td className="py-2">
+                      <td className="px-4 py-2.5">
                         <Badge variant="outline" className="text-xs">{api.type || 'openapi'}</Badge>
                       </td>
-                      <td className="py-2 text-xs text-muted-foreground flex items-center gap-1 font-mono">
-                        <ExternalLink className="h-3 w-3 shrink-0" />{api.baseUrl || '--'}
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">
+                        <span className="flex items-center gap-1"><ExternalLink className="h-3 w-3 shrink-0" />{api.baseUrl || '--'}</span>
                       </td>
-                      <td className="py-2 text-right font-medium">{opCount}</td>
-                      <td className="py-2 text-right font-medium">{toolCount}</td>
-                      <td className="py-2 text-xs capitalize">{authType}</td>
-                      <td className="py-2">
+                      <td className="px-4 py-2.5 text-right font-medium">{opCount}</td>
+                      <td className="px-4 py-2.5 text-right font-medium">{toolCount}</td>
+                      <td className="px-4 py-2.5 text-xs capitalize">{authType}</td>
+                      <td className="px-4 py-2.5">
                         <Badge variant={api.status === 'active' ? 'default' : 'secondary'} className="text-xs">{api.status}</Badge>
                       </td>
-                      <td className="py-2 text-right text-xs text-muted-foreground">{formatDate(api.createdAt)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">{formatDate(api.createdAt)}</td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
