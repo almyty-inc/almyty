@@ -800,7 +800,7 @@ export function LlmProvidersPage() {
           tokens: Math.floor(Math.random() * 10000),
           requests: Math.floor(Math.random() * 500)
         })),
-        usageByModel: selectedProvider.models.map(model => ({
+        usageByModel: ((selectedProvider as any).models || []).map((model: any) => ({
           model: model.name,
           requests: Math.floor(Math.random() * 1000),
           cost: Math.random() * 100,
@@ -958,7 +958,7 @@ export function LlmProvidersPage() {
     }
   })
 
-  const filteredProviders = providers.filter(provider => {
+  const filteredProviders = providers.filter((provider: any) => {
     const matchesSearch = provider.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (provider.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                          provider.type.toLowerCase().includes(searchQuery.toLowerCase())
@@ -972,10 +972,10 @@ export function LlmProvidersPage() {
     testProviderMutation.mutate({ providerId: testProvider.id, input: testInput })
   }
 
-  const totalCost = providers.reduce((sum, provider) => sum + (provider.totalCost || 0), 0)
-  const totalRequests = providers.reduce((sum, provider) => sum + (provider.totalRequests || 0), 0)
+  const totalCost = providers.reduce((sum: number, provider: any) => sum + (provider.totalCost || 0), 0)
+  const totalRequests = providers.reduce((sum: number, provider: any) => sum + (provider.totalRequests || 0), 0)
   const avgSuccessRate = providers.length > 0
-    ? providers.reduce((sum, provider) => {
+    ? providers.reduce((sum: number, provider: any) => {
         const successRate = provider.totalRequests > 0
           ? (provider.successfulRequests / provider.totalRequests) * 100
           : 100
@@ -1034,7 +1034,7 @@ export function LlmProvidersPage() {
       header: 'Health',
       cell: ({ row }) => {
         const provider = row.original
-        const healthStatus = provider.isHealthy ? 'healthy' : (provider.status === 'error' ? 'down' : 'unknown')
+        const healthStatus: string = provider.isHealthy ? 'healthy' : (provider.status === 'error' ? 'down' : 'unknown')
         return (
           <div className="flex items-center gap-2">
             {healthStatus === 'healthy' ? (
@@ -1218,7 +1218,7 @@ export function LlmProvidersPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">LLM Providers</h1>
           <p className="text-muted-foreground">
-            Configure and manage your LLM provider integrations with cost tracking and monitoring
+            Configure AI providers for tool-augmented chat. Providers can be used to test tools with real LLM interactions.
           </p>
         </div>
         {/* Only show Add Provider button when not in empty state */}
@@ -1246,7 +1246,7 @@ export function LlmProvidersPage() {
           <CardContent>
             <div className="text-2xl font-bold">{providers.length}</div>
             <p className="text-xs text-muted-foreground">
-              {providers.filter(p => p.status === 'active').length} active
+              {providers.filter((p: any) => p.status === 'active').length} active
             </p>
           </CardContent>
         </Card>
@@ -1475,23 +1475,23 @@ export function LlmProvidersPage() {
                               <Badge variant="default">Available</Badge>
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              {selectedProvider.capabilities.maxTokens?.toLocaleString() || 'N/A'} tokens
+                              {(selectedProvider.capabilities as any)?.maxTokens?.toLocaleString() || 'N/A'} tokens
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <div className="text-sm font-medium">Capabilities</div>
                               <div className="flex flex-wrap gap-1 mt-1">
-                                {selectedProvider.capabilities.supportsFunctionCalling && (
+                                {(selectedProvider.capabilities as any)?.supportsFunctionCalling && (
                                   <Badge variant="outline" className="text-xs">Function Calling</Badge>
                                 )}
-                                {selectedProvider.capabilities.supportsStreaming && (
+                                {(selectedProvider.capabilities as any)?.supportsStreaming && (
                                   <Badge variant="outline" className="text-xs">Streaming</Badge>
                                 )}
-                                {selectedProvider.capabilities.supportsToolUse && (
+                                {(selectedProvider.capabilities as any)?.supportsToolUse && (
                                   <Badge variant="outline" className="text-xs">Tool Use</Badge>
                                 )}
-                                {selectedProvider.capabilities.supportsVision && (
+                                {(selectedProvider.capabilities as any)?.supportsVision && (
                                   <Badge variant="outline" className="text-xs">Vision</Badge>
                                 )}
                               </div>

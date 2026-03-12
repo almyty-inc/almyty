@@ -375,15 +375,15 @@ export function ApisPage() {
       header: 'Type',
       cell: ({ row }) => {
         const type = row.original.type
-        const colors = {
-          [ApiType.REST]: 'default',
+        const colors: Record<string, string> = {
+          [ApiType.OPENAPI]: 'default',
           [ApiType.GRAPHQL]: 'secondary',
           [ApiType.SOAP]: 'outline',
           [ApiType.GRPC]: 'destructive',
-          [ApiType.WEBSOCKET]: 'success',
+          [ApiType.OTHER]: 'secondary',
         }
         return (
-          <Badge variant={colors[type] as any}>
+          <Badge variant={(colors[type] || 'secondary') as any}>
             {type.toUpperCase()}
           </Badge>
         )
@@ -810,7 +810,7 @@ export function ApisPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {apis.reduce((sum, a) => sum + (a.operations?.length || 0), 0)}
+                  {apis.reduce((sum: number, a: any) => sum + (a.operations?.length || 0), 0)}
                 </div>
               </CardContent>
             </Card>
@@ -821,7 +821,7 @@ export function ApisPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {apis.reduce((sum, a) => sum + (a.tools?.length || 0), 0)}
+                  {apis.reduce((sum: number, a: any) => sum + (a.tools?.length || 0), 0)}
                 </div>
               </CardContent>
             </Card>

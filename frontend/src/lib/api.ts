@@ -315,17 +315,6 @@ export const llmProvidersApi = {
 // Analytics API
 export const analyticsApi = {
   getDashboard: () => api.get('/monitoring/enterprise/dashboard'),
-  
-  getUsageMetrics: (params?: any) => api.get('/analytics/usage', { params }),
-  
-  getCostAnalysis: (params?: any) => api.get('/analytics/costs', { params }),
-  
-  getPerformanceMetrics: (params?: any) => api.get('/analytics/performance', { params }),
-  
-  getErrorAnalysis: (params?: any) => api.get('/analytics/errors', { params }),
-  
-  export: (type: string, params?: any) => 
-    api.get(`/analytics/export/${type}`, { params, responseType: 'blob' }),
 }
 
 // Users API (admin)

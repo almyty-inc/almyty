@@ -100,9 +100,9 @@ export function SecurityTab() {
           <div className="flex justify-end">
             <Button 
               onClick={handleChangePassword}
-              disabled={changePasswordMutation.isLoading}
+              disabled={changePasswordMutation.isPending}
             >
-              {changePasswordMutation.isLoading ? 'Updating...' : 'Update Password'}
+              {changePasswordMutation.isPending ? 'Updating...' : 'Update Password'}
             </Button>
           </div>
         </CardContent>

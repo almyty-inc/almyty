@@ -95,7 +95,7 @@ export function SchemaImportDialog({
           extensions: ['.wsdl', '.xml'],
           example: 'https://api.example.com/service.wsdl'
         }
-      case ApiType.PROTOBUF:
+      case ApiType.GRPC:
         return {
           icon: Server,
           title: 'Protocol Buffers Schema',

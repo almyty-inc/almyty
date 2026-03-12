@@ -308,7 +308,7 @@ return new Promise((resolve, reject) => {
 
   const executeToolMutation = useMutation({
     mutationFn: ({ id, parameters }: { id: string; parameters: Record<string, any> }) =>
-      toolsApi.execute(id, { parameters }),
+      toolsApi.execute(id, { parameters }, currentOrganization?.id || ''),
     onSuccess: (response: any) => {
       setExecutionResult(response.data)
       if (response.data.success) {
@@ -335,7 +335,7 @@ return new Promise((resolve, reject) => {
         .map((t: Tool) => t.metadata?.sourceApi?.name)
         .filter(Boolean)
     )
-  )
+  ) as string[]
 
   const filteredTools = tools.filter((tool: Tool) => {
     const matchesSearch =
@@ -424,7 +424,7 @@ return new Promise((resolve, reject) => {
     {
       id: 'test',
       header: '',
-      cell: ({ row }) => (
+      cell: ({ row }: { row: any }) => (
         <Button
           size="sm"
           variant="ghost"
@@ -710,8 +710,8 @@ return new Promise((resolve, reject) => {
               <div className="border-t pt-4">
                 <h4 className="text-sm font-medium mb-2">Assigned Gateways</h4>
                 <div className="flex gap-2 flex-wrap">
-                  {selectedTool?.gatewayAssociations?.length > 0 ? (
-                    selectedTool.gatewayAssociations.map((assoc: any) => (
+                  {(selectedTool as any)?.gatewayAssociations?.length > 0 ? (
+                    (selectedTool as any).gatewayAssociations.map((assoc: any) => (
                       <Badge key={assoc.id} variant="secondary">
                         {assoc.gateway?.name || 'Unknown'} ({assoc.gateway?.type?.toUpperCase() || 'N/A'})
                       </Badge>

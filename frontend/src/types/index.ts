@@ -82,6 +82,7 @@ export interface OrganizationMembership {
   organizationId: string
   role: OrganizationRole
   joinedAt: string
+  email?: string
   user: User
   organization: Organization
 }
@@ -183,6 +184,8 @@ export interface Api {
   authentication?: ApiAuthentication
   rateLimitConfig?: RateLimitConfig
   schema?: ApiSchema
+  schemas?: any[]
+  operations?: ApiOperation[]
   metadata?: Record<string, any>
   isActive: boolean
   lastTestedAt?: string
@@ -242,6 +245,7 @@ export interface ApiOperation {
   name: string
   method?: string
   path?: string
+  endpoint?: string
   description?: string
   parameters: any[]
   responses: any[]

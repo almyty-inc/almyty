@@ -432,16 +432,16 @@ export function ApiDetailPage() {
               <div>
                 <Label>Related Tools</Label>
                 <div className="space-y-1">
-                  {apiTools.filter(tool =>
+                  {apiTools.filter((tool: any) =>
                     tool.operationId === selectedOperation.id ||
                     tool.metadata?.sourceOperation?.name === selectedOperation.name
                   ).length > 0 ? (
                     apiTools
-                      .filter(tool =>
+                      .filter((tool: any) =>
                         tool.operationId === selectedOperation.id ||
                         tool.metadata?.sourceOperation?.name === selectedOperation.name
                       )
-                      .map(tool => (
+                      .map((tool: any) => (
                         <div key={tool.id} className="flex items-center justify-between p-2 border rounded">
                           <span className="text-sm">{tool.name}</span>
                           <Button size="sm" variant="ghost" onClick={() => navigate(`/tools/${tool.id}`)}>
@@ -622,7 +622,7 @@ export function ApiDetailPage() {
         open={uploadDialogOpen}
         onOpenChange={setUploadDialogOpen}
         apiType={api.type}
-        onImport={(data) => importSchemaMutation.mutate({ data, file: uploadFile })}
+        onImport={(data) => importSchemaMutation.mutate({ data, file: uploadFile ?? undefined })}
         isLoading={importSchemaMutation.isPending}
       />
     </div>
