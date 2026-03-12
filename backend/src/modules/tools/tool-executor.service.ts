@@ -556,7 +556,8 @@ export class ToolExecutorService {
         
         return {
           success: false,
-          error: `HTTP ${status}: ${errorData?.message || error.message}`,
+          data: errorData,
+          error: `HTTP ${status}: ${typeof errorData === 'string' ? errorData : errorData?.message || error.message}`,
           executionTime: 0,
           cached: false,
           rateLimited: false,
