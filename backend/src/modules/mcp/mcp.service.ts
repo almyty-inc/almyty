@@ -553,7 +553,11 @@ export class McpService {
 
       // Convert result to MCP content format
       // MCP spec requires content array with type and text fields
-      const textContent = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
+      const textContent = !result.success && result.error
+        ? result.error
+        : typeof result.data === 'string'
+          ? result.data
+          : JSON.stringify(result.data ?? {}, null, 2);
 
       return {
         content: [
