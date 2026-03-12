@@ -96,6 +96,8 @@ export function GatewaysPage() {
       configuration = { agentCapabilities: {} }
     } else if (data.type === 'utcp') {
       configuration = { protocol: 'http' }
+    } else if (data.type === 'skills') {
+      configuration = { format: 'skill-md' }
     }
 
     const payload = {
