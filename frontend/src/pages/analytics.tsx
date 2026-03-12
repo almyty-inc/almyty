@@ -1,179 +1,101 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import {
   Activity,
   Zap,
   Clock,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   Wrench,
-  Brain,
   Globe,
   Shield,
-  Cpu,
-  HardDrive,
   Timer,
-  ArrowUp,
-  ArrowDown,
-  RefreshCw,
   Wifi,
-  Server,
+  ExternalLink,
+  Key,
+  ArrowRight,
   BarChart3,
+  Hash,
   TrendingUp,
-  Eye,
-  ShieldAlert,
-  Lock,
-  Ban,
-  Radio,
 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { analyticsApi } from '@/lib/api'
+import { gatewaysApi, toolsApi, apisApi, analyticsApi } from '@/lib/api'
+import { useOrganizationStore } from '@/store/organization'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
 
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  const mins = Math.floor((seconds % 3600) / 60)
-  if (days > 0) return `${days}d ${hours}h ${mins}m`
-  if (hours > 0) return `${hours}h ${mins}m`
-  return `${mins}m`
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`
-  return `${(bytes / 1073741824).toFixed(2)} GB`
-}
-
 function formatMs(ms: number): string {
+  if (!ms || ms === 0) return '--'
   if (ms < 1) return '<1ms'
   if (ms < 1000) return `${Math.round(ms)}ms`
   return `${(ms / 1000).toFixed(2)}s`
 }
 
-function StatusDot({ status }: { status: 'healthy' | 'degraded' | 'down' }) {
-  return (
-    <span className={cn(
-      'inline-block w-2.5 h-2.5 rounded-full',
-      status === 'healthy' && 'bg-green-500 animate-pulse',
-      status === 'degraded' && 'bg-yellow-500 animate-pulse',
-      status === 'down' && 'bg-red-500',
-    )} />
-  )
+function formatDate(date: string | null): string {
+  if (!date) return 'Never'
+  const d = new Date(date)
+  const now = new Date()
+  const diff = now.getTime() - d.getTime()
+  if (diff < 60000) return 'Just now'
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
+  return d.toLocaleDateString()
 }
 
-function MetricCard({ label, value, sub, icon: Icon, color = 'blue' }: {
-  label: string
-  value: string | number
-  sub?: string
-  icon: any
-  color?: 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'gray'
-}) {
-  const colorMap = {
-    blue: 'bg-blue-50 text-blue-600',
-    green: 'bg-green-50 text-green-600',
-    purple: 'bg-purple-50 text-purple-600',
-    orange: 'bg-orange-50 text-orange-600',
-    red: 'bg-red-50 text-red-600',
-    gray: 'bg-gray-50 text-gray-600',
-  }
-  return (
-    <div className="flex items-center gap-3 p-3 rounded-lg border bg-white">
-      <div className={cn('p-2 rounded-lg', colorMap[color])}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0">
-        <div className="text-xs text-muted-foreground truncate">{label}</div>
-        <div className="text-lg font-semibold leading-tight">{value}</div>
-        {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
-      </div>
-    </div>
-  )
-}
-
-function ProgressBar({ value, max, color = 'blue', label }: {
-  value: number; max: number; color?: string; label?: string
-}) {
-  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0
-  const colorClass = {
-    blue: 'bg-blue-500',
-    green: 'bg-green-500',
-    purple: 'bg-purple-500',
-    orange: 'bg-orange-500',
-    red: 'bg-red-500',
-    emerald: 'bg-emerald-500',
-  }[color] || 'bg-blue-500'
-
-  return (
-    <div className="space-y-1">
-      {label && (
-        <div className="flex justify-between text-xs">
-          <span className="text-muted-foreground">{label}</span>
-          <span className="font-medium">{pct.toFixed(1)}%</span>
-        </div>
-      )}
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className={cn('h-full rounded-full transition-all', colorClass)} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  )
+function formatUptime(seconds: number): string {
+  if (!seconds) return '--'
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${mins}m`
+  return `${mins}m`
 }
 
 export function AnalyticsPage() {
-  const [refreshInterval, setRefreshInterval] = useState(5000)
+  const { currentOrganization } = useOrganizationStore()
 
-  // Live stats - auto-refreshes
-  const { data: liveStats, isLoading: loadingLive, dataUpdatedAt: liveUpdatedAt } = useQuery({
-    queryKey: ['monitoring-live'],
+  const { data: tools = [], isLoading: loadingTools } = useQuery({
+    queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
-      const response = await analyticsApi.getLiveStats()
-      return response.data
+      const response = await toolsApi.getAll(currentOrganization?.id)
+      return response.data?.data?.tools || response.data?.tools || []
     },
-    refetchInterval: refreshInterval,
-    retry: 1,
+    enabled: !!currentOrganization,
   })
 
-  // System metrics
-  const { data: metrics, isLoading: loadingMetrics } = useQuery({
+  const { data: gateways = [], isLoading: loadingGateways } = useQuery({
+    queryKey: ['gateways', currentOrganization?.id],
+    queryFn: async () => {
+      const response = await gatewaysApi.getAll()
+      return response.data?.data?.gateways || response.data?.data || []
+    },
+    enabled: !!currentOrganization,
+  })
+
+  const { data: apis = [], isLoading: loadingApis } = useQuery({
+    queryKey: ['apis'],
+    queryFn: async () => {
+      const response = await apisApi.getAll()
+      return response.data?.data?.apis || response.data?.apis || response.data?.data || []
+    },
+  })
+
+  // Light system health check (just uptime + status)
+  const { data: metrics } = useQuery({
     queryKey: ['monitoring-metrics'],
     queryFn: async () => {
-      const response = await analyticsApi.getMetrics()
-      return response.data
-    },
-    refetchInterval: refreshInterval,
-    retry: 1,
-  })
-
-  // Active alerts
-  const { data: alerts = [] } = useQuery({
-    queryKey: ['monitoring-alerts'],
-    queryFn: async () => {
       try {
-        const response = await analyticsApi.getAlerts()
-        return response.data?.data || response.data || []
-      } catch { return [] }
-    },
-    refetchInterval: 15000,
-  })
-
-  // Enterprise dashboard (SLA, compliance)
-  const { data: dashboard } = useQuery({
-    queryKey: ['monitoring-dashboard'],
-    queryFn: async () => {
-      try {
-        const response = await analyticsApi.getDashboard()
+        const response = await analyticsApi.getMetrics()
         return response.data
       } catch { return null }
     },
     refetchInterval: 30000,
   })
 
-  const isLoading = loadingLive && loadingMetrics
+  const isLoading = loadingTools || loadingGateways || loadingApis
 
   if (isLoading) {
     return (
@@ -183,475 +105,468 @@ export function AnalyticsPage() {
     )
   }
 
-  const sys = metrics?.system || {}
-  const app = metrics?.application || {}
-  const proto = liveStats?.protocols || metrics?.protocols || {}
-  const perf = liveStats?.performance || metrics?.performance || {}
-  const sec = liveStats?.security || metrics?.security || {}
-  const summary = liveStats?.summary || {}
-  const sla = dashboard?.sla || {}
+  const toolList = Array.isArray(tools) ? tools : []
+  const gatewayList = Array.isArray(gateways) ? gateways : []
+  const apiList = Array.isArray(apis) ? apis : []
 
-  // Derive system health status
-  const memUsed = sys.memoryUsage?.heapUsed || 0
-  const memTotal = sys.memoryUsage?.heapTotal || 1
-  const memPct = (memUsed / memTotal) * 100
-  const errorRate = perf.errorRate || 0
-  const systemStatus: 'healthy' | 'degraded' | 'down' =
-    errorRate > 10 ? 'down' : errorRate > 5 || memPct > 90 ? 'degraded' : 'healthy'
+  // Tool stats
+  const totalUsage = toolList.reduce((sum: number, t: any) => sum + (t.usageCount || 0), 0)
+  const avgSuccessRate = toolList.length > 0
+    ? toolList.reduce((sum: number, t: any) => sum + (t.successRate || 0), 0) / toolList.length
+    : 0
+  const toolsWithUsage = toolList.filter((t: any) => t.usageCount > 0)
+  const topTools = [...toolList].sort((a: any, b: any) => (b.usageCount || 0) - (a.usageCount || 0)).slice(0, 10)
 
-  const activeAlerts = Array.isArray(alerts) ? alerts.filter((a: any) => !a.isResolved) : []
-  const criticalAlerts = activeAlerts.filter((a: any) => a.severity === 'critical')
-  const lastUpdated = liveUpdatedAt ? new Date(liveUpdatedAt).toLocaleTimeString() : 'N/A'
+  // Gateway stats
+  const totalGatewayRequests = gatewayList.reduce((sum: number, g: any) => sum + (g.totalRequests || 0), 0)
+  const totalGatewaySuccess = gatewayList.reduce((sum: number, g: any) => sum + (g.successfulRequests || 0), 0)
+
+  // API stats
+  const activeApis = apiList.filter((a: any) => a.status === 'active')
+  const totalOperations = apiList.reduce((sum: number, a: any) => {
+    const ops = a.operations || a.operationCount || 0
+    return sum + (Array.isArray(ops) ? ops.length : ops)
+  }, 0)
+
+  // Auth methods across APIs
+  const authMethods = apiList.reduce((acc: Record<string, number>, api: any) => {
+    const auth = api.authentication?.type || 'none'
+    acc[auth] = (acc[auth] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+
+  const uptime = metrics?.system?.uptime
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            Monitoring
-            <StatusDot status={systemStatus} />
-          </h1>
+          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
           <p className="text-muted-foreground">
-            Live system metrics and performance
+            API connections, tool usage, and gateway traffic
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">Updated {lastUpdated}</span>
-          <div className="flex items-center gap-1">
-            {[
-              { label: '5s', value: 5000 },
-              { label: '15s', value: 15000 },
-              { label: '30s', value: 30000 },
-              { label: 'Off', value: 0 },
-            ].map(opt => (
-              <Button
-                key={opt.label}
-                variant={refreshInterval === opt.value ? 'default' : 'outline'}
-                size="sm"
-                className="h-7 text-xs px-2"
-                onClick={() => setRefreshInterval(opt.value)}
-              >
-                {opt.label}
-              </Button>
-            ))}
+        {uptime != null && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            System up {formatUptime(uptime)}
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Critical Alerts Banner */}
-      {criticalAlerts.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-red-800 font-medium mb-2">
-            <ShieldAlert className="h-5 w-5" />
-            {criticalAlerts.length} Critical Alert{criticalAlerts.length !== 1 ? 's' : ''}
-          </div>
-          <div className="space-y-1">
-            {criticalAlerts.map((alert: any) => (
-              <div key={alert.id} className="text-sm text-red-700">
-                {alert.title}: {alert.message}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* System Health Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-        <MetricCard
-          icon={Clock}
-          label="Uptime"
-          value={sys.uptime ? formatUptime(sys.uptime) : '--'}
-          color="green"
-        />
-        <MetricCard
-          icon={HardDrive}
-          label="Memory (Heap)"
-          value={memUsed ? formatBytes(memUsed) : '--'}
-          sub={memTotal ? `of ${formatBytes(memTotal)} (${memPct.toFixed(0)}%)` : undefined}
-          color={memPct > 85 ? 'red' : memPct > 70 ? 'orange' : 'blue'}
-        />
-        <MetricCard
-          icon={Cpu}
-          label="CPU (User)"
-          value={sys.cpuUsage?.user != null ? `${(sys.cpuUsage.user / 1000000).toFixed(1)}s` : '--'}
-          sub={sys.cpuUsage?.system != null ? `sys: ${(sys.cpuUsage.system / 1000000).toFixed(1)}s` : undefined}
-          color="purple"
-        />
-        <MetricCard
-          icon={Server}
-          label="Load Average"
-          value={sys.loadAverage?.length ? sys.loadAverage[0].toFixed(2) : '--'}
-          sub={sys.loadAverage?.length >= 3 ? `${sys.loadAverage[1].toFixed(2)} / ${sys.loadAverage[2].toFixed(2)}` : undefined}
-          color="gray"
-        />
-        <MetricCard
-          icon={Activity}
-          label="Total Requests"
-          value={app.requests?.total?.toLocaleString() || summary.totalRequests?.toLocaleString() || '0'}
-          sub={app.requests?.rate ? `${app.requests.rate.toFixed(1)}/s` : undefined}
-          color="blue"
-        />
-        <MetricCard
-          icon={Wrench}
-          label="Tool Executions"
-          value={app.tools?.executions?.toLocaleString() || '0'}
-          sub={app.tools?.averageExecutionTime ? `avg ${formatMs(app.tools.averageExecutionTime)}` : undefined}
-          color="green"
-        />
-      </div>
-
-      {/* Performance + Request Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Performance */}
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Timer className="h-4 w-4 text-muted-foreground" />
-              Response Times
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <div className="text-xs text-muted-foreground mb-1">Average</div>
-                <div className="text-xl font-bold">{formatMs(perf.averageResponseTime || 0)}</div>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Connected APIs</p>
+                <p className="text-3xl font-bold">{apiList.length}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {totalOperations} operations parsed
+                </p>
               </div>
-              <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <div className="text-xs text-muted-foreground mb-1">P95</div>
-                <div className="text-xl font-bold">{formatMs(perf.p95ResponseTime || 0)}</div>
-              </div>
-              <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <div className="text-xs text-muted-foreground mb-1">P99</div>
-                <div className="text-xl font-bold">{formatMs(perf.p99ResponseTime || 0)}</div>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <ProgressBar
-                value={perf.cacheHitRate || 0}
-                max={100}
-                color="emerald"
-                label="Cache Hit Rate"
-              />
-              <ProgressBar
-                value={perf.errorRate || 0}
-                max={100}
-                color={errorRate > 5 ? 'red' : errorRate > 2 ? 'orange' : 'green'}
-                label="Error Rate"
-              />
+              <Globe className="h-8 w-8 text-blue-500 opacity-50" />
             </div>
           </CardContent>
         </Card>
 
-        {/* Request Breakdown */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-              Requests
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Successful</div>
-                  <div className="text-xl font-bold text-green-700">
-                    {app.requests?.successful?.toLocaleString() || '0'}
-                  </div>
-                </div>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Generated Tools</p>
+                <p className="text-3xl font-bold">{toolList.length}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {toolsWithUsage.length} used at least once
+                </p>
               </div>
-              <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
-                <XCircle className="h-5 w-5 text-red-600" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Failed</div>
-                  <div className="text-xl font-bold text-red-700">
-                    {app.requests?.failed?.toLocaleString() || '0'}
-                  </div>
-                </div>
-              </div>
+              <Wrench className="h-8 w-8 text-green-500 opacity-50" />
             </div>
-            {app.requests?.total > 0 && (
-              <ProgressBar
-                value={app.requests.successful || 0}
-                max={app.requests.total}
-                color="green"
-                label="Success Rate"
-              />
-            )}
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <div className="text-xs text-muted-foreground">Request Rate</div>
-                <div className="text-lg font-semibold">{(app.requests?.rate || 0).toFixed(1)}/s</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Gateway Requests</p>
+                <p className="text-3xl font-bold">{totalGatewayRequests.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {totalGatewaySuccess} successful
+                </p>
               </div>
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <div className="text-xs text-muted-foreground">Active Tools</div>
-                <div className="text-lg font-semibold">{app.tools?.active || summary.activeTools || 0}</div>
+              <Zap className="h-8 w-8 text-purple-500 opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Tool Calls</p>
+                <p className="text-3xl font-bold">{totalUsage.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {avgSuccessRate > 0 ? `${avgSuccessRate.toFixed(0)}% avg success` : 'No calls yet'}
+                </p>
               </div>
+              <Activity className="h-8 w-8 text-orange-500 opacity-50" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Protocol Metrics */}
+      {/* Connected APIs */}
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Radio className="h-4 w-4 text-muted-foreground" />
-            Protocol Activity
+            <Globe className="h-4 w-4" />
+            Connected APIs
           </CardTitle>
+          <CardDescription>Data sources feeding your tool library</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* MCP */}
-            <div className="border rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">MCP</Badge>
-                  <span className="text-sm font-medium">JSON-RPC</span>
-                </div>
-                <Badge variant="secondary" className="text-xs">
-                  {app.activeConnections?.mcp || 0} conn
-                </Badge>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Sessions</span>
-                  <span className="font-medium">{proto.mcp?.sessions || 0}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tool Calls</span>
-                  <span className="font-medium">{proto.mcp?.toolCalls || 0}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Response Time</span>
-                  <span className="font-medium">{formatMs(proto.mcp?.responseTime || 0)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Error Rate</span>
-                  <span className={cn('font-medium', (proto.mcp?.errorRate || 0) > 5 ? 'text-red-600' : 'text-green-600')}>
-                    {(proto.mcp?.errorRate || 0).toFixed(1)}%
-                  </span>
-                </div>
-              </div>
+          {apiList.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Globe className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No APIs connected yet</p>
+              <Link to="/apis" className="text-sm text-primary hover:underline">Import an API</Link>
             </div>
+          ) : (
+            <div className="space-y-3">
+              {apiList.map((api: any) => {
+                const ops = api.operations || []
+                const opCount = Array.isArray(ops) ? ops.length : (api.operationCount || 0)
+                const toolsFromApi = toolList.filter((t: any) => {
+                  if (!t.operationId) return false
+                  if (Array.isArray(ops)) {
+                    return ops.some((op: any) => op.id === t.operationId)
+                  }
+                  return false
+                })
+                const authType = api.authentication?.type || 'none'
 
-            {/* UTCP */}
-            <div className="border rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">UTCP</Badge>
-                  <span className="text-sm font-medium">Universal</span>
-                </div>
-                <Badge variant="secondary" className="text-xs">
-                  {app.activeConnections?.utcp || 0} conn
-                </Badge>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Manuals Served</span>
-                  <span className="font-medium">{proto.utcp?.manuals || 0}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Direct Calls</span>
-                  <span className="font-medium">{proto.utcp?.directCalls || 0}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Proxy Executions</span>
-                  <span className="font-medium">{proto.utcp?.proxyExecutions || 0}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* A2A */}
-            <div className="border rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">A2A</Badge>
-                  <span className="text-sm font-medium">Agent-to-Agent</span>
-                </div>
-                <Badge variant="secondary" className="text-xs">
-                  {app.activeConnections?.a2a || 0} conn
-                </Badge>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Active Agents</span>
-                  <span className="font-medium">{proto.a2a?.activeAgents || 0}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Messages</span>
-                  <span className="font-medium">{proto.a2a?.messages || 0}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Workflows</span>
-                  <span className="font-medium">{proto.a2a?.workflows || 0}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Connection breakdown */}
-          {app.activeConnections && (
-            <div className="mt-4 pt-4 border-t">
-              <div className="text-xs text-muted-foreground mb-2">Active Connections by Transport</div>
-              <div className="flex gap-3 flex-wrap">
-                {Object.entries(app.activeConnections as Record<string, number>).map(([type, count]) => (
-                  <div key={type} className="flex items-center gap-1.5 text-sm">
-                    <Wifi className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground uppercase text-xs">{type}:</span>
-                    <span className="font-medium">{count}</span>
+                return (
+                  <div key={api.id} className="border rounded-lg p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Link to={`/apis/${api.id}`} className="font-medium text-sm hover:underline">
+                            {api.name}
+                          </Link>
+                          <Badge variant={api.status === 'active' ? 'default' : 'secondary'} className="text-xs">
+                            {api.status}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">{api.type || 'openapi'}</Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <ExternalLink className="h-3 w-3" />
+                          {api.baseUrl || 'No base URL'}
+                        </div>
+                      </div>
+                      <div className="text-right text-sm">
+                        <div className="font-medium">{opCount} operations</div>
+                        <div className="text-xs text-muted-foreground">
+                          {toolsFromApi.length > 0 ? `${toolsFromApi.length} tools generated` : `${toolList.length > 0 ? toolList.length : opCount} tools`}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 mt-3 pt-3 border-t text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Key className="h-3 w-3" />
+                        Auth: <span className="font-medium capitalize">{authType}</span>
+                      </div>
+                      {api.version && (
+                        <div className="flex items-center gap-1">
+                          <Hash className="h-3 w-3" />
+                          v{api.version}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Added {formatDate(api.createdAt)}
+                      </div>
+                    </div>
                   </div>
-                ))}
-              </div>
+                )
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Security + Resources */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Security */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              Security
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex items-center gap-3 p-3 border rounded-lg">
-                <ShieldAlert className="h-5 w-5 text-red-500" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Threats Blocked</div>
-                  <div className="text-lg font-semibold">{sec.threatsBlocked || 0}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-3 border rounded-lg">
-                <Eye className="h-5 w-5 text-blue-500" />
-                <div>
-                  <div className="text-xs text-muted-foreground">PII Filtered</div>
-                  <div className="text-lg font-semibold">{sec.piiFiltered || 0}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-3 border rounded-lg">
-                <Ban className="h-5 w-5 text-orange-500" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Rate Limits</div>
-                  <div className="text-lg font-semibold">{sec.rateLimitsApplied || 0}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-3 border rounded-lg">
-                <Lock className="h-5 w-5 text-gray-500" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Auth Failures</div>
-                  <div className="text-lg font-semibold">{sec.authFailures || 0}</div>
-                </div>
-              </div>
+      {/* Gateway Traffic */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Gateway Traffic
+          </CardTitle>
+          <CardDescription>Protocol endpoints and their usage</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {gatewayList.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Zap className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No gateways configured yet</p>
+              <Link to="/gateways" className="text-sm text-primary hover:underline">Create a gateway</Link>
             </div>
-          </CardContent>
-        </Card>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="pb-2 font-medium text-muted-foreground">Gateway</th>
+                    <th className="pb-2 font-medium text-muted-foreground">Protocol</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-right">Tools</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-right">Requests</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-right">Success</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-right">Last Activity</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-center">Health</th>
+                    <th className="pb-2 font-medium text-muted-foreground">Auth</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gatewayList.map((gw: any) => {
+                    const toolCount = gw.tools?.length || gw.toolCount || 0
+                    const total = gw.totalRequests || 0
+                    const success = gw.successfulRequests || 0
+                    const successRate = total > 0 ? ((success / total) * 100).toFixed(1) : '--'
+                    const authCount = gw.authConfigs?.length || 0
+                    const authTypes = gw.authConfigs?.map((a: any) => a.type).filter(Boolean) || []
 
-        {/* Resources / SLA */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              Platform Resources
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 border rounded-lg">
-                <div className="text-xs text-muted-foreground">APIs</div>
-                <div className="text-lg font-semibold">{app.apis?.total || 0}</div>
-                <div className="text-xs text-green-600">{app.apis?.active || 0} active / {app.apis?.healthy || 0} healthy</div>
-              </div>
-              <div className="p-3 border rounded-lg">
-                <div className="text-xs text-muted-foreground">Tools</div>
-                <div className="text-lg font-semibold">{app.tools?.total || 0}</div>
-                <div className="text-xs text-green-600">{app.tools?.active || 0} active</div>
-              </div>
-              <div className="p-3 border rounded-lg">
-                <div className="text-xs text-muted-foreground">Sessions</div>
-                <div className="text-lg font-semibold">{summary.activeSessions || 0}</div>
-                <div className="text-xs text-muted-foreground">active</div>
-              </div>
-              <div className="p-3 border rounded-lg">
-                <div className="text-xs text-muted-foreground">SLA Uptime</div>
-                <div className="text-lg font-semibold">
-                  {sla.uptime != null ? `${(sla.uptime * 100).toFixed(2)}%` : '--'}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {sla.availabilityTarget ? `target: ${sla.availabilityTarget}%` : ''}
-                </div>
-              </div>
+                    return (
+                      <tr key={gw.id} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="py-3">
+                          <Link to={`/gateways/${gw.id}`} className="font-medium hover:underline">
+                            {gw.name}
+                          </Link>
+                          <div className="text-xs text-muted-foreground">{gw.endpoint}</div>
+                        </td>
+                        <td className="py-3">
+                          <Badge
+                            variant="outline"
+                            className={cn('text-xs uppercase', {
+                              'bg-blue-50 text-blue-700 border-blue-200': gw.type === 'mcp',
+                              'bg-purple-50 text-purple-700 border-purple-200': gw.type === 'utcp',
+                              'bg-green-50 text-green-700 border-green-200': gw.type === 'a2a',
+                              'bg-orange-50 text-orange-700 border-orange-200': gw.type === 'skills',
+                            })}
+                          >
+                            {gw.type}
+                          </Badge>
+                        </td>
+                        <td className="py-3 text-right font-medium">{toolCount}</td>
+                        <td className="py-3 text-right font-medium">{total.toLocaleString()}</td>
+                        <td className="py-3 text-right">
+                          {successRate !== '--' ? (
+                            <span className={cn(
+                              'font-medium',
+                              parseFloat(successRate) >= 95 ? 'text-green-600' :
+                              parseFloat(successRate) >= 80 ? 'text-yellow-600' : 'text-red-600'
+                            )}>
+                              {successRate}%
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">--</span>
+                          )}
+                        </td>
+                        <td className="py-3 text-right text-muted-foreground text-xs">
+                          {formatDate(gw.lastRequestAt)}
+                        </td>
+                        <td className="py-3 text-center">
+                          {gw.isHealthy !== false ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />
+                          ) : (
+                            <XCircle className="h-4 w-4 text-red-500 mx-auto" />
+                          )}
+                        </td>
+                        <td className="py-3">
+                          {authTypes.length > 0 ? (
+                            <div className="flex items-center gap-1">
+                              <Shield className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs capitalize">{authTypes.join(', ')}</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">None</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
-            {sla.responseTimeTarget && (
-              <div className="mt-3">
-                <ProgressBar
-                  value={sla.responseTimeTarget - (sla.currentResponseTime || 0)}
-                  max={sla.responseTimeTarget}
-                  color={sla.currentResponseTime > sla.responseTimeTarget ? 'red' : 'green'}
-                  label={`Response Time vs Target (${formatMs(sla.currentResponseTime || 0)} / ${formatMs(sla.responseTimeTarget)})`}
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Active Alerts */}
-      {activeAlerts.length > 0 && (
+      {/* Tools by Gateway */}
+      {gatewayList.length > 0 && (
         <Card>
-          <CardHeader className="pb-3">
+          <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-              Active Alerts ({activeAlerts.length})
+              <TrendingUp className="h-4 w-4" />
+              Tools by Gateway
             </CardTitle>
+            <CardDescription>Which tools are served through which gateway</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {activeAlerts.map((alert: any) => (
-                <div
-                  key={alert.id}
-                  className={cn(
-                    'flex items-center justify-between p-3 rounded-lg border',
-                    alert.severity === 'critical' && 'bg-red-50 border-red-200',
-                    alert.severity === 'error' && 'bg-orange-50 border-orange-200',
-                    alert.severity === 'warning' && 'bg-yellow-50 border-yellow-200',
-                    alert.severity === 'info' && 'bg-blue-50 border-blue-200',
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        'text-xs',
-                        alert.severity === 'critical' && 'bg-red-100 text-red-700 border-red-300',
-                        alert.severity === 'error' && 'bg-orange-100 text-orange-700 border-orange-300',
-                        alert.severity === 'warning' && 'bg-yellow-100 text-yellow-700 border-yellow-300',
-                        alert.severity === 'info' && 'bg-blue-100 text-blue-700 border-blue-300',
-                      )}
-                    >
-                      {alert.severity}
-                    </Badge>
-                    <div>
-                      <div className="text-sm font-medium">{alert.title}</div>
-                      <div className="text-xs text-muted-foreground">{alert.message}</div>
+            <div className="space-y-4">
+              {gatewayList.map((gw: any) => {
+                const gwTools = gw.tools || []
+                const gwToolUsage = gwTools.reduce((sum: number, t: any) => sum + (t.usageCount || 0), 0)
+                const badgeMap: Record<string, string> = {
+                  mcp: 'bg-blue-50 text-blue-700 border-blue-200',
+                  utcp: 'bg-purple-50 text-purple-700 border-purple-200',
+                  a2a: 'bg-green-50 text-green-700 border-green-200',
+                  skills: 'bg-orange-50 text-orange-700 border-orange-200',
+                }
+                const typeBadgeClass = badgeMap[gw.type] || 'bg-gray-50 text-gray-700 border-gray-200'
+
+                return (
+                  <div key={gw.id} className="border rounded-lg">
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-t-lg">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className={cn('text-xs uppercase', typeBadgeClass)}>
+                          {gw.type}
+                        </Badge>
+                        <Link to={`/gateways/${gw.id}`} className="font-medium text-sm hover:underline">
+                          {gw.name}
+                        </Link>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>{gwTools.length} tools</span>
+                        <span>{gwToolUsage} total calls</span>
+                        <span>{(gw.totalRequests || 0)} gateway requests</span>
+                      </div>
                     </div>
+                    {gwTools.length > 0 ? (
+                      <div className="p-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {gwTools.slice(0, 12).map((tool: any) => (
+                            <div key={tool.id} className="flex items-center justify-between p-2 rounded border text-xs">
+                              <Link to={`/tools/${tool.id}`} className="font-medium truncate hover:underline max-w-[60%]">
+                                {tool.name}
+                              </Link>
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                <span>{tool.usageCount || 0} calls</span>
+                                {tool.usageCount > 0 && (
+                                  <span className={cn(
+                                    tool.successRate >= 90 ? 'text-green-600' :
+                                    tool.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'
+                                  )}>
+                                    {tool.successRate}%
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {gwTools.length > 12 && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            +{gwTools.length - 12} more tools
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-3 text-xs text-muted-foreground text-center">
+                        No tools assigned to this gateway
+                      </div>
+                    )}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {alert.triggeredAt ? new Date(alert.triggeredAt).toLocaleTimeString() : ''}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Tool Usage */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wrench className="h-4 w-4" />
+            Tool Usage
+          </CardTitle>
+          <CardDescription>
+            {toolsWithUsage.length > 0
+              ? `${toolsWithUsage.length} of ${toolList.length} tools have been called`
+              : `${toolList.length} tools generated, none called yet`}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {toolList.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Wrench className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No tools generated yet</p>
+              <Link to="/apis" className="text-sm text-primary hover:underline">Import an API to generate tools</Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="pb-2 font-medium text-muted-foreground">Tool</th>
+                    <th className="pb-2 font-medium text-muted-foreground">Type</th>
+                    <th className="pb-2 font-medium text-muted-foreground">Method</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-right">Calls</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-right">Success Rate</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-right">Avg Response</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-right">Last Used</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topTools.map((tool: any) => (
+                    <tr key={tool.id} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="py-2.5">
+                        <Link to={`/tools/${tool.id}`} className="font-medium hover:underline text-xs">
+                          {tool.name}
+                        </Link>
+                      </td>
+                      <td className="py-2.5">
+                        <Badge variant="outline" className="text-xs capitalize">{tool.type || 'function'}</Badge>
+                      </td>
+                      <td className="py-2.5">
+                        <span className="text-xs text-muted-foreground capitalize">{tool.executionMethod || 'http'}</span>
+                      </td>
+                      <td className="py-2.5 text-right font-medium">{(tool.usageCount || 0).toLocaleString()}</td>
+                      <td className="py-2.5 text-right">
+                        {tool.usageCount > 0 ? (
+                          <span className={cn(
+                            'font-medium',
+                            tool.successRate >= 90 ? 'text-green-600' :
+                            tool.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'
+                          )}>
+                            {tool.successRate}%
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">--</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 text-right text-muted-foreground">
+                        {formatMs(tool.averageResponseTime)}
+                      </td>
+                      <td className="py-2.5 text-right text-xs text-muted-foreground">
+                        {formatDate(tool.lastUsedAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {toolList.length > 10 && (
+                <div className="mt-3 text-center">
+                  <Link to="/tools" className="text-xs text-primary hover:underline">
+                    View all {toolList.length} tools
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
