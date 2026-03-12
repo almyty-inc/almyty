@@ -130,6 +130,7 @@ export enum GatewayType {
   MCP = 'mcp',
   A2A = 'a2a',
   UTCP = 'utcp',
+  SKILLS = 'skills',
 }
 
 export enum GatewayStatus {

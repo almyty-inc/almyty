@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
@@ -10,17 +10,14 @@ import {
   Wrench,
   Globe,
   Shield,
-  Timer,
-  Wifi,
   ExternalLink,
   Key,
-  ArrowRight,
-  BarChart3,
   Hash,
-  TrendingUp,
+  Filter,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { gatewaysApi, toolsApi, apisApi, analyticsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -54,8 +51,16 @@ function formatUptime(seconds: number): string {
   return `${mins}m`
 }
 
+const protocolColors: Record<string, string> = {
+  mcp: 'bg-blue-50 text-blue-700 border-blue-200',
+  utcp: 'bg-purple-50 text-purple-700 border-purple-200',
+  a2a: 'bg-green-50 text-green-700 border-green-200',
+  skills: 'bg-orange-50 text-orange-700 border-orange-200',
+}
+
 export function AnalyticsPage() {
   const { currentOrganization } = useOrganizationStore()
+  const [gatewayFilter, setGatewayFilter] = useState<string>('all')
 
   const { data: tools = [], isLoading: loadingTools } = useQuery({
     queryKey: ['tools', currentOrganization?.id],
@@ -83,7 +88,6 @@ export function AnalyticsPage() {
     },
   })
 
-  // Light system health check (just uptime + status)
   const { data: metrics } = useQuery({
     queryKey: ['monitoring-metrics'],
     queryFn: async () => {
@@ -109,32 +113,33 @@ export function AnalyticsPage() {
   const gatewayList = Array.isArray(gateways) ? gateways : []
   const apiList = Array.isArray(apis) ? apis : []
 
-  // Tool stats
+  // Build gateway → tool mapping
+  const gwToolMap = new Map<string, Set<string>>()
+  gatewayList.forEach((gw: any) => {
+    const gwTools = gw.tools || []
+    gwTools.forEach((t: any) => {
+      if (!gwToolMap.has(t.id)) gwToolMap.set(t.id, new Set())
+      gwToolMap.get(t.id)!.add(gw.id)
+    })
+  })
+
+  // Stats
   const totalUsage = toolList.reduce((sum: number, t: any) => sum + (t.usageCount || 0), 0)
-  const avgSuccessRate = toolList.length > 0
-    ? toolList.reduce((sum: number, t: any) => sum + (t.successRate || 0), 0) / toolList.length
-    : 0
-  const toolsWithUsage = toolList.filter((t: any) => t.usageCount > 0)
-  const topTools = [...toolList].sort((a: any, b: any) => (b.usageCount || 0) - (a.usageCount || 0)).slice(0, 10)
-
-  // Gateway stats
   const totalGatewayRequests = gatewayList.reduce((sum: number, g: any) => sum + (g.totalRequests || 0), 0)
-  const totalGatewaySuccess = gatewayList.reduce((sum: number, g: any) => sum + (g.successfulRequests || 0), 0)
-
-  // API stats
-  const activeApis = apiList.filter((a: any) => a.status === 'active')
   const totalOperations = apiList.reduce((sum: number, a: any) => {
     const ops = a.operations || a.operationCount || 0
     return sum + (Array.isArray(ops) ? ops.length : ops)
   }, 0)
 
-  // Auth methods across APIs
-  const authMethods = apiList.reduce((acc: Record<string, number>, api: any) => {
-    const auth = api.authentication?.type || 'none'
-    acc[auth] = (acc[auth] || 0) + 1
-    return acc
-  }, {} as Record<string, number>)
+  // Filter tools by gateway
+  const filteredTools = gatewayFilter === 'all'
+    ? toolList
+    : toolList.filter((t: any) => {
+        const gw = gatewayList.find((g: any) => g.id === gatewayFilter)
+        return gw?.tools?.some((gt: any) => gt.id === t.id)
+      })
 
+  const sortedTools = [...filteredTools].sort((a: any, b: any) => (b.usageCount || 0) - (a.usageCount || 0))
   const uptime = metrics?.system?.uptime
 
   return (
@@ -163,9 +168,7 @@ export function AnalyticsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Connected APIs</p>
                 <p className="text-3xl font-bold">{apiList.length}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {totalOperations} operations parsed
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">{totalOperations} operations</p>
               </div>
               <Globe className="h-8 w-8 text-blue-500 opacity-50" />
             </div>
@@ -176,11 +179,9 @@ export function AnalyticsPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Generated Tools</p>
+                <p className="text-sm text-muted-foreground">Tools</p>
                 <p className="text-3xl font-bold">{toolList.length}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {toolsWithUsage.length} used at least once
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">{totalUsage} total calls</p>
               </div>
               <Wrench className="h-8 w-8 text-green-500 opacity-50" />
             </div>
@@ -191,11 +192,9 @@ export function AnalyticsPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Gateway Requests</p>
-                <p className="text-3xl font-bold">{totalGatewayRequests.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {totalGatewaySuccess} successful
-                </p>
+                <p className="text-sm text-muted-foreground">Gateways</p>
+                <p className="text-3xl font-bold">{gatewayList.length}</p>
+                <p className="text-xs text-muted-foreground mt-1">{totalGatewayRequests} requests</p>
               </div>
               <Zap className="h-8 w-8 text-purple-500 opacity-50" />
             </div>
@@ -206,11 +205,14 @@ export function AnalyticsPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Tool Calls</p>
-                <p className="text-3xl font-bold">{totalUsage.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {avgSuccessRate > 0 ? `${avgSuccessRate.toFixed(0)}% avg success` : 'No calls yet'}
-                </p>
+                <p className="text-sm text-muted-foreground">Protocols</p>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {[...new Set(gatewayList.map((g: any) => g.type))].map((type: string) => (
+                    <Badge key={type} variant="outline" className={cn('text-xs uppercase', protocolColors[type])}>
+                      {type}
+                    </Badge>
+                  ))}
+                </div>
               </div>
               <Activity className="h-8 w-8 text-orange-500 opacity-50" />
             </div>
@@ -218,291 +220,152 @@ export function AnalyticsPage() {
         </Card>
       </div>
 
-      {/* Connected APIs */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Globe className="h-4 w-4" />
-            Connected APIs
-          </CardTitle>
-          <CardDescription>Data sources feeding your tool library</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {apiList.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Globe className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>No APIs connected yet</p>
-              <Link to="/apis" className="text-sm text-primary hover:underline">Import an API</Link>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {apiList.map((api: any) => {
-                const ops = api.operations || []
-                const opCount = Array.isArray(ops) ? ops.length : (api.operationCount || 0)
-                const toolsFromApi = toolList.filter((t: any) => {
-                  if (!t.operationId) return false
-                  if (Array.isArray(ops)) {
-                    return ops.some((op: any) => op.id === t.operationId)
-                  }
-                  return false
-                })
-                const authType = api.authentication?.type || 'none'
-
-                return (
-                  <div key={api.id} className="border rounded-lg p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <Link to={`/apis/${api.id}`} className="font-medium text-sm hover:underline">
-                            {api.name}
-                          </Link>
-                          <Badge variant={api.status === 'active' ? 'default' : 'secondary'} className="text-xs">
-                            {api.status}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">{api.type || 'openapi'}</Badge>
-                        </div>
-                        <div className="text-xs text-muted-foreground flex items-center gap-1">
-                          <ExternalLink className="h-3 w-3" />
-                          {api.baseUrl || 'No base URL'}
-                        </div>
-                      </div>
-                      <div className="text-right text-sm">
-                        <div className="font-medium">{opCount} operations</div>
-                        <div className="text-xs text-muted-foreground">
-                          {toolsFromApi.length > 0 ? `${toolsFromApi.length} tools generated` : `${toolList.length > 0 ? toolList.length : opCount} tools`}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 mt-3 pt-3 border-t text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Key className="h-3 w-3" />
-                        Auth: <span className="font-medium capitalize">{authType}</span>
-                      </div>
-                      {api.version && (
-                        <div className="flex items-center gap-1">
-                          <Hash className="h-3 w-3" />
-                          v{api.version}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        Added {formatDate(api.createdAt)}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Gateway Traffic */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Zap className="h-4 w-4" />
-            Gateway Traffic
-          </CardTitle>
-          <CardDescription>Protocol endpoints and their usage</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {gatewayList.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Zap className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>No gateways configured yet</p>
-              <Link to="/gateways" className="text-sm text-primary hover:underline">Create a gateway</Link>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left">
-                    <th className="pb-2 font-medium text-muted-foreground">Gateway</th>
-                    <th className="pb-2 font-medium text-muted-foreground">Protocol</th>
-                    <th className="pb-2 font-medium text-muted-foreground text-right">Tools</th>
-                    <th className="pb-2 font-medium text-muted-foreground text-right">Requests</th>
-                    <th className="pb-2 font-medium text-muted-foreground text-right">Success</th>
-                    <th className="pb-2 font-medium text-muted-foreground text-right">Last Activity</th>
-                    <th className="pb-2 font-medium text-muted-foreground text-center">Health</th>
-                    <th className="pb-2 font-medium text-muted-foreground">Auth</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gatewayList.map((gw: any) => {
-                    const toolCount = gw.tools?.length || gw.toolCount || 0
-                    const total = gw.totalRequests || 0
-                    const success = gw.successfulRequests || 0
-                    const successRate = total > 0 ? ((success / total) * 100).toFixed(1) : '--'
-                    const authCount = gw.authConfigs?.length || 0
-                    const authTypes = gw.authConfigs?.map((a: any) => a.type).filter(Boolean) || []
-
-                    return (
-                      <tr key={gw.id} className="border-b last:border-0 hover:bg-gray-50">
-                        <td className="py-3">
-                          <Link to={`/gateways/${gw.id}`} className="font-medium hover:underline">
-                            {gw.name}
-                          </Link>
-                          <div className="text-xs text-muted-foreground">{gw.endpoint}</div>
-                        </td>
-                        <td className="py-3">
-                          <Badge
-                            variant="outline"
-                            className={cn('text-xs uppercase', {
-                              'bg-blue-50 text-blue-700 border-blue-200': gw.type === 'mcp',
-                              'bg-purple-50 text-purple-700 border-purple-200': gw.type === 'utcp',
-                              'bg-green-50 text-green-700 border-green-200': gw.type === 'a2a',
-                              'bg-orange-50 text-orange-700 border-orange-200': gw.type === 'skills',
-                            })}
-                          >
-                            {gw.type}
-                          </Badge>
-                        </td>
-                        <td className="py-3 text-right font-medium">{toolCount}</td>
-                        <td className="py-3 text-right font-medium">{total.toLocaleString()}</td>
-                        <td className="py-3 text-right">
-                          {successRate !== '--' ? (
-                            <span className={cn(
-                              'font-medium',
-                              parseFloat(successRate) >= 95 ? 'text-green-600' :
-                              parseFloat(successRate) >= 80 ? 'text-yellow-600' : 'text-red-600'
-                            )}>
-                              {successRate}%
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">--</span>
-                          )}
-                        </td>
-                        <td className="py-3 text-right text-muted-foreground text-xs">
-                          {formatDate(gw.lastRequestAt)}
-                        </td>
-                        <td className="py-3 text-center">
-                          {gw.isHealthy !== false ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-red-500 mx-auto" />
-                          )}
-                        </td>
-                        <td className="py-3">
-                          {authTypes.length > 0 ? (
-                            <div className="flex items-center gap-1">
-                              <Shield className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-xs capitalize">{authTypes.join(', ')}</span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">None</span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Tools by Gateway */}
-      {gatewayList.length > 0 && (
+      {/* Two-column: APIs + Gateways */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* APIs */}
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Tools by Gateway
+              <Globe className="h-4 w-4" />
+              Connected APIs
             </CardTitle>
-            <CardDescription>Which tools are served through which gateway</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {gatewayList.map((gw: any) => {
-                const gwTools = gw.tools || []
-                const gwToolUsage = gwTools.reduce((sum: number, t: any) => sum + (t.usageCount || 0), 0)
-                const badgeMap: Record<string, string> = {
-                  mcp: 'bg-blue-50 text-blue-700 border-blue-200',
-                  utcp: 'bg-purple-50 text-purple-700 border-purple-200',
-                  a2a: 'bg-green-50 text-green-700 border-green-200',
-                  skills: 'bg-orange-50 text-orange-700 border-orange-200',
-                }
-                const typeBadgeClass = badgeMap[gw.type] || 'bg-gray-50 text-gray-700 border-gray-200'
-
-                return (
-                  <div key={gw.id} className="border rounded-lg">
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-t-lg">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className={cn('text-xs uppercase', typeBadgeClass)}>
-                          {gw.type}
-                        </Badge>
-                        <Link to={`/gateways/${gw.id}`} className="font-medium text-sm hover:underline">
-                          {gw.name}
-                        </Link>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <span>{gwTools.length} tools</span>
-                        <span>{gwToolUsage} total calls</span>
-                        <span>{(gw.totalRequests || 0)} gateway requests</span>
-                      </div>
-                    </div>
-                    {gwTools.length > 0 ? (
-                      <div className="p-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                          {gwTools.slice(0, 12).map((tool: any) => (
-                            <div key={tool.id} className="flex items-center justify-between p-2 rounded border text-xs">
-                              <Link to={`/tools/${tool.id}`} className="font-medium truncate hover:underline max-w-[60%]">
-                                {tool.name}
-                              </Link>
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <span>{tool.usageCount || 0} calls</span>
-                                {tool.usageCount > 0 && (
-                                  <span className={cn(
-                                    tool.successRate >= 90 ? 'text-green-600' :
-                                    tool.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'
-                                  )}>
-                                    {tool.successRate}%
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+            {apiList.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground text-sm">
+                <p>No APIs connected</p>
+                <Link to="/apis" className="text-primary hover:underline text-xs">Import one</Link>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {apiList.map((api: any) => {
+                  const ops = api.operations || []
+                  const opCount = Array.isArray(ops) ? ops.length : (api.operationCount || 0)
+                  return (
+                    <Link key={api.id} to={`/apis/${api.id}`} className="flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 transition-colors">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm truncate">{api.name}</span>
+                          <Badge variant={api.status === 'active' ? 'default' : 'secondary'} className="text-xs shrink-0">
+                            {api.status}
+                          </Badge>
                         </div>
-                        {gwTools.length > 12 && (
-                          <p className="text-xs text-muted-foreground mt-2">
-                            +{gwTools.length - 12} more tools
-                          </p>
-                        )}
+                        <div className="text-xs text-muted-foreground truncate flex items-center gap-1 mt-0.5">
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                          {api.baseUrl || 'No URL'}
+                        </div>
                       </div>
-                    ) : (
-                      <div className="p-3 text-xs text-muted-foreground text-center">
-                        No tools assigned to this gateway
+                      <div className="text-right shrink-0 ml-3">
+                        <div className="text-sm font-medium">{opCount}</div>
+                        <div className="text-xs text-muted-foreground">ops</div>
                       </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
-      )}
 
-      {/* Tool Usage */}
+        {/* Gateways */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Zap className="h-4 w-4" />
+              Gateways
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {gatewayList.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground text-sm">
+                <p>No gateways configured</p>
+                <Link to="/gateways" className="text-primary hover:underline text-xs">Create one</Link>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {gatewayList.map((gw: any) => {
+                  const toolCount = gw.tools?.length || gw.toolCount || 0
+                  const total = gw.totalRequests || 0
+                  const success = gw.successfulRequests || 0
+                  return (
+                    <Link key={gw.id} to={`/gateways/${gw.id}`} className="flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="outline" className={cn('text-xs uppercase shrink-0', protocolColors[gw.type])}>
+                          {gw.type}
+                        </Badge>
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm truncate">{gw.name}</div>
+                          <div className="text-xs text-muted-foreground">{toolCount} tools</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0 ml-3">
+                        <div className="text-right">
+                          <div className="text-sm font-medium">{total}</div>
+                          <div className="text-xs text-muted-foreground">requests</div>
+                        </div>
+                        {gw.isHealthy !== false ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-500" />
+                        )}
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tools — with gateway filter */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Wrench className="h-4 w-4" />
-            Tool Usage
-          </CardTitle>
-          <CardDescription>
-            {toolsWithUsage.length > 0
-              ? `${toolsWithUsage.length} of ${toolList.length} tools have been called`
-              : `${toolList.length} tools generated, none called yet`}
-          </CardDescription>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Wrench className="h-4 w-4" />
+                Tools ({filteredTools.length})
+              </CardTitle>
+              <CardDescription className="mt-1">
+                {gatewayFilter !== 'all'
+                  ? `Filtered by ${gatewayList.find((g: any) => g.id === gatewayFilter)?.name}`
+                  : 'All tools across all gateways'}
+              </CardDescription>
+            </div>
+            {/* Gateway filter */}
+            <div className="flex items-center gap-1">
+              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+              <div className="flex gap-1">
+                <Button
+                  variant={gatewayFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => setGatewayFilter('all')}
+                >
+                  All
+                </Button>
+                {gatewayList.map((gw: any) => (
+                  <Button
+                    key={gw.id}
+                    variant={gatewayFilter === gw.id ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 text-xs px-2"
+                    onClick={() => setGatewayFilter(gw.id)}
+                  >
+                    {gw.name.replace('Petstore ', '')}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          {toolList.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Wrench className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>No tools generated yet</p>
-              <Link to="/apis" className="text-sm text-primary hover:underline">Import an API to generate tools</Link>
+          {filteredTools.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              {gatewayFilter !== 'all'
+                ? 'No tools assigned to this gateway'
+                : <>No tools generated yet. <Link to="/apis" className="text-primary hover:underline">Import an API</Link></>}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -510,53 +373,62 @@ export function AnalyticsPage() {
                 <thead>
                   <tr className="border-b text-left">
                     <th className="pb-2 font-medium text-muted-foreground">Tool</th>
-                    <th className="pb-2 font-medium text-muted-foreground">Type</th>
                     <th className="pb-2 font-medium text-muted-foreground">Method</th>
+                    <th className="pb-2 font-medium text-muted-foreground">Gateways</th>
                     <th className="pb-2 font-medium text-muted-foreground text-right">Calls</th>
-                    <th className="pb-2 font-medium text-muted-foreground text-right">Success Rate</th>
-                    <th className="pb-2 font-medium text-muted-foreground text-right">Avg Response</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-right">Success</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-right">Avg Time</th>
                     <th className="pb-2 font-medium text-muted-foreground text-right">Last Used</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {topTools.map((tool: any) => (
-                    <tr key={tool.id} className="border-b last:border-0 hover:bg-gray-50">
-                      <td className="py-2.5">
-                        <Link to={`/tools/${tool.id}`} className="font-medium hover:underline text-xs">
-                          {tool.name}
-                        </Link>
-                      </td>
-                      <td className="py-2.5">
-                        <Badge variant="outline" className="text-xs capitalize">{tool.type || 'function'}</Badge>
-                      </td>
-                      <td className="py-2.5">
-                        <span className="text-xs text-muted-foreground capitalize">{tool.executionMethod || 'http'}</span>
-                      </td>
-                      <td className="py-2.5 text-right font-medium">{(tool.usageCount || 0).toLocaleString()}</td>
-                      <td className="py-2.5 text-right">
-                        {tool.usageCount > 0 ? (
-                          <span className={cn(
-                            'font-medium',
-                            tool.successRate >= 90 ? 'text-green-600' :
-                            tool.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'
-                          )}>
-                            {tool.successRate}%
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">--</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 text-right text-muted-foreground">
-                        {formatMs(tool.averageResponseTime)}
-                      </td>
-                      <td className="py-2.5 text-right text-xs text-muted-foreground">
-                        {formatDate(tool.lastUsedAt)}
-                      </td>
-                    </tr>
-                  ))}
+                  {sortedTools.map((tool: any) => {
+                    const toolGateways = gatewayList.filter((gw: any) =>
+                      gw.tools?.some((t: any) => t.id === tool.id)
+                    )
+                    return (
+                      <tr key={tool.id} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="py-2.5">
+                          <Link to={`/tools/${tool.id}`} className="font-medium hover:underline text-xs">
+                            {tool.name}
+                          </Link>
+                        </td>
+                        <td className="py-2.5">
+                          <span className="text-xs text-muted-foreground capitalize">{tool.executionMethod || 'http'}</span>
+                        </td>
+                        <td className="py-2.5">
+                          <div className="flex gap-1 flex-wrap">
+                            {toolGateways.length > 0 ? toolGateways.map((gw: any) => (
+                              <Badge key={gw.id} variant="outline" className={cn('text-[10px] uppercase px-1.5 py-0', protocolColors[gw.type])}>
+                                {gw.type}
+                              </Badge>
+                            )) : (
+                              <span className="text-xs text-muted-foreground">none</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2.5 text-right font-medium">{(tool.usageCount || 0).toLocaleString()}</td>
+                        <td className="py-2.5 text-right">
+                          {tool.usageCount > 0 ? (
+                            <span className={cn(
+                              'font-medium',
+                              tool.successRate >= 90 ? 'text-green-600' :
+                              tool.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'
+                            )}>
+                              {tool.successRate}%
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">--</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 text-right text-muted-foreground">{formatMs(tool.averageResponseTime)}</td>
+                        <td className="py-2.5 text-right text-xs text-muted-foreground">{formatDate(tool.lastUsedAt)}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
-              {toolList.length > 10 && (
+              {sortedTools.length > 20 && (
                 <div className="mt-3 text-center">
                   <Link to="/tools" className="text-xs text-primary hover:underline">
                     View all {toolList.length} tools
