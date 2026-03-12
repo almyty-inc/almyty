@@ -44,3 +44,9 @@ logs/
 # Database
 *.sqlite
 *.db
+
+# Playwright MCP screenshots
+.playwright-mcp/
+
+# Claude worktrees
+.claude/worktrees/

@@ -256,6 +256,6 @@ git push origin v1.0.0
 
 ## Design Documents
 
-- `llm-tool-gateway-architecture.md` — System architecture
-- `llm-tool-gateway-implementation-plan.md` — Original implementation plan
-- `llm-tool-gateway-schema.md` — Database schema design
+- `docs/architecture.md` — System architecture
+- `docs/implementation-plan.md` — Original implementation plan
+- `docs/schema-design.md` — Database schema design
