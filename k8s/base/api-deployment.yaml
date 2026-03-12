@@ -132,6 +132,11 @@ spec:
             configMapKeyRef:
               name: apifai-config
               key: DB_SSL
+        - name: DB_SYNC
+          valueFrom:
+            configMapKeyRef:
+              name: apifai-config
+              key: DB_SYNC
         - name: BASE_URL
           valueFrom:
             configMapKeyRef:
