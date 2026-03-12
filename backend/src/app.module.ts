@@ -72,6 +72,8 @@ import { databaseConfig } from './config/database.config';
           password: configService.get<string>('DATABASE_PASSWORD', 'password'),
           database: configService.get<string>('DATABASE_NAME', 'apifai'),
           entities: [__dirname + '/entities/*.entity{.ts,.js}'],
+          migrations: [__dirname + '/migrations/*{.ts,.js}'],
+          migrationsRun: true,
           synchronize: configService.get('NODE_ENV') === 'development',
           logging: configService.get('NODE_ENV') === 'development',
           autoLoadEntities: true,
