@@ -18,6 +18,7 @@ describe('SkillGeneratorService', () => {
     description: 'Find pet by ID',
     type: ToolType.QUERY,
     status: ToolStatus.ACTIVE,
+    version: '1.0.0',
     parameters: {
       type: 'object',
       properties: {
@@ -31,6 +32,7 @@ describe('SkillGeneratorService', () => {
       id: 'op-1',
       method: 'GET',
       endpoint: '/pet/{petId}',
+      api: { baseUrl: 'https://petstore.swagger.io/v2' },
     } as any,
   };
 
@@ -40,6 +42,7 @@ describe('SkillGeneratorService', () => {
     description: 'Add a new pet to the store',
     type: ToolType.MUTATION,
     status: ToolStatus.ACTIVE,
+    version: '1.0.0',
     parameters: {
       type: 'object',
       properties: {
@@ -53,6 +56,7 @@ describe('SkillGeneratorService', () => {
       id: 'op-2',
       method: 'POST',
       endpoint: '/pet',
+      api: { baseUrl: 'https://petstore.swagger.io/v2' },
     } as any,
   };
 
@@ -94,34 +98,42 @@ describe('SkillGeneratorService', () => {
 
       expect(result.name).toBe('getpetbyid');
       expect(result.toolCount).toBe(1);
-      // YAML frontmatter — Agent Skills standard (name + description only)
+      // YAML frontmatter — Agent Skills standard
       expect(result.content).toContain('---');
       expect(result.content).toContain('name: getpetbyid');
-      expect(result.content).toContain('description: Find pet by ID');
+      expect(result.content).toContain('description:');
+      expect(result.content).toContain('Find pet by ID');
+      // Metadata
+      expect(result.content).toContain('metadata:');
+      expect(result.content).toContain('author: apifai');
+      expect(result.content).toContain('generated: "true"');
       // Content sections
       expect(result.content).toContain('# getPetById');
       expect(result.content).toContain('## When to use');
       expect(result.content).toContain('retrieve or look up data');
-      // Tool call instructions via apifai_execute
-      expect(result.content).toContain('## Tool call');
-      expect(result.content).toContain('apifai_execute');
-      expect(result.content).toContain('`tool_name`: `"getPetById"`');
+      // HTTP endpoint (real curl, not fictional apifai_execute)
+      expect(result.content).toContain('## HTTP endpoint');
+      expect(result.content).toContain('GET https://petstore.swagger.io/v2/pet/{petId}');
+      // Parameters
+      expect(result.content).toContain('## Parameters');
       expect(result.content).toContain('`petId` (integer, **required**)');
       expect(result.content).toContain('`format` (string)');
-      // Example
+      // Curl example
       expect(result.content).toContain('## Example');
-      expect(result.content).toContain('tool_name: "getPetById"');
+      expect(result.content).toContain('curl');
+      expect(result.content).toContain('petstore.swagger.io');
       // Error handling
       expect(result.content).toContain('## Error handling');
     });
 
-    it('should generate a skill for a mutation tool', async () => {
+    it('should generate a skill for a mutation tool with POST curl', async () => {
       toolRepository.findOne.mockResolvedValue(mockMutationTool);
 
       const result = await service.generateToolSkill('tool-2');
 
       expect(result.content).toContain('create, update, or modify data');
-      expect(result.content).toContain('`tool_name`: `"addPet"`');
+      expect(result.content).toContain('curl -X POST');
+      expect(result.content).toContain('Content-Type: application/json');
     });
 
     it('should generate a skill for an action tool', async () => {
@@ -144,7 +156,7 @@ describe('SkillGeneratorService', () => {
       const result = await service.generateToolSkill('tool-1');
 
       // Should not have parameters section
-      expect(result.content).not.toContain('`parameters`');
+      expect(result.content).not.toContain('## Parameters');
     });
 
     it('should throw NotFoundException for missing tool', async () => {
@@ -161,7 +173,40 @@ describe('SkillGeneratorService', () => {
 
       const result = await service.generateToolSkill('tool-1');
 
-      expect(result.content).toContain('description: "Find pet: by \\"ID\\""');
+      // Description should be YAML-escaped (quoted)
+      expect(result.content).toMatch(/description: ".*Find pet.*"/);
+    });
+
+    it('should include trigger phrase in description', async () => {
+      toolRepository.findOne.mockResolvedValue(mockTool);
+
+      const result = await service.generateToolSkill('tool-1');
+
+      // Description should include "Use when" trigger phrase
+      expect(result.content).toContain('Use when you need to retrieve this data.');
+    });
+
+    it('should handle tool with no operation (custom tool)', async () => {
+      toolRepository.findOne.mockResolvedValue({
+        ...mockTool,
+        operation: null,
+        parameters: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Name to greet' },
+          },
+          required: ['name'],
+        },
+      });
+
+      const result = await service.generateToolSkill('tool-1');
+
+      // No HTTP endpoint section
+      expect(result.content).not.toContain('## HTTP endpoint');
+      // No error handling (only for API tools)
+      expect(result.content).not.toContain('## Error handling');
+      // JSON example instead of curl
+      expect(result.content).toContain('```json');
     });
   });
 
@@ -178,13 +223,18 @@ describe('SkillGeneratorService', () => {
       expect(result.name).toBe('petstore-gateway');
       expect(result.toolCount).toBe(2);
       expect(result.content).toContain('# Petstore Gateway');
-      expect(result.content).toContain('This gateway provides 2 tools.');
+      expect(result.content).toContain('This gateway provides 2 API tools.');
       expect(result.content).toContain('## Available tools');
       expect(result.content).toContain('**getPetById**');
       expect(result.content).toContain('**addPet**');
       expect(result.content).toContain('### getPetById');
       expect(result.content).toContain('### addPet');
-      expect(result.content).toContain('apifai_execute');
+      // Should have HTTP endpoints, not apifai_execute
+      expect(result.content).toContain('GET https://petstore.swagger.io/v2/pet/{petId}');
+      expect(result.content).toContain('curl');
+      // Metadata
+      expect(result.content).toContain('metadata:');
+      expect(result.content).toContain('author: apifai');
     });
 
     it('should generate an empty skill for a gateway with no tools', async () => {
@@ -195,6 +245,7 @@ describe('SkillGeneratorService', () => {
 
       expect(result.toolCount).toBe(0);
       expect(result.content).toContain('No tools are currently assigned');
+      expect(result.content).toContain('metadata:');
     });
 
     it('should throw NotFoundException for missing gateway', async () => {
@@ -230,7 +281,7 @@ describe('SkillGeneratorService', () => {
   });
 
   describe('generateIndividualSkills', () => {
-    it('should generate individual SKILL.md files per tool', async () => {
+    it('should generate individual SKILL.md files with name matching directory', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([
         { tool: mockTool, isActive: true },
@@ -242,10 +293,12 @@ describe('SkillGeneratorService', () => {
       expect(result).toHaveLength(2);
       expect(result[0].name).toBe('getpetbyid');
       expect(result[0].fileName).toBe('apifai-getpetbyid');
-      expect(result[0].content).toContain('name: getpetbyid');
-      expect(result[0].content).toContain('apifai_execute');
+      // Frontmatter name MUST match directory name (Agent Skills spec compliance)
+      expect(result[0].content).toContain('name: apifai-getpetbyid');
+      expect(result[0].content).toContain('curl');
       expect(result[1].name).toBe('addpet');
       expect(result[1].fileName).toBe('apifai-addpet');
+      expect(result[1].content).toContain('name: apifai-addpet');
     });
 
     it('should throw NotFoundException for missing gateway', async () => {
