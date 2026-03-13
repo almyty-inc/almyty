@@ -9,12 +9,13 @@
  *   npx @apifai/skills list --gateway <id>             # List available skills
  *   npx @apifai/skills installed                       # Show installed skills
  *   npx @apifai/skills remove                          # Remove installed skills
+ *   npx @apifai/skills watch --gateway <id>            # Daemon: auto-sync skills
  *   npx @apifai/skills logout                          # Remove credentials
  */
 
 import { login, logout, resolveAuth } from './auth.js';
 import { ApifaiClient } from './client.js';
-import { detectAgents, getDefaultTargets } from './agents.js';
+import { detectAgents, getDefaultTargets, getAllTargets } from './agents.js';
 import { installSkills, removeSkills, listInstalledSkills } from './installer.js';
 
 const VERSION = '1.0.0';
@@ -22,6 +23,9 @@ const VERSION = '1.0.0';
 function printHelp(): void {
   console.log(`
 @apifai/skills v${VERSION} — Install API skills into AI coding agents
+
+Supports 30+ agents: Claude Code, Cursor, GitHub Copilot, Windsurf, Codex,
+Gemini CLI, Cline, Roo Code, OpenHands, Goose, and many more.
 
 USAGE
   npx @apifai/skills <command> [options]
@@ -34,9 +38,11 @@ COMMANDS
   gateways                      List all your gateways
   installed                     Show locally installed apifai skills
   remove                        Remove all installed apifai skills
+  watch    --gateway <id>       Watch mode: auto-sync skills on changes
 
 OPTIONS
   --gateway, -g <id>            Gateway ID
+  --interval, -i <seconds>      Watch interval in seconds (default: 60)
   --url <url>                   apifai API URL (default: https://api.apif.ai)
   --dir <path>                  Project directory (default: current directory)
   --help, -h                    Show help
@@ -49,7 +55,7 @@ ENVIRONMENT
 EXAMPLES
   npx @apifai/skills login
   npx @apifai/skills install --gateway abc-123-def
-  npx @apifai/skills list --gateway abc-123-def
+  npx @apifai/skills watch --gateway abc-123-def --interval 30
   npx @apifai/skills remove
 `);
 }
@@ -67,6 +73,8 @@ function parseArgs(args: string[]): Record<string, string | boolean> {
       parsed.url = args[++i] || '';
     } else if (arg === '--dir') {
       parsed.dir = args[++i] || '';
+    } else if (arg === '--interval' || arg === '-i') {
+      parsed.interval = args[++i] || '60';
     } else if (arg === '--help' || arg === '-h') {
       parsed.help = true;
     } else if (arg === '--version' || arg === '-v') {
@@ -195,7 +203,7 @@ async function main(): Promise<void> {
 
       console.log('');
       for (const result of results) {
-        console.log(`✓ ${result.agent}: ${result.installed} skills → ${result.skillsDir}`);
+        console.log(`  ${result.agent}: ${result.installed} skills -> ${result.skillsDir}`);
       }
 
       const totalInstalled = results.reduce((sum, r) => sum + r.installed, 0);
@@ -239,7 +247,7 @@ async function main(): Promise<void> {
       for (const target of targets) {
         const removed = removeSkills(target);
         if (removed > 0) {
-          console.log(`✓ Removed ${removed} skills from ${target.skillsDir}`);
+          console.log(`  Removed ${removed} skills from ${target.skillsDir}`);
           totalRemoved += removed;
         }
       }
@@ -249,6 +257,76 @@ async function main(): Promise<void> {
       } else {
         console.log(`\nRemoved ${totalRemoved} skill(s) total.`);
       }
+      break;
+    }
+
+    case 'watch': {
+      const gatewayId = args.gateway as string;
+      if (!gatewayId) {
+        console.error('Error: --gateway <id> is required');
+        console.error('  npx @apifai/skills watch --gateway <id>');
+        process.exit(1);
+      }
+
+      const intervalSec = parseInt(args.interval as string, 10) || 60;
+      const { url, token } = resolveAuth();
+      const client = new ApifaiClient(urlOverride || url, token);
+
+      // Get all targets (detected + universal .agents/skills/)
+      const targets = getAllTargets(projectDir);
+
+      console.log(`Watching gateway ${gatewayId} (every ${intervalSec}s)`);
+      console.log(`Syncing to ${targets.length} agent target(s):`);
+      for (const t of targets) {
+        console.log(`  • ${t.name}: ${t.skillsDir}`);
+      }
+      console.log('\nPress Ctrl+C to stop.\n');
+
+      let lastHash = '';
+
+      const sync = async () => {
+        try {
+          const skills = await client.fetchSkills(gatewayId);
+          // Simple change detection via content hash
+          const currentHash = skills.map(s => `${s.name}:${s.content.length}`).join('|');
+
+          if (currentHash !== lastHash) {
+            lastHash = currentHash;
+            const ts = new Date().toLocaleTimeString();
+
+            if (skills.length === 0) {
+              console.log(`[${ts}] No skills available.`);
+              return;
+            }
+
+            for (const target of targets) {
+              installSkills(skills, target);
+            }
+            console.log(`[${ts}] Synced ${skills.length} skills to ${targets.length} agent(s).`);
+          }
+        } catch (err: any) {
+          const ts = new Date().toLocaleTimeString();
+          console.error(`[${ts}] Sync error: ${err.message}`);
+        }
+      };
+
+      // Initial sync
+      await sync();
+
+      // Periodic sync
+      const interval = setInterval(sync, intervalSec * 1000);
+
+      // Graceful shutdown
+      const shutdown = () => {
+        clearInterval(interval);
+        console.log('\nWatch stopped.');
+        process.exit(0);
+      };
+      process.on('SIGINT', shutdown);
+      process.on('SIGTERM', shutdown);
+
+      // Keep process alive
+      await new Promise(() => {});
       break;
     }
 
