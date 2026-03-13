@@ -40,7 +40,7 @@ export class OrganizationsController {
   }
 
   @Post()
-  @Roles('owner')
+  @UseGuards(JwtAuthGuard)  // Any authenticated user can create an org (no roles guard)
   @ApiOperation({ summary: 'Create organization' })
   @ApiResponse({ status: 201, description: 'Organization created successfully' })
   async createOrganization(@Body() createOrgDto: any, @Request() req: any) {

@@ -58,6 +58,12 @@ export class AuthService {
       throw new BadRequestException('User with this email already exists');
     }
 
+    // Check if organization name is available BEFORE creating user
+    const isOrgNameAvailable = await this.isOrganizationNameAvailable(createUserDto.organizationName);
+    if (!isOrgNameAvailable) {
+      throw new BadRequestException('Organization name is already taken');
+    }
+
     // Hash password
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(createUserDto.password, saltRounds);
@@ -68,36 +74,36 @@ export class AuthService {
       passwordHash,
       firstName: createUserDto.firstName,
       lastName: createUserDto.lastName,
-      isVerified: false, // In production, require email verification
+      isVerified: false,
     });
 
     const savedUser = await this.userRepository.save(user);
 
-    // Check if organization name is available
-    const isOrgNameAvailable = await this.isOrganizationNameAvailable(createUserDto.organizationName);
-    if (!isOrgNameAvailable) {
-      throw new BadRequestException('Organization name is already taken');
+    try {
+      // Create organization with user-provided name
+      const organization = this.organizationRepository.create({
+        name: createUserDto.organizationName,
+        description: `Organization managed by ${createUserDto.firstName} ${createUserDto.lastName}`,
+        plan: 'free',
+        isActive: true,
+      });
+      const savedOrganization = await this.organizationRepository.save(organization);
+
+      // Create organization membership (user as owner)
+      const userOrganization = this.userOrganizationRepository.create({
+        userId: savedUser.id,
+        organizationId: savedOrganization.id,
+        role: OrganizationRole.OWNER,
+        isActive: true,
+        inviteAccepted: true,
+      });
+
+      await this.userOrganizationRepository.save(userOrganization);
+    } catch (error) {
+      // If org creation fails, remove the orphaned user
+      await this.userRepository.remove(savedUser);
+      throw error;
     }
-
-    // Create organization with user-provided name
-    const organization = this.organizationRepository.create({
-      name: createUserDto.organizationName,
-      description: `Organization managed by ${createUserDto.firstName} ${createUserDto.lastName}`,
-      plan: 'free',
-      isActive: true,
-    });
-    const savedOrganization = await this.organizationRepository.save(organization);
-
-    // Create organization membership (user as owner)
-    const userOrganization = this.userOrganizationRepository.create({
-      userId: savedUser.id,
-      organizationId: savedOrganization.id,
-      role: OrganizationRole.OWNER,
-      isActive: true,
-      inviteAccepted: true,
-    });
-
-    await this.userOrganizationRepository.save(userOrganization);
 
     // Generate tokens
     return this.generateTokens(savedUser);
