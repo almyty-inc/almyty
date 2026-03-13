@@ -96,7 +96,7 @@ export function AnalyticsPage() {
     ? toolList
     : toolList.filter((t: any) => {
         return gatewayList.some((gw: any) =>
-          gw.type === protocolFilter && gw.tools?.some((gt: any) => gt.id === t.id)
+          gw.type === protocolFilter && gw.tools?.some((gt: any) => gt.toolId === t.id || gt.tool?.id === t.id)
         )
       })
 
@@ -188,7 +188,7 @@ export function AnalyticsPage() {
               </thead>
               <tbody>
                 {sortedTools.map((tool: any) => {
-                  const onGateways = gatewayList.filter((gw: any) => gw.tools?.some((t: any) => t.id === tool.id))
+                  const onGateways = gatewayList.filter((gw: any) => gw.tools?.some((t: any) => t.toolId === tool.id || t.tool?.id === tool.id))
                   return (
                     <tr key={tool.id} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="px-4 py-2.5">

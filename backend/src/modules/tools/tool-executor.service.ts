@@ -517,6 +517,17 @@ export class ToolExecutorService {
         maxContentLength: 10 * 1024 * 1024, // 10MB response limit
         maxBodyLength: 10 * 1024 * 1024,
         params: queryParams,
+        paramsSerializer: (params) => {
+          const parts: string[] = [];
+          for (const [key, value] of Object.entries(params)) {
+            if (Array.isArray(value)) {
+              value.forEach(v => parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(v))}`));
+            } else if (value !== undefined && value !== null) {
+              parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+            }
+          }
+          return parts.join('&');
+        },
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'LLM-Tool-Gateway/1.0',
