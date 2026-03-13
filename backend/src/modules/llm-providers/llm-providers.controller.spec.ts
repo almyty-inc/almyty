@@ -143,7 +143,7 @@ describe('LlmProvidersController', () => {
 
   describe('chat', () => {
     it('should handle chat request successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const chatDto = {
         messages: [{ role: 'user' as any, content: 'Hello' }],
         model: 'gpt-4',
@@ -160,7 +160,7 @@ describe('LlmProvidersController', () => {
 
       llmProvidersService.chat.mockResolvedValue(mockResponse);
 
-      const result = await controller.chat('org-1', 'provider-1', chatDto, mockRequest);
+      const result = await controller.chat('provider-1', chatDto, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResponse);
@@ -230,13 +230,13 @@ describe('LlmProvidersController', () => {
 
   describe('createSession', () => {
     it('should create session successfully', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const createDto = { type: 'chat' as any, title: 'Test Session' };
       const mockSession = { id: 'session-1', ...createDto };
 
       (llmProvidersService as any).createSession = jest.fn().mockResolvedValue(mockSession);
 
-      const result = await controller.createSession('org-1', 'provider-1', createDto as any, mockRequest);
+      const result = await controller.createSession('provider-1', createDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockSession);
@@ -245,24 +245,24 @@ describe('LlmProvidersController', () => {
 
   describe('getSessions', () => {
     it('should return provider sessions', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const mockResult = { sessions: [], total: 0, page: 1, limit: 20 };
 
       (llmProvidersService as any).getSessions = jest.fn().mockResolvedValue(mockResult);
 
-      const result = await controller.getSessions('org-1', 'provider-1', undefined, undefined, 1, 20, mockRequest);
+      const result = await controller.getSessions('provider-1', undefined, undefined, 1, 20, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult);
     });
 
     it('should limit results to 100', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const mockResult = { sessions: [], total: 0, page: 1, limit: 100 };
 
       (llmProvidersService as any).getSessions = jest.fn().mockResolvedValue(mockResult);
 
-      await controller.getSessions('org-1', 'provider-1', undefined, undefined, 1, 200, mockRequest);
+      await controller.getSessions('provider-1', undefined, undefined, 1, 200, mockRequest);
 
       expect((llmProvidersService as any).getSessions).toHaveBeenCalledWith('org-1', 'provider-1', undefined, undefined, 1, 100);
     });
@@ -270,12 +270,12 @@ describe('LlmProvidersController', () => {
 
   describe('getSession', () => {
     it('should return session by id', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const mockSession = { id: 'session-1', title: 'Test Session' };
 
       (llmProvidersService as any).getSession = jest.fn().mockResolvedValue(mockSession);
 
-      const result = await controller.getSession('org-1', 'session-1', mockRequest);
+      const result = await controller.getSession('session-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockSession);
@@ -284,13 +284,13 @@ describe('LlmProvidersController', () => {
 
   describe('updateSession', () => {
     it('should update session successfully', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const updateDto = { title: 'Updated Session' };
       const mockSession = { id: 'session-1', title: 'Updated Session' };
 
       (llmProvidersService as any).updateSession = jest.fn().mockResolvedValue(mockSession);
 
-      const result = await controller.updateSession('org-1', 'session-1', updateDto as any, mockRequest);
+      const result = await controller.updateSession('session-1', updateDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockSession);
@@ -299,11 +299,11 @@ describe('LlmProvidersController', () => {
 
   describe('deleteSession', () => {
     it('should delete session successfully', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
 
       (llmProvidersService as any).deleteSession = jest.fn().mockResolvedValue(undefined);
 
-      const result = await controller.deleteSession('org-1', 'session-1', mockRequest);
+      const result = await controller.deleteSession('session-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Session deleted successfully');
@@ -390,12 +390,12 @@ describe('LlmProvidersController', () => {
 
   describe('chat - error handling', () => {
     it('should handle chat error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       const chatDto = { messages: [{ role: 'user' as any, content: 'Hello' }] };
 
       llmProvidersService.chat.mockRejectedValue(new Error('Chat failed'));
 
-      await expect(controller.chat('org-1', 'provider-1', chatDto as any, mockRequest))
+      await expect(controller.chat('provider-1', chatDto as any, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -413,50 +413,50 @@ describe('LlmProvidersController', () => {
 
   describe('createSession - error handling', () => {
     it('should handle session creation error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).createSession = jest.fn().mockRejectedValue(new Error('Session creation failed'));
 
-      await expect(controller.createSession('org-1', 'provider-1', {} as any, mockRequest))
+      await expect(controller.createSession('provider-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('getSessions - error handling', () => {
     it('should handle sessions retrieval error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).getSessions = jest.fn().mockRejectedValue(new Error('Sessions failed'));
 
-      await expect(controller.getSessions('org-1', 'provider-1', undefined, undefined, 1, 20, mockRequest))
+      await expect(controller.getSessions('provider-1', undefined, undefined, 1, 20, mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('getSession - error handling', () => {
     it('should handle session not found error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).getSession = jest.fn().mockRejectedValue(new Error('Session not found'));
 
-      await expect(controller.getSession('org-1', 'session-1', mockRequest))
+      await expect(controller.getSession('session-1', mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('updateSession - error handling', () => {
     it('should handle session update error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).updateSession = jest.fn().mockRejectedValue(new Error('Update failed'));
 
-      await expect(controller.updateSession('org-1', 'session-1', {} as any, mockRequest))
+      await expect(controller.updateSession('session-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
 
   describe('deleteSession - error handling', () => {
     it('should handle session deletion error', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).deleteSession = jest.fn().mockRejectedValue(new Error('Deletion failed'));
 
-      await expect(controller.deleteSession('org-1', 'session-1', mockRequest))
+      await expect(controller.deleteSession('session-1', mockRequest))
         .rejects.toThrow();
     });
   });

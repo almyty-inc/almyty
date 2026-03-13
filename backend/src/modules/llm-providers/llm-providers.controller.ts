@@ -537,12 +537,19 @@ export class LlmProvidersController {
   @ApiResponse({ status: 200, description: 'Chat response received successfully' })
   @ApiResponse({ status: 400, description: 'Invalid chat request' })
   async chat(
-    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('providerId', ParseUUIDPipe) providerId: string,
     @Body(ValidationPipe) chatRequest: ChatRequestBodyDto,
     @Request() req: any,
   ) {
     try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       const response = await this.llmProvidersService.chat(
         providerId,
         chatRequest as ChatRequest,
@@ -601,12 +608,19 @@ export class LlmProvidersController {
   @ApiOperation({ summary: 'Create a new chat session' })
   @ApiResponse({ status: 201, description: 'Session created successfully' })
   async createSession(
-    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('providerId', ParseUUIDPipe) providerId: string,
     @Body(ValidationPipe) createSessionDto: CreateSessionDto,
     @Request() req: any,
   ) {
     try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       const session = await this.llmProvidersService.createSession(
         providerId,
         organizationId,
@@ -636,7 +650,6 @@ export class LlmProvidersController {
   @ApiOperation({ summary: 'Get sessions for LLM provider' })
   @ApiResponse({ status: 200, description: 'Sessions retrieved successfully' })
   async getSessions(
-    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('providerId', ParseUUIDPipe) providerId: string,
     @Query('status') status?: SessionStatus,
     @Query('userId') userId?: string,
@@ -645,6 +658,14 @@ export class LlmProvidersController {
     @Request() req?: any,
   ) {
     try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       const result = await this.llmProvidersService.getSessions(
         organizationId,
         providerId,
@@ -677,11 +698,18 @@ export class LlmProvidersController {
   @ApiResponse({ status: 200, description: 'Session retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Session not found' })
   async getSession(
-    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @Request() req: any,
   ) {
     try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       const session = await this.llmProvidersService.getSession(sessionId, organizationId);
 
       return {
@@ -707,12 +735,19 @@ export class LlmProvidersController {
   @ApiResponse({ status: 200, description: 'Session updated successfully' })
   @ApiResponse({ status: 404, description: 'Session not found' })
   async updateSession(
-    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @Body(ValidationPipe) updateSessionDto: UpdateSessionDto,
     @Request() req: any,
   ) {
     try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       const session = await this.llmProvidersService.updateSession(
         sessionId,
         organizationId,
@@ -742,11 +777,18 @@ export class LlmProvidersController {
   @ApiResponse({ status: 200, description: 'Session deleted successfully' })
   @ApiResponse({ status: 404, description: 'Session not found' })
   async deleteSession(
-    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @Request() req: any,
   ) {
     try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       await this.llmProvidersService.deleteSession(sessionId, organizationId);
 
       return {

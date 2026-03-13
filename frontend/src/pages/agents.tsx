@@ -98,11 +98,21 @@ export function AgentsPage() {
   const createAgentMutation = useMutation({
     mutationFn: async () => {
       // 1. Create gateway
+      // Build configuration based on gateway type
+      const configByType: Record<string, any> = {
+        mcp: { transport: 'http' },
+        utcp: { protocol: 'http' },
+        a2a: { agentCapabilities: {} },
+        skills: { format: 'skill-md' },
+      }
+      // Generate endpoint slug from agent name
+      const endpoint = '/' + agentName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
       const gatewayResponse = await gatewaysApi.create({
         name: agentName,
         type: selectedGatewayType,
+        endpoint,
         description: `Agent created with ${selectedToolIds.length} tools`,
-        organizationId: currentOrganization?.id,
+        configuration: configByType[selectedGatewayType] || { transport: 'http' },
       })
       const gateway = gatewayResponse.data?.data || gatewayResponse.data
       const gatewayId = gateway?.id
