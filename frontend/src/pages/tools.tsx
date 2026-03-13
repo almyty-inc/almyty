@@ -946,42 +946,70 @@ return new Promise((resolve, reject) => {
               <div id="tool-parameters-section" className="space-y-4">
                 <h4 className="text-sm font-medium">Parameters</h4>
 
-                {/* Simple parameter inputs - expand based on tool.parameters schema */}
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-sm font-medium">Path Parameters</label>
-                    <Input
-                      placeholder='{"petId": "1"}'
-                      value={JSON.stringify(executionParameters.path || {})}
-                      onChange={(e) => {
-                        try {
-                          const parsed = JSON.parse(e.target.value || '{}')
-                          setExecutionParameters({ ...executionParameters, path: parsed })
-                        } catch {}
-                      }}
-                      className="mt-1 font-mono text-xs"
-                    />
-                  </div>
+                {(toolForExecution as any).type === 'api' ? (
+                  /* API tools: show path/query/body split */
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium">Path Parameters</label>
+                      <Input
+                        placeholder='{"petId": "1"}'
+                        value={JSON.stringify(executionParameters.path || {})}
+                        onChange={(e) => {
+                          try {
+                            const parsed = JSON.parse(e.target.value || '{}')
+                            setExecutionParameters({ ...executionParameters, path: parsed })
+                          } catch {}
+                        }}
+                        className="mt-1 font-mono text-xs"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="text-sm font-medium">Query Parameters</label>
-                    <Input
-                      placeholder='{"status": "available"}'
-                      value={JSON.stringify(executionParameters.query || {})}
-                      onChange={(e) => {
-                        try {
-                          const parsed = JSON.parse(e.target.value || '{}')
-                          setExecutionParameters({ ...executionParameters, query: parsed })
-                        } catch {}
-                      }}
-                      className="mt-1 font-mono text-xs"
-                    />
-                  </div>
+                    <div>
+                      <label className="text-sm font-medium">Query Parameters</label>
+                      <Input
+                        placeholder='{"status": "available"}'
+                        value={JSON.stringify(executionParameters.query || {})}
+                        onChange={(e) => {
+                          try {
+                            const parsed = JSON.parse(e.target.value || '{}')
+                            setExecutionParameters({ ...executionParameters, query: parsed })
+                          } catch {}
+                        }}
+                        className="mt-1 font-mono text-xs"
+                      />
+                    </div>
 
+                    <div>
+                      <label className="text-sm font-medium">Body</label>
+                      <textarea
+                        placeholder='{"name": "Rex", "status": "available"}'
+                        value={JSON.stringify(executionParameters.body || {}, null, 2)}
+                        onChange={(e) => {
+                          try {
+                            const parsed = JSON.parse(e.target.value || '{}')
+                            setExecutionParameters({ ...executionParameters, body: parsed })
+                          } catch {}
+                        }}
+                        className="w-full min-h-[100px] p-2 border rounded font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  /* Custom/LLM/other tools: single parameters input */
                   <div>
-                    <label className="text-sm font-medium">Body</label>
+                    <label className="text-sm font-medium">Parameters (JSON)</label>
                     <textarea
-                      placeholder='{"name": "Rex", "status": "available"}'
+                      placeholder={(() => {
+                        const props = (toolForExecution as any).parameters?.properties
+                        if (props && Object.keys(props).length > 0) {
+                          const example: Record<string, string> = {}
+                          for (const [k, v] of Object.entries(props)) {
+                            example[k] = (v as any).type === 'number' ? '0' : (v as any).type === 'boolean' ? 'true' : `example_${k}`
+                          }
+                          return JSON.stringify(example, null, 2)
+                        }
+                        return '{"key": "value"}'
+                      })()}
                       value={JSON.stringify(executionParameters.body || {}, null, 2)}
                       onChange={(e) => {
                         try {
@@ -989,10 +1017,15 @@ return new Promise((resolve, reject) => {
                           setExecutionParameters({ ...executionParameters, body: parsed })
                         } catch {}
                       }}
-                      className="w-full min-h-[100px] p-2 border rounded font-mono text-xs"
+                      className="w-full min-h-[120px] p-2 border rounded font-mono text-xs"
                     />
+                    {(toolForExecution as any).parameters?.properties && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Expected: {Object.entries((toolForExecution as any).parameters.properties).map(([k, v]: [string, any]) => `${k} (${v.type})`).join(', ')}
+                      </p>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Execute Button */}
@@ -1000,12 +1033,14 @@ return new Promise((resolve, reject) => {
                 <Button
                   onClick={() => {
                     if (toolForExecution) {
-                      // Merge path, query, body into flat parameters for the backend executor
-                      const flatParams = {
-                        ...(executionParameters.path || {}),
-                        ...(executionParameters.query || {}),
-                        ...(executionParameters.body || {}),
-                      }
+                      // For API tools, merge path/query/body; for others, use body directly
+                      const flatParams = (toolForExecution as any).type === 'api'
+                        ? {
+                            ...(executionParameters.path || {}),
+                            ...(executionParameters.query || {}),
+                            ...(executionParameters.body || {}),
+                          }
+                        : (executionParameters.body || {})
                       executeToolMutation.mutate({
                         id: toolForExecution.id,
                         parameters: flatParams,
