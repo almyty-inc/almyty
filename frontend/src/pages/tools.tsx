@@ -1000,9 +1000,15 @@ return new Promise((resolve, reject) => {
                 <Button
                   onClick={() => {
                     if (toolForExecution) {
+                      // Merge path, query, body into flat parameters for the backend executor
+                      const flatParams = {
+                        ...(executionParameters.path || {}),
+                        ...(executionParameters.query || {}),
+                        ...(executionParameters.body || {}),
+                      }
                       executeToolMutation.mutate({
                         id: toolForExecution.id,
-                        parameters: executionParameters,
+                        parameters: flatParams,
                       })
                     }
                   }}
