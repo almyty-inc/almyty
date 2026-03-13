@@ -69,7 +69,8 @@ export function AgentsPage() {
     queryKey: ['gateways', currentOrganization?.id],
     queryFn: async () => {
       const response = await gatewaysApi.getAll()
-      return response.data?.data?.gateways || response.data?.data || []
+      const result = response.data?.data?.gateways || response.data?.data || []
+      return Array.isArray(result) ? result : []
     },
     enabled: !!currentOrganization,
   })
@@ -78,7 +79,8 @@ export function AgentsPage() {
     queryKey: ['llm-providers'],
     queryFn: async () => {
       const response = await llmProvidersApi.getAll()
-      return response.data?.data?.providers || []
+      const result = response.data?.data?.providers || response.data?.providers || []
+      return Array.isArray(result) ? result : []
     },
   })
 
@@ -86,7 +88,8 @@ export function AgentsPage() {
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
       const response = await toolsApi.getAll(currentOrganization?.id)
-      return response.data?.data?.tools || response.data?.tools || []
+      const result = response.data?.data?.tools || response.data?.tools || response.data?.data || []
+      return Array.isArray(result) ? result : []
     },
     enabled: !!currentOrganization,
   })
