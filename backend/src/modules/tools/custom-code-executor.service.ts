@@ -38,8 +38,9 @@ export class CustomCodeExecutorService {
       // Inject parameters as individual variables AND as parameters object
       const jail = context.global;
 
-      // Set parameters object
+      // Set parameters object (and 'params' alias)
       await jail.set('parameters', new ivm.ExternalCopy(parameters).copyInto());
+      await jail.set('params', new ivm.ExternalCopy(parameters).copyInto());
 
       // Also set each parameter as individual variable
       for (const [key, value] of Object.entries(parameters)) {

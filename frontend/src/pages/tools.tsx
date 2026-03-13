@@ -1343,7 +1343,7 @@ return new Promise((resolve, reject) => {
                   }}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Available parameters: <code className="bg-muted px-1 rounded">{Object.keys(toolParameters.properties || {}).join(', ') || 'none - add below'}</code>
+                  Access via <code className="bg-muted px-1 rounded">params.name</code> or directly as <code className="bg-muted px-1 rounded">name</code>. Available: <code className="bg-muted px-1 rounded">{Object.keys(toolParameters.properties || {}).join(', ') || 'none - add below'}</code>
                 </p>
               </div>
             )}
