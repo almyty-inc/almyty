@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { Tool, ToolType } from '../../entities/tool.entity';
+import { Tool, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 
@@ -37,7 +37,7 @@ export class SkillGeneratorService {
   async generateToolSkill(toolId: string): Promise<SkillOutput> {
     const tool = await this.toolRepository.findOne({
       where: { id: toolId },
-      relations: ['categories', 'operation'],
+      relations: ['categories', 'operation', 'operation.api'],
     });
 
     if (!tool) {
@@ -85,6 +85,9 @@ export class SkillGeneratorService {
   /**
    * Generate individual SKILL.md files per tool for a gateway.
    * Used by the skills CLI to install into agent directories.
+   *
+   * Per Agent Skills spec: frontmatter `name` must match parent directory name.
+   * Directory = `apifai-{slug}`, so name = `apifai-{slug}`.
    */
   async generateIndividualSkills(gatewayId: string): Promise<IndividualSkill[]> {
     const gateway = await this.gatewayRepository.findOne({
@@ -97,17 +100,22 @@ export class SkillGeneratorService {
 
     const tools = await this.getGatewayTools(gatewayId);
 
-    return tools.map(tool => ({
-      name: this.slugify(tool.name),
-      fileName: `apifai-${this.slugify(tool.name)}`,
-      content: this.renderToolSkillMd(tool),
-    }));
+    return tools.map(tool => {
+      const slug = this.slugify(tool.name);
+      const fileName = `apifai-${slug}`;
+      return {
+        name: slug,
+        fileName,
+        // Use fileName as skillName so frontmatter name matches directory
+        content: this.renderToolSkillMd(tool, fileName),
+      };
+    });
   }
 
   private async getGatewayTools(gatewayId: string): Promise<Tool[]> {
     const gatewayTools = await this.gatewayToolRepository.find({
       where: { gatewayId, isActive: true },
-      relations: ['tool', 'tool.categories', 'tool.operation'],
+      relations: ['tool', 'tool.categories', 'tool.operation', 'tool.operation.api'],
     });
 
     return gatewayTools.map(gt => gt.tool).filter(Boolean);
@@ -115,21 +123,34 @@ export class SkillGeneratorService {
 
   /**
    * Render a SKILL.md following the Agent Skills open standard.
-   * https://agentskills.io / https://code.claude.com/docs/en/skills
+   * https://agentskills.io/specification
+   *
+   * @param tool The tool to render
+   * @param skillName Optional override for the frontmatter `name` field.
+   *   When provided (e.g. `apifai-find-pet-by-id`), ensures name matches
+   *   the parent directory per the Agent Skills spec.
    */
-  private renderToolSkillMd(tool: Tool): string {
+  private renderToolSkillMd(tool: Tool, skillName?: string): string {
     const params = tool.parameters as any;
     const properties = params?.properties || {};
     const required = params?.required || [];
     const method = tool.operation?.method || '';
     const endpoint = tool.operation?.endpoint || '';
+    const baseUrl = tool.operation?.api?.baseUrl?.replace(/\/$/, '') || '';
+    const isApiTool = !!tool.operation && !!method && !!endpoint;
 
     const lines: string[] = [];
 
     // YAML frontmatter (Agent Skills standard)
     lines.push('---');
-    lines.push(`name: ${this.slugify(tool.name)}`);
+    lines.push(`name: ${skillName || this.slugify(tool.name)}`);
     lines.push(`description: ${this.escapeYaml(this.buildDescription(tool))}`);
+    lines.push('metadata:');
+    lines.push('  author: apifai');
+    lines.push('  generated: "true"');
+    if (tool.version) {
+      lines.push(`  version: "${tool.version}"`);
+    }
     lines.push('---');
     lines.push('');
 
@@ -149,36 +170,51 @@ export class SkillGeneratorService {
     lines.push(this.generateWhenToUse(tool));
     lines.push('');
 
-    // Tool call instructions
-    lines.push('## Tool call');
-    lines.push('');
-    lines.push(`Call \`apifai_execute\` with:`);
-    lines.push(`- \`tool_name\`: \`"${tool.name}"\``);
+    // API endpoint (for API tools with operation data)
+    if (isApiTool) {
+      const fullUrl = baseUrl
+        ? `${baseUrl}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`
+        : endpoint;
+      lines.push('## HTTP endpoint');
+      lines.push('');
+      lines.push('```');
+      lines.push(`${method} ${fullUrl}`);
+      lines.push('```');
+      lines.push('');
+    }
 
+    // Parameters
     if (Object.keys(properties).length > 0) {
-      lines.push(`- \`parameters\`:`);
-      for (const [name, schema] of Object.entries(properties)) {
+      lines.push('## Parameters');
+      lines.push('');
+      for (const [pName, schema] of Object.entries(properties)) {
         const paramSchema = schema as any;
-        const isRequired = required.includes(name);
+        const isRequired = required.includes(pName);
         const typeStr = paramSchema.type || 'string';
         const desc = paramSchema.description || '';
         const reqLabel = isRequired ? ', **required**' : '';
-        lines.push(`  - \`${name}\` (${typeStr}${reqLabel}): ${desc}`);
+        lines.push(`- \`${pName}\` (${typeStr}${reqLabel}): ${desc}`);
       }
+      lines.push('');
     }
-    lines.push('');
 
     // Example
     lines.push('## Example');
     lines.push('');
-    lines.push(this.generateExample(tool, properties, required));
+    if (isApiTool) {
+      lines.push(this.generateCurlExample(tool, properties, required));
+    } else {
+      lines.push(this.generateJsonExample(tool, properties, required));
+    }
     lines.push('');
 
-    // Error handling
-    lines.push('## Error handling');
-    lines.push('');
-    lines.push(this.generateErrorHandling(tool));
-    lines.push('');
+    // Error handling (for API tools)
+    if (isApiTool) {
+      lines.push('## Error handling');
+      lines.push('');
+      lines.push(this.generateErrorHandling(tool));
+      lines.push('');
+    }
 
     return lines.join('\n');
   }
@@ -192,14 +228,17 @@ export class SkillGeneratorService {
     // YAML frontmatter
     lines.push('---');
     lines.push(`name: ${this.slugify(gateway.name)}`);
-    lines.push(`description: ${this.escapeYaml(`API skills for ${gateway.name}. ${tools.length} tools available.`)}`);
+    lines.push(`description: ${this.escapeYaml(`API tools for ${gateway.name}. ${tools.length} tools available. Use when interacting with the ${gateway.name} API.`)}`);
+    lines.push('metadata:');
+    lines.push('  author: apifai');
+    lines.push('  generated: "true"');
     lines.push('---');
     lines.push('');
 
     // Overview
     lines.push(`# ${gateway.name}`);
     lines.push('');
-    lines.push(`This gateway provides ${tools.length} tools. Use \`apifai_execute\` to call any tool, or \`apifai_search\` to find tools by keyword.`);
+    lines.push(`This gateway provides ${tools.length} API tools.`);
     lines.push('');
 
     // Tool index
@@ -212,6 +251,14 @@ export class SkillGeneratorService {
 
     // Per-tool sections
     for (const tool of tools) {
+      const params = tool.parameters as any;
+      const properties = params?.properties || {};
+      const required = params?.required || [];
+      const method = tool.operation?.method || '';
+      const endpoint = tool.operation?.endpoint || '';
+      const baseUrl = tool.operation?.api?.baseUrl?.replace(/\/$/, '') || '';
+      const isApiTool = !!tool.operation && !!method && !!endpoint;
+
       lines.push('---');
       lines.push('');
       lines.push(`### ${tool.name}`);
@@ -221,12 +268,15 @@ export class SkillGeneratorService {
         lines.push('');
       }
 
-      const params = tool.parameters as any;
-      const properties = params?.properties || {};
-      const required = params?.required || [];
-
-      lines.push(`Call \`apifai_execute\` with \`tool_name: "${tool.name}"\``);
-      lines.push('');
+      if (isApiTool) {
+        const fullUrl = baseUrl
+          ? `${baseUrl}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`
+          : endpoint;
+        lines.push('```');
+        lines.push(`${method} ${fullUrl}`);
+        lines.push('```');
+        lines.push('');
+      }
 
       if (Object.keys(properties).length > 0) {
         lines.push('**Parameters:**');
@@ -238,6 +288,11 @@ export class SkillGeneratorService {
         }
         lines.push('');
       }
+
+      if (isApiTool) {
+        lines.push(this.generateCurlExample(tool, properties, required));
+        lines.push('');
+      }
     }
 
     return lines.join('\n');
@@ -247,7 +302,10 @@ export class SkillGeneratorService {
     return [
       '---',
       `name: ${this.slugify(gateway.name)}`,
-      `description: ${this.escapeYaml(`API skills for ${gateway.name}`)}`,
+      `description: ${this.escapeYaml(`API tools for ${gateway.name}. Use when interacting with the ${gateway.name} API.`)}`,
+      'metadata:',
+      '  author: apifai',
+      '  generated: "true"',
       '---',
       '',
       `# ${gateway.name}`,
@@ -259,16 +317,33 @@ export class SkillGeneratorService {
 
   private buildDescription(tool: Tool): string {
     const base = tool.description || `Use the ${tool.name} tool`;
-    // Keep it concise — description is used by agents to decide when to load the skill
-    if (base.length > 200) {
-      return base.substring(0, 197) + '...';
+
+    // Add trigger phrase per Agent Skills best practice
+    let trigger: string;
+    switch (tool.type) {
+      case ToolType.QUERY:
+        trigger = 'Use when you need to retrieve this data.';
+        break;
+      case ToolType.MUTATION:
+        trigger = 'Use when you need to create or modify this data.';
+        break;
+      case ToolType.ACTION:
+        trigger = 'Use when you need to perform this action.';
+        break;
+      default:
+        trigger = 'Use when you need to call this API.';
     }
-    return base;
+
+    const combined = `${base}. ${trigger}`;
+    // Spec allows up to 1024 chars; keep concise for token efficiency
+    if (combined.length > 300) {
+      return combined.substring(0, 297) + '...';
+    }
+    return combined;
   }
 
   private generateWhenToUse(tool: Tool): string {
     const type = tool.type;
-    const name = tool.name;
     const desc = tool.description || '';
 
     const lines: string[] = [];
@@ -295,7 +370,67 @@ export class SkillGeneratorService {
     return lines.join('\n');
   }
 
-  private generateExample(tool: Tool, properties: Record<string, any>, required: string[]): string {
+  /**
+   * Generate a curl example for API tools.
+   */
+  private generateCurlExample(tool: Tool, properties: Record<string, any>, required: string[]): string {
+    const method = tool.operation?.method || 'GET';
+    const endpoint = tool.operation?.endpoint || '';
+    const baseUrl = tool.operation?.api?.baseUrl?.replace(/\/$/, '') || '';
+    let fullUrl = baseUrl
+      ? `${baseUrl}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`
+      : endpoint;
+
+    const bodyParams: Record<string, any> = {};
+    const queryParams: string[] = [];
+
+    for (const [name, schema] of Object.entries(properties)) {
+      const paramSchema = schema as any;
+      const value = this.getExampleValue(name, paramSchema);
+
+      if (fullUrl.includes(`{${name}}`)) {
+        // Path parameter — substitute into URL
+        fullUrl = fullUrl.replace(`{${name}}`, String(value));
+      } else if (['GET', 'DELETE', 'HEAD'].includes(method)) {
+        // Query parameter for GET-like methods
+        if (required.includes(name) || Object.keys(properties).length <= 3) {
+          queryParams.push(`${name}=${encodeURIComponent(String(value))}`);
+        }
+      } else {
+        // Body parameter for POST/PUT/PATCH
+        if (required.includes(name) || Object.keys(properties).length <= 3) {
+          bodyParams[name] = value;
+        }
+      }
+    }
+
+    if (queryParams.length > 0) {
+      fullUrl += `?${queryParams.join('&')}`;
+    }
+
+    const lines: string[] = [];
+    lines.push('```bash');
+
+    const hasBody = Object.keys(bodyParams).length > 0;
+    if (method === 'GET' && !hasBody) {
+      lines.push(`curl "${fullUrl}"`);
+    } else {
+      const parts: string[] = [`curl -X ${method} "${fullUrl}"`];
+      if (hasBody) {
+        parts.push(`  -H "Content-Type: application/json"`);
+        parts.push(`  -d '${JSON.stringify(bodyParams)}'`);
+      }
+      lines.push(parts.join(' \\\n'));
+    }
+
+    lines.push('```');
+    return lines.join('\n');
+  }
+
+  /**
+   * Generate a JSON parameters example for non-API tools.
+   */
+  private generateJsonExample(tool: Tool, properties: Record<string, any>, required: string[]): string {
     const exampleParams: Record<string, any> = {};
     for (const [name, schema] of Object.entries(properties)) {
       const paramSchema = schema as any;
@@ -304,8 +439,11 @@ export class SkillGeneratorService {
       }
     }
 
-    const paramsStr = JSON.stringify(exampleParams, null, 2);
-    return `\`\`\`\napifai_execute({\n  tool_name: "${tool.name}",\n  parameters: ${paramsStr}\n})\n\`\`\``;
+    if (Object.keys(exampleParams).length === 0) {
+      return 'No parameters required.';
+    }
+
+    return `\`\`\`json\n${JSON.stringify(exampleParams, null, 2)}\n\`\`\``;
   }
 
   private getExampleValue(name: string, schema: any): any {
