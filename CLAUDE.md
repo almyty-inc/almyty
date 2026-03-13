@@ -2,9 +2,7 @@
 
 ## Project Overview
 
-**apifai** is a universal API-to-AI tool gateway. It parses API schemas (OpenAPI, GraphQL, SOAP, Protobuf), auto-generates tools, and serves them via MCP, UTCP, and A2A protocols.
-
-**Last active**: March 12, 2026. **Project started**: November 5, 2025.
+**apifai** is a universal API-to-AI tool gateway. It parses API schemas (OpenAPI, GraphQL, SOAP, Protobuf), auto-generates tools, and serves them via MCP, UTCP, A2A, and Agent Skills protocols. Users can also create custom tools manually (HTTP, JavaScript, GraphQL, LLM-powered).
 
 ---
 
@@ -25,29 +23,14 @@
 - **State**: Zustand 4.4 + TanStack React Query 5
 - **Tables**: TanStack React Table 8
 - **Forms**: react-hook-form + zod
-- **Production**: nginx 1.25 serving static build on port 8080
 - **Port**: 3002 (dev), 8080 (production/nginx)
 
 ### Infrastructure
-- **Docker**: Multi-stage Dockerfiles (node:22-alpine for backend, nginx:1.25-alpine for frontend)
-- **Docker Compose**: postgres, redis, backend, frontend, nginx (local dev)
+- **Docker**: Multi-stage Dockerfiles (node:22-alpine, nginx:1.25-alpine)
+- **Docker Compose**: postgres, redis, backend, frontend, nginx
 - **Kubernetes**: Kustomize base + 3 overlays (development, staging, production)
-- **CI/CD**: 5 GitHub Actions workflows (production, staging, dev, quick-api, quick-frontend)
-- **Registry**: ghcr.io/frane/apifai
-- **Cloud**: DigitalOcean Kubernetes
-- **Domain**: apif.ai (primary)
+- **CI/CD**: GitHub Actions (5 workflows)
 - **TLS**: Let's Encrypt via cert-manager
-- **Testing**: Playwright for E2E, Jest for backend unit/integration
-
----
-
-## Live Environments
-
-| Environment | API | Frontend | Database | Deploy Trigger |
-|-------------|-----|----------|----------|----------------|
-| **Dev** | https://api.dev.apif.ai | https://app.dev.apif.ai | In-cluster postgres (ephemeral) | Push to `develop` |
-| **Staging** | https://api.staging.apif.ai | https://app.staging.apif.ai | DO Managed PostgreSQL (persistent) | Push to `master` |
-| **Production** | https://api.apif.ai | https://app.apif.ai | DO Managed PostgreSQL (not yet provisioned) | Tag `v*.*.*` |
 
 ---
 
@@ -60,108 +43,61 @@ backend/src/
 │   ├── apis/          # API CRUD, schema import
 │   ├── auth/          # JWT auth, registration, login
 │   ├── gateways/      # Gateway CRUD, tool scoping, protocol serving, exports
-│   ├── health/        # @nestjs/terminus: /health, /health/live, /health/ready
+│   ├── health/        # /health, /health/live, /health/ready
 │   ├── jobs/          # BullMQ background jobs
-│   ├── json-schema-translator/
 │   ├── llm-providers/ # OpenAI, Anthropic integration
-│   ├── mcp/           # MCP JSON-RPC 2.0 (HTTP, SSE, WebSocket) + real prompts
+│   ├── mcp/           # MCP JSON-RPC 2.0 (HTTP, SSE, WebSocket)
 │   ├── monitoring/    # Metrics, usage tracking
-│   ├── organizations/ # Multi-tenancy, RBAC, teams
-│   ├── plugins/       # Plugin architecture
+│   ├── organizations/ # Multi-tenancy, RBAC
 │   ├── schema-parser/ # 4 parsers: OpenAPI, GraphQL, SOAP, Protobuf
-│   ├── tools/         # Tool CRUD, generation, execution (real HTTP via axios)
+│   ├── tools/         # Tool CRUD, generation, execution, skill export
 │   └── users/         # User management
-└── 90 test suites     # 3,003 backend tests, 0 failures
 
 frontend/src/
-├── pages/             # 14 pages + auth
-├── components/        # 20 shadcn/ui components
+├── pages/             # Dashboard, APIs, Tools, Gateways, Agents, Chat, etc.
+├── components/        # shadcn/ui components
 ├── hooks/             # React Query hooks
-├── lib/               # API client (with 401 interceptor), utilities
+├── lib/               # API client, utilities
 ├── stores/            # Zustand stores
 └── types/             # TypeScript types
 
-frontend/tests/e2e/
-└── 15 spec files      # 190 Playwright tests
-
-k8s/
-├── base/              # Namespace, configmap, deployments, services, ingress, cert-manager
-├── overlays/
-│   ├── development/   # In-cluster postgres, 1 replica, debug logging
-│   ├── staging/       # Managed DB, 2 replicas, swagger enabled
-│   └── production/    # Managed DB, 3 API replicas, manual approval deploy
-└── redirect-ingress.yaml  # 301 redirects: apifai.ai + apifai.com → apif.ai
-
-.github/workflows/
-├── deploy-production.yml  # Tag v*.*.* → build → manual approval → deploy + GitHub Release
-├── deploy-staging.yml     # Push to master → auto-deploy staging + redirect ingress
-├── deploy-development.yml # Push to develop → auto-deploy dev
-├── deploy-api.yml         # Quick API-only deploy (backend/** changes on master)
-└── deploy-frontend.yml    # Quick frontend-only deploy (frontend/** changes on master)
+packages/skills-cli/   # npx @apifai/skills CLI
+├── src/
+│   ├── index.ts       # CLI entry (install, watch, list, remove)
+│   ├── agents.ts      # 30+ agent detection
+│   ├── installer.ts   # SKILL.md file writer
+│   ├── client.ts      # HTTP client to backend
+│   └── auth.ts        # JWT authentication
 ```
 
 ---
 
-## Key Facts (Verified March 2026)
+## Key Facts
 
 - **Entities**: 24 (User, Organization, Team, Api, ApiSchema, Operation, Resource, Tool, ToolVersion, ToolCategory, ToolExecution, Gateway, GatewayTool, GatewayAuth, LlmProvider, LlmSession, LlmMessage, RequestLog, UsageMetric, JsonSchema, ApiKey, Credential, UserOrganization, UserTeam)
-- **Gateway types**: 3 — `MCP`, `A2A`, `UTCP` (scoping via tool assignment)
-- **Backend tests**: 90 suites, 3,003 tests, 0 failures
-- **E2E tests**: 190 across 15 files, 90s timeout per test
-- **Petstore pipeline**: Verified — 20 operations parsed, 20 tools generated, served via MCP
-- **Tool execution**: Real HTTP calls via axios (not stubs)
-- **MCP prompts**: Real implementation generating prompts from org tools
-
----
-
-## What Works (All Verified)
-
-- Full auth flow (registration, login, JWT, 401 interceptor)
-- API CRUD with schema import (OpenAPI verified end-to-end with Petstore)
-- Tool auto-generation from parsed schemas
-- Tool execution: real HTTP calls via axios to target APIs
-- MCP protocol: JSON-RPC 2.0 with session management, multi-transport, real prompts
-- UTCP and A2A protocol endpoints (real implementations)
-- Gateway exports: skills, CLI bundles, SDK generation
-- Frontend: all pages functional (dashboard, APIs, tools, gateways, analytics, settings, orgs)
-- Organization settings: editable name/description with save
-- Protocol discovery: `/.well-known/mcp`, `/.well-known/utcp`
-- Health checks: `/health` (full), `/health/live` (liveness), `/health/ready` (readiness)
-- Graceful shutdown (SIGTERM handling for k8s)
-- Global rate limiting (ThrottlerGuard)
-- Docker deployment with production-grade multi-stage builds
-- Kubernetes: dev + staging deployed and healthy
-- GitHub Actions CI/CD: fully automated deploys on push
-- TLS: real Let's Encrypt certs on all environments
-- Domain redirects: apifai.ai + apifai.com → apif.ai (301)
+- **Gateway types**: MCP, A2A, UTCP, Skills
+- **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed), GraphQL, LLM
+- **Backend tests**: 90 suites, 3,000+ tests
+- **Agent Skills**: Compliant with https://agentskills.io spec
 
 ---
 
 ## Ports
 
-| Service | Dev Port | Container Port | Notes |
-|---------|----------|---------------|-------|
-| Backend | 4000 (host) | 3000 | docker-compose maps 4000:3000 |
-| Frontend | 3002 (dev) | 8080 (nginx) | Vite dev server / nginx production |
-| PostgreSQL | 5432 | 5432 | |
-| Redis | 6379 | 6379 | |
+| Service | Dev Port | Container Port |
+|---------|----------|---------------|
+| Backend | 4000 (host) | 3000 |
+| Frontend | 3002 (dev) | 8080 (nginx) |
+| PostgreSQL | 5432 | 5432 |
+| Redis | 6379 | 6379 |
 
 ---
 
 ## Database Configuration
 
-TypeORM connects via individual params (not DATABASE_URL) for proper SSL control:
+TypeORM connects via individual params:
 - `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `DATABASE_NAME`
-- `DB_SSL` env var: `"true"` for managed databases, `"false"` for local dev
-
----
-
-## Secrets Management
-
-Secrets are **NOT stored in git**. They are managed via:
-- **GitHub Secrets** → injected by CI/CD workflows
-- **k8s secrets** → created at deploy time
-- See `.github/workflows/` for secret references
+- `DB_SSL`: `"true"` for managed databases, `"false"` for local dev
 
 ---
 
@@ -174,55 +110,19 @@ docker-compose up -d
 # Frontend dev
 cd frontend && PORT=3002 npm run dev
 
-# Backend tests (90 suites, 3,003 tests)
+# Backend tests
 cd backend && npm run test
-cd backend && npm run test:cov
 
-# E2E tests
-cd frontend && E2E_BASE_URL=http://localhost:3002 npx playwright test --reporter=list
+# Health check
+curl http://localhost:4000/health
 
-# Health checks (local)
-curl http://localhost:4000/health          # Full health (DB + Redis + memory)
-curl http://localhost:4000/health/live     # Liveness (memory only)
-curl http://localhost:4000/health/ready    # Readiness (DB + Redis)
-
-# Health checks (staging)
-curl https://api.staging.apif.ai/health
-
-# MCP discovery
-curl http://localhost:4000/api/mcp/.well-known/mcp
-
-# Validate k8s manifests
-kubectl kustomize k8s/overlays/development
-kubectl kustomize k8s/overlays/staging
-kubectl kustomize k8s/overlays/production
+# Skills CLI
+npx @apifai/skills install --gateway <id>
+npx @apifai/skills watch --gateway <id>
 
 # Docker production builds
-docker build --target production -t apifai-api:test ./backend
-docker build --target production -t apifai-frontend:test --build-arg VITE_API_BASE_URL=http://localhost:3000 ./frontend
-```
-
----
-
-## Deployment
-
-### Staging Deploy (auto on push to master)
-```bash
-git push origin master
-# GitHub Actions: builds images → creates secrets → deploys to k8s + redirect ingress
-```
-
-### Development Deploy (auto on push to develop)
-```bash
-git push origin develop
-# GitHub Actions: builds images → deploys to k8s
-```
-
-### Production Deploy (manual tag)
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-# GitHub Actions: builds images → manual approval gate → deploys to k8s → creates GitHub Release
+docker build --target production -t apifai-api ./backend
+docker build --target production -t apifai-frontend ./frontend
 ```
 
 ---
