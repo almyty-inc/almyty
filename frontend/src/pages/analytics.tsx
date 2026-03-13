@@ -101,7 +101,7 @@ export function AnalyticsPage() {
       })
 
   const sortedTools = [...filteredTools].sort((a: any, b: any) => (b.usageCount || 0) - (a.usageCount || 0))
-  const protocols = [...new Set(gatewayList.map((g: any) => g.type))] as string[]
+  const protocols = ['mcp', 'utcp', 'a2a', 'skills']
 
   return (
     <div className="space-y-4">
@@ -143,30 +143,28 @@ export function AnalyticsPage() {
       {tab === 'tools' && (
         <div>
           {/* Protocol filter */}
-          {protocols.length > 0 && (
-            <div className="flex items-center gap-1 mb-3">
-              <span className="text-xs text-muted-foreground mr-1">Protocol:</span>
+          <div className="flex items-center gap-1 mb-3">
+            <span className="text-xs text-muted-foreground mr-1">Protocol:</span>
+            <Button
+              variant={protocolFilter === 'all' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-6 text-xs px-2"
+              onClick={() => setProtocolFilter('all')}
+            >
+              All
+            </Button>
+            {protocols.map((p) => (
               <Button
-                variant={protocolFilter === 'all' ? 'default' : 'ghost'}
+                key={p}
+                variant={protocolFilter === p ? 'default' : 'ghost'}
                 size="sm"
                 className="h-6 text-xs px-2"
-                onClick={() => setProtocolFilter('all')}
+                onClick={() => setProtocolFilter(p)}
               >
-                All
+                {p.toUpperCase()}
               </Button>
-              {protocols.map((p) => (
-                <Button
-                  key={p}
-                  variant={protocolFilter === p ? 'default' : 'ghost'}
-                  size="sm"
-                  className="h-6 text-xs px-2"
-                  onClick={() => setProtocolFilter(p)}
-                >
-                  {p.toUpperCase()}
-                </Button>
-              ))}
-            </div>
-          )}
+            ))}
+          </div>
 
           {sortedTools.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
