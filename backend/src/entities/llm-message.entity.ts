@@ -114,7 +114,7 @@ export class LlmMessage {
   @Column({ default: 0 })
   outputTokens: number;
 
-  @Column({ default: 0 })
+  @Column({ type: 'float', default: 0 })
   cost: number; // in cents
 
   @Column({ nullable: true })

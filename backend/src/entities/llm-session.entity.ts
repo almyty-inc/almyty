@@ -95,7 +95,7 @@ export class LlmSession {
   @Column({ default: 0 })
   totalOutputTokens: number;
 
-  @Column({ default: 0 })
+  @Column({ type: 'float', default: 0 })
   totalCost: number; // in cents
 
   @Column({ default: 0 })
