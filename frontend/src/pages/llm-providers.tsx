@@ -996,7 +996,6 @@ export function LlmProvidersPage() {
     : 0
 
   const columns = [
-    createSelectColumn<LlmProvider>(),
     createSortableColumn<LlmProvider>({
       accessorKey: 'name',
       header: 'Provider',
@@ -1018,16 +1017,25 @@ export function LlmProvidersPage() {
     }),
     createSortableColumn<LlmProvider>({
       accessorKey: 'type',
-      header: 'Type',
-      cell: ({ row }) => (
-        <Badge variant="outline" className="capitalize">{row.getValue('type')}</Badge>
-      )
+      header: 'Model',
+      cell: ({ row }) => {
+        const provider = row.original
+        return (
+          <div>
+            <Badge variant="outline" className="capitalize">{provider.type}</Badge>
+            {provider.configuration?.model && (
+              <div className="text-xs text-muted-foreground mt-1">{provider.configuration.model}</div>
+            )}
+          </div>
+        )
+      }
     }),
     createSortableColumn<LlmProvider>({
       accessorKey: 'status',
       header: 'Status',
       cell: ({ row }) => {
-        const status = row.getValue('status') as string
+        const provider = row.original
+        const status = provider.status
         const colors = {
           active: 'bg-green-100 text-green-800',
           inactive: 'bg-gray-100 text-gray-800',
@@ -1035,63 +1043,32 @@ export function LlmProvidersPage() {
           configuring: 'bg-yellow-100 text-yellow-800'
         }
         return (
-          <Badge className={colors[status as keyof typeof colors]}>
-            {status}
-          </Badge>
-        )
-      }
-    }),
-    createSortableColumn<LlmProvider>({
-      accessorKey: 'isHealthy',
-      header: 'Health',
-      cell: ({ row }) => {
-        const provider = row.original
-        const healthStatus: string = provider.isHealthy ? 'healthy' : (provider.status === 'error' ? 'down' : 'unknown')
-        return (
           <div className="flex items-center gap-2">
-            {healthStatus === 'healthy' ? (
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-            ) : healthStatus === 'degraded' ? (
-              <AlertTriangle className="h-4 w-4 text-yellow-500" />
-            ) : healthStatus === 'down' ? (
-              <XCircle className="h-4 w-4 text-red-500" />
-            ) : (
-              <Activity className="h-4 w-4 text-gray-500" />
+            <Badge className={colors[status as keyof typeof colors]}>
+              {status}
+            </Badge>
+            {status === 'error' && provider.lastError && (
+              <span className="text-xs text-red-500 truncate max-w-[150px]" title={provider.lastError}>
+                {provider.lastError}
+              </span>
             )}
-            <span className="text-sm capitalize">{healthStatus}</span>
           </div>
         )
       }
     }),
     createSortableColumn<LlmProvider>({
-      accessorKey: 'totalCost',
-      header: 'Usage Cost',
+      accessorKey: 'totalRequests',
+      header: 'Usage',
       cell: ({ row }) => {
         const provider = row.original
+        const requests = provider.totalRequests || 0
+        if (requests === 0) {
+          return <div className="text-sm text-muted-foreground">No usage yet</div>
+        }
         return (
-          <div className="text-right">
-            <div className="font-medium">${(provider.totalCost || 0).toFixed(2)}</div>
-            <div className="text-sm text-muted-foreground">
-              {(provider.totalRequests || 0).toLocaleString()} reqs
-            </div>
-          </div>
-        )
-      }
-    }),
-    createSortableColumn<LlmProvider>({
-      accessorKey: 'lastRequestAt',
-      header: 'Performance',
-      cell: ({ row }) => {
-        const provider = row.original
-        const successRate = provider.totalRequests > 0
-          ? ((provider.successfulRequests || 0) / provider.totalRequests) * 100
-          : null
-        return (
-          <div className="text-right">
-            <div className="font-medium">{provider.lastRequestAt ? 'Active' : 'No usage yet'}</div>
-            <div className="text-sm text-muted-foreground">
-              {successRate !== null ? `${successRate.toFixed(1)}% success` : 'no data'}
-            </div>
+          <div>
+            <div className="font-medium">{requests.toLocaleString()} reqs</div>
+            <div className="text-sm text-muted-foreground">${(provider.totalCost || 0).toFixed(2)} spent</div>
           </div>
         )
       }
