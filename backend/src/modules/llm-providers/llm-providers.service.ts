@@ -1056,6 +1056,158 @@ export class LlmProvidersService {
     }
   }
 
+  /**
+   * Fetch available models dynamically from the provider's API.
+   * Falls back to hardcoded defaults if the API call fails.
+   */
+  async fetchModelsFromProvider(provider: LlmProvider): Promise<Array<{
+    id: string;
+    name: string;
+    created?: number;
+    owned_by?: string;
+  }>> {
+    try {
+      switch (provider.type) {
+        case LlmProviderType.OPENAI:
+          return this.fetchOpenAIModels(provider);
+        case LlmProviderType.ANTHROPIC:
+          return this.fetchAnthropicModels(provider);
+        case LlmProviderType.GOOGLE:
+          return this.fetchGoogleModels(provider);
+        default:
+          // For other providers, return the hardcoded defaults
+          return this.getDefaultCapabilities(provider.type).supportedModels.map(m => ({
+            id: m,
+            name: m,
+          }));
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to fetch models from ${provider.type} API: ${error.message}`);
+      // Fallback to hardcoded defaults
+      return this.getDefaultCapabilities(provider.type).supportedModels.map(m => ({
+        id: m,
+        name: m,
+      }));
+    }
+  }
+
+  private async fetchOpenAIModels(provider: LlmProvider): Promise<Array<{
+    id: string;
+    name: string;
+    created?: number;
+    owned_by?: string;
+  }>> {
+    const apiUrl = provider.configuration.apiUrl || 'https://api.openai.com/v1';
+    const response = await axios.get(`${apiUrl}/models`, {
+      headers: {
+        'Authorization': `Bearer ${provider.configuration.apiKey}`,
+      },
+      timeout: 10000,
+    });
+
+    const models = response.data?.data || [];
+
+    // Filter to only chat-compatible models and sort by created date (newest first)
+    const chatModels = models
+      .filter((m: any) => {
+        const id = m.id?.toLowerCase() || '';
+        // Include GPT models and o-series reasoning models, exclude embedding/whisper/tts/dall-e
+        return (id.includes('gpt') || id.startsWith('o1') || id.startsWith('o3') || id.startsWith('o4'))
+          && !id.includes('embedding')
+          && !id.includes('whisper')
+          && !id.includes('tts')
+          && !id.includes('dall-e')
+          && !id.includes('realtime')
+          && !id.includes('audio');
+      })
+      .sort((a: any, b: any) => (b.created || 0) - (a.created || 0))
+      .map((m: any) => ({
+        id: m.id,
+        name: m.id,
+        created: m.created,
+        owned_by: m.owned_by,
+      }));
+
+    return chatModels;
+  }
+
+  private async fetchAnthropicModels(provider: LlmProvider): Promise<Array<{
+    id: string;
+    name: string;
+    created?: number;
+    owned_by?: string;
+  }>> {
+    const apiUrl = provider.configuration.apiUrl || 'https://api.anthropic.com/v1';
+    const response = await axios.get(`${apiUrl}/models`, {
+      headers: {
+        'x-api-key': provider.configuration.apiKey,
+        'anthropic-version': provider.configuration.apiVersion || '2023-06-01',
+      },
+      timeout: 10000,
+    });
+
+    const models = response.data?.data || [];
+
+    return models
+      .sort((a: any, b: any) => {
+        // Sort by created_at descending (newest first)
+        const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bDate - aDate;
+      })
+      .map((m: any) => ({
+        id: m.id,
+        name: m.display_name || m.id,
+        created: m.created_at ? Math.floor(new Date(m.created_at).getTime() / 1000) : undefined,
+        owned_by: 'anthropic',
+      }));
+  }
+
+  private async fetchGoogleModels(provider: LlmProvider): Promise<Array<{
+    id: string;
+    name: string;
+    created?: number;
+    owned_by?: string;
+  }>> {
+    const apiKey = provider.configuration.apiKey;
+    const response = await axios.get(
+      `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`,
+      { timeout: 10000 }
+    );
+
+    const models = response.data?.models || [];
+
+    return models
+      .filter((m: any) => {
+        // Only include generative models
+        const methods = m.supportedGenerationMethods || [];
+        return methods.includes('generateContent');
+      })
+      .map((m: any) => ({
+        id: m.name?.replace('models/', '') || m.name,
+        name: m.displayName || m.name,
+        owned_by: 'google',
+      }));
+  }
+
+  /**
+   * Fetch models by provider type and API key without needing a saved provider.
+   * Used during provider creation to show available models before the provider is saved.
+   */
+  async fetchModelsByType(type: LlmProviderType, apiKey: string): Promise<Array<{
+    id: string;
+    name: string;
+    created?: number;
+    owned_by?: string;
+  }>> {
+    // Create a temporary provider-like object
+    const tempProvider = new LlmProvider();
+    tempProvider.type = type;
+    tempProvider.configuration = { apiKey };
+
+    return this.fetchModelsFromProvider(tempProvider);
+  }
+
   private getDefaultCapabilities(type: LlmProviderType): LlmProvider['capabilities'] {
     const baseCapabilities = {
       supportedModels: [],

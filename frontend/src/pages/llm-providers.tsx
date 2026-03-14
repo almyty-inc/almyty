@@ -782,6 +782,10 @@ export function LlmProvidersPage() {
   const [chatInput, setChatInput] = useState('')
   const [chatSessionId, setChatSessionId] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
+
+  // Dynamic model fetching state
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>([])
+  const [modelsLoading, setModelsLoading] = useState(false)
   const chatEndRef = React.useRef<HTMLDivElement>(null)
 
   const queryClient = useQueryClient()
@@ -1129,7 +1133,7 @@ export function LlmProvidersPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation()
                 setProviderToEdit(provider)
                 editForm.reset({
@@ -1139,6 +1143,19 @@ export function LlmProvidersPage() {
                   temperature: provider.configuration.temperature || 0.7,
                 })
                 setIsEditDialogOpen(true)
+                // Fetch models dynamically from the provider API
+                setModelsLoading(true)
+                setAvailableModels([])
+                try {
+                  const res = await llmProvidersApi.getModels(provider.id)
+                  const models = res.data?.data || []
+                  setAvailableModels(models)
+                } catch (err) {
+                  console.warn('Failed to fetch models dynamically:', err)
+                  setAvailableModels([])
+                } finally {
+                  setModelsLoading(false)
+                }
               }}
               aria-label="Edit"
             >
@@ -2058,33 +2075,20 @@ export function LlmProvidersPage() {
                 render={({ field }) => (
                   <Select onValueChange={field.onChange} value={field.value}>
                     <SelectTrigger id="editDefaultModel" aria-label="Default Model">
-                      <SelectValue placeholder="Select default model" />
+                      <SelectValue placeholder={modelsLoading ? "Loading models..." : "Select default model"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {providerToEdit?.type === 'openai' && (
-                        <>
-                          <SelectItem value="gpt-4">GPT-4</SelectItem>
-                          <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                          <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                        </>
+                      {modelsLoading && (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">Fetching models from provider API...</div>
                       )}
-                      {providerToEdit?.type === 'anthropic' && (
-                        <>
-                          <SelectItem value="claude-sonnet-4-20250514">Claude Sonnet 4</SelectItem>
-                          <SelectItem value="claude-haiku-4-20250514">Claude Haiku 4</SelectItem>
-                          <SelectItem value="claude-opus-4-20250514">Claude Opus 4</SelectItem>
-                          <SelectItem value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</SelectItem>
-                          <SelectItem value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</SelectItem>
-                        </>
+                      {!modelsLoading && availableModels.length > 0 && availableModels.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.name !== model.id ? `${model.name} (${model.id})` : model.id}
+                        </SelectItem>
+                      ))}
+                      {!modelsLoading && availableModels.length === 0 && (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">No models available — check API key</div>
                       )}
-                      {providerToEdit?.type === 'google' && (
-                        <>
-                          <SelectItem value="gemini-pro">Gemini Pro</SelectItem>
-                          <SelectItem value="gemini-pro-vision">Gemini Pro Vision</SelectItem>
-                        </>
-                      )}
-                      {/* Add more provider types as needed */}
-                      <SelectItem value="custom">Custom Model</SelectItem>
                     </SelectContent>
                   </Select>
                 )}
