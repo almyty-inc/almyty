@@ -144,17 +144,9 @@ export class OpenAPIParserService implements SchemaParser {
 
   private async extractResourcesFromOpenAPI(api: OpenAPIV3.Document): Promise<ParsedResource[]> {
     const resources: ParsedResource[] = [];
-    const MAX_RESOURCES = 10000; // High limit — large APIs like Stripe have thousands of schemas
-    let resourceCount = 0;
 
     if (api.components?.schemas) {
       for (const [name, schemaRef] of Object.entries(api.components.schemas)) {
-        // Stop processing if we hit the limit
-        if (resourceCount >= MAX_RESOURCES) {
-          this.logger.warn(`Resource extraction limited to ${MAX_RESOURCES} schemas. Skipping remaining ${Object.entries(api.components.schemas).length - resourceCount} schemas.`);
-          break;
-        }
-
         const schema = this.resolveReference(schemaRef, api);
 
         if (schema && typeof schema === 'object') {
@@ -168,7 +160,6 @@ export class OpenAPIParserService implements SchemaParser {
           };
 
           resources.push(resource);
-          resourceCount++;
         }
       }
     }

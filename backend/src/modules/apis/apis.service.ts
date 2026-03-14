@@ -212,11 +212,6 @@ export class ApisService {
         options.fileName,
       );
 
-      // Validate operation count (max 10000)
-      if (parsedSchema.operations && parsedSchema.operations.length > 10000) {
-        throw new BadRequestException(`Too many operations: ${parsedSchema.operations.length} (max 10,000). Please split your API or contact support for enterprise limits.`);
-      }
-
       // Create API schema record
       const apiSchema = this.apiSchemaRepository.create({
         apiId,
