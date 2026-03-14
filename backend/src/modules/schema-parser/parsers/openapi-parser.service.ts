@@ -144,7 +144,7 @@ export class OpenAPIParserService implements SchemaParser {
 
   private async extractResourcesFromOpenAPI(api: OpenAPIV3.Document): Promise<ParsedResource[]> {
     const resources: ParsedResource[] = [];
-    const MAX_RESOURCES = 500; // Limit to prevent memory exhaustion
+    const MAX_RESOURCES = 10000; // High limit — large APIs like Stripe have thousands of schemas
     let resourceCount = 0;
 
     if (api.components?.schemas) {
