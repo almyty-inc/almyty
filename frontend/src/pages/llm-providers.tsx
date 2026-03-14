@@ -261,7 +261,7 @@ const healthColors = {
     configuration: {
       apiKey: 'sk-ant-***************************',
       baseUrl: 'https://api.anthropic.com',
-      model: 'claude-3-opus-20240229',
+      model: 'claude-sonnet-4-20250514',
       maxTokens: 4096,
       temperature: 0.5
     },
@@ -2070,9 +2070,11 @@ export function LlmProvidersPage() {
                       )}
                       {providerToEdit?.type === 'anthropic' && (
                         <>
-                          <SelectItem value="claude-3-opus-20240229">Claude 3 Opus</SelectItem>
-                          <SelectItem value="claude-3-sonnet-20240229">Claude 3 Sonnet</SelectItem>
-                          <SelectItem value="claude-3-haiku-20240307">Claude 3 Haiku</SelectItem>
+                          <SelectItem value="claude-sonnet-4-20250514">Claude Sonnet 4</SelectItem>
+                          <SelectItem value="claude-haiku-4-20250514">Claude Haiku 4</SelectItem>
+                          <SelectItem value="claude-opus-4-20250514">Claude Opus 4</SelectItem>
+                          <SelectItem value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</SelectItem>
+                          <SelectItem value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</SelectItem>
                         </>
                       )}
                       {providerToEdit?.type === 'google' && (

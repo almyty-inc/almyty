@@ -243,7 +243,7 @@ export function ToolsPage() {
         code = toolCode;
       } else if (executionMethod === 'http') {
         code = `
-const axios = require('axios');
+// axios is available as a global — no require needed
 // Parameters are available both as individual variables and as 'parameters' object
 const response = await axios({
   method: '${httpConfig.method}',
@@ -255,7 +255,7 @@ return response.data;
 `;
       } else if (executionMethod === 'graphql') {
         code = `
-const axios = require('axios');
+// axios is available as a global — no require needed
 // Parameters available as variables
 const response = await axios.post('${graphqlConfig.endpoint}', {
   query: \`${graphqlConfig.query}\`,
@@ -265,7 +265,7 @@ return response.data;
 `;
       } else if (executionMethod === 'soap') {
         code = `
-const soap = require('soap');
+// soap is available as a global — no require needed
 const client = await soap.createClientAsync('${soapConfig.wsdlUrl}');
 // Parameters available as variables
 const result = await client.${soapConfig.operation}Async(parameters);
