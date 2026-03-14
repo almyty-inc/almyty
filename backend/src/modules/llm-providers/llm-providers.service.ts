@@ -574,7 +574,7 @@ export class LlmProvidersService {
 
     // Prepare Anthropic request
     const anthropicRequest: any = {
-      model: request.model || provider.configuration.model || 'claude-3-sonnet-20240229',
+      model: request.model || provider.configuration.model || 'claude-sonnet-4-20250514',
       max_tokens: request.maxTokens || session.context?.maxTokens || 1024,
       temperature: request.temperature ?? session.context?.temperature,
       top_p: request.topP ?? session.context?.topP,
@@ -1085,7 +1085,7 @@ export class LlmProvidersService {
       case LlmProviderType.ANTHROPIC:
         return {
           ...baseCapabilities,
-          supportedModels: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
+          supportedModels: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250514', 'claude-opus-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
           maxTokens: 200000,
           supportsStreaming: true,
           supportsVision: true,
@@ -1124,12 +1124,14 @@ export class LlmProvidersService {
   private calculateAnthropicCost(model: string, inputTokens: number, outputTokens: number): number {
     // Approximate costs in cents per 1K tokens
     const costMap: Record<string, { input: number; output: number }> = {
-      'claude-3-opus-20240229': { input: 1.5, output: 7.5 },
-      'claude-3-sonnet-20240229': { input: 0.3, output: 1.5 },
-      'claude-3-haiku-20240307': { input: 0.025, output: 0.125 },
+      'claude-opus-4-20250514': { input: 1.5, output: 7.5 },
+      'claude-sonnet-4-20250514': { input: 0.3, output: 1.5 },
+      'claude-haiku-4-20250514': { input: 0.08, output: 0.4 },
+      'claude-3-5-sonnet-20241022': { input: 0.3, output: 1.5 },
+      'claude-3-5-haiku-20241022': { input: 0.08, output: 0.4 },
     };
 
-    const costs = costMap[model] || costMap['claude-3-haiku-20240307'];
+    const costs = costMap[model] || costMap['claude-sonnet-4-20250514'];
     return ((inputTokens / 1000) * costs.input) + ((outputTokens / 1000) * costs.output);
   }
 
