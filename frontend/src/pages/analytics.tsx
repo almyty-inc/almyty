@@ -2,17 +2,19 @@ import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
-  CheckCircle2,
-  XCircle,
+  Activity,
+  ArrowDownToLine,
+  Clock,
+  DollarSign,
   Globe,
+  MessageSquare,
   Wrench,
   Zap,
-  ExternalLink,
-  Shield,
+  AlertTriangle,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { gatewaysApi, toolsApi, apisApi } from '@/lib/api'
+import { analyticsApi, gatewaysApi, toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
@@ -35,6 +37,12 @@ function formatDate(date: string | null): string {
   return d.toLocaleDateString()
 }
 
+function formatNumber(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return n.toString()
+}
+
 const protocolColors: Record<string, string> = {
   mcp: 'bg-blue-50 text-blue-700 border-blue-200',
   utcp: 'bg-purple-50 text-purple-700 border-purple-200',
@@ -42,86 +50,134 @@ const protocolColors: Record<string, string> = {
   skills: 'bg-orange-50 text-orange-700 border-orange-200',
 }
 
-type Tab = 'tools' | 'gateways' | 'apis'
+const statusColors: Record<string, string> = {
+  '2': 'text-green-600',
+  '3': 'text-blue-600',
+  '4': 'text-yellow-600',
+  '5': 'text-red-600',
+}
+
+type Tab = 'overview' | 'requests' | 'tools' | 'gateways' | 'llm'
 
 export function AnalyticsPage() {
   const { currentOrganization } = useOrganizationStore()
-  const [tab, setTab] = useState<Tab>('tools')
-  const [protocolFilter, setProtocolFilter] = useState<string>('all')
+  const [tab, setTab] = useState<Tab>('overview')
+  const [timeframe, setTimeframe] = useState('7d')
+  const [logPage, setLogPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState<string>('')
 
-  const { data: tools = [], isLoading: loadingTools } = useQuery({
+  const { data: overview, isLoading: loadingOverview } = useQuery({
+    queryKey: ['analytics-overview', currentOrganization?.id],
+    queryFn: async () => {
+      const res = await analyticsApi.getOverview()
+      return res.data
+    },
+    enabled: !!currentOrganization,
+    refetchInterval: 30000,
+  })
+
+  const { data: requestLogs, isLoading: loadingLogs } = useQuery({
+    queryKey: ['analytics-requests', currentOrganization?.id, logPage, statusFilter],
+    queryFn: async () => {
+      const params: Record<string, string> = { page: String(logPage), limit: '25' }
+      if (statusFilter) params.status = statusFilter
+      const res = await analyticsApi.getRequestLogs(params)
+      return res.data
+    },
+    enabled: !!currentOrganization && tab === 'requests',
+  })
+
+  const { data: toolUsage, isLoading: loadingToolUsage } = useQuery({
+    queryKey: ['analytics-tool-usage', currentOrganization?.id, timeframe],
+    queryFn: async () => {
+      const res = await analyticsApi.getToolUsage(timeframe)
+      return res.data
+    },
+    enabled: !!currentOrganization && tab === 'tools',
+  })
+
+  const { data: gatewayUsage, isLoading: loadingGatewayUsage } = useQuery({
+    queryKey: ['analytics-gateway-usage', currentOrganization?.id, timeframe],
+    queryFn: async () => {
+      const res = await analyticsApi.getGatewayUsage(timeframe)
+      return res.data
+    },
+    enabled: !!currentOrganization && tab === 'gateways',
+  })
+
+  const { data: llmUsage, isLoading: loadingLlmUsage } = useQuery({
+    queryKey: ['analytics-llm-usage', currentOrganization?.id, timeframe],
+    queryFn: async () => {
+      const res = await analyticsApi.getLlmUsage(timeframe)
+      return res.data
+    },
+    enabled: !!currentOrganization && tab === 'llm',
+  })
+
+  const { data: tools = [] } = useQuery({
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
-      const response = await toolsApi.getAll(currentOrganization?.id)
-      return response.data?.data?.tools || response.data?.tools || []
+      const res = await toolsApi.getAll(currentOrganization?.id)
+      return res.data?.data?.tools || res.data?.tools || []
     },
     enabled: !!currentOrganization,
   })
 
-  const { data: gateways = [], isLoading: loadingGateways } = useQuery({
+  const { data: gateways = [] } = useQuery({
     queryKey: ['gateways', currentOrganization?.id],
     queryFn: async () => {
-      const response = await gatewaysApi.getAll()
-      return response.data?.data?.gateways || response.data?.data || []
+      const res = await gatewaysApi.getAll()
+      return res.data?.data?.gateways || res.data?.data || []
     },
     enabled: !!currentOrganization,
   })
 
-  const { data: apis = [], isLoading: loadingApis } = useQuery({
-    queryKey: ['apis'],
-    queryFn: async () => {
-      const response = await apisApi.getAll()
-      return response.data?.data?.apis || response.data?.apis || response.data?.data || []
-    },
-  })
+  const toolMap = Object.fromEntries((Array.isArray(tools) ? tools : []).map((t: any) => [t.id, t]))
+  const gatewayMap = Object.fromEntries((Array.isArray(gateways) ? gateways : []).map((g: any) => [g.id, g]))
 
-  const isLoading = loadingTools || loadingGateways || loadingApis
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-96"><LoadingSpinner size="lg" /></div>
-  }
-
-  const toolList = Array.isArray(tools) ? tools : []
-  const gatewayList = Array.isArray(gateways) ? gateways : []
-  const apiList = Array.isArray(apis) ? apis : []
-
-  const totalUsage = toolList.reduce((sum: number, t: any) => sum + (t.usageCount || 0), 0)
-  const totalGwReqs = gatewayList.reduce((sum: number, g: any) => sum + (g.totalRequests || 0), 0)
-  const totalOps = apiList.reduce((sum: number, a: any) => {
-    const ops = a.operations || a.operationCount || 0
-    return sum + (Array.isArray(ops) ? ops.length : ops)
-  }, 0)
-
-  // Filter tools by protocol
-  const filteredTools = protocolFilter === 'all'
-    ? toolList
-    : toolList.filter((t: any) => {
-        return gatewayList.some((gw: any) =>
-          gw.type === protocolFilter && gw.tools?.some((gt: any) => gt.toolId === t.id || gt.tool?.id === t.id)
-        )
+  const handleExport = async (type: string, format: string) => {
+    try {
+      const res = await analyticsApi.exportData(format, type)
+      const blob = new Blob([typeof res.data === 'string' ? res.data : JSON.stringify(res.data, null, 2)], {
+        type: format === 'csv' ? 'text/csv' : 'application/json',
       })
-
-  const sortedTools = [...filteredTools].sort((a: any, b: any) => (b.usageCount || 0) - (a.usageCount || 0))
-  const protocols = ['mcp', 'utcp', 'a2a', 'skills']
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${type}-${new Date().toISOString().split('T')[0]}.${format}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Export failed:', err)
+    }
+  }
 
   return (
     <div className="space-y-4">
-      {/* Header row */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-        <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-          <span>{apiList.length} APIs · {totalOps} operations</span>
-          <span>{toolList.length} tools · {totalUsage} calls</span>
-          <span>{gatewayList.length} gateways · {totalGwReqs} requests</span>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-sm text-muted-foreground mt-1">Real-time usage data across all protocols</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => handleExport('requests', 'csv')}>
+            <ArrowDownToLine className="h-4 w-4 mr-1" /> Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport('requests', 'json')}>
+            <ArrowDownToLine className="h-4 w-4 mr-1" /> Export JSON
+          </Button>
         </div>
       </div>
 
-      {/* Tab bar */}
+      {/* Tabs */}
       <div className="flex items-center gap-1 border-b">
         {([
-          { key: 'tools' as Tab, label: 'Tools', count: toolList.length, icon: Wrench },
-          { key: 'gateways' as Tab, label: 'Gateways', count: gatewayList.length, icon: Zap },
-          { key: 'apis' as Tab, label: 'APIs', count: apiList.length, icon: Globe },
-        ]).map(({ key, label, count, icon: Icon }) => (
+          { key: 'overview' as Tab, label: 'Overview', icon: Activity },
+          { key: 'requests' as Tab, label: 'Request Log', icon: Globe },
+          { key: 'tools' as Tab, label: 'Tools', icon: Wrench },
+          { key: 'gateways' as Tab, label: 'Gateways', icon: Zap },
+          { key: 'llm' as Tab, label: 'LLM', icon: MessageSquare },
+        ]).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -134,91 +190,161 @@ export function AnalyticsPage() {
           >
             <Icon className="h-4 w-4" />
             {label}
-            <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full ml-1">{count}</span>
           </button>
         ))}
       </div>
 
-      {/* Tools tab */}
-      {tab === 'tools' && (
+      {/* Overview tab */}
+      {tab === 'overview' && (
         <div>
-          {/* Protocol filter */}
-          <div className="flex items-center gap-1 mb-3">
-            <span className="text-xs text-muted-foreground mr-1">Protocol:</span>
-            <Button
-              variant={protocolFilter === 'all' ? 'default' : 'ghost'}
-              size="sm"
-              className="h-6 text-xs px-2"
-              onClick={() => setProtocolFilter('all')}
-            >
-              All
-            </Button>
-            {protocols.map((p) => (
-              <Button
-                key={p}
-                variant={protocolFilter === p ? 'default' : 'ghost'}
-                size="sm"
-                className="h-6 text-xs px-2"
-                onClick={() => setProtocolFilter(p)}
-              >
-                {p.toUpperCase()}
+          {loadingOverview ? (
+            <div className="flex items-center justify-center h-48"><LoadingSpinner size="lg" /></div>
+          ) : overview ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatCard icon={Globe} label="Requests (24h)" value={formatNumber(overview.last24h?.requests || 0)} />
+              <StatCard icon={Wrench} label="Tool Executions (24h)" value={formatNumber(overview.last24h?.toolExecutions || 0)} />
+              <StatCard icon={Clock} label="Avg Response (24h)" value={formatMs(overview.last24h?.avgResponseTime || 0)} />
+              <StatCard icon={AlertTriangle} label="Errors (24h)" value={formatNumber(overview.last24h?.errors || 0)}
+                className={overview.last24h?.errors > 0 ? 'border-red-200 bg-red-50/50' : ''} />
+              <StatCard icon={MessageSquare} label="LLM Sessions (24h)" value={formatNumber(overview.last24h?.llmSessions || 0)} />
+              <StatCard icon={Globe} label="Requests (7d)" value={formatNumber(overview.last7d?.requests || 0)} />
+              <StatCard icon={Wrench} label="Tool Executions (7d)" value={formatNumber(overview.last7d?.toolExecutions || 0)} />
+              <StatCard icon={DollarSign} label="LLM Cost (7d)"
+                value={`$${((overview.last7d?.llmCostCents || 0) / 100).toFixed(4)}`} />
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              No analytics data yet. Use the system to generate data.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Request Log tab */}
+      {tab === 'requests' && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs text-muted-foreground">Filter:</span>
+            {['', 'success', 'error'].map(f => (
+              <Button key={f || 'all'} variant={statusFilter === f ? 'default' : 'ghost'}
+                size="sm" className="h-6 text-xs px-2"
+                onClick={() => { setStatusFilter(f); setLogPage(1) }}>
+                {f || 'All'}
               </Button>
             ))}
           </div>
 
-          {sortedTools.length === 0 ? (
+          {loadingLogs ? (
+            <div className="flex items-center justify-center h-48"><LoadingSpinner size="lg" /></div>
+          ) : requestLogs?.data?.length > 0 ? (
+            <>
+              <div className="rounded-lg border bg-card overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                      <th className="px-3 py-2 font-medium">Time</th>
+                      <th className="px-3 py-2 font-medium">Method</th>
+                      <th className="px-3 py-2 font-medium">Path</th>
+                      <th className="px-3 py-2 font-medium">Status</th>
+                      <th className="px-3 py-2 font-medium text-right">Time</th>
+                      <th className="px-3 py-2 font-medium">Protocol</th>
+                      <th className="px-3 py-2 font-medium">IP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {requestLogs.data.map((log: any) => (
+                      <tr key={log.id} className="border-b last:border-0 hover:bg-muted/30 text-xs">
+                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2 font-mono font-medium">{log.method}</td>
+                        <td className="px-3 py-2 font-mono text-muted-foreground max-w-[300px] truncate">
+                          {log.path}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={cn('font-medium', statusColors[String(log.statusCode)[0]] || '')}>
+                            {log.statusCode}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">{formatMs(log.responseTime)}</td>
+                        <td className="px-3 py-2">
+                          {log.protocol ? (
+                            <Badge variant="outline" className={cn('text-[10px] uppercase px-1.5 py-0', protocolColors[log.protocol])}>
+                              {log.protocol}
+                            </Badge>
+                          ) : <span className="text-muted-foreground">--</span>}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground font-mono">{log.ipAddress || '--'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-xs text-muted-foreground">
+                  Page {requestLogs.page} of {requestLogs.pages} ({requestLogs.total} total)
+                </span>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="sm" disabled={logPage <= 1}
+                    onClick={() => setLogPage(p => p - 1)}>Prev</Button>
+                  <Button variant="outline" size="sm" disabled={logPage >= requestLogs.pages}
+                    onClick={() => setLogPage(p => p + 1)}>Next</Button>
+                </div>
+              </div>
+            </>
+          ) : (
             <div className="text-center py-12 text-muted-foreground">
-              {protocolFilter !== 'all'
-                ? 'No tools on this protocol'
-                : <>No tools yet. <Link to="/apis" className="text-primary hover:underline">Import an API</Link> to generate tools.</>}
+              No request logs yet. Logs are recorded automatically as the system is used.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tools tab */}
+      {tab === 'tools' && (
+        <div>
+          <TimeframeSelector value={timeframe} onChange={setTimeframe} />
+          {loadingToolUsage ? (
+            <div className="flex items-center justify-center h-48"><LoadingSpinner size="lg" /></div>
+          ) : (Array.isArray(toolUsage) && toolUsage.length > 0) ? (
+            <div className="rounded-lg border bg-card">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                    <th className="px-4 py-3 font-medium">Tool</th>
+                    <th className="px-4 py-3 font-medium text-right">Executions</th>
+                    <th className="px-4 py-3 font-medium text-right">Success Rate</th>
+                    <th className="px-4 py-3 font-medium text-right">Avg Time</th>
+                    <th className="px-4 py-3 font-medium text-right">Last Used</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {toolUsage.map((t: any) => {
+                    const tool = toolMap[t.toolId]
+                    return (
+                      <tr key={t.toolId} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="px-4 py-2.5">
+                          <Link to={`/tools/${t.toolId}`} className="font-medium hover:underline text-xs">
+                            {tool?.name || t.toolId.slice(0, 8)}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-medium">{t.totalExecutions.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className={cn('font-medium',
+                            t.successRate >= 90 ? 'text-green-600' : t.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'
+                          )}>{t.successRate}%</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground">{formatMs(t.avgExecutionTime)}</td>
+                        <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">{formatDate(t.lastUsed)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : (
-            <div className="rounded-lg border bg-card">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground bg-muted/50">
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Method</th>
-                  <th className="px-4 py-3 font-medium">Served via</th>
-                  <th className="px-4 py-3 font-medium text-right">Calls</th>
-                  <th className="px-4 py-3 font-medium text-right">Success</th>
-                  <th className="px-4 py-3 font-medium text-right">Avg Time</th>
-                  <th className="px-4 py-3 font-medium text-right">Last Used</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedTools.map((tool: any) => {
-                  const onGateways = gatewayList.filter((gw: any) => gw.tools?.some((t: any) => t.toolId === tool.id || t.tool?.id === tool.id))
-                  return (
-                    <tr key={tool.id} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="px-4 py-2.5">
-                        <Link to={`/tools/${tool.id}`} className="font-medium hover:underline text-xs">{tool.name}</Link>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground capitalize">{tool.executionMethod || 'http'}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex gap-1">
-                          {onGateways.length > 0 ? onGateways.map((gw: any) => (
-                            <Badge key={gw.id} variant="outline" className={cn('text-[10px] uppercase px-1.5 py-0', protocolColors[gw.type])}>
-                              {gw.type}
-                            </Badge>
-                          )) : <span className="text-xs text-muted-foreground">--</span>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-medium">{(tool.usageCount || 0).toLocaleString()}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        {tool.usageCount > 0 ? (
-                          <span className={cn('font-medium',
-                            tool.successRate >= 90 ? 'text-green-600' : tool.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'
-                          )}>{tool.successRate}%</span>
-                        ) : <span className="text-muted-foreground">--</span>}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-muted-foreground">{formatMs(tool.averageResponseTime)}</td>
-                      <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">{formatDate(tool.lastUsedAt)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="text-center py-12 text-muted-foreground">
+              No tool usage data for this period.
             </div>
           )}
         </div>
@@ -227,127 +353,134 @@ export function AnalyticsPage() {
       {/* Gateways tab */}
       {tab === 'gateways' && (
         <div>
-          {gatewayList.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              No gateways. <Link to="/gateways" className="text-primary hover:underline">Create one</Link>.
+          <TimeframeSelector value={timeframe} onChange={setTimeframe} />
+          {loadingGatewayUsage ? (
+            <div className="flex items-center justify-center h-48"><LoadingSpinner size="lg" /></div>
+          ) : (Array.isArray(gatewayUsage) && gatewayUsage.length > 0) ? (
+            <div className="rounded-lg border bg-card">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                    <th className="px-4 py-3 font-medium">Gateway</th>
+                    <th className="px-4 py-3 font-medium">Protocol</th>
+                    <th className="px-4 py-3 font-medium text-right">Requests</th>
+                    <th className="px-4 py-3 font-medium text-right">Success</th>
+                    <th className="px-4 py-3 font-medium text-right">Errors</th>
+                    <th className="px-4 py-3 font-medium text-right">Success Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gatewayUsage.map((g: any) => {
+                    const gateway = gatewayMap[g.gatewayId]
+                    return (
+                      <tr key={g.gatewayId} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="px-4 py-2.5">
+                          <Link to={`/gateways/${g.gatewayId}`} className="font-medium hover:underline text-sm">
+                            {gateway?.name || g.gatewayId.slice(0, 8)}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {gateway?.type ? (
+                            <Badge variant="outline" className={cn('text-xs uppercase', protocolColors[gateway.type])}>
+                              {gateway.type}
+                            </Badge>
+                          ) : '--'}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-medium">{g.totalRequests.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-right text-green-600">{g.successCount.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-right text-red-600">{g.errorCount.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className={cn('font-medium',
+                            g.successRate >= 90 ? 'text-green-600' : g.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'
+                          )}>{g.successRate}%</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : (
-            <div className="rounded-lg border bg-card">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground bg-muted/50">
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Protocol</th>
-                  <th className="px-4 py-3 font-medium">Endpoint</th>
-                  <th className="px-4 py-3 font-medium text-right">Tools</th>
-                  <th className="px-4 py-3 font-medium text-right">Requests</th>
-                  <th className="px-4 py-3 font-medium text-right">Success Rate</th>
-                  <th className="px-4 py-3 font-medium text-right">Last Request</th>
-                  <th className="px-4 py-3 font-medium text-center">Health</th>
-                  <th className="px-4 py-3 font-medium">Auth</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gatewayList.map((gw: any) => {
-                  const toolCount = gw.tools?.length || gw.toolCount || 0
-                  const total = gw.totalRequests || 0
-                  const success = gw.successfulRequests || 0
-                  const rate = total > 0 ? ((success / total) * 100).toFixed(1) + '%' : '--'
-                  const authTypes = gw.authConfigs?.map((a: any) => a.type).filter(Boolean) || []
-                  return (
-                    <tr key={gw.id} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="px-4 py-2.5">
-                        <Link to={`/gateways/${gw.id}`} className="font-medium hover:underline text-sm">{gw.name}</Link>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Badge variant="outline" className={cn('text-xs uppercase', protocolColors[gw.type])}>{gw.type}</Badge>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">{gw.endpoint}</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{toolCount}</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{total.toLocaleString()}</td>
-                      <td className="px-4 py-2.5 text-right">{rate}</td>
-                      <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">{formatDate(gw.lastRequestAt)}</td>
-                      <td className="px-4 py-2.5 text-center">
-                        {gw.isHealthy !== false
-                          ? <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />
-                          : <XCircle className="h-4 w-4 text-red-500 mx-auto" />}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {authTypes.length > 0 ? (
-                          <span className="text-xs capitalize flex items-center gap-1">
-                            <Shield className="h-3 w-3 text-muted-foreground" />{authTypes.join(', ')}
-                          </span>
-                        ) : <span className="text-xs text-muted-foreground">--</span>}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="text-center py-12 text-muted-foreground">
+              No gateway usage data for this period.
             </div>
           )}
         </div>
       )}
 
-      {/* APIs tab */}
-      {tab === 'apis' && (
+      {/* LLM tab */}
+      {tab === 'llm' && (
         <div>
-          {apiList.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              No APIs connected. <Link to="/apis" className="text-primary hover:underline">Import one</Link>.
+          <TimeframeSelector value={timeframe} onChange={setTimeframe} />
+          {loadingLlmUsage ? (
+            <div className="flex items-center justify-center h-48"><LoadingSpinner size="lg" /></div>
+          ) : (Array.isArray(llmUsage) && llmUsage.length > 0) ? (
+            <div className="rounded-lg border bg-card">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                    <th className="px-4 py-3 font-medium">Provider</th>
+                    <th className="px-4 py-3 font-medium text-right">Sessions</th>
+                    <th className="px-4 py-3 font-medium text-right">Messages</th>
+                    <th className="px-4 py-3 font-medium text-right">Input Tokens</th>
+                    <th className="px-4 py-3 font-medium text-right">Output Tokens</th>
+                    <th className="px-4 py-3 font-medium text-right">Tool Calls</th>
+                    <th className="px-4 py-3 font-medium text-right">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {llmUsage.map((l: any) => (
+                    <tr key={l.providerId} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="px-4 py-2.5 font-medium text-sm">{l.providerId.slice(0, 8)}</td>
+                      <td className="px-4 py-2.5 text-right">{l.sessionCount.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right">{l.totalMessages.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right text-muted-foreground">{formatNumber(l.totalInputTokens)}</td>
+                      <td className="px-4 py-2.5 text-right text-muted-foreground">{formatNumber(l.totalOutputTokens)}</td>
+                      <td className="px-4 py-2.5 text-right">{l.totalToolCalls.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right font-medium">
+                        ${(l.totalCostCents / 100).toFixed(4)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : (
-            <div className="rounded-lg border bg-card">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground bg-muted/50">
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Type</th>
-                  <th className="px-4 py-3 font-medium">Base URL</th>
-                  <th className="px-4 py-3 font-medium text-right">Operations</th>
-                  <th className="px-4 py-3 font-medium text-right">Tools</th>
-                  <th className="px-4 py-3 font-medium">Auth</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium text-right">Added</th>
-                </tr>
-              </thead>
-              <tbody>
-                {apiList.map((api: any) => {
-                  const ops = api.operations || []
-                  const opCount = Array.isArray(ops) ? ops.length : (api.operationCount || 0)
-                  const apiTools = toolList.filter((t: any) => {
-                    if (!t.operationId || !Array.isArray(ops)) return false
-                    return ops.some((op: any) => op.id === t.operationId)
-                  })
-                  const toolCount = apiTools.length > 0 ? apiTools.length : (opCount > 0 ? opCount : 0)
-                  const authType = api.authentication?.type || 'none'
-                  return (
-                    <tr key={api.id} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="px-4 py-2.5">
-                        <Link to={`/apis/${api.id}`} className="font-medium hover:underline text-sm">{api.name}</Link>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Badge variant="outline" className="text-xs">{api.type || 'openapi'}</Badge>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">
-                        <span className="flex items-center gap-1"><ExternalLink className="h-3 w-3 shrink-0" />{api.baseUrl || '--'}</span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-medium">{opCount}</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{toolCount}</td>
-                      <td className="px-4 py-2.5 text-xs capitalize">{authType}</td>
-                      <td className="px-4 py-2.5">
-                        <Badge variant={api.status === 'active' ? 'default' : 'secondary'} className="text-xs">{api.status}</Badge>
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">{formatDate(api.createdAt)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="text-center py-12 text-muted-foreground">
+              No LLM usage data for this period.
             </div>
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function StatCard({ icon: Icon, label, value, className }: {
+  icon: any; label: string; value: string; className?: string
+}) {
+  return (
+    <div className={cn('rounded-lg border bg-card p-4', className)}>
+      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+        <Icon className="h-4 w-4" />
+        <span className="text-xs">{label}</span>
+      </div>
+      <div className="text-2xl font-bold">{value}</div>
+    </div>
+  )
+}
+
+function TimeframeSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center gap-1 mb-3">
+      <span className="text-xs text-muted-foreground mr-1">Timeframe:</span>
+      {['1h', '24h', '7d', '30d'].map(tf => (
+        <Button key={tf} variant={value === tf ? 'default' : 'ghost'}
+          size="sm" className="h-6 text-xs px-2"
+          onClick={() => onChange(tf)}>
+          {tf}
+        </Button>
+      ))}
     </div>
   )
 }

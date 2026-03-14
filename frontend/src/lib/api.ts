@@ -320,6 +320,23 @@ export const analyticsApi = {
   getMetricsHistory: (hours = 1) => api.get(`/monitoring/metrics/history?hours=${hours}`),
   getAlerts: () => api.get('/monitoring/alerts'),
   getHealth: () => api.get('/monitoring/health'),
+  // Real analytics endpoints
+  getOverview: () => api.get('/analytics/overview'),
+  getRequestLogs: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return api.get(`/analytics/requests${qs}`)
+  },
+  getToolUsage: (timeframe = '7d') => api.get(`/analytics/tool-usage?timeframe=${timeframe}`),
+  getGatewayUsage: (timeframe = '7d') => api.get(`/analytics/gateway-usage?timeframe=${timeframe}`),
+  getLlmUsage: (timeframe = '7d') => api.get(`/analytics/llm-usage?timeframe=${timeframe}`),
+  getTimeline: (timeframe = '24h', granularity = 'hour') =>
+    api.get(`/analytics/timeline?timeframe=${timeframe}&granularity=${granularity}`),
+  exportData: (format: string, type: string, from?: string, to?: string) => {
+    const params = new URLSearchParams({ format, type })
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    return api.get(`/analytics/export?${params.toString()}`, { responseType: 'blob' as any })
+  },
 }
 
 // Users API (admin)
