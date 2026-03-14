@@ -379,7 +379,7 @@ export class LlmProvidersService {
         toolCalls: response.message.toolCalls,
         inputTokens: response.usage.inputTokens,
         outputTokens: response.usage.outputTokens,
-        cost: response.cost,
+        cost: Math.round(response.cost),
         responseTime: response.responseTime,
         model: response.model,
         finishReason: response.message.finishReason,
@@ -389,14 +389,14 @@ export class LlmProvidersService {
       const savedMessage = await this.llmMessageRepository.save(message);
 
       // Update session stats
-      session.addMessage(response.usage.inputTokens, response.usage.outputTokens, response.cost);
+      session.addMessage(response.usage.inputTokens, response.usage.outputTokens, Math.round(response.cost));
       if (response.message.toolCalls?.length > 0) {
         session.addToolCall(true);
       }
       await this.llmSessionRepository.save(session);
 
       // Update provider stats
-      provider.incrementUsage(response.usage.totalTokens, response.cost, true);
+      provider.incrementUsage(response.usage.totalTokens, Math.round(response.cost), true);
       await this.llmProviderRepository.save(provider);
 
       return {
