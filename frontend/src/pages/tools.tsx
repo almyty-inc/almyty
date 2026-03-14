@@ -411,7 +411,7 @@ return new Promise((resolve, reject) => {
             <div>
               <div className="font-medium">{tool.name}</div>
               <div className="text-sm text-muted-foreground">
-                {tool.metadata?.sourceApi?.name || 'Unknown API'}
+                {tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'LLM Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : 'Custom Tool')}
               </div>
             </div>
           </div>
