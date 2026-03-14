@@ -153,11 +153,11 @@ export function AnalyticsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-          <p className="text-sm text-muted-foreground mt-1">Real-time usage data across all protocols</p>
+          <p className="text-muted-foreground">Real-time usage data across all protocols</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => handleExport('requests', 'csv')}>
