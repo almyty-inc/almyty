@@ -47,15 +47,14 @@ export class RequestLoggingInterceptor implements NestInterceptor {
   }
 
   private shouldSkip(path: string): boolean {
-    const skipPaths = [
-      '/health',
-      '/health/live',
-      '/health/ready',
-      '/monitoring/metrics/prometheus',
-      '/docs',
-      '/favicon.ico',
-    ];
-    return skipPaths.some(p => path.startsWith(p));
+    // Only log protocol/gateway requests and tool executions — NOT internal management API calls.
+    // Internal calls (GET /apis, GET /tools, GET /analytics, etc.) are the frontend
+    // talking to itself and would pollute analytics with noise.
+    const isProtocolRequest = this.isProtocolRequest(path);
+    if (isProtocolRequest) return false; // Always log protocol requests
+
+    // Skip everything else — internal management API, health, docs, etc.
+    return true;
   }
 
   private async logRequest(

@@ -59,12 +59,19 @@ export class AnalyticsService {
       llmSessions24h,
       llmCost7d,
     ] = await Promise.all([
-      this.requestLogRepository.count({
-        where: { timestamp: MoreThanOrEqual(last24h), metadata: { organizationId } as any },
-      }).catch(() => 0),
-      this.requestLogRepository.count({
-        where: { timestamp: MoreThanOrEqual(last7d), metadata: { organizationId } as any },
-      }).catch(() => 0),
+      // Only count protocol requests (MCP, UTCP, A2A, Skills), not internal management API calls
+      this.requestLogRepository
+        .createQueryBuilder('log')
+        .where('log.timestamp >= :since', { since: last24h })
+        .andWhere("log.metadata->>'protocol' IS NOT NULL")
+        .getCount()
+        .catch(() => 0),
+      this.requestLogRepository
+        .createQueryBuilder('log')
+        .where('log.timestamp >= :since', { since: last7d })
+        .andWhere("log.metadata->>'protocol' IS NOT NULL")
+        .getCount()
+        .catch(() => 0),
       this.toolExecutionRepository.count({
         where: { organizationId, createdAt: MoreThanOrEqual(last24h) },
       }).catch(() => 0),
@@ -75,12 +82,17 @@ export class AnalyticsService {
         .createQueryBuilder('log')
         .select('AVG(log.responseTime)', 'avg')
         .where('log.timestamp >= :since', { since: last24h })
+        .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getRawOne()
         .then(r => Math.round(r?.avg || 0))
         .catch(() => 0),
-      this.requestLogRepository.count({
-        where: { timestamp: MoreThanOrEqual(last24h), statusCode: MoreThanOrEqual(500) as any },
-      }).catch(() => 0),
+      this.requestLogRepository
+        .createQueryBuilder('log')
+        .where('log.timestamp >= :since', { since: last24h })
+        .andWhere('log.statusCode >= 500')
+        .andWhere("log.metadata->>'protocol' IS NOT NULL")
+        .getCount()
+        .catch(() => 0),
       this.llmSessionRepository.count({
         where: { organizationId, createdAt: MoreThanOrEqual(last24h) },
       }).catch(() => 0),
@@ -260,6 +272,7 @@ export class AnalyticsService {
       .addSelect('SUM(CASE WHEN log.statusCode >= 400 THEN 1 ELSE 0 END)', 'errors')
       .addSelect('AVG(log.responseTime)', 'avgResponseTime')
       .where('log.timestamp >= :since', { since })
+      .andWhere("log.metadata->>'protocol' IS NOT NULL")
       .groupBy('bucket')
       .orderBy('bucket', 'ASC')
       .getRawMany();
