@@ -110,16 +110,22 @@ export class CustomCodeExecutorService {
         `);
       }
 
-      // Prepare the code with async wrapper
+      // Prepare the code with async wrapper that JSON-serializes the result
+      // to avoid "A non-transferable value was passed" errors when crossing
+      // the isolate boundary. All return values must be JSON-serializable.
       const wrappedCode = `
         (async function() {
-          ${code}
+          const __userResult = await (async function() {
+            ${code}
+          })();
+          return JSON.stringify(__userResult === undefined ? null : __userResult);
         })()
       `;
 
       // Compile and run the script with timeout
       const script = await isolate.compileScript(wrappedCode);
-      const result = await script.run(context, { timeout, promise: true });
+      const rawResult = await script.run(context, { timeout, promise: true });
+      const result = rawResult ? JSON.parse(rawResult) : null;
 
       const executionTime = Date.now() - startTime;
 

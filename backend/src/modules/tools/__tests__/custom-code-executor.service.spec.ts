@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CustomCodeExecutorService } from '../custom-code-executor.service';
 
 // Mock isolated-vm since it's a native module
-const mockRun = jest.fn().mockResolvedValue({ message: 'mocked result' });
+const mockRun = jest.fn().mockResolvedValue(JSON.stringify({ message: 'mocked result' }));
 const mockCompileScript = jest.fn().mockResolvedValue({
   run: mockRun,
 });
