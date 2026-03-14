@@ -41,6 +41,7 @@ export interface UpdateToolDto {
   name?: string;
   description?: string;
   parameters?: Record<string, any>;
+  code?: string;
   configuration?: {
     timeout?: number;
     retries?: number;
@@ -279,6 +280,10 @@ export class ToolsService {
 
       if (updateToolDto.parameters !== undefined) {
         tool.parameters = updateToolDto.parameters;
+      }
+
+      if (updateToolDto.code !== undefined) {
+        tool.code = updateToolDto.code;
       }
 
       if (updateToolDto.configuration !== undefined) {

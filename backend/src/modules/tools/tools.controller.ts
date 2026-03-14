@@ -101,6 +101,10 @@ class UpdateToolBodyDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsOptional()
   @IsObject()
   parameters?: Record<string, any>;
 
