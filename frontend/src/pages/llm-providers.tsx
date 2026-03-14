@@ -988,13 +988,11 @@ export function LlmProvidersPage() {
 
   const totalCost = providers.reduce((sum: number, provider: any) => sum + (provider.totalCost || 0), 0)
   const totalRequests = providers.reduce((sum: number, provider: any) => sum + (provider.totalRequests || 0), 0)
-  const avgSuccessRate = providers.length > 0
-    ? providers.reduce((sum: number, provider: any) => {
-        const successRate = provider.totalRequests > 0
-          ? (provider.successfulRequests / provider.totalRequests) * 100
-          : 100
-        return sum + successRate
-      }, 0) / providers.length
+  const providersWithRequests = providers.filter((p: any) => p.totalRequests > 0)
+  const avgSuccessRate = providersWithRequests.length > 0
+    ? providersWithRequests.reduce((sum: number, provider: any) => {
+        return sum + ((provider.successfulRequests || 0) / provider.totalRequests) * 100
+      }, 0) / providersWithRequests.length
     : 0
 
   const columns = [
@@ -1087,12 +1085,12 @@ export function LlmProvidersPage() {
         const provider = row.original
         const successRate = provider.totalRequests > 0
           ? ((provider.successfulRequests || 0) / provider.totalRequests) * 100
-          : 100
+          : null
         return (
           <div className="text-right">
-            <div className="font-medium">{provider.lastRequestAt ? 'Active' : 'Inactive'}</div>
+            <div className="font-medium">{provider.lastRequestAt ? 'Active' : 'No usage yet'}</div>
             <div className="text-sm text-muted-foreground">
-              {successRate.toFixed(1)}% success
+              {successRate !== null ? `${successRate.toFixed(1)}% success` : 'no data'}
             </div>
           </div>
         )
@@ -1273,7 +1271,7 @@ export function LlmProvidersPage() {
           <CardContent>
             <div className="text-2xl font-bold">${totalCost.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
-              +15.2% from last month
+              across all providers
             </p>
           </CardContent>
         </Card>
@@ -1286,7 +1284,7 @@ export function LlmProvidersPage() {
           <CardContent>
             <div className="text-2xl font-bold">{totalRequests.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              +8.3% from last week
+              total API calls
             </p>
           </CardContent>
         </Card>
@@ -1297,9 +1295,9 @@ export function LlmProvidersPage() {
             <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{avgSuccessRate.toFixed(1)}%</div>
+            <div className="text-2xl font-bold">{providersWithRequests.length > 0 ? `${avgSuccessRate.toFixed(1)}%` : 'N/A'}</div>
             <p className="text-xs text-muted-foreground">
-              +1.2% from yesterday
+              {providersWithRequests.length > 0 ? 'average across providers' : 'no requests yet'}
             </p>
           </CardContent>
         </Card>
