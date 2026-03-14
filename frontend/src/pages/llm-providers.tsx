@@ -1298,51 +1298,6 @@ export function LlmProvidersPage() {
         </div>
       )}
 
-      {/* Filters - Only show when there are providers */}
-      {!(!isLoading && providers.length === 0) && (
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search providers..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-              <SelectItem value="error">Error</SelectItem>
-              <SelectItem value="configuring">Configuring</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="anthropic">Anthropic</SelectItem>
-              <SelectItem value="google">Google</SelectItem>
-              <SelectItem value="cohere">Cohere</SelectItem>
-              <SelectItem value="huggingface">HuggingFace</SelectItem>
-              <SelectItem value="azure">Azure</SelectItem>
-              <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
-              <SelectItem value="custom">Custom</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
       {/* Providers Table or Empty State */}
       {!isLoading && providers.length === 0 ? (
         <Card className="p-12">
@@ -1363,12 +1318,58 @@ export function LlmProvidersPage() {
           </div>
         </Card>
       ) : (
-        <DataTable
-          columns={columns}
-          data={filteredProviders}
-          loading={isLoading}
-          onRowClick={(provider) => setSelectedProvider(provider)}
-        />
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            {/* Filters */}
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search providers..."
+                    className="pl-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                  <SelectItem value="configuring">Configuring</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="anthropic">Anthropic</SelectItem>
+                  <SelectItem value="google">Google</SelectItem>
+                  <SelectItem value="cohere">Cohere</SelectItem>
+                  <SelectItem value="huggingface">HuggingFace</SelectItem>
+                  <SelectItem value="azure">Azure</SelectItem>
+                  <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <DataTable
+              columns={columns}
+              data={filteredProviders}
+              loading={isLoading}
+              onRowClick={(provider) => setSelectedProvider(provider)}
+            />
+          </CardContent>
+        </Card>
       )}
 
       {/* Provider Details Sheet */}
