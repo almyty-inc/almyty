@@ -308,8 +308,12 @@ export const llmProvidersApi = {
   chat: (id: string, data: any) => api.post(`/llm-providers/${id}/chat`, data),
   
   getSessions: (id: string) => api.get(`/llm-providers/${id}/sessions`),
-  
+
   getUsage: (id: string, params?: any) => api.get(`/llm-providers/${id}/usage`, { params }),
+
+  getModels: (id: string) => api.get(`/llm-providers/${id}/models`),
+
+  getModelsByType: (type: string, apiKey: string) => api.post('/llm-providers/models/by-type', { type, apiKey }),
 }
 
 // Analytics / Monitoring API

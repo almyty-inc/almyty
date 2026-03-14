@@ -827,9 +827,55 @@ export class LlmProvidersController {
     };
   }
 
+  @Post('models/by-type')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Fetch available models by provider type and API key (for pre-creation)' })
+  @ApiResponse({ status: 200, description: 'Models retrieved successfully' })
+  async getModelsByType(
+    @Body() body: { type: string; apiKey: string },
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (!body.type || !body.apiKey) {
+        throw new HttpException(
+          { success: false, message: 'type and apiKey are required', error: 'INVALID_INPUT' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const models = await this.llmProvidersService.fetchModelsByType(
+        body.type as any,
+        body.apiKey,
+      );
+
+      return {
+        success: true,
+        data: models,
+        message: 'Models fetched from provider API',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'MODELS_RETRIEVAL_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   @Get(':providerId/models')
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Get available models for LLM provider' })
+  @ApiOperation({ summary: 'Fetch available models dynamically from the provider API' })
   @ApiResponse({ status: 200, description: 'Models retrieved successfully' })
   async getProviderModels(
     @Param('providerId', ParseUUIDPipe) providerId: string,
@@ -844,21 +890,13 @@ export class LlmProvidersController {
         );
       }
 
-      const provider = await this.llmProvidersService.getProvider(providerId, organizationId);
-
-      const models = provider.getSupportedModels().map(model => ({
-        id: model,
-        name: model,
-        contextWindow: provider.getMaxTokens(),
-        supportsToolUse: provider.supportsToolUse(),
-        supportsFunctionCalling: provider.supportsFunctionCalling(),
-        supportsStreaming: provider.supportsStreaming(),
-      }));
+      const provider = await this.llmProvidersService.getProvider(providerId, organizationId, true);
+      const models = await this.llmProvidersService.fetchModelsFromProvider(provider);
 
       return {
         success: true,
         data: models,
-        message: 'Models retrieved successfully',
+        message: 'Models fetched from provider API',
       };
     } catch (error) {
       throw new HttpException(

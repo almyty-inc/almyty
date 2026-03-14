@@ -1942,19 +1942,20 @@ describe('LlmProvidersService', () => {
       expect(cost).toBe((1000 / 1000) * 0.05 + (1000 / 1000) * 0.15);
     });
 
-    it('should calculate Anthropic cost for claude-3-opus', () => {
-      const cost = service['calculateAnthropicCost']('claude-3-opus-20240229', 1000, 1000);
+    it('should calculate Anthropic cost for claude-opus-4', () => {
+      const cost = service['calculateAnthropicCost']('claude-opus-4-20250514', 1000, 1000);
       expect(cost).toBe((1000 / 1000) * 1.5 + (1000 / 1000) * 7.5);
     });
 
-    it('should calculate Anthropic cost for claude-3-sonnet', () => {
-      const cost = service['calculateAnthropicCost']('claude-3-sonnet-20240229', 1000, 1000);
+    it('should calculate Anthropic cost for claude-sonnet-4', () => {
+      const cost = service['calculateAnthropicCost']('claude-sonnet-4-20250514', 1000, 1000);
       expect(cost).toBe((1000 / 1000) * 0.3 + (1000 / 1000) * 1.5);
     });
 
-    it('should calculate Anthropic cost for unknown model (defaults to haiku)', () => {
+    it('should calculate Anthropic cost for unknown model (defaults to sonnet-4)', () => {
       const cost = service['calculateAnthropicCost']('unknown-model', 1000, 1000);
-      expect(cost).toBe((1000 / 1000) * 0.025 + (1000 / 1000) * 0.125);
+      // Defaults to claude-sonnet-4 costs: input=0.3, output=1.5
+      expect(cost).toBe((1000 / 1000) * 0.3 + (1000 / 1000) * 1.5);
     });
 
     it('should calculate Google cost', () => {

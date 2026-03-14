@@ -17,6 +17,8 @@ describe('LlmProvidersController', () => {
       deleteProvider: jest.fn(),
       chat: jest.fn(),
       performHealthCheck: jest.fn(),
+      fetchModelsFromProvider: jest.fn(),
+      fetchModelsByType: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -311,23 +313,22 @@ describe('LlmProvidersController', () => {
   });
 
   describe('getProviderModels', () => {
-    it('should return available models for provider', async () => {
+    it('should return available models for provider (fetched dynamically)', async () => {
       const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
-      const mockProvider = {
-        id: 'provider-1',
-        getSupportedModels: jest.fn().mockReturnValue(['gpt-4', 'gpt-3.5-turbo']),
-        getMaxTokens: jest.fn().mockReturnValue(8192),
-        supportsToolUse: jest.fn().mockReturnValue(true),
-        supportsFunctionCalling: jest.fn().mockReturnValue(true),
-        supportsStreaming: jest.fn().mockReturnValue(true),
-      } as any;
+      const mockProvider = { id: 'provider-1', type: 'openai' } as any;
+      const mockModels = [
+        { id: 'gpt-4', name: 'gpt-4' },
+        { id: 'gpt-3.5-turbo', name: 'gpt-3.5-turbo' },
+      ];
 
       llmProvidersService.getProvider.mockResolvedValue(mockProvider);
+      (llmProvidersService as any).fetchModelsFromProvider.mockResolvedValue(mockModels);
 
       const result = await controller.getProviderModels('provider-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toHaveLength(2);
+      expect(result.data[0].id).toBe('gpt-4');
     });
   });
 
