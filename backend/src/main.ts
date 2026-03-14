@@ -6,6 +6,11 @@ import * as compression from 'compression';
 import * as cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { RequestLog } from './entities/request-log.entity';
+import { UsageMetric } from './entities/usage-metric.entity';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -92,6 +97,16 @@ async function bootstrap() {
     });
     logger.log(`Swagger documentation: http://localhost:${port}/docs`);
   }
+
+  // Global exception filter — standardized error responses, no internal leaks
+  app.useGlobalFilters(new GlobalExceptionFilter());
+
+  // Request logging — records every request to RequestLog + UsageMetric tables
+  const requestLogRepo = app.get(getRepositoryToken(RequestLog));
+  const usageMetricRepo = app.get(getRepositoryToken(UsageMetric));
+  app.useGlobalInterceptors(
+    new RequestLoggingInterceptor(requestLogRepo, usageMetricRepo),
+  );
 
   // Graceful shutdown hooks for k8s SIGTERM
   app.enableShutdownHooks();
