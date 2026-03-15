@@ -286,9 +286,9 @@ export const toolsApi = {
   getSchema: (id: string) => api.get(`/tools/${id}/schema`),
 
   // Export formats
-  getSkill: (id: string) => api.get(`/tools/${id}/skill`),
-  getCli: (id: string, format: 'bash' | 'node' = 'bash') => api.get(`/tools/${id}/cli`, { params: { format } }),
-  getSdk: (id: string) => api.get(`/tools/${id}/sdk`),
+  getSkill: (id: string, organizationId: string) => api.get(`/organizations/${organizationId}/tools/${id}/skill`),
+  getCli: (id: string, organizationId: string, format: 'bash' | 'node' = 'bash') => api.get(`/organizations/${organizationId}/tools/${id}/cli`, { params: { format } }),
+  getSdk: (id: string, organizationId: string) => api.get(`/organizations/${organizationId}/tools/${id}/sdk`),
 }
 
 // LLM Providers API
