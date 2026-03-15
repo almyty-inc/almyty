@@ -505,19 +505,24 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [cliFormat, setCliFormat] = useState<'bash' | 'node'>('bash')
 
+  const orgId = currentOrganization?.id || ''
+
   const { data: skillData, isLoading: skillLoading } = useQuery({
     queryKey: ['tool-skill', toolId],
-    queryFn: () => toolsApi.getSkill(toolId),
+    queryFn: () => toolsApi.getSkill(toolId, orgId),
+    enabled: !!orgId,
   })
 
   const { data: cliData, isLoading: cliLoading } = useQuery({
     queryKey: ['tool-cli', toolId, cliFormat],
-    queryFn: () => toolsApi.getCli(toolId, cliFormat),
+    queryFn: () => toolsApi.getCli(toolId, orgId, cliFormat),
+    enabled: !!orgId,
   })
 
   const { data: sdkData, isLoading: sdkLoading } = useQuery({
     queryKey: ['tool-sdk', toolId],
-    queryFn: () => toolsApi.getSdk(toolId),
+    queryFn: () => toolsApi.getSdk(toolId, orgId),
+    enabled: !!orgId,
   })
 
   const copyToClipboard = (text: string, field: string) => {
@@ -657,10 +662,10 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <FileCode className="h-5 w-5 text-blue-500" />
-            <CardTitle className="text-sm">TypeScript SDK</CardTitle>
+            <CardTitle className="text-sm">TypeScript Client</CardTitle>
           </div>
           <CardDescription className="text-xs">
-            Typed TypeScript module for this tool
+            Generated TypeScript code for calling this tool
           </CardDescription>
         </CardHeader>
         <CardContent>
