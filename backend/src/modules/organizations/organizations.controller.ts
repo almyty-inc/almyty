@@ -77,14 +77,14 @@ export class OrganizationsController {
 
   // Member Management
   @Get(':id/members')
-  @UseGuards(JwtAuthGuard)
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get organization members' })
   async getOrganizationMembers(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.organizationsService.getMembers(id, req.user.id);
   }
 
   @Post(':id/members')
-  @UseGuards(JwtAuthGuard)
+  @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Invite user to organization' })
   async inviteUserToOrganization(
     @Param('id', ParseUUIDPipe) id: string,
@@ -95,7 +95,7 @@ export class OrganizationsController {
   }
 
   @Put(':id/members/:userId')
-  @UseGuards(JwtAuthGuard)
+  @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update member role' })
   async updateMemberRole(
     @Param('id', ParseUUIDPipe) id: string,
@@ -107,7 +107,7 @@ export class OrganizationsController {
   }
 
   @Delete(':id/members/:userId')
-  @UseGuards(JwtAuthGuard)
+  @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Remove member from organization' })
   async removeMember(
     @Param('id', ParseUUIDPipe) id: string,
@@ -117,16 +117,16 @@ export class OrganizationsController {
     return this.organizationsService.removeMember(id, userId);
   }
 
-  // Team Management  
+  // Team Management
   @Get(':id/teams')
-  @UseGuards(JwtAuthGuard)
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get organization teams' })
   async getOrganizationTeams(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.organizationsService.getTeams(id);
   }
 
   @Post(':id/teams')
-  @UseGuards(JwtAuthGuard) 
+  @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Create team in organization' })
   async createTeam(
     @Param('id', ParseUUIDPipe) id: string,
@@ -137,7 +137,7 @@ export class OrganizationsController {
   }
 
   @Put(':id/teams/:teamId')
-  @UseGuards(JwtAuthGuard)
+  @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update team' })
   async updateTeam(
     @Param('id', ParseUUIDPipe) id: string,
@@ -149,7 +149,7 @@ export class OrganizationsController {
   }
 
   @Post(':id/teams/:teamId/members')
-  @UseGuards(JwtAuthGuard)
+  @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Add member to team' })
   async addMemberToTeam(
     @Param('id', ParseUUIDPipe) id: string,
@@ -161,7 +161,7 @@ export class OrganizationsController {
   }
 
   @Put(':id/teams/:teamId/members/:userId')
-  @UseGuards(JwtAuthGuard)
+  @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update team member role' })
   async updateTeamMemberRole(
     @Param('id', ParseUUIDPipe) id: string,
@@ -174,7 +174,7 @@ export class OrganizationsController {
   }
 
   @Delete(':id/teams/:teamId/members/:userId')
-  @UseGuards(JwtAuthGuard)
+  @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Remove member from team' })
   async removeMemberFromTeam(
     @Param('id', ParseUUIDPipe) id: string,

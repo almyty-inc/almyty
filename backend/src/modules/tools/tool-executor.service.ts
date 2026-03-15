@@ -11,6 +11,7 @@ import { Api, ApiType } from '../../entities/api.entity';
 import { Operation } from '../../entities/operation.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { User } from '../../entities/user.entity';
+import { Credential, CredentialType } from '../../entities/credential.entity';
 import { CustomCodeExecutorService } from './custom-code-executor.service';
 import { validateUrl, sanitizeHeaders, validateResponseSize } from '../../common/security/url-validator';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
@@ -63,6 +64,8 @@ export class ToolExecutorService {
     private toolExecutionRepository: Repository<ToolExecution>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(Credential)
+    private credentialRepository: Repository<Credential>,
     @InjectRedis() private readonly redis: Redis.Redis,
     private customCodeExecutor: CustomCodeExecutorService,
     private moduleRef: ModuleRef,
@@ -821,6 +824,22 @@ export class ToolExecutorService {
     api: Api,
     options: ToolExecutionOptions
   ): Promise<void> {
+    // 1. Try Credential entity (proper credential management)
+    const credential = await this.credentialRepository.findOne({
+      where: {
+        apiId: api.id,
+        organizationId: options.organizationId,
+        isActive: true,
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (credential) {
+      await this.applyCredential(config, credential);
+      return;
+    }
+
+    // 2. Fallback to legacy api.authentication field
     if (!api.authentication) {
       return;
     }
@@ -831,12 +850,12 @@ export class ToolExecutorService {
       case 'bearer':
         config.headers.Authorization = `Bearer ${authConfig.config.token}`;
         break;
-      
+
       case 'basic':
-        const credentials = Buffer.from(`${authConfig.config.username}:${authConfig.config.password}`).toString('base64');
-        config.headers.Authorization = `Basic ${credentials}`;
+        const basicCreds = Buffer.from(`${authConfig.config.username}:${authConfig.config.password}`).toString('base64');
+        config.headers.Authorization = `Basic ${basicCreds}`;
         break;
-      
+
       case 'api_key':
         if (authConfig.config.location === 'header') {
           config.headers[authConfig.config.name] = authConfig.config.value;
@@ -845,14 +864,41 @@ export class ToolExecutorService {
           config.params[authConfig.config.name] = authConfig.config.value;
         }
         break;
-      
+
       case 'oauth2':
-        // In a real implementation, we'd handle OAuth2 flow here
         if (authConfig.config.accessToken) {
           config.headers.Authorization = `Bearer ${authConfig.config.accessToken}`;
         }
         break;
     }
+  }
+
+  private async applyCredential(config: AxiosRequestConfig, credential: Credential): Promise<void> {
+    // Check if OAuth2 token needs refresh
+    if (credential.type === CredentialType.OAUTH2 && credential.isExpired()) {
+      try {
+        const { CredentialService } = await import('../apis/credential.service');
+        const credService = this.moduleRef?.get(CredentialService, { strict: false });
+        if (credService) {
+          await credService.refreshOAuthToken(credential);
+        }
+      } catch (e) {
+        this.logger.warn(`OAuth2 token refresh failed for credential ${credential.id}: ${e.message}`);
+      }
+    }
+
+    // Apply auth headers from credential
+    const authHeaders = credential.getAuthHeaders();
+    Object.assign(config.headers, authHeaders);
+
+    // Apply query params from credential
+    const queryParams = credential.getQueryParams();
+    if (Object.keys(queryParams).length > 0) {
+      config.params = { ...config.params, ...queryParams };
+    }
+
+    // Mark as used (fire-and-forget)
+    this.credentialRepository.update(credential.id, { lastUsedAt: new Date() }).catch(() => {});
   }
 
   private async validateParameters(

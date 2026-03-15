@@ -17,7 +17,8 @@ import { GatewayProtocolService } from './gateway-protocol.service';
 import { GatewayAuthService } from './gateway-auth.service';
 import { GatewayToolService } from './gateway-tool.service';
 import { GatewaysController } from './gateways.controller';
-import { GatewayProtocolController } from './gateway-protocol.controller';
+// GatewayProtocolController removed — all protocol traffic goes through org-scoped
+// controllers in mcp.module.ts: /mcp/:orgId/, /a2a/:orgId/, /utcp/:orgId/
 
 import { ToolsModule } from '../tools/tools.module';
 
@@ -45,7 +46,6 @@ import { ToolsModule } from '../tools/tools.module';
   ],
   controllers: [
     GatewaysController,
-    GatewayProtocolController,
   ],
   exports: [
     GatewaysService,

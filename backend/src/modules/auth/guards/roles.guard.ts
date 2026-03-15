@@ -69,15 +69,24 @@ export class RolesGuard implements CanActivate {
   }
 
   private extractOrganizationId(request: any): string | null {
-    // Try to get organization ID from various sources
-    return (
+    // Try explicit sources first
+    const explicit = (
       request.params?.organizationId ||
+      request.params?.id || // For /organizations/:id routes
       request.query?.organizationId ||
       request.body?.organizationId ||
-      request.headers?.['x-organization-id'] ||
-      // Fallback to user's first organization from JWT token
-      request.user?.organizations?.[0]?.id ||
-      null
+      request.headers?.['x-organization-id']
     );
+
+    if (explicit) return explicit;
+
+    // Fallback: use the user's org from JWT, but ONLY if they belong to exactly one org.
+    // If they have multiple orgs, require explicit org context to prevent cross-org leaks.
+    const userOrgs = request.user?.organizations;
+    if (userOrgs?.length === 1) {
+      return userOrgs[0].id;
+    }
+
+    return null;
   }
 }
