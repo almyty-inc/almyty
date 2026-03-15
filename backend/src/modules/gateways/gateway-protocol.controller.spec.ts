@@ -389,10 +389,14 @@ describe('GatewayProtocolController', () => {
   });
 
   describe('getGatewayInfo', () => {
+    beforeEach(() => {
+      gatewayAuthService.authenticateRequest.mockResolvedValue({ isValid: true, userId: 'user-1' });
+    });
+
     it('should return 404 if gateway not found', async () => {
       mockGatewayRepository.findOne.mockResolvedValue(null);
 
-      await controller.getGatewayInfo('test-endpoint', mockResponse);
+      await controller.getGatewayInfo('test-endpoint', mockRequest, mockResponse, {}, {});
 
       expect(mockResponse.status).toHaveBeenCalledWith(404);
       expect(mockResponse.json).toHaveBeenCalledWith({ error: 'Gateway not found' });
@@ -407,7 +411,7 @@ describe('GatewayProtocolController', () => {
       };
       mockGatewayRepository.findOne.mockResolvedValue(gatewayWithAuth);
 
-      await controller.getGatewayInfo('test-endpoint', mockResponse);
+      await controller.getGatewayInfo('test-endpoint', mockRequest, mockResponse, {}, {});
 
       expect(mockResponse.status).toHaveBeenCalledWith(200);
       expect(mockResponse.json).toHaveBeenCalledWith(
@@ -426,7 +430,7 @@ describe('GatewayProtocolController', () => {
         throw new Error('Config error');
       });
 
-      await controller.getGatewayInfo('test-endpoint', mockResponse);
+      await controller.getGatewayInfo('test-endpoint', mockRequest, mockResponse, {}, {});
 
       expect(mockResponse.status).toHaveBeenCalledWith(500);
       expect(mockResponse.json).toHaveBeenCalledWith({ error: 'Failed to get gateway info' });
@@ -434,10 +438,14 @@ describe('GatewayProtocolController', () => {
   });
 
   describe('handleSSE', () => {
+    beforeEach(() => {
+      gatewayAuthService.authenticateRequest.mockResolvedValue({ isValid: true, userId: 'user-1' });
+    });
+
     it('should return 404 if gateway not found', async () => {
       mockGatewayRepository.findOne.mockResolvedValue(null);
 
-      await controller.handleSSE('test-endpoint', mockRequest, mockResponse);
+      await controller.handleSSE('test-endpoint', mockRequest, mockResponse, {}, {}, {});
 
       expect(mockResponse.status).toHaveBeenCalledWith(404);
       expect(mockResponse.json).toHaveBeenCalledWith({ error: 'Gateway not found' });
@@ -447,7 +455,7 @@ describe('GatewayProtocolController', () => {
       const gatewayNoSSE = { ...mockGateway, supportsProtocol: jest.fn().mockReturnValue(false) };
       mockGatewayRepository.findOne.mockResolvedValue(gatewayNoSSE);
 
-      await controller.handleSSE('test-endpoint', mockRequest, mockResponse);
+      await controller.handleSSE('test-endpoint', mockRequest, mockResponse, {}, {}, {});
 
       expect(mockResponse.status).toHaveBeenCalledWith(400);
       expect(mockResponse.json).toHaveBeenCalledWith({
@@ -458,7 +466,7 @@ describe('GatewayProtocolController', () => {
     it('should establish SSE connection', async () => {
       mockGatewayRepository.findOne.mockResolvedValue(mockGateway);
 
-      await controller.handleSSE('test-endpoint', mockRequest, mockResponse);
+      await controller.handleSSE('test-endpoint', mockRequest, mockResponse, {}, {}, {});
 
       expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream');
       expect(mockResponse.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache');
@@ -472,7 +480,7 @@ describe('GatewayProtocolController', () => {
         throw new Error('Header error');
       });
 
-      await controller.handleSSE('test-endpoint', mockRequest, mockResponse);
+      await controller.handleSSE('test-endpoint', mockRequest, mockResponse, {}, {}, {});
 
       expect(mockResponse.status).toHaveBeenCalledWith(500);
       expect(mockResponse.json).toHaveBeenCalledWith({ error: 'SSE connection failed' });
@@ -593,6 +601,10 @@ describe('GatewayProtocolController', () => {
   });
 
   describe('handleSSE - heartbeat and disconnect', () => {
+    beforeEach(() => {
+      gatewayAuthService.authenticateRequest.mockResolvedValue({ isValid: true, userId: 'user-1' });
+    });
+
     it.skip('should send heartbeat on SSE connection', async () => {
       jest.useFakeTimers();
       const sseGateway = {
@@ -615,7 +627,7 @@ describe('GatewayProtocolController', () => {
       } as unknown as Response;
 
       // Start SSE connection (returns void, runs in background)
-      controller.handleSSE('test-endpoint', sseRequest, sseResponse);
+      controller.handleSSE('test-endpoint', sseRequest, sseResponse, {}, {}, {});
 
       // Wait for all pending promises to resolve
       await jest.runAllTimersAsync();
@@ -659,7 +671,7 @@ describe('GatewayProtocolController', () => {
         json: jest.fn().mockReturnThis(),
       } as unknown as Response;
 
-      await controller.handleSSE('test-endpoint', sseRequest, sseResponse);
+      await controller.handleSSE('test-endpoint', sseRequest, sseResponse, {}, {}, {});
 
       // Simulate client disconnect
       expect(closeCallback).toBeDefined();
@@ -794,6 +806,10 @@ describe('GatewayProtocolController', () => {
   });
 
   describe('getSupportedProtocols coverage', () => {
+    beforeEach(() => {
+      gatewayAuthService.authenticateRequest.mockResolvedValue({ isValid: true, userId: 'user-1' });
+    });
+
     it('should return protocols for A2A gateway in info endpoint', async () => {
       const a2aGateway = {
         ...mockGateway,
@@ -809,7 +825,7 @@ describe('GatewayProtocolController', () => {
       };
       mockGatewayRepository.findOne.mockResolvedValue(a2aGateway);
 
-      await controller.getGatewayInfo('test-endpoint', mockResponse);
+      await controller.getGatewayInfo('test-endpoint', mockRequest, mockResponse, {}, {});
 
       expect(mockResponse.json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -833,7 +849,7 @@ describe('GatewayProtocolController', () => {
       };
       mockGatewayRepository.findOne.mockResolvedValue(utcpGateway);
 
-      await controller.getGatewayInfo('test-endpoint', mockResponse);
+      await controller.getGatewayInfo('test-endpoint', mockRequest, mockResponse, {}, {});
 
       expect(mockResponse.json).toHaveBeenCalledWith(
         expect.objectContaining({

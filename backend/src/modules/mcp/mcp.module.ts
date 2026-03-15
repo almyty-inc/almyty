@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { McpController } from './mcp.controller';
@@ -15,6 +15,7 @@ import { McpSessionService } from './mcp-session.service';
 import { UtcpService } from './utcp.service';
 import { A2AService } from './a2a.service';
 import { RealtimeExecutorService } from './realtime-executor.service';
+import { GatewayResolverService } from './services/gateway-resolver.service';
 import { SseTransport } from './transports/sse.transport';
 import { WebSocketTransport } from './transports/websocket.transport';
 
@@ -32,7 +33,6 @@ import { ToolCategory } from '../../entities/tool-category.entity';
 // Import related modules
 import { ToolsModule } from '../tools/tools.module';
 import { GatewaysModule } from '../gateways/gateways.module';
-import { forwardRef } from '@nestjs/common';
 
 @Module({
   imports: [
@@ -48,6 +48,7 @@ import { forwardRef } from '@nestjs/common';
       ToolCategory,
     ]),
     forwardRef(() => ToolsModule),
+    GatewaysModule,
   ],
   controllers: [McpController, GatewayMcpController, McpTransportController, UtcpController, GatewayUtcpController, A2AController, GatewayA2AController, PublicController],
   providers: [
@@ -57,6 +58,7 @@ import { forwardRef } from '@nestjs/common';
     UtcpService,
     A2AService,
     RealtimeExecutorService,
+    GatewayResolverService,
     SseTransport,
     WebSocketTransport,
   ],
@@ -67,6 +69,7 @@ import { forwardRef } from '@nestjs/common';
     UtcpService,
     A2AService,
     RealtimeExecutorService,
+    GatewayResolverService,
     SseTransport,
     WebSocketTransport,
   ],

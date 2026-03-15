@@ -390,6 +390,173 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
   )
 }
 
+function GatewayAuthSection({ gatewayId, gatewayName }: { gatewayId: string; gatewayName: string }) {
+  const queryClient = useQueryClient()
+  const { success, error: errorNotif } = useNotifications()
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
+  const [newKeyName, setNewKeyName] = useState('')
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const { data: keysData, isLoading: keysLoading } = useQuery({
+    queryKey: ['gateway-api-keys', gatewayId],
+    queryFn: () => gatewaysApi.listApiKeys(gatewayId),
+    enabled: !!gatewayId,
+  })
+
+  const generateKeyMutation = useMutation({
+    mutationFn: (name: string) => gatewaysApi.generateApiKey(gatewayId, { name }),
+    onSuccess: (response: any) => {
+      const key = response.data?.data?.key
+      setGeneratedKey(key)
+      queryClient.invalidateQueries({ queryKey: ['gateway-api-keys', gatewayId] })
+      success('API Key Generated', 'Copy and save it now — it will not be shown again.')
+    },
+    onError: () => {
+      errorNotif('Failed to generate key', 'Could not generate API key')
+    },
+  })
+
+  const revokeKeyMutation = useMutation({
+    mutationFn: (keyId: string) => gatewaysApi.revokeApiKey(gatewayId, keyId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gateway-api-keys', gatewayId] })
+      success('Key Revoked', 'API key has been revoked')
+    },
+    onError: () => {
+      errorNotif('Failed to revoke', 'Could not revoke API key')
+    },
+  })
+
+  const keys = keysData?.data?.data || []
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Authentication
+            </CardTitle>
+            <CardDescription>
+              API keys for accessing this gateway. Clients must include a valid key in the <code className="text-xs bg-muted px-1 py-0.5 rounded">x-api-key</code> header.
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => {
+              setNewKeyName('')
+              setGeneratedKey(null)
+              setCopied(false)
+              setGenerateDialogOpen(true)
+            }}
+          >
+            Generate API Key
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {keysLoading ? (
+          <div className="flex justify-center py-4"><LoadingSpinner /></div>
+        ) : keys.length === 0 ? (
+          <div className="text-center py-6 text-muted-foreground text-sm">
+            No API keys yet. Generate one to allow clients to access this gateway.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {keys.map((key: any) => (
+              <div key={key.id} className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <code className="text-xs font-mono bg-background px-2 py-1 rounded">{key.keyPrefix}...</code>
+                  <span className="text-sm font-medium">{key.name}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {key.lastUsedAt && (
+                    <span className="text-xs text-muted-foreground">
+                      Last used {new Date(key.lastUsedAt).toLocaleDateString()}
+                    </span>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    Created {new Date(key.createdAt).toLocaleDateString()}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => revokeKeyMutation.mutate(key.id)}
+                    disabled={revokeKeyMutation.isPending}
+                  >
+                    Revoke
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+
+      {/* Generate Key Dialog */}
+      <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate API Key</DialogTitle>
+            <DialogDescription>
+              Create a new API key for {gatewayName}. The key will only be shown once.
+            </DialogDescription>
+          </DialogHeader>
+          {generatedKey ? (
+            <div className="space-y-4">
+              <div>
+                <Label>Your API Key</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input value={generatedKey} readOnly className="font-mono text-xs" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(generatedKey)
+                      setCopied(true)
+                      setTimeout(() => setCopied(false), 2000)
+                    }}
+                  >
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-destructive mt-2">
+                  Save this key now. It will not be shown again.
+                </p>
+              </div>
+              <Button className="w-full" onClick={() => setGenerateDialogOpen(false)}>
+                Done
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <Label>Key Name</Label>
+                <Input
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  placeholder="e.g. Production, CI/CD, Development"
+                  className="mt-1"
+                />
+              </div>
+              <Button
+                className="w-full"
+                onClick={() => generateKeyMutation.mutate(newKeyName || `${gatewayName} Key`)}
+                disabled={generateKeyMutation.isPending}
+              >
+                {generateKeyMutation.isPending ? 'Generating...' : 'Generate Key'}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Card>
+  )
+}
+
 export function GatewayDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -675,6 +842,11 @@ export function GatewayDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Authentication */}
+      {gateway.type !== 'skills' && (
+        <GatewayAuthSection gatewayId={gateway.id} gatewayName={gateway.name} />
+      )}
 
       {/* Main Content */}
       <Tabs defaultValue="tools" className="space-y-4">

@@ -6,10 +6,9 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-  BeforeInsert,
-  BeforeUpdate,
 } from 'typeorm';
 import { Api } from './api.entity';
+import { Organization } from './organization.entity';
 import * as crypto from 'crypto';
 
 export enum CredentialType {
@@ -34,6 +33,9 @@ export class Credential {
 
   @Column()
   apiId: string;
+
+  @Column()
+  organizationId: string;
 
   @Column({
     type: 'varchar',
@@ -77,37 +79,39 @@ export class Credential {
   @JoinColumn({ name: 'apiId' })
   api: Api;
 
-  @BeforeInsert()
-  @BeforeUpdate()
-  encryptSensitiveData() {
+  @ManyToOne(() => Organization, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'organizationId' })
+  organization: Organization;
+
+  /**
+   * Encrypt sensitive fields in config before storing.
+   * Call this explicitly from the service layer before saving.
+   */
+  encryptSensitiveData(): void {
     if (this.config && typeof this.config === 'object') {
-      // In a real implementation, you'd encrypt sensitive fields
-      // For now, we'll just flag sensitive data
-      this.config = this.maskSensitiveFields(this.config);
-    }
-  }
+      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken'];
+      const encrypted = { ...this.config };
 
-  private maskSensitiveFields(config: Record<string, any>): Record<string, any> {
-    const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret'];
-    const masked = { ...config };
-
-    for (const field of sensitiveFields) {
-      if (masked[field]) {
-        // In production, encrypt instead of masking
-        masked[field] = this.encryptValue(masked[field]);
+      for (const field of sensitiveFields) {
+        if (encrypted[field] && typeof encrypted[field] === 'string' && !encrypted[field].startsWith('encrypted:')) {
+          encrypted[field] = this.encryptValue(encrypted[field]);
+        }
       }
-    }
 
-    return masked;
+      this.config = encrypted;
+    }
   }
 
   private encryptValue(value: string): string {
-    // Simplified encryption - in production, use proper encryption
-    const key = process.env.ENCRYPTION_KEY || 'default-key';
-    const cipher = crypto.createCipher('aes-256-cbc', key);
+    const envKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-change-me!';
+    const key = crypto.createHash('sha256').update(envKey).digest();
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
     let encrypted = cipher.update(value, 'utf8', 'hex');
     encrypted += cipher.final('hex');
-    return `encrypted:${encrypted}`;
+    return `encrypted:${iv.toString('hex')}:${encrypted}`;
   }
 
   private decryptValue(encryptedValue: string): string {
@@ -115,9 +119,15 @@ export class Credential {
       return encryptedValue;
     }
 
-    const encrypted = encryptedValue.replace('encrypted:', '');
-    const key = process.env.ENCRYPTION_KEY || 'default-key';
-    const decipher = crypto.createDecipher('aes-256-cbc', key);
+    const parts = encryptedValue.split(':');
+    if (parts.length < 3) return encryptedValue;
+
+    const ivHex = parts[1];
+    const encrypted = parts.slice(2).join(':');
+    const envKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-change-me!';
+    const key = crypto.createHash('sha256').update(envKey).digest();
+    const iv = Buffer.from(ivHex, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted;
@@ -185,7 +195,7 @@ export class Credential {
     return {};
   }
 
-  private getDecryptedConfig(): Record<string, any> {
+  getDecryptedConfig(): Record<string, any> {
     const decrypted = { ...this.config };
 
     for (const [key, value] of Object.entries(decrypted)) {

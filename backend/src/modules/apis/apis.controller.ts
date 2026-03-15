@@ -19,16 +19,20 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { ApisService } from './apis.service';
+import { CredentialService, CreateCredentialDto, UpdateCredentialDto } from './credential.service';
 import { CreateApiDto, UpdateApiDto, ImportSchemaDto } from './dto/api.dto';
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
 import { SchemaParserService } from '../schema-parser/schema-parser.service';
 
 @Controller('apis')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ApisController {
   constructor(
     private readonly apisService: ApisService,
+    private readonly credentialService: CredentialService,
     private readonly schemaParserService: SchemaParserService,
     @InjectQueue('schema-import') private readonly schemaImportQueue: Queue,
   ) {}
@@ -278,7 +282,7 @@ export class ApisController {
     @Body('status') status: ApiStatus,
   ) {
     const api = await this.apisService.findOne(id);
-    
+
     if (!api) {
       throw new NotFoundException('API not found');
     }
@@ -288,5 +292,62 @@ export class ApisController {
     }
 
     return this.apisService.updateStatus(id, status);
+  }
+
+  // ─── Credential Management ──────────────────────────────────────
+
+  @Post(':id/credentials')
+  @Roles('admin', 'owner')
+  async createCredential(
+    @Request() req,
+    @Param('id') apiId: string,
+    @Body() dto: CreateCredentialDto,
+  ) {
+    const orgId = req.user.currentOrganizationId;
+    if (!orgId) throw new BadRequestException('Organization context required');
+    return this.credentialService.createCredential(apiId, orgId, dto);
+  }
+
+  @Get(':id/credentials')
+  @Roles('member', 'admin', 'owner')
+  async getCredentials(@Request() req, @Param('id') apiId: string) {
+    const orgId = req.user.currentOrganizationId;
+    if (!orgId) throw new BadRequestException('Organization context required');
+    return this.credentialService.getCredentials(apiId, orgId);
+  }
+
+  @Put(':id/credentials/:credentialId')
+  @Roles('admin', 'owner')
+  async updateCredential(
+    @Request() req,
+    @Param('credentialId') credentialId: string,
+    @Body() dto: UpdateCredentialDto,
+  ) {
+    const orgId = req.user.currentOrganizationId;
+    if (!orgId) throw new BadRequestException('Organization context required');
+    return this.credentialService.updateCredential(credentialId, orgId, dto);
+  }
+
+  @Delete(':id/credentials/:credentialId')
+  @Roles('admin', 'owner')
+  async deleteCredential(
+    @Request() req,
+    @Param('credentialId') credentialId: string,
+  ) {
+    const orgId = req.user.currentOrganizationId;
+    if (!orgId) throw new BadRequestException('Organization context required');
+    await this.credentialService.deleteCredential(credentialId, orgId);
+    return { success: true, message: 'Credential deleted' };
+  }
+
+  @Post(':id/credentials/:credentialId/test')
+  @Roles('admin', 'owner')
+  async testCredential(
+    @Request() req,
+    @Param('credentialId') credentialId: string,
+  ) {
+    const orgId = req.user.currentOrganizationId;
+    if (!orgId) throw new BadRequestException('Organization context required');
+    return this.credentialService.testCredential(credentialId, orgId);
   }
 }
