@@ -7,6 +7,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { Api, ApiType } from '../../entities/api.entity';
 import { Operation } from '../../entities/operation.entity';
 import { User } from '../../entities/user.entity';
+import { Credential } from '../../entities/credential.entity';
 import { CustomCodeExecutorService } from './custom-code-executor.service';
 import axios from 'axios';
 
@@ -75,6 +76,13 @@ describe('ToolExecutorService', () => {
           provide: getRepositoryToken(User),
           useValue: {
             findOne: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(Credential),
+          useValue: {
+            findOne: jest.fn(),
+            update: jest.fn(),
           },
         },
         {

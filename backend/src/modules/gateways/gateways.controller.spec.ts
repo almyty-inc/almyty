@@ -144,12 +144,20 @@ describe('GatewaysController', () => {
         status: 'draft' as any,
       } as any;
 
+      const mockApiKey = { id: 'key-1', key: 'gw_test_key' } as any;
+
       gatewaysService.createGateway.mockResolvedValue(mockGateway);
+      (gatewayAuthService as any).generateApiKey = jest.fn().mockResolvedValue(mockApiKey);
 
       const result = await controller.createGateway(createDto, mockRequest);
 
       expect(result.success).toBe(true);
-      expect(result.data).toBe(mockGateway);
+      expect(result.data).toEqual(expect.objectContaining({
+        id: 'gateway-1',
+        name: 'New Gateway',
+        organizationId: 'org-1',
+        initialApiKey: 'gw_test_key',
+      }));
     });
   });
 

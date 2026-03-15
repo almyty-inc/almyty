@@ -1,21 +1,5 @@
 import { Credential, CredentialType } from './credential.entity';
 
-// Mock crypto methods since createCipher/createDecipher are deprecated
-jest.mock('crypto', () => {
-  const actual = jest.requireActual('crypto');
-  return {
-    ...actual,
-    createCipher: jest.fn(() => ({
-      update: jest.fn((data: string) => Buffer.from(data).toString('hex')),
-      final: jest.fn(() => ''),
-    })),
-    createDecipher: jest.fn(() => ({
-      update: jest.fn((data: string) => Buffer.from(data, 'hex').toString('utf8')),
-      final: jest.fn(() => ''),
-    })),
-  };
-});
-
 describe('Credential Entity', () => {
   describe('isExpired', () => {
     it('should return true if expiresAt is in the past', () => {
@@ -274,76 +258,101 @@ describe('Credential Entity', () => {
     });
   });
 
-  describe('maskSensitiveFields', () => {
-    it('should mask password field', () => {
+  describe('encryptSensitiveData', () => {
+    it('should encrypt password field', () => {
       const credential = new Credential();
-      const config = { username: 'user', password: 'secret123' };
+      credential.config = { username: 'user', password: 'secret123' };
 
-      const masked = credential['maskSensitiveFields'](config);
+      credential.encryptSensitiveData();
 
-      expect(masked.username).toBe('user');
-      expect(masked.password).toMatch(/^encrypted:/);
-      expect(masked.password).not.toBe('secret123');
+      expect(credential.config.username).toBe('user');
+      expect(credential.config.password).toMatch(/^encrypted:/);
+      expect(credential.config.password).not.toBe('secret123');
     });
 
-    it('should mask secret field', () => {
+    it('should encrypt secret field', () => {
       const credential = new Credential();
-      const config = { appId: 'app123', secret: 'my-secret' };
+      credential.config = { appId: 'app123', secret: 'my-secret' };
 
-      const masked = credential['maskSensitiveFields'](config);
+      credential.encryptSensitiveData();
 
-      expect(masked.appId).toBe('app123');
-      expect(masked.secret).toMatch(/^encrypted:/);
+      expect(credential.config.appId).toBe('app123');
+      expect(credential.config.secret).toMatch(/^encrypted:/);
     });
 
-    it('should mask token field', () => {
+    it('should encrypt token field', () => {
       const credential = new Credential();
-      const config = { token: 'token-value' };
+      credential.config = { token: 'token-value' };
 
-      const masked = credential['maskSensitiveFields'](config);
+      credential.encryptSensitiveData();
 
-      expect(masked.token).toMatch(/^encrypted:/);
+      expect(credential.config.token).toMatch(/^encrypted:/);
     });
 
-    it('should mask key field', () => {
+    it('should encrypt key field', () => {
       const credential = new Credential();
-      const config = { key: 'api-key-value' };
+      credential.config = { key: 'api-key-value' };
 
-      const masked = credential['maskSensitiveFields'](config);
+      credential.encryptSensitiveData();
 
-      expect(masked.key).toMatch(/^encrypted:/);
+      expect(credential.config.key).toMatch(/^encrypted:/);
     });
 
-    it('should mask client_secret field', () => {
+    it('should encrypt client_secret field', () => {
       const credential = new Credential();
-      const config = { client_id: 'client123', client_secret: 'oauth-secret' };
+      credential.config = { client_id: 'client123', client_secret: 'oauth-secret' };
 
-      const masked = credential['maskSensitiveFields'](config);
+      credential.encryptSensitiveData();
 
-      expect(masked.client_id).toBe('client123');
-      expect(masked.client_secret).toMatch(/^encrypted:/);
+      expect(credential.config.client_id).toBe('client123');
+      expect(credential.config.client_secret).toMatch(/^encrypted:/);
     });
 
     it('should not modify non-sensitive fields', () => {
       const credential = new Credential();
-      const config = { username: 'user', email: 'user@test.com', timeout: 30 };
+      credential.config = { username: 'user', email: 'user@test.com', timeout: 30 };
 
-      const masked = credential['maskSensitiveFields'](config);
+      credential.encryptSensitiveData();
 
-      expect(masked.username).toBe('user');
-      expect(masked.email).toBe('user@test.com');
-      expect(masked.timeout).toBe(30);
+      expect(credential.config.username).toBe('user');
+      expect(credential.config.email).toBe('user@test.com');
+      expect(credential.config.timeout).toBe(30);
     });
 
-    it('should handle multiple sensitive fields', () => {
+    it('should encrypt multiple sensitive fields', () => {
       const credential = new Credential();
-      const config = { password: 'pass123', secret: 'secret456', token: 'token789' };
+      credential.config = { password: 'pass123', secret: 'secret456', token: 'token789' };
 
-      const masked = credential['maskSensitiveFields'](config);
+      credential.encryptSensitiveData();
 
-      expect(masked.password).toMatch(/^encrypted:/);
-      expect(masked.secret).toMatch(/^encrypted:/);
-      expect(masked.token).toMatch(/^encrypted:/);
+      expect(credential.config.password).toMatch(/^encrypted:/);
+      expect(credential.config.secret).toMatch(/^encrypted:/);
+      expect(credential.config.token).toMatch(/^encrypted:/);
+    });
+
+    it('should not re-encrypt already encrypted values', () => {
+      const credential = new Credential();
+      credential.config = { token: 'my-token' };
+
+      credential.encryptSensitiveData();
+      const firstEncrypted = credential.config.token;
+
+      credential.encryptSensitiveData();
+      expect(credential.config.token).toBe(firstEncrypted);
+    });
+
+    it('should handle null config', () => {
+      const credential = new Credential();
+      credential.config = null;
+
+      expect(() => credential.encryptSensitiveData()).not.toThrow();
+    });
+
+    it('should handle non-object config', () => {
+      const credential = new Credential();
+      credential.config = 'not-an-object' as any;
+
+      expect(() => credential.encryptSensitiveData()).not.toThrow();
     });
   });
 
@@ -377,17 +386,17 @@ describe('Credential Entity', () => {
       expect(decrypted).toBe('');
     });
 
-    it('should produce different encrypted values for same input on different calls', () => {
+    it('should produce different encrypted values for same input (random IV)', () => {
       const credential = new Credential();
       const value = 'test-value';
 
       const encrypted1 = credential['encryptValue'](value);
       const encrypted2 = credential['encryptValue'](value);
 
-      // Note: With the simple cipher used, this might be the same
-      // In production with proper encryption (IV), they would differ
+      // With proper IV-based encryption, these should differ
       expect(encrypted1).toMatch(/^encrypted:/);
       expect(encrypted2).toMatch(/^encrypted:/);
+      expect(encrypted1).not.toBe(encrypted2);
     });
   });
 
@@ -407,7 +416,7 @@ describe('Credential Entity', () => {
         endpoint: 'https://api.example.com',
       };
 
-      const decrypted = credential['getDecryptedConfig']();
+      const decrypted = credential.getDecryptedConfig();
 
       expect(decrypted.username).toBe('user');
       expect(decrypted.password).toBe(plainPassword);
@@ -423,7 +432,7 @@ describe('Credential Entity', () => {
         retries: 3,
       };
 
-      const decrypted = credential['getDecryptedConfig']();
+      const decrypted = credential.getDecryptedConfig();
 
       expect(decrypted).toEqual({
         username: 'user',
@@ -436,7 +445,7 @@ describe('Credential Entity', () => {
       const credential = new Credential();
       credential.config = {};
 
-      const decrypted = credential['getDecryptedConfig']();
+      const decrypted = credential.getDecryptedConfig();
 
       expect(decrypted).toEqual({});
     });
@@ -451,39 +460,13 @@ describe('Credential Entity', () => {
         timeout: 30,
       };
 
-      const decrypted = credential['getDecryptedConfig']();
+      const decrypted = credential.getDecryptedConfig();
 
       expect(decrypted.oauth).toEqual({
         client_id: 'id123',
         scope: 'read write',
       });
       expect(decrypted.timeout).toBe(30);
-    });
-  });
-
-  describe('encryptSensitiveData hook', () => {
-    it('should mask sensitive data when config is set', () => {
-      const credential = new Credential();
-      credential.config = { password: 'secret', username: 'user' };
-
-      credential.encryptSensitiveData();
-
-      expect(credential.config.password).toMatch(/^encrypted:/);
-      expect(credential.config.username).toBe('user');
-    });
-
-    it('should handle null config', () => {
-      const credential = new Credential();
-      credential.config = null;
-
-      expect(() => credential.encryptSensitiveData()).not.toThrow();
-    });
-
-    it('should handle non-object config', () => {
-      const credential = new Credential();
-      credential.config = 'not-an-object' as any;
-
-      expect(() => credential.encryptSensitiveData()).not.toThrow();
     });
   });
 });

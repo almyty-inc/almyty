@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import { User } from './user.entity';
 import { Organization } from './organization.entity';
+import { Gateway } from './gateway.entity';
 import * as crypto from 'crypto';
 
 @Entity('api_keys')
@@ -33,6 +34,9 @@ export class ApiKey {
 
   @Column({ nullable: true })
   organizationId: string;
+
+  @Column({ nullable: true })
+  gatewayId: string;
 
   @Column({ default: true })
   isActive: boolean;
@@ -73,6 +77,13 @@ export class ApiKey {
   })
   @JoinColumn({ name: 'organizationId' })
   organization: Organization;
+
+  @ManyToOne(() => Gateway, {
+    onDelete: 'CASCADE',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'gatewayId' })
+  gateway: Gateway;
 
   @BeforeInsert()
   generateKeyHash() {

@@ -225,34 +225,50 @@ export class GatewayAuthService {
       });
 
       if (authConfigs.length === 0) {
-        // No auth required
-        return { isValid: true };
+        // No auth configs = deny by default. Gateways must have explicit auth configured.
+        return {
+          isValid: false,
+          error: 'Gateway has no authentication configured. Contact the gateway owner.',
+          errorCode: 'NO_AUTH_CONFIGURED',
+        };
       }
 
-      // Try each auth method until one succeeds or all fail
+      // Separate required and optional auth configs
+      const requiredConfigs = authConfigs.filter(c => c.isRequired);
+      const optionalConfigs = authConfigs.filter(c => !c.isRequired);
+
+      // If all configs are optional (type=none or isRequired=false), check if any is type NONE
+      if (requiredConfigs.length === 0) {
+        const hasNoneType = authConfigs.some(c => c.type === GatewayAuthType.NONE);
+        if (hasNoneType) {
+          return { isValid: true };
+        }
+        // No required configs but none are type NONE — deny
+        return {
+          isValid: false,
+          error: 'Gateway authentication is not properly configured',
+          errorCode: 'AUTH_MISCONFIGURED',
+        };
+      }
+
+      // Try each required auth method — any one succeeding is enough
       let lastError = 'No valid authentication provided';
       let lastErrorCode = 'NO_AUTH';
 
-      for (const authConfig of authConfigs) {
-        if (!authConfig.isRequired) {
-          continue;
-        }
-
+      for (const authConfig of requiredConfigs) {
         const result = await this.validateAuthConfig(authConfig, headers, query, body, clientIp);
-        
+
         if (result.isValid) {
-          // Authentication successful
           return result;
         }
 
-        // Store last error for reporting
         if (result.error) {
           lastError = result.error;
           lastErrorCode = result.errorCode || 'AUTH_FAILED';
         }
       }
 
-      // All auth methods failed
+      // All required auth methods failed
       return {
         isValid: false,
         error: lastError,
@@ -363,8 +379,12 @@ export class GatewayAuthService {
 
     // Hash the provided API key and look it up in database
     const keyHash = this.hashKey(apiKey);
+    // Scope lookup: key must match gateway OR be an org-wide key (no gatewayId)
     const apiKeyRecord = await this.apiKeyRepository.findOne({
-      where: { keyHash, isActive: true },
+      where: [
+        { keyHash, isActive: true, gatewayId: authConfig.gatewayId },
+        { keyHash, isActive: true, gatewayId: null as any },
+      ],
       relations: ['user', 'user.organizationMemberships'],
     });
 
@@ -705,12 +725,13 @@ export class GatewayAuthService {
     organizationId: string,
     userId: string,
     scopes: string[] = [],
-    expiresAt?: Date
+    expiresAt?: Date,
+    gatewayId?: string,
   ): Promise<ApiKey> {
     const key = this.generateSecureKey();
     const keyHash = this.hashKey(key);
     const keyPrefix = key.substring(0, 8);
-    
+
     const apiKey = this.apiKeyRepository.create({
       name,
       keyHash,
@@ -719,6 +740,7 @@ export class GatewayAuthService {
       userId,
       scopes,
       expiresAt,
+      gatewayId: gatewayId || null,
       isActive: true,
     });
 
@@ -727,6 +749,27 @@ export class GatewayAuthService {
     // Return the key only once for the user to save (add as non-entity property)
     (savedApiKey as any).key = key;
     return savedApiKey;
+  }
+
+  async listGatewayApiKeys(gatewayId: string, organizationId: string): Promise<ApiKey[]> {
+    return this.apiKeyRepository.find({
+      where: { gatewayId, organizationId, isActive: true },
+      select: ['id', 'name', 'keyPrefix', 'scopes', 'isActive', 'expiresAt', 'lastUsedAt', 'createdAt', 'gatewayId'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async revokeGatewayApiKey(keyId: string, gatewayId: string, organizationId: string): Promise<void> {
+    const apiKey = await this.apiKeyRepository.findOne({
+      where: { id: keyId, gatewayId, organizationId },
+    });
+
+    if (!apiKey) {
+      throw new NotFoundException('API key not found');
+    }
+
+    apiKey.isActive = false;
+    await this.apiKeyRepository.save(apiKey);
   }
 
   private hashKey(key: string): string {
