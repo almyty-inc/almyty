@@ -711,6 +711,7 @@ describe('GatewayAuthService - Real Business Logic', () => {
         userId: 'user-1',
         scopes: ['read'],
         expiresAt: expect.any(Date),
+        gatewayId: null,
         isActive: true,
       });
     });

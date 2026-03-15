@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bull';
 import { ApisController } from './apis.controller';
 import { ApisService } from './apis.service';
+import { CredentialService } from './credential.service';
 import { SchemaParserService } from '../schema-parser/schema-parser.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -34,6 +35,16 @@ describe('ApisController', () => {
         {
           provide: ApisService,
           useValue: mockApisService,
+        },
+        {
+          provide: CredentialService,
+          useValue: {
+            createCredential: jest.fn(),
+            getCredentials: jest.fn(),
+            updateCredential: jest.fn(),
+            deleteCredential: jest.fn(),
+            testCredential: jest.fn(),
+          },
         },
         {
           provide: SchemaParserService,

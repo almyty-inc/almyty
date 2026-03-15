@@ -187,6 +187,17 @@ export const gatewaysApi = {
 
   getMetrics: (id: string, params?: any) => api.get(`/gateways/${id}/stats`, { params }),
 
+  // Auth configuration
+  getAuthConfigs: (gatewayId: string) => api.get(`/gateways/${gatewayId}/auth`),
+  createAuthConfig: (gatewayId: string, data: any) => api.post(`/gateways/${gatewayId}/auth`, data),
+  deleteAuthConfig: (gatewayId: string, authId: string) => api.delete(`/gateways/${gatewayId}/auth/${authId}`),
+
+  // API key management
+  generateApiKey: (gatewayId: string, data: { name: string; scopes?: string[]; expiresAt?: string }) =>
+    api.post(`/gateways/${gatewayId}/auth/api-keys`, data),
+  listApiKeys: (gatewayId: string) => api.get(`/gateways/${gatewayId}/auth/api-keys`),
+  revokeApiKey: (gatewayId: string, keyId: string) => api.delete(`/gateways/${gatewayId}/auth/api-keys/${keyId}`),
+
   // Export formats
   getSkills: (id: string) => api.get(`/gateways/${id}/skills`),
   getCliBundle: (id: string, format: 'bash' | 'node' = 'bash') => api.get(`/gateways/${id}/cli-bundle`, { params: { format } }),
@@ -255,6 +266,13 @@ export const apisApi = {
   getSchemas: (id: string) => api.get(`/apis/${id}/schemas`),
   
   updateStatus: (id: string, status: string) => api.put(`/apis/${id}/status`, { status }),
+
+  // Credential management
+  getCredentials: (apiId: string) => api.get(`/apis/${apiId}/credentials`),
+  createCredential: (apiId: string, data: any) => api.post(`/apis/${apiId}/credentials`, data),
+  updateCredential: (apiId: string, credentialId: string, data: any) => api.put(`/apis/${apiId}/credentials/${credentialId}`, data),
+  deleteCredential: (apiId: string, credentialId: string) => api.delete(`/apis/${apiId}/credentials/${credentialId}`),
+  testCredential: (apiId: string, credentialId: string) => api.post(`/apis/${apiId}/credentials/${credentialId}/test`),
 }
 
 // Tools API

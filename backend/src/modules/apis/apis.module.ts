@@ -5,6 +5,7 @@ import { BullModule } from '@nestjs/bull';
 
 import { ApisController } from './apis.controller';
 import { ApisService } from './apis.service';
+import { CredentialService } from './credential.service';
 
 // Entities
 import { Api } from '../../entities/api.entity';
@@ -12,6 +13,7 @@ import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
 import { Resource } from '../../entities/resource.entity';
 import { Organization } from '../../entities/organization.entity';
+import { Credential } from '../../entities/credential.entity';
 
 // Modules
 import { SchemaParserModule } from '../schema-parser/schema-parser.module';
@@ -25,6 +27,7 @@ import { ToolsModule } from '../tools/tools.module';
       Operation,
       Resource,
       Organization,
+      Credential,
     ]),
     BullModule.registerQueue({
       name: 'schema-import',
@@ -58,7 +61,7 @@ import { ToolsModule } from '../tools/tools.module';
     ToolsModule,
   ],
   controllers: [ApisController],
-  providers: [ApisService],
-  exports: [ApisService],
+  providers: [ApisService, CredentialService],
+  exports: [ApisService, CredentialService],
 })
 export class ApisModule {}

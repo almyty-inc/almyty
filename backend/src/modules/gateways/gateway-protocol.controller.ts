@@ -228,14 +228,35 @@ export class GatewayProtocolController {
   @ApiResponse({ status: 200, description: 'Gateway information retrieved' })
   async getGatewayInfo(
     @Param('endpoint') endpoint: string,
+    @Req() req: Request,
     @Res() res: Response,
+    @Headers() headers: Record<string, string>,
+    @Query() query: Record<string, string>,
   ) {
     try {
       const gateway = await this.findGatewayByEndpoint(`/${endpoint}`);
-      
+
       if (!gateway) {
         return res.status(404).json({
           error: 'Gateway not found',
+        });
+      }
+
+      // Authenticate info requests — exposes gateway configuration
+      const authResult = await this.gatewayAuthService.authenticateRequest(
+        gateway.id,
+        headers,
+        query,
+        undefined,
+        this.getClientIp(req),
+      );
+
+      if (!authResult.isValid) {
+        return res.status(401).json({
+          error: {
+            code: authResult.errorCode || 'UNAUTHORIZED',
+            message: authResult.error || 'Authentication required',
+          },
         });
       }
 
@@ -275,13 +296,34 @@ export class GatewayProtocolController {
     @Param('endpoint') endpoint: string,
     @Req() req: Request,
     @Res() res: Response,
+    @Headers() headers: Record<string, string>,
+    @Query() query: Record<string, string>,
+    @Body() body: any,
   ) {
     try {
       const gateway = await this.findGatewayByEndpoint(`/${endpoint}`);
-      
+
       if (!gateway) {
         return res.status(404).json({
           error: 'Gateway not found',
+        });
+      }
+
+      // Authenticate SSE connections
+      const authResult = await this.gatewayAuthService.authenticateRequest(
+        gateway.id,
+        headers,
+        query,
+        body,
+        this.getClientIp(req),
+      );
+
+      if (!authResult.isValid) {
+        return res.status(401).json({
+          error: {
+            code: authResult.errorCode || 'UNAUTHORIZED',
+            message: authResult.error || 'Authentication required',
+          },
         });
       }
 
@@ -340,10 +382,10 @@ export class GatewayProtocolController {
     try {
       // Remove query parameters and fragments
       const cleanEndpoint = endpoint.split('?')[0].split('#')[0];
-      
+
       return await this.gatewaysService['gatewayRepository'].findOne({
-        where: { endpoint: cleanEndpoint },
-        relations: ['tools', 'tools.tool', 'authConfigs'],
+        where: { endpoint: cleanEndpoint, status: 'active' as any },
+        relations: ['tools', 'tools.tool', 'authConfigs', 'organization'],
       });
     } catch (error) {
       this.logger.error(`Error finding gateway by endpoint: ${error.message}`);

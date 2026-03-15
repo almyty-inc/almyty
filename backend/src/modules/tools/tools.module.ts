@@ -13,6 +13,7 @@ import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
+import { Credential } from '../../entities/credential.entity';
 
 import { ToolsService } from './tools.service';
 import { ToolGeneratorService } from './tool-generator.service';
@@ -40,6 +41,7 @@ import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schem
       GatewayTool,
       User,
       Organization,
+      Credential,
     ]),
     JsonSchemaTranslatorModule,
   ],

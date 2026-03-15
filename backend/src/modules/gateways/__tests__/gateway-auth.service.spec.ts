@@ -264,7 +264,8 @@ describe('GatewayAuthService', () => {
 
       const result = await service.authenticateRequest('gateway-1', {}, {});
 
-      expect(result.isValid).toBe(true);
+      expect(result.isValid).toBe(false);
+      expect(result.errorCode).toBe('NO_AUTH_CONFIGURED');
     });
 
     it('should skip non-required auth configs', async () => {
