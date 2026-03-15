@@ -209,6 +209,11 @@ class ChatRequestBodyDto {
   }>;
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  toolIds?: string[];
+
+  @IsOptional()
   @IsBoolean()
   stream?: boolean;
 

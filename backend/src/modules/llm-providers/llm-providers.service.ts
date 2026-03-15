@@ -49,6 +49,7 @@ export interface ChatRequest {
     description: string;
     parameters: Record<string, any>;
   }>;
+  toolIds?: string[];
   stream?: boolean;
   sessionId?: string;
   gatewayId?: string;
@@ -353,14 +354,22 @@ export class LlmProvidersService {
             frequencyPenalty: request.frequencyPenalty ?? provider.configuration.frequencyPenalty,
             presencePenalty: request.presencePenalty ?? provider.configuration.presencePenalty,
             stopSequences: request.stopSequences,
-            toolsEnabled: request.tools && request.tools.length > 0,
+            toolsEnabled: (request.tools && request.tools.length > 0) || (request.toolIds && request.toolIds.length > 0),
           },
         });
         session = await this.llmSessionRepository.save(session);
       }
 
-      // Prepare tools if provided
-      const tools = await this.prepareTools(request.tools || [], organizationId);
+      // Resolve toolIds to tool entities directly if provided
+      let tools: Tool[] = [];
+      if (request.toolIds && request.toolIds.length > 0) {
+        tools = await this.toolRepository.find({
+          where: request.toolIds.map(id => ({ id, organizationId })),
+        });
+      } else {
+        // Prepare tools from inline tool definitions
+        tools = await this.prepareTools(request.tools || [], organizationId);
+      }
 
       // Make API call to LLM provider
       const response = await this.callLlmProvider(provider, request, session, tools);
