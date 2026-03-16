@@ -15,6 +15,8 @@ describe('GatewaysController', () => {
   let gatewaysService: jest.Mocked<GatewaysService>;
   let gatewayAuthService: jest.Mocked<GatewayAuthService>;
   let gatewayToolService: jest.Mocked<GatewayToolService>;
+  let skillGeneratorService: jest.Mocked<SkillGeneratorService>;
+  let toolExecutorService: jest.Mocked<ToolExecutorService>;
 
   beforeEach(async () => {
     const mockGatewaysService = {
@@ -27,6 +29,8 @@ describe('GatewaysController', () => {
       activateGateway: jest.fn(),
       deactivateGateway: jest.fn(),
       getGatewayStats: jest.fn(),
+      searchSkillsAcrossGateways: jest.fn(),
+      getAllUserGateways: jest.fn(),
     };
 
     const mockGatewayAuthService = {
@@ -63,7 +67,7 @@ describe('GatewaysController', () => {
         },
         {
           provide: SkillGeneratorService,
-          useValue: { generateGatewaySkills: jest.fn() },
+          useValue: { generateGatewaySkills: jest.fn(), generateIndividualSkills: jest.fn() },
         },
         {
           provide: CliGeneratorService,
@@ -89,6 +93,8 @@ describe('GatewaysController', () => {
     gatewaysService = module.get(GatewaysService);
     gatewayAuthService = module.get(GatewayAuthService);
     gatewayToolService = module.get(GatewayToolService);
+    skillGeneratorService = module.get(SkillGeneratorService);
+    toolExecutorService = module.get(ToolExecutorService);
   });
 
   describe('getGateways', () => {
@@ -449,6 +455,252 @@ describe('GatewaysController', () => {
     });
   });
 
+  describe('searchSkills', () => {
+    it('should search skills across all gateways', async () => {
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
+      const mockResults = [
+        { toolId: 'tool-1', toolName: 'List Users', toolDescription: 'Lists users', gatewayId: 'gw-1', gatewayName: 'User API', orgSlug: 'test-org', gatewaySlug: 'user-api', skillRef: 'test-org/user-api/list-users' },
+        { toolId: 'tool-2', toolName: 'Get User', toolDescription: 'Gets a user', gatewayId: 'gw-1', gatewayName: 'User API', orgSlug: 'test-org', gatewaySlug: 'user-api', skillRef: 'test-org/user-api/get-user' },
+      ];
+
+      gatewaysService.searchSkillsAcrossGateways.mockResolvedValue(mockResults);
+
+      const result = await controller.searchSkills('user', mockRequest);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBe(mockResults);
+      expect(result.message).toBe('Found 2 skill(s) matching "user"');
+      expect(gatewaysService.searchSkillsAcrossGateways).toHaveBeenCalledWith('org-1', 'user');
+    });
+
+    it('should handle empty query', async () => {
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
+
+      gatewaysService.searchSkillsAcrossGateways.mockResolvedValue([]);
+
+      const result = await controller.searchSkills('', mockRequest);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual([]);
+      expect(gatewaysService.searchSkillsAcrossGateways).toHaveBeenCalledWith('org-1', '');
+    });
+
+    it('should throw when no organization found', async () => {
+      const mockRequest = { user: { organizations: [] } };
+
+      await expect(controller.searchSkills('test', mockRequest)).rejects.toThrow();
+    });
+  });
+
+  describe('getAllSkills', () => {
+    it('should return skills from all user gateways', async () => {
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
+      const mockGateways = [
+        {
+          id: 'gw-1',
+          name: 'User API',
+          endpoint: '/user-api',
+          organization: { slug: 'test-org', name: 'Test Org' },
+        },
+        {
+          id: 'gw-2',
+          name: 'Payment API',
+          endpoint: '/payment-api',
+          organization: { slug: 'test-org', name: 'Test Org' },
+        },
+      ];
+      const mockSkills1 = [{ name: 'list-users', content: '# list-users' }];
+      const mockSkills2 = [{ name: 'create-payment', content: '# create-payment' }];
+
+      gatewaysService.getAllUserGateways.mockResolvedValue(mockGateways as any);
+      skillGeneratorService.generateIndividualSkills
+        .mockResolvedValueOnce(mockSkills1 as any)
+        .mockResolvedValueOnce(mockSkills2 as any);
+
+      const result = await controller.getAllSkills(mockRequest);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0]).toEqual({
+        gatewayId: 'gw-1',
+        gatewayName: 'User API',
+        orgSlug: 'test-org',
+        gatewaySlug: 'user-api',
+        skills: mockSkills1,
+      });
+      expect(result.data[1]).toEqual({
+        gatewayId: 'gw-2',
+        gatewayName: 'Payment API',
+        orgSlug: 'test-org',
+        gatewaySlug: 'payment-api',
+        skills: mockSkills2,
+      });
+      expect(result.message).toBe('Retrieved skills from 2 gateway(s)');
+      expect(gatewaysService.getAllUserGateways).toHaveBeenCalledWith('org-1');
+      expect(skillGeneratorService.generateIndividualSkills).toHaveBeenCalledWith('gw-1', { orgSlug: 'test-org', gatewaySlug: 'user-api' });
+      expect(skillGeneratorService.generateIndividualSkills).toHaveBeenCalledWith('gw-2', { orgSlug: 'test-org', gatewaySlug: 'payment-api' });
+    });
+
+    it('should handle gateways with no organization slug (fallback to name)', async () => {
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
+      const mockGateways = [
+        {
+          id: 'gw-1',
+          name: 'My Gateway',
+          endpoint: '/my-gw',
+          organization: { name: 'My Org Name' },
+        },
+      ];
+
+      gatewaysService.getAllUserGateways.mockResolvedValue(mockGateways as any);
+      skillGeneratorService.generateIndividualSkills.mockResolvedValue([]);
+
+      const result = await controller.getAllSkills(mockRequest);
+
+      expect(result.success).toBe(true);
+      expect(result.data[0].orgSlug).toBe('my-org-name');
+    });
+
+    it('should return empty array when no gateways exist', async () => {
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
+
+      gatewaysService.getAllUserGateways.mockResolvedValue([]);
+
+      const result = await controller.getAllSkills(mockRequest);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual([]);
+      expect(result.message).toBe('Retrieved skills from 0 gateway(s)');
+    });
+
+    it('should throw when no organization found', async () => {
+      const mockRequest = { user: { organizations: [] } };
+
+      await expect(controller.getAllSkills(mockRequest)).rejects.toThrow();
+    });
+  });
+
+  describe('executeSkill', () => {
+    it('should execute a skill successfully', async () => {
+      const mockRequest = { user: { id: 'user-1', sub: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockGateway = {
+        id: 'gw-1',
+        tools: [{ toolId: 'tool-1', isActive: true }],
+      };
+      const mockExecutionResult = {
+        success: true,
+        output: { data: 'result' },
+        executionTime: 150,
+      };
+
+      gatewaysService.getGateway.mockResolvedValue(mockGateway as any);
+      toolExecutorService.executeTool.mockResolvedValue(mockExecutionResult as any);
+
+      const result = await controller.executeSkill(
+        'gw-1',
+        'tool-1',
+        { parameters: { key: 'value' } },
+        mockRequest,
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBe(mockExecutionResult);
+      expect(result.message).toBe('Skill executed successfully');
+      expect(gatewaysService.getGateway).toHaveBeenCalledWith('gw-1', 'org-1', true);
+      expect(toolExecutorService.executeTool).toHaveBeenCalledWith(
+        'tool-1',
+        { key: 'value' },
+        { userId: 'user-1', organizationId: 'org-1' },
+      );
+    });
+
+    it('should return failure message when execution fails', async () => {
+      const mockRequest = { user: { id: 'user-1', sub: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockGateway = {
+        id: 'gw-1',
+        tools: [{ toolId: 'tool-1', isActive: true }],
+      };
+      const mockExecutionResult = {
+        success: false,
+        error: 'Execution timed out',
+      };
+
+      gatewaysService.getGateway.mockResolvedValue(mockGateway as any);
+      toolExecutorService.executeTool.mockResolvedValue(mockExecutionResult as any);
+
+      const result = await controller.executeSkill(
+        'gw-1',
+        'tool-1',
+        { parameters: {} },
+        mockRequest,
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('Skill execution failed');
+    });
+
+    it('should throw when tool is not found in gateway', async () => {
+      const mockRequest = { user: { id: 'user-1', sub: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockGateway = {
+        id: 'gw-1',
+        tools: [{ toolId: 'tool-other', isActive: true }],
+      };
+
+      gatewaysService.getGateway.mockResolvedValue(mockGateway as any);
+
+      await expect(
+        controller.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
+      ).rejects.toThrow();
+    });
+
+    it('should throw when tool is inactive in gateway', async () => {
+      const mockRequest = { user: { id: 'user-1', sub: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockGateway = {
+        id: 'gw-1',
+        tools: [{ toolId: 'tool-1', isActive: false }],
+      };
+
+      gatewaysService.getGateway.mockResolvedValue(mockGateway as any);
+
+      await expect(
+        controller.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
+      ).rejects.toThrow();
+    });
+
+    it('should throw when no organization found', async () => {
+      const mockRequest = { user: { id: 'user-1', organizations: [] } };
+
+      await expect(
+        controller.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
+      ).rejects.toThrow();
+    });
+
+    it('should default to empty parameters when body.parameters is undefined', async () => {
+      const mockRequest = { user: { id: 'user-1', sub: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockGateway = {
+        id: 'gw-1',
+        tools: [{ toolId: 'tool-1', isActive: true }],
+      };
+      const mockExecutionResult = { success: true, output: {} };
+
+      gatewaysService.getGateway.mockResolvedValue(mockGateway as any);
+      toolExecutorService.executeTool.mockResolvedValue(mockExecutionResult as any);
+
+      await controller.executeSkill(
+        'gw-1',
+        'tool-1',
+        { parameters: undefined } as any,
+        mockRequest,
+      );
+
+      expect(toolExecutorService.executeTool).toHaveBeenCalledWith(
+        'tool-1',
+        {},
+        { userId: 'user-1', organizationId: 'org-1' },
+      );
+    });
+  });
+
   // Error handling tests for all branches
   describe('createGateway - error handling', () => {
     it('should handle creation error', async () => {
@@ -631,6 +883,45 @@ describe('GatewaysController', () => {
 
       await expect(controller.getOrganizationStats(mockRequest))
         .rejects.toThrow();
+    });
+  });
+
+  describe('searchSkills - error handling', () => {
+    it('should handle search error', async () => {
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
+
+      gatewaysService.searchSkillsAcrossGateways.mockRejectedValue(new Error('Search failed'));
+
+      await expect(controller.searchSkills('test', mockRequest))
+        .rejects.toThrow();
+    });
+  });
+
+  describe('getAllSkills - error handling', () => {
+    it('should handle retrieval error', async () => {
+      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
+
+      gatewaysService.getAllUserGateways.mockRejectedValue(new Error('Retrieval failed'));
+
+      await expect(controller.getAllSkills(mockRequest))
+        .rejects.toThrow();
+    });
+  });
+
+  describe('executeSkill - error handling', () => {
+    it('should handle execution error', async () => {
+      const mockRequest = { user: { id: 'user-1', sub: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockGateway = {
+        id: 'gw-1',
+        tools: [{ toolId: 'tool-1', isActive: true }],
+      };
+
+      gatewaysService.getGateway.mockResolvedValue(mockGateway as any);
+      toolExecutorService.executeTool.mockRejectedValue(new Error('Execution failed'));
+
+      await expect(
+        controller.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
+      ).rejects.toThrow();
     });
   });
 
