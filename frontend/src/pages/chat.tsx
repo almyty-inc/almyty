@@ -77,25 +77,29 @@ export function ChatPage() {
   const [activeSidebarSession, setActiveSidebarSession] = useState<string | null>(null)
 
   // Fetch providers
-  const { data: providers = [], isLoading: loadingProviders } = useQuery({
+  const { data: providersRaw, isLoading: loadingProviders } = useQuery({
     queryKey: ['llm-providers'],
     queryFn: async () => {
       const response = await llmProvidersApi.getAll()
-      const result = response.data?.data?.providers || response.data?.providers || []
+      const d = response.data?.data || response.data
+      const result = d?.providers || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
   })
+  const providers = Array.isArray(providersRaw) ? providersRaw : []
 
   // Fetch tools
-  const { data: tools = [], isLoading: loadingTools } = useQuery({
+  const { data: toolsRaw, isLoading: loadingTools } = useQuery({
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
       const response = await toolsApi.getAll(currentOrganization?.id)
-      const result = response.data?.data?.tools || response.data?.tools || response.data?.data || []
+      const d = response.data?.data || response.data
+      const result = d?.tools || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
     enabled: !!currentOrganization,
   })
+  const tools = Array.isArray(toolsRaw) ? toolsRaw : []
 
   // Auto-select first active provider
   useEffect(() => {

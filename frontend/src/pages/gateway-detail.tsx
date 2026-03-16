@@ -135,7 +135,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
     } catch {}
   }
 
-  const backendUrl = window.location.origin.replace(':3002', ':4000').replace(':8080', ':3000')
+  const backendUrl = window.location.origin.replace(':3002', ':4000').replace(':8080', ':3000').replace('app.', 'api.')
   const gatewayType = (gateway.type || 'mcp').toLowerCase()
   const skillsContent = skillsData?.data?.data || skillsData?.data || ''
 
@@ -225,9 +225,9 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
 
   // MCP gateway
   if (gatewayType === 'mcp') {
-    const mcpEndpoint = `${backendUrl}/api/mcp/${orgSlug}${gateway.endpoint}`
-    const sseEndpoint = `${backendUrl}/api/mcp/sse`
-    const discoveryUrl = `${backendUrl}/api/mcp/.well-known/mcp`
+    const mcpEndpoint = `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`
+    const sseEndpoint = `${backendUrl}/mcp/sse`
+    const discoveryUrl = `${backendUrl}/mcp/.well-known/mcp`
 
     return (
       <div className="space-y-6">
@@ -270,7 +270,9 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
               </div>
             </div>
             <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
-              <strong>Auth:</strong> Include <code className="font-mono">Authorization: Bearer &lt;jwt&gt;</code> header.
+              <strong>Auth:</strong> {gateway.authConfigs?.length > 0
+                ? <>Include <code className="font-mono">x-api-key: &lt;your-key&gt;</code> header. Generate keys in the Authentication section above.</>
+                : <>Include <code className="font-mono">Authorization: Bearer &lt;jwt&gt;</code> header.</>}
             </div>
           </CardContent>
         </Card>
@@ -280,7 +282,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
 
   // A2A gateway
   if (gatewayType === 'a2a') {
-    const a2aBase = `${backendUrl}/api/a2a`
+    const a2aBase = `${backendUrl}/a2a`
     const discoveryUrl = `${backendUrl}/a2a/.well-known/a2a`
 
     return (
@@ -334,7 +336,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
 
   // UTCP gateway
   if (gatewayType === 'utcp') {
-    const discoveryUrl = `${backendUrl}/api/utcp/.well-known/utcp`
+    const discoveryUrl = `${backendUrl}/utcp/.well-known/utcp`
     const orgId = gateway.organizationId || orgSlug
 
     return (
@@ -362,7 +364,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
               <p className="text-xs text-muted-foreground mb-1">POST to execute a tool via UTCP</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{backendUrl}/api/utcp/{orgId}/execute</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${backendUrl}/api/utcp/${orgId}/execute`, 'utcp-execute')}>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${backendUrl}/utcp/${orgId}/execute`, 'utcp-execute')}>
                   {copiedField === 'utcp-execute' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -372,7 +374,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
               <p className="text-xs text-muted-foreground mb-1">GET to retrieve the UTCP manual</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{backendUrl}/api/utcp/{orgId}/manual</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${backendUrl}/api/utcp/${orgId}/manual`, 'utcp-manual')}>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${backendUrl}/utcp/${orgId}/manual`, 'utcp-manual')}>
                   {copiedField === 'utcp-manual' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -432,7 +434,8 @@ function GatewayAuthSection({ gatewayId, gatewayName }: { gatewayId: string; gat
     },
   })
 
-  const keys = keysData?.data?.data || []
+  const keysExtracted = keysData?.data?.data?.keys || keysData?.data?.data || []
+  const keys = Array.isArray(keysExtracted) ? keysExtracted : []
 
   return (
     <Card>
