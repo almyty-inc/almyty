@@ -89,7 +89,7 @@ export class SkillGeneratorService {
    * Per Agent Skills spec: frontmatter `name` must match parent directory name.
    * Directory = `apifai-{slug}`, so name = `apifai-{slug}`.
    */
-  async generateIndividualSkills(gatewayId: string): Promise<IndividualSkill[]> {
+  async generateIndividualSkills(gatewayId: string, context?: { orgSlug?: string; gatewaySlug?: string }): Promise<IndividualSkill[]> {
     const gateway = await this.gatewayRepository.findOne({
       where: { id: gatewayId },
     });
@@ -107,7 +107,7 @@ export class SkillGeneratorService {
         name: slug,
         fileName,
         // Use fileName as skillName so frontmatter name matches directory
-        content: this.renderToolSkillMd(tool, fileName),
+        content: this.renderToolSkillMd(tool, fileName, context),
       };
     });
   }
@@ -130,7 +130,7 @@ export class SkillGeneratorService {
    *   When provided (e.g. `apifai-find-pet-by-id`), ensures name matches
    *   the parent directory per the Agent Skills spec.
    */
-  private renderToolSkillMd(tool: Tool, skillName?: string): string {
+  private renderToolSkillMd(tool: Tool, skillName?: string, context?: { orgSlug?: string; gatewaySlug?: string }): string {
     const params = tool.parameters as any;
     const properties = params?.properties || {};
     const required = params?.required || [];
@@ -207,6 +207,18 @@ export class SkillGeneratorService {
       lines.push(this.generateJsonExample(tool, properties, required));
     }
     lines.push('');
+
+    // Invocation section (only if context with slugs is provided)
+    if (context?.orgSlug && context?.gatewaySlug) {
+      const skillSlug = this.slugify(tool.name);
+      lines.push('## Invocation');
+      lines.push('');
+      lines.push('Run this tool directly:');
+      lines.push('```bash');
+      lines.push(`npx @apifai/skills run @${context.orgSlug}/${context.gatewaySlug}/${skillSlug} --param1 value1`);
+      lines.push('```');
+      lines.push('');
+    }
 
     // Error handling (for API tools)
     if (isApiTool) {

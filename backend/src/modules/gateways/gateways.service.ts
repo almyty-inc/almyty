@@ -251,6 +251,42 @@ export class GatewaysService {
     }
   }
 
+  /**
+   * Resolve a gateway by @orgSlug/gateway-name-slug.
+   * Used by the CLI to avoid exposing UUIDs.
+   */
+  async resolveGateway(orgSlug: string, gatewayNameSlug: string): Promise<Gateway> {
+    const organization = await this.organizationRepository.findOne({
+      where: { slug: orgSlug },
+    });
+    if (!organization) {
+      throw new NotFoundException(`Organization not found: ${orgSlug}`);
+    }
+
+    // Try matching by endpoint (which is already a slug like /httpbin-skills-gateway)
+    let gateway = await this.gatewayRepository.findOne({
+      where: { organizationId: organization.id, endpoint: `/${gatewayNameSlug}` },
+      relations: ['tools', 'tools.tool', 'authConfigs'],
+    });
+
+    // Fallback: match by slugified name
+    if (!gateway) {
+      const gateways = await this.gatewayRepository.find({
+        where: { organizationId: organization.id },
+        relations: ['tools', 'tools.tool', 'authConfigs'],
+      });
+      gateway = gateways.find(g =>
+        g.name.toLowerCase().replace(/\s+/g, '-') === gatewayNameSlug
+      ) || null;
+    }
+
+    if (!gateway) {
+      throw new NotFoundException(`Gateway not found: @${orgSlug}/${gatewayNameSlug}`);
+    }
+
+    return gateway;
+  }
+
   async getGateway(
     gatewayId: string,
     organizationId: string,
@@ -576,6 +612,79 @@ export class GatewaysService {
         error: error.message,
       };
     }
+  }
+
+  async searchSkillsAcrossGateways(organizationId: string, query: string): Promise<Array<{
+    toolId: string;
+    toolName: string;
+    toolDescription: string;
+    gatewayId: string;
+    gatewayName: string;
+    orgSlug: string;
+    gatewaySlug: string;
+    skillRef: string;
+  }>> {
+    const organization = await this.organizationRepository.findOne({
+      where: { id: organizationId },
+    });
+
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const orgSlug = organization.slug || organization.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    const gateways = await this.gatewayRepository.find({
+      where: { organizationId, status: GatewayStatus.ACTIVE },
+      relations: ['tools', 'tools.tool'],
+    });
+
+    const results: Array<{
+      toolId: string;
+      toolName: string;
+      toolDescription: string;
+      gatewayId: string;
+      gatewayName: string;
+      orgSlug: string;
+      gatewaySlug: string;
+      skillRef: string;
+    }> = [];
+
+    const searchLower = query.toLowerCase();
+
+    for (const gateway of gateways) {
+      const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || gateway.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const activeTools = gateway.tools?.filter(gt => gt.isActive && gt.tool) || [];
+
+      for (const gt of activeTools) {
+        const tool = gt.tool;
+        const nameMatch = tool.name?.toLowerCase().includes(searchLower);
+        const descMatch = tool.description?.toLowerCase().includes(searchLower);
+
+        if (nameMatch || descMatch) {
+          const toolSlug = tool.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          results.push({
+            toolId: tool.id,
+            toolName: tool.name,
+            toolDescription: tool.description || '',
+            gatewayId: gateway.id,
+            gatewayName: gateway.name,
+            orgSlug,
+            gatewaySlug,
+            skillRef: `@${orgSlug}/${gatewaySlug}/${toolSlug}`,
+          });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  async getAllUserGateways(organizationId: string): Promise<Gateway[]> {
+    return this.gatewayRepository.find({
+      where: { organizationId, status: GatewayStatus.ACTIVE },
+      relations: ['tools', 'tools.tool', 'organization'],
+    });
   }
 
   private validateGatewayConfiguration(type: GatewayType, configuration: Record<string, any>): void {
