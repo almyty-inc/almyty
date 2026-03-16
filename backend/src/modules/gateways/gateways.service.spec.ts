@@ -1074,4 +1074,269 @@ describe('GatewaysService', () => {
       expect(gatewayRepository.save).not.toHaveBeenCalled();
     });
   });
+
+  describe('searchSkillsAcrossGateways', () => {
+    it('should return matching tools with skillRef in @org/gateway/skill format', async () => {
+      const mockOrganization = {
+        id: 'org-1',
+        name: 'Test Org',
+        slug: 'test-org',
+      };
+
+      const mockGateways = [
+        {
+          id: 'gateway-1',
+          name: 'My Gateway',
+          endpoint: '/my-gateway',
+          status: 'active',
+          tools: [
+            {
+              isActive: true,
+              tool: {
+                id: 'tool-1',
+                name: 'Get Users',
+                description: 'Fetches all users from the API',
+              },
+            },
+          ],
+        },
+      ];
+
+      organizationRepository.findOne.mockResolvedValue(mockOrganization);
+      gatewayRepository.find.mockResolvedValue(mockGateways);
+
+      const results = await service.searchSkillsAcrossGateways('org-1', 'users');
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({
+        toolId: 'tool-1',
+        toolName: 'Get Users',
+        toolDescription: 'Fetches all users from the API',
+        gatewayId: 'gateway-1',
+        gatewayName: 'My Gateway',
+        orgSlug: 'test-org',
+        gatewaySlug: 'my-gateway',
+        skillRef: '@test-org/my-gateway/get-users',
+      });
+    });
+
+    it('should match by tool name (case insensitive)', async () => {
+      const mockOrganization = {
+        id: 'org-1',
+        name: 'Test Org',
+        slug: 'test-org',
+      };
+
+      const mockGateways = [
+        {
+          id: 'gateway-1',
+          name: 'API Gateway',
+          endpoint: '/api-gateway',
+          status: 'active',
+          tools: [
+            {
+              isActive: true,
+              tool: {
+                id: 'tool-1',
+                name: 'Create Invoice',
+                description: 'Creates a new invoice',
+              },
+            },
+            {
+              isActive: true,
+              tool: {
+                id: 'tool-2',
+                name: 'List Orders',
+                description: 'Lists all orders',
+              },
+            },
+          ],
+        },
+      ];
+
+      organizationRepository.findOne.mockResolvedValue(mockOrganization);
+      gatewayRepository.find.mockResolvedValue(mockGateways);
+
+      const results = await service.searchSkillsAcrossGateways('org-1', 'INVOICE');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].toolName).toBe('Create Invoice');
+    });
+
+    it('should match by tool description', async () => {
+      const mockOrganization = {
+        id: 'org-1',
+        name: 'Test Org',
+        slug: 'test-org',
+      };
+
+      const mockGateways = [
+        {
+          id: 'gateway-1',
+          name: 'API Gateway',
+          endpoint: '/api-gateway',
+          status: 'active',
+          tools: [
+            {
+              isActive: true,
+              tool: {
+                id: 'tool-1',
+                name: 'Send Email',
+                description: 'Sends a notification email to the user',
+              },
+            },
+          ],
+        },
+      ];
+
+      organizationRepository.findOne.mockResolvedValue(mockOrganization);
+      gatewayRepository.find.mockResolvedValue(mockGateways);
+
+      const results = await service.searchSkillsAcrossGateways('org-1', 'notification');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].toolName).toBe('Send Email');
+    });
+
+    it('should return empty array when no matches', async () => {
+      const mockOrganization = {
+        id: 'org-1',
+        name: 'Test Org',
+        slug: 'test-org',
+      };
+
+      const mockGateways = [
+        {
+          id: 'gateway-1',
+          name: 'API Gateway',
+          endpoint: '/api-gateway',
+          status: 'active',
+          tools: [
+            {
+              isActive: true,
+              tool: {
+                id: 'tool-1',
+                name: 'Get Users',
+                description: 'Fetches users',
+              },
+            },
+          ],
+        },
+      ];
+
+      organizationRepository.findOne.mockResolvedValue(mockOrganization);
+      gatewayRepository.find.mockResolvedValue(mockGateways);
+
+      const results = await service.searchSkillsAcrossGateways('org-1', 'nonexistent');
+
+      expect(results).toEqual([]);
+    });
+
+    it('should only search active gateways', async () => {
+      const mockOrganization = {
+        id: 'org-1',
+        name: 'Test Org',
+        slug: 'test-org',
+      };
+
+      organizationRepository.findOne.mockResolvedValue(mockOrganization);
+      gatewayRepository.find.mockResolvedValue([]);
+
+      await service.searchSkillsAcrossGateways('org-1', 'test');
+
+      expect(gatewayRepository.find).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1', status: 'active' },
+        relations: ['tools', 'tools.tool'],
+      });
+    });
+
+    it('should only include active tools', async () => {
+      const mockOrganization = {
+        id: 'org-1',
+        name: 'Test Org',
+        slug: 'test-org',
+      };
+
+      const mockGateways = [
+        {
+          id: 'gateway-1',
+          name: 'API Gateway',
+          endpoint: '/api-gateway',
+          status: 'active',
+          tools: [
+            {
+              isActive: true,
+              tool: {
+                id: 'tool-1',
+                name: 'Active Tool',
+                description: 'This tool is active',
+              },
+            },
+            {
+              isActive: false,
+              tool: {
+                id: 'tool-2',
+                name: 'Inactive Tool',
+                description: 'This tool is inactive',
+              },
+            },
+          ],
+        },
+      ];
+
+      organizationRepository.findOne.mockResolvedValue(mockOrganization);
+      gatewayRepository.find.mockResolvedValue(mockGateways);
+
+      const results = await service.searchSkillsAcrossGateways('org-1', 'tool');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].toolName).toBe('Active Tool');
+    });
+  });
+
+  describe('getAllUserGateways', () => {
+    it('should return all active gateways with tools and organization loaded', async () => {
+      const mockGateways = [
+        {
+          id: 'gateway-1',
+          name: 'Gateway One',
+          organizationId: 'org-1',
+          status: 'active',
+          tools: [{ id: 'gt-1', tool: { id: 'tool-1', name: 'Tool 1' } }],
+          organization: { id: 'org-1', name: 'Test Org' },
+        },
+        {
+          id: 'gateway-2',
+          name: 'Gateway Two',
+          organizationId: 'org-1',
+          status: 'active',
+          tools: [],
+          organization: { id: 'org-1', name: 'Test Org' },
+        },
+      ];
+
+      gatewayRepository.find.mockResolvedValue(mockGateways);
+
+      const result = await service.getAllUserGateways('org-1');
+
+      expect(result).toEqual(mockGateways);
+      expect(result).toHaveLength(2);
+      expect(gatewayRepository.find).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1', status: 'active' },
+        relations: ['tools', 'tools.tool', 'organization'],
+      });
+    });
+
+    it('should return empty array when no gateways', async () => {
+      gatewayRepository.find.mockResolvedValue([]);
+
+      const result = await service.getAllUserGateways('org-1');
+
+      expect(result).toEqual([]);
+      expect(gatewayRepository.find).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1', status: 'active' },
+        relations: ['tools', 'tools.tool', 'organization'],
+      });
+    });
+  });
 });
