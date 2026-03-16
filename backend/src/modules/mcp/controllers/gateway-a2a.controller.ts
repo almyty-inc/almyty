@@ -172,11 +172,12 @@ export class GatewayA2AController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { gatewayEndpoint, action } = this.gatewayResolver.parsePathSegments(req, orgSlugOrId, 'a2a');
-    const { organization, gateway } = await this.resolveAndAuthenticateWithWwwAuth(orgSlugOrId, gatewayEndpoint, req, res);
 
-    this.logger.log(`A2A gateway request: org=${orgSlugOrId}, gateway=${gateway.name}, action=${action}`);
+    // Discovery endpoints are PUBLIC per A2A spec — clients need them to learn how to auth
+    if (action === '.well-known/agent.json' || action === '.well-known/agent-card.json' || action === '.well-known/a2a') {
+      const organization = await this.gatewayResolver.resolveOrganization(orgSlugOrId);
+      const gateway = await this.gatewayResolver.resolveGateway(organization.id, gatewayEndpoint);
 
-    if (action === '.well-known/a2a') {
       const baseUrl = process.env.BASE_URL || 'http://localhost:4000';
       const { securitySchemes, security } = this.buildSecurityInfo(gateway);
 
@@ -187,12 +188,12 @@ export class GatewayA2AController {
         endpoints: {
           agents: `${baseUrl}/a2a/${orgSlugOrId}${gatewayEndpoint}/agents`,
           messages: `${baseUrl}/a2a/${orgSlugOrId}${gatewayEndpoint}/messages`,
-          discovery: `${baseUrl}/a2a/${orgSlugOrId}${gatewayEndpoint}/.well-known/a2a`,
+          discovery: `${baseUrl}/a2a/${orgSlugOrId}${gatewayEndpoint}/.well-known/agent.json`,
         },
         gateway: { id: gateway.id, name: gateway.name },
       };
 
-      // Only include security fields if the gateway has auth configured
+      // Include security fields so clients know how to authenticate
       if (Object.keys(securitySchemes).length > 0) {
         agentCard.securitySchemes = securitySchemes;
         agentCard.security = security;
@@ -200,6 +201,11 @@ export class GatewayA2AController {
 
       return agentCard;
     }
+
+    // All other endpoints require auth
+    const { organization, gateway } = await this.resolveAndAuthenticateWithWwwAuth(orgSlugOrId, gatewayEndpoint, req, res);
+
+    this.logger.log(`A2A gateway request: org=${orgSlugOrId}, gateway=${gateway.name}, action=${action}`);
 
     if (action === 'agents') {
       return this.a2aService.listAgents(organization.id);

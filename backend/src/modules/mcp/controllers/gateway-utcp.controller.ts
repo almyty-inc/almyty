@@ -155,29 +155,31 @@ export class GatewayUtcpController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { gatewayEndpoint, action } = this.gatewayResolver.parsePathSegments(req, orgSlugOrId, 'utcp');
-    const { organization, gateway } = await this.resolveAndAuthenticateWithWwwAuth(orgSlugOrId, gatewayEndpoint, req, res);
 
-    this.logger.log(`UTCP gateway request: org=${orgSlugOrId}, gateway=${gateway.name}, action=${action}`);
+    // Discovery endpoints are PUBLIC per UTCP spec — clients need them to learn how to auth
+    if (action === '.well-known/utcp' || action === 'manual') {
+      const organization = await this.gatewayResolver.resolveOrganization(orgSlugOrId);
+      const gateway = await this.gatewayResolver.resolveGateway(organization.id, gatewayEndpoint);
 
-    if (action === '.well-known/utcp') {
-      const discoveryInfo = this.utcpService.getDiscoveryInfo(organization.id);
-      const authObjects = this.buildUtcpAuth(gateway);
+      this.logger.log(`UTCP discovery: org=${orgSlugOrId}, gateway=${gateway.name}, action=${action}`);
 
-      // Augment discovery info with gateway-specific auth
-      if (authObjects.length > 0) {
-        return {
-          ...discoveryInfo,
-          auth: authObjects.length === 1 ? authObjects[0] : authObjects,
-        };
+      if (action === '.well-known/utcp') {
+        const discoveryInfo = this.utcpService.getDiscoveryInfo(organization.id);
+        const authObjects = this.buildUtcpAuth(gateway);
+
+        if (authObjects.length > 0) {
+          return {
+            ...discoveryInfo,
+            auth: authObjects.length === 1 ? authObjects[0] : authObjects,
+          };
+        }
+        return discoveryInfo;
       }
-      return discoveryInfo;
-    }
 
-    if (action === 'manual') {
+      // manual
       const manual = await this.utcpService.generateManual(organization.id);
       const authObjects = this.buildUtcpAuth(gateway);
 
-      // Augment manual with gateway-specific auth
       if (authObjects.length > 0) {
         return {
           ...manual,
@@ -186,6 +188,11 @@ export class GatewayUtcpController {
       }
       return manual;
     }
+
+    // All other endpoints require auth
+    const { organization, gateway } = await this.resolveAndAuthenticateWithWwwAuth(orgSlugOrId, gatewayEndpoint, req, res);
+
+    this.logger.log(`UTCP gateway request: org=${orgSlugOrId}, gateway=${gateway.name}, action=${action}`);
 
     throw new HttpException(`Unknown UTCP action: ${action}`, HttpStatus.NOT_FOUND);
   }
