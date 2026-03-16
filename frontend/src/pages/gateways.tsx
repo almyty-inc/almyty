@@ -57,7 +57,8 @@ export function GatewaysPage() {
     enabled: !!currentOrganization,
   })
 
-  const gateways = gatewaysData?.data?.data?.gateways || gatewaysData?.data?.data || []
+  const gatewaysExtracted = gatewaysData?.data?.data?.gateways || gatewaysData?.data?.data || []
+  const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
 
   const filteredGateways = gateways.filter((gateway: any) => {
     const matchesSearch =

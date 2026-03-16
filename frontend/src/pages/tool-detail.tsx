@@ -504,6 +504,7 @@ export function ToolDetailPage() {
 function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string }) {
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [cliFormat, setCliFormat] = useState<'bash' | 'node'>('bash')
+  const { currentOrganization } = useOrganizationStore()
 
   const orgId = currentOrganization?.id || ''
 
