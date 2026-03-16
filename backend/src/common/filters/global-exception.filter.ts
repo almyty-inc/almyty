@@ -34,6 +34,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       if (Array.isArray(message)) {
         message = message.join('; ');
       }
+
+      // Set WWW-Authenticate header on 401 responses (per HTTP/A2A/UTCP specs)
+      if (status === 401 && (exception as any).wwwAuthenticate) {
+        response.setHeader('WWW-Authenticate', (exception as any).wwwAuthenticate);
+      }
     } else if (exception instanceof QueryFailedError) {
       status = HttpStatus.BAD_REQUEST;
       message = 'Database operation failed';

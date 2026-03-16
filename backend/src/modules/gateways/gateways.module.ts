@@ -11,6 +11,7 @@ import { Organization } from '../../entities/organization.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { ApiKey } from '../../entities/api-key.entity';
+import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
@@ -34,6 +35,7 @@ import { ToolsModule } from '../tools/tools.module';
       ToolExecution,
       UsageMetric,
       ApiKey,
+      OAuthAccessToken,
     ]),
     JwtModule,
     ToolsModule,

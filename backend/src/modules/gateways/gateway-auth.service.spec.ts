@@ -9,6 +9,7 @@ import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity
 import { Gateway } from '../../entities/gateway.entity';
 import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
+import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 
 describe('GatewayAuthService - Real Business Logic', () => {
   let service: GatewayAuthService;
@@ -50,6 +51,12 @@ describe('GatewayAuthService - Real Business Logic', () => {
             findOne: jest.fn(),
             create: jest.fn(),
             save: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(OAuthAccessToken),
+          useValue: {
+            findOne: jest.fn(),
           },
         },
         {
