@@ -9,6 +9,7 @@ import { A2AController } from './controllers/a2a.controller';
 import { GatewayUtcpController } from './controllers/gateway-utcp.controller';
 import { GatewayA2AController } from './controllers/gateway-a2a.controller';
 import { PublicController } from './controllers/public.controller';
+import { McpOAuthController } from './controllers/mcp-oauth.controller';
 import { McpService } from './mcp.service';
 import { McpGatewayService } from './mcp-gateway.service';
 import { McpSessionService } from './mcp-session.service';
@@ -16,6 +17,7 @@ import { UtcpService } from './utcp.service';
 import { A2AService } from './a2a.service';
 import { RealtimeExecutorService } from './realtime-executor.service';
 import { GatewayResolverService } from './services/gateway-resolver.service';
+import { McpOAuthService } from './services/mcp-oauth.service';
 import { SseTransport } from './transports/sse.transport';
 import { WebSocketTransport } from './transports/websocket.transport';
 
@@ -29,6 +31,9 @@ import { User } from '../../entities/user.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { ToolCategory } from '../../entities/tool-category.entity';
+import { OAuthClient } from '../../entities/oauth-client.entity';
+import { OAuthAuthorizationCode } from '../../entities/oauth-authorization-code.entity';
+import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 
 // Import related modules
 import { ToolsModule } from '../tools/tools.module';
@@ -46,11 +51,14 @@ import { GatewaysModule } from '../gateways/gateways.module';
       Gateway,
       GatewayTool,
       ToolCategory,
+      OAuthClient,
+      OAuthAuthorizationCode,
+      OAuthAccessToken,
     ]),
     forwardRef(() => ToolsModule),
     GatewaysModule,
   ],
-  controllers: [McpController, GatewayMcpController, McpTransportController, UtcpController, GatewayUtcpController, A2AController, GatewayA2AController, PublicController],
+  controllers: [McpOAuthController, McpController, GatewayMcpController, McpTransportController, UtcpController, GatewayUtcpController, A2AController, GatewayA2AController, PublicController],
   providers: [
     McpService,
     McpGatewayService,
@@ -59,6 +67,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
     A2AService,
     RealtimeExecutorService,
     GatewayResolverService,
+    McpOAuthService,
     SseTransport,
     WebSocketTransport,
   ],

@@ -9,6 +9,7 @@ import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity
 import { Gateway } from '../../entities/gateway.entity';
 import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
+import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 
 export interface CreateGatewayAuthDto {
   type: GatewayAuthType;
@@ -108,6 +109,8 @@ export class GatewayAuthService {
     private userRepository: Repository<User>,
     @InjectRepository(ApiKey)
     private apiKeyRepository: Repository<ApiKey>,
+    @InjectRepository(OAuthAccessToken)
+    private oauthAccessTokenRepository: Repository<OAuthAccessToken>,
     private jwtService: JwtService,
   ) {}
 
@@ -602,9 +605,52 @@ export class GatewayAuthService {
     authConfig: GatewayAuth,
     headers: Record<string, string>
   ): Promise<AuthenticationResult> {
-    // OAuth2 validation would typically involve introspecting the token with the authorization server
-    // For now, we'll treat it like a bearer token
-    return this.validateBearerToken(authConfig, headers);
+    const authHeader = headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return {
+        isValid: false,
+        error: 'OAuth2 Bearer token required',
+        errorCode: 'BEARER_TOKEN_MISSING',
+      };
+    }
+
+    const token = authHeader.substring(7);
+
+    // Validate against OAuthAccessToken table via SHA-256 hash lookup
+    try {
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const oauthToken = await this.oauthAccessTokenRepository?.findOne({
+        where: { tokenHash, tokenType: 'access', isRevoked: false },
+      });
+
+      if (!oauthToken) {
+        // Fallback: try legacy bearer token validation (ApiKey-based)
+        return this.validateBearerToken(authConfig, headers);
+      }
+
+      if (oauthToken.expiresAt < new Date()) {
+        return {
+          isValid: false,
+          error: 'OAuth2 access token expired',
+          errorCode: 'OAUTH2_TOKEN_EXPIRED',
+        };
+      }
+
+      return {
+        isValid: true,
+        userId: oauthToken.userId || undefined,
+        organizationId: oauthToken.organizationId,
+        scopes: oauthToken.scope ? oauthToken.scope.split(' ') : [],
+        metadata: {
+          authMethod: 'oauth2',
+          clientId: oauthToken.clientId,
+          tokenId: oauthToken.id,
+        },
+      };
+    } catch {
+      // If OAuth token table doesn't exist yet, fall back to bearer token validation
+      return this.validateBearerToken(authConfig, headers);
+    }
   }
 
   private async validateCustomAuth(
