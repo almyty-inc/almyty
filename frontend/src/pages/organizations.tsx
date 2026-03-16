@@ -324,8 +324,10 @@ export function OrganizationsPage() {
     )
   }
 
-  const orgs = organizationsData?.data || organizations
-  const members = membersData?.data || []
+  const orgsExtracted = organizationsData?.data?.data || organizationsData?.data || organizations
+  const orgs = Array.isArray(orgsExtracted) ? orgsExtracted : []
+  const membersExtracted = membersData?.data?.data?.members || membersData?.data?.members || membersData?.data?.data || membersData?.data || []
+  const members = Array.isArray(membersExtracted) ? membersExtracted : []
 
   return (
     <div className="space-y-8">

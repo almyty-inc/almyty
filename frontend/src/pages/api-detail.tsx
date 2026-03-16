@@ -56,7 +56,8 @@ export function ApiDetailPage() {
     enabled: !!currentOrganization,
   })
 
-  const allTools = allToolsData?.data?.data?.tools || allToolsData?.data?.tools || []
+  const allToolsExtracted = allToolsData?.data?.data?.tools || allToolsData?.data?.tools || []
+  const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
   const apiTools = allTools.filter((tool: any) => tool.metadata?.sourceApi?.id === id || tool.apiId === id)
 
   // Initialize auth state when API loads
@@ -129,7 +130,8 @@ export function ApiDetailPage() {
   }
 
   const api = apiData.data
-  const operations = apiOperations?.data || []
+  const operationsExtracted = apiOperations?.data?.data?.operations || apiOperations?.data?.operations || apiOperations?.data || []
+  const operations = Array.isArray(operationsExtracted) ? operationsExtracted : []
   const TypeIcon = getApiTypeIcon(api.type)
 
   return (
