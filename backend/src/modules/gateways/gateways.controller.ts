@@ -24,6 +24,7 @@ import { GatewaysService, CreateGatewayDto, UpdateGatewayDto, GatewaySearchFilte
 import { GatewayAuthService, CreateGatewayAuthDto, UpdateGatewayAuthDto } from './gateway-auth.service';
 import { GatewayToolService, CreateGatewayToolDto, UpdateGatewayToolDto, BulkAssociateToolsDto, GatewayToolSearchFilters } from './gateway-tool.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
+import { ToolExecutorService } from '../tools/tool-executor.service';
 import { CliGeneratorService } from '../tools/cli-generator.service';
 import { CodegenService } from '../tools/codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -398,6 +399,7 @@ export class GatewaysController {
     private readonly gatewayAuthService: GatewayAuthService,
     private readonly gatewayToolService: GatewayToolService,
     private readonly skillGeneratorService: SkillGeneratorService,
+    private readonly toolExecutorService: ToolExecutorService,
     private readonly cliGeneratorService: CliGeneratorService,
     private readonly codegenService: CodegenService,
   ) {}
@@ -503,6 +505,95 @@ export class GatewaysController {
           success: false,
           message: error.message,
           error: 'GATEWAYS_RETRIEVAL_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  // === Skills CLI Endpoints (must be before :gatewayId parameterized routes) ===
+
+  @Get('skills/search')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Search skills across all user gateways' })
+  @ApiQuery({ name: 'q', required: true, description: 'Search query for tool name or description' })
+  @ApiResponse({ status: 200, description: 'Skills search results' })
+  async searchSkills(
+    @Query('q') query: string,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const results = await this.gatewaysService.searchSkillsAcrossGateways(organizationId, query || '');
+
+      return {
+        success: true,
+        data: results,
+        message: `Found ${results.length} skill(s) matching "${query}"`,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'SKILLS_SEARCH_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get('all-skills')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Fetch all skills across all user gateways (for daemon mode)' })
+  @ApiResponse({ status: 200, description: 'All skills retrieved successfully' })
+  async getAllSkills(
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const gateways = await this.gatewaysService.getAllUserGateways(organizationId);
+
+      const result = await Promise.all(
+        gateways.map(async (gateway) => {
+          const orgSlug = gateway.organization?.slug || gateway.organization?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
+          const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || gateway.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const skills = await this.skillGeneratorService.generateIndividualSkills(gateway.id, { orgSlug, gatewaySlug });
+          return {
+            gatewayId: gateway.id,
+            gatewayName: gateway.name,
+            orgSlug,
+            gatewaySlug,
+            skills,
+          };
+        }),
+      );
+
+      return {
+        success: true,
+        data: result,
+        message: `Retrieved skills from ${result.length} gateway(s)`,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'ALL_SKILLS_RETRIEVAL_FAILED',
         },
         error.status || HttpStatus.BAD_REQUEST,
       );
@@ -1372,6 +1463,35 @@ export class GatewaysController {
     }
   }
 
+  // === Gateway Resolution ===
+
+  @Get('resolve/:orgSlug/:gatewaySlug')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Resolve a gateway by @org/name slug' })
+  async resolveGateway(
+    @Param('orgSlug') orgSlug: string,
+    @Param('gatewaySlug') gatewaySlug: string,
+  ) {
+    try {
+      const gateway = await this.gatewaysService.resolveGateway(orgSlug, gatewaySlug);
+      return {
+        success: true,
+        data: {
+          id: gateway.id,
+          name: gateway.name,
+          type: gateway.type,
+          endpoint: gateway.endpoint,
+          organizationId: gateway.organizationId,
+        },
+      };
+    } catch (error) {
+      throw new HttpException(
+        { success: false, message: error.message },
+        error.status || HttpStatus.NOT_FOUND,
+      );
+    }
+  }
+
   // === Gateway Export Endpoints ===
 
   @Get(':gatewayId/skills')
@@ -1410,7 +1530,21 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const skills = await this.skillGeneratorService.generateIndividualSkills(gatewayId);
+      const organizationId = req.user.organizations?.[0]?.id;
+      let context: { orgSlug?: string; gatewaySlug?: string } | undefined;
+
+      if (organizationId) {
+        const gateway = await this.gatewaysService.getGateway(gatewayId, organizationId, false);
+        const gateways = await this.gatewaysService.getAllUserGateways(organizationId);
+        const org = gateways[0]?.organization;
+        if (org && gateway) {
+          const orgSlug = org.slug || org.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
+          const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || gateway.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          context = { orgSlug, gatewaySlug };
+        }
+      }
+
+      const skills = await this.skillGeneratorService.generateIndividualSkills(gatewayId, context);
       return {
         success: true,
         data: { skills },
@@ -1422,6 +1556,63 @@ export class GatewaysController {
           success: false,
           message: error.message,
           error: 'GATEWAY_INDIVIDUAL_SKILLS_GENERATION_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Post(':gatewayId/skills/:toolId/execute')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Execute a skill via CLI' })
+  @ApiParam({ name: 'gatewayId', description: 'Gateway ID' })
+  @ApiParam({ name: 'toolId', description: 'Tool ID' })
+  @ApiResponse({ status: 200, description: 'Skill executed successfully' })
+  @ApiResponse({ status: 404, description: 'Tool not found in gateway' })
+  async executeSkill(
+    @Param('gatewayId', ParseUUIDPipe) gatewayId: string,
+    @Param('toolId', ParseUUIDPipe) toolId: string,
+    @Body() body: { parameters: Record<string, any> },
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const userId = req.user.sub || req.user.id;
+
+      // Verify the tool belongs to the gateway
+      const gateway = await this.gatewaysService.getGateway(gatewayId, organizationId, true);
+      const gatewayTool = gateway.tools?.find(gt => gt.toolId === toolId && gt.isActive);
+      if (!gatewayTool) {
+        throw new HttpException(
+          { success: false, message: 'Tool not found in this gateway or is inactive', error: 'TOOL_NOT_IN_GATEWAY' },
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      const result = await this.toolExecutorService.executeTool(
+        toolId,
+        body.parameters || {},
+        { userId, organizationId },
+      );
+
+      return {
+        success: true,
+        data: result,
+        message: result.success ? 'Skill executed successfully' : 'Skill execution failed',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'SKILL_EXECUTION_FAILED',
         },
         error.status || HttpStatus.BAD_REQUEST,
       );

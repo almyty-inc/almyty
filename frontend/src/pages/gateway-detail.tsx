@@ -141,8 +141,18 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
 
   // Skills gateway
   if (gatewayType === 'skills') {
-    const installCommand = `npx @apifai/skills install --gateway ${gatewayId}`
+    const gatewaySlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
+    const installCommand = `npx @apifai/skills install @${orgSlug}/${gatewaySlug}`
+    const watchCommand = `npx @apifai/skills watch @${orgSlug}/${gatewaySlug}`
     const loginCommand = `npx @apifai/skills login`
+
+    // Extract the actual SKILL.md markdown content
+    const skillMarkdown = (() => {
+      if (!skillsContent) return ''
+      if (typeof skillsContent === 'string') return skillsContent
+      if (skillsContent.content) return skillsContent.content
+      return ''
+    })()
 
     return (
       <div className="space-y-6">
@@ -168,6 +178,16 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
               </div>
             </div>
             <div>
+              <Label className="text-sm font-medium">Watch (daemon mode)</Label>
+              <p className="text-xs text-muted-foreground mb-2">Auto-sync skills when tools change:</p>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{watchCommand}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(watchCommand, 'watch-cmd')}>
+                  {copiedField === 'watch-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div>
               <Label className="text-sm font-medium">First-Time Setup</Label>
               <p className="text-xs text-muted-foreground mb-2">Authenticate once (or use APIFAI_TOKEN env var):</p>
               <div className="flex gap-2 mt-1">
@@ -175,22 +195,6 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
                 <Button size="sm" variant="outline" onClick={() => copyToClipboard(loginCommand, 'login-cmd')}>
                   {copiedField === 'login-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
-              </div>
-            </div>
-            <div>
-              <Label className="text-sm font-medium">Agent Directories</Label>
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                {[
-                  { agent: 'Claude Code', dir: '.claude/skills/' },
-                  { agent: 'Cursor', dir: '.agents/skills/' },
-                  { agent: 'Windsurf', dir: '.windsurf/skills/' },
-                  { agent: 'Copilot / Codex', dir: '.agents/skills/' },
-                ].map(({ agent, dir }) => (
-                  <div key={agent} className="flex items-center gap-2 text-xs bg-muted/50 px-3 py-2 rounded">
-                    <code className="font-mono text-purple-600 dark:text-purple-400">{dir}</code>
-                    <span className="text-muted-foreground">({agent})</span>
-                  </div>
-                ))}
               </div>
             </div>
             <div>
@@ -203,10 +207,10 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
               {showSkillPreview && (
                 skillsLoading ? (
                   <div className="flex justify-center py-4"><LoadingSpinner /></div>
-                ) : skillsContent ? (
-                  <pre className="text-xs bg-muted p-3 rounded max-h-64 overflow-auto font-mono mt-2">
-                    {typeof skillsContent === 'string' ? skillsContent.slice(0, 800) : JSON.stringify(skillsContent, null, 2).slice(0, 800)}
-                    {(typeof skillsContent === 'string' ? skillsContent.length : JSON.stringify(skillsContent).length) > 800 ? '\n...' : ''}
+                ) : skillMarkdown ? (
+                  <pre className="text-xs bg-muted p-3 rounded max-h-80 overflow-auto font-mono mt-2 whitespace-pre-wrap">
+                    {skillMarkdown.slice(0, 2000)}
+                    {skillMarkdown.length > 2000 ? '\n...' : ''}
                   </pre>
                 ) : (
                   <p className="text-sm text-muted-foreground py-4">No skills generated yet. Assign tools first.</p>
@@ -807,7 +811,10 @@ export function GatewayDetailPage() {
                     if (gateway.type === 'mcp') return `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`
                     if (gateway.type === 'utcp') return `${backendUrl}/utcp/${orgSlug}${gateway.endpoint}/manual`
                     if (gateway.type === 'a2a') return `${backendUrl}/a2a/${orgSlug}${gateway.endpoint}/.well-known/a2a`
-                    if (gateway.type === 'skills') return `npx @apifai/skills install --gateway ${gateway.id}`
+                    if (gateway.type === 'skills') {
+                      const gwSlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
+                      return `npx @apifai/skills install @${orgSlug}/${gwSlug}`
+                    }
                     return gateway.endpoint
                   })()}
                 </code>
@@ -821,7 +828,10 @@ export function GatewayDetailPage() {
                     if (gateway.type === 'mcp') fullEndpoint = `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`
                     else if (gateway.type === 'utcp') fullEndpoint = `${backendUrl}/utcp/${orgSlug}${gateway.endpoint}/manual`
                     else if (gateway.type === 'a2a') fullEndpoint = `${backendUrl}/a2a/${orgSlug}${gateway.endpoint}/.well-known/a2a`
-                    else if (gateway.type === 'skills') fullEndpoint = `npx @apifai/skills install --gateway ${gateway.id}`
+                    else if (gateway.type === 'skills') {
+                      const gwSlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
+                      fullEndpoint = `npx @apifai/skills install @${orgSlug}/${gwSlug}`
+                    }
                     try {
                       await navigator.clipboard.writeText(fullEndpoint)
                       success('Copied!', 'Endpoint copied to clipboard')

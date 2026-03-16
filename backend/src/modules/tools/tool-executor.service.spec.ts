@@ -28,6 +28,7 @@ describe('ToolExecutorService', () => {
   let userRepository: any;
   let apiRepository: any;
   let operationRepository: any;
+  let credentialRepository: any;
   let mockRedis: any;
 
   beforeEach(async () => {
@@ -82,7 +83,7 @@ describe('ToolExecutorService', () => {
           provide: getRepositoryToken(Credential),
           useValue: {
             findOne: jest.fn(),
-            update: jest.fn(),
+            update: jest.fn().mockResolvedValue({ affected: 1 }),
           },
         },
         {
@@ -105,6 +106,7 @@ describe('ToolExecutorService', () => {
     userRepository = module.get(getRepositoryToken(User));
     apiRepository = module.get(getRepositoryToken(Api));
     operationRepository = module.get(getRepositoryToken(Operation));
+    credentialRepository = module.get(getRepositoryToken(Credential));
   });
 
   describe('executeTool', () => {
@@ -1297,6 +1299,122 @@ describe('ToolExecutorService', () => {
         await service['addAuthentication'](config, api, { userId: "user-1", organizationId: "org-1" });
 
         expect(config.headers.Authorization).toBeUndefined();
+      });
+    });
+
+    describe('Credential entity integration', () => {
+      it('should use Credential entity when one exists (instead of legacy api.authentication)', async () => {
+        const mockCredential = {
+          id: 'cred-1',
+          type: 'api_key',
+          isExpired: jest.fn().mockReturnValue(false),
+          getAuthHeaders: jest.fn().mockReturnValue({ 'X-API-Key': 'cred-api-key' }),
+          getQueryParams: jest.fn().mockReturnValue({}),
+        };
+        credentialRepository.findOne.mockResolvedValue(mockCredential);
+
+        const config: any = { headers: {} };
+        const api = {
+          id: 'api-1',
+          authentication: {
+            type: 'bearer',
+            config: { token: 'legacy-token' },
+          },
+        } as any;
+
+        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-1' });
+
+        // Should use credential entity, NOT legacy api.authentication
+        expect(config.headers['X-API-Key']).toBe('cred-api-key');
+        expect(config.headers.Authorization).toBeUndefined();
+      });
+
+      it('should fall back to legacy api.authentication when no Credential entity exists', async () => {
+        credentialRepository.findOne.mockResolvedValue(null);
+
+        const config: any = { headers: {} };
+        const api = {
+          id: 'api-1',
+          authentication: {
+            type: 'bearer',
+            config: { token: 'legacy-token' },
+          },
+        } as any;
+
+        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-1' });
+
+        expect(config.headers.Authorization).toBe('Bearer legacy-token');
+      });
+
+      it('should query credentials scoped to api + org + active', async () => {
+        credentialRepository.findOne.mockResolvedValue(null);
+
+        const config: any = { headers: {} };
+        const api = { id: 'api-42', authentication: null } as any;
+
+        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-99' });
+
+        expect(credentialRepository.findOne).toHaveBeenCalledWith({
+          where: {
+            apiId: 'api-42',
+            organizationId: 'org-99',
+            isActive: true,
+          },
+          order: { createdAt: 'DESC' },
+        });
+      });
+
+      it('should apply query params from credential', async () => {
+        const mockCredential = {
+          id: 'cred-1',
+          type: 'api_key',
+          isExpired: jest.fn().mockReturnValue(false),
+          getAuthHeaders: jest.fn().mockReturnValue({}),
+          getQueryParams: jest.fn().mockReturnValue({ api_key: 'query-key-value' }),
+        };
+        credentialRepository.findOne.mockResolvedValue(mockCredential);
+
+        const config: any = { headers: {}, params: { existing: 'param' } };
+        const api = { id: 'api-1', authentication: null } as any;
+
+        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-1' });
+
+        expect(config.params.api_key).toBe('query-key-value');
+        expect(config.params.existing).toBe('param');
+      });
+
+      it('should mark credential as used after applying', async () => {
+        const mockCredential = {
+          id: 'cred-1',
+          type: 'api_key',
+          isExpired: jest.fn().mockReturnValue(false),
+          getAuthHeaders: jest.fn().mockReturnValue({ Authorization: 'Bearer x' }),
+          getQueryParams: jest.fn().mockReturnValue({}),
+        };
+        credentialRepository.findOne.mockResolvedValue(mockCredential);
+        credentialRepository.update.mockResolvedValue({ affected: 1 });
+
+        const config: any = { headers: {} };
+        const api = { id: 'api-1', authentication: null } as any;
+
+        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-1' });
+
+        expect(credentialRepository.update).toHaveBeenCalledWith(
+          'cred-1',
+          expect.objectContaining({ lastUsedAt: expect.any(Date) }),
+        );
+      });
+
+      it('should not add auth when no credential AND no legacy authentication', async () => {
+        credentialRepository.findOne.mockResolvedValue(null);
+
+        const config: any = { headers: {} };
+        const api = { id: 'api-1', authentication: null } as any;
+
+        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-1' });
+
+        expect(config.headers.Authorization).toBeUndefined();
+        expect(config.params).toBeUndefined();
       });
     });
   });

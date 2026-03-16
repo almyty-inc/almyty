@@ -1,8 +1,3 @@
-/**
- * HTTP client to the apifai backend.
- * Fetches individual skills and gateway info for installation.
- */
-
 export interface SkillFile {
   name: string;
   fileName: string;
@@ -13,6 +8,34 @@ export interface GatewayInfo {
   id: string;
   name: string;
   type: string;
+}
+
+export interface ParsedRef {
+  type: 'gateway' | 'skill' | 'search' | 'uuid';
+  orgSlug?: string;
+  gatewaySlug?: string;
+  skillName?: string;
+  uuid?: string;
+  raw: string;
+}
+
+export function parseRef(ref: string): ParsedRef {
+  if (!ref) return { type: 'search', raw: ref };
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(ref)) return { type: 'uuid', uuid: ref, raw: ref };
+
+  if (ref.startsWith('@')) {
+    const parts = ref.slice(1).split('/');
+    if (parts.length === 3) {
+      return { type: 'skill', orgSlug: parts[0], gatewaySlug: parts[1], skillName: parts[2], raw: ref };
+    }
+    if (parts.length === 2) {
+      return { type: 'gateway', orgSlug: parts[0], gatewaySlug: parts[1], raw: ref };
+    }
+  }
+
+  return { type: 'search', raw: ref };
 }
 
 export class ApifaiClient {
@@ -44,19 +67,25 @@ export class ApifaiClient {
     return response.json();
   }
 
-  /**
-   * Fetch individual SKILL.md files for a gateway.
-   */
-  async fetchSkills(gatewayId: string): Promise<SkillFile[]> {
-    const data: any = await this.request(`/gateways/${gatewayId}/skills/individual`);
-    return data?.data?.skills || [];
+  private async post(path: string, body: any): Promise<any> {
+    const url = `${this.baseUrl}/api${path}`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`API error ${resp.status}: ${text}`);
+    }
+    return resp.json();
   }
 
-  /**
-   * Fetch gateway info.
-   */
-  async fetchGateway(gatewayId: string): Promise<GatewayInfo> {
-    const data: any = await this.request(`/gateways/${gatewayId}`);
+  async resolveGateway(orgSlug: string, gatewaySlug: string): Promise<GatewayInfo> {
+    const data: any = await this.request(`/gateways/resolve/${orgSlug}/${gatewaySlug}`);
     const gw = data?.data || data;
     return {
       id: gw.id,
@@ -65,9 +94,28 @@ export class ApifaiClient {
     };
   }
 
-  /**
-   * List all gateways for the authenticated user.
-   */
+  async fetchSkills(gatewayIdOrRef: string): Promise<SkillFile[]> {
+    const gatewayId = await this.resolveRef(gatewayIdOrRef);
+    const data: any = await this.request(`/gateways/${gatewayId}/skills/individual`);
+    return data?.data?.skills || [];
+  }
+
+  async fetchGateway(gatewayIdOrRef: string): Promise<GatewayInfo> {
+    if (gatewayIdOrRef.startsWith('@')) {
+      const parsed = parseRef(gatewayIdOrRef);
+      if (parsed.orgSlug && parsed.gatewaySlug) {
+        return this.resolveGateway(parsed.orgSlug, parsed.gatewaySlug);
+      }
+    }
+    const data: any = await this.request(`/gateways/${gatewayIdOrRef}`);
+    const gw = data?.data || data;
+    return {
+      id: gw.id,
+      name: gw.name,
+      type: gw.type,
+    };
+  }
+
   async listGateways(): Promise<GatewayInfo[]> {
     const data: any = await this.request('/gateways');
     const gateways = data?.data?.data?.gateways || data?.data?.data || data?.data || [];
@@ -76,5 +124,41 @@ export class ApifaiClient {
       name: gw.name,
       type: gw.type,
     }));
+  }
+
+  async searchSkills(query: string): Promise<any[]> {
+    const resp: any = await this.request(`/gateways/skills/search?q=${encodeURIComponent(query)}`);
+    return resp?.data || [];
+  }
+
+  async fetchAllSkills(): Promise<SkillFile[]> {
+    const resp: any = await this.request('/gateways/all-skills');
+    const gateways = resp?.data || [];
+    const skills: SkillFile[] = [];
+    for (const gw of gateways) {
+      for (const skill of gw.skills || []) {
+        (skill as any).gateway = gw.gatewayName;
+        (skill as any).gatewayId = gw.gatewayId;
+        (skill as any).orgSlug = gw.orgSlug;
+        (skill as any).gatewaySlug = gw.gatewaySlug;
+        skills.push(skill);
+      }
+    }
+    return skills;
+  }
+
+  async executeSkill(gatewayId: string, toolId: string, parameters: Record<string, any>): Promise<any> {
+    return this.post(`/gateways/${gatewayId}/skills/${toolId}/execute`, { parameters });
+  }
+
+  private async resolveRef(ref: string): Promise<string> {
+    if (ref.startsWith('@')) {
+      const parsed = parseRef(ref);
+      if (parsed.orgSlug && parsed.gatewaySlug) {
+        const gw = await this.resolveGateway(parsed.orgSlug, parsed.gatewaySlug);
+        return gw.id;
+      }
+    }
+    return ref;
   }
 }
