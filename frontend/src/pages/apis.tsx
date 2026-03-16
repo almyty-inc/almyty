@@ -75,7 +75,8 @@ export function ApisPage() {
     enabled: !!currentOrganization,
   })
 
-  const allTools = allToolsData?.data?.data?.tools || allToolsData?.data?.tools || []
+  const allToolsExtracted = allToolsData?.data?.data?.tools || allToolsData?.data?.tools || []
+  const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
   
   const [selectedApi, setSelectedApi] = React.useState<Api | null>(null)
   const [editingApi, setEditingApi] = React.useState<Api | null>(null)
@@ -480,8 +481,10 @@ export function ApisPage() {
     )
   }
 
-  const apis = apisData?.data?.apis || []
-  const operations = apiOperations?.data || []
+  const apisExtracted = apisData?.data?.data?.apis || apisData?.data?.apis || []
+  const apis = Array.isArray(apisExtracted) ? apisExtracted : []
+  const operationsExtracted = apiOperations?.data?.data?.operations || apiOperations?.data?.operations || apiOperations?.data || []
+  const operations = Array.isArray(operationsExtracted) ? operationsExtracted : []
 
   const filteredApis = apis.filter((api: Api) => {
     const matchesSearch =

@@ -791,19 +791,22 @@ export function LlmProvidersPage() {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
 
-  const { data: providers = [], isLoading, error } = useQuery({
+  const { data: providersRaw, isLoading, error } = useQuery({
     queryKey: ['llm-providers'],
     queryFn: async () => {
       try {
         const response = await llmProvidersApi.getAll()
         // Backend returns: { success: true, data: { providers: [...], total: number } }
-        return response.data?.data?.providers || []
+        const d = response.data?.data || response.data
+        const result = d?.providers || (Array.isArray(d) ? d : [])
+        return Array.isArray(result) ? result : []
       } catch (err) {
         console.error('Failed to fetch LLM providers:', err)
         return []
       }
     }
   })
+  const providers = Array.isArray(providersRaw) ? providersRaw : []
 
   const { data: providerMetrics } = useQuery({
     queryKey: ['provider-metrics', selectedProvider?.id],
