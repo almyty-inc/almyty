@@ -9,6 +9,7 @@ import { GatewayAuth, GatewayAuthType } from '../../../entities/gateway-auth.ent
 import { Gateway } from '../../../entities/gateway.entity';
 import { User } from '../../../entities/user.entity';
 import { ApiKey } from '../../../entities/api-key.entity';
+import { OAuthAccessToken } from '../../../entities/oauth-access-token.entity';
 
 describe('GatewayAuthService', () => {
   let service: GatewayAuthService;
@@ -89,6 +90,12 @@ describe('GatewayAuthService', () => {
           useValue: {
             create: jest.fn(),
             save: jest.fn(),
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(OAuthAccessToken),
+          useValue: {
             findOne: jest.fn(),
           },
         },
