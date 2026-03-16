@@ -6,6 +6,7 @@ import { GatewayToolService } from './gateway-tool.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
 import { CliGeneratorService } from '../tools/cli-generator.service';
 import { CodegenService } from '../tools/codegen.service';
+import { ToolExecutorService } from '../tools/tool-executor.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 
@@ -71,6 +72,10 @@ describe('GatewaysController', () => {
         {
           provide: CodegenService,
           useValue: { generateGatewaySdk: jest.fn() },
+        },
+        {
+          provide: ToolExecutorService,
+          useValue: { executeTool: jest.fn() },
         },
       ],
     })

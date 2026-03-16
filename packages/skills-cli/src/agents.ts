@@ -132,6 +132,14 @@ export function getAllTargets(projectDir: string): AgentTarget[] {
 }
 
 /**
+ * Filter agents by name (case-insensitive partial match).
+ */
+export function filterAgents(agents: AgentTarget[], filter: string[]): AgentTarget[] {
+  const normalized = filter.map(f => f.toLowerCase());
+  return agents.filter(a => normalized.some(f => a.name.toLowerCase().includes(f)));
+}
+
+/**
  * Ensure a skills directory exists.
  */
 export function ensureSkillsDir(skillsDir: string): void {
