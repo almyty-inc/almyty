@@ -65,37 +65,40 @@ export function AgentsPage() {
   const [toolSearch, setToolSearch] = useState('')
 
   // Fetch data
-  const { data: gateways = [], isLoading: loadingGateways } = useQuery({
+  const { data: gatewaysRaw, isLoading: loadingGateways } = useQuery({
     queryKey: ['gateways', currentOrganization?.id],
     queryFn: async () => {
       const response = await gatewaysApi.getAll()
       const d = response.data?.data || response.data
-      const result = d?.gateways || d
+      const result = d?.gateways || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
     enabled: !!currentOrganization,
   })
+  const gateways = Array.isArray(gatewaysRaw) ? gatewaysRaw : []
 
-  const { data: providers = [], isLoading: loadingProviders } = useQuery({
+  const { data: providersRaw, isLoading: loadingProviders } = useQuery({
     queryKey: ['llm-providers'],
     queryFn: async () => {
       const response = await llmProvidersApi.getAll()
       const d = response.data?.data || response.data
-      const result = d?.providers || d
+      const result = d?.providers || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
   })
+  const providers = Array.isArray(providersRaw) ? providersRaw : []
 
-  const { data: tools = [], isLoading: loadingTools } = useQuery({
+  const { data: toolsRaw, isLoading: loadingTools } = useQuery({
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
       const response = await toolsApi.getAll(currentOrganization?.id)
       const d = response.data?.data || response.data
-      const result = d?.tools || d
+      const result = d?.tools || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
     enabled: !!currentOrganization,
   })
+  const tools = Array.isArray(toolsRaw) ? toolsRaw : []
 
   // Create agent mutation (creates a gateway + assigns tools)
   const createAgentMutation = useMutation({
