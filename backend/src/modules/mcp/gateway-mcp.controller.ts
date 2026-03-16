@@ -5,11 +5,14 @@ import {
   Body,
   Req,
   Logger,
+  UseFilters,
 } from '@nestjs/common';
 import { McpService } from './mcp.service';
 import { GatewayResolverService } from './services/gateway-resolver.service';
+import { McpAuthExceptionFilter } from './filters/mcp-auth-exception.filter';
 
 @Controller('mcp/:orgId')
+@UseFilters(McpAuthExceptionFilter)
 export class GatewayMcpController {
   private readonly logger = new Logger(GatewayMcpController.name);
 

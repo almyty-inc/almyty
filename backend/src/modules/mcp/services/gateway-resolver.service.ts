@@ -2,6 +2,7 @@ import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
+import { GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { GatewayAuthService, AuthenticationResult } from '../../gateways/gateway-auth.service';
 
@@ -102,6 +103,33 @@ export class GatewayResolverService {
   }
 
   /**
+   * Build WWW-Authenticate header per MCP spec (RFC 9728).
+   * Tells MCP clients where to discover OAuth authorization server.
+   */
+  private buildWwwAuthenticateHeader(gateway: Gateway, orgSlug: string): string | null {
+    const hasOAuthAuth = gateway.authConfigs?.some(
+      (ac) => ac.type === GatewayAuthType.OAUTH2,
+    );
+    const hasApiKeyAuth = gateway.authConfigs?.some(
+      (ac) => ac.type === GatewayAuthType.API_KEY,
+    );
+
+    const baseUrl = process.env.BASE_URL || process.env.API_URL || 'https://api.staging.apif.ai';
+    const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || '';
+
+    if (hasOAuthAuth) {
+      const resourceMetadataUrl = `${baseUrl}/mcp/${orgSlug}/${gatewaySlug}/.well-known/oauth-protected-resource`;
+      return `Bearer resource_metadata="${resourceMetadataUrl}"`;
+    }
+
+    if (hasApiKeyAuth) {
+      return `ApiKey realm="${gateway.name}", header="x-api-key"`;
+    }
+
+    return `Bearer realm="${gateway.name}"`;
+  }
+
+  /**
    * Full resolution pipeline: org → gateway → auth check.
    * Returns the resolved org, gateway, and auth result.
    * Throws HttpException on any failure.
@@ -129,13 +157,23 @@ export class GatewayResolverService {
 
     if (!auth.isValid) {
       const statusCode = auth.errorCode?.includes('MISSING') ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
-      throw new HttpException(
-        {
-          error: auth.error || 'Authentication failed',
-          errorCode: auth.errorCode || 'AUTH_FAILED',
-        },
-        statusCode,
-      );
+
+      // MCP spec: include WWW-Authenticate header with resource_metadata URL on 401
+      const wwwAuthenticate = this.buildWwwAuthenticateHeader(gateway, orgSlugOrId);
+
+      const error: any = {
+        error: auth.error || 'Authentication failed',
+        errorCode: auth.errorCode || 'AUTH_FAILED',
+      };
+
+      const exception = new HttpException(error, statusCode);
+
+      // Attach WWW-Authenticate header info for the controller to pick up
+      if (wwwAuthenticate && statusCode === HttpStatus.UNAUTHORIZED) {
+        (exception as any).wwwAuthenticate = wwwAuthenticate;
+      }
+
+      throw exception;
     }
 
     this.logger.log(`Gateway resolved: org=${orgSlugOrId}, gateway=${gateway.name}, auth=${auth.isValid}`);
