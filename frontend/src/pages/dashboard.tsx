@@ -49,9 +49,12 @@ export function DashboardPage() {
     )
   }
 
-  const gateways = gatewaysData?.data?.data?.gateways || gatewaysData?.data?.data || []
-  const tools = toolsData?.data?.data?.tools || toolsData?.data?.tools || []
-  const apis = apisData?.data?.data?.apis || apisData?.data?.apis || apisData?.data?.data || []
+  const gatewaysExtracted = gatewaysData?.data?.data?.gateways || gatewaysData?.data?.data || []
+  const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
+  const toolsExtracted = toolsData?.data?.data?.tools || toolsData?.data?.tools || []
+  const tools = Array.isArray(toolsExtracted) ? toolsExtracted : []
+  const apisExtracted = apisData?.data?.data?.apis || apisData?.data?.apis || apisData?.data?.data || []
+  const apis = Array.isArray(apisExtracted) ? apisExtracted : []
 
   return (
     <div className="space-y-6">
@@ -110,7 +113,7 @@ export function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{apis.length}</div>
             <p className="text-xs text-muted-foreground">
-              {Array.isArray(apis) ? apis.filter((a: any) => a.status === 'active').length : 0} active
+              {apis.filter((a: any) => a.status === 'active').length} active
             </p>
           </CardContent>
         </Card>

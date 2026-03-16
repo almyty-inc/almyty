@@ -114,26 +114,32 @@ export function AnalyticsPage() {
     enabled: !!currentOrganization && tab === 'llm',
   })
 
-  const { data: tools = [] } = useQuery({
+  const { data: toolsRaw } = useQuery({
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
       const res = await toolsApi.getAll(currentOrganization?.id)
-      return res.data?.data?.tools || res.data?.tools || []
+      const d = res.data?.data || res.data
+      const result = d?.tools || (Array.isArray(d) ? d : [])
+      return Array.isArray(result) ? result : []
     },
     enabled: !!currentOrganization,
   })
+  const tools = Array.isArray(toolsRaw) ? toolsRaw : []
 
-  const { data: gateways = [] } = useQuery({
+  const { data: gatewaysRaw } = useQuery({
     queryKey: ['gateways', currentOrganization?.id],
     queryFn: async () => {
       const res = await gatewaysApi.getAll()
-      return res.data?.data?.gateways || res.data?.data || []
+      const d = res.data?.data || res.data
+      const result = d?.gateways || (Array.isArray(d) ? d : [])
+      return Array.isArray(result) ? result : []
     },
     enabled: !!currentOrganization,
   })
+  const gateways = Array.isArray(gatewaysRaw) ? gatewaysRaw : []
 
-  const toolMap = Object.fromEntries((Array.isArray(tools) ? tools : []).map((t: any) => [t.id, t]))
-  const gatewayMap = Object.fromEntries((Array.isArray(gateways) ? gateways : []).map((g: any) => [g.id, g]))
+  const toolMap = Object.fromEntries(tools.map((t: any) => [t.id, t]))
+  const gatewayMap = Object.fromEntries(gateways.map((g: any) => [g.id, g]))
 
   const handleExport = async (type: string, format: string) => {
     try {

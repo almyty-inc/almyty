@@ -211,8 +211,9 @@ export function ToolsPage() {
     queryFn: () => llmProvidersApi.getAll(),
     enabled: !!currentOrganization,
   })
-  const llmProviders = providersData?.data?.data?.providers || providersData?.data?.data || providersData?.data || []
-  const activeProviders = Array.isArray(llmProviders) ? llmProviders.filter((p: any) => p.status === 'active' || p.isActive) : []
+  const llmProvidersExtracted = providersData?.data?.data?.providers || providersData?.data?.providers || []
+  const llmProviders = Array.isArray(llmProvidersExtracted) ? llmProvidersExtracted : []
+  const activeProviders = llmProviders.filter((p: any) => p.status === 'active' || p.isActive)
 
   const deleteToolMutation = useMutation({
     mutationFn: (id: string) => toolsApi.delete(id),
@@ -362,7 +363,8 @@ return new Promise((resolve, reject) => {
     },
   })
 
-  const tools = toolsData?.data?.data?.tools || toolsData?.data?.tools || []
+  const toolsExtracted = toolsData?.data?.data?.tools || toolsData?.data?.tools || []
+  const tools = Array.isArray(toolsExtracted) ? toolsExtracted : []
 
   // Get unique API sources for filter
   const apiSources = Array.from(
