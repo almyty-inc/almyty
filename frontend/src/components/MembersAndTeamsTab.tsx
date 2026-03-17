@@ -281,7 +281,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                 {members.map((member: any) => (
                   <div key={member.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                      <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center">
                         <span className="text-xs font-medium">
                           {member.firstName?.[0]}{member.lastName?.[0]}
                         </span>
@@ -418,7 +418,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                           {team.members.map((member: any) => (
                             <div key={member.userId} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                               <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                                <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center">
                                   <span className="text-xs font-medium">
                                     {member.user?.firstName?.[0]}{member.user?.lastName?.[0]}
                                   </span>
