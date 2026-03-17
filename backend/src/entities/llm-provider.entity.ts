@@ -17,10 +17,16 @@ export enum LlmProviderType {
   OPENAI = 'openai',
   ANTHROPIC = 'anthropic',
   GOOGLE = 'google',
-  COHERE = 'cohere',
-  HUGGINGFACE = 'huggingface',
+  MISTRAL = 'mistral',
+  XAI = 'xai',
+  DEEPSEEK = 'deepseek',
+  GROQ = 'groq',
+  TOGETHER = 'together',
+  OPENROUTER = 'openrouter',
   AZURE_OPENAI = 'azure_openai',
   AWS_BEDROCK = 'aws_bedrock',
+  COHERE = 'cohere',
+  HUGGINGFACE = 'huggingface',
   CUSTOM = 'custom',
 }
 
@@ -247,11 +253,23 @@ export class LlmProvider {
         return this.configuration.apiUrl || 'https://api.anthropic.com/v1';
       case LlmProviderType.GOOGLE:
         return this.configuration.apiUrl || 'https://generativelanguage.googleapis.com/v1';
+      case LlmProviderType.MISTRAL:
+        return this.configuration.apiUrl || 'https://api.mistral.ai/v1';
+      case LlmProviderType.XAI:
+        return this.configuration.apiUrl || 'https://api.x.ai/v1';
+      case LlmProviderType.DEEPSEEK:
+        return this.configuration.apiUrl || 'https://api.deepseek.com/v1';
+      case LlmProviderType.GROQ:
+        return this.configuration.apiUrl || 'https://api.groq.com/openai/v1';
+      case LlmProviderType.TOGETHER:
+        return this.configuration.apiUrl || 'https://api.together.xyz/v1';
+      case LlmProviderType.OPENROUTER:
+        return this.configuration.apiUrl || 'https://openrouter.ai/api/v1';
       case LlmProviderType.COHERE:
-        return this.configuration.apiUrl || 'https://api.cohere.ai/v1';
+        return this.configuration.apiUrl || 'https://api.cohere.ai/v2';
       case LlmProviderType.AZURE_OPENAI:
         const resourceName = this.configuration.azure?.resourceName;
-        const apiVersion = this.configuration.azure?.apiVersion || '2023-12-01-preview';
+        const apiVersion = this.configuration.azure?.apiVersion || '2024-10-21';
         return `https://${resourceName}.openai.azure.com/openai/deployments/${this.configuration.azure?.deploymentName}?api-version=${apiVersion}`;
       case LlmProviderType.AWS_BEDROCK:
         const region = this.configuration.bedrock?.region || 'us-east-1';
@@ -271,37 +289,40 @@ export class LlmProvider {
     switch (this.type) {
       case LlmProviderType.OPENAI:
       case LlmProviderType.AZURE_OPENAI:
+      case LlmProviderType.MISTRAL:
+      case LlmProviderType.XAI:
+      case LlmProviderType.DEEPSEEK:
+      case LlmProviderType.GROQ:
+      case LlmProviderType.TOGETHER:
+      case LlmProviderType.COHERE:
+      case LlmProviderType.HUGGINGFACE:
         if (this.configuration.apiKey) {
           headers['Authorization'] = `Bearer ${this.configuration.apiKey}`;
         }
         break;
-      
+
+      case LlmProviderType.OPENROUTER:
+        if (this.configuration.apiKey) {
+          headers['Authorization'] = `Bearer ${this.configuration.apiKey}`;
+          headers['HTTP-Referer'] = 'https://apif.ai';
+          headers['X-Title'] = 'apifai';
+        }
+        break;
+
       case LlmProviderType.ANTHROPIC:
         if (this.configuration.apiKey) {
           headers['x-api-key'] = this.configuration.apiKey;
-          headers['anthropic-version'] = this.configuration.apiVersion || '2023-06-01';
+          headers['anthropic-version'] = this.configuration.apiVersion || '2024-10-22';
         }
         break;
-      
+
       case LlmProviderType.GOOGLE:
         if (this.configuration.apiKey) {
           // Google uses query parameter for API key
           // headers will be handled differently in the service
         }
         break;
-      
-      case LlmProviderType.COHERE:
-        if (this.configuration.apiKey) {
-          headers['Authorization'] = `Bearer ${this.configuration.apiKey}`;
-        }
-        break;
-      
-      case LlmProviderType.HUGGINGFACE:
-        if (this.configuration.apiKey) {
-          headers['Authorization'] = `Bearer ${this.configuration.apiKey}`;
-        }
-        break;
-      
+
       case LlmProviderType.CUSTOM:
         if (this.configuration.custom?.headers) {
           Object.assign(headers, this.configuration.custom.headers);
@@ -314,7 +335,7 @@ export class LlmProvider {
         break;
     }
 
-    headers['User-Agent'] = 'LLM-Tool-Gateway/1.0';
+    headers['User-Agent'] = 'apifai/1.0';
     headers['Content-Type'] = 'application/json';
 
     return headers;

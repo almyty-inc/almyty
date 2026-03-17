@@ -100,7 +100,7 @@ interface LlmProvider {
   id: string
   name: string
   description?: string
-  type: 'openai' | 'anthropic' | 'google' | 'cohere' | 'huggingface' | 'azure' | 'aws_bedrock' | 'custom'
+  type: 'openai' | 'anthropic' | 'google' | 'mistral' | 'xai' | 'deepseek' | 'groq' | 'together' | 'openrouter' | 'azure_openai' | 'aws_bedrock' | 'cohere' | 'huggingface' | 'custom'
   status: 'active' | 'inactive' | 'error' | 'configuring'
   organizationId: string
   configuration: {
@@ -160,12 +160,18 @@ interface ProviderMetrics {
 
 const providerLogos: Record<string, string> = {
   openai: '🤖',
-  anthropic: '🧠', 
-  google: '🔍',
+  anthropic: '🧠',
+  google: '✦',
+  mistral: '🔷',
+  xai: '𝕏',
+  deepseek: '🔮',
+  groq: '⚡',
+  together: '🤝',
+  openrouter: '🔀',
+  azure_openai: '☁️',
+  aws_bedrock: '🪨',
   cohere: '🌀',
   huggingface: '🤗',
-  azure: '☁️',
-  aws_bedrock: '🪨',
   custom: '⚙️'
 }
 
@@ -723,34 +729,10 @@ const createProviderSchema = z.object({
   apiKey: z.string().min(1, 'API key is required'),
   organizationId: z.string().optional(),
 }).refine((data) => {
-  const { type, apiKey } = data
-
-  // Provider-specific API key validation
-  if (type === 'openai') {
-    return apiKey.startsWith('sk-') && apiKey.length > 20
-  }
-  if (type === 'anthropic') {
-    return apiKey.startsWith('sk-ant-') && apiKey.length > 20
-  }
-  if (type === 'azure') {
-    return apiKey.length === 32 || apiKey.length === 64
-  }
-  if (type === 'google') {
-    return apiKey.startsWith('AIza') || apiKey.length > 30
-  }
-  if (type === 'cohere') {
-    return apiKey.startsWith('co-') || apiKey.length > 20
-  }
-  if (type === 'huggingface') {
-    return apiKey.startsWith('hf_') || apiKey.length > 20
-  }
-  if (type === 'aws_bedrock') {
-    return apiKey.startsWith('AKIA') || apiKey.length > 20
-  }
-  // Custom or unknown: require at least 20 chars
-  return apiKey.length >= 20
+  // Just check it's not empty — actual validation happens when we test the connection
+  return data.apiKey.length >= 8
 }, {
-  message: 'Invalid API key format for the selected provider',
+  message: 'API key is too short',
   path: ['apiKey']
 })
 
@@ -765,7 +747,7 @@ export function LlmProvidersPage() {
   const [providerToDelete, setProviderToDelete] = useState<LlmProvider | null>(null)
   const [testProvider, setTestProvider] = useState<LlmProvider | null>(null)
   const [isTestDialogOpen, setIsTestDialogOpen] = useState(false)
-  const [testInput, setTestInput] = useState('Hello, can you help me test this LLM provider?')
+  const [testInput, setTestInput] = useState('Hello, can you help me test this connection?')
   const [testResult, setTestResult] = useState<any>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -801,7 +783,7 @@ export function LlmProvidersPage() {
         const result = d?.providers || (Array.isArray(d) ? d : [])
         return Array.isArray(result) ? result : []
       } catch (err) {
-        console.error('Failed to fetch LLM providers:', err)
+        console.error('Failed to fetch AI models:', err)
         return []
       }
     }
@@ -948,7 +930,7 @@ export function LlmProvidersPage() {
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
       setIsCreateDialogOpen(false)
       createForm.reset()
-      notifications.success('Provider added', 'LLM provider configured successfully')
+      notifications.success('Provider added', 'AI model provider connected successfully')
     },
     onError: (error: any) => {
       console.error('Create provider mutation error:', error)
@@ -1225,9 +1207,9 @@ export function LlmProvidersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">LLM Providers</h1>
+          <h1 className="text-3xl font-bold tracking-tight">AI Models</h1>
           <p className="text-muted-foreground">
-            Configure AI providers for tool-augmented chat. Providers can be used to test tools with real LLM interactions.
+            Connect AI model providers to power tool execution, chat, and agent capabilities.
           </p>
         </div>
         {/* Only show Add Provider button when not in empty state */}
@@ -1309,9 +1291,9 @@ export function LlmProvidersPage() {
               <Server className="h-16 w-16 text-muted-foreground" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold">No Providers Configured</h3>
+              <h3 className="text-lg font-semibold">No AI Models Configured</h3>
               <p className="text-muted-foreground mt-2">
-                Get started by adding your first LLM provider to enable AI-powered features
+                Connect your first AI model provider — OpenAI, Anthropic, Mistral, or any of 14 supported providers
               </p>
             </div>
             <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
@@ -1356,11 +1338,17 @@ export function LlmProvidersPage() {
                   <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="openai">OpenAI</SelectItem>
                   <SelectItem value="anthropic">Anthropic</SelectItem>
-                  <SelectItem value="google">Google</SelectItem>
+                  <SelectItem value="google">Google Gemini</SelectItem>
+                  <SelectItem value="mistral">Mistral AI</SelectItem>
+                  <SelectItem value="xai">xAI</SelectItem>
+                  <SelectItem value="deepseek">DeepSeek</SelectItem>
+                  <SelectItem value="groq">Groq</SelectItem>
+                  <SelectItem value="together">Together AI</SelectItem>
+                  <SelectItem value="openrouter">OpenRouter</SelectItem>
+                  <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
+                  <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
                   <SelectItem value="cohere">Cohere</SelectItem>
                   <SelectItem value="huggingface">HuggingFace</SelectItem>
-                  <SelectItem value="azure">Azure</SelectItem>
-                  <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
                   <SelectItem value="custom">Custom</SelectItem>
                 </SelectContent>
               </Select>
@@ -1987,14 +1975,20 @@ export function LlmProvidersPage() {
                       <SelectValue placeholder="Select provider type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="openai" data-testid="provider-type-openai">OpenAI</SelectItem>
-                      <SelectItem value="anthropic" data-testid="provider-type-anthropic">Anthropic Claude</SelectItem>
-                      <SelectItem value="azure" data-testid="provider-type-azure">Azure</SelectItem>
-                      <SelectItem value="google" data-testid="provider-type-google">Google</SelectItem>
-                      <SelectItem value="cohere" data-testid="provider-type-cohere">Cohere</SelectItem>
-                      <SelectItem value="huggingface" data-testid="provider-type-huggingface">HuggingFace</SelectItem>
-                      <SelectItem value="aws_bedrock" data-testid="provider-type-aws-bedrock">AWS Bedrock</SelectItem>
-                      <SelectItem value="custom" data-testid="provider-type-custom">Custom</SelectItem>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="anthropic">Anthropic</SelectItem>
+                      <SelectItem value="google">Google Gemini</SelectItem>
+                      <SelectItem value="mistral">Mistral AI</SelectItem>
+                      <SelectItem value="xai">xAI (Grok)</SelectItem>
+                      <SelectItem value="deepseek">DeepSeek</SelectItem>
+                      <SelectItem value="groq">Groq</SelectItem>
+                      <SelectItem value="together">Together AI</SelectItem>
+                      <SelectItem value="openrouter">OpenRouter</SelectItem>
+                      <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
+                      <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
+                      <SelectItem value="cohere">Cohere</SelectItem>
+                      <SelectItem value="huggingface">HuggingFace</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
                     </SelectContent>
                   </Select>
                 )}

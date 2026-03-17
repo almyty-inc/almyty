@@ -442,6 +442,12 @@ export class LlmProvidersService {
       switch (provider.type) {
         case LlmProviderType.OPENAI:
         case LlmProviderType.AZURE_OPENAI:
+        case LlmProviderType.MISTRAL:
+        case LlmProviderType.XAI:
+        case LlmProviderType.DEEPSEEK:
+        case LlmProviderType.GROQ:
+        case LlmProviderType.TOGETHER:
+        case LlmProviderType.OPENROUTER:
           return this.callOpenAI(provider, request, session, tools, startTime);
         case LlmProviderType.ANTHROPIC:
           return this.callAnthropic(provider, request, session, tools, startTime);
@@ -475,7 +481,7 @@ export class LlmProvidersService {
 
     // Prepare OpenAI request
     const openaiRequest: any = {
-      model: request.model || provider.configuration.model || 'gpt-3.5-turbo',
+      model: request.model || provider.configuration.model || 'gpt-4o',
       messages: request.messages.map(msg => {
         const openaiMsg: any = {
           role: msg.role,
@@ -534,12 +540,7 @@ export class LlmProvidersService {
     const choice = response.data.choices[0];
     const usage = response.data.usage;
     
-    // Calculate cost (approximate)
-    const cost = this.calculateOpenAICost(
-      openaiRequest.model,
-      usage.prompt_tokens,
-      usage.completion_tokens
-    );
+    const cost = this.calculateProviderCost(provider, usage.prompt_tokens, usage.completion_tokens);
 
     // Process tool calls
     let toolCalls: ToolCall[] = [];
@@ -616,12 +617,7 @@ export class LlmProvidersService {
 
     const usage = response.data.usage;
     
-    // Calculate cost (approximate)
-    const cost = this.calculateAnthropicCost(
-      anthropicRequest.model,
-      usage.input_tokens,
-      usage.output_tokens
-    );
+    const cost = this.calculateProviderCost(provider, usage.input_tokens, usage.output_tokens);
 
     // Process tool use
     let toolCalls: ToolCall[] = [];
@@ -702,12 +698,7 @@ export class LlmProvidersService {
     const content = candidate?.content?.parts?.[0]?.text || '';
     const usage = response.data.usageMetadata || {};
     
-    // Approximate cost calculation
-    const cost = this.calculateGoogleCost(
-      request.model || 'gemini-pro',
-      usage.promptTokenCount || 0,
-      usage.candidatesTokenCount || 0
-    );
+    const cost = this.calculateProviderCost(provider, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
 
     return {
       message: {
@@ -769,10 +760,9 @@ export class LlmProvidersService {
     const response: AxiosResponse = await axios(config);
     const responseTime = Date.now() - startTime;
 
-    // Approximate token counting and cost
     const inputTokens = JSON.stringify(cohereRequest).length / 4;
     const outputTokens = response.data.text?.length / 4 || 0;
-    const cost = this.calculateCohereCost(inputTokens, outputTokens);
+    const cost = this.calculateProviderCost(provider, inputTokens, outputTokens);
 
     return {
       message: {
@@ -1028,35 +1018,33 @@ export class LlmProvidersService {
   private validateProviderConfiguration(type: LlmProviderType, config: LlmProviderConfig): void {
     switch (type) {
       case LlmProviderType.OPENAI:
-        if (!config.apiKey) {
-          throw new BadRequestException('OpenAI provider requires API key');
-        }
-        break;
-      
       case LlmProviderType.ANTHROPIC:
-        if (!config.apiKey) {
-          throw new BadRequestException('Anthropic provider requires API key');
-        }
-        break;
-      
       case LlmProviderType.GOOGLE:
+      case LlmProviderType.MISTRAL:
+      case LlmProviderType.XAI:
+      case LlmProviderType.DEEPSEEK:
+      case LlmProviderType.GROQ:
+      case LlmProviderType.TOGETHER:
+      case LlmProviderType.OPENROUTER:
+      case LlmProviderType.COHERE:
+      case LlmProviderType.HUGGINGFACE:
         if (!config.apiKey) {
-          throw new BadRequestException('Google provider requires API key');
+          throw new BadRequestException(`${type} provider requires an API key`);
         }
         break;
-      
+
       case LlmProviderType.AZURE_OPENAI:
         if (!config.apiKey || !config.azure?.resourceName || !config.azure?.deploymentName) {
           throw new BadRequestException('Azure OpenAI provider requires API key, resource name, and deployment name');
         }
         break;
-      
+
       case LlmProviderType.AWS_BEDROCK:
         if (!config.bedrock?.region) {
           throw new BadRequestException('AWS Bedrock provider requires region');
         }
         break;
-      
+
       case LlmProviderType.CUSTOM:
         if (!config.apiUrl) {
           throw new BadRequestException('Custom provider requires API URL');
@@ -1078,6 +1066,12 @@ export class LlmProvidersService {
     try {
       switch (provider.type) {
         case LlmProviderType.OPENAI:
+        case LlmProviderType.MISTRAL:
+        case LlmProviderType.XAI:
+        case LlmProviderType.DEEPSEEK:
+        case LlmProviderType.GROQ:
+        case LlmProviderType.TOGETHER:
+        case LlmProviderType.OPENROUTER:
           return this.fetchOpenAIModels(provider);
         case LlmProviderType.ANTHROPIC:
           return this.fetchAnthropicModels(provider);
@@ -1116,18 +1110,22 @@ export class LlmProvidersService {
 
     const models = response.data?.data || [];
 
-    // Filter to only chat-compatible models and sort by created date (newest first)
+    // Filter to chat-compatible models and sort by created date (newest first)
+    const isOpenAI = provider.type === LlmProviderType.OPENAI;
     const chatModels = models
       .filter((m: any) => {
         const id = m.id?.toLowerCase() || '';
-        // Include GPT models and o-series reasoning models, exclude embedding/whisper/tts/dall-e
-        return (id.includes('gpt') || id.startsWith('o1') || id.startsWith('o3') || id.startsWith('o4'))
-          && !id.includes('embedding')
-          && !id.includes('whisper')
-          && !id.includes('tts')
-          && !id.includes('dall-e')
-          && !id.includes('realtime')
-          && !id.includes('audio');
+        // Always exclude non-chat models
+        if (id.includes('embedding') || id.includes('whisper') || id.includes('tts')
+          || id.includes('dall-e') || id.includes('realtime') || id.includes('moderation')) {
+          return false;
+        }
+        // For OpenAI specifically, only include GPT and o-series models
+        if (isOpenAI) {
+          return id.includes('gpt') || id.startsWith('o1') || id.startsWith('o3') || id.startsWith('o4');
+        }
+        // For other OpenAI-compatible providers, include all non-excluded models
+        return true;
       })
       .sort((a: any, b: any) => (b.created || 0) - (a.created || 0))
       .map((m: any) => ({
@@ -1230,81 +1228,89 @@ export class LlmProvidersService {
       supportedToolFormats: [],
     };
 
+    // Models are fetched dynamically from provider APIs via fetchModelsFromProvider().
+    // These defaults only define capability flags — supportedModels is intentionally
+    // empty because the real list comes from the API at runtime.
+    const openaiCompatible = {
+      ...baseCapabilities,
+      supportedModels: [],
+      supportsFunctionCalling: true,
+      supportsStreaming: true,
+      supportsToolUse: true,
+      supportedToolFormats: ['openai'],
+    };
+
     switch (type) {
       case LlmProviderType.OPENAI:
-        return {
-          ...baseCapabilities,
-          supportedModels: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-          maxTokens: 128000,
-          supportsFunctionCalling: true,
-          supportsStreaming: true,
-          supportsVision: true,
-          supportsToolUse: true,
-          supportedToolFormats: ['openai'],
-        };
-      
+        return { ...openaiCompatible, maxTokens: 128000, supportsVision: true };
+
       case LlmProviderType.ANTHROPIC:
         return {
           ...baseCapabilities,
-          supportedModels: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250514', 'claude-opus-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
+          supportedModels: [],
           maxTokens: 200000,
           supportsStreaming: true,
           supportsVision: true,
           supportsToolUse: true,
           supportedToolFormats: ['anthropic'],
         };
-      
+
       case LlmProviderType.GOOGLE:
         return {
           ...baseCapabilities,
-          supportedModels: ['gemini-pro', 'gemini-pro-vision'],
-          maxTokens: 32768,
+          supportedModels: [],
+          maxTokens: 1000000,
           supportsStreaming: true,
           supportsVision: true,
+          supportsToolUse: true,
           supportedToolFormats: ['google'],
         };
-      
+
+      case LlmProviderType.MISTRAL:
+        return { ...openaiCompatible, maxTokens: 128000 };
+
+      case LlmProviderType.XAI:
+        return { ...openaiCompatible, maxTokens: 131072, supportsVision: true };
+
+      case LlmProviderType.DEEPSEEK:
+        return { ...openaiCompatible, maxTokens: 64000 };
+
+      case LlmProviderType.GROQ:
+        return { ...openaiCompatible, maxTokens: 131072 };
+
+      case LlmProviderType.TOGETHER:
+        return { ...openaiCompatible, maxTokens: 131072 };
+
+      case LlmProviderType.OPENROUTER:
+        return { ...openaiCompatible, maxTokens: 200000, supportsVision: true };
+
+      case LlmProviderType.AZURE_OPENAI:
+        return { ...openaiCompatible, maxTokens: 128000, supportsVision: true };
+
+      case LlmProviderType.AWS_BEDROCK:
+        return { ...baseCapabilities, supportedModels: [], maxTokens: 200000 };
+
+      case LlmProviderType.COHERE:
+        return { ...openaiCompatible, maxTokens: 128000 };
+
+      case LlmProviderType.HUGGINGFACE:
+        return { ...baseCapabilities, supportedModels: [], supportsStreaming: true };
+
       default:
         return baseCapabilities;
     }
   }
 
-  private calculateOpenAICost(model: string, inputTokens: number, outputTokens: number): number {
-    // Approximate costs in cents per 1K tokens (as of 2024)
-    const costMap: Record<string, { input: number; output: number }> = {
-      'gpt-4': { input: 3.0, output: 6.0 },
-      'gpt-4-turbo': { input: 1.0, output: 3.0 },
-      'gpt-3.5-turbo': { input: 0.05, output: 0.15 },
-      'gpt-4o': { input: 0.5, output: 1.5 },
-    };
-
-    const costs = costMap[model] || costMap['gpt-3.5-turbo'];
-    return ((inputTokens / 1000) * costs.input) + ((outputTokens / 1000) * costs.output);
+  private calculateProviderCost(provider: LlmProvider, inputTokens: number, outputTokens: number): number {
+    // Use the provider's configured pricing from metadata. If no pricing is set, return 0.
+    // Users set pricing via provider metadata or it can be fetched from provider APIs.
+    const modelInfo = provider.metadata?.modelInfo;
+    if (modelInfo?.inputTokenCost && modelInfo?.outputTokenCost) {
+      return ((inputTokens / 1000) * modelInfo.inputTokenCost) + ((outputTokens / 1000) * modelInfo.outputTokenCost);
+    }
+    return 0;
   }
 
-  private calculateAnthropicCost(model: string, inputTokens: number, outputTokens: number): number {
-    // Approximate costs in cents per 1K tokens
-    const costMap: Record<string, { input: number; output: number }> = {
-      'claude-opus-4-20250514': { input: 1.5, output: 7.5 },
-      'claude-sonnet-4-20250514': { input: 0.3, output: 1.5 },
-      'claude-haiku-4-20250514': { input: 0.08, output: 0.4 },
-      'claude-3-5-sonnet-20241022': { input: 0.3, output: 1.5 },
-      'claude-3-5-haiku-20241022': { input: 0.08, output: 0.4 },
-    };
-
-    const costs = costMap[model] || costMap['claude-sonnet-4-20250514'];
-    return ((inputTokens / 1000) * costs.input) + ((outputTokens / 1000) * costs.output);
-  }
-
-  private calculateGoogleCost(model: string, inputTokens: number, outputTokens: number): number {
-    // Approximate costs for Google models
-    return ((inputTokens + outputTokens) / 1000) * 0.1; // $0.001 per 1K tokens
-  }
-
-  private calculateCohereCost(inputTokens: number, outputTokens: number): number {
-    // Approximate costs for Cohere
-    return ((inputTokens + outputTokens) / 1000) * 0.2; // $0.002 per 1K tokens
-  }
 
   async performHealthCheck(providerId: string): Promise<{
     isHealthy: boolean;

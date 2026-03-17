@@ -326,7 +326,7 @@ export function AgentsPage() {
                 <div className="space-y-2 max-h-[200px] overflow-y-auto">
                   {activeProviders.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-2">
-                      No active providers. <a href="/llm-providers" className="text-primary underline">Configure one</a> first.
+                      No active AI models. <a href="/llm-providers" className="text-primary underline">Configure one</a> first.
                     </p>
                   ) : (
                     activeProviders.map((provider: any) => (
