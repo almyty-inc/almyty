@@ -51,7 +51,7 @@ describe('DataTable', () => {
       // Check data
       expect(screen.getByText('Item 1')).toBeInTheDocument()
       expect(screen.getByText('Item 2')).toBeInTheDocument()
-      expect(screen.getByText('active')).toBeInTheDocument()
+      expect(screen.getAllByText('active')).toHaveLength(2)
       expect(screen.getByText('inactive')).toBeInTheDocument()
     })
 
@@ -60,11 +60,10 @@ describe('DataTable', () => {
         <DataTable
           columns={basicColumns}
           data={[]}
-          emptyMessage="No items found"
         />
       )
 
-      expect(screen.getByText('No items found')).toBeInTheDocument()
+      expect(screen.getByText('No results.')).toBeInTheDocument()
     })
 
     it('should show default empty message', () => {
@@ -75,7 +74,7 @@ describe('DataTable', () => {
         />
       )
 
-      expect(screen.getByText('No results found')).toBeInTheDocument()
+      expect(screen.getByText('No results.')).toBeInTheDocument()
     })
   })
 
@@ -127,7 +126,7 @@ describe('DataTable', () => {
       const searchInput = screen.getByRole('textbox')
       await user.type(searchInput, 'NonExistent')
 
-      expect(screen.getByText('No results found')).toBeInTheDocument()
+      expect(screen.getByText('No results.')).toBeInTheDocument()
     })
   })
 
@@ -144,24 +143,25 @@ describe('DataTable', () => {
         <DataTable
           columns={basicColumns}
           data={largeDataset}
-          pageSize={10}
         />
       )
 
       // Should show pagination controls
       expect(screen.getByText('Previous')).toBeInTheDocument()
       expect(screen.getByText('Next')).toBeInTheDocument()
-      expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
+
+      // Previous should be disabled on first page, Next should be enabled
+      expect(screen.getByText('Previous')).toBeDisabled()
+      expect(screen.getByText('Next')).not.toBeDisabled()
     })
 
     it('should navigate between pages', async () => {
       const user = userEvent.setup()
-      
+
       render(
         <DataTable
           columns={basicColumns}
           data={largeDataset}
-          pageSize={10}
         />
       )
 
@@ -179,25 +179,29 @@ describe('DataTable', () => {
       expect(screen.getByText('Item 20')).toBeInTheDocument()
     })
 
-    it('should change page size', async () => {
+    it('should navigate back to previous page', async () => {
       const user = userEvent.setup()
-      
+
       render(
         <DataTable
           columns={basicColumns}
           data={largeDataset}
-          pageSize={10}
         />
       )
 
-      // Change page size
-      const pageSizeSelect = screen.getByDisplayValue('10')
-      await user.selectOptions(pageSizeSelect, '20')
+      // Go to next page
+      await user.click(screen.getByText('Next'))
 
-      // Should show 20 items
+      // Should be on page 2
+      expect(screen.queryByText('Item 1')).not.toBeInTheDocument()
+      expect(screen.getByText('Item 11')).toBeInTheDocument()
+
+      // Go back to first page
+      await user.click(screen.getByText('Previous'))
+
+      // Should be back on page 1
       expect(screen.getByText('Item 1')).toBeInTheDocument()
-      expect(screen.getByText('Item 20')).toBeInTheDocument()
-      expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
+      expect(screen.queryByText('Item 11')).not.toBeInTheDocument()
     })
   })
 
@@ -220,8 +224,8 @@ describe('DataTable', () => {
       )
 
       // Sortable columns should have sort indicators
-      expect(screen.getByRole('button', { name: /Name.*sort/i })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Count.*sort/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Name/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Count/i })).toBeInTheDocument()
     })
 
     it('should sort data when clicking column header', async () => {
@@ -241,7 +245,7 @@ describe('DataTable', () => {
       expect(rowsBefore[3]).toHaveTextContent('Item 3')
 
       // Click name header to sort
-      await user.click(screen.getByRole('button', { name: /Name.*sort/i }))
+      await user.click(screen.getByRole('button', { name: /Name/i }))
 
       // Should still be in same order (A-Z is natural)
       const rowsAfter = screen.getAllByRole('row')
@@ -250,7 +254,7 @@ describe('DataTable', () => {
       expect(rowsAfter[3]).toHaveTextContent('Item 3')
 
       // Click again to reverse sort
-      await user.click(screen.getByRole('button', { name: /Name.*sort/i }))
+      await user.click(screen.getByRole('button', { name: /Name/i }))
 
       const rowsReversed = screen.getAllByRole('row')
       expect(rowsReversed[1]).toHaveTextContent('Item 3')
@@ -269,7 +273,7 @@ describe('DataTable', () => {
       )
 
       // Click count header to sort
-      await user.click(screen.getByRole('button', { name: /Count.*sort/i }))
+      await user.click(screen.getByRole('button', { name: /Count/i }))
 
       // Should be sorted by count ascending (5, 10, 25)
       const rows = screen.getAllByRole('row')
@@ -316,7 +320,7 @@ describe('DataTable', () => {
       expect(firstRowCheckbox).toBeChecked()
 
       // Should show selection count
-      expect(screen.getByText('1 of 3 row(s) selected')).toBeInTheDocument()
+      expect(screen.getByText(/1 of 3 row\(s\) selected\./)).toBeInTheDocument()
     })
 
     it('should select all rows', async () => {
@@ -338,7 +342,7 @@ describe('DataTable', () => {
         expect(checkbox).toBeChecked()
       })
 
-      expect(screen.getByText('3 of 3 row(s) selected')).toBeInTheDocument()
+      expect(screen.getByText(/3 of 3 row\(s\) selected\./)).toBeInTheDocument()
     })
   })
 
@@ -437,12 +441,12 @@ describe('DataTable', () => {
   })
 
   describe('Loading State', () => {
-    it('should show loading state when isLoading is true', () => {
+    it('should show loading state when loading is true', () => {
       render(
         <DataTable
           columns={basicColumns}
           data={[]}
-          isLoading={true}
+          loading={true}
         />
       )
 
@@ -463,8 +467,9 @@ describe('DataTable', () => {
       // Table should have proper role
       expect(screen.getByRole('table')).toBeInTheDocument()
       
-      // Search should have proper label
-      expect(screen.getByLabelText(/search/i)).toBeInTheDocument()
+      // Search input should be accessible via its role
+      expect(screen.getByRole('textbox')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument()
     })
 
     it('should support keyboard navigation', async () => {

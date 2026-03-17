@@ -72,6 +72,7 @@ export function SecurityTab() {
             <Input
               id="current-password"
               type="password"
+              placeholder="Enter your current password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
             />
@@ -82,6 +83,7 @@ export function SecurityTab() {
             <Input
               id="new-password"
               type="password"
+              placeholder="Enter a new password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
             />
@@ -92,6 +94,7 @@ export function SecurityTab() {
             <Input
               id="confirm-password"
               type="password"
+              placeholder="Confirm your new password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
             />

@@ -41,6 +41,9 @@ interface DataTableProps<TData, TValue> {
   searchPlaceholder?: string
   loading?: boolean
   onRowClick?: (row: TData) => void
+  hideSelectionCount?: boolean
+  hideColumnsButton?: boolean
+  headerExtra?: React.ReactNode
 }
 
 export function DataTable<TData, TValue>({
@@ -50,6 +53,9 @@ export function DataTable<TData, TValue>({
   searchPlaceholder = "Search...",
   loading = false,
   onRowClick,
+  hideSelectionCount = false,
+  hideColumnsButton = false,
+  headerExtra,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -77,6 +83,7 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="w-full">
+      {(searchKey || headerExtra || !hideColumnsButton) && (
       <div className="flex items-center py-4">
         {searchKey && (
           <Input
@@ -88,33 +95,37 @@ export function DataTable<TData, TValue>({
             className="max-w-sm"
           />
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-auto">
-              Columns <ChevronDown className="ml-2 h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {table
-              .getAllColumns()
-              .filter((column) => column.getCanHide())
-              .map((column) => {
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={column.id}
-                    className="capitalize"
-                    checked={column.getIsVisible()}
-                    onCheckedChange={(value) =>
-                      column.toggleVisibility(!!value)
-                    }
-                  >
-                    {column.id}
-                  </DropdownMenuCheckboxItem>
-                )
-              })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {headerExtra}
+        {!hideColumnsButton && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="ml-auto">
+                Columns <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {table
+                .getAllColumns()
+                .filter((column) => column.getCanHide())
+                .map((column) => {
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={column.id}
+                      className="capitalize"
+                      checked={column.getIsVisible()}
+                      onCheckedChange={(value) =>
+                        column.toggleVisibility(!!value)
+                      }
+                    >
+                      {column.id}
+                    </DropdownMenuCheckboxItem>
+                  )
+                })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
+      )}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -177,10 +188,13 @@ export function DataTable<TData, TValue>({
         </Table>
       </div>
       <div className="flex items-center justify-end space-x-2 py-4">
-        <div className="flex-1 text-sm text-muted-foreground">
-          {table.getFilteredSelectedRowModel().rows.length} of{" "}
-          {table.getFilteredRowModel().rows.length} row(s) selected.
-        </div>
+        {!hideSelectionCount && (
+          <div className="flex-1 text-sm text-muted-foreground">
+            {table.getFilteredSelectedRowModel().rows.length} of{" "}
+            {table.getFilteredRowModel().rows.length} row(s) selected.
+          </div>
+        )}
+        {hideSelectionCount && <div className="flex-1" />}
         <div className="space-x-2">
           <Button
             variant="outline"

@@ -2,7 +2,8 @@ import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Upload, Zap, Copy, Code, Globe, Database, Cloud, Server, TestTube, Edit, Plus, Trash2, Key, Shield, Check
+  ArrowLeft, Upload, Zap, Copy, Code, Globe, Database, Cloud, Server, TestTube, Edit, Plus, Trash2, Key, Shield, Check,
+  Search, ExternalLink
 } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -371,6 +372,8 @@ export function ApiDetailPage() {
   const [authType, setAuthType] = React.useState<ApiAuthType>(ApiAuthType.NONE)
   const [authConfig, setAuthConfig] = React.useState<any>({})
   const [selectedOperation, setSelectedOperation] = React.useState<ApiOperation | null>(null)
+  const [operationSearch, setOperationSearch] = React.useState('')
+  const [methodFilter, setMethodFilter] = React.useState<string>('ALL')
 
   const { data: apiData, isLoading } = useQuery({
     queryKey: ['api', id],
@@ -619,6 +622,13 @@ export function ApiDetailPage() {
           <TestTube className="mr-2 h-4 w-4" />
           {testing ? 'Testing...' : 'Test Connection'}
         </Button>
+        <Button
+          variant="outline"
+          onClick={() => navigate(`/gateways?apiId=${id}&apiName=${encodeURIComponent(api.name)}`)}
+        >
+          <ExternalLink className="mr-2 h-4 w-4" />
+          Expose via Gateway
+        </Button>
       </div>
 
       {/* Upstream Credentials */}
@@ -635,8 +645,15 @@ export function ApiDetailPage() {
                   {testResults.success ? 'Success' : 'Failed'}
                 </Badge>
               </div>
-              <pre className="text-xs bg-white/50 p-3 rounded border overflow-x-auto">
-                {JSON.stringify(testResults, null, 2)}
+              <pre className="p-4 text-sm font-mono bg-muted/50 rounded-md overflow-auto max-h-96">
+                {(() => {
+                  try {
+                    const data = typeof testResults === 'string' ? JSON.parse(testResults) : testResults
+                    return JSON.stringify(data, null, 2)
+                  } catch {
+                    return String(testResults)
+                  }
+                })()}
               </pre>
             </div>
           </CardContent>
@@ -675,8 +692,43 @@ export function ApiDetailPage() {
               </Button>
             </div>
           ) : (
-            <div className="space-y-2">
-              {operations.map((operation: ApiOperation) => (
+            <div className="space-y-4">
+              {/* Search and method filter */}
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search operations by path or description..."
+                    className="pl-10"
+                    value={operationSearch}
+                    onChange={(e) => setOperationSearch(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-1">
+                  {['ALL', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((method) => (
+                    <Button
+                      key={method}
+                      variant={methodFilter === method ? 'default' : 'outline'}
+                      size="sm"
+                      className="text-xs px-2"
+                      onClick={() => setMethodFilter(method)}
+                    >
+                      {method === 'ALL' ? 'All' : method}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+              {operations
+                .filter((operation: ApiOperation) => {
+                  const matchesSearch = !operationSearch ||
+                    (operation.endpoint || operation.path || '').toLowerCase().includes(operationSearch.toLowerCase()) ||
+                    (operation.name || '').toLowerCase().includes(operationSearch.toLowerCase()) ||
+                    (operation.description || '').toLowerCase().includes(operationSearch.toLowerCase())
+                  const matchesMethod = methodFilter === 'ALL' || operation.method === methodFilter
+                  return matchesSearch && matchesMethod
+                })
+                .map((operation: ApiOperation) => (
                 <div
                   key={operation.id}
                   className="flex items-center justify-between p-4 border rounded hover:bg-muted/50 cursor-pointer group"
@@ -715,6 +767,19 @@ export function ApiDetailPage() {
                   </div>
                 </div>
               ))}
+              {operations.filter((operation: ApiOperation) => {
+                const matchesSearch = !operationSearch ||
+                  (operation.endpoint || operation.path || '').toLowerCase().includes(operationSearch.toLowerCase()) ||
+                  (operation.name || '').toLowerCase().includes(operationSearch.toLowerCase()) ||
+                  (operation.description || '').toLowerCase().includes(operationSearch.toLowerCase())
+                const matchesMethod = methodFilter === 'ALL' || operation.method === methodFilter
+                return matchesSearch && matchesMethod
+              }).length === 0 && (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  No operations match your search.
+                </div>
+              )}
+              </div>
             </div>
           )}
         </CardContent>
@@ -760,14 +825,27 @@ export function ApiDetailPage() {
                 </div>
               </div>
 
-              {selectedOperation.parameters && Object.keys(selectedOperation.parameters).length > 0 && (
-                <div>
-                  <Label>Parameters</Label>
-                  <div className="bg-muted p-3 rounded text-xs max-h-48 overflow-y-auto">
-                    <pre>{JSON.stringify(selectedOperation.parameters, null, 2)}</pre>
+              {selectedOperation.parameters && (() => {
+                const params = selectedOperation.parameters
+                // Check if parameters is an array with items, or an object with non-empty values
+                const hasContent = Array.isArray(params)
+                  ? params.length > 0
+                  : typeof params === 'object' && Object.values(params).some((v: any) =>
+                      v && typeof v === 'object' ? (Array.isArray(v) ? v.length > 0 : Object.keys(v).length > 0) : !!v
+                    )
+                return (
+                  <div>
+                    <Label>Parameters</Label>
+                    {hasContent ? (
+                      <div className="bg-muted p-3 rounded text-xs max-h-48 overflow-y-auto">
+                        <pre>{JSON.stringify(params, null, 2)}</pre>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-1">No parameters required</p>
+                    )}
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               <div>
                 <Label>Related Tools</Label>

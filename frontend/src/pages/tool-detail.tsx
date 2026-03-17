@@ -201,12 +201,12 @@ export function ToolDetailPage() {
                   <span className="text-muted-foreground">Execution Method</span>
                   <Badge>Custom JavaScript</Badge>
                 </div>
-                {tool.code && (
-                  <div className="mt-2">
-                    <span className="text-xs text-muted-foreground">Code:</span>
-                    <pre className="text-xs bg-muted p-3 rounded mt-1 max-h-64 overflow-auto font-mono">{tool.code}</pre>
-                  </div>
-                )}
+                <div className="mt-2">
+                  <span className="text-xs text-muted-foreground">Code:</span>
+                  <pre className="p-4 text-sm font-mono bg-muted/50 rounded-md overflow-auto whitespace-pre-wrap break-words max-h-[300px] mt-1">
+                    {tool.code || tool.configuration?.code || 'No code'}
+                  </pre>
+                </div>
               </>
             ) : tool.executionMethod === 'http' ? (
               <>
@@ -493,6 +493,11 @@ export function ToolDetailPage() {
                   Last used: {new Date(tool.lastUsedAt).toLocaleString()}
                 </p>
               )}
+              {(tool.usageCount || 0) === 0 && (
+                <p className="text-center text-muted-foreground py-8">
+                  No executions recorded yet. Test this tool to see usage statistics.
+                </p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -658,21 +663,19 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
         </CardContent>
       </Card>
 
-      {/* SDK Card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <FileCode className="h-5 w-5 text-blue-500" />
-            <CardTitle className="text-sm">TypeScript Client</CardTitle>
-          </div>
-          <CardDescription className="text-xs">
-            Generated TypeScript code for calling this tool
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {sdkLoading ? (
-            <LoadingSpinner size="sm" />
-          ) : sdk?.content ? (
+      {/* SDK Card - only show when content is available */}
+      {sdk?.content && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <FileCode className="h-5 w-5 text-blue-500" />
+              <CardTitle className="text-sm">TypeScript Client</CardTitle>
+            </div>
+            <CardDescription className="text-xs">
+              Generated TypeScript code for calling this tool
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <div className="space-y-3">
               <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono whitespace-pre-wrap">
                 {sdk.content.slice(0, 500)}{sdk.content.length > 500 ? '...' : ''}
@@ -698,11 +701,9 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
                 </Button>
               </div>
             </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Not available</p>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* MCP Setup Card */}
       <Card className="md:col-span-2 lg:col-span-3">

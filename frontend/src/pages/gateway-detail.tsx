@@ -276,6 +276,74 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Quick Setup</CardTitle>
+            <CardDescription>Copy-paste configs for popular MCP clients</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Claude Code</h4>
+              <div className="relative">
+                <pre className="p-3 bg-muted/50 rounded text-sm font-mono overflow-x-auto">
+{JSON.stringify({
+  mcpServers: {
+    [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
+      url: mcpEndpoint
+    }
+  }
+}, null, 2)}
+                </pre>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="absolute top-2 right-2"
+                  onClick={() => copyToClipboard(JSON.stringify({
+                    mcpServers: {
+                      [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
+                        url: mcpEndpoint
+                      }
+                    }
+                  }, null, 2), 'claude-config')}
+                >
+                  {copiedField === 'claude-config' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Cursor / Windsurf</h4>
+              <div className="relative">
+                <pre className="p-3 bg-muted/50 rounded text-sm font-mono overflow-x-auto">
+{JSON.stringify({
+  mcpServers: {
+    [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
+      url: mcpEndpoint,
+      transport: "streamable-http"
+    }
+  }
+}, null, 2)}
+                </pre>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="absolute top-2 right-2"
+                  onClick={() => copyToClipboard(JSON.stringify({
+                    mcpServers: {
+                      [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
+                        url: mcpEndpoint,
+                        transport: "streamable-http"
+                      }
+                    }
+                  }, null, 2), 'cursor-config')}
+                >
+                  {copiedField === 'cursor-config' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -1157,11 +1225,6 @@ export function GatewayDetailPage() {
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
-              {gateway.type !== 'skills' && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Path: <code className="bg-muted px-1 py-0.5 rounded text-xs">{gateway.endpoint}</code>
-                </p>
-              )}
             </div>
           </div>
         </CardContent>
@@ -1247,7 +1310,7 @@ export function GatewayDetailPage() {
           ) : (
             <div className="space-y-2">
               {allTools.map((tool: any) => {
-                const isAssigned = gatewayTools.some((gt: any) => gt.id === tool.id || gt.toolId === tool.id)
+                const isAssigned = gatewayTools.some((gt: any) => gt.id === tool.id || gt.toolId === tool.id || gt.tool?.id === tool.id)
 
                 return (
                   <Card key={tool.id}>
@@ -1255,7 +1318,7 @@ export function GatewayDetailPage() {
                       <div className="flex-1">
                         <div className="font-medium">{tool.name}</div>
                         <div className="text-sm text-muted-foreground">
-                          {tool.description || 'No description'}
+                          {(tool.description || 'No description').replace(/^Auto-generated tool for\s+/i, '')}
                         </div>
                         {tool.method && (
                           <Badge variant="outline" className="mt-1">
@@ -1269,7 +1332,7 @@ export function GatewayDetailPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              const gt = gatewayTools.find((gt: any) => gt.id === tool.id || gt.toolId === tool.id)
+                              const gt = gatewayTools.find((gt: any) => gt.id === tool.id || gt.toolId === tool.id || gt.tool?.id === tool.id)
                               setSecurityTarget({
                                 gatewayToolId: gt?.gatewayToolId || gt?.id || tool.id,
                                 toolName: tool.name,

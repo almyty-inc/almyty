@@ -853,7 +853,7 @@ describe('ApisService', () => {
 
       expect(apiRepository.findAndCount).toHaveBeenCalledWith({
         where: { organizationId: 'org-1', type: ApiType.GRAPHQL },
-        relations: ['schemas', 'operations'],
+        relations: ['schemas', 'operations', 'operations.tools'],
         order: { createdAt: 'DESC' },
         skip: 0,
         take: 10,
@@ -867,7 +867,7 @@ describe('ApisService', () => {
 
       expect(apiRepository.findAndCount).toHaveBeenCalledWith({
         where: { organizationId: 'org-1', status: ApiStatus.ACTIVE },
-        relations: ['schemas', 'operations'],
+        relations: ['schemas', 'operations', 'operations.tools'],
         order: { createdAt: 'DESC' },
         skip: 0,
         take: 10,
@@ -884,7 +884,7 @@ describe('ApisService', () => {
 
       expect(apiRepository.findAndCount).toHaveBeenCalledWith({
         where: { organizationId: 'org-1', type: ApiType.OPENAPI, status: ApiStatus.ACTIVE },
-        relations: ['schemas', 'operations'],
+        relations: ['schemas', 'operations', 'operations.tools'],
         order: { createdAt: 'DESC' },
         skip: 0,
         take: 10,
@@ -898,7 +898,7 @@ describe('ApisService', () => {
 
       expect(apiRepository.findAndCount).toHaveBeenCalledWith({
         where: { organizationId: 'org-1' },
-        relations: ['schemas', 'operations'],
+        relations: ['schemas', 'operations', 'operations.tools'],
         order: { createdAt: 'DESC' },
         skip: 40,
         take: 20,
