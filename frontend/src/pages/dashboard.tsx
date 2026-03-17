@@ -2,20 +2,29 @@ import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
-  Zap,
-  Wrench,
   Activity,
-  Globe,
   AlertTriangle,
+  ArrowRight,
 } from 'lucide-react'
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { StatCard } from '@/components/ui/stat-card'
 import { gatewaysApi, toolsApi, apisApi, analyticsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
+
+// Helper to humanize a log path
+const humanizePath = (path: string, method: string) => {
+  if (path.includes('/mcp/')) return `MCP ${method} request`
+  if (path.includes('/a2a/')) return `A2A agent discovery`
+  if (path.includes('/utcp/')) return `UTCP manifest request`
+  if (path.includes('/auth/api-keys')) return `API key check`
+  if (path.includes('/auth')) return `Auth check on gateway`
+  if (path.includes('/tools')) return `Tools listing`
+  // Truncate UUIDs
+  return `${method} ${path.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '...')}`
+}
 
 export function DashboardPage() {
   const { currentOrganization } = useOrganizationStore()
@@ -100,62 +109,24 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Resource Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatCard
-          icon={Zap}
-          label="Gateways"
-          value={gateways.length}
-          subtitle={`Serving ${tools.length} tools`}
-        />
-        <StatCard
-          icon={Wrench}
-          label="Tools"
-          value={tools.length}
-          subtitle={`Generated from ${apis.length} APIs`}
-        />
-        <StatCard
-          icon={Globe}
-          label="APIs"
-          value={apis.length}
-          subtitle={`${apis.filter((a: any) => a.status === 'active').length} active`}
-        />
-      </div>
-
-      {/* Quick Actions */}
+      {/* Pipeline: APIs → Tools → Gateways */}
       <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>
-            Get started with common tasks
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Button
-              className="h-24 flex-col space-y-2"
-              variant="outline"
-              onClick={() => navigate('/gateways')}
-            >
-              <Zap className="h-6 w-6" />
-              <span>Create Gateway</span>
-            </Button>
-            <Button
-              className="h-24 flex-col space-y-2"
-              variant="outline"
-              onClick={() => navigate('/apis')}
-            >
-              <Globe className="h-6 w-6" />
-              <span>Add API</span>
-            </Button>
-            <Button
-              className="h-24 flex-col space-y-2"
-              variant="outline"
-              onClick={() => navigate('/tools')}
-            >
-              <Wrench className="h-6 w-6" />
-              <span>Create Tool</span>
-            </Button>
+        <CardContent className="py-6">
+          <div className="flex items-center justify-between gap-4">
+            <button onClick={() => navigate('/apis')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+              <div className="text-2xl font-bold">{apis.length}</div>
+              <div className="text-sm text-muted-foreground">APIs Connected</div>
+            </button>
+            <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
+            <button onClick={() => navigate('/tools')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+              <div className="text-2xl font-bold">{tools.length}</div>
+              <div className="text-sm text-muted-foreground">Tools Generated</div>
+            </button>
+            <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
+            <button onClick={() => navigate('/gateways')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+              <div className="text-2xl font-bold">{gateways.length}</div>
+              <div className="text-sm text-muted-foreground">Gateways Serving</div>
+            </button>
           </div>
         </CardContent>
       </Card>
@@ -169,14 +140,20 @@ export function DashboardPage() {
           <CardContent>
             <div className="space-y-2">
               {apisWithNoTools.length > 0 && (
-                <div className="flex items-center gap-2 text-sm text-amber-600">
-                  <AlertTriangle className="h-4 w-4" />
+                <div
+                  className="flex items-center gap-2 text-sm text-amber-600 cursor-pointer hover:underline"
+                  onClick={() => navigate('/apis')}
+                >
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
                   <span>{apisWithNoTools.length} API(s) have no generated tools</span>
                 </div>
               )}
               {gatewaysWithNoKeys.length > 0 && (
-                <div className="flex items-center gap-2 text-sm text-amber-600">
-                  <AlertTriangle className="h-4 w-4" />
+                <div
+                  className="flex items-center gap-2 text-sm text-amber-600 cursor-pointer hover:underline"
+                  onClick={() => navigate('/gateways')}
+                >
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
                   <span>{gatewaysWithNoKeys.length} gateway(s) have no API keys</span>
                 </div>
               )}
@@ -198,8 +175,7 @@ export function DashboardPage() {
                   <span className="text-muted-foreground text-xs w-32 shrink-0">
                     {new Date(log.timestamp).toLocaleTimeString()}
                   </span>
-                  <Badge variant="outline" className="text-xs">{log.method}</Badge>
-                  <span className="truncate flex-1 font-mono text-xs">{log.path}</span>
+                  <span className="truncate flex-1 text-xs">{humanizePath(log.path, log.method)}</span>
                   <Badge variant={log.statusCode < 400 ? 'default' : 'destructive'} className="text-xs">
                     {log.statusCode}
                   </Badge>

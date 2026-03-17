@@ -360,11 +360,8 @@ export function ApisPage() {
         
         return (
           <div className="flex items-center space-x-3">
-            <div className="relative">
-              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                <TypeIcon className="h-5 w-5 text-primary" />
-              </div>
-              <HealthIcon className={cn('absolute -top-1 -right-1 h-4 w-4', getHealthStatusColor(api.healthStatus))} />
+            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+              <TypeIcon className="h-5 w-5 text-primary" />
             </div>
             <div>
               <div className="font-medium">{api.name}</div>
@@ -495,7 +492,7 @@ export function ApisPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">APIs</h1>
           <p className="text-muted-foreground">
-            Connect and manage your REST, GraphQL, SOAP, and gRPC APIs
+            {apis.length} connected &middot; {apis.reduce((sum: number, a: any) => sum + (a.operations?.length || 0), 0)} operations &middot; {apis.reduce((sum: number, api: any) => sum + (api.operations?.reduce((t: number, op: any) => t + (op.tools?.length || 0), 0) || 0), 0)} tools generated
           </p>
         </div>
         <div className="flex items-center space-x-2">
@@ -908,39 +905,6 @@ export function ApisPage() {
         </Card>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Total APIs</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{apis.length}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Total Operations</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {apis.reduce((sum: number, a: any) => sum + (a.operations?.length || 0), 0)}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Tools Generated</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {apis.reduce((sum: number, api: any) => sum + (api.operations?.reduce((t: number, op: any) => t + (op.tools?.length || 0), 0) || 0), 0)}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
           <Card>
             <CardContent className="pt-6 space-y-4">
               {/* Filters */}

@@ -44,6 +44,7 @@ interface DataTableProps<TData, TValue> {
   hideSelectionCount?: boolean
   hideColumnsButton?: boolean
   headerExtra?: React.ReactNode
+  hidePaginationWhenSinglePage?: boolean
 }
 
 export function DataTable<TData, TValue>({
@@ -56,6 +57,7 @@ export function DataTable<TData, TValue>({
   hideSelectionCount = false,
   hideColumnsButton = false,
   headerExtra,
+  hidePaginationWhenSinglePage = true,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -193,33 +195,35 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-end space-x-2 py-4">
-        {!hideSelectionCount && (
-          <div className="flex-1 text-sm text-muted-foreground">
-            {table.getFilteredSelectedRowModel().rows.length} of{" "}
-            {table.getFilteredRowModel().rows.length} row(s) selected.
+      {!(hidePaginationWhenSinglePage && table.getPageCount() <= 1) && (
+        <div className="flex items-center justify-end space-x-2 py-4">
+          {!hideSelectionCount && (
+            <div className="flex-1 text-sm text-muted-foreground">
+              {table.getFilteredSelectedRowModel().rows.length} of{" "}
+              {table.getFilteredRowModel().rows.length} row(s) selected.
+            </div>
+          )}
+          {hideSelectionCount && <div className="flex-1" />}
+          <div className="space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              Next
+            </Button>
           </div>
-        )}
-        {hideSelectionCount && <div className="flex-1" />}
-        <div className="space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </Button>
         </div>
-      </div>
+      )}
     </div>
   )
 }

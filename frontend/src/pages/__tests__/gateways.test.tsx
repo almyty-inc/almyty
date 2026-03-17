@@ -86,7 +86,6 @@ describe('GatewaysPage', () => {
       // The component shows a LoadingSpinner (an animated div) inside a centered container
       // When loading, the page header is still visible but the main content area shows the spinner
       expect(screen.getByText('Gateways')).toBeInTheDocument()
-      expect(screen.getByText('Serve your tools via MCP, A2A, UTCP, and Skills protocols')).toBeInTheDocument()
     })
   })
 
@@ -287,8 +286,8 @@ describe('GatewaysPage', () => {
     })
   })
 
-  describe('Stats Cards', () => {
-    it('should show gateway stats when gateways exist', async () => {
+  describe('Subtitle Stats', () => {
+    it('should show gateway counts in subtitle', async () => {
       vi.mocked(gatewaysApi.getAll).mockResolvedValue({
         data: {
           data: [
@@ -301,9 +300,8 @@ describe('GatewaysPage', () => {
       renderGatewaysPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Total Gateways')).toBeInTheDocument()
-        expect(screen.getByText('Active Gateways')).toBeInTheDocument()
-        expect(screen.getByText('Tool Assignments')).toBeInTheDocument()
+        // Subtitle now shows inline counts like "2 gateways (1 active)"
+        expect(screen.getByText(/2 gateways/)).toBeInTheDocument()
       })
     })
   })
