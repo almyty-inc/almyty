@@ -296,11 +296,11 @@ export function AgentsPage() {
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                   step < wizardStep ? 'bg-green-100 text-green-700' :
                   step === wizardStep ? 'bg-primary text-primary-foreground' :
-                  'bg-gray-100 text-gray-400'
+                  'bg-accent text-muted-foreground'
                 }`}>
                   {step < wizardStep ? <Check className="h-4 w-4" /> : step + 1}
                 </div>
-                {step < 2 && <div className={`w-12 h-0.5 ${step < wizardStep ? 'bg-green-300' : 'bg-gray-200'}`} />}
+                {step < 2 && <div className={`w-12 h-0.5 ${step < wizardStep ? 'bg-green-300' : 'bg-muted'}`} />}
               </div>
             ))}
           </div>
@@ -333,7 +333,7 @@ export function AgentsPage() {
                       <label
                         key={provider.id}
                         className={`flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
-                          selectedProviderId === provider.id ? 'border-primary bg-primary/5' : 'hover:bg-gray-50'
+                          selectedProviderId === provider.id ? 'border-primary bg-primary/5' : 'hover:bg-accent'
                         }`}
                       >
                         <input
@@ -400,7 +400,7 @@ export function AgentsPage() {
                   filteredTools.map((tool: any) => (
                     <label
                       key={tool.id}
-                      className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 cursor-pointer"
+                      className="flex items-center gap-3 p-2 rounded hover:bg-accent cursor-pointer"
                     >
                       <input
                         type="checkbox"
@@ -429,7 +429,7 @@ export function AgentsPage() {
                 <label
                   key={type}
                   className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
-                    selectedGatewayType === type ? 'border-primary bg-primary/5' : 'hover:bg-gray-50'
+                    selectedGatewayType === type ? 'border-primary bg-primary/5' : 'hover:bg-accent'
                   }`}
                 >
                   <input
@@ -447,7 +447,7 @@ export function AgentsPage() {
               ))}
 
               {/* Summary */}
-              <div className="bg-gray-50 rounded-md p-3 mt-4">
+              <div className="bg-muted/50 rounded-md p-3 mt-4">
                 <div className="text-sm font-medium mb-2">Summary</div>
                 <div className="text-xs text-muted-foreground space-y-1">
                   <div><strong>Name:</strong> {agentName || '—'}</div>

@@ -161,7 +161,13 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  onClick={() => onRowClick?.(row.original)}
+                  onClick={(e) => {
+                    // Don't navigate when clicking interactive elements inside the row
+                    const target = e.target as HTMLElement
+                    const interactive = target.closest('button, [role="switch"], [role="menuitem"], a, input, select, [data-no-row-click]')
+                    if (interactive) return
+                    onRowClick?.(row.original)
+                  }}
                   className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
                 >
                   {row.getVisibleCells().map((cell) => (
