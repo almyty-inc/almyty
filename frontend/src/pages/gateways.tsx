@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { Router, Plus, Settings, Zap, MoreVertical, Eye, Edit2, Trash2, Activity, Copy, Search } from 'lucide-react'
+import { Router, Plus, Search } from 'lucide-react'
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
@@ -23,7 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { DataTable, createSelectColumn, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
 import type { ColumnDef } from '@tanstack/react-table'
 
-import { gatewaysApi, toolsApi } from '@/lib/api'
+import { gatewaysApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 
@@ -269,7 +269,7 @@ export function GatewaysPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Gateways</h1>
           <p className="text-muted-foreground">
-            Serve your tools via MCP, A2A, UTCP, and Skills protocols
+            {gateways.length} gateways ({gateways.filter((g: any) => g.status === 'active').length} active) &middot; {gateways.reduce((sum: number, g: any) => sum + (g.tools?.length || 0), 0)} tool assignments
           </p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>
@@ -290,40 +290,6 @@ export function GatewaysPage() {
         </div>
       ) : (
         <>
-
-      {/* Gateway Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Total Gateways</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{gateways.length}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Active Gateways</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {gateways.filter((g: any) => g.status === 'active').length}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Tool Assignments</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {gateways.reduce((sum: number, g: any) => sum + (g.tools?.length || 0), 0)}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Gateways Table */}
       {gateways.length === 0 ? (
@@ -388,6 +354,7 @@ export function GatewaysPage() {
               onRowClick={(gateway) => navigate(`/gateways/${gateway.id}`)}
               hideSelectionCount
               hideColumnsButton
+              hidePaginationWhenSinglePage
             />
           </CardContent>
         </Card>
