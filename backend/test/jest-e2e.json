@@ -6,6 +6,7 @@
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
+  "setupFiles": ["./setup-e2e.ts"],
   "testTimeout": 60000,
   "maxWorkers": 1
 }
