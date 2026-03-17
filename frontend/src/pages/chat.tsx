@@ -243,7 +243,7 @@ export function ChatPage() {
   return (
     <div className="flex h-[calc(100vh-140px)] -mx-4 sm:-mx-6 lg:-mx-8 -my-6">
       {/* Session Sidebar */}
-      <div className="w-64 border-r bg-gray-50/50 flex flex-col shrink-0">
+      <div className="w-64 border-r bg-muted/50 flex flex-col shrink-0">
         <div className="p-3 border-b">
           <Button onClick={handleNewChat} className="w-full gap-2" size="sm">
             <Plus className="h-4 w-4" />
@@ -260,8 +260,8 @@ export function ChatPage() {
               <button
                 key={session.id}
                 onClick={() => handleRestoreSession(session)}
-                className={`w-full text-left p-2 rounded-md text-sm hover:bg-gray-100 transition-colors ${
-                  activeSidebarSession === session.id ? 'bg-gray-100 font-medium' : ''
+                className={`w-full text-left p-2 rounded-md text-sm hover:bg-accent transition-colors ${
+                  activeSidebarSession === session.id ? 'bg-accent font-medium' : ''
                 }`}
               >
                 <div className="truncate">{session.title}</div>
@@ -277,7 +277,7 @@ export function ChatPage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
-        <div className="border-b px-4 py-2 flex items-center justify-between bg-white">
+        <div className="border-b px-4 py-2 flex items-center justify-between bg-background">
           <div className="flex items-center gap-3">
             {/* Provider Selector */}
             <DropdownMenu>
@@ -344,7 +344,7 @@ export function ChatPage() {
                     tools.map((tool: any) => (
                       <label
                         key={tool.id}
-                        className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
+                        className="flex items-center gap-3 p-2 rounded-md hover:bg-accent cursor-pointer"
                       >
                         <input
                           type="checkbox"
@@ -444,8 +444,8 @@ export function ChatPage() {
                 )}
               </div>
               {msg.role === 'user' && (
-                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
-                  <User className="h-4 w-4 text-gray-600" />
+                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+                  <User className="h-4 w-4 text-muted-foreground" />
                 </div>
               )}
             </div>
@@ -468,7 +468,7 @@ export function ChatPage() {
         </div>
 
         {/* Input Area */}
-        <div className="border-t p-4 bg-white">
+        <div className="border-t p-4 bg-background">
           {selectedToolIds.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-2">
               {selectedToolIds.map(toolId => {

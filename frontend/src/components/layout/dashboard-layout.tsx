@@ -94,10 +94,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // Show loading only while hydrating or not authenticated
   if (!hasHydrated || !isAuthenticated) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-100">
+      <div className="h-screen flex items-center justify-center bg-muted">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-foreground mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
     )
@@ -113,11 +113,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-gray-100">
+    <div className="h-screen flex overflow-hidden bg-muted">
       {/* Sidebar */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
+          "fixed inset-y-0 left-0 z-50 w-64 bg-background shadow-lg border-r transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -128,7 +128,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">ai</span>
               </div>
-              <span className="text-xl font-bold text-gray-900">apifai</span>
+              <span className="text-xl font-bold text-foreground">apifai</span>
             </div>
             <Button
               variant="ghost"
@@ -147,7 +147,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="w-full justify-between">
                     <div className="flex items-center space-x-2">
-                      <div className="w-6 h-6 bg-gray-200 rounded flex items-center justify-center">
+                      <div className="w-6 h-6 bg-muted rounded flex items-center justify-center">
                         <span className="text-xs font-medium">
                           {getInitials(currentOrganization.name)}
                         </span>
@@ -167,7 +167,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       className="flex items-center justify-between"
                     >
                       <div className="flex items-center space-x-2">
-                        <div className="w-4 h-4 bg-gray-200 rounded flex items-center justify-center">
+                        <div className="w-4 h-4 bg-muted rounded flex items-center justify-center">
                           <span className="text-xs">{getInitials(org.name)}</span>
                         </div>
                         <span>{org.name}</span>
@@ -194,13 +194,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     "group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors",
                     isActive
                       ? "bg-primary text-primary-foreground"
-                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   )}
                 >
                   <item.icon
                     className={cn(
                       "mr-3 flex-shrink-0 h-5 w-5",
-                      isActive ? "text-primary-foreground" : "text-gray-400 group-hover:text-gray-500"
+                      isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-accent-foreground"
                     )}
                   />
                   {item.name}
@@ -232,8 +232,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     </AvatarFallback>
                   </Avatar>
                   <div className="text-left truncate">
-                    <p className="text-sm font-medium text-gray-900 truncate">{user?.name || user?.email}</p>
-                    {user?.name && <p className="text-xs text-gray-500 truncate">{user?.email}</p>}
+                    <p className="text-sm font-medium text-foreground truncate">{user?.name || user?.email}</p>
+                    {user?.name && <p className="text-xs text-muted-foreground truncate">{user?.email}</p>}
                   </div>
                 </Button>
               </DropdownMenuTrigger>
@@ -267,7 +267,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Top Bar */}
-        <header className="bg-white shadow-sm border-b lg:hidden">
+        <header className="bg-background shadow-sm border-b lg:hidden">
           <div className="flex items-center justify-between h-16 px-4">
             <Button
               variant="ghost"
@@ -280,7 +280,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">ai</span>
               </div>
-              <span className="text-xl font-bold text-gray-900">apifai</span>
+              <span className="text-xl font-bold text-foreground">apifai</span>
             </div>
           </div>
         </header>
@@ -298,7 +298,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Overlay for mobile */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-gray-600 bg-opacity-75 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}

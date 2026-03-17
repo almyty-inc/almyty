@@ -368,7 +368,7 @@ export function ToolDetailPage() {
                     {executionResult.success ? (
                       <div>
                         <p className="text-sm font-medium mb-3">Response Data:</p>
-                        <pre className="text-xs overflow-x-auto bg-white/50 p-3 rounded">
+                        <pre className="text-xs overflow-x-auto bg-background/50 p-3 rounded">
                           {JSON.stringify(executionResult.data, null, 2)}
                         </pre>
                         {executionResult.metadata && (
@@ -381,7 +381,7 @@ export function ToolDetailPage() {
                       <div className="space-y-3">
                         <p className="text-sm text-red-900 font-medium">Execution Failed</p>
                         <div className="space-y-3 text-xs">
-                          <div className="bg-white/50 p-3 rounded space-y-2">
+                          <div className="bg-background/50 p-3 rounded space-y-2">
                             <p className="text-red-700"><strong>Error:</strong> {executionResult.error || executionResult.message || 'Unknown error'}</p>
                             {executionResult.statusCode && (
                               <p><strong>HTTP Status:</strong> {executionResult.statusCode}</p>
@@ -394,7 +394,7 @@ export function ToolDetailPage() {
                           {sentParameters && (
                             <div>
                               <strong>Parameters Sent:</strong>
-                              <pre className="mt-1 bg-white/50 p-2 rounded overflow-x-auto">
+                              <pre className="mt-1 bg-background/50 p-2 rounded overflow-x-auto">
                                 {JSON.stringify(sentParameters, null, 2)}
                               </pre>
                             </div>
@@ -403,7 +403,7 @@ export function ToolDetailPage() {
                           {executionResult.fullError && (
                             <div>
                               <strong>Backend Response:</strong>
-                              <pre className="mt-1 bg-white/50 p-2 rounded overflow-x-auto">
+                              <pre className="mt-1 bg-background/50 p-2 rounded overflow-x-auto">
                                 {JSON.stringify(executionResult.fullError, null, 2)}
                               </pre>
                             </div>
