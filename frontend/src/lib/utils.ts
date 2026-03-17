@@ -70,3 +70,18 @@ export function debounce<T extends (...args: any[]) => any>(
 export function capitalizeFirst(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
+
+/** Format badge labels consistently */
+export function formatLabel(value: string, type: 'protocol' | 'apiType' | 'toolType' | 'status' | 'auth' | 'role' = 'status'): string {
+  if (!value) return ''
+
+  // Acronyms stay uppercase
+  const acronyms = ['mcp', 'a2a', 'utcp', 'api', 'http', 'llm', 'sdk', 'cli', 'url', 'jwt', 'oauth']
+  const lower = value.toLowerCase()
+
+  if (type === 'protocol') return value.toUpperCase()
+  if (acronyms.includes(lower)) return value.toUpperCase()
+
+  // Title case for everything else
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase()
+}

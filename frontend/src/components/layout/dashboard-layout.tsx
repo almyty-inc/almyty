@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -17,6 +17,8 @@ import {
   Activity,
   Bot,
   MessageSquare,
+  Sun,
+  Moon,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -58,6 +60,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, isAuthenticated, logout, hasHydrated } = useAuthStore()
   const { currentOrganization, organizations, setCurrentOrganization, fetchOrganizations } = useOrganizationStore()
   const { sidebarOpen, setSidebarOpen, toggleSidebar } = useAppStore()
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem('theme') === 'dark' ||
+      (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  })
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('theme', 'light')
+    }
+  }, [darkMode])
 
   // Check authentication and redirect if not logged in (only after hydration)
   useEffect(() => {
@@ -195,6 +211,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
           {/* User Menu */}
           <div className="flex-shrink-0 border-t p-4">
+            <div className="flex items-center justify-between mb-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setDarkMode(!darkMode)}
+                aria-label="Toggle dark mode"
+                className="h-8 w-8"
+              >
+                {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="w-full justify-start p-2" aria-label="User menu">
@@ -204,9 +231,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       {user?.name ? getInitials(user.name) : 'U'}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="text-left">
-                    <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-                    <p className="text-xs text-gray-500">{user?.email}</p>
+                  <div className="text-left truncate">
+                    <p className="text-sm font-medium text-gray-900 truncate">{user?.name || user?.email}</p>
+                    {user?.name && <p className="text-xs text-gray-500 truncate">{user?.email}</p>}
                   </div>
                 </Button>
               </DropdownMenuTrigger>
@@ -221,6 +248,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <DropdownMenuItem onClick={() => navigate('/settings')}>
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setDarkMode(!darkMode)}>
+                  {darkMode ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+                  <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
@@ -246,10 +277,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <Menu className="h-6 w-6" />
             </Button>
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">LTG</span>
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">ai</span>
               </div>
-              <span className="text-xl font-bold text-gray-900">LTG</span>
+              <span className="text-xl font-bold text-gray-900">apifai</span>
             </div>
           </div>
         </header>

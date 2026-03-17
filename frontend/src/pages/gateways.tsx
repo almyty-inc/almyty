@@ -9,6 +9,7 @@ import { Router, Plus, Settings, Zap, MoreVertical, Eye, Edit2, Trash2, Activity
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -176,9 +177,7 @@ export function GatewaysPage() {
       cell: ({ row }) => {
         const type = row.original.type
         return (
-          <Badge variant="secondary">
-            {type?.toUpperCase()}
-          </Badge>
+          <ProtocolBadge protocol={type || 'mcp'} />
         )
       },
     },
@@ -209,9 +208,9 @@ export function GatewaysPage() {
       cell: ({ row }) => {
         const toolCount = row.original.tools?.length || 0
         return (
-          <div className="text-center">
-            <span className="font-medium">{toolCount}</span>
-            <span className="text-sm text-muted-foreground ml-1">tools</span>
+          <div className="text-center text-sm">
+            <span className="font-medium">{toolCount}</span>{' '}
+            <span className="text-muted-foreground">tools</span>
           </div>
         )
       },
@@ -221,11 +220,13 @@ export function GatewaysPage() {
       header: 'Requests',
       cell: ({ row }) => {
         const total = row.original.totalRequests || 0
-        const success = row.original.successfulRequests || 0
+        const ok = row.original.successfulRequests || 0
         return (
           <div className="text-sm">
-            <div className="font-medium">{total}</div>
-            <div className="text-muted-foreground">{success} successful</div>
+            {total > 0
+              ? <><span className="font-medium">{total}</span> <span className="text-muted-foreground">({ok} ok)</span></>
+              : <span className="text-muted-foreground">0 requests</span>
+            }
           </div>
         )
       },
@@ -268,7 +269,7 @@ export function GatewaysPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Gateways</h1>
           <p className="text-muted-foreground">
-            Manage API gateways and tool compositions. Scoping is achieved by selective tool assignment.
+            Serve your tools via MCP, A2A, UTCP, and Skills protocols
           </p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>
@@ -314,7 +315,7 @@ export function GatewaysPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Total Tools</CardTitle>
+            <CardTitle className="text-sm">Tool Assignments</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
@@ -385,6 +386,8 @@ export function GatewaysPage() {
               columns={gatewayColumns}
               data={filteredGateways}
               onRowClick={(gateway) => navigate(`/gateways/${gateway.id}`)}
+              hideSelectionCount
+              hideColumnsButton
             />
           </CardContent>
         </Card>

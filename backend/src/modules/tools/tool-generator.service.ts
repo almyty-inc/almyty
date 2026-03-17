@@ -297,10 +297,37 @@ export class ToolGeneratorService {
   }
 
   private generateToolName(operation: Operation, prefix?: string): string {
-    let name = operation.name || operation.operationId;
-    
+    // Prefer operationId if available (e.g., "getStatusCodes")
+    let name = operation.operationId || '';
+
+    if (!name) {
+      // Build from method + endpoint path
+      const method = (operation.method || 'get').toLowerCase();
+      const pathParts = (operation.endpoint || '')
+        .split('/')
+        .filter(p => p && !p.startsWith('{'))
+        .map(p => p.replace(/[^a-zA-Z0-9]/g, ''));
+
+      // Also get path params for context
+      const pathParams = (operation.endpoint || '')
+        .split('/')
+        .filter(p => p.startsWith('{'))
+        .map(p => p.replace(/[{}]/g, ''));
+
+      if (pathParts.length > 0) {
+        name = `${method}_${pathParts.join('_')}`;
+        if (pathParams.length > 0) {
+          name += `_by_${pathParams.join('_')}`;
+        }
+      } else {
+        // Fallback to cleaned operation name
+        name = operation.name || 'unnamed_operation';
+      }
+    }
+
     // Clean up the name
     name = name
+      .replace(/([a-z])([A-Z])/g, '$1_$2') // camelCase to snake_case
       .replace(/[^a-zA-Z0-9_]/g, '_')
       .replace(/_{2,}/g, '_')
       .replace(/^_|_$/g, '')
@@ -309,6 +336,11 @@ export class ToolGeneratorService {
     // Add prefix if provided
     if (prefix) {
       name = `${prefix}_${name}`;
+    }
+
+    // Truncate to 60 chars max (keeping meaningful suffix)
+    if (name.length > 60) {
+      name = name.substring(0, 60).replace(/_[^_]*$/, ''); // cut at last underscore before limit
     }
 
     // Ensure name doesn't start with a number
@@ -320,12 +352,10 @@ export class ToolGeneratorService {
   }
 
   private generateToolDescription(operation: Operation, api: Api): string {
-    const baseDescription = operation.description || 
-      `Execute ${operation.method} ${operation.endpoint} operation`;
-    
-    const apiDescription = `from ${api.name} API`;
-    
-    return `${baseDescription} ${apiDescription}`.trim();
+    if (operation.description) {
+      return operation.description;
+    }
+    return `${(operation.method || 'GET').toUpperCase()} ${operation.endpoint || ''} operation on ${api.name}`;
   }
 
   private determineToolType(operation: Operation): ToolType {

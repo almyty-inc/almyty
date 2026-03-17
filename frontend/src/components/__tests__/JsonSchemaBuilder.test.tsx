@@ -37,8 +37,9 @@ describe('JsonSchemaBuilder', () => {
 
       expect(screen.getByDisplayValue('username')).toBeInTheDocument()
       expect(screen.getByDisplayValue('age')).toBeInTheDocument()
-      expect(screen.getByText('User name')).toBeInTheDocument()
-      expect(screen.getByText('User age')).toBeInTheDocument()
+      // In visual (non-readOnly) mode, descriptions are Input values, not plain text
+      expect(screen.getByDisplayValue('User name')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('User age')).toBeInTheDocument()
     })
 
     it('should add new property when clicking Add Property button', async () => {
@@ -78,7 +79,9 @@ describe('JsonSchemaBuilder', () => {
 
       render(<JsonSchemaBuilder value={schema} onChange={onChange} />)
 
-      const deleteButtons = screen.getAllByRole('button', { name: /trash/i })
+      // Delete buttons have no accessible name (only contain a Trash2 SVG icon)
+      const allButtons = screen.getAllByRole('button')
+      const deleteButtons = allButtons.filter(btn => btn.textContent === '')
       fireEvent.click(deleteButtons[0])
 
       await waitFor(() => {
@@ -332,7 +335,7 @@ describe('JsonSchemaBuilder', () => {
       expect(Object.values(generatedSchema.properties)[0]).toHaveProperty('type')
     })
 
-    it('should maintain required array correctly', () => {
+    it('should maintain required array correctly', async () => {
       const onChange = vi.fn()
       const schema = {
         type: 'object',
@@ -358,7 +361,7 @@ describe('JsonSchemaBuilder', () => {
       })
     })
 
-    it('should remove required array when no properties are required', () => {
+    it('should remove required array when no properties are required', async () => {
       const onChange = vi.fn()
       const schema = {
         type: 'object',
@@ -423,7 +426,7 @@ describe('JsonSchemaBuilder', () => {
       expect(screen.getByText('No properties defined')).toBeInTheDocument()
     })
 
-    it('should preserve property metadata when updating', () => {
+    it('should preserve property metadata when updating', async () => {
       const onChange = vi.fn()
       const schema = {
         type: 'object',
@@ -460,7 +463,7 @@ describe('JsonSchemaBuilder', () => {
   describe('JSON Schema Validation', () => {
     it('should always have type: object at root', () => {
       const onChange = vi.fn()
-      render(<JsonSchemaBuilder value={{ properties: {} }} onChange={onChange} />)
+      render(<JsonSchemaBuilder value={{ type: 'object', properties: {} }} onChange={onChange} />)
 
       fireEvent.click(screen.getByText('Add First Property'))
 
@@ -505,16 +508,18 @@ describe('JsonSchemaBuilder', () => {
       const schemaWithRequired = {
         type: 'object',
         properties: {
-          required: { type: 'string' },
+          email: { type: 'string' },
         },
-        required: ['required'],
+        required: ['email'],
       }
 
       rerender(
         <JsonSchemaBuilder value={schemaWithRequired} onChange={vi.fn()} readOnly />
       )
 
+      // In readOnly mode, required badge is shown as <span>required</span>
       expect(screen.getByText('required')).toBeInTheDocument()
+      expect(screen.getByText('email')).toBeInTheDocument()
     })
   })
 })

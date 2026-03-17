@@ -16,6 +16,7 @@ import { z } from 'zod'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ApiTypeBadge } from '@/components/ui/api-type-badge'
 import { DataTable, createSelectColumn, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
@@ -82,6 +83,8 @@ export function ApisPage() {
   const [editingApi, setEditingApi] = React.useState<Api | null>(null)
   const [deletingApi, setDeletingApi] = React.useState<Api | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
+  const [createStep, setCreateStep] = React.useState<'details' | 'schema'>('details')
+  const [createdApiForSchema, setCreatedApiForSchema] = React.useState<Api | null>(null)
   const [uploadDialogOpen, setUploadDialogOpen] = React.useState(false)
   const [apiDetailsOpen, setApiDetailsOpen] = React.useState(false)
   const [testResults, setTestResults] = React.useState<any>(null)
@@ -110,9 +113,9 @@ export function ApisPage() {
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       success('API created', 'API has been created successfully.')
-      setCreateDialogOpen(false)
+      setCreatedApiForSchema(response.data)
       setSelectedApi(response.data)
-      setUploadDialogOpen(true)
+      setCreateStep('schema')
     },
     onError: (err: any) => {
       error('Failed to create API', err.response?.data?.message || 'Please try again.')
@@ -365,7 +368,7 @@ export function ApisPage() {
             </div>
             <div>
               <div className="font-medium">{api.name}</div>
-              <div className="text-sm text-muted-foreground">{api.baseUrl}</div>
+              <div className="text-sm text-muted-foreground">{api.baseUrl === 'internal://custom' ? 'Custom Tool' : api.baseUrl}</div>
             </div>
           </div>
         )
@@ -375,32 +378,20 @@ export function ApisPage() {
       accessorKey: 'type',
       header: 'Type',
       cell: ({ row }) => {
-        const type = row.original.type
-        const colors: Record<string, string> = {
-          [ApiType.OPENAPI]: 'default',
-          [ApiType.GRAPHQL]: 'secondary',
-          [ApiType.SOAP]: 'outline',
-          [ApiType.GRPC]: 'destructive',
-          [ApiType.OTHER]: 'secondary',
-        }
-        return (
-          <Badge variant={(colors[type] || 'secondary') as any}>
-            {type.toUpperCase()}
-          </Badge>
-        )
+        return <ApiTypeBadge type={row.original.type} />
       },
     },
     {
       accessorKey: 'authentication.type',
       header: 'Auth',
       cell: ({ row }) => {
-        const authType = row.original.authentication?.type
-        const AuthIcon = getAuthTypeIcon(authType)
+        const auth = row.original.authentication?.type
+        const AuthIcon = getAuthTypeIcon(auth)
         return (
           <div className="flex items-center space-x-1">
             <AuthIcon className="h-4 w-4" />
             <span className="text-sm">
-              {authType?.replace('_', ' ').toUpperCase() || 'None'}
+              {!auth || auth === 'none' ? 'None' : auth.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
             </span>
           </div>
         )
@@ -510,7 +501,11 @@ export function ApisPage() {
         <div className="flex items-center space-x-2">
           <Dialog open={createDialogOpen} onOpenChange={(open) => {
             setCreateDialogOpen(open)
-            if (!open) setEditingApi(null)
+            if (!open) {
+              setEditingApi(null)
+              setCreateStep('details')
+              setCreatedApiForSchema(null)
+            }
           }}>
             <DialogTrigger asChild>
               <Button>
@@ -518,15 +513,130 @@ export function ApisPage() {
                 Connect API
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>{editingApi ? 'Edit API' : 'Connect New API'}</DialogTitle>
+                <DialogTitle>
+                  {createStep === 'schema'
+                    ? 'Import Schema'
+                    : editingApi ? 'Edit API' : 'Connect New API'}
+                </DialogTitle>
                 <DialogDescription>
-                  {editingApi
-                    ? 'Update your API configuration and settings.'
-                    : 'Connect an existing API to automatically generate tools for LLM usage.'}
+                  {createStep === 'schema'
+                    ? 'Import a schema to auto-generate operations and tools, or skip this step.'
+                    : editingApi
+                      ? 'Update your API configuration and settings.'
+                      : 'Connect an existing API to automatically generate tools for LLM usage.'}
                 </DialogDescription>
               </DialogHeader>
+              {createStep === 'schema' && createdApiForSchema ? (
+                <div className="space-y-6">
+                  <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
+                    <div>
+                      <p className="font-medium text-sm">API "{createdApiForSchema.name}" created</p>
+                      <p className="text-xs text-muted-foreground">Import a schema to auto-generate operations and tools.</p>
+                    </div>
+                  </div>
+
+                  <Tabs defaultValue="file" className="w-full">
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="file">
+                        <Upload className="h-4 w-4 mr-1" />
+                        File
+                      </TabsTrigger>
+                      <TabsTrigger value="url">
+                        <Globe className="h-4 w-4 mr-1" />
+                        URL
+                      </TabsTrigger>
+                      <TabsTrigger value="paste">
+                        <FileText className="h-4 w-4 mr-1" />
+                        Paste
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="file" className="space-y-3 mt-3">
+                      <div>
+                        <Label>Schema File</Label>
+                        <Input
+                          type="file"
+                          accept=".json,.yaml,.yml,.graphql,.gql,.wsdl,.xml,.proto"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) setUploadFile(file)
+                          }}
+                          className="mt-1"
+                        />
+                        {uploadFile && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Selected: {uploadFile.name} ({(uploadFile.size / 1024).toFixed(1)} KB)
+                          </p>
+                        )}
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="url" className="space-y-3 mt-3">
+                      <div>
+                        <Label>Schema URL</Label>
+                        <Input
+                          id="inlineSchemaUrl"
+                          type="url"
+                          placeholder="https://api.example.com/swagger.json"
+                          className="mt-1"
+                        />
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="paste" className="space-y-3 mt-3">
+                      <div>
+                        <Label>Schema Content</Label>
+                        <Textarea
+                          id="inlineSchemaContent"
+                          placeholder="Paste your schema here..."
+                          rows={8}
+                          className="mt-1"
+                        />
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t">
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setCreateDialogOpen(false)
+                        setCreateStep('details')
+                        setCreatedApiForSchema(null)
+                      }}
+                    >
+                      Skip for now
+                    </Button>
+                    <Button
+                      disabled={importSchemaMutation.isPending}
+                      onClick={() => {
+                        const urlInput = document.getElementById('inlineSchemaUrl') as HTMLInputElement
+                        const pasteInput = document.getElementById('inlineSchemaContent') as HTMLTextAreaElement
+                        const data: any = { generateTools: true }
+                        if (urlInput?.value) data.schemaUrl = urlInput.value
+                        if (pasteInput?.value) data.schemaContent = pasteInput.value
+
+                        importSchemaMutation.mutate({
+                          id: createdApiForSchema.id,
+                          data,
+                          file: uploadFile || undefined,
+                        })
+                        setCreateStep('details')
+                        setCreatedApiForSchema(null)
+                      }}
+                    >
+                      {importSchemaMutation.isPending ? (
+                        <>Importing...</>
+                      ) : (
+                        <>
+                          <Upload className="mr-2 h-4 w-4" />
+                          Import Schema
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
               <form onSubmit={createForm.handleSubmit(handleCreateApi)} className="space-y-6">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
@@ -774,6 +884,7 @@ export function ApisPage() {
                   </Button>
                 </div>
               </form>
+              )}
             </DialogContent>
           </Dialog>
         </div>
@@ -824,7 +935,7 @@ export function ApisPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {apis.reduce((sum: number, a: any) => sum + (a.tools?.length || 0), 0)}
+                  {apis.reduce((sum: number, api: any) => sum + (api.operations?.reduce((t: number, op: any) => t + (op.tools?.length || 0), 0) || 0), 0)}
                 </div>
               </CardContent>
             </Card>
@@ -875,6 +986,8 @@ export function ApisPage() {
                 columns={apiColumns}
                 data={filteredApis}
                 onRowClick={(api) => navigate(`/apis/${api.id}`)}
+                hideSelectionCount
+                hideColumnsButton
               />
             </CardContent>
           </Card>
@@ -1039,7 +1152,7 @@ export function ApisPage() {
                     <CardContent className="space-y-2">
                       <div className="flex justify-between">
                         <span>Tools Generated</span>
-                        <span className="font-medium">{selectedApi.tools?.length || 0}</span>
+                        <span className="font-medium">{allTools.filter((t: any) => t.metadata?.apiId === selectedApi.id || (t.operationId && selectedApi.operations?.some((op: any) => op.id === t.operationId))).length}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Operations Parsed</span>

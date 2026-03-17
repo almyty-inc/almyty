@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
@@ -12,8 +12,10 @@ import {
   Zap,
   AlertTriangle,
 } from 'lucide-react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { analyticsApi, gatewaysApi, toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -113,6 +115,35 @@ export function AnalyticsPage() {
     },
     enabled: !!currentOrganization && tab === 'llm',
   })
+
+  const { data: timeline } = useQuery({
+    queryKey: ['analytics-timeline', currentOrganization?.id],
+    queryFn: async () => {
+      const res = await analyticsApi.getTimeline('7d', 'day')
+      return res.data
+    },
+    enabled: !!currentOrganization && tab === 'overview',
+  })
+
+  const timelineData = useMemo(() => {
+    if (Array.isArray(timeline) && timeline.length > 0) {
+      return timeline.map((entry: any) => ({
+        date: new Date(entry.timestamp || entry.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        requests: entry.requests || entry.count || 0,
+      }))
+    }
+    // Fallback: generate empty 7-day data
+    const days = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      days.push({
+        date: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        requests: 0,
+      })
+    }
+    return days
+  }, [timeline])
 
   const { data: toolsRaw } = useQuery({
     queryKey: ['tools', currentOrganization?.id],
@@ -223,6 +254,26 @@ export function AnalyticsPage() {
               No analytics data yet. Use the system to generate data.
             </div>
           )}
+
+          {/* Requests chart */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-lg">Requests (7 days)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={timelineData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="date" className="text-xs" />
+                    <YAxis className="text-xs" />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="requests" stroke="hsl(222.2, 47.4%, 11.2%)" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -231,13 +282,19 @@ export function AnalyticsPage() {
         <div>
           <div className="flex items-center gap-2 mb-3">
             <span className="text-xs text-muted-foreground">Filter:</span>
-            {['', 'success', 'error'].map(f => (
-              <Button key={f || 'all'} variant={statusFilter === f ? 'default' : 'ghost'}
-                size="sm" className="h-6 text-xs px-2"
-                onClick={() => { setStatusFilter(f); setLogPage(1) }}>
-                {f || 'All'}
-              </Button>
-            ))}
+            <div className="flex gap-1">
+              {[
+                { value: '', label: 'All' },
+                { value: 'success', label: 'Success' },
+                { value: 'error', label: 'Error' },
+              ].map(f => (
+                <Button key={f.value || 'all'} variant={statusFilter === f.value ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => { setStatusFilter(f.value); setLogPage(1) }}>
+                  {f.label}
+                </Button>
+              ))}
+            </div>
           </div>
 
           {loadingLogs ? (
@@ -252,7 +309,7 @@ export function AnalyticsPage() {
                       <th className="px-3 py-2 font-medium">Method</th>
                       <th className="px-3 py-2 font-medium">Path</th>
                       <th className="px-3 py-2 font-medium">Status</th>
-                      <th className="px-3 py-2 font-medium text-right">Time</th>
+                      <th className="px-3 py-2 font-medium text-right">Duration</th>
                       <th className="px-3 py-2 font-medium">Protocol</th>
                       <th className="px-3 py-2 font-medium">IP</th>
                     </tr>

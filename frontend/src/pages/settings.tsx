@@ -163,21 +163,15 @@ function OrganizationTab({ organization }: { organization: any }) {
               className="mt-1"
             />
           ) : (
-            <div className="text-sm mt-1">{organization.description || 'No description'}</div>
+            <div className="text-sm mt-1">{organization.description || <span className="text-muted-foreground italic">No description added</span>}</div>
           )}
         </div>
         
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <label className="text-sm font-medium text-muted-foreground">Plan</label>
-            <div className="text-sm font-medium mt-1">{fullOrg.plan || 'free'}</div>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-muted-foreground">Status</label>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="w-2 h-2 bg-green-500 rounded-full" />
-              <span className="text-sm">Active</span>
-            </div>
+        <div>
+          <label className="text-sm font-medium text-muted-foreground">Status</label>
+          <div className="flex items-center gap-2 mt-1">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <span className="text-sm">Active</span>
           </div>
         </div>
 

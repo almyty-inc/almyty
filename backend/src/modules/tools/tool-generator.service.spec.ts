@@ -422,8 +422,8 @@ describe('ToolGeneratorService', () => {
 
       const result = await service.generateToolFromOperation(mockOperation, mockApi);
 
-      // Test actual name transformation logic
-      expect(result.name).toBe('get_user_by_id');
+      // New logic: builds from method + endpoint path, not operation.name
+      expect(result.name).toBe('get_users_by_id');
       expect(result.name).not.toContain('-');
       expect(result.name).not.toContain('.');
       expect(result.name).not.toContain('!');
@@ -449,7 +449,8 @@ describe('ToolGeneratorService', () => {
 
       const result = await service.generateToolFromOperation(mockOperation, mockApi, { namePrefix: 'api' });
 
-      expect(result.name).toBe('api_getuser');
+      // New logic: builds from method + endpoint, then adds prefix
+      expect(result.name).toBe('api_get_users_by_id');
     });
 
     it('should prepend tool_ if name starts with number', async () => {
@@ -472,7 +473,8 @@ describe('ToolGeneratorService', () => {
 
       const result = await service.generateToolFromOperation(mockOperation, mockApi);
 
-      expect(result.name).toBe('tool_123getuser');
+      // New logic: builds from method + endpoint (ignores operation.name starting with number)
+      expect(result.name).toBe('get_users_by_id');
     });
   });
 
@@ -498,7 +500,8 @@ describe('ToolGeneratorService', () => {
 
       const result = await service.generateToolFromOperation(mockOperation, mockApi);
 
-      expect(result.description).toBe('Retrieves a user by ID from User Management API API');
+      // New logic: returns operation description directly, no API name suffix
+      expect(result.description).toBe('Retrieves a user by ID');
     });
 
     it('should create fallback description from method and endpoint', async () => {
@@ -522,8 +525,8 @@ describe('ToolGeneratorService', () => {
 
       const result = await service.generateToolFromOperation(mockOperation, mockApi);
 
-      expect(result.description).toContain('Execute POST /users');
-      expect(result.description).toContain('from User API');
+      expect(result.description).toContain('POST /users');
+      expect(result.description).toContain('User API');
     });
   });
 

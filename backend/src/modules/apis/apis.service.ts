@@ -147,7 +147,7 @@ export class ApisService {
 
     const [apis, total] = await this.apiRepository.findAndCount({
       where,
-      relations: ['schemas', 'operations'],
+      relations: ['schemas', 'operations', 'operations.tools'],
       order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
@@ -328,8 +328,8 @@ export class ApisService {
     const toolPromises = activeOperations.map(async (operation) => {
       this.logger.log(`[TOOL-GEN] Processing operation: ${operation.name}`);
 
-      const toolName = `${api.name}_${operation.name}`;
-      const toolDescription = operation.description || `Auto-generated tool for ${operation.name} operation`;
+      const toolName = this.generateSemanticToolName(api.name, operation);
+      const toolDescription = operation.description || `${(operation.method || 'GET').toUpperCase()} ${operation.endpoint || ''} operation`;
 
       // Check if tool already exists
       const existingTool = await this.toolsService.findByName(toolName, api.organizationId);
@@ -436,6 +436,46 @@ export class ApisService {
         error: error.message,
       };
     }
+  }
+
+  private generateSemanticToolName(apiName: string, operation: any): string {
+    // Prefer operationId if available (e.g., "getStatusCodes" from OpenAPI spec)
+    let name = operation.operationId || '';
+
+    if (!name && operation.endpoint) {
+      // Build from method + endpoint: "get_status_codes"
+      const method = (operation.method || 'get').toLowerCase();
+      const pathParts = operation.endpoint
+        .split('/')
+        .filter((p: string) => p && !p.startsWith('{'))
+        .map((p: string) => p.replace(/[^a-zA-Z0-9]/g, ''));
+
+      if (pathParts.length > 0) {
+        name = `${method}_${pathParts.join('_')}`;
+      }
+    }
+
+    if (!name) {
+      // Fallback: use operation name but truncate aggressively
+      name = (operation.name || 'unnamed').substring(0, 30);
+    }
+
+    // Clean: camelCase to snake_case, remove special chars
+    const prefix = apiName.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_{2,}/g, '_').replace(/^_|_$/g, '');
+    name = name
+      .replace(/([a-z])([A-Z])/g, '$1_$2')
+      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_|_$/g, '')
+      .toLowerCase();
+
+    const fullName = `${prefix}_${name}`;
+
+    // Truncate to 60 chars max
+    if (fullName.length > 60) {
+      return fullName.substring(0, 60).replace(/_[^_]*$/, '');
+    }
+    return fullName;
   }
 
   private applyAuthentication(config: any, authConfig: any): void {
