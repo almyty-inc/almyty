@@ -329,7 +329,7 @@ describe('LlmProvider Entity', () => {
     it('should return Cohere URL', () => {
       provider.type = LlmProviderType.COHERE;
 
-      expect(provider.getApiUrl()).toBe('https://api.cohere.ai/v1');
+      expect(provider.getApiUrl()).toBe('https://api.cohere.ai/v2');
     });
 
     it('should return Azure OpenAI URL', () => {
@@ -374,7 +374,7 @@ describe('LlmProvider Entity', () => {
       const headers = provider.getAuthHeaders();
 
       expect(headers.Authorization).toBe('Bearer sk-test-key');
-      expect(headers['User-Agent']).toBe('LLM-Tool-Gateway/1.0');
+      expect(headers['User-Agent']).toBe('apifai/1.0');
       expect(headers['Content-Type']).toBe('application/json');
     });
 

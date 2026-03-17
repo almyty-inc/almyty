@@ -1015,15 +1015,21 @@ describe('LlmProvidersService', () => {
         }).toThrow(BadRequestException);
       });
 
-      it('should validate Cohere configuration - no validation required', () => {
+      it('should validate Cohere configuration requires API key', () => {
         expect(() => {
           service['validateProviderConfiguration'](LlmProviderType.COHERE, {});
+        }).toThrow();
+        expect(() => {
+          service['validateProviderConfiguration'](LlmProviderType.COHERE, { apiKey: 'test-key' });
         }).not.toThrow();
       });
 
-      it('should validate HuggingFace configuration - no validation required', () => {
+      it('should validate HuggingFace configuration requires API key', () => {
         expect(() => {
           service['validateProviderConfiguration'](LlmProviderType.HUGGINGFACE, {});
+        }).toThrow();
+        expect(() => {
+          service['validateProviderConfiguration'](LlmProviderType.HUGGINGFACE, { apiKey: 'test-key' });
         }).not.toThrow();
       });
     });
@@ -1054,7 +1060,7 @@ describe('LlmProvidersService', () => {
 
         expect(capabilities.supportsStreaming).toBe(true);
         expect(capabilities.supportsVision).toBe(true);
-        expect(capabilities.maxTokens).toBe(32768);
+        expect(capabilities.maxTokens).toBe(1000000);
       });
 
       it('should return default capabilities for unknown provider', () => {
@@ -1342,7 +1348,7 @@ describe('LlmProvidersService', () => {
         context: { maxTokens: 100, temperature: 0.7 },
       };
 
-      jest.spyOn(service as any, 'calculateOpenAICost').mockReturnValue(0.001);
+      jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
       const result = await service['callOpenAI'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
@@ -1386,7 +1392,7 @@ describe('LlmProvidersService', () => {
         context: {},
       };
 
-      jest.spyOn(service as any, 'calculateOpenAICost').mockReturnValue(0.001);
+      jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
       const result = await service['callOpenAI'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
@@ -1423,7 +1429,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      jest.spyOn(service as any, 'calculateOpenAICost').mockReturnValue(0.001);
+      jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
       await service['callOpenAI'](mockProvider as any, chatRequest, mockSession as any, tools, Date.now());
 
@@ -1460,7 +1466,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: { maxTokens: 1024 } };
 
-      jest.spyOn(service as any, 'calculateAnthropicCost').mockReturnValue(0.002);
+      jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.002);
 
       const result = await service['callAnthropic'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
@@ -1499,7 +1505,7 @@ describe('LlmProvidersService', () => {
       const mockSession = { id: 'session-1', context: {} };
       const tools: any = [{ name: 'get_weather', description: 'Get weather', parameters: {} }];
 
-      jest.spyOn(service as any, 'calculateAnthropicCost').mockReturnValue(0.002);
+      jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.002);
 
       const result = await service['callAnthropic'](mockProvider as any, chatRequest, mockSession as any, tools, Date.now());
 
@@ -1542,7 +1548,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      jest.spyOn(service as any, 'calculateGoogleCost').mockReturnValue(0.001);
+      jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
       const result = await service['callGoogle'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
@@ -1576,7 +1582,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      jest.spyOn(service as any, 'calculateGoogleCost').mockReturnValue(0.001);
+      jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
       const result = await service['callGoogle'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
@@ -1613,7 +1619,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      jest.spyOn(service as any, 'calculateCohereCost').mockReturnValue(0.001);
+      jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
       const result = await service['callCohere'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
@@ -1913,7 +1919,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      jest.spyOn(service as any, 'calculateOpenAICost').mockReturnValue(0.001);
+      jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
       const result = await service['callLlmProvider'](mockProvider as any, chatRequest, mockSession as any, []);
 
@@ -1922,50 +1928,29 @@ describe('LlmProvidersService', () => {
   });
 
   describe('cost calculation methods', () => {
-    it('should calculate OpenAI cost for gpt-4', () => {
-      const cost = service['calculateOpenAICost']('gpt-4', 1000, 1000);
+    it('should calculate cost from provider metadata pricing', () => {
+      const provider = {
+        metadata: {
+          modelInfo: {
+            inputTokenCost: 3.0,
+            outputTokenCost: 6.0,
+          },
+        },
+      };
+      const cost = service['calculateProviderCost'](provider as any, 1000, 1000);
       expect(cost).toBe((1000 / 1000) * 3.0 + (1000 / 1000) * 6.0);
     });
 
-    it('should calculate OpenAI cost for gpt-4-turbo', () => {
-      const cost = service['calculateOpenAICost']('gpt-4-turbo', 1000, 1000);
-      expect(cost).toBe((1000 / 1000) * 1.0 + (1000 / 1000) * 3.0);
+    it('should return 0 when no pricing metadata is set', () => {
+      const provider = { metadata: {} };
+      const cost = service['calculateProviderCost'](provider as any, 1000, 1000);
+      expect(cost).toBe(0);
     });
 
-    it('should calculate OpenAI cost for gpt-4o', () => {
-      const cost = service['calculateOpenAICost']('gpt-4o', 1000, 1000);
-      expect(cost).toBe((1000 / 1000) * 0.5 + (1000 / 1000) * 1.5);
-    });
-
-    it('should calculate OpenAI cost for unknown model (defaults to gpt-3.5-turbo)', () => {
-      const cost = service['calculateOpenAICost']('unknown-model', 1000, 1000);
-      expect(cost).toBe((1000 / 1000) * 0.05 + (1000 / 1000) * 0.15);
-    });
-
-    it('should calculate Anthropic cost for claude-opus-4', () => {
-      const cost = service['calculateAnthropicCost']('claude-opus-4-20250514', 1000, 1000);
-      expect(cost).toBe((1000 / 1000) * 1.5 + (1000 / 1000) * 7.5);
-    });
-
-    it('should calculate Anthropic cost for claude-sonnet-4', () => {
-      const cost = service['calculateAnthropicCost']('claude-sonnet-4-20250514', 1000, 1000);
-      expect(cost).toBe((1000 / 1000) * 0.3 + (1000 / 1000) * 1.5);
-    });
-
-    it('should calculate Anthropic cost for unknown model (defaults to sonnet-4)', () => {
-      const cost = service['calculateAnthropicCost']('unknown-model', 1000, 1000);
-      // Defaults to claude-sonnet-4 costs: input=0.3, output=1.5
-      expect(cost).toBe((1000 / 1000) * 0.3 + (1000 / 1000) * 1.5);
-    });
-
-    it('should calculate Google cost', () => {
-      const cost = service['calculateGoogleCost']('gemini-pro', 1000, 1000);
-      expect(cost).toBe((2000 / 1000) * 0.1);
-    });
-
-    it('should calculate Cohere cost', () => {
-      const cost = service['calculateCohereCost'](1000, 1000);
-      expect(cost).toBe((2000 / 1000) * 0.2);
+    it('should return 0 when metadata is null', () => {
+      const provider = { metadata: null };
+      const cost = service['calculateProviderCost'](provider as any, 1000, 1000);
+      expect(cost).toBe(0);
     });
   });
 
