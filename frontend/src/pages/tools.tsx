@@ -227,15 +227,6 @@ export function ToolsPage() {
     },
   })
 
-  const toggleStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      toolsApi.update(id, { status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tools'] })
-      notifications.success('Success', 'Tool status updated')
-    },
-  })
-
   const createToolMutation = useMutation({
     mutationFn: (data: any) => {
       let code = undefined;
@@ -455,21 +446,7 @@ return new Promise((resolve, reject) => {
       cell: ({ row }: any) => {
         const status = row.original.status
         const variant = status === 'active' ? 'success' : 'secondary'
-        return (
-          <div className="flex items-center gap-2">
-            <Badge variant={variant}>{status}</Badge>
-            <Switch
-              checked={status === 'active'}
-              onCheckedChange={(checked) => {
-                toggleStatusMutation.mutate({
-                  id: row.original.id,
-                  status: checked ? 'active' : 'inactive',
-                })
-              }}
-              aria-label="Toggle tool status"
-            />
-          </div>
-        )
+        return <Badge variant={variant}>{status === 'active' ? 'Active' : 'Inactive'}</Badge>
       },
     },
     {
