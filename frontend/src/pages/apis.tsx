@@ -473,7 +473,10 @@ export function ApisPage() {
   }
 
   const apisExtracted = apisData?.data?.data?.apis || apisData?.data?.apis || []
-  const apis = Array.isArray(apisExtracted) ? apisExtracted : []
+  // Filter out internal custom tool APIs — they're not real APIs, just backend bookkeeping
+  const apis = (Array.isArray(apisExtracted) ? apisExtracted : []).filter(
+    (api: Api) => api.baseUrl !== 'internal://custom'
+  )
   const operationsExtracted = apiOperations?.data?.data?.operations || apiOperations?.data?.operations || apiOperations?.data || []
   const operations = Array.isArray(operationsExtracted) ? operationsExtracted : []
 
