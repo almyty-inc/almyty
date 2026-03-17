@@ -75,11 +75,7 @@ function App() {
             <ToolDetailPage />
           </DashboardLayout>
         } />
-        <Route path="/agents" element={
-          <DashboardLayout>
-            <AgentsPage />
-          </DashboardLayout>
-        } />
+        <Route path="/agents" element={<Navigate to="/gateways" replace />} />
         <Route path="/chat" element={
           <DashboardLayout>
             <ChatPage />

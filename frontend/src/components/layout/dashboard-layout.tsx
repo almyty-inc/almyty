@@ -46,8 +46,6 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'APIs', href: '/apis', icon: Globe },
   { name: 'Tools', href: '/tools', icon: Wrench },
-  { name: 'Agents', href: '/agents', icon: Bot },
-  { name: 'Chat', href: '/chat', icon: MessageSquare },
   { name: 'Gateways', href: '/gateways', icon: Zap },
   { name: 'AI Models', href: '/llm-providers', icon: Brain },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
