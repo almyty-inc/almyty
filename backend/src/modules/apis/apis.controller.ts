@@ -38,6 +38,7 @@ export class ApisController {
   ) {}
 
   @Get()
+  @Roles('member', 'admin', 'owner')
   async findAll(
     @Request() req,
     @Query('organizationId') organizationId?: string,
@@ -60,6 +61,7 @@ export class ApisController {
   }
 
   @Get(':id')
+  @Roles('member', 'admin', 'owner')
   async findOne(@Request() req, @Param('id') id: string) {
     const api = await this.apisService.findOne(id);
     
@@ -75,6 +77,7 @@ export class ApisController {
   }
 
   @Post()
+  @Roles('admin', 'owner')
   async create(@Request() req, @Body() createApiDto: CreateApiDto) {
     if (!req.user.currentOrganizationId) {
       throw new BadRequestException('Organization context required');
@@ -87,6 +90,7 @@ export class ApisController {
   }
 
   @Put(':id')
+  @Roles('admin', 'owner')
   async update(
     @Request() req,
     @Param('id') id: string,
@@ -106,6 +110,7 @@ export class ApisController {
   }
 
   @Delete(':id')
+  @Roles('admin', 'owner')
   async remove(@Request() req, @Param('id') id: string) {
     const api = await this.apisService.findOne(id);
     
@@ -121,6 +126,7 @@ export class ApisController {
   }
 
   @Post(':id/import-schema')
+  @Roles('admin', 'owner')
   @UseInterceptors(FileInterceptor('schema'))
   async importSchema(
     @Request() req,
@@ -170,6 +176,7 @@ export class ApisController {
   }
 
   @Get(':id/import-status/:jobId')
+  @Roles('member', 'admin', 'owner')
   async getImportStatus(@Param('id') id: string, @Param('jobId') jobId: string) {
     const job = await this.schemaImportQueue.getJob(jobId);
 
@@ -201,6 +208,7 @@ export class ApisController {
   }
 
   @Post(':id/generate-tools')
+  @Roles('admin', 'owner')
   async generateTools(@Request() req, @Param('id') id: string) {
     const api = await this.apisService.findOne(id);
     
@@ -216,6 +224,7 @@ export class ApisController {
   }
 
   @Get(':id/operations')
+  @Roles('member', 'admin', 'owner')
   async getOperations(@Request() req, @Param('id') id: string) {
     const api = await this.apisService.findOne(id);
     
@@ -231,6 +240,7 @@ export class ApisController {
   }
 
   @Get(':id/resources')
+  @Roles('member', 'admin', 'owner')
   async getResources(@Request() req, @Param('id') id: string) {
     const api = await this.apisService.findOne(id);
     
@@ -246,6 +256,7 @@ export class ApisController {
   }
 
   @Post(':id/test-connection')
+  @Roles('admin', 'owner')
   async testConnection(@Request() req, @Param('id') id: string) {
     const api = await this.apisService.findOne(id);
     
@@ -261,6 +272,7 @@ export class ApisController {
   }
 
   @Get(':id/schemas')
+  @Roles('member', 'admin', 'owner')
   async getSchemas(@Request() req, @Param('id') id: string) {
     const api = await this.apisService.findOne(id);
     
@@ -276,6 +288,7 @@ export class ApisController {
   }
 
   @Put(':id/status')
+  @Roles('admin', 'owner')
   async updateStatus(
     @Request() req,
     @Param('id') id: string,
