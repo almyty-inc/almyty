@@ -229,12 +229,12 @@ export function ChatPage() {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)]">
         <Bot className="h-16 w-16 text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold mb-2">No LLM Providers Configured</h2>
+        <h2 className="text-xl font-semibold mb-2">No AI Models Configured</h2>
         <p className="text-muted-foreground text-center max-w-md mb-4">
-          To start chatting, you need to configure at least one LLM provider (OpenAI, Anthropic, etc.) in the LLM Providers page.
+          To start chatting, configure at least one AI model provider (OpenAI, Anthropic, etc.) in the AI Models page.
         </p>
         <Button onClick={() => window.location.href = '/llm-providers'}>
-          Configure Providers
+          Configure AI Models
         </Button>
       </div>
     )
