@@ -7,6 +7,7 @@ import {
   Body,
   Req,
   Res,
+  HttpCode,
   HttpException,
   HttpStatus,
   Logger,
@@ -19,6 +20,7 @@ import { Repository } from 'typeorm';
 import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { McpOAuthService } from '../services/mcp-oauth.service';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 /**
  * MCP OAuth 2.1 Controller
@@ -311,10 +313,98 @@ export class McpOAuthController {
   }
 
   // ---------------------------------------------------------------------------
+  // 3b. Authorization Endpoint (POST — programmatic / API clients)
+  // POST /:orgSlug/:gatewaySlug/authorize
+  //
+  // RFC 6749 §3.1: "The authorization server MUST support the use of the
+  // HTTP GET method … and MAY support the use of the POST method as well."
+  //
+  // This POST variant is for programmatic clients that send a Bearer JWT
+  // to identify the resource owner and receive the authorization code as
+  // JSON instead of a 302 redirect.
+  // ---------------------------------------------------------------------------
+  @Post(':orgSlug/:gatewaySlug/authorize')
+  @UseGuards(JwtAuthGuard)
+  @Header('Cache-Control', 'no-store')
+  async authorizePost(
+    @Param('orgSlug') orgSlug: string,
+    @Param('gatewaySlug') gatewaySlug: string,
+    @Body() body: any,
+    @Req() req: any,
+  ) {
+    const { organization, gateway } = await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
+
+    const responseType = body.response_type;
+    const clientId = body.client_id;
+    const redirectUri = body.redirect_uri;
+    const codeChallenge = body.code_challenge;
+    const codeChallengeMethod = body.code_challenge_method;
+    const scope = body.scope;
+    const state = body.state;
+
+    this.logger.log(
+      `OAuth authorize (POST): org=${orgSlug}, gateway=${gateway.name}, client=${clientId}`,
+    );
+
+    // --- Validate required parameters ---
+    if (!responseType || !clientId || !redirectUri || !codeChallenge || !codeChallengeMethod) {
+      throw new HttpException(
+        {
+          error: 'invalid_request',
+          error_description:
+            'Missing required parameters: response_type, client_id, redirect_uri, code_challenge, code_challenge_method',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (responseType !== 'code') {
+      throw new HttpException(
+        {
+          error: 'unsupported_response_type',
+          error_description: 'Only response_type=code is supported (OAuth 2.1)',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (codeChallengeMethod !== 'S256') {
+      throw new HttpException(
+        {
+          error: 'invalid_request',
+          error_description:
+            'Only code_challenge_method=S256 is supported (OAuth 2.1 requires PKCE with S256)',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // User is authenticated via JwtAuthGuard — req.user is always set here
+    const user = req.user;
+
+    const authorizationCode = await this.generateAuthorizationCode({
+      organizationId: organization.id,
+      gatewayId: gateway.id,
+      userId: user.id,
+      clientId,
+      redirectUri,
+      codeChallenge,
+      codeChallengeMethod,
+      scope: scope || 'mcp:*',
+    });
+
+    return {
+      code: authorizationCode,
+      ...(state ? { state } : {}),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // 4. Token Endpoint
   // POST /:orgSlug/:gatewaySlug/token
   // ---------------------------------------------------------------------------
   @Post(':orgSlug/:gatewaySlug/token')
+  @HttpCode(HttpStatus.OK)
   @Header('Content-Type', 'application/json')
   @Header('Cache-Control', 'no-store')
   @Header('Pragma', 'no-cache')
