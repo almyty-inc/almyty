@@ -90,7 +90,7 @@ describe('ToolsService - Custom Tool Creation', () => {
     );
   });
 
-  it('should create HTTP tool and auto-create API', async () => {
+  it('should create HTTP tool without auto-creating API', async () => {
     const createDto = {
       name: 'HTTP Tool',
       description: 'HTTP request tool',
@@ -102,14 +102,9 @@ describe('ToolsService - Custom Tool Creation', () => {
 
     await service.createTool(createDto as any, 'org-123', 'user-123');
 
-    // Should auto-create API
-    expect(apiRepository.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: expect.stringContaining('Custom'),
-        type: 'other',
-      })
-    );
-    expect(apiRepository.save).toHaveBeenCalled();
+    // Custom tools should NOT create dummy API entries
+    expect(apiRepository.create).not.toHaveBeenCalled();
+    expect(toolRepository.save).toHaveBeenCalled();
   });
 
   it('should create GraphQL tool with executionMethod', async () => {
