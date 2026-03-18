@@ -404,6 +404,7 @@ export function AgentBuilderPage() {
             fitViewOptions={{ padding: 0.2 }}
             deleteKeyCode={['Backspace', 'Delete']}
             className="bg-muted/20"
+            proOptions={{ hideAttribution: true }}
           >
             <Background gap={16} size={1} />
             <Controls />
