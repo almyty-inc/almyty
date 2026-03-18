@@ -210,7 +210,7 @@ export function AgentsPage() {
             {agents.length} agents ({activeCount} active)
           </p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>
+        <Button onClick={() => navigate('/agents/new')} disabled={!currentOrganization}>
           <Plus className="h-4 w-4 mr-2" />
           Create Agent
         </Button>
@@ -236,7 +236,7 @@ export function AgentsPage() {
             <p className="text-muted-foreground mb-6 text-center max-w-md">
               Agents orchestrate LLM calls, tool executions, and data transformations into powerful pipelines.
             </p>
-            <Button size="lg" onClick={() => setCreateDialogOpen(true)}>
+            <Button size="lg" onClick={() => navigate('/agents/new')}>
               <Plus className="h-4 w-4 mr-2" />
               Create Agent
             </Button>

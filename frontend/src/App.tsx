@@ -27,6 +27,8 @@ import { SettingsPage } from '@/pages/settings'
 import { OrganizationsPage } from '@/pages/organizations'
 import { ChatPage } from '@/pages/chat'
 import { AgentsPage } from '@/pages/agents'
+import { AgentBuilderPage } from '@/pages/agent-builder'
+import { AgentDetailPage } from '@/pages/agent-detail'
 
 function App() {
   const { checkAuth } = useAuthStore()
@@ -78,6 +80,21 @@ function App() {
         <Route path="/agents" element={
           <DashboardLayout>
             <AgentsPage />
+          </DashboardLayout>
+        } />
+        <Route path="/agents/new" element={
+          <DashboardLayout>
+            <AgentBuilderPage />
+          </DashboardLayout>
+        } />
+        <Route path="/agents/:id" element={
+          <DashboardLayout>
+            <AgentDetailPage />
+          </DashboardLayout>
+        } />
+        <Route path="/agents/:id/edit" element={
+          <DashboardLayout>
+            <AgentBuilderPage />
           </DashboardLayout>
         } />
         <Route path="/chat" element={
