@@ -156,9 +156,10 @@ function OutputConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; 
 }
 
 // --- Model options by provider type ---
-const MODEL_OPTIONS: Record<string, string[]> = {
-  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-  anthropic: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250414', 'claude-opus-4-20250514'],
+// Fallback model suggestions only if the provider API doesn't return models
+const MODEL_FALLBACKS: Record<string, string[]> = {
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
+  anthropic: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250414'],
   google: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
   mistral: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest'],
   groq: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768'],
@@ -210,11 +211,24 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
     return (providers as any[]).find((p: any) => p.id === node.data.providerId) || null
   }, [providers, node.data.providerId])
 
+  // Fetch models dynamically from the provider API
+  const { data: dynamicModels } = useQuery({
+    queryKey: ['provider-models', node.data.providerId],
+    queryFn: async () => {
+      const res = await llmProvidersApi.getModels(node.data.providerId as string)
+      const models = res.data?.data || res.data || []
+      return Array.isArray(models) ? models.map((m: any) => m.id || m.name || m) : []
+    },
+    enabled: !!node.data.providerId,
+  })
+
   const modelSuggestions = useMemo(() => {
+    if (dynamicModels && dynamicModels.length > 0) return dynamicModels
+    // Fallback to static list if API doesn't return models
     if (!selectedProvider) return []
     const providerType = (selectedProvider.type || '').toLowerCase()
-    return MODEL_OPTIONS[providerType] || []
-  }, [selectedProvider])
+    return MODEL_FALLBACKS[providerType] || []
+  }, [dynamicModels, selectedProvider])
 
   // Filter tools by search
   const filteredTools = useMemo(() => {
