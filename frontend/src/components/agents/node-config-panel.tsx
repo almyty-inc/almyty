@@ -292,8 +292,11 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
             className="mt-1"
             value={(node.data.model as string) || ''}
             onChange={(e) => updateData('model', e.target.value)}
-            placeholder="gpt-4o, claude-sonnet-4-20250514, etc."
+            placeholder="Enter model name"
           />
+          {modelSuggestions.length === 0 && node.data.providerId && (
+            <p className="text-[11px] text-muted-foreground mt-1">No models returned from provider. Type the model name manually.</p>
+          )}
         )}
       </div>
 
