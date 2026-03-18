@@ -78,14 +78,22 @@ export function DashboardPage() {
   const recentLogs = recentLogsData?.data || []
 
   // Action items: APIs with no generated tools
+  // Tools connect to APIs through operations, not directly via apiId
   const apisWithNoTools = apis.filter((a: any) => {
-    const apiTools = tools.filter((t: any) => t.apiId === a.id)
-    return apiTools.length === 0
+    // Check via operations.tools (if loaded) or via tool metadata
+    const hasToolsViaOps = a.operations?.some((op: any) => op.tools?.length > 0)
+    const hasToolsViaMeta = tools.some((t: any) =>
+      t.metadata?.sourceApi?.id === a.id ||
+      t.metadata?.apiId === a.id ||
+      a.operations?.some((op: any) => op.id === t.operationId)
+    )
+    return !hasToolsViaOps && !hasToolsViaMeta
   })
 
-  // Action items: Gateways with no API keys (no auth configs)
-  const gatewaysWithNoKeys = gateways.filter((g: any) => {
-    return !g.apiKeyCount && !g.authConfigCount
+  // Action items: Gateways with no auth configured
+  // Check authConfigs array, not a count field
+  const gatewaysWithNoAuth = gateways.filter((g: any) => {
+    return !g.authConfigs?.length && !g.authMethods?.length
   })
 
   return (
@@ -132,7 +140,7 @@ export function DashboardPage() {
       </Card>
 
       {/* Needs Attention */}
-      {(apisWithNoTools.length > 0 || gatewaysWithNoKeys.length > 0) && (
+      {(apisWithNoTools.length > 0 || gatewaysWithNoAuth.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Needs Attention</CardTitle>
@@ -148,13 +156,13 @@ export function DashboardPage() {
                   <span>{apisWithNoTools.length} API(s) have no generated tools</span>
                 </div>
               )}
-              {gatewaysWithNoKeys.length > 0 && (
+              {gatewaysWithNoAuth.length > 0 && (
                 <div
                   className="flex items-center gap-2 text-sm text-amber-600 cursor-pointer hover:underline"
                   onClick={() => navigate('/gateways')}
                 >
                   <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span>{gatewaysWithNoKeys.length} gateway(s) have no API keys</span>
+                  <span>{gatewaysWithNoAuth.length} gateway(s) have no authentication configured</span>
                 </div>
               )}
             </div>
