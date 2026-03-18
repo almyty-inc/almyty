@@ -361,6 +361,22 @@ export const analyticsApi = {
   },
 }
 
+// Agents API
+export const agentsApi = {
+  getAll: () => api.get('/agents'),
+  getById: (id: string) => api.get(`/agents/${id}`),
+  create: (data: any, organizationId?: string) => api.post('/agents', data),
+  update: (id: string, data: any) => api.patch(`/agents/${id}`, data),
+  delete: (id: string) => api.delete(`/agents/${id}`),
+  activate: (id: string) => api.post(`/agents/${id}/activate`),
+  deactivate: (id: string) => api.post(`/agents/${id}/deactivate`),
+  duplicate: (id: string) => api.post(`/agents/${id}/duplicate`),
+  invoke: (id: string, input: any, options?: any) => api.post(`/agents/${id}/invoke`, { input, options }),
+  stream: (id: string, input: any) => api.post(`/agents/${id}/stream`, { input }, { responseType: 'stream' }),
+  getExecutions: (id: string, params?: any) => api.get(`/agents/${id}/executions`, { params }),
+  getExecution: (id: string, execId: string) => api.get(`/agents/${id}/executions/${execId}`),
+}
+
 // Users API (admin)
 export const usersApi = {
   getAll: () => api.get('/users'),

@@ -47,6 +47,7 @@ const navigation = [
   { name: 'APIs', href: '/apis', icon: Globe },
   { name: 'Tools', href: '/tools', icon: Wrench },
   { name: 'Gateways', href: '/gateways', icon: Zap },
+  { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'AI Models', href: '/llm-providers', icon: Brain },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
