@@ -156,18 +156,6 @@ function OutputConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; 
 }
 
 // --- Model options by provider type ---
-// Fallback model suggestions only if the provider API doesn't return models
-const MODEL_FALLBACKS: Record<string, string[]> = {
-  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
-  anthropic: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250414'],
-  google: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
-  mistral: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest'],
-  groq: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768'],
-  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
-  xai: ['grok-2', 'grok-2-mini'],
-  together: ['meta-llama/Llama-3-70b-chat-hf', 'mistralai/Mixtral-8x7B-Instruct-v0.1'],
-  cohere: ['command-r-plus', 'command-r', 'command-light'],
-}
 
 // --- Extract {{...}} variables from a template string ---
 function extractTemplateVariables(text: string): string[] {
@@ -222,13 +210,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
     enabled: !!node.data.providerId,
   })
 
-  const modelSuggestions = useMemo(() => {
-    if (dynamicModels && dynamicModels.length > 0) return dynamicModels
-    // Fallback to static list if API doesn't return models
-    if (!selectedProvider) return []
-    const providerType = (selectedProvider.type || '').toLowerCase()
-    return MODEL_FALLBACKS[providerType] || []
-  }, [dynamicModels, selectedProvider])
+  const modelSuggestions = dynamicModels || []
 
   // Filter tools by search
   const filteredTools = useMemo(() => {
