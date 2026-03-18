@@ -28,6 +28,8 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { useOrganizationStore } from '@/store/organization'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
@@ -86,11 +88,16 @@ export function AgentDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
+  const { currentOrganization } = useOrganizationStore()
 
   const [invokeDialogOpen, setInvokeDialogOpen] = useState(false)
   const [invokeInput, setInvokeInput] = useState('{\n  "message": "Hello"\n}')
   const [invokeResult, setInvokeResult] = useState<any>(null)
   const [rollbackIndex, setRollbackIndex] = useState<number | null>(null)
+  const [integrationTab, setIntegrationTab] = useState<'curl' | 'python' | 'node'>('curl')
+  const [testInput, setTestInput] = useState('')
+  const [testOutput, setTestOutput] = useState<string | null>(null)
+  const [testLoading, setTestLoading] = useState(false)
 
   // Fetch agent
   const { data: agentData, isLoading } = useQuery({
@@ -373,114 +380,135 @@ export function AgentDetailPage() {
         </CardContent>
       </Card>
 
-      {/* How to Use This Agent */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">How to Use This Agent</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Native API */}
-          <div>
-            <div className="text-sm font-medium mb-1">Invoke via API</div>
-            <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs space-y-1 relative">
-              <div className="text-muted-foreground"># Invoke (sync)</div>
-              <div>curl -X POST {window.location.origin.replace('app.', 'api.')}/agents/{agent.id}/invoke \</div>
-              <div>{"  "}-H "Authorization: Bearer YOUR_API_KEY" \</div>
-              <div>{"  "}-H "Content-Type: application/json" \</div>
-              <div>{"  "}-d '{`{"input":{"message":"Hello"}}`}'</div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute top-2 right-2 h-6 px-2 text-xs"
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    `curl -X POST ${window.location.origin.replace('app.', 'api.')}/agents/${agent.id}/invoke -H "Authorization: Bearer YOUR_API_KEY" -H "Content-Type: application/json" -d '{"input":{"message":"Hello"}}'`
-                  )
-                }}
-              >
-                <Copy className="h-3 w-3 mr-1" />
-                Copy
-              </Button>
+      {/* Try It + Integration */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Try It */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Try It</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Type a message to test this agent..."
+                  value={testInput}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTestInput(e.target.value)}
+                  onKeyDown={(e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter' && testInput.trim() && !testLoading) {
+                      setTestLoading(true)
+                      setTestOutput(null)
+                      agentsApi.invoke(agent.id, { message: testInput })
+                        .then((res: any) => {
+                          const output = res.data?.data?.output || res.data?.output || JSON.stringify(res.data)
+                          setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
+                          setTestInput('')
+                        })
+                        .catch((err: any) => {
+                          setTestOutput(`Error: ${err.response?.data?.message || err.message}`)
+                        })
+                        .finally(() => setTestLoading(false))
+                    }
+                  }}
+                  disabled={testLoading}
+                />
+                <Button
+                  disabled={!testInput.trim() || testLoading}
+                  onClick={() => {
+                    setTestLoading(true)
+                    setTestOutput(null)
+                    agentsApi.invoke(agent.id, { message: testInput })
+                      .then((res: any) => {
+                        const output = res.data?.data?.output || res.data?.output || JSON.stringify(res.data)
+                        setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
+                        setTestInput('')
+                      })
+                      .catch((err: any) => {
+                        setTestOutput(`Error: ${err.response?.data?.message || err.message}`)
+                      })
+                      .finally(() => setTestLoading(false))
+                  }}
+                >
+                  {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                </Button>
+              </div>
+              {testOutput && (
+                <div className="bg-muted/50 rounded-lg p-3 text-sm whitespace-pre-wrap max-h-[200px] overflow-auto">
+                  {testOutput}
+                </div>
+              )}
+              {!testOutput && (
+                <p className="text-xs text-muted-foreground">Send a message to invoke this agent and see the response.</p>
+              )}
             </div>
-          </div>
+          </CardContent>
+        </Card>
 
-          {/* OpenAI-compatible */}
-          <div>
-            <div className="text-sm font-medium mb-1">OpenAI-Compatible Endpoint</div>
-            <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs space-y-1 relative">
-              <div className="text-muted-foreground"># Works with any OpenAI SDK</div>
-              <div>curl -X POST {window.location.origin.replace('app.', 'api.')}/v1/chat/completions \</div>
-              <div>{"  "}-H "Authorization: Bearer YOUR_API_KEY" \</div>
-              <div>{"  "}-H "Content-Type: application/json" \</div>
-              <div>{"  "}-d '{`{"model":"agent:${agent.id}","messages":[{"role":"user","content":"Hello"}]}`}'</div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute top-2 right-2 h-6 px-2 text-xs"
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    `curl -X POST ${window.location.origin.replace('app.', 'api.')}/v1/chat/completions -H "Authorization: Bearer YOUR_API_KEY" -H "Content-Type: application/json" -d '{"model":"agent:${agent.id}","messages":[{"role":"user","content":"Hello"}]}'`
-                  )
-                }}
-              >
-                <Copy className="h-3 w-3 mr-1" />
-                Copy
-              </Button>
+        {/* Integration */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Integration</CardTitle>
+              <div className="flex gap-1">
+                {(['curl', 'python', 'node'] as const).map(tab => (
+                  <Button
+                    key={tab}
+                    variant={integrationTab === tab ? 'default' : 'ghost'}
+                    size="sm"
+                    className="h-7 text-xs px-2"
+                    onClick={() => setIntegrationTab(tab)}
+                  >
+                    {tab === 'curl' ? 'cURL' : tab === 'python' ? 'Python' : 'Node.js'}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const apiBase = window.location.origin.replace('app.', 'api.')
+              const agentRef = agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+              const snippets: Record<string, string> = {
+                curl: `curl ${apiBase}/v1/chat/completions \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"agent:${agentRef}","messages":[{"role":"user","content":"Hello"}]}'`,
+                python: `from openai import OpenAI
 
-          {/* Python SDK */}
-          <div>
-            <div className="text-sm font-medium mb-1">Python (OpenAI SDK)</div>
-            <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs space-y-1 relative">
-              <div>from openai import OpenAI</div>
-              <div>&nbsp;</div>
-              <div>client = OpenAI(</div>
-              <div>{"  "}base_url="{window.location.origin.replace('app.', 'api.')}/v1",</div>
-              <div>{"  "}api_key="YOUR_API_KEY"</div>
-              <div>)</div>
-              <div>&nbsp;</div>
-              <div>response = client.chat.completions.create(</div>
-              <div>{"  "}model="agent:{agent.id}",</div>
-              <div>{"  "}messages=[{`{"role": "user", "content": "Hello"}`}]</div>
-              <div>)</div>
-              <div>print(response.choices[0].message.content)</div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute top-2 right-2 h-6 px-2 text-xs"
-                onClick={() => {
-                  navigator.clipboard.writeText(
-`from openai import OpenAI
-
-client = OpenAI(
-    base_url="${window.location.origin.replace('app.', 'api.')}/v1",
-    api_key="YOUR_API_KEY"
-)
-
-response = client.chat.completions.create(
-    model="agent:${agent.id}",
+client = OpenAI(base_url="${apiBase}/v1", api_key="YOUR_API_KEY")
+r = client.chat.completions.create(
+    model="agent:${agentRef}",
     messages=[{"role": "user", "content": "Hello"}]
 )
-print(response.choices[0].message.content)`)
-                }}
-              >
-                <Copy className="h-3 w-3 mr-1" />
-                Copy
-              </Button>
-            </div>
-          </div>
+print(r.choices[0].message.content)`,
+                node: `import OpenAI from 'openai';
 
-          {/* Streaming */}
-          <div>
-            <div className="text-sm font-medium mb-1">Streaming (SSE)</div>
-            <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs">
-              <span className="text-muted-foreground">POST</span>{" "}
-              {window.location.origin.replace('app.', 'api.')}/agents/{agent.id}/stream
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+const client = new OpenAI({ baseURL: '${apiBase}/v1', apiKey: 'YOUR_API_KEY' });
+const r = await client.chat.completions.create({
+  model: 'agent:${agentRef}',
+  messages: [{ role: 'user', content: 'Hello' }],
+});
+console.log(r.choices[0].message.content);`,
+              }
+              return (
+                <div className="relative">
+                  <pre className="bg-muted/50 rounded-lg p-3 font-mono text-xs overflow-auto max-h-[180px] whitespace-pre-wrap">
+                    {snippets[integrationTab]}
+                  </pre>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-2 right-2 h-6 px-2 text-xs"
+                    onClick={() => navigator.clipboard.writeText(snippets[integrationTab])}
+                  >
+                    <Copy className="h-3 w-3 mr-1" /> Copy
+                  </Button>
+                </div>
+              )
+            })()}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Recent Executions */}
       <Card>
