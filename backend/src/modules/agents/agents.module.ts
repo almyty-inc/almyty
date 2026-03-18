@@ -9,6 +9,7 @@ import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
+import { ApiKey } from '../../entities/api-key.entity';
 
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
@@ -31,6 +32,7 @@ import { ToolsModule } from '../tools/tools.module';
       GatewayTool,
       User,
       Organization,
+      ApiKey,
     ]),
     forwardRef(() => LlmProvidersModule),
     forwardRef(() => ToolsModule),

@@ -105,6 +105,19 @@ export class AgentsService {
     return agent;
   }
 
+  async findByName(name: string, organizationId: string): Promise<Agent | null> {
+    return this.agentRepository.findOne({
+      where: { name, organizationId },
+    });
+  }
+
+  async findAllActive(organizationId: string): Promise<Agent[]> {
+    return this.agentRepository.find({
+      where: { organizationId, status: AgentStatus.ACTIVE },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async getAgents(filters: AgentSearchFilters): Promise<{
     data: Agent[];
     total: number;
