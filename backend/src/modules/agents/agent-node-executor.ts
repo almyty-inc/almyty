@@ -1,13 +1,26 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+
 import { AgentTemplateResolver, ExecutionContext } from './agent-template-resolver';
 import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
-import { AgentPipelineNode } from '../../entities/agent.entity';
+import { ToolExecutorService } from '../tools/tool-executor.service';
+import { Agent, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
+import { AgentExecutionEngine } from './agent-execution.engine';
 
 export interface NodeExecutionResult {
   output: any;
   cost?: number;
   tokens?: number;
   executionTime?: number;
+}
+
+export interface NodeExecutionOptions {
+  organizationId: string;
+  userId?: string;
+  nestingDepth?: number;
+  maxNestingDepth?: number;
+  edges?: AgentPipelineEdge[];
 }
 
 @Injectable()
@@ -17,19 +30,30 @@ export class AgentNodeExecutor {
   constructor(
     private readonly templateResolver: AgentTemplateResolver,
     private readonly llmProvidersService: LlmProvidersService,
+    private readonly toolExecutorService: ToolExecutorService,
+    @InjectRepository(Agent)
+    private readonly agentRepository: Repository<Agent>,
+    @Inject(forwardRef(() => AgentExecutionEngine))
+    private readonly executionEngine: AgentExecutionEngine,
   ) {}
 
   /**
    * Executes a single pipeline node and returns the result.
-   * Phase 1 supports: input, output, llm_call
+   * Supports: input, output, llm_call, tool_call, condition, transform, parallel, merge, sub_agent
    */
   async execute(
     node: AgentPipelineNode,
     context: ExecutionContext,
     organizationId: string,
     userId?: string,
+    options?: NodeExecutionOptions,
   ): Promise<NodeExecutionResult> {
     const startTime = Date.now();
+    const execOptions: NodeExecutionOptions = {
+      organizationId,
+      userId,
+      ...options,
+    };
 
     switch (node.type) {
       case 'input':
@@ -41,8 +65,26 @@ export class AgentNodeExecutor {
       case 'llm_call':
         return this.executeLlmCallNode(node, context, organizationId, userId);
 
+      case 'tool_call':
+        return this.executeToolCallNode(node, context, execOptions);
+
+      case 'condition':
+        return this.executeConditionNode(node, context);
+
+      case 'transform':
+        return this.executeTransformNode(node, context);
+
+      case 'parallel':
+        return this.executeParallelNode(node, context);
+
+      case 'merge':
+        return this.executeMergeNode(node, context, execOptions);
+
+      case 'sub_agent':
+        return this.executeSubAgentNode(node, context, execOptions);
+
       default:
-        throw new Error(`Unsupported node type: ${node.type}. Phase 1 supports: input, output, llm_call`);
+        throw new Error(`Unsupported node type: ${node.type}`);
     }
   }
 
@@ -160,5 +202,330 @@ export class AgentNodeExecutor {
       tokens: response.usage?.totalTokens || 0,
       executionTime,
     };
+  }
+
+  /**
+   * Execute a tool_call node — resolves parameter templates and calls ToolExecutorService.
+   */
+  private async executeToolCallNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+    options: NodeExecutionOptions,
+  ): Promise<NodeExecutionResult> {
+    const { toolId, parameterMapping } = node.config || {};
+    const startTime = Date.now();
+
+    if (!toolId) {
+      throw new Error(`Tool call node '${node.id}' is missing 'toolId' in config`);
+    }
+
+    // Resolve each parameter template
+    const resolvedParams: Record<string, any> = {};
+    if (parameterMapping) {
+      for (const [key, template] of Object.entries(parameterMapping)) {
+        if (typeof template === 'string') {
+          resolvedParams[key] = this.templateResolver.resolve(template, context);
+        } else {
+          resolvedParams[key] = template;
+        }
+      }
+    }
+
+    const result = await this.toolExecutorService.executeTool(toolId, resolvedParams, {
+      organizationId: options.organizationId,
+      userId: options.userId,
+    });
+
+    const executionTime = Date.now() - startTime;
+
+    if (!result.success) {
+      throw new Error(result.error || 'Tool execution failed');
+    }
+
+    return {
+      output: result.data,
+      executionTime,
+    };
+  }
+
+  /**
+   * Execute a condition node — evaluates an expression and returns a boolean flag.
+   * The engine uses the __condition flag to decide which branch to follow.
+   */
+  private async executeConditionNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+  ): Promise<NodeExecutionResult> {
+    const { expression } = node.config || {};
+
+    if (!expression) {
+      throw new Error(`Condition node '${node.id}' is missing 'expression' in config`);
+    }
+
+    const resolved = this.templateResolver.resolve(expression, context);
+
+    // Evaluate as boolean: "true", "1", non-empty string => true; "false", "0", "" => false
+    let result: boolean;
+    if (typeof resolved === 'string') {
+      const lower = resolved.toLowerCase().trim();
+      result = lower !== '' && lower !== 'false' && lower !== '0' && lower !== 'null' && lower !== 'undefined';
+    } else {
+      result = Boolean(resolved);
+    }
+
+    return {
+      output: { __condition: true, result },
+    };
+  }
+
+  /**
+   * Execute a transform node — resolves an expression template against context.
+   */
+  private async executeTransformNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+  ): Promise<NodeExecutionResult> {
+    const { expression } = node.config || {};
+
+    if (!expression) {
+      throw new Error(`Transform node '${node.id}' is missing 'expression' in config`);
+    }
+
+    const resolved = this.templateResolver.resolve(expression, context);
+
+    return {
+      output: resolved,
+    };
+  }
+
+  /**
+   * Execute a parallel node — pass-through; the engine handles fan-out.
+   */
+  private async executeParallelNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+  ): Promise<NodeExecutionResult> {
+    // Find the first input that has been resolved
+    const inputNodeId = this.getInputNodeId(node, context);
+    const output = inputNodeId ? context.nodes[inputNodeId]?.output : context.input;
+
+    return {
+      output: output || context.input,
+    };
+  }
+
+  /**
+   * Execute a merge node — collects outputs from all incoming edges and applies a merge strategy.
+   */
+  private async executeMergeNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+    options: NodeExecutionOptions,
+  ): Promise<NodeExecutionResult> {
+    const { strategy, judgeConfig } = node.config || {};
+    const startTime = Date.now();
+
+    // Collect outputs from all incoming edges
+    const incomingOutputs = this.getIncomingOutputs(node, context, options.edges);
+
+    switch (strategy) {
+      case 'first_response':
+        return {
+          output: incomingOutputs[0],
+          executionTime: Date.now() - startTime,
+        };
+
+      case 'concatenate':
+        return {
+          output: incomingOutputs,
+          executionTime: Date.now() - startTime,
+        };
+
+      case 'best_of_n': {
+        if (!judgeConfig?.providerId) {
+          throw new Error(`Merge node '${node.id}' with strategy 'best_of_n' requires judgeConfig.providerId`);
+        }
+
+        const prompt = judgeConfig.prompt ||
+          `You are a judge. Pick the best response from these options:\n\n${incomingOutputs.map((o: any, i: number) => `Option ${i + 1}: ${JSON.stringify(o)}`).join('\n\n')}\n\nRespond with ONLY the number of the best option.`;
+
+        const judgeResult = await this.llmProvidersService.chat(
+          judgeConfig.providerId,
+          {
+            messages: [{ role: 'user' as any, content: prompt }],
+            model: judgeConfig.model,
+          },
+          options.organizationId,
+          options.userId,
+        );
+
+        const executionTime = Date.now() - startTime;
+        const pick = parseInt(judgeResult?.message?.content || '1') - 1;
+        const selectedIndex = Math.max(0, Math.min(pick, incomingOutputs.length - 1));
+
+        return {
+          output: incomingOutputs[selectedIndex],
+          cost: judgeResult?.cost || 0,
+          tokens: judgeResult?.usage?.totalTokens || 0,
+          executionTime,
+        };
+      }
+
+      case 'consensus': {
+        if (!judgeConfig?.providerId) {
+          throw new Error(`Merge node '${node.id}' with strategy 'consensus' requires judgeConfig.providerId`);
+        }
+
+        const prompt = `Analyze these responses and provide a consensus answer that combines the best elements:\n\n${incomingOutputs.map((o: any, i: number) => `Response ${i + 1}: ${JSON.stringify(o)}`).join('\n\n')}\n\nProvide a single consensus response.`;
+
+        const result = await this.llmProvidersService.chat(
+          judgeConfig.providerId,
+          {
+            messages: [{ role: 'user' as any, content: prompt }],
+            model: judgeConfig.model,
+          },
+          options.organizationId,
+          options.userId,
+        );
+
+        const executionTime = Date.now() - startTime;
+
+        return {
+          output: result?.message?.content,
+          cost: result?.cost || 0,
+          tokens: result?.usage?.totalTokens || 0,
+          executionTime,
+        };
+      }
+
+      default:
+        // Default: return first output
+        return {
+          output: incomingOutputs[0],
+          executionTime: Date.now() - startTime,
+        };
+    }
+  }
+
+  /**
+   * Execute a sub_agent node — loads and runs another agent with mapped inputs.
+   * Enforces maximum nesting depth to prevent runaway recursion.
+   */
+  private async executeSubAgentNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+    options: NodeExecutionOptions,
+  ): Promise<NodeExecutionResult> {
+    const { agentId, inputMapping } = node.config || {};
+    const startTime = Date.now();
+
+    if (!agentId) {
+      throw new Error(`Sub-agent node '${node.id}' is missing 'agentId' in config`);
+    }
+
+    const currentDepth = options.nestingDepth || 0;
+    const maxDepth = options.maxNestingDepth || 5;
+
+    if (currentDepth >= maxDepth) {
+      throw new Error(`Max nesting depth (${maxDepth}) exceeded at node '${node.id}'`);
+    }
+
+    // Resolve input mapping
+    const subInput: Record<string, any> = {};
+    if (inputMapping) {
+      for (const [key, template] of Object.entries(inputMapping)) {
+        if (typeof template === 'string') {
+          subInput[key] = this.templateResolver.resolve(template, context);
+        } else {
+          subInput[key] = template;
+        }
+      }
+    } else {
+      // Default: pass entire context input
+      Object.assign(subInput, context.input);
+    }
+
+    // Load sub-agent
+    const subAgent = await this.agentRepository.findOne({ where: { id: agentId } });
+    if (!subAgent) {
+      throw new Error(`Sub-agent '${agentId}' not found`);
+    }
+
+    // Execute sub-agent via the execution engine
+    const result = await this.executionEngine.execute(
+      subAgent,
+      options.organizationId,
+      options.userId,
+      {
+        input: subInput,
+        metadata: {
+          parentNodeId: node.id,
+          nestingDepth: currentDepth + 1,
+        },
+      },
+      undefined, // no onEvent callback for sub-agents
+      {
+        nestingDepth: currentDepth + 1,
+        maxNestingDepth: maxDepth,
+      },
+    );
+
+    const executionTime = Date.now() - startTime;
+
+    if (result.status === 'failed') {
+      throw new Error(`Sub-agent execution failed: ${result.error}`);
+    }
+
+    return {
+      output: result.output,
+      cost: result.totalCost || 0,
+      tokens: result.totalTokens || 0,
+      executionTime,
+    };
+  }
+
+  /**
+   * Find the ID of the first incoming node that has output in context.
+   */
+  private getInputNodeId(node: AgentPipelineNode, context: ExecutionContext): string | null {
+    for (const [nodeId, nodeResult] of Object.entries(context.nodes)) {
+      if (nodeResult.output !== undefined) {
+        return nodeId;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Collect all outputs from nodes that have edges targeting this node.
+   */
+  private getIncomingOutputs(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+    edges?: AgentPipelineEdge[],
+  ): any[] {
+    const outputs: any[] = [];
+
+    if (edges) {
+      // Use edge information to find incoming nodes
+      const incomingEdges = edges.filter(e => e.target === node.id);
+      for (const edge of incomingEdges) {
+        const sourceOutput = context.nodes[edge.source]?.output;
+        if (sourceOutput !== undefined) {
+          outputs.push(sourceOutput);
+        }
+      }
+    }
+
+    // Fallback: if no edges provided or no outputs found, gather all node outputs
+    if (outputs.length === 0) {
+      for (const [nodeId, nodeResult] of Object.entries(context.nodes)) {
+        if (nodeId !== node.id && nodeResult.output !== undefined) {
+          outputs.push(nodeResult.output);
+        }
+      }
+    }
+
+    return outputs;
   }
 }

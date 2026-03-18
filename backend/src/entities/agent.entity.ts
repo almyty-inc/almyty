@@ -31,6 +31,7 @@ export interface AgentPipelineEdge {
   id: string;
   source: string;
   target: string;
+  sourceHandle?: string; // 'true' | 'false' for condition nodes
   label?: string;
   condition?: string;
 }

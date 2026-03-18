@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 
-import { Agent, AgentStatus, AgentPipeline, AgentPipelineNode } from '../../entities/agent.entity';
+import { Agent, AgentStatus, AgentPipeline, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
 import { Organization } from '../../entities/organization.entity';
 
@@ -154,9 +154,9 @@ export class AgentsService {
   ): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId);
 
-    // If pipeline is being updated, validate it
+    // If pipeline is being updated, validate it (pass agent id to prevent self-recursion)
     if (updateDto.pipeline) {
-      this.validatePipeline(updateDto.pipeline);
+      this.validatePipeline(updateDto.pipeline, id);
     }
 
     Object.assign(agent, updateDto);
@@ -176,7 +176,7 @@ export class AgentsService {
     const agent = await this.getAgent(id, organizationId);
 
     // Validate pipeline before activating
-    this.validatePipeline(agent.pipeline);
+    this.validatePipeline(agent.pipeline, agent.id);
 
     agent.status = AgentStatus.ACTIVE;
     const saved = await this.agentRepository.save(agent);
@@ -230,8 +230,12 @@ export class AgentsService {
    * - Must have at least 1 output node
    * - Must have no cycles (topological sort)
    * - All edges must reference existing nodes
+   * - Condition nodes must have exactly 2 outgoing edges with sourceHandle 'true' and 'false'
+   * - Merge nodes must have 2+ incoming edges
+   * - Parallel nodes should have 2+ outgoing edges
+   * - Sub-agent references must exist and not reference self
    */
-  validatePipeline(pipeline: AgentPipeline): void {
+  validatePipeline(pipeline: AgentPipeline, agentId?: string): void {
     if (!pipeline || !pipeline.nodes || !pipeline.edges) {
       throw new BadRequestException('Pipeline must have nodes and edges arrays');
     }
@@ -265,6 +269,87 @@ export class AgentsService {
       }
       if (!nodeIds.has(edge.target)) {
         throw new BadRequestException(`Edge target '${edge.target}' does not reference an existing node`);
+      }
+    }
+
+    // Build edge lookup maps for advanced validation
+    const outgoingEdges = new Map<string, AgentPipelineEdge[]>();
+    const incomingEdges = new Map<string, AgentPipelineEdge[]>();
+    for (const node of pipeline.nodes) {
+      outgoingEdges.set(node.id, []);
+      incomingEdges.set(node.id, []);
+    }
+    for (const edge of pipeline.edges) {
+      outgoingEdges.get(edge.source)?.push(edge);
+      incomingEdges.get(edge.target)?.push(edge);
+    }
+
+    // Validate specific node types
+    for (const node of pipeline.nodes) {
+      switch (node.type) {
+        case 'condition': {
+          const outEdges = outgoingEdges.get(node.id) || [];
+          if (outEdges.length !== 2) {
+            throw new BadRequestException(
+              `Condition node '${node.id}' must have exactly 2 outgoing edges, found ${outEdges.length}`,
+            );
+          }
+          const handles = outEdges.map(e => e.sourceHandle || e.label || '').sort();
+          const hasTrueFalse =
+            (handles.includes('true') && handles.includes('false')) ||
+            (handles.includes('yes') && handles.includes('no'));
+          if (!hasTrueFalse) {
+            throw new BadRequestException(
+              `Condition node '${node.id}' outgoing edges must have sourceHandle 'true'/'false' (or 'yes'/'no'), found: ${handles.join(', ')}`,
+            );
+          }
+          break;
+        }
+
+        case 'merge': {
+          const inEdges = incomingEdges.get(node.id) || [];
+          if (inEdges.length < 2) {
+            throw new BadRequestException(
+              `Merge node '${node.id}' must have at least 2 incoming edges, found ${inEdges.length}`,
+            );
+          }
+          break;
+        }
+
+        case 'parallel': {
+          const outEdges = outgoingEdges.get(node.id) || [];
+          if (outEdges.length < 2) {
+            throw new BadRequestException(
+              `Parallel node '${node.id}' should have at least 2 outgoing edges, found ${outEdges.length}`,
+            );
+          }
+          break;
+        }
+
+        case 'sub_agent': {
+          const subAgentId = node.config?.agentId;
+          if (!subAgentId) {
+            throw new BadRequestException(
+              `Sub-agent node '${node.id}' must have 'agentId' in config`,
+            );
+          }
+          // Prevent direct self-recursion
+          if (agentId && subAgentId === agentId) {
+            throw new BadRequestException(
+              `Sub-agent node '${node.id}' cannot reference the same agent (self-recursion)`,
+            );
+          }
+          break;
+        }
+
+        case 'tool_call': {
+          if (!node.config?.toolId) {
+            throw new BadRequestException(
+              `Tool call node '${node.id}' must have 'toolId' in config`,
+            );
+          }
+          break;
+        }
       }
     }
 

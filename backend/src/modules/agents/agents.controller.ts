@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  Res,
   UseGuards,
   Request,
   ParseUUIDPipe,
@@ -18,9 +19,10 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsOptional, IsEnum, IsObject, IsNumber, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
+import { Response } from 'express';
 
 import { AgentsService, AgentSearchFilters } from './agents.service';
-import { AgentExecutionEngine } from './agent-execution.engine';
+import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { InvokeAgentDto } from './dto/invoke-agent.dto';
@@ -406,6 +408,85 @@ export class AgentsController {
         },
         error.status || HttpStatus.BAD_REQUEST,
       );
+    }
+  }
+
+  @Post(':id/stream')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Stream agent execution via SSE' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiResponse({ status: 200, description: 'SSE stream of execution events' })
+  @ApiResponse({ status: 400, description: 'Agent not active or invalid input' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
+  async streamAgent(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(ValidationPipe) invokeDto: InvokeAgentDto,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        res.status(HttpStatus.BAD_REQUEST).json({
+          success: false,
+          message: 'No organization found',
+          error: 'NO_ORGANIZATION',
+        });
+        return;
+      }
+
+      const userId = req.user.sub || req.user.id;
+      const agent = await this.agentsService.getAgent(id, organizationId);
+
+      if (agent.status !== AgentStatus.ACTIVE) {
+        res.status(HttpStatus.BAD_REQUEST).json({
+          success: false,
+          message: 'Agent must be active to invoke',
+          error: 'AGENT_NOT_ACTIVE',
+        });
+        return;
+      }
+
+      // Set SSE headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+
+      const onEvent = (event: StreamEvent) => {
+        const data = JSON.stringify(event);
+        res.write(`event: ${event.type}\ndata: ${data}\n\n`);
+      };
+
+      const execution = await this.executionEngine.execute(
+        agent,
+        organizationId,
+        userId,
+        {
+          input: invokeDto.input,
+          variables: invokeDto.variables,
+          metadata: invokeDto.metadata,
+        },
+        onEvent,
+      );
+
+      // Send final result
+      res.write(`event: done\ndata: ${JSON.stringify({ executionId: execution.id, status: execution.status })}\n\n`);
+      res.end();
+    } catch (error) {
+      this.logger.error(`[STREAM] Agent stream failed: ${error.message}`, error.stack);
+      // If headers haven't been sent yet, send error as JSON
+      if (!res.headersSent) {
+        res.status(error.status || HttpStatus.BAD_REQUEST).json({
+          success: false,
+          message: error.message,
+          error: 'AGENT_STREAM_FAILED',
+        });
+      } else {
+        // Headers already sent (SSE started), send error as SSE event
+        res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.end();
+      }
     }
   }
 
