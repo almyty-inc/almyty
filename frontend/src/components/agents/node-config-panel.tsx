@@ -1,7 +1,7 @@
-import React from 'react'
+import React, { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Node } from '@xyflow/react'
-import { X, Trash2 } from 'lucide-react'
+import { X, Trash2, ChevronDown, ChevronUp, Code } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 
 import { llmProvidersApi, toolsApi, agentsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
@@ -22,12 +24,13 @@ import { NODE_TYPE_CONFIG, type PipelineNodeType } from './nodes'
 
 interface NodeConfigPanelProps {
   node: Node | null
+  nodes: Node[]
   onUpdateNode: (nodeId: string, data: Record<string, any>) => void
   onDeleteNode: (nodeId: string) => void
   onClose: () => void
 }
 
-export function NodeConfigPanel({ node, onUpdateNode, onDeleteNode, onClose }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClose }: NodeConfigPanelProps) {
   if (!node) return null
 
   const nodeType = node.type as PipelineNodeType
@@ -60,10 +63,10 @@ export function NodeConfigPanel({ node, onUpdateNode, onDeleteNode, onClose }: N
 
         {/* Type-specific configs */}
         {nodeType === 'input' && <InputConfig node={node} updateData={updateData} />}
-        {nodeType === 'output' && <OutputConfig node={node} updateData={updateData} />}
+        {nodeType === 'output' && <OutputConfig node={node} nodes={nodes} updateData={updateData} />}
         {nodeType === 'llm_call' && <LlmCallConfig node={node} updateData={updateData} />}
         {nodeType === 'tool_call' && <ToolCallConfig node={node} updateData={updateData} />}
-        {nodeType === 'condition' && <ConditionConfig node={node} updateData={updateData} />}
+        {nodeType === 'condition' && <ConditionConfig node={node} nodes={nodes} updateData={updateData} />}
         {nodeType === 'transform' && <TransformConfig node={node} updateData={updateData} />}
         {nodeType === 'merge' && <MergeConfig node={node} updateData={updateData} />}
         {nodeType === 'parallel' && <ParallelConfig />}
@@ -88,28 +91,16 @@ export function NodeConfigPanel({ node, onUpdateNode, onDeleteNode, onClose }: N
 
 // --- Input Node Config ---
 function InputConfig({ node, updateData }: { node: Node; updateData: (k: string, v: any) => void }) {
-  const schema = node.data.schema as any
-  const schemaStr = schema ? JSON.stringify(schema, null, 2) : ''
-
   return (
     <div className="space-y-3">
       <div>
-        <Label htmlFor="input-schema">Input Schema (JSON)</Label>
-        <Textarea
-          id="input-schema"
-          className="mt-1 font-mono text-xs"
-          rows={10}
-          value={schemaStr}
-          onChange={(e) => {
-            try {
-              const parsed = JSON.parse(e.target.value)
-              updateData('schema', parsed)
-            } catch {
-              // Allow invalid JSON while typing
-            }
-          }}
-          placeholder='{"type": "object", "properties": {"message": {"type": "string"}}}'
-        />
+        <Label>Input Schema</Label>
+        <div className="mt-1">
+          <JsonSchemaBuilder
+            value={node.data.schema || { type: 'object', properties: {} }}
+            onChange={(schema) => updateData('schema', schema)}
+          />
+        </div>
         <p className="text-xs text-muted-foreground mt-1">
           Define the JSON Schema for pipeline input.
         </p>
@@ -119,30 +110,78 @@ function InputConfig({ node, updateData }: { node: Node; updateData: (k: string,
 }
 
 // --- Output Node Config ---
-function OutputConfig({ node, updateData }: { node: Node; updateData: (k: string, v: any) => void }) {
+function OutputConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; updateData: (k: string, v: any) => void }) {
+  const availableNodes = nodes.filter(n => n.id !== node.id && n.type !== 'input' && n.type !== 'output')
+
   return (
     <div className="space-y-3">
       <div>
-        <Label htmlFor="output-mapping">Output Mapping</Label>
+        <Label>Output Source</Label>
+        <Select
+          value={(node.data.mapping as string) || ''}
+          onValueChange={(v) => updateData('mapping', v)}
+        >
+          <SelectTrigger className="mt-1">
+            <SelectValue placeholder="Select output source" />
+          </SelectTrigger>
+          <SelectContent>
+            {availableNodes.map(n => (
+              <SelectItem key={n.id} value={`{{nodes.${n.id}.output}}`}>
+                {NODE_TYPE_CONFIG[n.type as PipelineNodeType]?.label || n.type}: {n.id}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground mt-1">
+          Select which node's output becomes the pipeline result.
+        </p>
+      </div>
+
+      <div>
+        <Label htmlFor="output-mapping-custom">Custom Mapping</Label>
         <Textarea
-          id="output-mapping"
+          id="output-mapping-custom"
           className="mt-1 font-mono text-xs"
-          rows={4}
+          rows={3}
           value={(node.data.mapping as string) || ''}
           onChange={(e) => updateData('mapping', e.target.value)}
           placeholder="{{nodes.llm_1.output}}"
         />
         <p className="text-xs text-muted-foreground mt-1">
-          Template expression mapping node outputs to pipeline result. Use {'{{nodes.<id>.output}}'} syntax.
+          Or write a custom template using {'{{nodes.<id>.output}}'} syntax.
         </p>
       </div>
     </div>
   )
 }
 
+// --- Model options by provider type ---
+const MODEL_OPTIONS: Record<string, string[]> = {
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+  anthropic: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250414', 'claude-opus-4-20250514'],
+  google: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+  mistral: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest'],
+  groq: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768'],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  xai: ['grok-2', 'grok-2-mini'],
+  together: ['meta-llama/Llama-3-70b-chat-hf', 'mistralai/Mixtral-8x7B-Instruct-v0.1'],
+  cohere: ['command-r-plus', 'command-r', 'command-light'],
+}
+
+// --- Extract {{...}} variables from a template string ---
+function extractTemplateVariables(text: string): string[] {
+  const matches = text.match(/\{\{([^}]+)\}\}/g)
+  if (!matches) return []
+  return [...new Set(matches.map(m => m.replace(/^\{\{|\}\}$/g, '').trim()))]
+}
+
 // --- LLM Call Config ---
 function LlmCallConfig({ node, updateData }: { node: Node; updateData: (k: string, v: any) => void }) {
   const { currentOrganization } = useOrganizationStore()
+  const [toolSearch, setToolSearch] = useState('')
+  const [showAllTools, setShowAllTools] = useState(false)
+  const [useCustomModel, setUseCustomModel] = useState(false)
+  const VISIBLE_TOOLS_LIMIT = 8
 
   const { data: providers } = useQuery({
     queryKey: ['llm-providers'],
@@ -165,6 +204,33 @@ function LlmCallConfig({ node, updateData }: { node: Node; updateData: (k: strin
 
   const temperature = typeof node.data.temperature === 'number' ? node.data.temperature : 0.7
 
+  // Get the selected provider to determine type for model suggestions
+  const selectedProvider = useMemo(() => {
+    if (!providers || !node.data.providerId) return null
+    return (providers as any[]).find((p: any) => p.id === node.data.providerId) || null
+  }, [providers, node.data.providerId])
+
+  const modelSuggestions = useMemo(() => {
+    if (!selectedProvider) return []
+    const providerType = (selectedProvider.type || '').toLowerCase()
+    return MODEL_OPTIONS[providerType] || []
+  }, [selectedProvider])
+
+  // Filter tools by search
+  const filteredTools = useMemo(() => {
+    const allTools = (tools || []) as any[]
+    if (!toolSearch.trim()) return allTools
+    const q = toolSearch.toLowerCase()
+    return allTools.filter((t: any) => t.name?.toLowerCase().includes(q))
+  }, [tools, toolSearch])
+
+  const visibleTools = showAllTools ? filteredTools : filteredTools.slice(0, VISIBLE_TOOLS_LIMIT)
+  const hasMoreTools = filteredTools.length > VISIBLE_TOOLS_LIMIT
+
+  // Extract template variables from prompts
+  const systemPromptVars = extractTemplateVariables((node.data.systemPrompt as string) || '')
+  const userPromptVars = extractTemplateVariables((node.data.userPromptTemplate as string) || '')
+
   return (
     <div className="space-y-3">
       <div>
@@ -172,45 +238,85 @@ function LlmCallConfig({ node, updateData }: { node: Node; updateData: (k: strin
         <Select
           value={(node.data.providerId as string) || ''}
           onValueChange={(v) => {
-            const provider = (providers || []).find((p: any) => p.id === v)
+            const provider = (providers || [] as any[]).find((p: any) => p.id === v)
             updateData('providerId', v)
             if (provider) {
               updateData('providerName', provider.name)
             }
+            // Reset model when provider changes
+            updateData('model', '')
+            setUseCustomModel(false)
           }}
         >
           <SelectTrigger className="mt-1">
             <SelectValue placeholder="Select provider" />
           </SelectTrigger>
           <SelectContent>
-            {(providers || []).map((p: any) => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            {(providers || [] as any[]).map((p: any) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name} <span className="text-muted-foreground ml-1">({p.type})</span>
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
       <div>
-        <Label htmlFor="model">Model</Label>
-        <Input
-          id="model"
-          className="mt-1"
-          value={(node.data.model as string) || ''}
-          onChange={(e) => updateData('model', e.target.value)}
-          placeholder="gpt-4o, claude-3.5-sonnet, etc."
-        />
+        <div className="flex items-center justify-between">
+          <Label htmlFor="model">Model</Label>
+          {modelSuggestions.length > 0 && (
+            <button
+              type="button"
+              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setUseCustomModel(!useCustomModel)}
+            >
+              {useCustomModel ? 'Use suggested' : 'Custom model'}
+            </button>
+          )}
+        </div>
+        {modelSuggestions.length > 0 && !useCustomModel ? (
+          <Select
+            value={(node.data.model as string) || ''}
+            onValueChange={(v) => updateData('model', v)}
+          >
+            <SelectTrigger className="mt-1">
+              <SelectValue placeholder="Select model" />
+            </SelectTrigger>
+            <SelectContent>
+              {modelSuggestions.map((model) => (
+                <SelectItem key={model} value={model}>{model}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            id="model"
+            className="mt-1"
+            value={(node.data.model as string) || ''}
+            onChange={(e) => updateData('model', e.target.value)}
+            placeholder="gpt-4o, claude-sonnet-4-20250514, etc."
+          />
+        )}
       </div>
 
       <div>
         <Label htmlFor="system-prompt">System Prompt</Label>
         <Textarea
           id="system-prompt"
-          className="mt-1 text-xs"
+          className="mt-1 font-mono text-xs"
           rows={4}
           value={(node.data.systemPrompt as string) || ''}
           onChange={(e) => updateData('systemPrompt', e.target.value)}
           placeholder="You are a helpful assistant..."
         />
+        {systemPromptVars.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            <span className="text-[10px] text-muted-foreground">Variables:</span>
+            {systemPromptVars.map(v => (
+              <code key={v} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1 rounded">{v}</code>
+            ))}
+          </div>
+        )}
       </div>
 
       <div>
@@ -223,6 +329,14 @@ function LlmCallConfig({ node, updateData }: { node: Node; updateData: (k: strin
           onChange={(e) => updateData('userPromptTemplate', e.target.value)}
           placeholder="{{input.message}}"
         />
+        {userPromptVars.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            <span className="text-[10px] text-muted-foreground">Variables:</span>
+            {userPromptVars.map(v => (
+              <code key={v} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1 rounded">{v}</code>
+            ))}
+          </div>
+        )}
         <p className="text-xs text-muted-foreground mt-1">
           Use {'{{input.*}}'} or {'{{nodes.<id>.output}}'} for dynamic values.
         </p>
@@ -254,30 +368,63 @@ function LlmCallConfig({ node, updateData }: { node: Node; updateData: (k: strin
 
       <div>
         <Label>Tools (available for function calling)</Label>
-        <div className="mt-1 space-y-1 max-h-[140px] overflow-y-auto border rounded-md p-2">
-          {(tools || []).length === 0 ? (
-            <p className="text-xs text-muted-foreground">No tools available</p>
+        <Input
+          placeholder="Search tools..."
+          value={toolSearch}
+          onChange={(e) => {
+            setToolSearch(e.target.value)
+            setShowAllTools(false)
+          }}
+          className="mt-1 mb-1 text-xs"
+        />
+        <div className="space-y-1 max-h-[200px] overflow-y-auto border rounded-md p-2">
+          {filteredTools.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {(tools || []).length === 0 ? 'No tools available' : 'No tools match your search'}
+            </p>
           ) : (
-            (tools || []).map((tool: any) => {
-              const selectedTools: string[] = (node.data.toolIds as string[]) || []
-              const isSelected = selectedTools.includes(tool.id)
-              return (
-                <label key={tool.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-accent/50 rounded px-1 py-0.5">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(e) => {
-                      const newSelected = e.target.checked
-                        ? [...selectedTools, tool.id]
-                        : selectedTools.filter((id: string) => id !== tool.id)
-                      updateData('toolIds', newSelected)
-                    }}
-                    className="rounded"
-                  />
-                  <span className="truncate">{tool.name}</span>
-                </label>
-              )
-            })
+            <>
+              {visibleTools.map((tool: any) => {
+                const selectedTools: string[] = (node.data.toolIds as string[]) || []
+                const isSelected = selectedTools.includes(tool.id)
+                return (
+                  <label key={tool.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-accent/50 rounded px-1 py-0.5">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        const newSelected = e.target.checked
+                          ? [...selectedTools, tool.id]
+                          : selectedTools.filter((id: string) => id !== tool.id)
+                        updateData('toolIds', newSelected)
+                      }}
+                      className="rounded"
+                    />
+                    <span className="truncate">{tool.name}</span>
+                  </label>
+                )
+              })}
+              {hasMoreTools && !showAllTools && (
+                <button
+                  type="button"
+                  className="w-full text-xs text-center text-muted-foreground hover:text-foreground py-1 transition-colors"
+                  onClick={() => setShowAllTools(true)}
+                >
+                  <ChevronDown className="h-3 w-3 inline mr-1" />
+                  Show all {filteredTools.length} tools
+                </button>
+              )}
+              {hasMoreTools && showAllTools && (
+                <button
+                  type="button"
+                  className="w-full text-xs text-center text-muted-foreground hover:text-foreground py-1 transition-colors"
+                  onClick={() => setShowAllTools(false)}
+                >
+                  <ChevronUp className="h-3 w-3 inline mr-1" />
+                  Show fewer
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -371,24 +518,176 @@ function ToolCallConfig({ node, updateData }: { node: Node; updateData: (k: stri
   )
 }
 
+// --- Condition operators ---
+const CONDITION_OPERATORS = [
+  { value: '===', label: 'equals' },
+  { value: '!==', label: 'not equals' },
+  { value: '>', label: 'greater than' },
+  { value: '<', label: 'less than' },
+  { value: '>=', label: 'greater or equal' },
+  { value: '<=', label: 'less or equal' },
+  { value: 'includes', label: 'contains' },
+  { value: '!includes', label: 'does not contain' },
+  { value: 'startsWith', label: 'starts with' },
+  { value: 'endsWith', label: 'ends with' },
+]
+
+// --- Parse a condition expression into parts ---
+function parseConditionExpression(expr: string): { source: string; operator: string; value: string } | null {
+  // Try to parse: source operator value
+  for (const op of CONDITION_OPERATORS) {
+    if (op.value === 'includes' || op.value === '!includes' || op.value === 'startsWith' || op.value === 'endsWith') {
+      // Pattern: source.includes('value') or !source.includes('value')
+      const negate = op.value.startsWith('!')
+      const method = negate ? op.value.slice(1) : op.value
+      const regex = new RegExp(`^(\\!?)(.*?)\\.${method}\\(['"](.*)['"]\\)$`)
+      const match = expr.match(regex)
+      if (match) {
+        const isNegated = match[1] === '!'
+        if ((negate && isNegated) || (!negate && !isNegated)) {
+          return { source: match[2], operator: op.value, value: match[3] }
+        }
+      }
+    } else {
+      // Pattern: source === 'value' or source > 123
+      const regex = new RegExp(`^(.*?)\\s*${op.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*['"]?(.*)['"]?$`)
+      const match = expr.match(regex)
+      if (match) {
+        return { source: match[1].trim(), operator: op.value, value: match[2].replace(/['"]/g, '').trim() }
+      }
+    }
+  }
+  return null
+}
+
+// --- Build condition expression from parts ---
+function buildConditionExpression(source: string, operator: string, value: string): string {
+  if (!source) return ''
+  if (operator === 'includes') return `${source}.includes('${value}')`
+  if (operator === '!includes') return `!${source}.includes('${value}')`
+  if (operator === 'startsWith') return `${source}.startsWith('${value}')`
+  if (operator === 'endsWith') return `${source}.endsWith('${value}')`
+  // Numeric comparison - don't quote if it's a number
+  const isNumeric = !isNaN(Number(value)) && value.trim() !== ''
+  const quotedValue = isNumeric ? value : `'${value}'`
+  return `${source} ${operator} ${quotedValue}`
+}
+
 // --- Condition Config ---
-function ConditionConfig({ node, updateData }: { node: Node; updateData: (k: string, v: any) => void }) {
+function ConditionConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; updateData: (k: string, v: any) => void }) {
+  const [useRawMode, setUseRawMode] = useState(false)
+  const expression = (node.data.expression as string) || ''
+
+  const availableOutputs = nodes.filter(n => n.id !== node.id && n.type !== 'output')
+
+  // Try to parse existing expression
+  const parsed = useMemo(() => parseConditionExpression(expression), [expression])
+
+  const [condSource, setCondSource] = useState(parsed?.source || '')
+  const [condOperator, setCondOperator] = useState(parsed?.operator || '===')
+  const [condValue, setCondValue] = useState(parsed?.value || '')
+
+  const updateCondition = (source: string, operator: string, value: string) => {
+    setCondSource(source)
+    setCondOperator(operator)
+    setCondValue(value)
+    const expr = buildConditionExpression(source, operator, value)
+    updateData('expression', expr)
+  }
+
   return (
     <div className="space-y-3">
-      <div>
-        <Label htmlFor="condition-expr">Condition Expression</Label>
-        <Textarea
-          id="condition-expr"
-          className="mt-1 font-mono text-xs"
-          rows={4}
-          value={(node.data.expression as string) || ''}
-          onChange={(e) => updateData('expression', e.target.value)}
-          placeholder="{{nodes.llm_1.output.sentiment}} === 'positive'"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          JavaScript expression that evaluates to true/false. The "True" handle connects to the right path, "False" connects below.
-        </p>
+      <div className="flex items-center justify-between">
+        <Label>Condition</Label>
+        <button
+          type="button"
+          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+          onClick={() => setUseRawMode(!useRawMode)}
+        >
+          <Code className="h-3 w-3" />
+          {useRawMode ? 'Visual builder' : 'Raw expression'}
+        </button>
       </div>
+
+      {useRawMode ? (
+        <div>
+          <Textarea
+            className="mt-1 font-mono text-xs"
+            rows={4}
+            value={expression}
+            onChange={(e) => updateData('expression', e.target.value)}
+            placeholder="{{nodes.llm_1.output.sentiment}} === 'positive'"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            JavaScript expression that evaluates to true/false.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
+          <div>
+            <Label className="text-xs">If</Label>
+            <Select
+              value={condSource}
+              onValueChange={(v) => updateCondition(v, condOperator, condValue)}
+            >
+              <SelectTrigger className="mt-1 text-xs font-mono">
+                <SelectValue placeholder="Select source" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableOutputs.map(n => {
+                  const nodeLabel = NODE_TYPE_CONFIG[n.type as PipelineNodeType]?.label || n.type
+                  const val = n.type === 'input' ? `{{input}}` : `{{nodes.${n.id}.output}}`
+                  return (
+                    <SelectItem key={n.id} value={val} className="text-xs font-mono">
+                      {nodeLabel}: {n.id}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label className="text-xs">Operator</Label>
+            <Select
+              value={condOperator}
+              onValueChange={(v) => updateCondition(condSource, v, condValue)}
+            >
+              <SelectTrigger className="mt-1 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CONDITION_OPERATORS.map(op => (
+                  <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label className="text-xs">Value</Label>
+            <Input
+              className="mt-1 text-xs"
+              value={condValue}
+              onChange={(e) => updateCondition(condSource, condOperator, e.target.value)}
+              placeholder="Value to compare"
+            />
+          </div>
+
+          {expression && (
+            <div className="pt-1 border-t">
+              <span className="text-[10px] text-muted-foreground">Expression:</span>
+              <code className="block text-[10px] font-mono bg-background rounded px-2 py-1 mt-0.5 break-all">
+                {expression}
+              </code>
+            </div>
+          )}
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        The "True" handle connects to the right path, "False" connects below.
+      </p>
     </div>
   )
 }

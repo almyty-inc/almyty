@@ -236,12 +236,12 @@ export function AgentBuilderPage() {
     (event: React.DragEvent) => {
       event.preventDefault()
       const type = event.dataTransfer.getData('application/reactflow') as PipelineNodeType
-      if (!type || !reactFlowInstance || !reactFlowWrapper.current) return
+      if (!type || !reactFlowInstance) return
 
-      const bounds = reactFlowWrapper.current.getBoundingClientRect()
+      // screenToFlowPosition expects raw screen coordinates — no manual offset needed
       const position = reactFlowInstance.screenToFlowPosition({
-        x: event.clientX - bounds.left,
-        y: event.clientY - bounds.top,
+        x: event.clientX,
+        y: event.clientY,
       })
 
       const newNode: Node = {
@@ -415,6 +415,7 @@ export function AgentBuilderPage() {
         {selectedNode && (
           <NodeConfigPanel
             node={selectedNode}
+            nodes={nodes}
             onUpdateNode={onUpdateNode}
             onDeleteNode={onDeleteNode}
             onClose={() => setSelectedNode(null)}
