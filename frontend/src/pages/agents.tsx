@@ -17,6 +17,11 @@ import {
   Clock,
   CircleDot,
   Search,
+  FileUp,
+  Sparkles,
+  Zap,
+  Brain,
+  Wrench,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -55,6 +60,14 @@ import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import type { Agent, AgentStatus } from '@/types'
 
+interface AgentTemplate {
+  id: string
+  name: string
+  description: string
+  category: string
+  pipeline: any
+}
+
 const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   active: 'default',
   draft: 'outline',
@@ -89,8 +102,11 @@ export function AgentsPage() {
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [importJson, setImportJson] = useState('')
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [showTemplates, setShowTemplates] = useState(true)
 
   // Fetch agents
   const { data: agentsData, isLoading } = useQuery({
@@ -103,6 +119,18 @@ export function AgentsPage() {
     },
     enabled: !!currentOrganization,
   })
+
+  // Fetch templates
+  const { data: templatesData } = useQuery({
+    queryKey: ['agent-templates'],
+    queryFn: async () => {
+      const response = await agentsApi.getTemplates()
+      return response.data?.data || []
+    },
+    enabled: !!currentOrganization,
+  })
+
+  const templates: AgentTemplate[] = Array.isArray(templatesData) ? templatesData : []
 
   const agents: Agent[] = Array.isArray(agentsData) ? agentsData : []
 
@@ -196,6 +224,24 @@ export function AgentsPage() {
     },
   })
 
+  // Import mutation
+  const importAgentMutation = useMutation({
+    mutationFn: async (jsonStr: string) => {
+      const data = JSON.parse(jsonStr)
+      const response = await agentsApi.importAgent(data)
+      return response.data
+    },
+    onSuccess: async () => {
+      success('Agent Imported', 'Agent has been imported successfully.')
+      await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      setImportDialogOpen(false)
+      setImportJson('')
+    },
+    onError: (err: any) => {
+      errorNotif('Import Failed', err?.message || 'Invalid JSON or import failed')
+    },
+  })
+
   const handleCreateSubmit = (data: CreateAgentForm) => {
     createAgentMutation.mutate(data)
   }
@@ -210,10 +256,16 @@ export function AgentsPage() {
             {agents.length} agents ({activeCount} active)
           </p>
         </div>
-        <Button onClick={() => navigate('/agents/new')} disabled={!currentOrganization}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Agent
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)} disabled={!currentOrganization}>
+            <FileUp className="h-4 w-4 mr-2" />
+            Import
+          </Button>
+          <Button onClick={() => navigate('/agents/new')} disabled={!currentOrganization}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Agent
+          </Button>
+        </div>
       </div>
 
       {!currentOrganization ? (
@@ -244,6 +296,46 @@ export function AgentsPage() {
         </Card>
       ) : (
         <>
+          {/* Templates Section */}
+          {templates.length > 0 && showTemplates && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-amber-500" />
+                  <h2 className="text-sm font-semibold">Start from a Template</h2>
+                </div>
+                <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setShowTemplates(false)}>
+                  Hide
+                </Button>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                {templates.map((template) => {
+                  const Icon = template.category === 'basic' ? Zap : template.id === 'research-agent' ? Brain : template.id === 'tool-augmented' ? Wrench : Bot
+                  return (
+                    <Card
+                      key={template.id}
+                      className="hover:shadow-md transition-shadow cursor-pointer border-dashed"
+                      onClick={() => navigate(`/agents/new?template=${template.id}`)}
+                    >
+                      <CardContent className="pt-4 pb-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 rounded-md bg-amber-500/10 flex items-center justify-center shrink-0">
+                            <Icon className="h-4 w-4 text-amber-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm">{template.name}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{template.description}</p>
+                            <Badge variant="outline" className="mt-1.5 text-[10px]">{template.category}</Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Search */}
           {agents.length > 0 && (
             <div className="relative max-w-sm">
@@ -460,6 +552,55 @@ export function AgentsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Agent Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={(open) => {
+        setImportDialogOpen(open)
+        if (!open) setImportJson('')
+      }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Import Agent</DialogTitle>
+            <DialogDescription>
+              Paste an exported agent JSON to create a new agent from it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="import-json">Agent JSON</Label>
+              <Textarea
+                id="import-json"
+                className="mt-1 font-mono text-xs"
+                rows={12}
+                placeholder='{"name": "My Agent", "pipeline": { ... }}'
+                value={importJson}
+                onChange={(e) => setImportJson(e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportJson('') }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => importAgentMutation.mutate(importJson)}
+                disabled={importAgentMutation.isPending || !importJson.trim()}
+              >
+                {importAgentMutation.isPending ? (
+                  <>
+                    <LoadingSpinner size="sm" className="mr-2" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <FileUp className="h-4 w-4 mr-2" />
+                    Import
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

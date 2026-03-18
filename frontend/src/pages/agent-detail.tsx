@@ -20,11 +20,16 @@ import {
   XCircle,
   DollarSign,
   Loader2,
+  Download,
+  Copy,
+  History,
+  RotateCcw,
+  Calculator,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -35,6 +40,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   Table,
   TableBody,
@@ -75,6 +90,7 @@ export function AgentDetailPage() {
   const [invokeDialogOpen, setInvokeDialogOpen] = useState(false)
   const [invokeInput, setInvokeInput] = useState('{\n  "message": "Hello"\n}')
   const [invokeResult, setInvokeResult] = useState<any>(null)
+  const [rollbackIndex, setRollbackIndex] = useState<number | null>(null)
 
   // Fetch agent
   const { data: agentData, isLoading } = useQuery({
@@ -100,6 +116,30 @@ export function AgentDetailPage() {
   })
 
   const executions: AgentExecution[] = Array.isArray(executionsData) ? executionsData : []
+
+  // Fetch version history
+  const { data: versionsData } = useQuery({
+    queryKey: ['agent-versions', id],
+    queryFn: async () => {
+      const res = await agentsApi.getVersions(id!)
+      return res.data?.data || []
+    },
+    enabled: !!id,
+  })
+
+  const versions: any[] = Array.isArray(versionsData) ? versionsData : []
+
+  // Fetch cost estimate
+  const { data: costEstimateData } = useQuery({
+    queryKey: ['agent-cost-estimate', id],
+    queryFn: async () => {
+      const res = await agentsApi.getCostEstimate(id!)
+      return res.data?.data || null
+    },
+    enabled: !!id,
+  })
+
+  const costEstimate = costEstimateData as any | null
 
   // Build React Flow nodes/edges from pipeline (read-only)
   const flowNodes: Node[] = useMemo(() => {
@@ -149,6 +189,54 @@ export function AgentDetailPage() {
     },
   })
 
+  // Duplicate mutation
+  const duplicateMutation = useMutation({
+    mutationFn: async () => {
+      return agentsApi.duplicate(id!)
+    },
+    onSuccess: async () => {
+      success('Agent Duplicated', 'A copy has been created.')
+      queryClient.invalidateQueries({ queryKey: ['agents'] })
+    },
+    onError: (err: any) => {
+      errorNotif('Duplicate Failed', err?.response?.data?.message || err?.message || 'Failed to duplicate')
+    },
+  })
+
+  // Rollback mutation
+  const rollbackMutation = useMutation({
+    mutationFn: async (versionIndex: number) => {
+      return agentsApi.rollback(id!, versionIndex)
+    },
+    onSuccess: async () => {
+      success('Rolled Back', 'Agent has been rolled back to the selected version.')
+      queryClient.invalidateQueries({ queryKey: ['agent', id] })
+      queryClient.invalidateQueries({ queryKey: ['agent-versions', id] })
+      setRollbackIndex(null)
+    },
+    onError: (err: any) => {
+      errorNotif('Rollback Failed', err?.response?.data?.message || err?.message || 'Failed to rollback')
+    },
+  })
+
+  // Export handler
+  const handleExport = async () => {
+    try {
+      const res = await agentsApi.exportAgent(id!)
+      const exportData = res.data?.data || res.data
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${agent?.name?.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'agent'}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      success('Exported', 'Agent JSON downloaded.')
+    } catch (err: any) {
+      errorNotif('Export Failed', err?.message || 'Failed to export agent')
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -192,6 +280,14 @@ export function AgentDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => duplicateMutation.mutate()}>
+            <Copy className="h-4 w-4 mr-2" />
+            Duplicate
+          </Button>
           <Button variant="outline" onClick={() => setInvokeDialogOpen(true)}>
             <Play className="h-4 w-4 mr-2" />
             Invoke
@@ -333,6 +429,118 @@ export function AgentDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Cost Estimate & Version Info */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Cost Estimate */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Calculator className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base">Pipeline Cost Estimate</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {costEstimate ? (
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">LLM calls per run</span>
+                  <span className="font-medium">{costEstimate.estimatedLlmCalls}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tool calls per run</span>
+                  <span className="font-medium">{costEstimate.estimatedToolCalls}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Parallel execution</span>
+                  <span className="font-medium">{costEstimate.hasParallelExecution ? 'Yes' : 'No'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Est. cost per run</span>
+                  <span className="font-medium">
+                    {costEstimate.estimatedCostRange.low.toFixed(1)}-{costEstimate.estimatedCostRange.high.toFixed(1)} cents
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground pt-1 border-t">
+                  <span>{costEstimate.nodeCount} nodes</span>
+                  <span>{costEstimate.edgeCount} edges</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading cost estimate...</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Version History */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base">Version History</CardTitle>
+            </div>
+            <CardDescription className="text-xs">
+              Current: v{agent.version}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {versions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No version snapshots yet. Versions are saved automatically when the pipeline is updated.
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                {versions.map((v, index) => (
+                  <div key={index} className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
+                    <div className="min-w-0">
+                      <div className="font-medium text-xs">v{v.version}</div>
+                      <div className="text-xs text-muted-foreground truncate">{v.changelog}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {v.savedAt ? formatDateTime(v.savedAt) : ''}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 text-xs"
+                      onClick={() => setRollbackIndex(index)}
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Rollback
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Rollback Confirmation */}
+      <AlertDialog open={rollbackIndex !== null} onOpenChange={(open) => { if (!open) setRollbackIndex(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rollback to this version?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will replace the current pipeline with the one from version
+              {rollbackIndex !== null && versions[rollbackIndex] ? ` v${versions[rollbackIndex].version}` : ''}.
+              The current pipeline state will be preserved in the version history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (rollbackIndex !== null) {
+                  rollbackMutation.mutate(rollbackIndex)
+                }
+              }}
+            >
+              Rollback
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Invoke Dialog */}
       <Dialog open={invokeDialogOpen} onOpenChange={setInvokeDialogOpen}>

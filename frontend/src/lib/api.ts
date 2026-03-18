@@ -375,6 +375,17 @@ export const agentsApi = {
   stream: (id: string, input: any) => api.post(`/agents/${id}/stream`, { input }, { responseType: 'stream' }),
   getExecutions: (id: string, params?: any) => api.get(`/agents/${id}/executions`, { params }),
   getExecution: (id: string, execId: string) => api.get(`/agents/${id}/executions/${execId}`),
+  // Templates
+  getTemplates: () => api.get('/agents/templates'),
+  // Versioning
+  getVersions: (id: string) => api.get(`/agents/${id}/versions`),
+  saveVersion: (id: string, changelog?: string) => api.post(`/agents/${id}/versions`, { changelog }),
+  rollback: (id: string, versionIndex: number) => api.post(`/agents/${id}/versions/${versionIndex}/rollback`),
+  // Import / Export
+  exportAgent: (id: string) => api.get(`/agents/${id}/export`),
+  importAgent: (data: any) => api.post('/agents/import', data),
+  // Cost estimation
+  getCostEstimate: (id: string) => api.get(`/agents/${id}/cost-estimate`),
 }
 
 // Users API (admin)
