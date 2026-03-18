@@ -377,6 +377,115 @@ export function AgentDetailPage() {
         </CardContent>
       </Card>
 
+      {/* How to Use This Agent */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">How to Use This Agent</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Native API */}
+          <div>
+            <div className="text-sm font-medium mb-1">Invoke via API</div>
+            <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs space-y-1 relative">
+              <div className="text-muted-foreground"># Invoke (sync)</div>
+              <div>curl -X POST {window.location.origin.replace('app.', 'api.')}/agents/{agent.id}/invoke \</div>
+              <div>{"  "}-H "Authorization: Bearer YOUR_API_KEY" \</div>
+              <div>{"  "}-H "Content-Type: application/json" \</div>
+              <div>{"  "}-d '{`{"input":{"message":"Hello"}}`}'</div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute top-2 right-2 h-6 px-2 text-xs"
+                onClick={() => {
+                  navigator.clipboard.writeText(
+                    `curl -X POST ${window.location.origin.replace('app.', 'api.')}/agents/${agent.id}/invoke -H "Authorization: Bearer YOUR_API_KEY" -H "Content-Type: application/json" -d '{"input":{"message":"Hello"}}'`
+                  )
+                }}
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Copy
+              </Button>
+            </div>
+          </div>
+
+          {/* OpenAI-compatible */}
+          <div>
+            <div className="text-sm font-medium mb-1">OpenAI-Compatible Endpoint</div>
+            <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs space-y-1 relative">
+              <div className="text-muted-foreground"># Works with any OpenAI SDK</div>
+              <div>curl -X POST {window.location.origin.replace('app.', 'api.')}/v1/chat/completions \</div>
+              <div>{"  "}-H "Authorization: Bearer YOUR_API_KEY" \</div>
+              <div>{"  "}-H "Content-Type: application/json" \</div>
+              <div>{"  "}-d '{`{"model":"agent:${agent.id}","messages":[{"role":"user","content":"Hello"}]}`}'</div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute top-2 right-2 h-6 px-2 text-xs"
+                onClick={() => {
+                  navigator.clipboard.writeText(
+                    `curl -X POST ${window.location.origin.replace('app.', 'api.')}/v1/chat/completions -H "Authorization: Bearer YOUR_API_KEY" -H "Content-Type: application/json" -d '{"model":"agent:${agent.id}","messages":[{"role":"user","content":"Hello"}]}'`
+                  )
+                }}
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Copy
+              </Button>
+            </div>
+          </div>
+
+          {/* Python SDK */}
+          <div>
+            <div className="text-sm font-medium mb-1">Python (OpenAI SDK)</div>
+            <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs space-y-1 relative">
+              <div>from openai import OpenAI</div>
+              <div>&nbsp;</div>
+              <div>client = OpenAI(</div>
+              <div>{"  "}base_url="{window.location.origin.replace('app.', 'api.')}/v1",</div>
+              <div>{"  "}api_key="YOUR_API_KEY"</div>
+              <div>)</div>
+              <div>&nbsp;</div>
+              <div>response = client.chat.completions.create(</div>
+              <div>{"  "}model="agent:{agent.id}",</div>
+              <div>{"  "}messages=[{`{"role": "user", "content": "Hello"}`}]</div>
+              <div>)</div>
+              <div>print(response.choices[0].message.content)</div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute top-2 right-2 h-6 px-2 text-xs"
+                onClick={() => {
+                  navigator.clipboard.writeText(
+`from openai import OpenAI
+
+client = OpenAI(
+    base_url="${window.location.origin.replace('app.', 'api.')}/v1",
+    api_key="YOUR_API_KEY"
+)
+
+response = client.chat.completions.create(
+    model="agent:${agent.id}",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+print(response.choices[0].message.content)`)
+                }}
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Copy
+              </Button>
+            </div>
+          </div>
+
+          {/* Streaming */}
+          <div>
+            <div className="text-sm font-medium mb-1">Streaming (SSE)</div>
+            <div className="bg-muted/50 rounded-lg p-3 font-mono text-xs">
+              <span className="text-muted-foreground">POST</span>{" "}
+              {window.location.origin.replace('app.', 'api.')}/agents/{agent.id}/stream
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Recent Executions */}
       <Card>
         <CardHeader>
