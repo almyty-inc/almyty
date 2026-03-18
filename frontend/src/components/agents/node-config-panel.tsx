@@ -64,8 +64,8 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
         {/* Type-specific configs */}
         {nodeType === 'input' && <InputConfig node={node} updateData={updateData} />}
         {nodeType === 'output' && <OutputConfig node={node} nodes={nodes} updateData={updateData} />}
-        {nodeType === 'llm_call' && <LlmCallConfig node={node} updateData={updateData} />}
-        {nodeType === 'tool_call' && <ToolCallConfig node={node} updateData={updateData} />}
+        {nodeType === 'llm_call' && <LlmCallConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
+        {nodeType === 'tool_call' && <ToolCallConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
         {nodeType === 'condition' && <ConditionConfig node={node} nodes={nodes} updateData={updateData} />}
         {nodeType === 'transform' && <TransformConfig node={node} updateData={updateData} />}
         {nodeType === 'merge' && <MergeConfig node={node} updateData={updateData} />}
@@ -176,7 +176,7 @@ function extractTemplateVariables(text: string): string[] {
 }
 
 // --- LLM Call Config ---
-function LlmCallConfig({ node, updateData }: { node: Node; updateData: (k: string, v: any) => void }) {
+function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: (k: string, v: any) => void; onUpdateNode: (nodeId: string, data: Record<string, any>) => void }) {
   const { currentOrganization } = useOrganizationStore()
   const [toolSearch, setToolSearch] = useState('')
   const [showAllTools, setShowAllTools] = useState(false)
@@ -239,12 +239,14 @@ function LlmCallConfig({ node, updateData }: { node: Node; updateData: (k: strin
           value={(node.data.providerId as string) || ''}
           onValueChange={(v) => {
             const provider = (providers || [] as any[]).find((p: any) => p.id === v)
-            updateData('providerId', v)
-            if (provider) {
-              updateData('providerName', provider.name)
-            }
-            // Reset model when provider changes
-            updateData('model', '')
+            // Batch all updates in one call to avoid stale data overwrites
+            onUpdateNode(node.id, {
+              ...node.data,
+              providerId: v,
+              providerName: provider?.name || '',
+              providerType: provider?.type || '',
+              model: '',
+            })
             setUseCustomModel(false)
           }}
         >
@@ -433,7 +435,7 @@ function LlmCallConfig({ node, updateData }: { node: Node; updateData: (k: strin
 }
 
 // --- Tool Call Config ---
-function ToolCallConfig({ node, updateData }: { node: Node; updateData: (k: string, v: any) => void }) {
+function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: (k: string, v: any) => void; onUpdateNode: (nodeId: string, data: Record<string, any>) => void }) {
   const { currentOrganization } = useOrganizationStore()
 
   const { data: tools } = useQuery({
@@ -470,10 +472,11 @@ function ToolCallConfig({ node, updateData }: { node: Node; updateData: (k: stri
           value={(node.data.toolId as string) || ''}
           onValueChange={(v) => {
             const tool = (tools || []).find((t: any) => t.id === v)
-            updateData('toolId', v)
-            if (tool) {
-              updateData('toolName', tool.name)
-            }
+            onUpdateNode(node.id, {
+              ...node.data,
+              toolId: v,
+              toolName: tool?.name || '',
+            })
           }}
         >
           <SelectTrigger className="mt-1">
