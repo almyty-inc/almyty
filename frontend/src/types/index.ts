@@ -530,3 +530,88 @@ export interface LlmMessage {
   createdAt: string
   session: LlmSession
 }
+
+// Agent Orchestration
+export enum AgentStatus {
+  DRAFT = 'draft',
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  ERROR = 'error',
+}
+
+export interface AgentPipeline {
+  nodes: PipelineNode[]
+  edges: PipelineEdge[]
+  viewport?: { x: number; y: number; zoom: number }
+}
+
+export interface PipelineNode {
+  id: string
+  type: 'input' | 'output' | 'llm_call' | 'tool_call' | 'condition' | 'transform' | 'merge' | 'parallel' | 'sub_agent'
+  position: { x: number; y: number }
+  data: Record<string, any>
+}
+
+export interface PipelineEdge {
+  id: string
+  source: string
+  target: string
+  sourceHandle?: string
+  targetHandle?: string
+  label?: string
+}
+
+export interface Agent {
+  id: string
+  name: string
+  description?: string
+  organizationId: string
+  status: AgentStatus
+  version: string
+  pipeline: AgentPipeline
+  variables?: Record<string, any>
+  settings?: {
+    maxExecutionTime?: number
+    maxNestingDepth?: number
+    maxParallelNodes?: number
+    budgetLimit?: number
+    enableStreaming?: boolean
+  }
+  metadata?: Record<string, any>
+  totalExecutions: number
+  successfulExecutions: number
+  totalCost: number
+  averageExecutionTime: number
+  lastExecutedAt?: string
+  createdBy?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AgentExecution {
+  id: string
+  agentId: string
+  organizationId: string
+  userId?: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout'
+  input?: Record<string, any>
+  output?: any
+  nodeResults?: Record<string, {
+    nodeId: string
+    nodeType: string
+    status: string
+    executionTime?: number
+    input?: any
+    output?: any
+    error?: string
+    cost?: number
+    tokens?: { input: number; output: number }
+  }>
+  executionTime: number
+  totalCost: number
+  totalTokens: number
+  error?: string
+  metadata?: Record<string, any>
+  createdAt: string
+  updatedAt: string
+}

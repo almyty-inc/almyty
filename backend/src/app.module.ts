@@ -29,6 +29,8 @@ import { GatewayTool } from './entities/gateway-tool.entity';
 import { GatewayAuth } from './entities/gateway-auth.entity';
 import { UsageMetric } from './entities/usage-metric.entity';
 import { RequestLog } from './entities/request-log.entity';
+import { Agent } from './entities/agent.entity';
+import { AgentExecution } from './entities/agent-execution.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -46,6 +48,7 @@ import { PluginsModule } from './modules/plugins/plugins.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { HealthModule } from './modules/health/health.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { AgentsModule } from './modules/agents/agents.module';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -107,6 +110,8 @@ import { databaseConfig } from './config/database.config';
       GatewayAuth,
       UsageMetric,
       RequestLog,
+      Agent,
+      AgentExecution,
     ]),
 
     // Rate limiting
@@ -162,6 +167,7 @@ import { databaseConfig } from './config/database.config';
     PluginsModule,
     MonitoringModule,
     HealthModule,
+    AgentsModule,
   ],
   providers: [
     {
