@@ -287,16 +287,18 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
             </SelectContent>
           </Select>
         ) : (
-          <Input
-            id="model"
-            className="mt-1"
-            value={(node.data.model as string) || ''}
-            onChange={(e) => updateData('model', e.target.value)}
-            placeholder="Enter model name"
-          />
-          {modelSuggestions.length === 0 && node.data.providerId && (
-            <p className="text-[11px] text-muted-foreground mt-1">No models returned from provider. Type the model name manually.</p>
-          )}
+          <>
+            <Input
+              id="model"
+              className="mt-1"
+              value={(node.data.model as string) || ''}
+              onChange={(e) => updateData('model', e.target.value)}
+              placeholder="Enter model name"
+            />
+            {modelSuggestions.length === 0 && node.data.providerId && (
+              <p className="text-[11px] text-muted-foreground mt-1">No models returned from provider. Type the model name manually.</p>
+            )}
+          </>
         )}
       </div>
 
