@@ -407,11 +407,6 @@ export function AgentBuilderPage() {
           >
             <Background gap={16} size={1} />
             <Controls />
-            <MiniMap
-              nodeStrokeWidth={3}
-              className="!bg-background !border"
-              maskColor="rgba(0,0,0,0.08)"
-            />
           </ReactFlow>
         </div>
 
