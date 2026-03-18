@@ -77,3 +77,15 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+/* React Flow: remove default node wrapper styling */
+.react-flow__node {
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: inherit !important;
+  color: inherit !important;
+  width: auto !important;
+}
