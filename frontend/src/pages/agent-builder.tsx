@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ReactFlow,
@@ -15,7 +15,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Save, Loader2 } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Download } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -75,11 +75,13 @@ function getDefaultData(type: PipelineNodeType): Record<string, any> {
 export function AgentBuilderPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const { currentOrganization } = useOrganizationStore()
   const { success, error: errorNotif } = useNotifications()
 
   const isEditing = !!id
+  const templateId = searchParams.get('template')
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
 
@@ -102,7 +104,17 @@ export function AgentBuilderPage() {
     enabled: isEditing,
   })
 
-  // Initialize pipeline from fetched data or defaults
+  // Fetch templates for template-based creation
+  const { data: templatesData } = useQuery({
+    queryKey: ['agent-templates'],
+    queryFn: async () => {
+      const res = await agentsApi.getTemplates()
+      return res.data?.data || []
+    },
+    enabled: !!templateId && !isEditing,
+  })
+
+  // Initialize pipeline from fetched data, template, or defaults
   useEffect(() => {
     if (initialized) return
 
@@ -128,7 +140,31 @@ export function AgentBuilderPage() {
       setNodes(pipelineNodes)
       setEdges(pipelineEdges)
       setInitialized(true)
-    } else if (!isEditing) {
+    } else if (!isEditing && templateId && Array.isArray(templatesData)) {
+      // Initialize from template
+      const template = templatesData.find((t: any) => t.id === templateId)
+      if (template) {
+        setAgentName(template.name)
+        setAgentDescription(template.description || '')
+        const pipelineNodes = (template.pipeline?.nodes || []).map((n: any) => ({
+          id: n.id,
+          type: n.type,
+          position: n.position,
+          data: n.data || n.config || {},
+        }))
+        const pipelineEdges = (template.pipeline?.edges || []).map((e: any) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          sourceHandle: e.sourceHandle,
+          targetHandle: e.targetHandle,
+          label: e.label,
+        }))
+        setNodes(pipelineNodes)
+        setEdges(pipelineEdges)
+        setInitialized(true)
+      }
+    } else if (!isEditing && !templateId) {
       setNodes(DEFAULT_PIPELINE_NODES.map((n) => ({
         id: n.id,
         type: n.type,
@@ -142,7 +178,7 @@ export function AgentBuilderPage() {
       })))
       setInitialized(true)
     }
-  }, [isEditing, agentData, initialized, setNodes, setEdges])
+  }, [isEditing, agentData, initialized, setNodes, setEdges, templateId, templatesData])
 
   // Connect edges
   const onConnect = useCallback(
@@ -304,6 +340,36 @@ export function AgentBuilderPage() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          {isEditing && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const res = await agentsApi.exportAgent(id!)
+                  const exportData = res.data?.data || res.data
+                  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `${agentName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                  success('Exported', 'Agent JSON downloaded.')
+                } catch (err: any) {
+                  errorNotif('Export Failed', err?.message || 'Failed to export agent')
+                }
+              }}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+          )}
+          {isEditing && agentData && (
+            <Badge variant="outline" className="text-xs">
+              v{(agentData as Agent).version || '1.0.0'}
+            </Badge>
+          )}
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
             {saveMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />

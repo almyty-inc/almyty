@@ -11,6 +11,7 @@ import {
   UseGuards,
   Request,
   ParseUUIDPipe,
+  ParseIntPipe,
   ValidationPipe,
   HttpStatus,
   HttpException,
@@ -159,6 +160,55 @@ export class AgentsController {
           error: 'AGENTS_FETCH_FAILED',
         },
         error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('templates')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Get pre-built agent templates' })
+  @ApiResponse({ status: 200, description: 'Templates retrieved successfully' })
+  getTemplates() {
+    return {
+      success: true,
+      data: this.agentsService.getTemplates(),
+    };
+  }
+
+  @Post('import')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Import an agent from JSON' })
+  @ApiResponse({ status: 201, description: 'Agent imported successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid import data' })
+  async importAgent(
+    @Body() body: any,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const userId = req.user.sub || req.user.id;
+      const agent = await this.agentsService.importAgent(body, organizationId, userId);
+
+      return {
+        success: true,
+        data: agent,
+        message: 'Agent imported successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'AGENT_IMPORT_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
       );
     }
   }
@@ -533,6 +583,204 @@ export class AgentsController {
           success: false,
           message: error.message,
           error: 'EXECUTIONS_FETCH_FAILED',
+        },
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // ── Version Management ──
+
+  @Post(':id/versions')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Save current agent state as a version' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiResponse({ status: 201, description: 'Version saved successfully' })
+  async saveVersion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { changelog?: string },
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      await this.agentsService.saveVersion(id, organizationId, body?.changelog);
+
+      return {
+        success: true,
+        message: 'Version saved successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'VERSION_SAVE_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get(':id/versions')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Get agent version history' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiResponse({ status: 200, description: 'Version history retrieved successfully' })
+  async getVersionHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const versions = await this.agentsService.getVersionHistory(id, organizationId);
+
+      return {
+        success: true,
+        data: versions,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'VERSION_HISTORY_FAILED',
+        },
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post(':id/versions/:index/rollback')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Rollback agent to a specific version' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiParam({ name: 'index', description: 'Version index' })
+  @ApiResponse({ status: 200, description: 'Agent rolled back successfully' })
+  async rollbackToVersion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('index') index: string,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const versionIndex = parseInt(index, 10);
+      if (isNaN(versionIndex)) {
+        throw new HttpException(
+          { success: false, message: 'Invalid version index', error: 'INVALID_INDEX' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const agent = await this.agentsService.rollbackToVersion(id, organizationId, versionIndex);
+
+      return {
+        success: true,
+        data: agent,
+        message: 'Agent rolled back successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'ROLLBACK_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  // ── Export / Import ──
+
+  @Get(':id/export')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Export agent as JSON' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiResponse({ status: 200, description: 'Agent exported successfully' })
+  async exportAgent(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const exportData = await this.agentsService.exportAgent(id, organizationId);
+
+      return {
+        success: true,
+        data: exportData,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'AGENT_EXPORT_FAILED',
+        },
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // ── Cost Estimation ──
+
+  @Get(':id/cost-estimate')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Get cost estimate for an agent pipeline' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiResponse({ status: 200, description: 'Cost estimate retrieved successfully' })
+  async getCostEstimate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const estimate = await this.agentsService.estimateCost(id, organizationId);
+
+      return {
+        success: true,
+        data: estimate,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'COST_ESTIMATE_FAILED',
         },
         error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
