@@ -349,41 +349,56 @@ export function AgentsPage() {
             </div>
           )}
 
-          {/* Agent Cards Grid */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {/* Agent Table */}
+          <Card>
+            <CardContent className="pt-6">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border/50">
+                    <th className="py-3 px-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
+                    <th className="py-3 px-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                    <th className="py-3 px-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Nodes</th>
+                    <th className="py-3 px-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Runs</th>
+                    <th className="py-3 px-4 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"></th>
+                  </tr>
+                </thead>
+                <tbody>
             {filteredAgents.map((agent) => {
               const nodeCount = agent.pipeline?.nodes?.length || 0
               return (
-                <Card
+                <tr
                   key={agent.id}
-                  className="hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => navigate(`/agents/${agent.id}`)}
+                  className="border-b border-border/50 hover:bg-accent/30 cursor-pointer transition-colors"
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement
+                    if (target.closest('button, [role="menuitem"]')) return
+                    navigate(`/agents/${agent.id}`)
+                  }}
                 >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0">
-                          <Bot className="h-5 w-5 text-white" />
-                        </div>
-                        <div className="min-w-0">
-                          <CardTitle className="text-base truncate">{agent.name}</CardTitle>
-                          <CardDescription className="text-xs truncate">
-                            {agent.description || 'No description'}
-                          </CardDescription>
-                        </div>
+                  <td className="py-3 px-4">
+                    <div>
+                      <span className="font-medium text-primary hover:underline">{agent.name}</span>
+                      <div className="text-xs text-muted-foreground truncate max-w-[300px]">
+                        {agent.description || 'No description'}
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Badge variant={statusVariant[agent.status] || 'secondary'}>
-                          {agent.status}
-                        </Badge>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <Badge variant={statusVariant[agent.status] || 'secondary'}>
+                      {agent.status === 'active' ? 'Active' : agent.status === 'draft' ? 'Draft' : agent.status}
+                    </Badge>
+                  </td>
+                  <td className="py-3 px-4 text-sm text-muted-foreground">{nodeCount}</td>
+                  <td className="py-3 px-4 text-sm text-muted-foreground">{agent.totalExecutions || 0}</td>
+                  <td className="py-3 px-4 text-right">
                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                            <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}`)}>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/edit`)}>
                               <Pencil className="h-4 w-4 mr-2" />
                               Edit
                             </DropdownMenuItem>
@@ -415,46 +430,14 @@ export function AgentsPage() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-1">
-                          <CircleDot className="h-3.5 w-3.5" />
-                          <span>{nodeCount} nodes</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Activity className="h-3.5 w-3.5" />
-                          <span>{agent.totalExecutions || 0} runs</span>
-                        </div>
-                      </div>
-                      {agent.averageExecutionTime > 0 && (
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
-                          <span>{(agent.averageExecutionTime / 1000).toFixed(1)}s avg</span>
-                        </div>
-                      )}
-                    </div>
-                    {agent.totalExecutions > 0 && (
-                      <div className="mt-2 flex items-center gap-2 text-xs">
-                        <span className="text-green-600">{agent.successfulExecutions || 0} ok</span>
-                        <span className="text-muted-foreground">/</span>
-                        <span className="text-muted-foreground">{agent.totalExecutions} total</span>
-                        {agent.totalCost > 0 && (
-                          <>
-                            <span className="text-muted-foreground">·</span>
-                            <span className="text-muted-foreground">${agent.totalCost.toFixed(4)}</span>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                  </td>
+                </tr>
               )
             })}
-          </div>
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
 
           {filteredAgents.length === 0 && searchQuery && (
             <div className="text-center py-12 text-muted-foreground">
