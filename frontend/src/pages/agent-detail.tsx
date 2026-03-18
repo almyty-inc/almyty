@@ -364,14 +364,10 @@ export function AgentDetailPage() {
               panOnDrag
               zoomOnScroll
               className="bg-muted/10"
+              proOptions={{ hideAttribution: true }}
             >
               <Background gap={16} size={1} />
               <Controls showInteractive={false} />
-              <MiniMap
-                nodeStrokeWidth={3}
-                className="!bg-background !border"
-                maskColor="rgba(0,0,0,0.08)"
-              />
             </ReactFlow>
           </div>
         </CardContent>
