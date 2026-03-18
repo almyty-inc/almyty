@@ -551,7 +551,8 @@ export class AgentsService {
         }
 
         case 'sub_agent': {
-          const subAgentId = node.config?.agentId;
+          const nodeData = node.data || node.config || {};
+          const subAgentId = nodeData.agentId;
           if (!subAgentId) {
             throw new BadRequestException(
               `Sub-agent node '${node.id}' must have 'agentId' in config`,
@@ -567,7 +568,8 @@ export class AgentsService {
         }
 
         case 'tool_call': {
-          if (!node.config?.toolId) {
+          const toolData = node.data || node.config || {};
+          if (!toolData.toolId) {
             throw new BadRequestException(
               `Tool call node '${node.id}' must have 'toolId' in config`,
             );

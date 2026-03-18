@@ -102,7 +102,7 @@ export class AgentNodeExecutor {
     node: AgentPipelineNode,
     context: ExecutionContext,
   ): Promise<NodeExecutionResult> {
-    const config = node.config || {};
+    const config = node.data || node.config || {};
 
     // If there's a mapping template, resolve it
     if (config.mapping) {
@@ -145,7 +145,7 @@ export class AgentNodeExecutor {
     organizationId: string,
     userId?: string,
   ): Promise<NodeExecutionResult> {
-    const config = node.config || {};
+    const config = node.data || node.config || {};
     const startTime = Date.now();
 
     // Resolve provider ID
@@ -212,7 +212,7 @@ export class AgentNodeExecutor {
     context: ExecutionContext,
     options: NodeExecutionOptions,
   ): Promise<NodeExecutionResult> {
-    const { toolId, parameterMapping } = node.config || {};
+    const { toolId, parameterMapping } = node.data || node.config || {};
     const startTime = Date.now();
 
     if (!toolId) {
@@ -256,7 +256,7 @@ export class AgentNodeExecutor {
     node: AgentPipelineNode,
     context: ExecutionContext,
   ): Promise<NodeExecutionResult> {
-    const { expression } = node.config || {};
+    const { expression } = node.data || node.config || {};
 
     if (!expression) {
       throw new Error(`Condition node '${node.id}' is missing 'expression' in config`);
@@ -285,7 +285,7 @@ export class AgentNodeExecutor {
     node: AgentPipelineNode,
     context: ExecutionContext,
   ): Promise<NodeExecutionResult> {
-    const { expression } = node.config || {};
+    const { expression } = node.data || node.config || {};
 
     if (!expression) {
       throw new Error(`Transform node '${node.id}' is missing 'expression' in config`);
@@ -322,7 +322,7 @@ export class AgentNodeExecutor {
     context: ExecutionContext,
     options: NodeExecutionOptions,
   ): Promise<NodeExecutionResult> {
-    const { strategy, judgeConfig } = node.config || {};
+    const { strategy, judgeConfig } = node.data || node.config || {};
     const startTime = Date.now();
 
     // Collect outputs from all incoming edges
@@ -416,7 +416,7 @@ export class AgentNodeExecutor {
     context: ExecutionContext,
     options: NodeExecutionOptions,
   ): Promise<NodeExecutionResult> {
-    const { agentId, inputMapping } = node.config || {};
+    const { agentId, inputMapping } = node.data || node.config || {};
     const startTime = Date.now();
 
     if (!agentId) {

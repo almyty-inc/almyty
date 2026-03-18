@@ -21,9 +21,10 @@ export enum AgentStatus {
 
 export interface AgentPipelineNode {
   id: string;
-  type: string; // 'input' | 'output' | 'llm_call' | 'tool_call' | 'condition' | 'loop' | 'transform'
+  type: string;
   label?: string;
-  config: Record<string, any>;
+  data?: Record<string, any>;    // React Flow convention (frontend)
+  config?: Record<string, any>;  // Backend convention
   position?: { x: number; y: number };
 }
 
