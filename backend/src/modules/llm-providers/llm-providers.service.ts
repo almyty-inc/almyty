@@ -582,6 +582,10 @@ export class LlmProvidersService {
     const apiUrl = provider.getApiUrl();
     const headers = provider.getAuthHeaders();
 
+    // Extract system messages for Anthropic's system parameter
+    const systemMessages = request.messages.filter(msg => msg.role === MessageRole.SYSTEM || msg.role === 'system' as any);
+    const nonSystemMessages = request.messages.filter(msg => msg.role !== MessageRole.SYSTEM && msg.role !== 'system' as any);
+
     // Prepare Anthropic request
     const anthropicRequest: any = {
       model: request.model || provider.configuration.model || 'claude-sonnet-4-20250514',
@@ -589,11 +593,16 @@ export class LlmProvidersService {
       temperature: request.temperature ?? session.context?.temperature,
       top_p: request.topP ?? session.context?.topP,
       stop_sequences: request.stopSequences || session.context?.stopSequences,
-      messages: request.messages.map(msg => ({
+      messages: nonSystemMessages.map(msg => ({
         role: msg.role === MessageRole.ASSISTANT ? 'assistant' : 'user',
         content: msg.content,
       })),
     };
+
+    // Add system prompt if present
+    if (systemMessages.length > 0) {
+      anthropicRequest.system = systemMessages.map(m => typeof m.content === 'string' ? m.content : '').join('\n');
+    }
 
     // Add tools if available
     if (tools.length > 0) {
