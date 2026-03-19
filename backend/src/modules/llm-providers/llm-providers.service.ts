@@ -372,14 +372,60 @@ export class LlmProvidersService {
       }
 
       // Make API call to LLM provider
-      const response = await this.callLlmProvider(provider, request, session, tools);
+      let response = await this.callLlmProvider(provider, request, session, tools);
 
-      // Process tool calls if present
-      if (response.message.toolCalls && response.message.toolCalls.length > 0) {
+      // Agentic tool call loop: execute tools and send results back until LLM is done
+      let toolRound = 0;
+      const maxToolRounds = 5;
+      const currentMessages = [...request.messages];
+
+      while (response.message.toolCalls && response.message.toolCalls.length > 0 && toolRound < maxToolRounds) {
+        toolRound++;
+        this.logger.log(`[CHAT] Tool call round ${toolRound}: ${response.message.toolCalls.length} tool(s)`);
+
+        // Execute each tool call
         await this.executeToolCalls(response.message.toolCalls, session, organizationId);
+
+        // Save the assistant's tool-call message
+        await this.llmMessageRepository.save(this.llmMessageRepository.create({
+          sessionId: session.id,
+          role: MessageRole.ASSISTANT,
+          type: MessageType.TOOL_CALL,
+          content: response.message.content || '',
+          toolCalls: response.message.toolCalls,
+          inputTokens: response.usage.inputTokens,
+          outputTokens: response.usage.outputTokens,
+          cost: Math.round(response.cost),
+          responseTime: response.responseTime,
+          model: response.model,
+          finishReason: response.message.finishReason,
+          status: MessageStatus.COMPLETED,
+        }));
+
+        session.addMessage(response.usage.inputTokens, response.usage.outputTokens, Math.round(response.cost));
+        session.addToolCall(true);
+
+        // Build follow-up messages with tool results
+        currentMessages.push({
+          role: MessageRole.ASSISTANT,
+          content: response.message.content || '',
+          toolCalls: response.message.toolCalls,
+        });
+
+        for (const tc of response.message.toolCalls) {
+          currentMessages.push({
+            role: MessageRole.TOOL,
+            content: tc.result != null ? (typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result)) : 'Tool executed successfully',
+            toolCallId: tc.id,
+          });
+        }
+
+        // Call LLM again with tool results
+        const followUpRequest = { ...request, messages: currentMessages };
+        response = await this.callLlmProvider(provider, followUpRequest, session, tools);
       }
 
-      // Save message to database
+      // Save final message to database
       const message = this.llmMessageRepository.create({
         sessionId: session.id,
         role: response.message.role,
