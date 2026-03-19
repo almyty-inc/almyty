@@ -312,7 +312,7 @@ export class LlmProvider {
       case LlmProviderType.ANTHROPIC:
         if (this.configuration.apiKey) {
           headers['x-api-key'] = this.configuration.apiKey;
-          headers['anthropic-version'] = this.configuration.apiVersion || '2024-10-22';
+          headers['anthropic-version'] = this.configuration.apiVersion || '2023-06-01';
         }
         break;
 
