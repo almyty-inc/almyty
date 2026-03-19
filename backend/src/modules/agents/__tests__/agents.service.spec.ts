@@ -546,6 +546,8 @@ describe('AgentsService', () => {
 
     it('should return null when agent is not found', async () => {
       agentRepo.findOne.mockResolvedValue(null);
+      const qb = { where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis(), getOne: jest.fn().mockResolvedValue(null) };
+      agentRepo.createQueryBuilder = jest.fn().mockReturnValue(qb);
 
       const result = await service.findByName('Nonexistent', 'org-1');
       expect(result).toBeNull();

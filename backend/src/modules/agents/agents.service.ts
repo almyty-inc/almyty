@@ -121,9 +121,28 @@ export class AgentsService {
   }
 
   async findByName(name: string, organizationId: string): Promise<Agent | null> {
-    return this.agentRepository.findOne({
+    // Try exact match first
+    let agent = await this.agentRepository.findOne({
       where: { name, organizationId },
     });
+    if (agent) return agent;
+
+    // Try case-insensitive match
+    agent = await this.agentRepository
+      .createQueryBuilder('agent')
+      .where('agent.organizationId = :organizationId', { organizationId })
+      .andWhere('LOWER(agent.name) = LOWER(:name)', { name })
+      .getOne();
+    if (agent) return agent;
+
+    // Try slug match: "my-agent" matches "My Agent"
+    const deslugified = name.replace(/-/g, ' ');
+    agent = await this.agentRepository
+      .createQueryBuilder('agent')
+      .where('agent.organizationId = :organizationId', { organizationId })
+      .andWhere('LOWER(agent.name) = LOWER(:name)', { name: deslugified })
+      .getOne();
+    return agent;
   }
 
   async findAllActive(organizationId: string): Promise<Agent[]> {

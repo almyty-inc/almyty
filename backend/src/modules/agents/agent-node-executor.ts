@@ -188,11 +188,8 @@ export class AgentNodeExecutor {
     this.logger.log(`[NODE_EXEC] Executing LLM call node '${node.id}' with provider=${providerId}, model=${config.model}`);
 
     let response: ChatResponse;
-    let totalCost = 0;
-    let totalTokens = 0;
-    const maxRounds = config.maxToolRounds || 5;
-
     try {
+      // The chat() method handles the full agentic tool call loop internally
       response = await this.llmProvidersService.chat(
         providerId,
         chatRequest,
@@ -205,64 +202,12 @@ export class AgentNodeExecutor {
       throw new Error(`LLM call failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
     }
 
-    totalCost += response.cost || 0;
-    totalTokens += response.usage?.totalTokens || 0;
-
-    // Tool call loop: if LLM requests tool calls, execute them and send results back
-    let round = 0;
-    while (response.message.toolCalls && response.message.toolCalls.length > 0 && round < maxRounds) {
-      round++;
-      this.logger.log(`[NODE_EXEC] Tool call round ${round} for node '${node.id}': ${response.message.toolCalls.length} tool(s)`);
-
-      // Execute each tool call
-      const toolResults: Array<{ toolCallId: string; content: string }> = [];
-      for (const tc of response.message.toolCalls) {
-        try {
-          const toolResult = await this.toolExecutorService.executeTool(
-            tc.id || tc.name,
-            typeof tc.parameters === 'string' ? JSON.parse(tc.parameters) : tc.parameters || {},
-            { organizationId, userId },
-          );
-          toolResults.push({
-            toolCallId: tc.id || tc.name,
-            content: typeof toolResult.data === 'string' ? toolResult.data : JSON.stringify(toolResult.data),
-          });
-        } catch (toolErr: any) {
-          toolResults.push({
-            toolCallId: tc.id || tc.name,
-            content: `Tool error: ${toolErr.message}`,
-          });
-        }
-      }
-
-      // Send tool results back to LLM
-      const followUpMessages = [
-        ...chatRequest.messages,
-        { role: 'assistant' as any, content: response.message.content || '', toolCalls: response.message.toolCalls },
-        ...toolResults.map(tr => ({ role: 'tool' as any, content: tr.content, toolCallId: tr.toolCallId })),
-      ];
-
-      try {
-        response = await this.llmProvidersService.chat(
-          providerId,
-          { ...chatRequest, messages: followUpMessages },
-          organizationId,
-          userId,
-        );
-        totalCost += response.cost || 0;
-        totalTokens += response.usage?.totalTokens || 0;
-      } catch (err: any) {
-        this.logger.error(`[NODE_EXEC] Tool follow-up LLM call failed: ${err.message}`);
-        break;
-      }
-    }
-
     const executionTime = Date.now() - startTime;
 
     return {
       output: response.message.content || response.message,
-      cost: totalCost,
-      tokens: totalTokens,
+      cost: response.cost || 0,
+      tokens: response.usage?.totalTokens || 0,
       executionTime,
     };
   }
