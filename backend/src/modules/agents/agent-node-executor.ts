@@ -185,14 +185,21 @@ export class AgentNodeExecutor {
       toolIds: config.toolIds,
     };
 
-    this.logger.log(`[NODE_EXEC] Executing LLM call node '${node.id}' with provider=${providerId}`);
+    this.logger.log(`[NODE_EXEC] Executing LLM call node '${node.id}' with provider=${providerId}, model=${config.model}`);
 
-    const response: ChatResponse = await this.llmProvidersService.chat(
-      providerId,
-      chatRequest,
-      organizationId,
-      userId,
-    );
+    let response: ChatResponse;
+    try {
+      response = await this.llmProvidersService.chat(
+        providerId,
+        chatRequest,
+        organizationId,
+        userId,
+      );
+    } catch (err: any) {
+      const detail = err.response?.data?.error?.message || err.response?.data?.message || err.response?.data || err.message;
+      this.logger.error(`[NODE_EXEC] LLM call failed for node '${node.id}': ${JSON.stringify(detail)}`);
+      throw new Error(`LLM call failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    }
 
     const executionTime = Date.now() - startTime;
 
