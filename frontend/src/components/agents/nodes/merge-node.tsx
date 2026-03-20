@@ -19,7 +19,7 @@ export function MergeNode({ data, selected }: NodeProps) {
         className="!w-3 !h-3 !bg-teal-500 !border-teal-600"
         style={{ top: '65%' }}
       />
-      <div className="px-3 py-2 bg-teal-50 dark:bg-teal-950 rounded-t-[10px] border-b flex items-center gap-2">
+      <div className="px-3 py-2 bg-gradient-to-r from-teal-50 to-teal-100 dark:from-teal-950 dark:to-teal-900 rounded-t-[10px] border-b flex items-center gap-2">
         <Combine className="h-3.5 w-3.5 text-teal-700 dark:text-teal-300" />
         <span className="text-xs font-semibold text-teal-700 dark:text-teal-300">Merge</span>
       </div>

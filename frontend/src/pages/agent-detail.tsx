@@ -405,7 +405,7 @@ export function AgentDetailPage() {
         <CardContent className="p-0">
           <div className="h-[350px] border-t">
             {flowNodes.length === 0 ? (
-              <div className="flex items-center justify-center h-full bg-muted/10">
+              <div className="flex items-center justify-center h-full bg-gradient-to-br from-muted/20 via-muted/10 to-transparent">
                 <p className="text-sm text-muted-foreground">No nodes in pipeline. Edit the agent to add nodes.</p>
               </div>
             ) : (
@@ -427,7 +427,7 @@ export function AgentDetailPage() {
                   elementsSelectable={false}
                   panOnDrag
                   zoomOnScroll
-                  className="bg-muted/10"
+                  className="bg-gradient-to-br from-muted/20 via-muted/5 to-transparent"
                   proOptions={{ hideAttribution: true }}
                 >
                   <Background gap={16} size={1} />

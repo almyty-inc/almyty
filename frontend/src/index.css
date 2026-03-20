@@ -78,6 +78,13 @@
   }
 }
 
+/* Subtle card shadow improvement for consistency */
+@layer components {
+  .card-elevated {
+    @apply shadow-sm hover:shadow-md transition-shadow;
+  }
+}
+
 /* React Flow: remove default node wrapper styling */
 .react-flow__node {
   padding: 0 !important;

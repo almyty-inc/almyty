@@ -29,6 +29,7 @@ import { ChatPage } from '@/pages/chat'
 import { AgentsPage } from '@/pages/agents'
 import { AgentBuilderPage } from '@/pages/agent-builder'
 import { AgentDetailPage } from '@/pages/agent-detail'
+import { DocsPage } from '@/pages/docs'
 
 function App() {
   const { checkAuth } = useAuthStore()
@@ -120,6 +121,11 @@ function App() {
         <Route path="/organizations" element={
           <DashboardLayout>
             <OrganizationsPage />
+          </DashboardLayout>
+        } />
+        <Route path="/docs" element={
+          <DashboardLayout>
+            <DocsPage />
           </DashboardLayout>
         } />
 
