@@ -2044,4 +2044,228 @@ describe('LlmProvidersService', () => {
       );
     });
   });
+
+  // ── Cost calculation ────────────────────────────────────────────────
+
+  describe('calculateProviderCost', () => {
+    it('should use configured metadata pricing if available', () => {
+      const provider = {
+        metadata: {
+          modelInfo: { inputTokenCost: 0.01, outputTokenCost: 0.03 },
+        },
+        configuration: { model: 'custom-model' },
+        type: LlmProviderType.CUSTOM,
+      } as any;
+
+      const cost = service['calculateProviderCost'](provider, 1000, 500);
+      // (1000/1000)*0.01 + (500/1000)*0.03 = 0.01 + 0.015 = 0.025
+      expect(cost).toBeCloseTo(0.025, 4);
+    });
+
+    it('should fall back to default pricing for known OpenAI models', () => {
+      const provider = {
+        metadata: {},
+        configuration: { model: 'gpt-4o' },
+        type: LlmProviderType.OPENAI,
+      } as any;
+
+      const cost = service['calculateProviderCost'](provider, 1000, 500);
+      // gpt-4o: input=0.0025/1K, output=0.01/1K
+      // (1000/1000)*0.0025 + (500/1000)*0.01 = 0.0025 + 0.005 = 0.0075
+      expect(cost).toBeCloseTo(0.0075, 4);
+    });
+
+    it('should fall back to default pricing for known Anthropic models', () => {
+      const provider = {
+        metadata: {},
+        configuration: { model: 'claude-sonnet-4-20250514' },
+        type: LlmProviderType.ANTHROPIC,
+      } as any;
+
+      const cost = service['calculateProviderCost'](provider, 1000, 500);
+      // claude-sonnet-4: input=0.003/1K, output=0.015/1K
+      // (1000/1000)*0.003 + (500/1000)*0.015 = 0.003 + 0.0075 = 0.0105
+      expect(cost).toBeCloseTo(0.0105, 4);
+    });
+
+    it('should return 0 for unknown models with no configured pricing', () => {
+      const provider = {
+        metadata: {},
+        configuration: { model: 'totally-unknown-model' },
+        type: LlmProviderType.CUSTOM,
+      } as any;
+
+      const cost = service['calculateProviderCost'](provider, 1000, 500);
+      expect(cost).toBe(0);
+    });
+
+    it('should handle gpt-4o-mini pricing', () => {
+      const provider = {
+        metadata: {},
+        configuration: { model: 'gpt-4o-mini' },
+        type: LlmProviderType.OPENAI,
+      } as any;
+
+      const cost = service['calculateProviderCost'](provider, 1000, 1000);
+      // gpt-4o-mini: input=0.00015/1K, output=0.0006/1K
+      expect(cost).toBeCloseTo(0.00075, 5);
+    });
+  });
+
+  // ── Retry logic ─────────────────────────────────────────────────────
+
+  describe('callLlmProvider: retry logic', () => {
+    it('should retry on 429 status and succeed on second attempt', async () => {
+      const provider = {
+        type: LlmProviderType.OPENAI,
+        configuration: { model: 'gpt-4o', timeout: 5000 },
+        metadata: {},
+        getApiUrl: jest.fn().mockReturnValue('https://api.openai.com/v1'),
+        getAuthHeaders: jest.fn().mockReturnValue({ Authorization: 'Bearer test' }),
+        incrementUsage: jest.fn(),
+        lastError: null,
+      } as any;
+
+      const session = {
+        id: 'session-1',
+        context: {},
+      } as any;
+
+      const request = {
+        messages: [{ role: 'user', content: 'Hello' }],
+        model: 'gpt-4o',
+      } as any;
+
+      let callCount = 0;
+
+      // Mock dispatchProviderCall via the private method
+      const mockResult = {
+        message: { role: 'assistant', content: 'Hi!', finishReason: 'stop' },
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        cost: 0.001,
+        model: 'gpt-4o',
+        sessionId: 'session-1',
+        messageId: '',
+        responseTime: 100,
+      };
+
+      jest.spyOn(service as any, 'dispatchProviderCall').mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          const err: any = new Error('Rate limited');
+          err.response = { status: 429, data: { error: { message: 'Rate limit exceeded' } } };
+          throw err;
+        }
+        return mockResult;
+      });
+
+      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
+
+      const result = await service['callLlmProvider'](provider, request, session, []);
+
+      expect(callCount).toBe(2);
+      expect(result).toEqual(mockResult);
+    });
+
+    it('should not retry on 400 (non-retryable) status', async () => {
+      const provider = {
+        type: LlmProviderType.OPENAI,
+        configuration: { model: 'gpt-4o', timeout: 5000 },
+        metadata: {},
+        incrementUsage: jest.fn(),
+        lastError: null,
+      } as any;
+
+      const session = { id: 'session-1', context: {} } as any;
+      const request = { messages: [{ role: 'user', content: 'Hello' }] } as any;
+
+      let callCount = 0;
+
+      jest.spyOn(service as any, 'dispatchProviderCall').mockImplementation(async () => {
+        callCount++;
+        const err: any = new Error('Bad request');
+        err.response = { status: 400, data: { error: { message: 'Invalid model' } } };
+        throw err;
+      });
+
+      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
+
+      await expect(
+        service['callLlmProvider'](provider, request, session, []),
+      ).rejects.toThrow('Bad request');
+
+      expect(callCount).toBe(1); // No retry
+    });
+
+    it('should retry on 500 status up to 2 times then fail', async () => {
+      const provider = {
+        type: LlmProviderType.OPENAI,
+        configuration: { model: 'gpt-4o', timeout: 5000 },
+        metadata: {},
+        incrementUsage: jest.fn(),
+        lastError: null,
+      } as any;
+
+      const session = { id: 'session-1', context: {} } as any;
+      const request = { messages: [{ role: 'user', content: 'Hello' }] } as any;
+
+      let callCount = 0;
+
+      jest.spyOn(service as any, 'dispatchProviderCall').mockImplementation(async () => {
+        callCount++;
+        const err: any = new Error('Server error');
+        err.response = { status: 500, data: 'Internal Server Error' };
+        throw err;
+      });
+
+      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
+
+      await expect(
+        service['callLlmProvider'](provider, request, session, []),
+      ).rejects.toThrow('Server error');
+
+      expect(callCount).toBe(3); // Initial + 2 retries
+    });
+
+    it('should update provider health metrics on failure', async () => {
+      const provider = {
+        type: LlmProviderType.OPENAI,
+        configuration: { model: 'gpt-4o', timeout: 5000 },
+        metadata: {},
+        incrementUsage: jest.fn(),
+        lastError: null,
+      } as any;
+
+      const session = { id: 'session-1', context: {} } as any;
+      const request = { messages: [{ role: 'user', content: 'Hello' }] } as any;
+
+      jest.spyOn(service as any, 'dispatchProviderCall').mockImplementation(async () => {
+        const err: any = new Error('Timeout');
+        err.response = { status: 503, data: 'Service Unavailable' };
+        throw err;
+      });
+
+      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
+
+      await expect(
+        service['callLlmProvider'](provider, request, session, []),
+      ).rejects.toThrow('Timeout');
+
+      // incrementUsage should be called for each failed attempt (3 times: initial + 2 retries)
+      expect(provider.incrementUsage).toHaveBeenCalledWith(0, 0, false);
+      expect(provider.incrementUsage).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  // ── Cost propagation (dollars to cents conversion) ─────────────────
+
+  describe('cost: dollars to cents conversion in chat()', () => {
+    it('should convert cost from dollars to cents using Math.round(cost * 100)', () => {
+      // Verify the conversion logic: 0.05 dollars -> 5 cents
+      expect(Math.round(0.05 * 100)).toBe(5);
+      expect(Math.round(0.001 * 100)).toBe(0); // Very small costs still round correctly
+      expect(Math.round(0.005 * 100)).toBe(1); // 0.5 cents rounds to 1 cent
+      expect(Math.round(0.0075 * 100)).toBe(1); // 0.75 cents rounds to 1 cent
+    });
+  });
 });

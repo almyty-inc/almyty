@@ -603,4 +603,282 @@ describe('AgentExecutionEngine', () => {
       expect(capturedContext.variables.extra).toBe('value');
     });
   });
+
+  // ── Input validation ───────────────────────────────────────────────────
+
+  describe('execute: input validation', () => {
+    it('should reject an array as input', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      await expect(
+        engine.execute(agent, 'org-1', 'user-1', { input: [1, 2, 3] as any }),
+      ).rejects.toThrow(/plain object/);
+    });
+
+    it('should reject a string as input', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      await expect(
+        engine.execute(agent, 'org-1', 'user-1', { input: 'hello' as any }),
+      ).rejects.toThrow(/plain object/);
+    });
+
+    it('should reject oversized input (> 100KB)', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const bigInput = { data: 'x'.repeat(110 * 1024) };
+
+      await expect(
+        engine.execute(agent, 'org-1', 'user-1', { input: bigInput }),
+      ).rejects.toThrow(/exceeds maximum allowed/);
+    });
+
+    it('should accept valid object input', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+      nodeExecutor.execute.mockResolvedValue({ output: 'ok' });
+
+      const result = await engine.execute(agent, 'org-1', 'user-1', {
+        input: { message: 'hello' },
+      });
+
+      expect(result.status).toBe(AgentExecutionStatus.COMPLETED);
+    });
+
+    it('should accept undefined/null input (defaults to empty object)', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+      nodeExecutor.execute.mockResolvedValue({ output: 'ok' });
+
+      const result = await engine.execute(agent, 'org-1', 'user-1');
+
+      expect(result.status).toBe(AgentExecutionStatus.COMPLETED);
+    });
+
+    it('should sanitize control characters in string input values', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      let capturedInput: any;
+      nodeExecutor.execute.mockImplementation(async (node: any, context: any) => {
+        if (node.type === 'input') {
+          capturedInput = JSON.parse(JSON.stringify(context.input));
+        }
+        return { output: 'ok' };
+      });
+
+      await engine.execute(agent, 'org-1', 'user-1', {
+        input: { message: 'hello\x00world\x07test' },
+      });
+
+      // Control chars \x00 and \x07 should be stripped
+      expect(capturedInput.message).toBe('helloworldtest');
+    });
+  });
+
+  // ── Pipeline size limits ──────────────────────────────────────────────
+
+  describe('execute: pipeline size limits', () => {
+    it('should reject pipeline with > 100 nodes', async () => {
+      const nodes = Array.from({ length: 101 }, (_, i) => ({
+        id: `node_${i}`,
+        type: 'input',
+        config: {},
+      }));
+
+      const agent = makeAgent({
+        pipeline: { nodes, edges: [] },
+      });
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const result = await engine.execute(agent, 'org-1', 'user-1');
+
+      expect(result.status).toBe(AgentExecutionStatus.FAILED);
+      expect(result.error).toContain('nodes');
+    });
+
+    it('should reject pipeline with > 500 edges', async () => {
+      const nodes = [
+        { id: 'a', type: 'input', config: {} },
+        { id: 'b', type: 'output', config: {} },
+      ];
+      const edges = Array.from({ length: 501 }, (_, i) => ({
+        id: `e_${i}`,
+        source: 'a',
+        target: 'b',
+      }));
+
+      const agent = makeAgent({
+        pipeline: { nodes, edges },
+      });
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const result = await engine.execute(agent, 'org-1', 'user-1');
+
+      expect(result.status).toBe(AgentExecutionStatus.FAILED);
+      expect(result.error).toContain('edges');
+    });
+  });
+
+  // ── Nesting depth validation ──────────────────────────────────────────
+
+  describe('execute: nesting depth validation', () => {
+    it('should reject execution that exceeds max nesting depth', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      await expect(
+        engine.execute(agent, 'org-1', 'user-1', {}, undefined, { nestingDepth: 11 }),
+      ).rejects.toThrow(/Nesting depth/);
+    });
+  });
+
+  // ── Per-node error handling (graceful failure) ────────────────────────
+
+  describe('execute: per-node error handling', () => {
+    it('should record node error and continue pipeline if output node is reachable', async () => {
+      // Pipeline: input -> [llm_a (fails), llm_b (succeeds)] -> output (depends on llm_b only)
+      const pipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          { id: 'llm_a', type: 'llm_call', config: {}, data: { providerId: 'p-1', userPromptTemplate: 'hi' } },
+          { id: 'llm_b', type: 'llm_call', config: {}, data: { providerId: 'p-2', userPromptTemplate: 'hi' } },
+          { id: 'output_1', type: 'output', config: {}, data: { mapping: '{{nodes.llm_b.output}}' } },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'llm_a' },
+          { id: 'e2', source: 'input_1', target: 'llm_b' },
+          { id: 'e3', source: 'llm_b', target: 'output_1' },
+          // llm_a has no downstream connection to output
+        ],
+      };
+
+      const agent = makeAgent({ pipeline });
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      nodeExecutor.execute.mockImplementation(async (node: any) => {
+        if (node.id === 'llm_a') throw new Error('Provider unavailable');
+        if (node.id === 'llm_b') return { output: 'B result', cost: 0.01, tokens: 50, executionTime: 100 };
+        return { output: 'ok' };
+      });
+
+      const result = await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+
+      // The output node was reached because llm_b succeeded
+      expect(result.status).toBe(AgentExecutionStatus.COMPLETED);
+      expect(result.nodeResults['llm_a']).toBeDefined();
+      expect(result.nodeResults['llm_a'].error).toContain('Provider unavailable');
+      expect(result.nodeResults['llm_b']).toBeDefined();
+      expect(result.nodeResults['llm_b'].output).toBe('B result');
+    });
+
+    it('should include startedAt and completedAt in node results', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+      nodeExecutor.execute.mockResolvedValue({ output: 'ok', cost: 0, tokens: 0, executionTime: 5 });
+
+      const result = await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+
+      expect(result.status).toBe(AgentExecutionStatus.COMPLETED);
+      // Check at least one node has startedAt
+      const firstNode = result.nodeResults['input_1'];
+      expect(firstNode).toBeDefined();
+      expect(firstNode.startedAt).toBeDefined();
+      expect(firstNode.completedAt).toBeDefined();
+      expect(firstNode.completedAt).toBeGreaterThanOrEqual(firstNode.startedAt);
+    });
+
+    it('should classify error types in failed node results', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      nodeExecutor.execute.mockImplementation(async (node: any) => {
+        if (node.type === 'llm_call') {
+          throw new Error('LLM provider rate limit exceeded (429)');
+        }
+        return { output: {} };
+      });
+
+      const result = await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+
+      expect(result.status).toBe(AgentExecutionStatus.FAILED);
+      const llmNodeResult = result.nodeResults['llm_1'];
+      expect(llmNodeResult).toBeDefined();
+      expect(llmNodeResult.error).toContain('rate limit');
+      expect(llmNodeResult.errorType).toBe('LLM_ERROR');
+    });
+  });
+
+  // ── Execution record always updated ──────────────────────────────────
+
+  describe('execute: execution record persistence on crash', () => {
+    it('should update execution record even when save itself initially fails', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      nodeExecutor.execute.mockRejectedValue(new Error('Catastrophic failure'));
+
+      const result = await engine.execute(agent, 'org-1', 'user-1');
+
+      // Even though the node threw, the execution record should be updated
+      expect(result.status).toBe(AgentExecutionStatus.FAILED);
+      expect(result.error).toContain('Catastrophic failure');
+      expect(agentExecutionRepo.save).toHaveBeenCalled();
+    });
+  });
 });

@@ -21,14 +21,28 @@ import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 import { llmProvidersApi, toolsApi, agentsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { NODE_TYPE_CONFIG, type PipelineNodeType } from './nodes'
+import type { LlmProvider, Tool, Agent } from '@/types'
+
+// ─── Shared types ────────────────────────────────────────────────────────────
+
+type NodeData = Record<string, unknown>
+
+type UpdateDataFn = (key: string, value: unknown) => void
 
 interface NodeConfigPanelProps {
   node: Node | null
   nodes: Node[]
-  onUpdateNode: (nodeId: string, data: Record<string, any>) => void
+  onUpdateNode: (nodeId: string, data: NodeData) => void
   onDeleteNode: (nodeId: string) => void
   onClose: () => void
 }
+
+interface ParameterMapping {
+  key: string
+  value: string
+}
+
+// ─── Main Panel ──────────────────────────────────────────────────────────────
 
 export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClose }: NodeConfigPanelProps) {
   if (!node) return null
@@ -36,8 +50,12 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
   const nodeType = node.type as PipelineNodeType
   const config = NODE_TYPE_CONFIG[nodeType]
 
-  const updateData = (key: string, value: any) => {
-    onUpdateNode(node.id, { ...node.data, [key]: value })
+  const updateData: UpdateDataFn = (key, value) => {
+    try {
+      onUpdateNode(node.id, { ...node.data, [key]: value })
+    } catch (err) {
+      console.error('[NodeConfigPanel] Failed to update node data:', err)
+    }
   }
 
   return (
@@ -90,14 +108,14 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
 }
 
 // --- Input Node Config ---
-function InputConfig({ node, updateData }: { node: Node; updateData: (k: string, v: any) => void }) {
+function InputConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
   return (
     <div className="space-y-3">
       <div>
         <Label>Input Schema</Label>
         <div className="mt-1">
           <JsonSchemaBuilder
-            value={node.data.schema || { type: 'object', properties: {} }}
+            value={(node.data.schema as Record<string, unknown>) || { type: 'object', properties: {} }}
             onChange={(schema) => updateData('schema', schema)}
           />
         </div>
@@ -110,7 +128,7 @@ function InputConfig({ node, updateData }: { node: Node; updateData: (k: string,
 }
 
 // --- Output Node Config ---
-function OutputConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; updateData: (k: string, v: any) => void }) {
+function OutputConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; updateData: UpdateDataFn }) {
   const availableNodes = nodes.filter(n => n.id !== node.id && n.type !== 'input' && n.type !== 'output')
 
   return (
@@ -155,8 +173,6 @@ function OutputConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; 
   )
 }
 
-// --- Model options by provider type ---
-
 // --- Extract {{...}} variables from a template string ---
 function extractTemplateVariables(text: string): string[] {
   const matches = text.match(/\{\{([^}]+)\}\}/g)
@@ -165,7 +181,7 @@ function extractTemplateVariables(text: string): string[] {
 }
 
 // --- LLM Call Config ---
-function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: (k: string, v: any) => void; onUpdateNode: (nodeId: string, data: Record<string, any>) => void }) {
+function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
   const { currentOrganization } = useOrganizationStore()
   const [toolSearch, setToolSearch] = useState('')
   const [showAllTools, setShowAllTools] = useState(false)
@@ -194,10 +210,11 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   const temperature = typeof node.data.temperature === 'number' ? node.data.temperature : 0.7
 
   // Get the selected provider to determine type for model suggestions
+  const providerList = (providers || []) as Array<Pick<LlmProvider, 'id' | 'name' | 'type'>>
   const selectedProvider = useMemo(() => {
-    if (!providers || !node.data.providerId) return null
-    return (providers as any[]).find((p: any) => p.id === node.data.providerId) || null
-  }, [providers, node.data.providerId])
+    if (!providerList.length || !node.data.providerId) return null
+    return providerList.find((p) => p.id === node.data.providerId) || null
+  }, [providerList, node.data.providerId])
 
   // Fetch models dynamically from the provider API
   const { data: dynamicModels } = useQuery({
@@ -205,20 +222,20 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
     queryFn: async () => {
       const res = await llmProvidersApi.getModels(node.data.providerId as string)
       const models = res.data?.data || res.data || []
-      return Array.isArray(models) ? models.map((m: any) => m.id || m.name || m) : []
+      return Array.isArray(models) ? models.map((m: Record<string, string>) => m.id || m.name || String(m)) : []
     },
     enabled: !!node.data.providerId,
   })
 
-  const modelSuggestions = dynamicModels || []
+  const modelSuggestions: string[] = dynamicModels || []
 
   // Filter tools by search
+  const toolList = (tools || []) as Array<Pick<Tool, 'id' | 'name'>>
   const filteredTools = useMemo(() => {
-    const allTools = (tools || []) as any[]
-    if (!toolSearch.trim()) return allTools
+    if (!toolSearch.trim()) return toolList
     const q = toolSearch.toLowerCase()
-    return allTools.filter((t: any) => t.name?.toLowerCase().includes(q))
-  }, [tools, toolSearch])
+    return toolList.filter((t) => t.name?.toLowerCase().includes(q))
+  }, [toolList, toolSearch])
 
   const visibleTools = showAllTools ? filteredTools : filteredTools.slice(0, VISIBLE_TOOLS_LIMIT)
   const hasMoreTools = filteredTools.length > VISIBLE_TOOLS_LIMIT
@@ -234,7 +251,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
         <Select
           value={(node.data.providerId as string) || ''}
           onValueChange={(v) => {
-            const provider = (providers || [] as any[]).find((p: any) => p.id === v)
+            const provider = providerList.find((p) => p.id === v)
             // Batch all updates in one call to avoid stale data overwrites
             onUpdateNode(node.id, {
               ...node.data,
@@ -250,7 +267,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
             <SelectValue placeholder="Select provider" />
           </SelectTrigger>
           <SelectContent>
-            {(providers || [] as any[]).map((p: any) => (
+            {providerList.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.name} <span className="text-muted-foreground ml-1">({p.type})</span>
               </SelectItem>
@@ -346,10 +363,10 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
       </div>
 
       <div>
-        <Label>Temperature: {(temperature as number).toFixed(2)}</Label>
+        <Label>Temperature: {temperature.toFixed(2)}</Label>
         <Slider
           className="mt-2"
-          value={[temperature as number]}
+          value={[temperature]}
           min={0}
           max={2}
           step={0.01}
@@ -383,11 +400,11 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
         <div className="space-y-1 max-h-[200px] overflow-y-auto border rounded-md p-2">
           {filteredTools.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              {(tools || []).length === 0 ? 'No tools available' : 'No tools match your search'}
+              {toolList.length === 0 ? 'No tools available' : 'No tools match your search'}
             </p>
           ) : (
             <>
-              {visibleTools.map((tool: any) => {
+              {visibleTools.map((tool) => {
                 const selectedTools: string[] = (node.data.toolIds as string[]) || []
                 const isSelected = selectedTools.includes(tool.id)
                 return (
@@ -398,7 +415,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
                       onChange={(e) => {
                         const newSelected = e.target.checked
                           ? [...selectedTools, tool.id]
-                          : selectedTools.filter((id: string) => id !== tool.id)
+                          : selectedTools.filter((id) => id !== tool.id)
                         updateData('toolIds', newSelected)
                       }}
                       className="rounded"
@@ -436,7 +453,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
 }
 
 // --- Tool Call Config ---
-function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: (k: string, v: any) => void; onUpdateNode: (nodeId: string, data: Record<string, any>) => void }) {
+function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
   const { currentOrganization } = useOrganizationStore()
 
   const { data: tools } = useQuery({
@@ -449,7 +466,8 @@ function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; update
     enabled: !!currentOrganization,
   })
 
-  const params: Array<{ key: string; value: string }> = (node.data.parameterMapping as any[]) || []
+  const toolList = (tools || []) as Array<Pick<Tool, 'id' | 'name'>>
+  const params: ParameterMapping[] = (node.data.parameterMapping as ParameterMapping[]) || []
 
   const addParam = () => {
     updateData('parameterMapping', [...params, { key: '', value: '' }])
@@ -472,7 +490,7 @@ function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; update
         <Select
           value={(node.data.toolId as string) || ''}
           onValueChange={(v) => {
-            const tool = (tools || []).find((t: any) => t.id === v)
+            const tool = toolList.find((t) => t.id === v)
             onUpdateNode(node.id, {
               ...node.data,
               toolId: v,
@@ -484,7 +502,7 @@ function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; update
             <SelectValue placeholder="Select tool" />
           </SelectTrigger>
           <SelectContent>
-            {(tools || []).map((t: any) => (
+            {toolList.map((t) => (
               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
           </SelectContent>
@@ -534,7 +552,7 @@ const CONDITION_OPERATORS = [
   { value: '!includes', label: 'does not contain' },
   { value: 'startsWith', label: 'starts with' },
   { value: 'endsWith', label: 'ends with' },
-]
+] as const
 
 // --- Parse a condition expression into parts ---
 function parseConditionExpression(expr: string): { source: string; operator: string; value: string } | null {
@@ -578,7 +596,7 @@ function buildConditionExpression(source: string, operator: string, value: strin
 }
 
 // --- Condition Config ---
-function ConditionConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; updateData: (k: string, v: any) => void }) {
+function ConditionConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; updateData: UpdateDataFn }) {
   const [useRawMode, setUseRawMode] = useState(false)
   const expression = (node.data.expression as string) || ''
 
@@ -697,7 +715,7 @@ function ConditionConfig({ node, nodes, updateData }: { node: Node; nodes: Node[
 }
 
 // --- Transform Config ---
-function TransformConfig({ node, updateData }: { node: Node; updateData: (k: string, v: any) => void }) {
+function TransformConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
   return (
     <div className="space-y-3">
       <div>
@@ -719,7 +737,7 @@ function TransformConfig({ node, updateData }: { node: Node; updateData: (k: str
 }
 
 // --- Merge Config ---
-function MergeConfig({ node, updateData }: { node: Node; updateData: (k: string, v: any) => void }) {
+function MergeConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
   return (
     <div className="space-y-3">
       <div>
@@ -790,7 +808,7 @@ function ParallelConfig() {
 }
 
 // --- Sub-Agent Config ---
-function SubAgentConfig({ node, updateData }: { node: Node; updateData: (k: string, v: any) => void }) {
+function SubAgentConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
   const { data: agents } = useQuery({
     queryKey: ['agents-for-subagent'],
     queryFn: async () => {
@@ -801,7 +819,8 @@ function SubAgentConfig({ node, updateData }: { node: Node; updateData: (k: stri
     },
   })
 
-  const mappings: Array<{ key: string; value: string }> = (node.data.inputMapping as any[]) || []
+  const agentList = (agents || []) as Array<Pick<Agent, 'id' | 'name'>>
+  const mappings: ParameterMapping[] = (node.data.inputMapping as ParameterMapping[]) || []
 
   const addMapping = () => {
     updateData('inputMapping', [...mappings, { key: '', value: '' }])
@@ -824,7 +843,7 @@ function SubAgentConfig({ node, updateData }: { node: Node; updateData: (k: stri
         <Select
           value={(node.data.agentId as string) || ''}
           onValueChange={(v) => {
-            const agent = (agents || []).find((a: any) => a.id === v)
+            const agent = agentList.find((a) => a.id === v)
             updateData('agentId', v)
             if (agent) {
               updateData('agentName', agent.name)
@@ -835,7 +854,7 @@ function SubAgentConfig({ node, updateData }: { node: Node; updateData: (k: stri
             <SelectValue placeholder="Select agent" />
           </SelectTrigger>
           <SelectContent>
-            {(agents || []).map((a: any) => (
+            {agentList.map((a) => (
               <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
             ))}
           </SelectContent>

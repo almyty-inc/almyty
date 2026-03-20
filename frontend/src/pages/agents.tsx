@@ -62,7 +62,10 @@ interface AgentTemplate {
   name: string
   description: string
   category: string
-  pipeline: any
+  pipeline: {
+    nodes: Array<{ id: string; type: string; position?: { x: number; y: number }; data?: Record<string, unknown> }>
+    edges: Array<{ id: string; source: string; target: string }>
+  }
 }
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {

@@ -26,6 +26,25 @@ export interface EngineInternalOptions {
   maxNestingDepth?: number;
 }
 
+/** Error classification for pipeline failures. */
+export enum ExecutionErrorType {
+  TIMEOUT = 'TIMEOUT',
+  LLM_ERROR = 'LLM_ERROR',
+  TOOL_ERROR = 'TOOL_ERROR',
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  BUDGET_EXCEEDED = 'BUDGET_EXCEEDED',
+  NESTING_EXCEEDED = 'NESTING_EXCEEDED',
+}
+
+/** Input size limits. */
+const MAX_INPUT_SIZE_BYTES = 100 * 1024; // 100 KB
+const MAX_PIPELINE_NODES = 100;
+const MAX_PIPELINE_EDGES = 500;
+const MAX_NESTING_DEPTH = 10;
+
+/** Regex matching ASCII C0 control characters except tab, newline, carriage return. */
+const CONTROL_CHAR_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
+
 @Injectable()
 export class AgentExecutionEngine {
   private readonly logger = new Logger(AgentExecutionEngine.name);
@@ -43,13 +62,14 @@ export class AgentExecutionEngine {
    * timeout/budget enforcement, and optional streaming events.
    *
    * Execution flow:
-   * 1. Create execution record (running)
-   * 2. Build graph from pipeline edges
-   * 3. Compute execution layers via topological sort (nodes grouped by dependency depth)
-   * 4. Process each layer — within a layer, execute independent nodes in parallel
-   * 5. Handle condition branching: skip nodes on untaken branches
-   * 6. Enforce timeout and budget limits
-   * 7. Collect output and update records
+   * 1. Validate input
+   * 2. Create execution record (running)
+   * 3. Build graph from pipeline edges
+   * 4. Compute execution layers via topological sort (nodes grouped by dependency depth)
+   * 5. Process each layer — within a layer, execute independent nodes in parallel
+   * 6. Handle condition branching: skip nodes on untaken branches
+   * 7. Enforce timeout and budget limits
+   * 8. Collect output and update records
    */
   async execute(
     agent: Agent,
@@ -60,6 +80,9 @@ export class AgentExecutionEngine {
     internalOptions?: EngineInternalOptions,
   ): Promise<AgentExecution> {
     const startTime = Date.now();
+
+    // ── Input validation ────────────────────────────────────────────────
+    this.validateInput(options.input, internalOptions);
 
     // 1. Create execution record
     const execution = this.agentExecutionRepository.create({
@@ -82,8 +105,11 @@ export class AgentExecutionEngine {
     try {
       const pipeline = agent.pipeline;
       if (!pipeline || !pipeline.nodes || !pipeline.edges) {
-        throw new BadRequestException('Agent pipeline is not configured');
+        throw this.classifiedError('Agent pipeline is not configured', ExecutionErrorType.VALIDATION_ERROR);
       }
+
+      // Validate pipeline size
+      this.validatePipelineSize(pipeline);
 
       // 2. Build graph
       const { adjacencyList, inDegree, reverseAdjacencyList } = this.buildGraph(pipeline);
@@ -128,7 +154,7 @@ export class AgentExecutionEngine {
 
           this.emitEvent(onEvent, {
             type: 'execution.failed',
-            data: { error: execution.error, executionId: execution.id },
+            data: { error: execution.error, errorType: ExecutionErrorType.TIMEOUT, executionId: execution.id },
             timestamp: Date.now(),
           });
 
@@ -149,7 +175,7 @@ export class AgentExecutionEngine {
 
           this.emitEvent(onEvent, {
             type: 'execution.failed',
-            data: { error: execution.error, executionId: execution.id },
+            data: { error: execution.error, errorType: ExecutionErrorType.BUDGET_EXCEEDED, executionId: execution.id },
             timestamp: Date.now(),
           });
 
@@ -161,10 +187,12 @@ export class AgentExecutionEngine {
 
         if (activeNodes.length === 0) continue;
 
-        // Execute all nodes in this layer in parallel
+        // Execute all nodes in this layer in parallel — each wrapped in try/catch
         const layerPromises = activeNodes.map(async (nodeId) => {
           const node = nodeMap.get(nodeId);
           if (!node) return;
+
+          const nodeStartedAt = Date.now();
 
           this.logger.log(`[EXECUTE] Processing node '${nodeId}' (type=${node.type}) for agent=${agent.id}`);
 
@@ -175,22 +203,52 @@ export class AgentExecutionEngine {
             timestamp: Date.now(),
           });
 
-          // Execute node
-          const result: NodeExecutionResult = await this.nodeExecutor.execute(
-            node,
-            context,
-            organizationId,
-            userId,
-            {
+          try {
+            // Execute node
+            const result: NodeExecutionResult = await this.nodeExecutor.execute(
+              node,
+              context,
               organizationId,
               userId,
-              edges: pipeline.edges,
-              nestingDepth: internalOptions?.nestingDepth,
-              maxNestingDepth: internalOptions?.maxNestingDepth,
-            },
-          );
+              {
+                organizationId,
+                userId,
+                edges: pipeline.edges,
+                nestingDepth: internalOptions?.nestingDepth,
+                maxNestingDepth: internalOptions?.maxNestingDepth,
+              },
+            );
 
-          return { nodeId, node, result };
+            const nodeCompletedAt = Date.now();
+
+            return {
+              nodeId,
+              node,
+              result,
+              error: null as string | null,
+              errorType: null as ExecutionErrorType | null,
+              startedAt: nodeStartedAt,
+              completedAt: nodeCompletedAt,
+            };
+          } catch (err: any) {
+            const nodeCompletedAt = Date.now();
+            const errorType = this.classifyNodeError(err);
+
+            this.logger.error(
+              `[EXECUTE] Node '${nodeId}' failed (${errorType}): ${err.message}`,
+              err.stack,
+            );
+
+            return {
+              nodeId,
+              node,
+              result: null as NodeExecutionResult | null,
+              error: err.message || 'Unknown node error',
+              errorType,
+              startedAt: nodeStartedAt,
+              completedAt: nodeCompletedAt,
+            };
+          }
         });
 
         // Wrap layer execution in timeout
@@ -201,10 +259,41 @@ export class AgentExecutionEngine {
           `Layer execution timed out`,
         );
 
+        // Track whether any node in this layer failed
+        let layerHasFailure = false;
+
         // Process layer results
         for (const item of layerResults) {
           if (!item) continue;
-          const { nodeId, node, result } = item;
+          const { nodeId, node, result, error, errorType, startedAt, completedAt } = item;
+
+          if (error || !result) {
+            // Node failed — record error but continue with other branches
+            layerHasFailure = true;
+            nodeResults[nodeId] = {
+              error,
+              errorType,
+              startedAt,
+              completedAt,
+              executionTime: completedAt - startedAt,
+            };
+            context.nodes[nodeId] = { output: undefined };
+
+            this.emitEvent(onEvent, {
+              type: 'node.completed',
+              nodeId,
+              nodeType: node.type,
+              data: { error, errorType },
+              timestamp: Date.now(),
+            });
+
+            // Skip all downstream nodes of a failed node
+            const neighbors = adjacencyList.get(nodeId) || [];
+            for (const neighbor of neighbors) {
+              this.markBranchAsSkipped(neighbor, adjacencyList, skippedNodes, pipeline.edges);
+            }
+            continue;
+          }
 
           // Store result in context
           context.nodes[nodeId] = { output: result.output };
@@ -213,6 +302,8 @@ export class AgentExecutionEngine {
             cost: result.cost || 0,
             tokens: result.tokens || 0,
             executionTime: result.executionTime || 0,
+            startedAt,
+            completedAt,
           };
 
           totalCost += result.cost || 0;
@@ -263,7 +354,7 @@ export class AgentExecutionEngine {
 
         // Mark skipped nodes in nodeResults
         for (const nodeId of layer) {
-          if (skippedNodes.has(nodeId)) {
+          if (skippedNodes.has(nodeId) && !nodeResults[nodeId]) {
             const node = nodeMap.get(nodeId);
             nodeResults[nodeId] = { skipped: true };
             context.nodes[nodeId] = { output: undefined };
@@ -279,6 +370,36 @@ export class AgentExecutionEngine {
       }
 
       const executionTime = Date.now() - startTime;
+
+      // Check if any node failed — if the output node was never reached, mark as failed
+      const hasNodeFailures = Object.values(nodeResults).some((r: any) => r.error);
+
+      if (hasNodeFailures && finalOutput === null) {
+        const failedNodes = Object.entries(nodeResults)
+          .filter(([, r]: [string, any]) => r.error)
+          .map(([id, r]: [string, any]) => `${id}: ${r.error}`)
+          .join('; ');
+
+        execution.status = AgentExecutionStatus.FAILED;
+        execution.error = `Pipeline failed: ${failedNodes}`;
+        execution.output = null;
+        execution.nodeResults = nodeResults;
+        execution.executionTime = executionTime;
+        execution.totalCost = totalCost;
+        execution.totalTokens = totalTokens;
+        await this.agentExecutionRepository.save(execution);
+
+        agent.incrementExecution(false, executionTime, totalCost);
+        await this.agentRepository.save(agent);
+
+        this.emitEvent(onEvent, {
+          type: 'execution.failed',
+          data: { error: execution.error, executionId: execution.id },
+          timestamp: Date.now(),
+        });
+
+        return execution;
+      }
 
       // 8. Update execution record
       execution.status = AgentExecutionStatus.COMPLETED;
@@ -311,15 +432,19 @@ export class AgentExecutionEngine {
     } catch (error) {
       const executionTime = Date.now() - startTime;
 
-      // Update execution with error
-      execution.status = AgentExecutionStatus.FAILED;
-      execution.error = error.message || 'Unknown error';
-      execution.executionTime = executionTime;
-      await this.agentExecutionRepository.save(execution);
+      // Update execution with error — always, even on unexpected crashes
+      try {
+        execution.status = AgentExecutionStatus.FAILED;
+        execution.error = error.message || 'Unknown error';
+        execution.executionTime = executionTime;
+        await this.agentExecutionRepository.save(execution);
 
-      // Update agent stats (failed)
-      agent.incrementExecution(false, executionTime, 0);
-      await this.agentRepository.save(agent);
+        // Update agent stats (failed)
+        agent.incrementExecution(false, executionTime, 0);
+        await this.agentRepository.save(agent);
+      } catch (saveError) {
+        this.logger.error(`[EXECUTE] Failed to persist execution record on crash: ${saveError.message}`);
+      }
 
       this.logger.error(`[EXECUTE] Agent ${agent.id} execution failed: ${error.message}`, error.stack);
 
@@ -332,6 +457,108 @@ export class AgentExecutionEngine {
       return execution;
     }
   }
+
+  // ── Input validation ─────────────────────────────────────────────────
+
+  private validateInput(input: any, internalOptions?: EngineInternalOptions): void {
+    // Validate nesting depth (checked regardless of input)
+    if (internalOptions?.nestingDepth !== undefined && internalOptions.nestingDepth > MAX_NESTING_DEPTH) {
+      throw new BadRequestException(
+        `Nesting depth (${internalOptions.nestingDepth}) exceeds maximum allowed (${MAX_NESTING_DEPTH})`,
+      );
+    }
+
+    if (input === undefined || input === null) {
+      return; // undefined/null input is fine — defaults to {}
+    }
+
+    // Must be a plain object (not array, not string, not number, etc.)
+    if (typeof input !== 'object' || Array.isArray(input)) {
+      throw new BadRequestException(
+        'Execution input must be a plain object (not an array, string, or primitive)',
+      );
+    }
+
+    // Size check
+    const serialized = JSON.stringify(input);
+    if (serialized.length > MAX_INPUT_SIZE_BYTES) {
+      throw new BadRequestException(
+        `Execution input size (${serialized.length} bytes) exceeds maximum allowed (${MAX_INPUT_SIZE_BYTES} bytes)`,
+      );
+    }
+
+    // Sanitize string values: strip control characters
+    this.sanitizeObject(input);
+  }
+
+  private validatePipelineSize(pipeline: AgentPipeline): void {
+    if (pipeline.nodes.length > MAX_PIPELINE_NODES) {
+      throw new BadRequestException(
+        `Pipeline has ${pipeline.nodes.length} nodes, exceeding maximum of ${MAX_PIPELINE_NODES}`,
+      );
+    }
+
+    if (pipeline.edges.length > MAX_PIPELINE_EDGES) {
+      throw new BadRequestException(
+        `Pipeline has ${pipeline.edges.length} edges, exceeding maximum of ${MAX_PIPELINE_EDGES}`,
+      );
+    }
+  }
+
+  /**
+   * Recursively strip control characters from all string values in an object.
+   * Mutates the object in place.
+   */
+  private sanitizeObject(obj: any): void {
+    if (obj === null || obj === undefined) return;
+    if (typeof obj !== 'object') return;
+
+    for (const key of Object.keys(obj)) {
+      const value = obj[key];
+      if (typeof value === 'string') {
+        obj[key] = value.replace(CONTROL_CHAR_REGEX, '');
+      } else if (typeof value === 'object' && value !== null) {
+        this.sanitizeObject(value);
+      }
+    }
+  }
+
+  // ── Error classification ──────────────────────────────────────────────
+
+  private classifyNodeError(err: any): ExecutionErrorType {
+    const message = (err.message || '').toLowerCase();
+
+    if (message.includes('timeout') || message.includes('timed out')) {
+      return ExecutionErrorType.TIMEOUT;
+    }
+    if (message.includes('budget') || message.includes('budget limit')) {
+      return ExecutionErrorType.BUDGET_EXCEEDED;
+    }
+    if (message.includes('nesting depth')) {
+      return ExecutionErrorType.NESTING_EXCEEDED;
+    }
+    if (
+      message.includes('llm') ||
+      message.includes('provider') ||
+      message.includes('model') ||
+      message.includes('rate limit') ||
+      message.includes('429')
+    ) {
+      return ExecutionErrorType.LLM_ERROR;
+    }
+    if (message.includes('tool') || message.includes('execution failed')) {
+      return ExecutionErrorType.TOOL_ERROR;
+    }
+    return ExecutionErrorType.VALIDATION_ERROR;
+  }
+
+  private classifiedError(message: string, type: ExecutionErrorType): Error {
+    const err = new BadRequestException(message);
+    (err as any).errorType = type;
+    return err;
+  }
+
+  // ── Graph building ───────────────────────────────────────────────────
 
   /**
    * Build adjacency list, in-degree map, and reverse adjacency list from pipeline edges.

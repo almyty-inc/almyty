@@ -395,14 +395,14 @@ export class LlmProvidersService {
           toolCalls: response.message.toolCalls,
           inputTokens: response.usage.inputTokens,
           outputTokens: response.usage.outputTokens,
-          cost: Math.round(response.cost),
+          cost: Math.round(response.cost * 100),
           responseTime: response.responseTime,
           model: response.model,
           finishReason: response.message.finishReason,
           status: MessageStatus.COMPLETED,
         }));
 
-        session.addMessage(response.usage.inputTokens, response.usage.outputTokens, Math.round(response.cost));
+        session.addMessage(response.usage.inputTokens, response.usage.outputTokens, Math.round(response.cost * 100));
         session.addToolCall(true);
 
         // Build follow-up messages with tool results
@@ -434,7 +434,7 @@ export class LlmProvidersService {
         toolCalls: response.message.toolCalls,
         inputTokens: response.usage.inputTokens,
         outputTokens: response.usage.outputTokens,
-        cost: Math.round(response.cost),
+        cost: Math.round(response.cost * 100),
         responseTime: response.responseTime,
         model: response.model,
         finishReason: response.message.finishReason,
@@ -444,14 +444,14 @@ export class LlmProvidersService {
       const savedMessage = await this.llmMessageRepository.save(message);
 
       // Update session stats
-      session.addMessage(response.usage.inputTokens, response.usage.outputTokens, Math.round(response.cost));
+      session.addMessage(response.usage.inputTokens, response.usage.outputTokens, Math.round(response.cost * 100));
       if (response.message.toolCalls?.length > 0) {
         session.addToolCall(true);
       }
       await this.llmSessionRepository.save(session);
 
       // Update provider stats
-      provider.incrementUsage(response.usage.totalTokens, Math.round(response.cost), true);
+      provider.incrementUsage(response.usage.totalTokens, Math.round(response.cost * 100), true);
       await this.llmProviderRepository.save(provider);
 
       return {
@@ -461,12 +461,18 @@ export class LlmProvidersService {
       };
 
     } catch (error) {
-      this.logger.error(`Chat request failed: ${error.message}`, error.stack);
-      
-      // Update provider error stats
+      const errorBody = error.response?.data || null;
+      this.logger.error(
+        `Chat request failed: ${error.message}` +
+        (errorBody ? ` response_body=${JSON.stringify(errorBody)}` : ''),
+        error.stack,
+      );
+
+      // Update provider error stats and health
       try {
         const provider = await this.getProvider(providerId, organizationId, true);
         provider.incrementUsage(0, 0, false);
+        provider.lastError = error.message;
         await this.llmProviderRepository.save(provider);
       } catch (updateError) {
         this.logger.warn(`Failed to update provider error stats: ${updateError.message}`);
@@ -482,37 +488,117 @@ export class LlmProvidersService {
     session: LlmSession,
     tools: Tool[]
   ): Promise<ChatResponse> {
-    const startTime = Date.now();
+    const maxRetries = 2;
+    const backoffDelays = [1000, 3000]; // 1s, 3s exponential backoff
+    let lastError: any;
 
-    try {
-      switch (provider.type) {
-        case LlmProviderType.OPENAI:
-        case LlmProviderType.AZURE_OPENAI:
-        case LlmProviderType.MISTRAL:
-        case LlmProviderType.XAI:
-        case LlmProviderType.DEEPSEEK:
-        case LlmProviderType.GROQ:
-        case LlmProviderType.TOGETHER:
-        case LlmProviderType.OPENROUTER:
-          return this.callOpenAI(provider, request, session, tools, startTime);
-        case LlmProviderType.ANTHROPIC:
-          return this.callAnthropic(provider, request, session, tools, startTime);
-        case LlmProviderType.GOOGLE:
-          return this.callGoogle(provider, request, session, tools, startTime);
-        case LlmProviderType.COHERE:
-          return this.callCohere(provider, request, session, tools, startTime);
-        case LlmProviderType.HUGGINGFACE:
-          return this.callHuggingFace(provider, request, session, tools, startTime);
-        case LlmProviderType.CUSTOM:
-          return this.callCustomProvider(provider, request, session, tools, startTime);
-        default:
-          throw new BadRequestException(`Unsupported LLM provider type: ${provider.type}`);
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const startTime = Date.now();
+
+      try {
+        const callPromise = this.dispatchProviderCall(provider, request, session, tools, startTime);
+
+        // Enforce a hard timeout per call (provider timeout + 5s buffer, max 120s)
+        const callTimeout = Math.min(
+          (provider.configuration?.timeout || 30000) + 5000,
+          120000,
+        );
+
+        const response = await this.withCallTimeout(callPromise, callTimeout);
+        return response;
+
+      } catch (error) {
+        const responseTime = Date.now() - startTime;
+        lastError = error;
+
+        // Log the full error response body from providers
+        const errorBody = error.response?.data || error.response?.body || null;
+        const statusCode = error.response?.status || error.status || 0;
+        this.logger.error(
+          `LLM provider call failed (attempt ${attempt + 1}/${maxRetries + 1}) after ${responseTime}ms: ` +
+          `status=${statusCode} message=${error.message}` +
+          (errorBody ? ` body=${JSON.stringify(errorBody)}` : ''),
+        );
+
+        // Update provider health metrics on failure
+        try {
+          provider.incrementUsage(0, 0, false);
+          if (statusCode >= 500) {
+            provider.lastError = `${error.message} (status ${statusCode})`;
+          }
+        } catch (_) { /* best effort */ }
+
+        // Retry only on retryable status codes (429, 500, 502, 503)
+        const isRetryable = [429, 500, 502, 503].includes(statusCode) ||
+          error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
+
+        if (isRetryable && attempt < maxRetries) {
+          const delay = backoffDelays[attempt] || 3000;
+          this.logger.warn(`Retrying LLM call after ${delay}ms (attempt ${attempt + 2}/${maxRetries + 1})`);
+          await this.sleep(delay);
+          continue;
+        }
+
+        // Not retryable or exhausted retries
+        throw error;
       }
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-      this.logger.error(`LLM provider call failed after ${responseTime}ms: ${error.message}`);
-      throw error;
     }
+
+    // Should never reach here, but safety net
+    throw lastError;
+  }
+
+  /**
+   * Dispatch call to the appropriate provider-specific method.
+   */
+  private async dispatchProviderCall(
+    provider: LlmProvider,
+    request: ChatRequest,
+    session: LlmSession,
+    tools: Tool[],
+    startTime: number,
+  ): Promise<ChatResponse> {
+    switch (provider.type) {
+      case LlmProviderType.OPENAI:
+      case LlmProviderType.AZURE_OPENAI:
+      case LlmProviderType.MISTRAL:
+      case LlmProviderType.XAI:
+      case LlmProviderType.DEEPSEEK:
+      case LlmProviderType.GROQ:
+      case LlmProviderType.TOGETHER:
+      case LlmProviderType.OPENROUTER:
+        return this.callOpenAI(provider, request, session, tools, startTime);
+      case LlmProviderType.ANTHROPIC:
+        return this.callAnthropic(provider, request, session, tools, startTime);
+      case LlmProviderType.GOOGLE:
+        return this.callGoogle(provider, request, session, tools, startTime);
+      case LlmProviderType.COHERE:
+        return this.callCohere(provider, request, session, tools, startTime);
+      case LlmProviderType.HUGGINGFACE:
+        return this.callHuggingFace(provider, request, session, tools, startTime);
+      case LlmProviderType.CUSTOM:
+        return this.callCustomProvider(provider, request, session, tools, startTime);
+      default:
+        throw new BadRequestException(`Unsupported LLM provider type: ${provider.type}`);
+    }
+  }
+
+  private withCallTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    let timer: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(Object.assign(new Error(`LLM call timed out after ${timeoutMs}ms`), { code: 'ECONNABORTED' })),
+        timeoutMs,
+      );
+    });
+
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      clearTimeout(timer);
+    });
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   private async callOpenAI(
@@ -1356,14 +1442,60 @@ export class LlmProvidersService {
     }
   }
 
+  /**
+   * Calculate the cost of a provider call in dollars.
+   * Uses configured pricing from metadata if available, otherwise falls back
+   * to default pricing for well-known models.
+   */
   private calculateProviderCost(provider: LlmProvider, inputTokens: number, outputTokens: number): number {
-    // Use the provider's configured pricing from metadata. If no pricing is set, return 0.
-    // Users set pricing via provider metadata or it can be fetched from provider APIs.
+    // 1. Use the provider's configured pricing from metadata if available
     const modelInfo = provider.metadata?.modelInfo;
     if (modelInfo?.inputTokenCost && modelInfo?.outputTokenCost) {
       return ((inputTokens / 1000) * modelInfo.inputTokenCost) + ((outputTokens / 1000) * modelInfo.outputTokenCost);
     }
+
+    // 2. Fall back to default pricing for well-known models (per 1K tokens, in dollars)
+    const model = (provider.configuration?.model || '').toLowerCase();
+    const pricing = this.getDefaultModelPricing(model, provider.type);
+    if (pricing) {
+      return ((inputTokens / 1000) * pricing.input) + ((outputTokens / 1000) * pricing.output);
+    }
+
     return 0;
+  }
+
+  /**
+   * Default per-1K-token pricing for common models.
+   * Returns { input, output } in dollars per 1K tokens, or null if model is unknown.
+   */
+  private getDefaultModelPricing(
+    model: string,
+    providerType: LlmProviderType,
+  ): { input: number; output: number } | null {
+    // OpenAI models
+    if (model.includes('gpt-4o-mini')) return { input: 0.00015, output: 0.0006 };
+    if (model.includes('gpt-4o')) return { input: 0.0025, output: 0.01 };
+    if (model.includes('gpt-4-turbo') || model.includes('gpt-4-1106')) return { input: 0.01, output: 0.03 };
+    if (model.includes('gpt-4')) return { input: 0.03, output: 0.06 };
+    if (model.includes('gpt-3.5-turbo')) return { input: 0.0005, output: 0.0015 };
+    if (model.includes('o1-mini')) return { input: 0.003, output: 0.012 };
+    if (model.includes('o1')) return { input: 0.015, output: 0.06 };
+
+    // Anthropic models
+    if (model.includes('claude-3-5-sonnet') || model.includes('claude-sonnet-4')) return { input: 0.003, output: 0.015 };
+    if (model.includes('claude-3-opus') || model.includes('claude-opus-4')) return { input: 0.015, output: 0.075 };
+    if (model.includes('claude-3-5-haiku') || model.includes('claude-3-haiku')) return { input: 0.00025, output: 0.00125 };
+
+    // Google models
+    if (model.includes('gemini-1.5-pro')) return { input: 0.00125, output: 0.005 };
+    if (model.includes('gemini-1.5-flash')) return { input: 0.000075, output: 0.0003 };
+    if (model.includes('gemini-pro') || model.includes('gemini-2')) return { input: 0.00125, output: 0.005 };
+
+    // DeepSeek models
+    if (model.includes('deepseek-chat') || model.includes('deepseek-v3')) return { input: 0.00027, output: 0.0011 };
+    if (model.includes('deepseek-reasoner') || model.includes('deepseek-r1')) return { input: 0.00055, output: 0.0022 };
+
+    return null;
   }
 
 
