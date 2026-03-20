@@ -13,9 +13,6 @@ import {
   Copy,
   Trash2,
   Pencil,
-  Activity,
-  Clock,
-  CircleDot,
   Search,
   FileUp,
   Sparkles,
@@ -26,7 +23,7 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -58,7 +55,7 @@ import {
 import { agentsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import type { Agent, AgentStatus } from '@/types'
+import type { Agent } from '@/types'
 
 interface AgentTemplate {
   id: string

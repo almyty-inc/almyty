@@ -9,8 +9,6 @@ import {
   UnauthorizedException,
   NotFoundException,
   BadRequestException,
-  HttpException,
-  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';

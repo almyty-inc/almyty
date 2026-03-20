@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { Agent, AgentStatus, AgentPipeline, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
