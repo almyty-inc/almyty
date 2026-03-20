@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Sun,
   Moon,
+  BookOpen,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -50,6 +51,7 @@ const navigation = [
   { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'AI Models', href: '/llm-providers', icon: Brain },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Docs', href: '/docs', icon: BookOpen },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -122,12 +124,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between h-14 px-4 border-b">
+          <div className="flex items-center justify-between h-14 px-4 border-b bg-gradient-to-r from-blue-600/5 via-purple-600/5 to-transparent">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center shadow-sm shadow-blue-600/20">
                 <span className="text-white font-bold text-sm">ai</span>
               </div>
-              <span className="text-xl font-bold text-foreground">apifai</span>
+              <span className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">apifai</span>
             </div>
             <Button
               variant="ghost"
@@ -192,7 +194,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   className={cn(
                     "group flex items-center px-3 py-1.5 text-[13px] rounded-md transition-colors",
                     isActive
-                      ? "bg-primary/10 text-primary border-l-2 border-primary font-medium"
+                      ? "bg-gradient-to-r from-primary/10 to-primary/5 text-primary border-l-2 border-primary font-medium"
                       : "text-muted-foreground hover:bg-accent/50 hover:text-foreground border-l-2 border-transparent"
                   )}
                 >

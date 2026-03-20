@@ -5,7 +5,7 @@ import { LogIn } from 'lucide-react'
 export function InputNode({ data, selected }: NodeProps) {
   return (
     <div className={`rounded-xl border-2 bg-card shadow-sm w-[220px] hover:shadow-md transition-shadow ${selected ? 'border-primary ring-2 ring-primary' : 'border-border'}`}>
-      <div className="px-3 py-2 bg-green-50 dark:bg-green-950 rounded-t-[10px] border-b flex items-center gap-2">
+      <div className="px-3 py-2 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 rounded-t-[10px] border-b flex items-center gap-2">
         <LogIn className="h-3.5 w-3.5 text-green-700 dark:text-green-300" />
         <span className="text-xs font-semibold text-green-700 dark:text-green-300">Input</span>
       </div>
