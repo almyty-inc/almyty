@@ -312,4 +312,170 @@ describe('AgentTemplateResolver', () => {
       expect(result).toBe('value');
     });
   });
+
+  // ── SECURITY: Template injection prevention ─────────────────────────────
+
+  describe('security: blocklist enforcement', () => {
+    const context: ExecutionContext = {
+      input: { message: 'hello' },
+      nodes: {},
+    };
+
+    it('should reject __proto__ access', () => {
+      expect(() => resolver.resolve('{{__proto__.polluted}}', context)).toThrow(/blocked keyword/);
+    });
+
+    it('should reject constructor access', () => {
+      expect(() => resolver.resolve('{{constructor.name}}', context)).toThrow(/blocked keyword/);
+    });
+
+    it('should reject prototype access', () => {
+      expect(() => resolver.resolve('{{input.prototype.foo}}', context)).toThrow(/blocked keyword/);
+    });
+
+    it('should reject process access', () => {
+      expect(() => resolver.resolve('{{process.env.SECRET}}', context)).toThrow(/blocked keyword/);
+    });
+
+    it('should reject require access', () => {
+      expect(() => resolver.resolve('{{require.resolve}}', context)).toThrow(/blocked keyword/);
+    });
+
+    it('should reject import access', () => {
+      expect(() => resolver.resolve('{{import.meta}}', context)).toThrow(/blocked keyword/);
+    });
+
+    it('should reject global access', () => {
+      expect(() => resolver.resolve('{{global.process}}', context)).toThrow(/blocked keyword/);
+    });
+
+    it('should reject window access', () => {
+      expect(() => resolver.resolve('{{window.document}}', context)).toThrow(/blocked keyword/);
+    });
+
+    it('should reject Function access', () => {
+      expect(() => resolver.resolve('{{Function.constructor}}', context)).toThrow(/blocked keyword/);
+    });
+
+    it('should reject eval access', () => {
+      expect(() => resolver.resolve('{{eval.call}}', context)).toThrow(/blocked keyword/);
+    });
+
+    it('should reject blocklisted words in nested paths', () => {
+      expect(() => resolver.resolve('{{nodes.llm_1.output.__proto__}}', context)).toThrow(/blocked keyword/);
+    });
+
+    it('should reject blocklisted words in resolveValue', () => {
+      expect(() => resolver.resolveValue('__proto__.polluted', context)).toThrow(/blocked keyword/);
+    });
+  });
+
+  describe('security: expression character validation', () => {
+    const context: ExecutionContext = {
+      input: { message: 'hello' },
+      nodes: {},
+    };
+
+    it('should reject expressions with parentheses', () => {
+      expect(() => resolver.resolve('{{input.toString()}}', context)).toThrow(/invalid characters/);
+    });
+
+    it('should reject expressions with brackets', () => {
+      expect(() => resolver.resolve('{{input["message"]}}', context)).toThrow(/invalid characters/);
+    });
+
+    it('should reject expressions with semicolons', () => {
+      expect(() => resolver.resolve('{{input.a;input.b}}', context)).toThrow(/invalid characters/);
+    });
+
+    it('should reject expressions with spaces', () => {
+      // Note: whitespace around the expression is trimmed, but spaces INSIDE the path are invalid
+      expect(() => resolver.resolve('{{input .message}}', context)).toThrow(/invalid characters/);
+    });
+
+    it('should reject expressions with backticks', () => {
+      expect(() => resolver.resolve('{{`input`.message}}', context)).toThrow(/invalid characters/);
+    });
+
+    it('should reject expressions with equal signs', () => {
+      expect(() => resolver.resolve('{{input.message=bad}}', context)).toThrow(/invalid characters/);
+    });
+
+    it('should allow valid dot-notation with underscores and hyphens', () => {
+      const ctx: ExecutionContext = {
+        input: {},
+        nodes: {
+          'my-node_1': { output: { 'data-value': 'ok' } },
+        },
+      };
+      const result = resolver.resolve('{{nodes.my-node_1.output.data-value}}', ctx);
+      expect(result).toBe('ok');
+    });
+  });
+
+  describe('security: expression length limits', () => {
+    const context: ExecutionContext = {
+      input: { message: 'hello' },
+      nodes: {},
+    };
+
+    it('should reject expressions longer than 500 characters', () => {
+      const longPath = 'input.' + 'a'.repeat(500);
+      expect(() => resolver.resolve(`{{${longPath}}}`, context)).toThrow(/expression length/);
+    });
+
+    it('should accept expressions up to 500 characters', () => {
+      // Build a valid 499-char path
+      const segments = [];
+      let len = 0;
+      while (len < 490) {
+        const seg = 'abcdef';
+        segments.push(seg);
+        len += seg.length + 1; // +1 for dot
+      }
+      const path = segments.join('.');
+      // Should not throw (resolves to undefined -> empty string)
+      expect(() => resolver.resolve(`{{${path}}}`, context)).not.toThrow();
+    });
+  });
+
+  describe('security: template length limits', () => {
+    const context: ExecutionContext = {
+      input: { message: 'hello' },
+      nodes: {},
+    };
+
+    it('should reject templates longer than 10000 characters', () => {
+      const longTemplate = 'A'.repeat(10001);
+      expect(() => resolver.resolve(longTemplate, context)).toThrow(/Template length/);
+    });
+
+    it('should accept templates up to 10000 characters', () => {
+      const template = 'A'.repeat(10000);
+      expect(() => resolver.resolve(template, context)).not.toThrow();
+    });
+  });
+
+  describe('security: prototype chain is not walked', () => {
+    it('should not resolve inherited properties', () => {
+      const context: ExecutionContext = {
+        input: { message: 'hello' },
+        nodes: {},
+      };
+
+      // 'toString' is inherited from Object.prototype, should not resolve
+      const result = resolver.resolve('{{input.toString}}', context);
+      expect(result).toBe('');
+    });
+
+    it('should not resolve hasOwnProperty from prototype', () => {
+      const context: ExecutionContext = {
+        input: {},
+        nodes: {},
+      };
+
+      const result = resolver.resolve('{{input.hasOwnProperty}}', context);
+      expect(result).toBe('');
+    });
+  });
 });

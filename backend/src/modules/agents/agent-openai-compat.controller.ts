@@ -5,6 +5,7 @@ import {
   Body,
   Headers,
   Res,
+  Req,
   Logger,
   UnauthorizedException,
   NotFoundException,
@@ -13,7 +14,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import * as crypto from 'crypto';
 
 import { ApiKey } from '../../entities/api-key.entity';
@@ -21,10 +22,25 @@ import { Agent } from '../../entities/agent.entity';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
 
+/** Maximum request body size in bytes (1 MB). */
+const MAX_BODY_SIZE_BYTES = 1 * 1024 * 1024;
+
+/** Maximum number of messages in a single request. */
+const MAX_MESSAGES = 100;
+
+/** Maximum content length per message (100 KB). */
+const MAX_MESSAGE_CONTENT_LENGTH = 100 * 1024;
+
+/** Placeholder rate limits (per-key enforcement is done externally; these are informational headers). */
+const RATE_LIMIT_RPM = 60;
+
 @Controller('v1')
 @ApiTags('OpenAI Compatible')
 export class AgentOpenAICompatController {
   private readonly logger = new Logger(AgentOpenAICompatController.name);
+
+  /** Simple per-key request counter for rate limit headers. Resets each minute. */
+  private readonly requestCounts = new Map<string, { count: number; resetAt: number }>();
 
   constructor(
     private readonly agentsService: AgentsService,
@@ -39,43 +55,73 @@ export class AgentOpenAICompatController {
   async chatCompletions(
     @Body() body: any,
     @Headers('authorization') auth: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
+    const requestStartTime = Date.now();
+    let apiKeyLast4 = '????';
+    let agentId = 'unknown';
+
     try {
+      // 0. Validate request body size
+      this.validateRequestBodySize(body);
+
       // 1. Authenticate via Bearer token (API key)
       const apiKey = await this.authenticateApiKey(auth);
+      apiKeyLast4 = this.getKeyLast4(auth);
+
+      // Rate limit tracking
+      const rateLimitInfo = this.trackRequestCount(apiKey.id);
+      this.setRateLimitHeaders(res, rateLimitInfo);
+
+      if (rateLimitInfo.remaining <= 0) {
+        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 429);
+        return this.sendOpenAIError(res, 429, 'Rate limit exceeded. Please retry after a moment.', 'rate_limit_error', 'rate_limit_exceeded');
+      }
 
       // 2. Extract agent from model field: "agent:uuid" or "agent:name"
       if (!body.model) {
+        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 400);
         return this.sendOpenAIError(res, 400, 'model is required', 'invalid_request_error', 'model_required');
       }
 
-      const agent = await this.resolveAgent(body.model, apiKey.organizationId);
+      // 3. Validate messages
+      this.validateMessages(body);
 
-      // 3. Map OpenAI messages to agent input
+      const agent = await this.resolveAgent(body.model, apiKey.organizationId);
+      agentId = agent.id;
+
+      // 4. Map OpenAI messages to agent input
       const input = this.mapOpenAIToAgentInput(body);
 
-      // 4. Update API key last used
+      // 5. Update API key last used
       apiKey.lastUsedAt = new Date();
       await this.apiKeyRepository.save(apiKey);
 
-      // 5. Execute (streaming or sync)
+      // 6. Execute (streaming or sync)
       if (body.stream) {
+        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 200, 'stream');
         return this.handleStreaming(agent, input, apiKey, res);
       } else {
-        return this.handleSync(agent, input, apiKey, res);
+        const result = await this.handleSync(agent, input, apiKey, res);
+        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 200);
+        return result;
       }
     } catch (error) {
       if (error instanceof UnauthorizedException) {
+        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 401);
         return this.sendOpenAIError(res, 401, error.message, 'authentication_error', 'invalid_api_key');
       }
       if (error instanceof NotFoundException) {
+        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 404);
         return this.sendOpenAIError(res, 404, error.message, 'invalid_request_error', 'model_not_found');
       }
       if (error instanceof BadRequestException) {
+        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 400);
         return this.sendOpenAIError(res, 400, error.message, 'invalid_request_error', 'bad_request');
       }
       this.logger.error(`[CHAT_COMPLETIONS] Unexpected error: ${error.message}`, error.stack);
+      this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 500);
       return this.sendOpenAIError(res, 500, 'Internal server error', 'api_error', 'internal_error');
     }
   }
@@ -117,6 +163,103 @@ export class AgentOpenAICompatController {
       this.logger.error(`[LIST_MODELS] Unexpected error: ${error.message}`, error.stack);
       return this.sendOpenAIError(res, 500, 'Internal server error', 'api_error', 'internal_error');
     }
+  }
+
+  // ─── Request Validation ─────────────────────────────────────────────
+
+  private validateRequestBodySize(body: any): void {
+    const bodySize = JSON.stringify(body || {}).length;
+    if (bodySize > MAX_BODY_SIZE_BYTES) {
+      throw new BadRequestException(
+        `Request body size (${bodySize} bytes) exceeds maximum allowed (${MAX_BODY_SIZE_BYTES} bytes)`,
+      );
+    }
+  }
+
+  private validateMessages(body: any): void {
+    const messages = body.messages;
+    if (!messages || !Array.isArray(messages)) {
+      throw new BadRequestException('messages must be an array');
+    }
+
+    if (messages.length === 0) {
+      throw new BadRequestException('messages array must not be empty');
+    }
+
+    if (messages.length > MAX_MESSAGES) {
+      throw new BadRequestException(
+        `messages array length (${messages.length}) exceeds maximum allowed (${MAX_MESSAGES})`,
+      );
+    }
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (!msg || typeof msg !== 'object') {
+        throw new BadRequestException(`messages[${i}] must be an object`);
+      }
+      if (!msg.role) {
+        throw new BadRequestException(`messages[${i}].role is required`);
+      }
+      // Validate content length (content can be string or array)
+      const contentStr = typeof msg.content === 'string'
+        ? msg.content
+        : JSON.stringify(msg.content || '');
+      if (contentStr.length > MAX_MESSAGE_CONTENT_LENGTH) {
+        throw new BadRequestException(
+          `messages[${i}].content length (${contentStr.length}) exceeds maximum allowed (${MAX_MESSAGE_CONTENT_LENGTH})`,
+        );
+      }
+    }
+  }
+
+  // ─── Rate Limiting ──────────────────────────────────────────────────
+
+  private trackRequestCount(apiKeyId: string): { remaining: number; limit: number; resetAt: number } {
+    const now = Date.now();
+    const existing = this.requestCounts.get(apiKeyId);
+
+    if (!existing || now >= existing.resetAt) {
+      // New window
+      const resetAt = now + 60_000; // 1 minute window
+      this.requestCounts.set(apiKeyId, { count: 1, resetAt });
+      return { remaining: RATE_LIMIT_RPM - 1, limit: RATE_LIMIT_RPM, resetAt };
+    }
+
+    existing.count++;
+    const remaining = Math.max(0, RATE_LIMIT_RPM - existing.count);
+    return { remaining, limit: RATE_LIMIT_RPM, resetAt: existing.resetAt };
+  }
+
+  private setRateLimitHeaders(
+    res: Response,
+    info: { remaining: number; limit: number; resetAt: number },
+  ): void {
+    res.setHeader('X-RateLimit-Limit', String(info.limit));
+    res.setHeader('X-RateLimit-Remaining', String(info.remaining));
+    res.setHeader('X-RateLimit-Reset', String(Math.ceil(info.resetAt / 1000)));
+  }
+
+  // ─── Request Logging ────────────────────────────────────────────────
+
+  private logRequest(
+    req: Request,
+    apiKeyLast4: string,
+    agentId: string,
+    startTime: number,
+    statusCode: number,
+    extra?: string,
+  ): void {
+    const ip = req?.ip || req?.socket?.remoteAddress || 'unknown';
+    const duration = Date.now() - startTime;
+    this.logger.log(
+      `[OPENAI_COMPAT] ip=${ip} key=***${apiKeyLast4} agent=${agentId} status=${statusCode} duration=${duration}ms${extra ? ` ${extra}` : ''}`,
+    );
+  }
+
+  private getKeyLast4(authHeader: string): string {
+    if (!authHeader) return '????';
+    const token = authHeader.replace('Bearer ', '');
+    return token.length >= 4 ? token.slice(-4) : token;
   }
 
   // ─── Authentication ──────────────────────────────────────────────────

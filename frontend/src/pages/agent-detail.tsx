@@ -62,6 +62,7 @@ import {
 } from '@/components/ui/table'
 
 import { nodeTypes } from '@/components/agents/nodes'
+import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { agentsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
@@ -112,7 +113,7 @@ export function AgentDetailPage() {
   const agent = agentData as Agent | undefined
 
   // Fetch executions
-  const { data: executionsData } = useQuery({
+  const { data: executionsData, error: executionsError } = useQuery({
     queryKey: ['agent-executions', id],
     queryFn: async () => {
       const res = await agentsApi.getExecutions(id!, { limit: 20 })
@@ -359,23 +360,37 @@ export function AgentDetailPage() {
         </CardHeader>
         <CardContent className="p-0">
           <div className="h-[350px] border-t">
-            <ReactFlow
-              nodes={flowNodes}
-              edges={flowEdges}
-              nodeTypes={nodeTypes}
-              fitView
-              fitViewOptions={{ padding: 0.3 }}
-              nodesDraggable={false}
-              nodesConnectable={false}
-              elementsSelectable={false}
-              panOnDrag
-              zoomOnScroll
-              className="bg-muted/10"
-              proOptions={{ hideAttribution: true }}
-            >
-              <Background gap={16} size={1} />
-              <Controls showInteractive={false} />
-            </ReactFlow>
+            {flowNodes.length === 0 ? (
+              <div className="flex items-center justify-center h-full bg-muted/10">
+                <p className="text-sm text-muted-foreground">No nodes in pipeline. Edit the agent to add nodes.</p>
+              </div>
+            ) : (
+              <ErrorBoundary
+                fallback={
+                  <div className="flex items-center justify-center h-full bg-muted/10">
+                    <p className="text-sm text-destructive">Failed to render pipeline canvas.</p>
+                  </div>
+                }
+              >
+                <ReactFlow
+                  nodes={flowNodes}
+                  edges={flowEdges}
+                  nodeTypes={nodeTypes}
+                  fitView
+                  fitViewOptions={{ padding: 0.3 }}
+                  nodesDraggable={false}
+                  nodesConnectable={false}
+                  elementsSelectable={false}
+                  panOnDrag
+                  zoomOnScroll
+                  className="bg-muted/10"
+                  proOptions={{ hideAttribution: true }}
+                >
+                  <Background gap={16} size={1} />
+                  <Controls showInteractive={false} />
+                </ReactFlow>
+              </ErrorBoundary>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -405,7 +420,9 @@ export function AgentDetailPage() {
                           setTestInput('')
                         })
                         .catch((err: any) => {
-                          setTestOutput(`Error: ${err.response?.data?.message || err.message}`)
+                          const msg = err.response?.data?.message || err.message || 'Invocation failed'
+                          setTestOutput(`Error: ${msg}`)
+                          errorNotif('Invocation Failed', msg)
                         })
                         .finally(() => setTestLoading(false))
                     }
@@ -424,7 +441,9 @@ export function AgentDetailPage() {
                         setTestInput('')
                       })
                       .catch((err: any) => {
-                        setTestOutput(`Error: ${err.response?.data?.message || err.message}`)
+                        const msg = err.response?.data?.message || err.message || 'Invocation failed'
+                        setTestOutput(`Error: ${msg}`)
+                        errorNotif('Invocation Failed', msg)
                       })
                       .finally(() => setTestLoading(false))
                   }}
@@ -516,7 +535,14 @@ console.log(r.choices[0].message.content);`,
           <CardTitle className="text-base">Recent Executions</CardTitle>
         </CardHeader>
         <CardContent>
-          {executions.length === 0 ? (
+          {executionsError ? (
+            <div className="text-center py-6">
+              <p className="text-sm text-destructive">Failed to load executions</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {(executionsError as Error)?.message || 'An error occurred while fetching execution history.'}
+              </p>
+            </div>
+          ) : executions.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-6">
               No executions yet. Click "Invoke" to run this agent.
             </p>

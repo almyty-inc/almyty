@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -15,12 +15,13 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Save, Loader2, Download } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Download, AlertTriangle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ErrorBoundary } from '@/components/ui/error-boundary'
 
 import { NodePalette } from '@/components/agents/node-palette'
 import { NodeConfigPanel } from '@/components/agents/node-config-panel'
@@ -256,6 +257,36 @@ export function AgentBuilderPage() {
     [reactFlowInstance, setNodes]
   )
 
+  // ── Validation ──────────────────────────────────────────────────────────
+  const validationErrors = useMemo(() => {
+    const errors: string[] = []
+
+    if (!agentName.trim()) {
+      errors.push('Agent name is required')
+    }
+
+    const hasInput = nodes.some((n) => n.type === 'input')
+    const hasOutput = nodes.some((n) => n.type === 'output')
+    if (!hasInput) {
+      errors.push('Pipeline must have at least one Input node')
+    }
+    if (!hasOutput) {
+      errors.push('Pipeline must have at least one Output node')
+    }
+
+    // Check that all LLM call nodes have a provider selected
+    const llmNodes = nodes.filter((n) => n.type === 'llm_call')
+    for (const llmNode of llmNodes) {
+      if (!llmNode.data?.providerId) {
+        errors.push(`LLM Call node "${llmNode.id}" is missing a provider`)
+      }
+    }
+
+    return errors
+  }, [agentName, nodes])
+
+  const canSave = validationErrors.length === 0
+
   // Build pipeline payload
   const buildPipeline = () => {
     const viewport = reactFlowInstance?.getViewport()
@@ -370,7 +401,16 @@ export function AgentBuilderPage() {
               v{(agentData as Agent).version || '1.0.0'}
             </Badge>
           )}
-          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+          <Button
+            onClick={() => {
+              if (!canSave) {
+                errorNotif('Validation Failed', validationErrors.join('. '))
+                return
+              }
+              saveMutation.mutate()
+            }}
+            disabled={saveMutation.isPending || !canSave}
+          >
             {saveMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
@@ -381,6 +421,20 @@ export function AgentBuilderPage() {
         </div>
       </div>
 
+      {/* Validation Errors Banner */}
+      {validationErrors.length > 0 && (
+        <div className="px-4 py-2 bg-destructive/10 border-b border-destructive/20 shrink-0">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+            <ul className="text-xs text-destructive space-y-0.5">
+              {validationErrors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {/* Three-panel Layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Palette */}
@@ -388,27 +442,38 @@ export function AgentBuilderPage() {
 
         {/* Center: Canvas */}
         <div className="flex-1" ref={reactFlowWrapper}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
-            onInit={setReactFlowInstance}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            nodeTypes={nodeTypes}
-            fitView
-            fitViewOptions={{ padding: 0.2 }}
-            deleteKeyCode={['Backspace', 'Delete']}
-            className="bg-muted/20"
-            proOptions={{ hideAttribution: true }}
+          <ErrorBoundary
+            fallback={
+              <div className="flex items-center justify-center h-full bg-muted/20">
+                <div className="text-center p-8">
+                  <p className="text-sm font-medium text-destructive">Canvas rendering error</p>
+                  <p className="text-xs text-muted-foreground mt-1">A node may have invalid data. Try removing recently added nodes.</p>
+                </div>
+              </div>
+            }
           >
-            <Background gap={16} size={1} />
-            <Controls />
-          </ReactFlow>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeClick={onNodeClick}
+              onPaneClick={onPaneClick}
+              onInit={setReactFlowInstance}
+              onDrop={onDrop}
+              onDragOver={onDragOver}
+              nodeTypes={nodeTypes}
+              fitView
+              fitViewOptions={{ padding: 0.2 }}
+              deleteKeyCode={['Backspace', 'Delete']}
+              className="bg-muted/20"
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background gap={16} size={1} />
+              <Controls />
+            </ReactFlow>
+          </ErrorBoundary>
         </div>
 
         {/* Right: Config Panel */}
