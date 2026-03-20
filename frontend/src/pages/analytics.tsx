@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
@@ -62,6 +62,11 @@ const statusColors: Record<string, string> = {
 type Tab = 'overview' | 'requests' | 'tools' | 'gateways' | 'llm'
 
 export function AnalyticsPage() {
+  useEffect(() => {
+    document.title = 'Analytics | apifai'
+    return () => { document.title = 'apifai' }
+  }, [])
+
   const { currentOrganization } = useOrganizationStore()
   const [tab, setTab] = useState<Tab>('overview')
   const [timeframe, setTimeframe] = useState('7d')
@@ -250,8 +255,10 @@ export function AnalyticsPage() {
                 value={`$${((overview.last7d?.llmCostCents || 0) / 100).toFixed(4)}`} />
             </div>
           ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              No analytics data yet. Use the system to generate data.
+            <div className="text-center py-12">
+              <Activity className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No analytics data yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Usage data will appear here as you use the system.</p>
             </div>
           )}
 
@@ -356,8 +363,10 @@ export function AnalyticsPage() {
               </div>
             </>
           ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              No request logs yet. Logs are recorded automatically as the system is used.
+            <div className="text-center py-12">
+              <Globe className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No request logs yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Logs are recorded automatically as API requests come in.</p>
             </div>
           )}
         </div>
@@ -406,8 +415,10 @@ export function AnalyticsPage() {
               </table>
             </div>
           ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              No tool usage data for this period.
+            <div className="text-center py-12">
+              <Wrench className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No tool usage data</p>
+              <p className="text-xs text-muted-foreground mt-1">Tool execution stats will appear here once tools are used.</p>
             </div>
           )}
         </div>
@@ -464,8 +475,10 @@ export function AnalyticsPage() {
               </table>
             </div>
           ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              No gateway usage data for this period.
+            <div className="text-center py-12">
+              <Zap className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No gateway usage data</p>
+              <p className="text-xs text-muted-foreground mt-1">Gateway traffic stats will appear here once gateways receive requests.</p>
             </div>
           )}
         </div>
@@ -509,8 +522,10 @@ export function AnalyticsPage() {
               </table>
             </div>
           ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              No LLM usage data for this period.
+            <div className="text-center py-12">
+              <MessageSquare className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No LLM usage data</p>
+              <p className="text-xs text-muted-foreground mt-1">LLM session and cost data will appear here once AI models are used.</p>
             </div>
           )}
         </div>

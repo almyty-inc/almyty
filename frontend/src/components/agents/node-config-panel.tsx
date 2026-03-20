@@ -59,7 +59,7 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
   }
 
   return (
-    <div className="w-[320px] border-l bg-muted/30 flex flex-col overflow-hidden">
+    <div className="w-full lg:w-[320px] border-l bg-muted/30 flex flex-col overflow-hidden h-full">
       {/* Header */}
       <div className="px-4 py-3 border-b flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">

@@ -739,6 +739,11 @@ const createProviderSchema = z.object({
 type CreateProviderFormData = z.infer<typeof createProviderSchema>
 
 export function LlmProvidersPage() {
+  useEffect(() => {
+    document.title = 'AI Models | apifai'
+    return () => { document.title = 'apifai' }
+  }, [])
+
   const [selectedProvider, setSelectedProvider] = useState<LlmProvider | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)

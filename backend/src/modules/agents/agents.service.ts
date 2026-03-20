@@ -25,6 +25,7 @@ export interface CreateAgentInput {
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
+  webhookUrl?: string;
 }
 
 export interface UpdateAgentInput {
@@ -36,6 +37,7 @@ export interface UpdateAgentInput {
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
+  webhookUrl?: string;
 }
 
 export interface AgentTemplate {

@@ -576,8 +576,14 @@ export interface Agent {
     maxParallelNodes?: number
     budgetLimit?: number
     enableStreaming?: boolean
+    schedule?: {
+      enabled: boolean
+      intervalMinutes: number
+      input: Record<string, any>
+    }
   }
   metadata?: Record<string, any>
+  webhookUrl?: string
   totalExecutions: number
   successfulExecutions: number
   totalCost: number

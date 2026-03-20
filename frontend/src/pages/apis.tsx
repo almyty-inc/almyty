@@ -64,6 +64,11 @@ type CreateApiFormData = z.infer<typeof createApiSchema>
 type ImportSchemaFormData = z.infer<typeof importSchemaSchema>
 
 export function ApisPage() {
+  React.useEffect(() => {
+    document.title = 'APIs | apifai'
+    return () => { document.title = 'apifai' }
+  }, [])
+
   const { currentOrganization } = useOrganizationStore()
   const { success, error } = useNotifications()
   const queryClient = useQueryClient()

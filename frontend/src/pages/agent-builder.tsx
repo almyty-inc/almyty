@@ -6,6 +6,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  Panel,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -15,7 +16,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Save, Loader2, Download, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Download, AlertTriangle, Plus, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,6 +30,7 @@ import { nodeTypes, type PipelineNodeType } from '@/components/agents/nodes'
 import { agentsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
+import { cn } from '@/lib/utils'
 import type { Agent, PipelineNode, PipelineEdge } from '@/types'
 
 const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
@@ -94,6 +96,13 @@ export function AgentBuilderPage() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([] as Edge[])
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [initialized, setInitialized] = useState(false)
+  const [showMobilePalette, setShowMobilePalette] = useState(false)
+
+  // Document title
+  useEffect(() => {
+    document.title = isEditing ? `Edit Agent | apifai` : `New Agent | apifai`
+    return () => { document.title = 'apifai' }
+  }, [isEditing])
 
   // Fetch existing agent when editing
   const { data: agentData, isLoading: isLoadingAgent } = useQuery({
@@ -355,26 +364,27 @@ export function AgentBuilderPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
       {/* Top Bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b bg-background shrink-0">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/agents')}>
+      <div className="flex items-center justify-between px-2 sm:px-4 py-2 border-b bg-background shrink-0 sticky top-0 z-30">
+        <div className="flex items-center gap-1 sm:gap-3 min-w-0">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => navigate('/agents')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <Input
-            className="text-lg font-semibold border-none shadow-none focus-visible:ring-0 w-[260px] px-1"
+            className="text-base sm:text-lg font-semibold border-none shadow-none focus-visible:ring-0 w-[140px] sm:w-[260px] px-1"
             value={agentName}
             onChange={(e) => setAgentName(e.target.value)}
             placeholder="Agent name"
           />
-          <Badge variant={agentStatus === 'active' ? 'default' : agentStatus === 'error' ? 'destructive' : 'outline'}>
+          <Badge variant={agentStatus === 'active' ? 'default' : agentStatus === 'error' ? 'destructive' : 'outline'} className="hidden sm:inline-flex">
             {agentStatus}
           </Badge>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           {isEditing && (
             <Button
               variant="outline"
               size="sm"
+              className="hidden sm:flex"
               onClick={async () => {
                 try {
                   const res = await agentsApi.exportAgent(id!)
@@ -397,11 +407,12 @@ export function AgentBuilderPage() {
             </Button>
           )}
           {isEditing && agentData && (
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-xs hidden sm:inline-flex">
               v{(agentData as Agent).version || '1.0.0'}
             </Badge>
           )}
           <Button
+            size="sm"
             onClick={() => {
               if (!canSave) {
                 errorNotif('Validation Failed', validationErrors.join('. '))
@@ -412,11 +423,11 @@ export function AgentBuilderPage() {
             disabled={saveMutation.isPending || !canSave}
           >
             {saveMutation.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
             ) : (
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="h-4 w-4 sm:mr-2" />
             )}
-            Save
+            <span className="hidden sm:inline">Save</span>
           </Button>
         </div>
       </div>
@@ -436,9 +447,29 @@ export function AgentBuilderPage() {
       )}
 
       {/* Three-panel Layout */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: Palette */}
-        <NodePalette />
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Left: Palette — visible on lg+, hidden on mobile */}
+        <div className="hidden lg:block">
+          <NodePalette />
+        </div>
+
+        {/* Mobile: floating add button to open palette dropdown */}
+        <div className="lg:hidden fixed bottom-4 right-4 z-50">
+          <Button
+            onClick={() => setShowMobilePalette(!showMobilePalette)}
+            size="icon"
+            className="rounded-full shadow-lg h-12 w-12"
+          >
+            {showMobilePalette ? <X className="h-6 w-6" /> : <Plus className="h-6 w-6" />}
+          </Button>
+        </div>
+
+        {/* Mobile: palette dropdown */}
+        {showMobilePalette && (
+          <div className="lg:hidden fixed bottom-20 right-4 z-50 w-[220px] max-h-[60vh] overflow-y-auto rounded-lg border bg-background shadow-xl">
+            <NodePalette />
+          </div>
+        )}
 
         {/* Center: Canvas */}
         <div className="flex-1" ref={reactFlowWrapper}>
@@ -472,19 +503,40 @@ export function AgentBuilderPage() {
             >
               <Background gap={16} size={1} />
               <Controls />
+              {/* In-app help overlay for empty/fresh canvas */}
+              {nodes.length <= 3 && !selectedNode && (
+                <Panel position="top-center" className="bg-background/80 backdrop-blur-sm rounded-lg p-4 text-center max-w-md">
+                  <p className="text-sm text-muted-foreground">
+                    Drag node types from the left panel onto the canvas.
+                    Connect them by dragging from output handles (right) to input handles (left).
+                    Click a node to configure it.
+                  </p>
+                </Panel>
+              )}
             </ReactFlow>
           </ErrorBoundary>
         </div>
 
-        {/* Right: Config Panel */}
+        {/* Right: Config Panel — sidebar on lg+, overlay on mobile */}
         {selectedNode && (
-          <NodeConfigPanel
-            node={selectedNode}
-            nodes={nodes}
-            onUpdateNode={onUpdateNode}
-            onDeleteNode={onDeleteNode}
-            onClose={() => setSelectedNode(null)}
-          />
+          <div className={cn(
+            'lg:w-[320px] lg:relative lg:border-l lg:z-auto',
+            'fixed inset-0 z-50 bg-background lg:static lg:inset-auto',
+          )}>
+            {/* Mobile overlay backdrop close button */}
+            <div className="lg:hidden absolute top-2 right-2 z-10">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedNode(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <NodeConfigPanel
+              node={selectedNode}
+              nodes={nodes}
+              onUpdateNode={onUpdateNode}
+              onDeleteNode={onDeleteNode}
+              onClose={() => setSelectedNode(null)}
+            />
+          </div>
         )}
       </div>
     </div>

@@ -43,7 +43,7 @@ export function NodePalette() {
   }
 
   return (
-    <div className="w-[200px] border-r bg-muted/30 p-3 overflow-y-auto">
+    <div className="w-[200px] lg:border-r bg-muted/30 p-3 overflow-y-auto">
       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
         Node Types
       </h3>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -38,6 +38,11 @@ const createGatewaySchema = z.object({
 type CreateGatewayForm = z.infer<typeof createGatewaySchema>
 
 export function GatewaysPage() {
+  useEffect(() => {
+    document.title = 'Gateways | apifai'
+    return () => { document.title = 'apifai' }
+  }, [])
+
   const navigate = useNavigate()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteGatewayDialogOpen, setDeleteGatewayDialogOpen] = useState(false)

@@ -386,6 +386,10 @@ export const agentsApi = {
   importAgent: (data: any) => api.post('/agents/import', data),
   // Cost estimation
   getCostEstimate: (id: string) => api.get(`/agents/${id}/cost-estimate`),
+  // Scheduling
+  schedule: (id: string, intervalMinutes: number, input?: any) =>
+    api.post(`/agents/${id}/schedule`, { intervalMinutes, input }),
+  unschedule: (id: string) => api.delete(`/agents/${id}/schedule`),
 }
 
 // Users API (admin)

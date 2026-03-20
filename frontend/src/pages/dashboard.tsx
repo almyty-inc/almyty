@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -27,6 +27,11 @@ const humanizePath = (path: string, method: string) => {
 }
 
 export function DashboardPage() {
+  useEffect(() => {
+    document.title = 'Dashboard | apifai'
+    return () => { document.title = 'apifai' }
+  }, [])
+
   const { currentOrganization } = useOrganizationStore()
   const orgId = currentOrganization?.id
   const navigate = useNavigate()
