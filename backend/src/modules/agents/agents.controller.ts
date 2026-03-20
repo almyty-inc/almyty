@@ -16,7 +16,8 @@ import {
   HttpException,
   Logger,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { IsString, IsOptional, IsEnum, IsNumber, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Response } from 'express';
@@ -77,6 +78,7 @@ export class AgentsController {
   @Post()
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Create a new agent' })
+  @ApiBody({ description: 'Agent configuration including name, pipeline, and settings' })
   @ApiResponse({ status: 201, description: 'Agent created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
@@ -177,8 +179,10 @@ export class AgentsController {
   @Post('import')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Import an agent from JSON' })
+  @ApiBody({ description: 'Exported agent JSON data' })
   @ApiResponse({ status: 201, description: 'Agent imported successfully' })
   @ApiResponse({ status: 400, description: 'Invalid import data' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   async importAgent(
     @Body() body: any,
     @Request() req: any,
@@ -253,7 +257,10 @@ export class AgentsController {
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiBody({ description: 'Agent fields to update' })
   @ApiResponse({ status: 200, description: 'Agent updated successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'Agent not found' })
   async updateAgent(
     @Param('id', ParseUUIDPipe) id: string,
@@ -293,6 +300,7 @@ export class AgentsController {
   @ApiOperation({ summary: 'Delete agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent deleted successfully' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'Agent not found' })
   async deleteAgent(
     @Param('id', ParseUUIDPipe) id: string,
@@ -330,6 +338,8 @@ export class AgentsController {
   @ApiOperation({ summary: 'Activate agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent activated successfully' })
+  @ApiResponse({ status: 400, description: 'Agent cannot be activated' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
   async activateAgent(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
@@ -367,6 +377,8 @@ export class AgentsController {
   @ApiOperation({ summary: 'Deactivate agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent deactivated successfully' })
+  @ApiResponse({ status: 400, description: 'Agent cannot be deactivated' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
   async deactivateAgent(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
@@ -401,11 +413,14 @@ export class AgentsController {
 
   @Post(':id/invoke')
   @Roles('member', 'admin', 'owner')
+  @Throttle({ default: { ttl: 60000, limit: 30 } })
   @ApiOperation({ summary: 'Invoke/execute an agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiBody({ description: 'Agent invocation input, variables, and metadata' })
   @ApiResponse({ status: 200, description: 'Agent executed successfully' })
   @ApiResponse({ status: 400, description: 'Agent not active or invalid input' })
   @ApiResponse({ status: 404, description: 'Agent not found' })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded (30 requests per minute)' })
   async invokeAgent(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(ValidationPipe) invokeDto: InvokeAgentDto,
@@ -462,11 +477,14 @@ export class AgentsController {
 
   @Post(':id/stream')
   @Roles('member', 'admin', 'owner')
+  @Throttle({ default: { ttl: 60000, limit: 30 } })
   @ApiOperation({ summary: 'Stream agent execution via SSE' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiBody({ description: 'Agent invocation input, variables, and metadata' })
   @ApiResponse({ status: 200, description: 'SSE stream of execution events' })
   @ApiResponse({ status: 400, description: 'Agent not active or invalid input' })
   @ApiResponse({ status: 404, description: 'Agent not found' })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded (30 requests per minute)' })
   async streamAgent(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(ValidationPipe) invokeDto: InvokeAgentDto,
@@ -544,6 +562,7 @@ export class AgentsController {
   @ApiOperation({ summary: 'Get agent execution history' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Executions retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
   async getAgentExecutions(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('page') page?: number,
@@ -594,7 +613,9 @@ export class AgentsController {
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Save current agent state as a version' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiBody({ description: 'Optional changelog for the version' })
   @ApiResponse({ status: 201, description: 'Version saved successfully' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
   async saveVersion(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: { changelog?: string },
@@ -632,6 +653,7 @@ export class AgentsController {
   @ApiOperation({ summary: 'Get agent version history' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Version history retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
   async getVersionHistory(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
@@ -667,8 +689,10 @@ export class AgentsController {
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Rollback agent to a specific version' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
-  @ApiParam({ name: 'index', description: 'Version index' })
+  @ApiParam({ name: 'index', description: 'Version index to rollback to' })
   @ApiResponse({ status: 200, description: 'Agent rolled back successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid version index' })
+  @ApiResponse({ status: 404, description: 'Agent or version not found' })
   async rollbackToVersion(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('index') index: string,
@@ -717,6 +741,7 @@ export class AgentsController {
   @ApiOperation({ summary: 'Export agent as JSON' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent exported successfully' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
   async exportAgent(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
@@ -755,6 +780,7 @@ export class AgentsController {
   @ApiOperation({ summary: 'Get cost estimate for an agent pipeline' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Cost estimate retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
   async getCostEstimate(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,

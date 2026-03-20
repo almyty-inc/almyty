@@ -177,7 +177,7 @@ const providerLogos: Record<string, string> = {
 
 const statusColors = {
   active: 'bg-green-500',
-  inactive: 'bg-gray-500',
+  inactive: 'bg-muted-foreground',
   error: 'bg-red-500',
   configuring: 'bg-yellow-500'
 }
@@ -186,7 +186,7 @@ const healthColors = {
   healthy: 'text-green-600',
   degraded: 'text-yellow-600',
   down: 'text-red-600',
-  unknown: 'text-gray-600'
+  unknown: 'text-muted-foreground'
 }
 
 // Mock providers array removed - doesn't match backend flat structure
@@ -1027,7 +1027,7 @@ export function LlmProvidersPage() {
         const status = provider.status
         const colors = {
           active: 'bg-green-100 text-green-800',
-          inactive: 'bg-gray-100 text-gray-800',
+          inactive: 'bg-muted text-muted-foreground',
           error: 'bg-red-100 text-red-800',
           configuring: 'bg-yellow-100 text-yellow-800'
         }
@@ -1693,7 +1693,7 @@ export function LlmProvidersPage() {
                         ) : selectedProvider.status === 'error' ? (
                           <XCircle className="h-4 w-4 text-red-500" />
                         ) : (
-                          <Activity className="h-4 w-4 text-gray-500" />
+                          <Activity className="h-4 w-4 text-muted-foreground" />
                         )}
                         <span className="capitalize font-medium">
                           {selectedProvider.isHealthy ? 'Healthy' : (selectedProvider.status === 'error' ? 'Down' : 'Unknown')}
@@ -2214,7 +2214,7 @@ export function LlmProvidersPage() {
                         <strong>Response:</strong>
                         <div className="mt-1">{testResult.output.response}</div>
                       </div>
-                      <div className="text-xs text-gray-600 space-y-1">
+                      <div className="text-xs text-muted-foreground space-y-1">
                         <div>Tokens: {testResult.output.usage.inputTokens} in, {testResult.output.usage.outputTokens} out</div>
                         <div>Cost: ${testResult.output.cost}</div>
                         <div>Response Time: {testResult.output.responseTime}ms</div>
