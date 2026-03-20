@@ -11,14 +11,13 @@ import {
   UseGuards,
   Request,
   ParseUUIDPipe,
-  ParseIntPipe,
   ValidationPipe,
   HttpStatus,
   HttpException,
   Logger,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsObject, IsNumber, Min, Max } from 'class-validator';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
+import { IsString, IsOptional, IsEnum, IsNumber, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Response } from 'express';
 
