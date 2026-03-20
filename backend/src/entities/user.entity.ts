@@ -78,8 +78,8 @@ export class User {
     
     // Check role-based permissions (simplified)
     const rolePermissions = {
-      owner: ['read', 'write', 'delete', 'admin', 'create_gateways', 'edit_gateways', 'delete_gateways', 'manage_gateways', 'create_tools', 'edit_tools', 'delete_tools', 'manage_tools', 'use_tools', 'manage_llm_providers', 'manage_gateway_tools'],
-      admin: ['read', 'write', 'delete', 'create_gateways', 'edit_gateways', 'delete_gateways', 'manage_gateways', 'create_tools', 'edit_tools', 'delete_tools', 'manage_tools', 'use_tools', 'manage_llm_providers', 'manage_gateway_tools'],
+      owner: ['read', 'write', 'delete', 'admin', 'create_gateways', 'edit_gateways', 'delete_gateways', 'manage_gateways', 'create_tools', 'edit_tools', 'delete_tools', 'manage_tools', 'use_tools', 'manage_llm_providers', 'manage_gateway_tools', 'edit_agents', 'delete_agents'],
+      admin: ['read', 'write', 'delete', 'create_gateways', 'edit_gateways', 'delete_gateways', 'manage_gateways', 'create_tools', 'edit_tools', 'delete_tools', 'manage_tools', 'use_tools', 'manage_llm_providers', 'manage_gateway_tools', 'edit_agents', 'delete_agents'],
       member: ['read', 'write', 'use_tools'],
       viewer: ['read'],
     };

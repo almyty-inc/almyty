@@ -1,10 +1,12 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Agent, AgentStatus, AgentPipeline, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
 import { Organization } from '../../entities/organization.entity';
+import { User } from '../../entities/user.entity';
+import { AgentAuditService } from './agent-audit.service';
 
 export interface AgentSearchFilters {
   search?: string;
@@ -66,6 +68,9 @@ export class AgentsService {
     private agentExecutionRepository: Repository<AgentExecution>,
     @InjectRepository(Organization)
     private organizationRepository: Repository<Organization>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+    private auditService: AgentAuditService,
   ) {}
 
   async createAgent(
@@ -103,6 +108,15 @@ export class AgentsService {
 
       const saved = await this.agentRepository.save(agent);
       this.logger.log(`[CREATE_AGENT] Agent created: id=${saved.id}`);
+
+      await this.auditService.log({
+        agentId: saved.id,
+        organizationId,
+        userId,
+        action: 'created',
+        details: { name: saved.name, status: saved.status },
+      });
+
       return saved;
     } catch (error) {
       this.logger.error(`[CREATE_AGENT] Failed: ${error.message}`, error.stack);
@@ -200,8 +214,14 @@ export class AgentsService {
     id: string,
     updateDto: UpdateAgentInput,
     organizationId: string,
+    userId?: string,
   ): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId);
+
+    // Permission check: admin+ can update any agent, members can only update their own
+    if (userId) {
+      await this.checkAgentPermission(agent, organizationId, userId, 'edit_agents');
+    }
 
     // If pipeline is being updated, validate it and auto-save a version snapshot
     if (updateDto.pipeline) {
@@ -224,16 +244,44 @@ export class AgentsService {
     const saved = await this.agentRepository.save(agent);
 
     this.logger.log(`[UPDATE_AGENT] Agent updated: id=${saved.id}`);
+
+    if (userId) {
+      await this.auditService.log({
+        agentId: saved.id,
+        organizationId,
+        userId,
+        action: 'updated',
+        details: { updatedFields: Object.keys(updateDto) },
+      });
+    }
+
     return saved;
   }
 
-  async deleteAgent(id: string, organizationId: string): Promise<void> {
+  async deleteAgent(id: string, organizationId: string, userId?: string): Promise<void> {
     const agent = await this.getAgent(id, organizationId);
+
+    // Permission check: admin+ can delete any agent, members can only delete their own
+    if (userId) {
+      await this.checkAgentPermission(agent, organizationId, userId, 'delete_agents');
+    }
+
+    // Log before removal since the agent won't exist after
+    if (userId) {
+      await this.auditService.log({
+        agentId: id,
+        organizationId,
+        userId,
+        action: 'deleted',
+        details: { name: agent.name },
+      });
+    }
+
     await this.agentRepository.remove(agent);
     this.logger.log(`[DELETE_AGENT] Agent deleted: id=${id}`);
   }
 
-  async activateAgent(id: string, organizationId: string): Promise<Agent> {
+  async activateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId);
 
     // Validate pipeline before activating
@@ -242,14 +290,24 @@ export class AgentsService {
     agent.status = AgentStatus.ACTIVE;
     const saved = await this.agentRepository.save(agent);
     this.logger.log(`[ACTIVATE_AGENT] Agent activated: id=${id}`);
+
+    if (userId) {
+      await this.auditService.log({ agentId: id, organizationId, userId, action: 'activated' });
+    }
+
     return saved;
   }
 
-  async deactivateAgent(id: string, organizationId: string): Promise<Agent> {
+  async deactivateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId);
     agent.status = AgentStatus.INACTIVE;
     const saved = await this.agentRepository.save(agent);
     this.logger.log(`[DEACTIVATE_AGENT] Agent deactivated: id=${id}`);
+
+    if (userId) {
+      await this.auditService.log({ agentId: id, organizationId, userId, action: 'deactivated' });
+    }
+
     return saved;
   }
 
@@ -287,7 +345,7 @@ export class AgentsService {
 
   // ── Version Management ──
 
-  async saveVersion(agentId: string, organizationId: string, changelog?: string): Promise<void> {
+  async saveVersion(agentId: string, organizationId: string, changelog?: string, userId?: string): Promise<void> {
     const agent = await this.getAgent(agentId, organizationId);
     const versions: AgentVersionSnapshot[] = agent.metadata?.versions || [];
     versions.push({
@@ -300,9 +358,17 @@ export class AgentsService {
       metadata: { ...agent.metadata, versions },
     });
     this.logger.log(`[SAVE_VERSION] Saved version for agent=${agentId}, total versions=${versions.length}`);
+
+    if (userId) {
+      await this.auditService.log({
+        agentId, organizationId, userId,
+        action: 'version_saved',
+        details: { version: agent.version, changelog },
+      });
+    }
   }
 
-  async rollbackToVersion(agentId: string, organizationId: string, versionIndex: number): Promise<Agent> {
+  async rollbackToVersion(agentId: string, organizationId: string, versionIndex: number, userId?: string): Promise<Agent> {
     const agent = await this.getAgent(agentId, organizationId);
     const versions: AgentVersionSnapshot[] = agent.metadata?.versions || [];
     if (versionIndex < 0 || versionIndex >= versions.length) {
@@ -313,6 +379,15 @@ export class AgentsService {
     agent.version = targetVersion.version;
     const saved = await this.agentRepository.save(agent);
     this.logger.log(`[ROLLBACK] Agent=${agentId} rolled back to version index=${versionIndex}`);
+
+    if (userId) {
+      await this.auditService.log({
+        agentId, organizationId, userId,
+        action: 'rolled_back',
+        details: { versionIndex, targetVersion: targetVersion.version },
+      });
+    }
+
     return saved;
   }
 
@@ -467,6 +542,32 @@ export class AgentsService {
       nodeCount: agent.pipeline.nodes.length,
       edgeCount: agent.pipeline.edges.length,
     };
+  }
+
+  /**
+   * Check if user has permission to modify an agent.
+   * Admin/owner roles can modify any agent. Members can only modify agents they created.
+   */
+  private async checkAgentPermission(
+    agent: Agent,
+    organizationId: string,
+    userId: string,
+    permission: string,
+  ): Promise<void> {
+    // If the user created the agent, they can always modify it
+    if (agent.createdBy === userId) {
+      return;
+    }
+
+    // Otherwise check if they have the admin-level permission
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['organizationMemberships'],
+    });
+
+    if (!user?.hasPermissionInOrganization(organizationId, permission)) {
+      throw new ForbiddenException('You do not have permission to modify this agent');
+    }
   }
 
   /**

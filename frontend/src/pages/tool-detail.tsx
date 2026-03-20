@@ -15,6 +15,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { toolsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
+import type { GatewayToolAssociation } from '@/types'
 
 export function ToolDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -23,8 +24,8 @@ export function ToolDetailPage() {
   const queryClient = useQueryClient()
   const { currentOrganization } = useOrganizationStore()
 
-  const [executionParameters, setExecutionParameters] = useState<Record<string, any>>({})
-  const [executionResult, setExecutionResult] = useState<any>(null)
+  const [executionParameters, setExecutionParameters] = useState<Record<string, string>>({})
+  const [executionResult, setExecutionResult] = useState<Record<string, any> | null>(null)
 
   const { data: toolData, isLoading } = useQuery({
     queryKey: ['tool', id],
@@ -35,15 +36,15 @@ export function ToolDetailPage() {
     enabled: !!id && !!currentOrganization,
   })
 
-  const [sentParameters, setSentParameters] = React.useState<any>(null)
+  const [sentParameters, setSentParameters] = React.useState<Record<string, string> | null>(null)
 
   const executeToolMutation = useMutation({
-    mutationFn: ({ parameters }: { parameters: Record<string, any> }) => {
+    mutationFn: ({ parameters }: { parameters: Record<string, string> }) => {
       if (!currentOrganization?.id) throw new Error('No organization selected')
       setSentParameters(parameters)
       return toolsApi.execute(id!, { parameters }, currentOrganization.id)
     },
-    onSuccess: (response: any) => {
+    onSuccess: (response: { data: Record<string, any> }) => {
       setExecutionResult(response.data)
       if (response.data.success) {
         notifications.success('Success', 'Tool executed successfully')
@@ -51,7 +52,7 @@ export function ToolDetailPage() {
         notifications.error('Execution Failed', response.data.error || 'Tool execution failed')
       }
     },
-    onError: (error: any) => {
+    onError: (error: Error & { response?: { data?: Record<string, any>; status?: number }; config?: { url?: string; method?: string } }) => {
       notifications.error('Error', error.message || 'Failed to execute tool')
       setExecutionResult({
         success: false,
@@ -160,7 +161,7 @@ export function ToolDetailPage() {
                   {tool.parameters.required?.length > 0 && ` • ${tool.parameters.required.length} required`}
                 </p>
                 <div className="space-y-2">
-                  {Object.entries(tool.parameters.properties).map(([key, schema]: [string, any]) => (
+                  {(Object.entries(tool.parameters.properties) as [string, Record<string, any>][]).map(([key, schema]) => (
                     <div key={key} className="flex items-start justify-between text-xs border-b pb-2">
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
@@ -304,7 +305,7 @@ export function ToolDetailPage() {
 
                 return (
                   <div className="space-y-4">
-                    {Object.entries(params).map(([paramName, paramSchema]: [string, any]) => (
+                    {(Object.entries(params) as [string, Record<string, any>][]).map(([paramName, paramSchema]) => (
                     <div key={paramName}>
                       <Label className="flex items-center gap-2">
                         <span className="font-medium">
@@ -435,7 +436,7 @@ export function ToolDetailPage() {
             <CardContent>
               <div className="space-y-2">
                 {tool.gatewayAssociations && tool.gatewayAssociations.length > 0 ? (
-                  tool.gatewayAssociations.map((assoc: any) => (
+                  tool.gatewayAssociations.map((assoc: GatewayToolAssociation) => (
                     <div
                       key={assoc.id}
                       className="flex items-center justify-between p-3 border rounded cursor-pointer hover:bg-muted/50"

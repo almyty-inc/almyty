@@ -26,6 +26,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { gatewaysApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
+import type { Gateway } from '@/types'
 
 // Form Schema
 const createGatewaySchema = z.object({
@@ -46,8 +47,8 @@ export function GatewaysPage() {
   const navigate = useNavigate()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteGatewayDialogOpen, setDeleteGatewayDialogOpen] = useState(false)
-  const [gatewayToDelete, setGatewayToDelete] = useState<any | null>(null)
-  const [selectedGateway, setSelectedGateway] = useState<any | null>(null)
+  const [gatewayToDelete, setGatewayToDelete] = useState<Gateway | null>(null)
+  const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null)
   const [gatewayDetailsOpen, setGatewayDetailsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -66,7 +67,7 @@ export function GatewaysPage() {
   const gatewaysExtracted = gatewaysData?.data?.data?.gateways || gatewaysData?.data?.data || []
   const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
 
-  const filteredGateways = gateways.filter((gateway: any) => {
+  const filteredGateways = gateways.filter((gateway: Gateway) => {
     const matchesSearch =
       gateway.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (gateway.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -118,7 +119,7 @@ export function GatewaysPage() {
 
   // Create gateway mutation
   const createGatewayMutation = useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: CreateGatewayForm & { configuration: Record<string, unknown> }) => {
       const response = await gatewaysApi.create(payload)
       return response.data
     },
@@ -136,7 +137,7 @@ export function GatewaysPage() {
       createForm.reset()
       setCreateDialogOpen(false)
     },
-    onError: (err: any) => {
+    onError: (err: Error & { response?: { data?: { message?: string } }; message?: string }) => {
       errorNotif('Error', err?.response?.data?.message || err?.message || 'Failed to create gateway')
     }
   })
@@ -152,13 +153,13 @@ export function GatewaysPage() {
       setDeleteGatewayDialogOpen(false)
       setGatewayToDelete(null)
     },
-    onError: (err: any) => {
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       errorNotif('Failed to delete gateway', err.response?.data?.message || 'Please try again.')
     }
   })
 
   // Gateway columns for DataTable
-  const gatewayColumns: ColumnDef<any>[] = [
+  const gatewayColumns: ColumnDef<Gateway>[] = [
     {
       ...createSortableColumn('name', 'Gateway'),
       cell: ({ row }) => {
@@ -236,7 +237,7 @@ export function GatewaysPage() {
         )
       },
     },
-    createActionsColumn<any>(
+    createActionsColumn<Gateway>(
       (gateway) => {
         setSelectedGateway(gateway)
         setGatewayDetailsOpen(true)
@@ -274,7 +275,7 @@ export function GatewaysPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Gateways</h1>
           <p className="text-muted-foreground">
-            {gateways.length} gateways ({gateways.filter((g: any) => g.status === 'active').length} active) &middot; {gateways.reduce((sum: number, g: any) => sum + (g.tools?.length || 0), 0)} tool assignments
+            {gateways.length} gateways ({gateways.filter((g: Gateway) => g.status === 'active').length} active) &middot; {gateways.reduce((sum: number, g: Gateway) => sum + (g.tools?.length || 0), 0)} tool assignments
           </p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>

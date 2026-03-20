@@ -621,3 +621,117 @@ export interface AgentExecution {
   createdAt: string
   updatedAt: string
 }
+
+// Credential type returned from the API
+export interface ApiCredential {
+  id: string
+  name: string
+  type: string
+  isExpired?: boolean
+  lastUsedAt?: string
+}
+
+// Request log entry returned from analytics API
+export interface RequestLog {
+  id: string
+  method: string
+  path: string
+  statusCode: number
+  responseTime: number
+  protocol?: string
+  ipAddress?: string
+  timestamp: string
+}
+
+// Tool usage analytics entry
+export interface ToolUsageEntry {
+  toolId: string
+  totalExecutions: number
+  successRate: number
+  avgExecutionTime: number
+  lastUsed: string | null
+}
+
+// Gateway usage analytics entry
+export interface GatewayUsageEntry {
+  gatewayId: string
+  totalRequests: number
+  successCount: number
+  errorCount: number
+  successRate: number
+}
+
+// LLM usage analytics entry
+export interface LlmUsageEntry {
+  providerId: string
+  sessionCount: number
+  totalMessages: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalToolCalls: number
+  totalCostCents: number
+}
+
+// Timeline data point
+export interface TimelineEntry {
+  timestamp?: string
+  date?: string
+  requests?: number
+  count?: number
+}
+
+// Analytics overview
+export interface AnalyticsOverview {
+  last24h: {
+    requests: number
+    toolExecutions: number
+    avgResponseTime: number
+    errors: number
+    llmSessions: number
+  }
+  last7d: {
+    requests: number
+    toolExecutions: number
+    llmCostCents: number
+  }
+}
+
+// Gateway tool association (for tool-detail page)
+export interface GatewayToolAssociation {
+  id: string
+  gateway?: {
+    id: string
+    name: string
+    endpoint?: string
+    type?: string
+  }
+}
+
+// Agent version snapshot
+export interface AgentVersionSnapshot {
+  version: string
+  pipeline: AgentPipeline
+  savedAt: string
+  changelog: string
+}
+
+// Agent cost estimate
+export interface AgentCostEstimate {
+  estimatedLlmCalls: number
+  estimatedToolCalls: number
+  hasParallelExecution: boolean
+  estimatedCostRange: {
+    low: number
+    high: number
+  }
+  nodeCount: number
+  edgeCount: number
+}
+
+// Agent audit log entry
+export interface AgentAuditEntry {
+  action: string
+  userId: string
+  timestamp: string
+  details?: Record<string, unknown>
+}

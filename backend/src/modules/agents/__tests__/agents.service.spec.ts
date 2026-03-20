@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AgentsService, CreateAgentInput, UpdateAgentInput } from '../agents.service';
+import { AgentAuditService } from '../agent-audit.service';
 import { Agent, AgentStatus, AgentPipeline } from '../../../entities/agent.entity';
 import { AgentExecution } from '../../../entities/agent-execution.entity';
 import { Organization } from '../../../entities/organization.entity';
+import { User } from '../../../entities/user.entity';
 
 // ─── Helper factories ───────────────────────────────────────────────────────
 
@@ -72,12 +74,25 @@ function makeQueryBuilder(returnAgents: Agent[] = [], total = 0) {
 
 // ─── Test suite ─────────────────────────────────────────────────────────────
 
+function makeUser(overrides: Partial<any> = {}): any {
+  const user = new User();
+  user.id = 'user-1';
+  user.email = 'test@test.com';
+  user.firstName = 'Test';
+  user.lastName = 'User';
+  user.passwordHash = 'hash';
+  user.organizationMemberships = [];
+  user.hasPermissionInOrganization = User.prototype.hasPermissionInOrganization;
+  return Object.assign(user, overrides);
+}
+
 describe('AgentsService', () => {
   let service: AgentsService;
 
   let agentRepo: jest.Mocked<any>;
   let agentExecutionRepo: jest.Mocked<any>;
   let organizationRepo: jest.Mocked<any>;
+  let userRepo: jest.Mocked<any>;
 
   beforeEach(async () => {
     agentRepo = {
@@ -100,12 +115,23 @@ describe('AgentsService', () => {
       findOne: jest.fn(),
     };
 
+    userRepo = {
+      findOne: jest.fn(),
+    };
+
+    const mockAuditService = {
+      log: jest.fn(),
+      getAuditLog: jest.fn().mockResolvedValue([]),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AgentsService,
         { provide: getRepositoryToken(Agent), useValue: agentRepo },
         { provide: getRepositoryToken(AgentExecution), useValue: agentExecutionRepo },
         { provide: getRepositoryToken(Organization), useValue: organizationRepo },
+        { provide: getRepositoryToken(User), useValue: userRepo },
+        { provide: AgentAuditService, useValue: mockAuditService },
       ],
     }).compile();
 
@@ -319,6 +345,117 @@ describe('AgentsService', () => {
 
       await expect(service.deleteAgent('missing', 'org-1'))
         .rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ── Permission checks ────────────────────────────────────────────────────
+
+  describe('agent permissions', () => {
+    it('should allow the creator (member) to update their own agent', async () => {
+      const agent = makeAgent({ createdBy: 'user-1' });
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      // user-1 is the creator, no need to check role
+      const result = await service.updateAgent('agent-1', { name: 'Updated' }, 'org-1', 'user-1');
+      expect(result.name).toBe('Updated');
+    });
+
+    it('should allow admin to update any agent', async () => {
+      const agent = makeAgent({ createdBy: 'other-user' });
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const adminUser = makeUser({
+        id: 'admin-user',
+        organizationMemberships: [{
+          organizationId: 'org-1',
+          role: 'admin',
+        }],
+      });
+      userRepo.findOne.mockResolvedValue(adminUser);
+
+      const result = await service.updateAgent('agent-1', { name: 'Updated' }, 'org-1', 'admin-user');
+      expect(result.name).toBe('Updated');
+    });
+
+    it('should reject a member trying to update another user\'s agent', async () => {
+      const agent = makeAgent({ createdBy: 'other-user' });
+      agentRepo.findOne.mockResolvedValue(agent);
+
+      const memberUser = makeUser({
+        id: 'member-user',
+        organizationMemberships: [{
+          organizationId: 'org-1',
+          role: 'member',
+        }],
+      });
+      userRepo.findOne.mockResolvedValue(memberUser);
+
+      await expect(service.updateAgent('agent-1', { name: 'Nope' }, 'org-1', 'member-user'))
+        .rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow the creator to delete their own agent', async () => {
+      const agent = makeAgent({ createdBy: 'user-1' });
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.remove.mockResolvedValue(agent);
+
+      await service.deleteAgent('agent-1', 'org-1', 'user-1');
+      expect(agentRepo.remove).toHaveBeenCalledWith(agent);
+    });
+
+    it('should allow admin to delete any agent', async () => {
+      const agent = makeAgent({ createdBy: 'other-user' });
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.remove.mockResolvedValue(agent);
+
+      const adminUser = makeUser({
+        id: 'admin-user',
+        organizationMemberships: [{
+          organizationId: 'org-1',
+          role: 'admin',
+        }],
+      });
+      userRepo.findOne.mockResolvedValue(adminUser);
+
+      await service.deleteAgent('agent-1', 'org-1', 'admin-user');
+      expect(agentRepo.remove).toHaveBeenCalledWith(agent);
+    });
+
+    it('should reject a member trying to delete another user\'s agent', async () => {
+      const agent = makeAgent({ createdBy: 'other-user' });
+      agentRepo.findOne.mockResolvedValue(agent);
+
+      const memberUser = makeUser({
+        id: 'member-user',
+        organizationMemberships: [{
+          organizationId: 'org-1',
+          role: 'member',
+        }],
+      });
+      userRepo.findOne.mockResolvedValue(memberUser);
+
+      await expect(service.deleteAgent('agent-1', 'org-1', 'member-user'))
+        .rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow owner to update any agent', async () => {
+      const agent = makeAgent({ createdBy: 'someone-else' });
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const ownerUser = makeUser({
+        id: 'owner-user',
+        organizationMemberships: [{
+          organizationId: 'org-1',
+          role: 'owner',
+        }],
+      });
+      userRepo.findOne.mockResolvedValue(ownerUser);
+
+      const result = await service.updateAgent('agent-1', { name: 'Owner Updated' }, 'org-1', 'owner-user');
+      expect(result.name).toBe('Owner Updated');
     });
   });
 
