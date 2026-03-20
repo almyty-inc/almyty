@@ -79,6 +79,9 @@ export class Agent {
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
 
+  @Column({ type: 'varchar', nullable: true })
+  webhookUrl: string;
+
   @Column({ default: 0 })
   totalExecutions: number;
 

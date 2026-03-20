@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { AgentExecutionEngine, StreamEvent } from '../agent-execution.engine';
 import { AgentNodeExecutor, NodeExecutionResult } from '../agent-node-executor';
+import { AgentWebhookService } from '../agent-webhook.service';
 import { Agent, AgentStatus, AgentPipeline } from '../../../entities/agent.entity';
 import { AgentExecution, AgentExecutionStatus } from '../../../entities/agent-execution.entity';
 
@@ -91,12 +92,17 @@ describe('AgentExecutionEngine', () => {
       execute: jest.fn(),
     };
 
+    const mockWebhookService = {
+      sendExecutionWebhook: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AgentExecutionEngine,
         { provide: getRepositoryToken(Agent), useValue: agentRepo },
         { provide: getRepositoryToken(AgentExecution), useValue: agentExecutionRepo },
         { provide: AgentNodeExecutor, useValue: mockNodeExecutor },
+        { provide: AgentWebhookService, useValue: mockWebhookService },
       ],
     }).compile();
 

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AgentsController } from '../agents.controller';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
+import { AgentSchedulerService } from '../agent-scheduler.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AgentStatus } from '../../../entities/agent.entity';
@@ -43,6 +44,13 @@ describe('AgentsController', () => {
       execute: jest.fn(),
     };
 
+    const mockSchedulerService = {
+      scheduleAgent: jest.fn(),
+      unscheduleAgent: jest.fn(),
+      restoreSchedules: jest.fn(),
+      getScheduledAgentIds: jest.fn().mockReturnValue([]),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AgentsController],
       providers: [
@@ -53,6 +61,10 @@ describe('AgentsController', () => {
         {
           provide: AgentExecutionEngine,
           useValue: mockExecutionEngine,
+        },
+        {
+          provide: AgentSchedulerService,
+          useValue: mockSchedulerService,
         },
       ],
     })

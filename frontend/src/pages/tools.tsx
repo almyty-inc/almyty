@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -109,6 +109,11 @@ interface Tool {
 }
 
 export function ToolsPage() {
+  useEffect(() => {
+    document.title = 'Tools | apifai'
+    return () => { document.title = 'apifai' }
+  }, [])
+
   const { currentOrganization } = useOrganizationStore()
   const queryClient = useQueryClient()
   const notifications = useNotifications()

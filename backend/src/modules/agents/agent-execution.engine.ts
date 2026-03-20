@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Agent, AgentPipeline, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
 import { AgentExecution, AgentExecutionStatus } from '../../entities/agent-execution.entity';
 import { AgentNodeExecutor, NodeExecutionResult } from './agent-node-executor';
+import { AgentWebhookService } from './agent-webhook.service';
 import { ExecutionContext } from './agent-template-resolver';
 
 export interface ExecuteAgentOptions {
@@ -55,6 +56,7 @@ export class AgentExecutionEngine {
     @InjectRepository(AgentExecution)
     private agentExecutionRepository: Repository<AgentExecution>,
     private readonly nodeExecutor: AgentNodeExecutor,
+    private readonly webhookService: AgentWebhookService,
   ) {}
 
   /**
@@ -428,6 +430,9 @@ export class AgentExecutionEngine {
         timestamp: Date.now(),
       });
 
+      // Send webhook notification (fire-and-forget)
+      this.webhookService.sendExecutionWebhook(agent, execution).catch(() => {});
+
       return execution;
     } catch (error) {
       const executionTime = Date.now() - startTime;
@@ -453,6 +458,9 @@ export class AgentExecutionEngine {
         data: { error: error.message, executionId: execution.id },
         timestamp: Date.now(),
       });
+
+      // Send webhook notification for failures too (fire-and-forget)
+      this.webhookService.sendExecutionWebhook(agent, execution).catch(() => {});
 
       return execution;
     }

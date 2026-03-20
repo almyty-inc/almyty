@@ -15,6 +15,8 @@ import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { AgentNodeExecutor } from './agent-node-executor';
 import { AgentTemplateResolver } from './agent-template-resolver';
+import { AgentWebhookService } from './agent-webhook.service';
+import { AgentSchedulerService } from './agent-scheduler.service';
 import { AgentsController } from './agents.controller';
 import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 
@@ -37,7 +39,7 @@ import { ToolsModule } from '../tools/tools.module';
     forwardRef(() => LlmProvidersModule),
     forwardRef(() => ToolsModule),
   ],
-  providers: [AgentsService, AgentExecutionEngine, AgentNodeExecutor, AgentTemplateResolver],
+  providers: [AgentsService, AgentExecutionEngine, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService],
   controllers: [AgentsController, AgentOpenAICompatController],
   exports: [AgentsService, AgentExecutionEngine],
 })

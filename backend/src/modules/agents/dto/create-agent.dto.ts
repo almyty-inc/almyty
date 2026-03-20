@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsObject, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsObject, IsEnum, IsUrl } from 'class-validator';
 import { AgentStatus } from '../../../entities/agent.entity';
 
 export class CreateAgentDto {
@@ -46,4 +46,8 @@ export class CreateAgentDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, any>;
+
+  @IsOptional()
+  @IsString()
+  webhookUrl?: string;
 }

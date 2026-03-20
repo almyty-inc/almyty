@@ -24,6 +24,7 @@ import { Response } from 'express';
 
 import { AgentsService, AgentSearchFilters } from './agents.service';
 import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
+import { AgentSchedulerService } from './agent-scheduler.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { InvokeAgentDto } from './dto/invoke-agent.dto';
@@ -73,6 +74,7 @@ export class AgentsController {
   constructor(
     private readonly agentsService: AgentsService,
     private readonly executionEngine: AgentExecutionEngine,
+    private readonly schedulerService: AgentSchedulerService,
   ) {}
 
   @Post()
@@ -808,6 +810,99 @@ export class AgentsController {
           error: 'COST_ESTIMATE_FAILED',
         },
         error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // ── Scheduling ──
+
+  @Post(':id/schedule')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Schedule agent for periodic execution' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiBody({ description: 'Schedule configuration: intervalMinutes and optional input' })
+  @ApiResponse({ status: 200, description: 'Agent scheduled successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid schedule configuration' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
+  async scheduleAgent(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { intervalMinutes: number; input?: Record<string, any> },
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (!body.intervalMinutes || body.intervalMinutes < 1) {
+        throw new HttpException(
+          { success: false, message: 'intervalMinutes must be at least 1', error: 'INVALID_INTERVAL' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const agent = await this.schedulerService.scheduleAgent(
+        id,
+        organizationId,
+        body.intervalMinutes,
+        body.input || {},
+      );
+
+      return {
+        success: true,
+        data: agent,
+        message: `Agent scheduled to run every ${body.intervalMinutes} minute(s)`,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'SCHEDULE_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Delete(':id/schedule')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Remove agent schedule' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiResponse({ status: 200, description: 'Agent unscheduled successfully' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
+  async unscheduleAgent(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const agent = await this.schedulerService.unscheduleAgent(id, organizationId);
+
+      return {
+        success: true,
+        data: agent,
+        message: 'Agent schedule removed',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'UNSCHEDULE_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
       );
     }
   }

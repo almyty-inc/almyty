@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -25,6 +25,9 @@ import {
   History,
   RotateCcw,
   Calculator,
+  Webhook,
+  Timer,
+  Save,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -35,6 +38,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -85,6 +89,11 @@ const execStatusVariant: Record<string, 'default' | 'secondary' | 'destructive' 
 }
 
 export function AgentDetailPage() {
+  useEffect(() => {
+    document.title = 'Agent Details | apifai'
+    return () => { document.title = 'apifai' }
+  }, [])
+
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -99,6 +108,16 @@ export function AgentDetailPage() {
   const [testInput, setTestInput] = useState('')
   const [testOutput, setTestOutput] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
+
+  // Webhook state
+  const [webhookUrl, setWebhookUrl] = useState('')
+  const [webhookSaving, setWebhookSaving] = useState(false)
+
+  // Schedule state
+  const [scheduleEnabled, setScheduleEnabled] = useState(false)
+  const [scheduleInterval, setScheduleInterval] = useState(60)
+  const [scheduleInput, setScheduleInput] = useState('{}')
+  const [scheduleSaving, setScheduleSaving] = useState(false)
 
   // Fetch agent
   const { data: agentData, isLoading } = useQuery({
@@ -148,6 +167,19 @@ export function AgentDetailPage() {
   })
 
   const costEstimate = costEstimateData as any | null
+
+  // Sync webhook/schedule state from agent data
+  React.useEffect(() => {
+    if (agent) {
+      setWebhookUrl(agent.webhookUrl || '')
+      const schedule = agent.settings?.schedule
+      if (schedule) {
+        setScheduleEnabled(!!schedule.enabled)
+        setScheduleInterval(schedule.intervalMinutes || 60)
+        setScheduleInput(JSON.stringify(schedule.input || {}, null, 2))
+      }
+    }
+  }, [agent])
 
   // Build React Flow nodes/edges from pipeline (read-only)
   const flowNodes: Node[] = useMemo(() => {
@@ -525,6 +557,152 @@ console.log(r.choices[0].message.content);`,
                 </div>
               )
             })()}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Webhook + Schedule */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Webhook */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Webhook className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base">Webhook</CardTitle>
+            </div>
+            <CardDescription className="text-xs">
+              Receive a POST notification when this agent finishes executing
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="webhook-url">Webhook URL</Label>
+                <Input
+                  id="webhook-url"
+                  placeholder="https://example.com/webhook"
+                  value={webhookUrl}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWebhookUrl(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <Button
+                size="sm"
+                disabled={webhookSaving}
+                onClick={async () => {
+                  setWebhookSaving(true)
+                  try {
+                    await agentsApi.update(agent.id, { webhookUrl: webhookUrl || null })
+                    queryClient.invalidateQueries({ queryKey: ['agent', id] })
+                    success('Saved', 'Webhook URL updated.')
+                  } catch (err: any) {
+                    errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to save webhook URL')
+                  } finally {
+                    setWebhookSaving(false)
+                  }
+                }}
+              >
+                {webhookSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                Save
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Schedule */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Timer className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base">Schedule</CardTitle>
+            </div>
+            <CardDescription className="text-xs">
+              Run this agent automatically at a fixed interval
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="schedule-toggle">Enable schedule</Label>
+                <Switch
+                  id="schedule-toggle"
+                  checked={scheduleEnabled}
+                  onCheckedChange={async (checked: boolean) => {
+                    setScheduleEnabled(checked)
+                    if (!checked) {
+                      setScheduleSaving(true)
+                      try {
+                        await agentsApi.unschedule(agent.id)
+                        queryClient.invalidateQueries({ queryKey: ['agent', id] })
+                        success('Unscheduled', 'Agent schedule removed.')
+                      } catch (err: any) {
+                        errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to unschedule')
+                        setScheduleEnabled(true)
+                      } finally {
+                        setScheduleSaving(false)
+                      }
+                    }
+                  }}
+                />
+              </div>
+              {scheduleEnabled && (
+                <>
+                  <div>
+                    <Label htmlFor="schedule-interval">Interval (minutes)</Label>
+                    <Input
+                      id="schedule-interval"
+                      type="number"
+                      min={1}
+                      value={scheduleInterval}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScheduleInterval(parseInt(e.target.value) || 1)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="schedule-input">Input JSON</Label>
+                    <Textarea
+                      id="schedule-input"
+                      className="mt-1 font-mono text-xs"
+                      rows={3}
+                      value={scheduleInput}
+                      onChange={(e) => setScheduleInput(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={scheduleSaving}
+                    onClick={async () => {
+                      setScheduleSaving(true)
+                      try {
+                        let parsedInput: any = {}
+                        try {
+                          parsedInput = JSON.parse(scheduleInput)
+                        } catch {
+                          errorNotif('Invalid JSON', 'Schedule input must be valid JSON')
+                          setScheduleSaving(false)
+                          return
+                        }
+                        await agentsApi.schedule(agent.id, scheduleInterval, parsedInput)
+                        queryClient.invalidateQueries({ queryKey: ['agent', id] })
+                        success('Scheduled', `Agent will run every ${scheduleInterval} minute(s).`)
+                      } catch (err: any) {
+                        errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to schedule')
+                      } finally {
+                        setScheduleSaving(false)
+                      }
+                    }}
+                  >
+                    {scheduleSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                    Save Schedule
+                  </Button>
+                  {agent.settings?.schedule?.enabled && (
+                    <p className="text-xs text-muted-foreground">
+                      Next run in ~{agent.settings.schedule.intervalMinutes} minute(s) from last execution
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

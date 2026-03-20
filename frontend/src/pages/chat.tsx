@@ -55,6 +55,11 @@ interface ChatSession {
 }
 
 export function ChatPage() {
+  useEffect(() => {
+    document.title = 'Chat | apifai'
+    return () => { document.title = 'apifai' }
+  }, [])
+
   const { currentOrganization } = useOrganizationStore()
   const notifications = useNotifications()
 
