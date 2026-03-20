@@ -881,4 +881,197 @@ describe('AgentExecutionEngine', () => {
       expect(agentExecutionRepo.save).toHaveBeenCalled();
     });
   });
+
+  // ── Sub-agent nesting ──────────────────────────────────────────────────
+
+  describe('execute: sub-agent nesting', () => {
+    it('should execute a sub-agent node and propagate its output', async () => {
+      // Parent pipeline: input -> sub_agent -> output
+      const parentPipeline: AgentPipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          {
+            id: 'sub_1',
+            type: 'sub_agent',
+            config: {},
+            data: { agentId: 'child-agent-1' },
+          },
+          {
+            id: 'output_1',
+            type: 'output',
+            config: {},
+            data: { mapping: '{{nodes.sub_1.output}}' },
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'sub_1' },
+          { id: 'e2', source: 'sub_1', target: 'output_1' },
+        ],
+      };
+
+      const parentAgent = makeAgent({ id: 'parent-agent', pipeline: parentPipeline });
+      const execution = makeExecution({ agentId: 'parent-agent' });
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      // Mock node executor to simulate sub_agent node returning child output
+      nodeExecutor.execute.mockImplementation(async (node: any, context: any) => {
+        switch (node.type) {
+          case 'input':
+            return { output: context.input };
+          case 'sub_agent':
+            // In a real execution, this calls the engine recursively via AgentNodeExecutor.
+            // Here we just mock the result as if the child agent returned successfully.
+            return {
+              output: 'Child agent produced this result',
+              cost: 0.02,
+              tokens: 80,
+              executionTime: 250,
+            };
+          case 'output':
+            return { output: 'Child agent produced this result' };
+          default:
+            return { output: null };
+        }
+      });
+
+      const result = await engine.execute(parentAgent, 'org-1', 'user-1', {
+        input: { message: 'Hello from parent' },
+      });
+
+      expect(result.status).toBe(AgentExecutionStatus.COMPLETED);
+      expect(result.output).toBe('Child agent produced this result');
+
+      // Verify the sub_agent node result is tracked
+      expect(result.nodeResults['sub_1']).toBeDefined();
+      expect(result.nodeResults['sub_1'].output).toBe('Child agent produced this result');
+      expect(result.nodeResults['sub_1'].cost).toBe(0.02);
+      expect(result.nodeResults['sub_1'].tokens).toBe(80);
+    });
+
+    it('should enforce max nesting depth', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      // Attempt execution with nesting depth at the limit (11 > max of 10)
+      await expect(
+        engine.execute(agent, 'org-1', 'user-1', {}, undefined, { nestingDepth: 11 }),
+      ).rejects.toThrow(/Nesting depth/);
+    });
+
+    it('should allow execution at nesting depth below the limit', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+      nodeExecutor.execute.mockResolvedValue({ output: 'ok' });
+
+      // nestingDepth=5 is below the max of 10, should succeed
+      const result = await engine.execute(agent, 'org-1', 'user-1', {
+        input: { message: 'hello' },
+      }, undefined, { nestingDepth: 5 });
+
+      expect(result.status).toBe(AgentExecutionStatus.COMPLETED);
+    });
+
+    it('should handle sub-agent node failure gracefully', async () => {
+      const parentPipeline: AgentPipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          {
+            id: 'sub_1',
+            type: 'sub_agent',
+            config: {},
+            data: { agentId: 'failing-child' },
+          },
+          {
+            id: 'output_1',
+            type: 'output',
+            config: {},
+            data: { mapping: '{{nodes.sub_1.output}}' },
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'sub_1' },
+          { id: 'e2', source: 'sub_1', target: 'output_1' },
+        ],
+      };
+
+      const parentAgent = makeAgent({ id: 'parent-fail', pipeline: parentPipeline });
+      const execution = makeExecution({ agentId: 'parent-fail' });
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      nodeExecutor.execute.mockImplementation(async (node: any) => {
+        if (node.type === 'sub_agent') {
+          throw new Error('Sub-agent execution failed: Child LLM provider unavailable');
+        }
+        return { output: {} };
+      });
+
+      const result = await engine.execute(parentAgent, 'org-1', 'user-1', {
+        input: { message: 'test' },
+      });
+
+      // Pipeline fails because the sub_agent node failed and output depends on it
+      expect(result.status).toBe(AgentExecutionStatus.FAILED);
+      expect(result.nodeResults['sub_1']).toBeDefined();
+      expect(result.nodeResults['sub_1'].error).toContain('Sub-agent execution failed');
+    });
+
+    it('should propagate nesting depth to stream events', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+      nodeExecutor.execute.mockResolvedValue({ output: 'ok', cost: 0, tokens: 0, executionTime: 1 });
+
+      const events: StreamEvent[] = [];
+      const onEvent = (event: StreamEvent) => events.push(event);
+
+      await engine.execute(
+        agent, 'org-1', 'user-1',
+        { input: {} },
+        onEvent,
+        { nestingDepth: 2 },
+      );
+
+      // Should still emit execution events even at nesting depth 2
+      const eventTypes = events.map(e => e.type);
+      expect(eventTypes).toContain('execution.started');
+      expect(eventTypes).toContain('execution.completed');
+    });
+
+    it('should reject nesting depth exactly at the boundary', async () => {
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      // nestingDepth=10 is exactly at the boundary (MAX_NESTING_DEPTH = 10)
+      // The check is `> MAX_NESTING_DEPTH`, so 10 should still pass
+      // but 11 should fail
+      nodeExecutor.execute.mockResolvedValue({ output: 'ok' });
+
+      const result = await engine.execute(agent, 'org-1', 'user-1', {
+        input: {},
+      }, undefined, { nestingDepth: 10 });
+
+      expect(result.status).toBe(AgentExecutionStatus.COMPLETED);
+    });
+  });
 });

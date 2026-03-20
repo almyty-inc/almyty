@@ -11,7 +11,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Response, Request } from 'express';
@@ -52,6 +52,12 @@ export class AgentOpenAICompatController {
   @Post('chat/completions')
   @ApiOperation({ summary: 'Create chat completion (OpenAI-compatible)' })
   @ApiBearerAuth()
+  @ApiBody({ description: 'OpenAI-compatible chat completion request with model, messages, and optional stream flag' })
+  @ApiResponse({ status: 200, description: 'Chat completion response in OpenAI format' })
+  @ApiResponse({ status: 400, description: 'Invalid request (missing model, empty messages, etc.)' })
+  @ApiResponse({ status: 401, description: 'Invalid or missing API key' })
+  @ApiResponse({ status: 404, description: 'Agent/model not found' })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   async chatCompletions(
     @Body() body: any,
     @Headers('authorization') auth: string,
@@ -129,6 +135,8 @@ export class AgentOpenAICompatController {
   @Get('models')
   @ApiOperation({ summary: 'List available models/agents (OpenAI-compatible)' })
   @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: 'List of available agents as OpenAI-compatible models' })
+  @ApiResponse({ status: 401, description: 'Invalid or missing API key' })
   async listModels(
     @Headers('authorization') auth: string,
     @Res() res: Response,

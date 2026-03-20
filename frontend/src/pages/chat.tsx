@@ -415,11 +415,11 @@ export function ChatPage() {
                 msg.role === 'user'
                   ? 'bg-primary text-primary-foreground'
                   : msg.role === 'tool'
-                  ? 'bg-amber-50 border border-amber-200'
+                  ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800'
                   : 'bg-muted'
               }`}>
                 {msg.role === 'tool' && (
-                  <div className="text-xs font-medium text-amber-600 mb-1 flex items-center gap-1">
+                  <div className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-1 flex items-center gap-1">
                     <Wrench className="h-3 w-3" />
                     Tool: {msg.toolCallId || 'call'}
                   </div>
