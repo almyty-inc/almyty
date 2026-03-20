@@ -20,6 +20,7 @@ import { analyticsApi, gatewaysApi, toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
+import type { Tool, Gateway, RequestLog, ToolUsageEntry, GatewayUsageEntry, LlmUsageEntry, TimelineEntry, AnalyticsOverview } from '@/types'
 
 function formatMs(ms: number): string {
   if (!ms || ms === 0) return '--'
@@ -132,8 +133,8 @@ export function AnalyticsPage() {
 
   const timelineData = useMemo(() => {
     if (Array.isArray(timeline) && timeline.length > 0) {
-      return timeline.map((entry: any) => ({
-        date: new Date(entry.timestamp || entry.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      return timeline.map((entry: TimelineEntry) => ({
+        date: new Date(entry.timestamp || entry.date || '').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
         requests: entry.requests || entry.count || 0,
       }))
     }
@@ -174,8 +175,8 @@ export function AnalyticsPage() {
   })
   const gateways = Array.isArray(gatewaysRaw) ? gatewaysRaw : []
 
-  const toolMap = Object.fromEntries(tools.map((t: any) => [t.id, t]))
-  const gatewayMap = Object.fromEntries(gateways.map((g: any) => [g.id, g]))
+  const toolMap = Object.fromEntries(tools.map((t: Tool) => [t.id, t]))
+  const gatewayMap = Object.fromEntries(gateways.map((g: Gateway) => [g.id, g]))
 
   const handleExport = async (type: string, format: string) => {
     try {
@@ -322,7 +323,7 @@ export function AnalyticsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {requestLogs.data.map((log: any) => (
+                    {requestLogs.data.map((log: RequestLog) => (
                       <tr key={log.id} className="border-b last:border-0 hover:bg-muted/30 text-xs">
                         <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                           {new Date(log.timestamp).toLocaleString()}
@@ -391,7 +392,7 @@ export function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {toolUsage.map((t: any) => {
+                  {toolUsage.map((t: ToolUsageEntry) => {
                     const tool = toolMap[t.toolId]
                     return (
                       <tr key={t.toolId} className="border-b last:border-0 hover:bg-muted/30">
@@ -444,7 +445,7 @@ export function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {gatewayUsage.map((g: any) => {
+                  {gatewayUsage.map((g: GatewayUsageEntry) => {
                     const gateway = gatewayMap[g.gatewayId]
                     return (
                       <tr key={g.gatewayId} className="border-b last:border-0 hover:bg-muted/30">
@@ -505,7 +506,7 @@ export function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {llmUsage.map((l: any) => (
+                  {llmUsage.map((l: LlmUsageEntry) => (
                     <tr key={l.providerId} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="px-4 py-2.5 font-medium text-sm">{l.providerId.slice(0, 8)}</td>
                       <td className="px-4 py-2.5 text-right">{l.sessionCount.toLocaleString()}</td>
@@ -535,7 +536,7 @@ export function AnalyticsPage() {
 }
 
 function StatCard({ icon: Icon, label, value, className }: {
-  icon: any; label: string; value: string; className?: string
+  icon: React.ComponentType<{ className?: string }>; label: string; value: string; className?: string
 }) {
   return (
     <div className={cn('rounded-lg border bg-card p-4', className)}>

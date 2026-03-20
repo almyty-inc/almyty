@@ -20,7 +20,7 @@ import { SchemaImportDialog } from '@/components/SchemaImportDialog'
 import { apisApi, toolsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
-import { Api, ApiType, ApiAuthType, ApiOperation } from '@/types'
+import { Api, ApiType, ApiAuthType, ApiOperation, ApiCredential, Tool } from '@/types'
 
 const CREDENTIAL_TYPE_LABELS: Record<string, string> = {
   API_KEY: 'API Key',
@@ -47,7 +47,7 @@ function ApiCredentialsSection({ apiId, apiName }: { apiId: string; apiName: str
   })
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => apisApi.createCredential(apiId, data),
+    mutationFn: (data: { name: string; type: string; config: Record<string, string> }) => apisApi.createCredential(apiId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-credentials', apiId] })
       success('Credential Added', 'Credential has been securely stored')
@@ -56,7 +56,7 @@ function ApiCredentialsSection({ apiId, apiName }: { apiId: string; apiName: str
       setNewCredName('')
       setNewCredConfig({})
     },
-    onError: (err: any) => {
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       errorNotif('Failed to add credential', err.response?.data?.message || 'Please try again')
     },
   })
@@ -68,7 +68,7 @@ function ApiCredentialsSection({ apiId, apiName }: { apiId: string; apiName: str
       success('Credential Deleted', 'Credential has been removed')
       setDeleteId(null)
     },
-    onError: (err: any) => {
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       errorNotif('Failed to delete', err.response?.data?.message || 'Please try again')
     },
   })
@@ -78,7 +78,7 @@ function ApiCredentialsSection({ apiId, apiName }: { apiId: string; apiName: str
     onSuccess: () => {
       success('Credential Valid', 'Test request succeeded')
     },
-    onError: (err: any) => {
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       errorNotif('Test Failed', err.response?.data?.message || 'Credential may be invalid')
     },
   })
@@ -251,7 +251,7 @@ function ApiCredentialsSection({ apiId, apiName }: { apiId: string; apiName: str
           </div>
         ) : (
           <div className="space-y-2">
-            {credentials.map((cred: any) => (
+            {credentials.map((cred: ApiCredential) => (
               <div key={cred.id} className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg">
                 <div className="flex items-center gap-3">
                   <Key className="h-4 w-4 text-muted-foreground" />
@@ -365,12 +365,12 @@ export function ApiDetailPage() {
 
   const [uploadDialogOpen, setUploadDialogOpen] = React.useState(false)
   const [uploadFile, setUploadFile] = React.useState<File | null>(null)
-  const [testResults, setTestResults] = React.useState<any>(null)
+  const [testResults, setTestResults] = React.useState<Record<string, unknown> | null>(null)
   const [testing, setTesting] = React.useState(false)
   const [schemaDialogOpen, setSchemaDialogOpen] = React.useState(false)
   const [authDialogOpen, setAuthDialogOpen] = React.useState(false)
   const [authType, setAuthType] = React.useState<ApiAuthType>(ApiAuthType.NONE)
-  const [authConfig, setAuthConfig] = React.useState<any>({})
+  const [authConfig, setAuthConfig] = React.useState<Record<string, string>>({})
   const [selectedOperation, setSelectedOperation] = React.useState<ApiOperation | null>(null)
   const [operationSearch, setOperationSearch] = React.useState('')
   const [methodFilter, setMethodFilter] = React.useState<string>('ALL')
@@ -396,7 +396,7 @@ export function ApiDetailPage() {
 
   const allToolsExtracted = allToolsData?.data?.data?.tools || allToolsData?.data?.tools || []
   const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
-  const apiTools = allTools.filter((tool: any) => tool.metadata?.sourceApi?.id === id || tool.apiId === id)
+  const apiTools = allTools.filter((tool: Tool) => tool.metadata?.sourceApi?.id === id || (tool as unknown as Record<string, string>).apiId === id)
 
   // Initialize auth state when API loads
   React.useEffect(() => {
@@ -407,7 +407,7 @@ export function ApiDetailPage() {
   }, [apiData])
 
   const importSchemaMutation = useMutation({
-    mutationFn: async ({ data, file }: { data: any; file?: File }) => {
+    mutationFn: async ({ data, file }: { data: { schemaContent?: string; schemaUrl?: string; description?: string; generateTools?: boolean }; file?: File }) => {
       if (!id) throw new Error('No API ID')
       const response = await apisApi.importSchema(id, data, file)
 
@@ -430,7 +430,7 @@ export function ApiDetailPage() {
       setUploadDialogOpen(false)
       setUploadFile(null)
     },
-    onError: (err: any) => {
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       error('Failed to import schema', err.response?.data?.message || err.message || 'Please try again.')
     },
   })
@@ -830,8 +830,8 @@ export function ApiDetailPage() {
                 // Check if parameters is an array with items, or an object with non-empty values
                 const hasContent = Array.isArray(params)
                   ? params.length > 0
-                  : typeof params === 'object' && Object.values(params).some((v: any) =>
-                      v && typeof v === 'object' ? (Array.isArray(v) ? v.length > 0 : Object.keys(v).length > 0) : !!v
+                  : typeof params === 'object' && Object.values(params).some((v: unknown) =>
+                      v && typeof v === 'object' ? (Array.isArray(v) ? v.length > 0 : Object.keys(v as Record<string, unknown>).length > 0) : !!v
                     )
                 return (
                   <div>
@@ -850,16 +850,16 @@ export function ApiDetailPage() {
               <div>
                 <Label>Related Tools</Label>
                 <div className="space-y-1">
-                  {apiTools.filter((tool: any) =>
-                    tool.operationId === selectedOperation.id ||
+                  {apiTools.filter((tool: Tool) =>
+                    (tool as unknown as Record<string, string>).operationId === selectedOperation.id ||
                     tool.metadata?.sourceOperation?.name === selectedOperation.name
                   ).length > 0 ? (
                     apiTools
-                      .filter((tool: any) =>
-                        tool.operationId === selectedOperation.id ||
+                      .filter((tool: Tool) =>
+                        (tool as unknown as Record<string, string>).operationId === selectedOperation.id ||
                         tool.metadata?.sourceOperation?.name === selectedOperation.name
                       )
-                      .map((tool: any) => (
+                      .map((tool: Tool) => (
                         <div key={tool.id} className="flex items-center justify-between p-2 border rounded">
                           <span className="text-sm">{tool.name}</span>
                           <Button size="sm" variant="ghost" onClick={() => navigate(`/tools/${tool.id}`)}>

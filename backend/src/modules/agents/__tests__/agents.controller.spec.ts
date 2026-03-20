@@ -3,6 +3,7 @@ import { AgentsController } from '../agents.controller';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
 import { AgentSchedulerService } from '../agent-scheduler.service';
+import { AgentAuditService } from '../agent-audit.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AgentStatus } from '../../../entities/agent.entity';
@@ -51,6 +52,11 @@ describe('AgentsController', () => {
       getScheduledAgentIds: jest.fn().mockReturnValue([]),
     };
 
+    const mockAuditService = {
+      log: jest.fn(),
+      getAuditLog: jest.fn().mockResolvedValue([]),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AgentsController],
       providers: [
@@ -65,6 +71,10 @@ describe('AgentsController', () => {
         {
           provide: AgentSchedulerService,
           useValue: mockSchedulerService,
+        },
+        {
+          provide: AgentAuditService,
+          useValue: mockAuditService,
         },
       ],
     })
@@ -212,7 +222,7 @@ describe('AgentsController', () => {
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAgent);
       expect(result.message).toBe('Agent updated successfully');
-      expect(agentsService.updateAgent).toHaveBeenCalledWith('agent-1', updateDto, 'org-1');
+      expect(agentsService.updateAgent).toHaveBeenCalledWith('agent-1', updateDto, 'org-1', 'user-1');
     });
 
     it('should handle update error', async () => {
@@ -232,7 +242,7 @@ describe('AgentsController', () => {
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Agent deleted successfully');
-      expect(agentsService.deleteAgent).toHaveBeenCalledWith('agent-1', 'org-1');
+      expect(agentsService.deleteAgent).toHaveBeenCalledWith('agent-1', 'org-1', 'user-1');
     });
 
     it('should handle deletion error', async () => {

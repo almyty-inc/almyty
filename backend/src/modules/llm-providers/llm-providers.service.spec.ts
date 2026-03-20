@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest } from './llm-providers.service';
+import { callOpenAI, callAnthropic, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import { LlmSession, SessionStatus, SessionType } from '../../entities/llm-session.entity';
 import { LlmMessage, MessageRole, MessageStatus } from '../../entities/llm-message.entity';
@@ -1350,7 +1351,7 @@ describe('LlmProvidersService', () => {
 
       jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
-      const result = await service['callOpenAI'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callOpenAI(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
 
       expect(result.message.role).toBe(MessageRole.ASSISTANT);
     });
@@ -1394,7 +1395,7 @@ describe('LlmProvidersService', () => {
 
       jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
-      const result = await service['callOpenAI'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callOpenAI(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
 
       expect(result.message.toolCalls).toBeDefined();
       expect(result.message.toolCalls.length).toBeGreaterThan(0);
@@ -1431,7 +1432,7 @@ describe('LlmProvidersService', () => {
 
       jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
-      await service['callOpenAI'](mockProvider as any, chatRequest, mockSession as any, tools, Date.now());
+      await callOpenAI(mockProvider as any, chatRequest, mockSession as any, tools, Date.now(), () => 0.001);
 
       expect(axiosSpy).toHaveBeenCalled();
       const callData = axiosSpy.mock.calls[0][0].data;
@@ -1468,7 +1469,7 @@ describe('LlmProvidersService', () => {
 
       jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.002);
 
-      const result = await service['callAnthropic'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callAnthropic(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
 
       expect(result.message.role).toBe(MessageRole.ASSISTANT);
       expect(result.message.content).toBe('Hello from Claude');
@@ -1507,7 +1508,7 @@ describe('LlmProvidersService', () => {
 
       jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.002);
 
-      const result = await service['callAnthropic'](mockProvider as any, chatRequest, mockSession as any, tools, Date.now());
+      const result = await callAnthropic(mockProvider as any, chatRequest, mockSession as any, tools, Date.now(), () => 0.001);
 
       expect(result.message.toolCalls).toBeDefined();
       expect(result.message.toolCalls.length).toBe(1);
@@ -1550,7 +1551,7 @@ describe('LlmProvidersService', () => {
 
       jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
-      const result = await service['callGoogle'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callGoogle(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
 
       expect(result.message.content).toBe('Response from Gemini');
       expect(result.usage.totalTokens).toBe(40);
@@ -1584,7 +1585,7 @@ describe('LlmProvidersService', () => {
 
       jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
-      const result = await service['callGoogle'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callGoogle(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
 
       expect(result.usage.inputTokens).toBe(0);
       expect(result.usage.outputTokens).toBe(0);
@@ -1621,7 +1622,7 @@ describe('LlmProvidersService', () => {
 
       jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
-      const result = await service['callCohere'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callCohere(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
 
       expect(result.message.content).toBe('Response from Cohere');
     });
@@ -1652,7 +1653,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      const result = await service['callHuggingFace'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callHuggingFace(mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
       expect(result.message.content).toBeDefined();
       expect(result.cost).toBe(0); // HuggingFace is free
@@ -1688,7 +1689,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      const result = await service['callCustomProvider'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callCustomProvider(mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
       expect(result.message.content).toBe('Custom response');
     });
@@ -1719,7 +1720,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      const result = await service['callCustomProvider'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callCustomProvider(mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
       expect(result.message.content).toBeDefined();
     });
@@ -1750,7 +1751,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      const result = await service['callCustomProvider'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callCustomProvider(mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
       expect(result.message.content).toBe('Simple string response');
     });
@@ -1780,7 +1781,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      const result = await service['callCustomProvider'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callCustomProvider(mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
       expect(result.message.content).toBe('Generic text response');
     });
@@ -1810,7 +1811,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      const result = await service['callCustomProvider'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callCustomProvider(mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
       expect(result.message.content).toBe('Response field content');
     });
@@ -1840,7 +1841,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      const result = await service['callCustomProvider'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callCustomProvider(mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
       expect(result.usage.inputTokens).toBeGreaterThan(0);
       expect(result.usage.outputTokens).toBeGreaterThan(0);
@@ -1871,7 +1872,7 @@ describe('LlmProvidersService', () => {
 
       const mockSession = { id: 'session-1', context: {} };
 
-      const result = await service['callCustomProvider'](mockProvider as any, chatRequest, mockSession as any, [], Date.now());
+      const result = await callCustomProvider(mockProvider as any, chatRequest, mockSession as any, [], Date.now());
 
       expect(result.message.content).toBe('Text field response');
     });

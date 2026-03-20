@@ -70,7 +70,7 @@ import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { agentsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
-import type { Agent, AgentExecution, PipelineNode, PipelineEdge } from '@/types'
+import type { Agent, AgentExecution, PipelineNode, PipelineEdge, AgentVersionSnapshot, AgentCostEstimate, AgentAuditEntry } from '@/types'
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   active: 'default',
@@ -102,7 +102,7 @@ export function AgentDetailPage() {
 
   const [invokeDialogOpen, setInvokeDialogOpen] = useState(false)
   const [invokeInput, setInvokeInput] = useState('{\n  "message": "Hello"\n}')
-  const [invokeResult, setInvokeResult] = useState<any>(null)
+  const [invokeResult, setInvokeResult] = useState<Record<string, unknown> | null>(null)
   const [rollbackIndex, setRollbackIndex] = useState<number | null>(null)
   const [integrationTab, setIntegrationTab] = useState<'curl' | 'python' | 'node'>('curl')
   const [testInput, setTestInput] = useState('')
@@ -154,7 +154,7 @@ export function AgentDetailPage() {
     enabled: !!id,
   })
 
-  const versions: any[] = Array.isArray(versionsData) ? versionsData : []
+  const versions: AgentVersionSnapshot[] = Array.isArray(versionsData) ? versionsData : []
 
   // Fetch cost estimate
   const { data: costEstimateData } = useQuery({
@@ -166,7 +166,19 @@ export function AgentDetailPage() {
     enabled: !!id,
   })
 
-  const costEstimate = costEstimateData as any | null
+  const costEstimate = costEstimateData as AgentCostEstimate | null
+
+  // Fetch audit log
+  const { data: auditLogData } = useQuery({
+    queryKey: ['agent-audit-log', id],
+    queryFn: async () => {
+      const res = await agentsApi.getAuditLog(id!)
+      return res.data?.data || []
+    },
+    enabled: !!id,
+  })
+
+  const auditLog: AgentAuditEntry[] = Array.isArray(auditLogData) ? auditLogData : []
 
   // Sync webhook/schedule state from agent data
   React.useEffect(() => {
@@ -852,6 +864,59 @@ console.log(r.choices[0].message.content);`,
           </CardContent>
         </Card>
       </div>
+
+      {/* Audit Log */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <History className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-base">Audit Log</CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            History of changes made to this agent
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {auditLog.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No audit entries yet.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Timestamp</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>User</TableHead>
+                    <TableHead>Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[...auditLog].reverse().map((entry, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDateTime(entry.timestamp)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                          {entry.action.replace(/_/g, ' ')}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground font-mono">
+                        {entry.userId?.slice(0, 8) || '--'}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                        {entry.details ? JSON.stringify(entry.details) : '--'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Rollback Confirmation */}
       <AlertDialog open={rollbackIndex !== null} onOpenChange={(open) => { if (!open) setRollbackIndex(null) }}>

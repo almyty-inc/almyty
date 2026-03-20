@@ -25,6 +25,7 @@ import { Response } from 'express';
 import { AgentsService, AgentSearchFilters } from './agents.service';
 import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
 import { AgentSchedulerService } from './agent-scheduler.service';
+import { AgentAuditService } from './agent-audit.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { InvokeAgentDto } from './dto/invoke-agent.dto';
@@ -75,10 +76,11 @@ export class AgentsController {
     private readonly agentsService: AgentsService,
     private readonly executionEngine: AgentExecutionEngine,
     private readonly schedulerService: AgentSchedulerService,
+    private readonly auditService: AgentAuditService,
   ) {}
 
   @Post()
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Create a new agent' })
   @ApiBody({ description: 'Agent configuration including name, pipeline, and settings' })
   @ApiResponse({ status: 201, description: 'Agent created successfully' })
@@ -122,7 +124,7 @@ export class AgentsController {
   }
 
   @Get()
-  @Roles('member', 'admin', 'owner')
+  @Roles('viewer', 'member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get all agents for organization' })
   @ApiResponse({ status: 200, description: 'Agents retrieved successfully' })
   async getAgents(
@@ -168,7 +170,7 @@ export class AgentsController {
   }
 
   @Get('templates')
-  @Roles('member', 'admin', 'owner')
+  @Roles('viewer', 'member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get pre-built agent templates' })
   @ApiResponse({ status: 200, description: 'Templates retrieved successfully' })
   getTemplates() {
@@ -219,7 +221,7 @@ export class AgentsController {
   }
 
   @Get(':id')
-  @Roles('member', 'admin', 'owner')
+  @Roles('viewer', 'member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get agent by ID' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent retrieved successfully' })
@@ -256,7 +258,7 @@ export class AgentsController {
   }
 
   @Patch(':id')
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Update agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiBody({ description: 'Agent fields to update' })
@@ -278,7 +280,8 @@ export class AgentsController {
         );
       }
 
-      const agent = await this.agentsService.updateAgent(id, updateAgentDto, organizationId);
+      const userId = req.user.sub || req.user.id;
+      const agent = await this.agentsService.updateAgent(id, updateAgentDto, organizationId, userId);
 
       return {
         success: true,
@@ -298,7 +301,7 @@ export class AgentsController {
   }
 
   @Delete(':id')
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Delete agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent deleted successfully' })
@@ -317,7 +320,8 @@ export class AgentsController {
         );
       }
 
-      await this.agentsService.deleteAgent(id, organizationId);
+      const userId = req.user.sub || req.user.id;
+      await this.agentsService.deleteAgent(id, organizationId, userId);
 
       return {
         success: true,
@@ -560,7 +564,7 @@ export class AgentsController {
   }
 
   @Get(':id/executions')
-  @Roles('member', 'admin', 'owner')
+  @Roles('viewer', 'member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get agent execution history' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Executions retrieved successfully' })
@@ -609,6 +613,48 @@ export class AgentsController {
     }
   }
 
+  // ── Audit Log ──
+
+  @Get(':id/audit-log')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Get agent audit log' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiResponse({ status: 200, description: 'Audit log retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
+  async getAuditLog(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Verify agent exists
+      await this.agentsService.getAgent(id, organizationId);
+
+      const auditLog = await this.auditService.getAuditLog(id, organizationId);
+
+      return {
+        success: true,
+        data: auditLog,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'AUDIT_LOG_FETCH_FAILED',
+        },
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   // ── Version Management ──
 
   @Post(':id/versions')
@@ -651,7 +697,7 @@ export class AgentsController {
   }
 
   @Get(':id/versions')
-  @Roles('member', 'admin', 'owner')
+  @Roles('viewer', 'member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get agent version history' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Version history retrieved successfully' })
@@ -739,7 +785,7 @@ export class AgentsController {
   // ── Export / Import ──
 
   @Get(':id/export')
-  @Roles('member', 'admin', 'owner')
+  @Roles('viewer', 'member', 'admin', 'owner')
   @ApiOperation({ summary: 'Export agent as JSON' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent exported successfully' })
@@ -778,7 +824,7 @@ export class AgentsController {
   // ── Cost Estimation ──
 
   @Get(':id/cost-estimate')
-  @Roles('member', 'admin', 'owner')
+  @Roles('viewer', 'member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get cost estimate for an agent pipeline' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Cost estimate retrieved successfully' })
