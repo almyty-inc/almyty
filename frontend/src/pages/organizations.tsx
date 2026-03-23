@@ -324,9 +324,9 @@ export function OrganizationsPage() {
     )
   }
 
-  const orgsExtracted = organizationsData?.data?.data || organizationsData?.data || organizations
+  const orgsExtracted = organizationsData?.data || organizations
   const orgs = Array.isArray(orgsExtracted) ? orgsExtracted : []
-  const membersExtracted = membersData?.data?.data?.members || membersData?.data?.members || membersData?.data?.data || membersData?.data || []
+  const membersExtracted = membersData?.data?.members || membersData?.data || []
   const members = Array.isArray(membersExtracted) ? membersExtracted : []
 
   return (

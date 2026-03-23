@@ -216,7 +216,7 @@ export function ToolsPage() {
     queryFn: () => llmProvidersApi.getAll(),
     enabled: !!currentOrganization,
   })
-  const llmProvidersExtracted = providersData?.data?.data?.providers || providersData?.data?.providers || []
+  const llmProvidersExtracted = providersData?.data?.providers || providersData?.data || []
   const llmProviders = Array.isArray(llmProvidersExtracted) ? llmProvidersExtracted : []
   const activeProviders = llmProviders.filter((p: any) => p.status === 'active' || p.isActive)
 
@@ -359,7 +359,7 @@ return new Promise((resolve, reject) => {
     },
   })
 
-  const toolsExtracted = toolsData?.data?.data?.tools || toolsData?.data?.tools || []
+  const toolsExtracted = toolsData?.data?.tools || toolsData?.data || []
   const tools = Array.isArray(toolsExtracted) ? toolsExtracted : []
 
   // Get unique API sources for filter

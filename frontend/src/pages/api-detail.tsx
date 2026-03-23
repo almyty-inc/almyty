@@ -83,7 +83,7 @@ function ApiCredentialsSection({ apiId, apiName }: { apiId: string; apiName: str
     },
   })
 
-  const credsRaw = credsData?.data?.data?.credentials || credsData?.data?.data || []
+  const credsRaw = credsData?.data?.credentials || credsData?.data || []
   const credentials = Array.isArray(credsRaw) ? credsRaw : []
 
   const handleCreate = () => {
@@ -394,7 +394,7 @@ export function ApiDetailPage() {
     enabled: !!currentOrganization,
   })
 
-  const allToolsExtracted = allToolsData?.data?.data?.tools || allToolsData?.data?.tools || []
+  const allToolsExtracted = allToolsData?.data?.tools || allToolsData?.data || []
   const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
   const apiTools = allTools.filter((tool: Tool) => tool.metadata?.sourceApi?.id === id || (tool as unknown as Record<string, string>).apiId === id)
 
@@ -468,7 +468,7 @@ export function ApiDetailPage() {
   }
 
   const api = apiData.data
-  const operationsExtracted = apiOperations?.data?.data?.operations || apiOperations?.data?.operations || apiOperations?.data || []
+  const operationsExtracted = apiOperations?.data?.operations || apiOperations?.data || []
   const operations = Array.isArray(operationsExtracted) ? operationsExtracted : []
   const TypeIcon = getApiTypeIcon(api.type)
 

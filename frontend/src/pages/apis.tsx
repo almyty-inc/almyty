@@ -81,7 +81,7 @@ export function ApisPage() {
     enabled: !!currentOrganization,
   })
 
-  const allToolsExtracted = allToolsData?.data?.data?.tools || allToolsData?.data?.tools || []
+  const allToolsExtracted = allToolsData?.data?.tools || allToolsData?.data || []
   const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
   
   const [selectedApi, setSelectedApi] = React.useState<Api | null>(null)
@@ -474,9 +474,9 @@ export function ApisPage() {
     )
   }
 
-  const apisExtracted = apisData?.data?.data?.apis || apisData?.data?.apis || []
+  const apisExtracted = apisData?.data?.apis || apisData?.data || []
   const apis = Array.isArray(apisExtracted) ? apisExtracted : []
-  const operationsExtracted = apiOperations?.data?.data?.operations || apiOperations?.data?.operations || apiOperations?.data || []
+  const operationsExtracted = apiOperations?.data?.operations || apiOperations?.data || []
   const operations = Array.isArray(operationsExtracted) ? operationsExtracted : []
 
   const filteredApis = apis.filter((api: Api) => {
@@ -497,7 +497,7 @@ export function ApisPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">APIs</h1>
           <p className="text-muted-foreground">
-            {apis.length} connected &middot; {apis.reduce((sum: number, a: any) => sum + (a.operations?.length || 0), 0)} operations &middot; {apis.reduce((sum: number, api: any) => sum + (api.operations?.reduce((t: number, op: any) => t + (op.tools?.length || 0), 0) || 0), 0)} tools generated
+            {apis.length} connected &middot; {apis.reduce((sum: number, a: any) => sum + (a.operations?.length || 0), 0)} operations &middot; {allTools.length} tools generated
           </p>
         </div>
         <div className="flex items-center space-x-2">

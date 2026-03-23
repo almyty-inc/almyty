@@ -1,0 +1,120 @@
+# Scheduling
+
+Agents can be scheduled to run automatically at regular intervals.
+This is useful for periodic data collection, reporting, monitoring,
+or any recurring AI workflow.
+
+## Creating a Schedule
+
+```bash
+curl -X POST https://api.apif.ai/agents/{id}/schedule \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "intervalMinutes": 60,
+    "input": { "action": "daily-report" }
+  }'
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `intervalMinutes` | number | Yes | How often to run (minimum: 5 minutes) |
+| `input` | object | No | Static input to pass on each invocation |
+
+### Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "scheduleId": "sched-uuid",
+    "intervalMinutes": 60,
+    "nextRunAt": "2026-03-23T15:00:00Z",
+    "input": { "action": "daily-report" }
+  }
+}
+```
+
+## Managing Schedules
+
+### View Schedule
+
+The schedule is included in the agent detail response:
+
+```bash
+curl https://api.apif.ai/agents/{id} \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "id": "agent-uuid",
+  "name": "Daily Reporter",
+  "schedule": {
+    "intervalMinutes": 60,
+    "nextRunAt": "2026-03-23T15:00:00Z",
+    "lastRunAt": "2026-03-23T14:00:00Z",
+    "input": { "action": "daily-report" }
+  }
+}
+```
+
+### Remove Schedule
+
+```bash
+curl -X DELETE https://api.apif.ai/agents/{id}/schedule \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Common Intervals
+
+| Use Case | Interval |
+|----------|----------|
+| Real-time monitoring | 5 minutes |
+| Frequent checks | 15 minutes |
+| Hourly reports | 60 minutes |
+| Daily digest | 1440 minutes (24h) |
+| Weekly summary | 10080 minutes (7d) |
+
+## Execution History
+
+Scheduled executions appear in the agent's execution history alongside
+manual invocations. Each scheduled execution is tagged with
+`trigger: "schedule"` in the metadata.
+
+```bash
+curl https://api.apif.ai/agents/{id}/executions?trigger=schedule \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Cost Estimation
+
+Before scheduling, check the estimated cost per run:
+
+```bash
+curl https://api.apif.ai/agents/{id}/cost-estimate \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "estimatedTokensPerRun": 450,
+  "estimatedCostPerRun": "$0.0045",
+  "estimatedMonthlyCost": "$3.24",
+  "breakdown": [
+    { "node": "llm_1", "tokens": 350, "cost": "$0.0035" },
+    { "node": "llm_2", "tokens": 100, "cost": "$0.0010" }
+  ]
+}
+```
+
+Multiply by `(60 * 24 * 30) / intervalMinutes` to get the monthly run count.
+
+## Important Notes
+
+- The agent must be in `active` status for scheduled runs to execute
+- If an execution fails, the schedule continues — check the execution history for errors
+- Deactivating an agent pauses its schedule; reactivating resumes it
+- Deleting the schedule does not affect existing execution history

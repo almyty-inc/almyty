@@ -137,7 +137,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
 
   const backendUrl = window.location.origin.replace(':3002', ':4000').replace(':8080', ':3000').replace('app.', 'api.')
   const gatewayType = (gateway.type || 'mcp').toLowerCase()
-  const skillsContent = skillsData?.data?.data || skillsData?.data || ''
+  const skillsContent = skillsData?.data || ''
 
   // Skills gateway
   if (gatewayType === 'skills') {
@@ -546,7 +546,7 @@ function GatewayAuthSection({ gatewayId, gatewayName }: { gatewayId: string; gat
   const generateKeyMutation = useMutation({
     mutationFn: (name: string) => gatewaysApi.generateApiKey(gatewayId, { name }),
     onSuccess: (response: any) => {
-      const key = response.data?.data?.key
+      const key = response.data?.key
       setGeneratedKey(key)
       queryClient.invalidateQueries({ queryKey: ['gateway-api-keys', gatewayId] })
       success('API Key Generated', 'Copy and save it now — it will not be shown again.')
@@ -567,9 +567,9 @@ function GatewayAuthSection({ gatewayId, gatewayName }: { gatewayId: string; gat
     },
   })
 
-  const authConfigsRaw = authConfigsData?.data?.data?.authConfigs || authConfigsData?.data?.data || []
+  const authConfigsRaw = authConfigsData?.data?.authConfigs || authConfigsData?.data || []
   const authConfigs = Array.isArray(authConfigsRaw) ? authConfigsRaw : []
-  const keysExtracted = keysData?.data?.data?.keys || keysData?.data?.data || []
+  const keysExtracted = keysData?.data?.keys || keysData?.data || []
   const keys = Array.isArray(keysExtracted) ? keysExtracted : []
 
   const hasApiKeyAuth = authConfigs.some((c: any) => c.type === 'api_key')
@@ -1029,7 +1029,7 @@ export function GatewayDetailPage() {
   })
 
   // Edit form setup - must be before early returns
-  const gateway = gatewayData?.data?.data || gatewayData?.data
+  const gateway = gatewayData?.data || gatewayData?.data
   const editForm = useForm<EditGatewayForm>({
     resolver: zodResolver(editGatewaySchema),
     values: {
@@ -1068,10 +1068,10 @@ export function GatewayDetailPage() {
     },
   })
 
-  const gatewayToolsRaw = gatewayToolsData?.data?.data?.gatewayTools || gatewayToolsData?.data?.data?.tools || gatewayToolsData?.data?.data || []
+  const gatewayToolsRaw = gatewayToolsData?.data?.gatewayTools || gatewayToolsData?.data?.tools || gatewayToolsData?.data || []
   const gatewayTools = Array.isArray(gatewayToolsRaw) ? gatewayToolsRaw : []
 
-  const allToolsRaw = allToolsData?.data?.data?.tools || allToolsData?.data?.data || []
+  const allToolsRaw = allToolsData?.data?.tools || allToolsData?.data || []
   const allTools = Array.isArray(allToolsRaw) ? allToolsRaw : []
 
   const applyScopingPreset = (preset: 'read-only' | 'admin' | 'public' | 'all' | 'none') => {

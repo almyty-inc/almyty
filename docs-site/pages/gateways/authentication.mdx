@@ -1,0 +1,120 @@
+# Gateway Authentication
+
+Gateways can be protected with authentication to control who can discover
+and invoke tools. apifai supports multiple authentication methods that
+can be configured per gateway.
+
+## Authentication Methods
+
+| Method | Description | Use Case |
+|--------|-------------|----------|
+| **None** | No authentication required | Public/development gateways |
+| **API Key** | Header or query parameter key | Simple machine-to-machine auth |
+| **Bearer Token** | JWT bearer token | User-scoped access |
+| **Basic Auth** | Username and password | Legacy integrations |
+| **OAuth2** | OAuth 2.0 client credentials | Enterprise integrations |
+
+## Configuring Authentication
+
+### Via the UI
+
+1. Navigate to the gateway detail page
+2. Open the **Authentication** tab
+3. Click **Add Auth Method**
+4. Select the method type and configure
+
+### Via the API
+
+```bash
+curl -X POST https://api.apif.ai/gateways/{id}/auth \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "api_key",
+    "configuration": {
+      "headerName": "X-API-Key"
+    }
+  }'
+```
+
+## API Key Authentication
+
+Generate API keys for programmatic access to your gateway:
+
+### Generate a Key
+
+```bash
+curl -X POST https://api.apif.ai/gateways/{id}/auth/api-keys \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production Key",
+    "scopes": ["tools:read", "tools:execute"],
+    "expiresAt": "2027-01-01T00:00:00Z"
+  }'
+```
+
+Response (key is only shown once):
+
+```json
+{
+  "id": "key-uuid",
+  "name": "Production Key",
+  "key": "apifai_gw_abc123...",
+  "scopes": ["tools:read", "tools:execute"],
+  "expiresAt": "2027-01-01T00:00:00Z"
+}
+```
+
+### Using the Key
+
+```bash
+# Via header
+curl https://api.apif.ai/mcp/acme/my-tools \
+  -H "X-API-Key: apifai_gw_abc123..."
+
+# Via Authorization header
+curl https://api.apif.ai/mcp/acme/my-tools \
+  -H "Authorization: Bearer apifai_gw_abc123..."
+```
+
+### List Keys
+
+```bash
+curl https://api.apif.ai/gateways/{id}/auth/api-keys \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Revoke a Key
+
+```bash
+curl -X DELETE https://api.apif.ai/gateways/{id}/auth/api-keys/{keyId} \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Key Scopes
+
+| Scope | Description |
+|-------|-------------|
+| `tools:read` | List and view tool definitions |
+| `tools:execute` | Execute/invoke tools |
+| `gateway:read` | View gateway configuration |
+
+## Multiple Auth Methods
+
+A gateway can have multiple auth methods enabled simultaneously.
+Requests are authenticated if they match **any** of the configured methods.
+
+This allows gradual migration between auth methods:
+
+1. Add the new auth method
+2. Update clients to use the new method
+3. Remove the old auth method
+
+## Security Best Practices
+
+1. **Always use authentication** in production gateways
+2. **Rotate keys regularly** — set expiration dates
+3. **Use minimal scopes** — grant only the permissions needed
+4. **Monitor usage** — check Analytics for unusual patterns
+5. **Revoke compromised keys immediately** — keys cannot be recovered once revoked

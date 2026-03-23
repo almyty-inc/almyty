@@ -1,0 +1,134 @@
+# Rate Limits
+
+apifai applies rate limits to protect the platform and ensure fair usage.
+Limits vary by endpoint type and authentication method.
+
+## Default Limits
+
+| Endpoint Category | Rate Limit | Window |
+|-------------------|-----------|--------|
+| Authentication (`/auth/*`) | 10 requests | per minute |
+| API Management (`/apis/*`, `/tools/*`, `/gateways/*`) | 120 requests | per minute |
+| Agent Invocations (`/agents/:id/invoke`) | 60 requests | per minute |
+| Gateway Endpoints (`/mcp/*`, `/a2a/*`, `/utcp/*`) | 300 requests | per minute |
+| Analytics (`/analytics/*`) | 30 requests | per minute |
+| Health Checks (`/health*`) | No limit | — |
+
+## Rate Limit Headers
+
+Every response includes rate limit information in headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximum requests allowed in the window |
+| `X-RateLimit-Remaining` | Requests remaining in the current window |
+| `X-RateLimit-Reset` | Unix timestamp when the window resets |
+| `Retry-After` | Seconds until the next request is allowed (only on 429) |
+
+Example headers:
+
+```
+X-RateLimit-Limit: 120
+X-RateLimit-Remaining: 85
+X-RateLimit-Reset: 1711234620
+```
+
+## Exceeding Limits
+
+When you exceed the rate limit, the API returns:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 30
+X-RateLimit-Limit: 120
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1711234620
+Content-Type: application/json
+
+{
+  "success": false,
+  "message": "Rate limit exceeded. Retry after 30 seconds.",
+  "error": "RATE_LIMITED",
+  "statusCode": 429
+}
+```
+
+## Handling Rate Limits
+
+### Exponential Backoff
+
+The recommended strategy for handling rate limits:
+
+```javascript
+async function requestWithRetry(url, options, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const response = await fetch(url, options);
+
+    if (response.status === 429) {
+      const retryAfter = parseInt(response.headers.get("Retry-After") || "1");
+      const delay = retryAfter * 1000 * Math.pow(2, attempt);
+      console.log(`Rate limited. Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      continue;
+    }
+
+    return response;
+  }
+
+  throw new Error("Max retries exceeded");
+}
+```
+
+### Python
+
+```python
+import time
+import requests
+
+def request_with_retry(url, headers, max_retries=3):
+    for attempt in range(max_retries):
+        response = requests.get(url, headers=headers)
+
+        if response.status_code == 429:
+            retry_after = int(response.headers.get("Retry-After", 1))
+            delay = retry_after * (2 ** attempt)
+            print(f"Rate limited. Retrying in {delay}s...")
+            time.sleep(delay)
+            continue
+
+        return response
+
+    raise Exception("Max retries exceeded")
+```
+
+## Per-Gateway Rate Limits
+
+Individual gateway tools can have custom rate limits configured
+through [Tool Scoping](/gateways/tool-scoping):
+
+```bash
+curl -X PATCH https://api.apif.ai/gateways/{gatewayId}/tools/{gatewayToolId} \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rateLimit": 50
+  }'
+```
+
+Gateway-level rate limits are applied per API key, allowing different
+keys to have different limits.
+
+## Burst Allowance
+
+Rate limits include a small burst allowance. You can briefly exceed
+the per-minute rate for short bursts, as long as the sustained rate
+stays within limits. The burst window is typically 10 seconds.
+
+## Best Practices
+
+1. **Respect `Retry-After`** — Always wait the specified duration before retrying
+2. **Implement backoff** — Use exponential backoff for retry logic
+3. **Cache responses** — Avoid unnecessary repeated requests
+4. **Batch operations** — Use bulk endpoints where available (e.g., `/tools/bulk`)
+5. **Monitor headers** — Track `X-RateLimit-Remaining` to proactively slow down
+6. **Use webhooks** — For event-driven workflows, use webhooks instead of polling

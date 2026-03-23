@@ -98,7 +98,7 @@ export function ToolDetailPage() {
     )
   }
 
-  const tool = toolData.data?.data || toolData.data
+  const tool = toolData.data || toolData.data
 
   return (
     <div className="space-y-8">
@@ -548,9 +548,9 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
     URL.revokeObjectURL(url)
   }
 
-  const skill = skillData?.data?.data || skillData?.data
-  const cli = cliData?.data?.data || cliData?.data
-  const sdk = sdkData?.data?.data || sdkData?.data
+  const skill = skillData?.data || skillData?.data
+  const cli = cliData?.data || cliData?.data
+  const sdk = sdkData?.data || sdkData?.data
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

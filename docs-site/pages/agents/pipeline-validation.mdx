@@ -1,0 +1,116 @@
+# Pipeline Validation
+
+Before an agent can be activated or invoked, apifai validates its pipeline
+to ensure correctness. Validation runs automatically when saving an agent
+and can be triggered manually via the API.
+
+## Validation Rules
+
+### Structural Rules
+
+| Rule | Description |
+|------|-------------|
+| **Single Input** | Exactly one Input node must exist |
+| **Single Output** | Exactly one Output node must exist |
+| **No Cycles** | The pipeline must be a directed acyclic graph (DAG) |
+| **Connected Graph** | All nodes must be reachable from the Input node |
+| **Output Reachable** | The Output node must be reachable from at least one path |
+
+### Node Configuration Rules
+
+| Node Type | Requirement |
+|-----------|-------------|
+| **Input** | Must have a valid JSON Schema in `data.schema` |
+| **Output** | Must have a non-empty `data.mapping` expression |
+| **LLM Call** | Must have `providerId` and `userPromptTemplate` |
+| **Tool Call** | Must have `toolId` referencing an existing tool |
+| **Condition** | Must have a non-empty `expression` |
+| **Transform** | Must have non-empty `code` |
+| **Loop** | Must have `iterableExpression` |
+| **Sub-Agent** | Must have `agentId` referencing an existing agent |
+
+### Expression Validation
+
+Template expressions (`{{...}}`) are checked for:
+
+- **Valid syntax** — Properly closed double curly braces
+- **Valid references** — Referenced node IDs must exist in the pipeline
+- **Upstream dependency** — Referenced nodes must be upstream (executed before) the current node
+- **No self-reference** — A node cannot reference its own output
+
+## Validation API
+
+```bash
+# Validation happens on save — errors are returned in the response
+curl -X PATCH https://api.apif.ai/agents/{id} \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pipeline": { ... }
+  }'
+```
+
+If validation fails, the response includes detailed errors:
+
+```json
+{
+  "success": false,
+  "message": "Pipeline validation failed",
+  "errors": [
+    {
+      "nodeId": "llm_1",
+      "field": "providerId",
+      "message": "LLM provider is required"
+    },
+    {
+      "nodeId": null,
+      "field": "structure",
+      "message": "No Output node found in pipeline"
+    }
+  ]
+}
+```
+
+## Common Issues
+
+### Disconnected Nodes
+
+If you add a node but forget to connect it with edges, validation
+will report it as unreachable. Fix by adding edges from an upstream
+node to the disconnected node.
+
+### Circular Dependencies
+
+Pipelines must be acyclic. If node A depends on node B and node B
+depends on node A, validation fails. Use Loop nodes instead for
+iterative processing.
+
+### Missing Provider
+
+LLM Call nodes require a valid `providerId`. If the referenced provider
+has been deleted or is inactive, validation will flag it. Navigate to
+**AI Models** to configure a provider first.
+
+### Invalid Template Expressions
+
+```
+// Bad — references a non-existent node
+{{nodes.nonexistent.output}}
+
+// Bad — references a downstream node (not yet executed)
+{{nodes.output_1.output}}  // Output is always the last node
+
+// Good — references an upstream node
+{{nodes.llm_1.output}}
+```
+
+## UI Validation Indicators
+
+In the visual agent builder, validation issues are displayed as:
+
+- **Red border** on nodes with configuration errors
+- **Warning icon** on edges with expression issues
+- **Error panel** at the bottom listing all validation problems
+
+Fix all issues before activating the agent. Draft agents can be saved
+with validation warnings but cannot be activated or invoked.

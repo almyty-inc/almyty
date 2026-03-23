@@ -116,13 +116,13 @@ export function DashboardPage() {
     )
   }
 
-  const gatewaysExtracted = gatewaysData?.data?.data?.gateways || gatewaysData?.data?.data || []
+  const gatewaysExtracted = gatewaysData?.data?.gateways || gatewaysData?.data || []
   const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
-  const toolsExtracted = toolsData?.data?.data?.tools || toolsData?.data?.tools || []
+  const toolsExtracted = toolsData?.data?.tools || toolsData?.data || []
   const tools = Array.isArray(toolsExtracted) ? toolsExtracted : []
-  const apisExtracted = apisData?.data?.data?.apis || apisData?.data?.apis || apisData?.data?.data || []
+  const apisExtracted = apisData?.data?.apis || apisData?.data || []
   const apis = Array.isArray(apisExtracted) ? apisExtracted : []
-  const agentsExtracted = agentsData?.data?.data || []
+  const agentsExtracted = agentsData?.data || []
   const agents = Array.isArray(agentsExtracted) ? agentsExtracted : []
 
   const recentLogs = recentLogsData?.data || []

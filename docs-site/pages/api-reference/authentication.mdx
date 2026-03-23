@@ -1,0 +1,150 @@
+# Authentication
+
+The apifai API uses JWT (JSON Web Tokens) for authentication. All API requests
+(except registration and login) require a valid Bearer token.
+
+## Registration
+
+Create a new account:
+
+```bash
+curl -X POST https://api.apif.ai/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePass123!",
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "organizationName": "Acme Corp"
+  }'
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `email` | string | Yes | Valid email address |
+| `password` | string | Yes | Minimum 8 characters, must include uppercase, lowercase, and number |
+| `firstName` | string | Yes | User's first name |
+| `lastName` | string | Yes | User's last name |
+| `organizationName` | string | Yes | Name for the default organization |
+
+### Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "user": {
+      "id": "user-uuid",
+      "email": "user@example.com",
+      "firstName": "Jane",
+      "lastName": "Doe"
+    },
+    "organization": {
+      "id": "org-uuid",
+      "name": "Acme Corp"
+    }
+  }
+}
+```
+
+## Login
+
+Authenticate with existing credentials:
+
+```bash
+curl -X POST https://api.apif.ai/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePass123!"
+  }'
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "user": {
+      "id": "user-uuid",
+      "email": "user@example.com",
+      "firstName": "Jane",
+      "lastName": "Doe"
+    }
+  }
+}
+```
+
+## Using the Token
+
+Include the JWT in the `Authorization` header of all API requests:
+
+```bash
+curl https://api.apif.ai/apis \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+## Token Expiration
+
+JWT tokens expire after 24 hours. When a token expires, the API returns
+a `401 Unauthorized` response. Obtain a new token by logging in again.
+
+## Profile
+
+### Get Profile
+
+```bash
+curl https://api.apif.ai/auth/profile \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Update Profile
+
+```bash
+curl -X PATCH https://api.apif.ai/auth/profile \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Smith"
+  }'
+```
+
+### Change Password
+
+```bash
+curl -X PATCH https://api.apif.ai/auth/change-password \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currentPassword": "OldPass123!",
+    "newPassword": "NewPass456!"
+  }'
+```
+
+## Organization Context
+
+Most API endpoints are scoped to an organization. The backend determines
+the current organization from the JWT token's associated user.
+
+For operations that require explicit organization context, pass the
+organization ID as a path parameter or header:
+
+```bash
+# Organization-scoped endpoints
+curl https://api.apif.ai/organizations/{orgId}/tools \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Logout
+
+```bash
+curl -X POST https://api.apif.ai/auth/logout \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+This invalidates the current token server-side.

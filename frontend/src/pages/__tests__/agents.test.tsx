@@ -113,10 +113,10 @@ describe('AgentsPage', () => {
   describe('Empty State', () => {
     beforeEach(() => {
       vi.mocked(agentsApi.getAll).mockResolvedValue({
-        data: { data: [] },
+        data: [],
       })
       vi.mocked(agentsApi.getTemplates).mockResolvedValue({
-        data: { data: [] },
+        data: [],
       })
     })
 
@@ -185,10 +185,10 @@ describe('AgentsPage', () => {
 
     beforeEach(() => {
       vi.mocked(agentsApi.getAll).mockResolvedValue({
-        data: { data: mockAgents },
+        data: mockAgents,
       })
       vi.mocked(agentsApi.getTemplates).mockResolvedValue({
-        data: { data: [] },
+        data: [],
       })
     })
 
@@ -272,22 +272,20 @@ describe('AgentsPage', () => {
 
     beforeEach(() => {
       vi.mocked(agentsApi.getAll).mockResolvedValue({
-        data: {
-          data: [
-            {
-              id: 'agent-1',
-              name: 'Existing Agent',
-              status: 'active',
-              totalExecutions: 0,
-              pipeline: { nodes: [{ id: 'input_1', type: 'input' }], edges: [] },
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-          ],
-        },
+        data: [
+          {
+            id: 'agent-1',
+            name: 'Existing Agent',
+            status: 'active',
+            totalExecutions: 0,
+            pipeline: { nodes: [{ id: 'input_1', type: 'input' }], edges: [] },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
       })
       vi.mocked(agentsApi.getTemplates).mockResolvedValue({
-        data: { data: mockTemplates },
+        data: mockTemplates,
       })
     })
 
@@ -328,10 +326,10 @@ describe('AgentsPage', () => {
   describe('Create Button Navigation', () => {
     beforeEach(() => {
       vi.mocked(agentsApi.getAll).mockResolvedValue({
-        data: { data: [] },
+        data: [],
       })
       vi.mocked(agentsApi.getTemplates).mockResolvedValue({
-        data: { data: [] },
+        data: [],
       })
     })
 

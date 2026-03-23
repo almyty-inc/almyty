@@ -1,0 +1,150 @@
+# HTTP Tools
+
+HTTP tools make custom HTTP requests to any endpoint. Unlike auto-generated API tools
+(which are derived from schemas), HTTP tools are created manually and give you full
+control over the request configuration.
+
+## Creating an HTTP Tool
+
+### Via the UI
+
+1. Navigate to **Tools** and click **Create Tool**
+2. Select **HTTP** as the execution method
+3. Configure the request details
+4. Define input parameters
+5. Write the execution code or use the defaults
+
+### Via the API
+
+```bash
+curl -X POST https://api.apif.ai/organizations/{orgId}/tools \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "fetch_weather",
+    "description": "Fetch current weather for a city",
+    "type": "http",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string",
+          "description": "City name"
+        },
+        "units": {
+          "type": "string",
+          "enum": ["metric", "imperial"],
+          "default": "metric"
+        }
+      },
+      "required": ["city"]
+    },
+    "executionConfig": {
+      "method": "GET",
+      "url": "https://api.weather.example.com/v1/current",
+      "headers": {
+        "X-API-Key": "{{env.WEATHER_API_KEY}}"
+      },
+      "queryParams": {
+        "q": "{{parameters.city}}",
+        "units": "{{parameters.units}}"
+      }
+    }
+  }'
+```
+
+## Configuration
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `method` | string | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
+| `url` | string | Full URL, supports template expressions |
+| `headers` | object | Request headers, supports template expressions |
+| `queryParams` | object | Query string parameters |
+| `body` | object/string | Request body (for POST/PUT/PATCH) |
+| `timeout` | number | Request timeout in milliseconds (default: 30000) |
+| `retries` | number | Number of retry attempts on failure (default: 0) |
+
+## Template Expressions in HTTP Tools
+
+HTTP tools support template expressions in URLs, headers, and body:
+
+```
+URL:     https://api.example.com/users/{{parameters.userId}}
+Header:  Authorization: Bearer {{parameters.token}}
+Body:    { "name": "{{parameters.name}}", "email": "{{parameters.email}}" }
+```
+
+## Authentication
+
+HTTP tools can use credentials configured on the parent API or inline:
+
+### API Key
+
+```json
+{
+  "headers": {
+    "X-API-Key": "{{env.API_KEY}}"
+  }
+}
+```
+
+### Bearer Token
+
+```json
+{
+  "headers": {
+    "Authorization": "Bearer {{env.ACCESS_TOKEN}}"
+  }
+}
+```
+
+### Basic Auth
+
+```json
+{
+  "headers": {
+    "Authorization": "Basic {{base64(env.USERNAME + ':' + env.PASSWORD)}}"
+  }
+}
+```
+
+## Custom Code
+
+For complex HTTP tools, write custom JavaScript:
+
+```javascript
+// axios is available as a global
+const response = await axios({
+  method: 'POST',
+  url: `https://api.example.com/search`,
+  headers: {
+    'Authorization': `Bearer ${parameters.apiKey}`,
+    'Content-Type': 'application/json',
+  },
+  data: {
+    query: parameters.query,
+    filters: parameters.filters || {},
+  },
+  timeout: 10000,
+});
+
+return {
+  results: response.data.items,
+  total: response.data.total,
+};
+```
+
+## Error Handling
+
+HTTP tools automatically handle common error scenarios:
+
+| Status Code | Behavior |
+|-------------|----------|
+| 2xx | Success — response body is returned |
+| 4xx | Client error — error message returned to the caller |
+| 5xx | Server error — retried if `retries > 0`, then error |
+| Timeout | Request timed out — error returned |
+| Network | Connection failed — retried if configured |
+
+Custom code can implement additional error handling logic.

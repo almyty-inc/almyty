@@ -32,6 +32,14 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Auto-unwrap { success, data, message } wrapper from backend responses
+api.interceptors.response.use((response) => {
+  if (response.data && typeof response.data === 'object' && 'success' in response.data && 'data' in response.data) {
+    response.data = response.data.data
+  }
+  return response
+})
+
 // Handle auth errors and retries
 api.interceptors.response.use(
   (response) => response,

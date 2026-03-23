@@ -1,0 +1,157 @@
+# LLM Tools
+
+LLM tools use a language model to generate output based on a prompt template.
+Instead of calling an API endpoint or running code, they send a prompt to
+a configured LLM provider and return the model's response.
+
+## Creating an LLM Tool
+
+### Via the UI
+
+1. Navigate to **Tools** and click **Create Tool**
+2. Select **LLM** as the execution method
+3. Choose an active LLM provider
+4. Write a system prompt and user prompt template
+5. Define input parameters referenced in the templates
+6. Configure output mode (text or JSON)
+
+### Via the API
+
+```bash
+curl -X POST https://api.apif.ai/organizations/{orgId}/tools \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "summarize_text",
+    "description": "Summarize a text document into key points",
+    "type": "llm",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "Text to summarize" },
+        "maxPoints": { "type": "integer", "description": "Maximum bullet points", "default": 5 }
+      },
+      "required": ["text"]
+    },
+    "executionConfig": {
+      "providerId": "provider-uuid",
+      "model": "gpt-4o",
+      "systemPrompt": "You are a concise summarizer. Extract key points from text.",
+      "promptTemplate": "Summarize the following text into at most {{parameters.maxPoints}} bullet points:\n\n{{parameters.text}}",
+      "temperature": 0.3,
+      "maxTokens": 1024,
+      "outputMode": "text"
+    }
+  }'
+```
+
+## Configuration
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `providerId` | string | — | ID of the LLM provider (required) |
+| `model` | string | Provider default | Specific model to use |
+| `systemPrompt` | string | — | System-level instructions |
+| `promptTemplate` | string | — | User prompt with `{{parameters.*}}` expressions |
+| `temperature` | number | `0.7` | Sampling temperature (0 = deterministic, 2 = creative) |
+| `maxTokens` | number | `1024` | Maximum tokens in the response |
+| `outputMode` | string | `text` | `text` for raw string, `json` for parsed JSON |
+| `outputSchema` | JSON Schema | — | When `outputMode` is `json`, validates the response |
+
+## Prompt Templates
+
+Prompt templates support the same `{{parameters.*}}` expression syntax as other tools:
+
+```
+Translate the following {{parameters.sourceLanguage}} text to {{parameters.targetLanguage}}:
+
+{{parameters.text}}
+```
+
+At execution time, parameter values are substituted into the template before
+sending to the LLM.
+
+## Output Modes
+
+### Text Mode
+
+Returns the raw LLM response as a string:
+
+```json
+{
+  "result": "Here are the key points:\n1. First point\n2. Second point"
+}
+```
+
+### JSON Mode
+
+Instructs the LLM to return structured JSON. The response is parsed and
+optionally validated against `outputSchema`:
+
+```json
+{
+  "result": {
+    "summary": "Brief overview",
+    "keyPoints": ["Point 1", "Point 2"],
+    "sentiment": "positive"
+  }
+}
+```
+
+Configure the output schema to enforce structure:
+
+```json
+{
+  "outputMode": "json",
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string" },
+      "keyPoints": { "type": "array", "items": { "type": "string" } },
+      "sentiment": { "type": "string", "enum": ["positive", "neutral", "negative"] }
+    },
+    "required": ["summary", "keyPoints"]
+  }
+}
+```
+
+## Supported Providers
+
+LLM tools work with any configured LLM provider:
+
+| Provider | Models |
+|----------|--------|
+| **OpenAI** | gpt-4o, gpt-4o-mini, gpt-4-turbo, etc. |
+| **Anthropic** | claude-sonnet-4-20250514, claude-3.5-haiku, etc. |
+| **Custom** | Any OpenAI-compatible API endpoint |
+
+Configure providers in **AI Models** before creating LLM tools.
+
+## Use Cases
+
+| Tool | System Prompt | Output Mode |
+|------|--------------|-------------|
+| Summarizer | "Extract key points concisely" | text |
+| Classifier | "Classify into categories" | json |
+| Translator | "Translate accurately" | text |
+| Entity Extractor | "Extract named entities" | json |
+| Code Generator | "Write clean, tested code" | text |
+| Sentiment Analyzer | "Analyze sentiment" | json |
+
+## Cost Tracking
+
+Each LLM tool execution tracks token usage:
+
+```json
+{
+  "result": "...",
+  "usage": {
+    "promptTokens": 120,
+    "completionTokens": 85,
+    "totalTokens": 205,
+    "estimatedCost": "$0.0004"
+  }
+}
+```
+
+View aggregate usage in the **Analytics** dashboard.
