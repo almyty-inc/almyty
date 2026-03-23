@@ -20,7 +20,7 @@ export class AuthHelper {
   private apiHelper: APIHelper
 
   constructor(private page: Page) {
-    this.apiHelper = new APIHelper()
+    this.apiHelper = new APIHelper(process.env.E2E_API_URL || 'http://localhost:4000')
   }
 
   /**

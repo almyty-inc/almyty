@@ -31,7 +31,7 @@ export const test = base.extend<TestFixtures>({
    * API helper instance
    */
   apiHelper: async ({}, use) => {
-    const apiHelper = new APIHelper()
+    const apiHelper = new APIHelper(process.env.E2E_API_URL || 'http://localhost:4000')
     await use(apiHelper)
     // Cleanup test data after each test
     // await apiHelper.cleanupTestData(...)
