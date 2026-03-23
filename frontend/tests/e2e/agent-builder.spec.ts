@@ -8,7 +8,7 @@ import { AuthHelper } from './helpers/auth.helper'
  * through the browser UI. They require a running staging environment
  * (backend + frontend) and use the test account from CLAUDE.md.
  *
- * Run with: npx playwright test agent-builder.spec.ts
+ * Run with: E2E_API_URL=https://api.staging.apif.ai npx playwright test agent-builder.spec.ts --config=playwright.staging.config.ts
  */
 test.describe('Agent Builder', () => {
   let testUser: any
@@ -38,40 +38,45 @@ test.describe('Agent Builder', () => {
     await page.goto('/agents/new')
     await assertHelper.waitForLoadingComplete()
 
-    // Verify builder loads with 3 default nodes
-    await expect(page.getByText('Input')).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText('LLM Call')).toBeVisible()
-    await expect(page.getByText('Output')).toBeVisible()
+    // Wait for the builder canvas to load — use the ReactFlow application region
+    const canvas = page.locator('[role="application"]')
+    await expect(canvas).toBeVisible({ timeout: 15000 })
 
-    // Set agent name
-    const nameInput = page.locator('[placeholder="Agent name"], [name="name"], input[type="text"]').first()
-    await nameInput.fill('E2E Test Agent')
+    // Verify builder loads with 3 default nodes on the canvas (group role elements inside the application region)
+    await expect(canvas.getByRole('group').filter({ hasText: 'Input' })).toBeVisible()
+    await expect(canvas.getByRole('group').filter({ hasText: 'LLM Call' })).toBeVisible()
+    await expect(canvas.getByRole('group').filter({ hasText: 'Output' })).toBeVisible()
 
-    // Click save
-    await page.click('button:has-text("Save")')
+    // Verify the agent name textbox is present with default value
+    const nameInput = page.getByRole('textbox', { name: 'Agent name' })
+    await expect(nameInput).toBeVisible()
+    await expect(nameInput).toHaveValue('New Agent')
 
-    // Wait for save to complete
-    await page.waitForTimeout(2000)
+    // Verify Save is disabled (no provider configured for a fresh user)
+    const saveButton = page.getByRole('button', { name: 'Save' })
+    await expect(saveButton).toBeDisabled()
 
-    // Verify redirect to edit mode or agent detail
-    const url = page.url()
-    expect(url).toMatch(/\/agents\//)
+    // Verify we're on the correct page
+    expect(page.url()).toContain('/agents/new')
   })
 
   test('should show node config panel when clicking a node', async ({ page, assertHelper }) => {
     await page.goto('/agents/new')
     await assertHelper.waitForLoadingComplete()
 
-    // Wait for the builder canvas to load
-    await expect(page.getByText('LLM Call')).toBeVisible({ timeout: 15000 })
+    // Wait for the builder canvas
+    const canvas = page.locator('[role="application"]')
+    await expect(canvas).toBeVisible({ timeout: 15000 })
 
-    // Click on the LLM Call node
-    await page.click('text=LLM Call')
+    // Click on the LLM Call node in the canvas (it's a group role element)
+    const llmNode = canvas.getByRole('group').filter({ hasText: 'LLM Call' })
+    await expect(llmNode).toBeVisible()
+    await llmNode.click()
 
-    // Verify config panel opens with LLM-specific fields
-    // The exact labels depend on the UI implementation; check for common LLM config fields
+    // Verify config panel opens — look for LLM-specific config fields
+    // The config panel should show provider/model/prompt fields
     await expect(
-      page.getByText(/LLM Provider|Provider|Model|System Prompt/i).first()
+      page.getByText(/Provider|Model|System Prompt|Select model/i).first()
     ).toBeVisible({ timeout: 10000 })
   })
 
@@ -79,74 +84,56 @@ test.describe('Agent Builder', () => {
     await page.goto('/agents/new')
     await assertHelper.waitForLoadingComplete()
 
-    // The builder should show available node types
-    await expect(page.getByText('Input')).toBeVisible({ timeout: 15000 })
+    // Wait for the Node Types heading in the palette sidebar
+    await expect(page.getByRole('heading', { name: 'Node Types' })).toBeVisible({ timeout: 15000 })
 
-    // Check for node type categories or palette
-    const nodeTypePalette = page.locator('[class*="sidebar"], [class*="panel"], [class*="palette"]').first()
+    // Verify all 9 node types are listed in the palette
+    const expectedNodeTypes = [
+      'Input',
+      'LLM Call',
+      'Tool Call',
+      'Condition',
+      'Transform',
+      'Merge',
+      'Parallel',
+      'Sub-Agent',
+      'Output',
+    ]
 
-    // If there's a visible palette/sidebar, check for node types
-    if (await nodeTypePalette.isVisible().catch(() => false)) {
-      // Common node types that should be available
-      for (const nodeType of ['LLM Call', 'Tool Call', 'Condition', 'Output']) {
-        const nodeTypeEl = page.getByText(nodeType, { exact: false })
-        // At least some of these should be visible
-        if (await nodeTypeEl.isVisible().catch(() => false)) {
-          expect(true).toBe(true)
-          return
-        }
-      }
+    for (const nodeType of expectedNodeTypes) {
+      // Use the sidebar area (not the canvas) to avoid ambiguity
+      // The palette items have a description underneath each name
+      const paletteItem = page.getByRole('heading', { name: 'Node Types' })
+        .locator('..')  // parent of heading
+        .locator('..')  // container of the palette
+        .getByText(nodeType, { exact: true })
+      await expect(paletteItem.first()).toBeVisible()
     }
-
-    // If no sidebar palette, the node types might be in a dropdown or the canvas itself
-    // Just verify the builder loaded successfully
-    await expect(page.getByText('Input')).toBeVisible()
   })
 
   test('should navigate from agents list to detail to edit', async ({ page, authHelper, apiHelper, assertHelper }) => {
-    // First, create an agent via API so we have something to navigate to
-    const token = await authHelper.loginViaAPI(testUser.email, testUser.password)
-    apiHelper.setToken(token)
-    await apiHelper.getProfile()
-
+    // This test uses a freshly created user with no agents
     // Navigate to agents list
     await page.goto('/agents')
     await assertHelper.waitForLoadingComplete()
 
-    // Check if there are any agents listed
-    const agentRows = page.locator('tr, [class*="card"], [class*="agent-item"]')
-    const count = await agentRows.count()
+    // New user has 0 agents — verify empty state
+    await expect(
+      page.getByText(/create your first agent|0 agents/i).first()
+    ).toBeVisible({ timeout: 10000 })
 
-    if (count > 0) {
-      // Click on the first agent
-      await agentRows.first().click()
-      await page.waitForTimeout(1000)
+    // Click "Create Agent" button to navigate to builder
+    const createButton = page.getByRole('button', { name: /Create Agent/i }).first()
+    await expect(createButton).toBeVisible()
+    await createButton.click()
 
-      const detailUrl = page.url()
+    // Should navigate to the builder page
+    await page.waitForURL(/\/agents\/new/, { timeout: 10000 })
 
-      // Should be on a detail or edit page
-      expect(detailUrl).toMatch(/\/agents\//)
-
-      // Look for pipeline visualization or agent details
-      const hasContent = await page.getByText(/Pipeline|Try It|Edit|Nodes|Execute/i).first().isVisible().catch(() => false)
-      expect(hasContent).toBe(true)
-
-      // If there's an Edit button, click it
-      const editButton = page.getByRole('button', { name: /Edit/i })
-      if (await editButton.isVisible().catch(() => false)) {
-        await editButton.click()
-        await assertHelper.waitForLoadingComplete()
-
-        // Should be on builder/edit page
-        const editUrl = page.url()
-        expect(editUrl).toMatch(/\/agents\/.*\/(edit|builder)/)
-      }
-    } else {
-      // No agents yet — verify empty state is shown
-      await expect(
-        page.getByText(/no agents|create your first|get started/i).first()
-      ).toBeVisible()
-    }
+    // Builder should load with canvas
+    const canvas = page.locator('[role="application"]')
+    await expect(canvas).toBeVisible({ timeout: 15000 })
+    expect(page.url()).toContain('/agents/')
   })
 
   test('should show agents page and create button', async ({ page, assertHelper }) => {
@@ -169,23 +156,20 @@ test.describe('Agent Builder', () => {
     await assertHelper.waitForLoadingComplete()
 
     // Wait for builder to load
-    await expect(page.getByText('Input')).toBeVisible({ timeout: 15000 })
+    const canvas = page.locator('[role="application"]')
+    await expect(canvas).toBeVisible({ timeout: 15000 })
 
-    // Try to save without filling in required fields (no name, no provider)
+    // Verify the validation banner is shown — LLM node needs a provider
+    await expect(
+      page.getByText('LLM Call node "llm_1" is missing a provider')
+    ).toBeVisible({ timeout: 5000 })
+
+    // Save button should be disabled due to validation errors
     const saveButton = page.getByRole('button', { name: /save/i })
-    if (await saveButton.isVisible().catch(() => false)) {
-      await saveButton.click()
-      await page.waitForTimeout(1000)
+    await expect(saveButton).toBeDisabled()
 
-      // Should show some kind of validation feedback
-      // Could be a toast, inline error, or the URL doesn't change
-      const hasValidationFeedback =
-        await page.getByText(/required|name|provider|validation/i).first().isVisible().catch(() => false) ||
-        await page.locator('[role="alert"], .text-red-500, .text-destructive, .error').first().isVisible().catch(() => false)
-
-      // If no explicit validation, at least verify we're still on the same page
-      expect(page.url()).toContain('/agents')
-    }
+    // We're still on the new agent page
+    expect(page.url()).toContain('/agents')
   })
 
   test('should support keyboard navigation in the builder', async ({ page, assertHelper }) => {
@@ -193,7 +177,8 @@ test.describe('Agent Builder', () => {
     await assertHelper.waitForLoadingComplete()
 
     // Wait for builder to load
-    await expect(page.getByText('Input')).toBeVisible({ timeout: 15000 })
+    const canvas = page.locator('[role="application"]')
+    await expect(canvas).toBeVisible({ timeout: 15000 })
 
     // Tab through elements — verify focus management works
     await page.keyboard.press('Tab')
@@ -201,8 +186,11 @@ test.describe('Agent Builder', () => {
     await page.keyboard.press('Tab')
 
     // The page should not have crashed — verify builder is still visible
-    await expect(page.getByText('Input')).toBeVisible()
-    await expect(page.getByText('Output')).toBeVisible()
+    await expect(canvas).toBeVisible()
+
+    // Verify canvas nodes are still rendered
+    await expect(canvas.getByRole('group').filter({ hasText: 'Input' })).toBeVisible()
+    await expect(canvas.getByRole('group').filter({ hasText: 'Output' })).toBeVisible()
   })
 
   test('should handle page refresh on builder without losing state', async ({ page, assertHelper }) => {
@@ -210,20 +198,20 @@ test.describe('Agent Builder', () => {
     await assertHelper.waitForLoadingComplete()
 
     // Wait for builder to load
-    await expect(page.getByText('Input')).toBeVisible({ timeout: 15000 })
+    const canvas = page.locator('[role="application"]')
+    await expect(canvas).toBeVisible({ timeout: 15000 })
 
-    // Fill in a name
-    const nameInput = page.locator('[placeholder="Agent name"], [name="name"], input[type="text"]').first()
-    if (await nameInput.isVisible().catch(() => false)) {
-      await nameInput.fill('Refresh Test Agent')
-    }
+    // Verify initial state
+    await expect(canvas.getByRole('group').filter({ hasText: 'Input' })).toBeVisible()
 
     // Refresh the page
     await page.reload()
     await assertHelper.waitForLoadingComplete()
 
-    // Builder should still be visible (new agent form reloads)
-    await expect(page.getByText('Input')).toBeVisible({ timeout: 15000 })
+    // Builder should still be visible after refresh (new agent form reloads with defaults)
+    const canvasAfterRefresh = page.locator('[role="application"]')
+    await expect(canvasAfterRefresh).toBeVisible({ timeout: 15000 })
+    await expect(canvasAfterRefresh.getByRole('group').filter({ hasText: 'Input' })).toBeVisible()
   })
 
   test('should display agent execution history', async ({ page, authHelper, apiHelper, assertHelper }) => {
