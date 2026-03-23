@@ -109,7 +109,7 @@ export function AgentBuilderPage() {
     queryKey: ['agent', id],
     queryFn: async () => {
       const res = await agentsApi.getById(id!)
-      return res.data?.data || res.data
+      return res.data || res.data
     },
     enabled: isEditing,
   })
@@ -119,7 +119,7 @@ export function AgentBuilderPage() {
     queryKey: ['agent-templates'],
     queryFn: async () => {
       const res = await agentsApi.getTemplates()
-      return res.data?.data || []
+      return res.data || []
     },
     enabled: !!templateId && !isEditing,
   })
@@ -340,7 +340,7 @@ export function AgentBuilderPage() {
       success('Saved', `Agent "${agentName}" saved successfully.`)
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
       if (!isEditing) {
-        const newAgent = res.data?.data || res.data
+        const newAgent = res.data || res.data
         if (newAgent?.id) {
           navigate(`/agents/${newAgent.id}/edit`, { replace: true })
         }
@@ -388,7 +388,7 @@ export function AgentBuilderPage() {
               onClick={async () => {
                 try {
                   const res = await agentsApi.exportAgent(id!)
-                  const exportData = res.data?.data || res.data
+                  const exportData = res.data || res.data
                   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
                   const url = URL.createObjectURL(blob)
                   const a = document.createElement('a')

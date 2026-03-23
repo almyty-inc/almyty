@@ -159,7 +159,7 @@ export function AnalyticsPage() {
     queryKey: ['analytics-agents', currentOrganization?.id],
     queryFn: async () => {
       const res = await agentsApi.getAll()
-      const d = res.data?.data || res.data
+      const d = res.data
       const result = d?.agents || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
@@ -176,7 +176,7 @@ export function AnalyticsPage() {
         agents.map(async (agent) => {
           try {
             const res = await agentsApi.getExecutions(agent.id, { limit: 50 })
-            const d = res.data?.data || res.data
+            const d = res.data
             map[agent.id] = Array.isArray(d) ? d : d?.executions || []
           } catch {
             map[agent.id] = []
@@ -271,7 +271,7 @@ export function AnalyticsPage() {
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
       const res = await toolsApi.getAll(currentOrganization?.id)
-      const d = res.data?.data || res.data
+      const d = res.data
       const result = d?.tools || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
@@ -283,7 +283,7 @@ export function AnalyticsPage() {
     queryKey: ['gateways', currentOrganization?.id],
     queryFn: async () => {
       const res = await gatewaysApi.getAll()
-      const d = res.data?.data || res.data
+      const d = res.data
       const result = d?.gateways || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },

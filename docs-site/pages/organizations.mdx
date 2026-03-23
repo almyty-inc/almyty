@@ -1,0 +1,167 @@
+# Organizations
+
+Organizations are the top-level grouping in apifai. Every resource — APIs, tools,
+gateways, agents, and LLM providers — belongs to an organization. Organizations
+enable multi-tenancy, team collaboration, and role-based access control.
+
+## Creating an Organization
+
+An organization is automatically created during registration. Additional
+organizations can be created via the API:
+
+```bash
+curl -X POST https://api.apif.ai/organizations \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Corp",
+    "description": "Main production organization"
+  }'
+```
+
+### Response
+
+```json
+{
+  "id": "org-uuid",
+  "name": "Acme Corp",
+  "description": "Main production organization",
+  "createdAt": "2026-03-01T10:00:00Z"
+}
+```
+
+## Managing Members
+
+### List Members
+
+```bash
+curl https://api.apif.ai/organizations/{orgId}/members \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "members": [
+    {
+      "id": "user-uuid",
+      "email": "admin@acme.com",
+      "firstName": "Jane",
+      "lastName": "Doe",
+      "role": "admin",
+      "joinedAt": "2026-03-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+### Add a Member
+
+```bash
+curl -X POST https://api.apif.ai/organizations/{orgId}/members \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "developer@acme.com",
+    "role": "member"
+  }'
+```
+
+### Update Member Role
+
+```bash
+curl -X PATCH https://api.apif.ai/organizations/{orgId}/members/{userId} \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "role": "admin"
+  }'
+```
+
+### Remove a Member
+
+```bash
+curl -X DELETE https://api.apif.ai/organizations/{orgId}/members/{userId} \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Roles
+
+| Role | Permissions |
+|------|-------------|
+| `owner` | Full access, can delete organization, manage billing |
+| `admin` | Manage members, APIs, tools, gateways, agents |
+| `member` | Create and manage own resources, invoke agents |
+| `viewer` | Read-only access to all resources |
+
+### Permission Matrix
+
+| Action | Owner | Admin | Member | Viewer |
+|--------|-------|-------|--------|--------|
+| View resources | Yes | Yes | Yes | Yes |
+| Create resources | Yes | Yes | Yes | No |
+| Edit own resources | Yes | Yes | Yes | No |
+| Edit all resources | Yes | Yes | No | No |
+| Manage members | Yes | Yes | No | No |
+| Delete organization | Yes | No | No | No |
+
+## Teams
+
+Teams are sub-groups within an organization for more granular access control.
+
+### Create a Team
+
+```bash
+curl -X POST https://api.apif.ai/organizations/{orgId}/teams \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Backend Team",
+    "description": "Backend API development"
+  }'
+```
+
+### Add Team Member
+
+```bash
+curl -X POST https://api.apif.ai/organizations/{orgId}/teams/{teamId}/members \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user-uuid",
+    "role": "member"
+  }'
+```
+
+### Team Roles
+
+| Role | Description |
+|------|-------------|
+| `lead` | Can manage team members and team settings |
+| `member` | Standard team member |
+
+## Switching Organizations
+
+Users can belong to multiple organizations. The frontend stores the
+current organization in the app state. API requests are scoped to the
+organization associated with the JWT token.
+
+To work with a specific organization's resources, use organization-scoped
+endpoints:
+
+```bash
+# List tools for a specific organization
+curl https://api.apif.ai/organizations/{orgId}/tools \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Deleting an Organization
+
+Only the organization owner can delete an organization:
+
+```bash
+curl -X DELETE https://api.apif.ai/organizations/{orgId} \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+This permanently deletes the organization and all its resources
+(APIs, tools, gateways, agents, etc.). This action cannot be undone.

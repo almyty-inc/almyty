@@ -1,0 +1,237 @@
+# Error Codes
+
+All apifai API errors follow a consistent format with HTTP status codes
+and structured error responses.
+
+## Error Response Format
+
+```json
+{
+  "success": false,
+  "message": "Human-readable error description",
+  "error": "ERROR_CODE",
+  "statusCode": 400
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Always `false` for errors |
+| `message` | string | Human-readable description of the error |
+| `error` | string | Machine-readable error code |
+| `statusCode` | number | HTTP status code |
+
+## HTTP Status Codes
+
+### 400 Bad Request
+
+The request is malformed or contains invalid data.
+
+```json
+{
+  "success": false,
+  "message": "Validation failed: name is required",
+  "error": "BAD_REQUEST",
+  "statusCode": 400
+}
+```
+
+Common causes:
+- Missing required fields
+- Invalid field types (string where number expected)
+- Failed schema validation
+- Malformed JSON body
+
+### 401 Unauthorized
+
+Authentication is missing or invalid.
+
+```json
+{
+  "success": false,
+  "message": "Invalid or expired token",
+  "error": "UNAUTHORIZED",
+  "statusCode": 401
+}
+```
+
+Common causes:
+- Missing `Authorization` header
+- Expired JWT token
+- Invalid token format
+- Revoked API key
+
+### 403 Forbidden
+
+The authenticated user does not have permission for this operation.
+
+```json
+{
+  "success": false,
+  "message": "Insufficient permissions: requires admin role",
+  "error": "FORBIDDEN",
+  "statusCode": 403
+}
+```
+
+Common causes:
+- User role lacks required permissions
+- Attempting to access another organization's resources
+- Operation restricted to organization admins
+
+### 404 Not Found
+
+The requested resource does not exist.
+
+```json
+{
+  "success": false,
+  "message": "Agent not found",
+  "error": "NOT_FOUND",
+  "statusCode": 404
+}
+```
+
+Common causes:
+- Invalid resource ID
+- Resource was deleted
+- Wrong organization context
+
+### 409 Conflict
+
+The request conflicts with the current state.
+
+```json
+{
+  "success": false,
+  "message": "Gateway with endpoint '/my-tools' already exists",
+  "error": "CONFLICT",
+  "statusCode": 409
+}
+```
+
+Common causes:
+- Duplicate unique fields (name, endpoint, email)
+- Concurrent modification conflicts
+
+### 422 Unprocessable Entity
+
+The request is well-formed but contains semantic errors.
+
+```json
+{
+  "success": false,
+  "message": "Pipeline validation failed",
+  "error": "VALIDATION_ERROR",
+  "statusCode": 422,
+  "errors": [
+    { "nodeId": "llm_1", "field": "providerId", "message": "Provider not found" }
+  ]
+}
+```
+
+Common causes:
+- Pipeline validation failures
+- Invalid schema references
+- Business logic violations
+
+### 429 Too Many Requests
+
+Rate limit exceeded.
+
+```json
+{
+  "success": false,
+  "message": "Rate limit exceeded. Retry after 30 seconds.",
+  "error": "RATE_LIMITED",
+  "statusCode": 429
+}
+```
+
+The response includes a `Retry-After` header indicating when to retry.
+
+### 500 Internal Server Error
+
+An unexpected error occurred on the server.
+
+```json
+{
+  "success": false,
+  "message": "An unexpected error occurred",
+  "error": "INTERNAL_ERROR",
+  "statusCode": 500
+}
+```
+
+If you encounter 500 errors consistently, contact support with the
+request details and timestamp.
+
+### 502 Bad Gateway
+
+The backend service is temporarily unavailable.
+
+### 503 Service Unavailable
+
+The service is undergoing maintenance or is overloaded.
+
+## Tool Execution Errors
+
+Tool executions return errors in a tool-specific format:
+
+```json
+{
+  "success": false,
+  "error": "Tool execution failed: Connection refused",
+  "duration": 5001,
+  "status": "error"
+}
+```
+
+| Error | Description |
+|-------|-------------|
+| Connection refused | Target API is unreachable |
+| Timeout | Execution exceeded the configured timeout |
+| Invalid response | Target API returned unparseable data |
+| Sandbox error | JavaScript tool threw an exception |
+| LLM error | LLM provider returned an error |
+
+## Handling Errors in Code
+
+### JavaScript
+
+```javascript
+try {
+  const response = await fetch("https://api.apif.ai/agents", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    console.error(`Error ${error.statusCode}: ${error.message}`);
+
+    if (response.status === 401) {
+      // Redirect to login
+    } else if (response.status === 429) {
+      const retryAfter = response.headers.get("Retry-After");
+      // Wait and retry
+    }
+  }
+} catch (networkError) {
+  console.error("Network error:", networkError);
+}
+```
+
+### Python
+
+```python
+import requests
+
+response = requests.get(
+    "https://api.apif.ai/agents",
+    headers={"Authorization": f"Bearer {token}"}
+)
+
+if not response.ok:
+    error = response.json()
+    print(f"Error {error['statusCode']}: {error['message']}")
+```

@@ -1,0 +1,176 @@
+# UTCP Gateway
+
+The Universal Tool Call Protocol (UTCP) gateway provides a simple, standardized
+REST API for discovering and invoking tools. UTCP is designed for broad
+compatibility with any HTTP client or agent framework.
+
+## Overview
+
+UTCP is a straightforward protocol where:
+
+- Tools are listed via `GET` requests
+- Tools are invoked via `POST` requests
+- Responses follow a consistent JSON format
+
+It requires no special client libraries — any HTTP client works.
+
+## Creating a UTCP Gateway
+
+```bash
+curl -X POST https://api.apif.ai/gateways \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My UTCP Gateway",
+    "type": "utcp",
+    "endpoint": "/tools-api",
+    "configuration": {
+      "protocol": "http"
+    }
+  }'
+```
+
+## Endpoint URL
+
+Your UTCP gateway is available at:
+
+```
+https://api.apif.ai/utcp/{org-slug}{endpoint}
+```
+
+## Listing Tools
+
+```bash
+curl https://api.apif.ai/utcp/acme/tools-api/tools \
+  -H "Authorization: Bearer your-api-key"
+```
+
+Response:
+
+```json
+{
+  "tools": [
+    {
+      "name": "get_users",
+      "description": "Retrieve a list of users with pagination",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer", "description": "Page number" },
+          "limit": { "type": "integer", "description": "Items per page" }
+        }
+      }
+    },
+    {
+      "name": "create_user",
+      "description": "Create a new user account",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "email": { "type": "string", "format": "email" }
+        },
+        "required": ["name", "email"]
+      }
+    }
+  ]
+}
+```
+
+## Invoking a Tool
+
+```bash
+curl -X POST https://api.apif.ai/utcp/acme/tools-api/tools/get_users/invoke \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "arguments": {
+      "page": 1,
+      "limit": 10
+    }
+  }'
+```
+
+Response:
+
+```json
+{
+  "result": {
+    "users": [
+      { "id": "1", "name": "Alice", "email": "alice@example.com" },
+      { "id": "2", "name": "Bob", "email": "bob@example.com" }
+    ],
+    "total": 42
+  },
+  "metadata": {
+    "duration": 234,
+    "toolId": "tool-uuid"
+  }
+}
+```
+
+## API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/tools` | List all available tools |
+| `GET` | `/tools/{name}` | Get a single tool's definition |
+| `POST` | `/tools/{name}/invoke` | Execute a tool |
+| `GET` | `/health` | Gateway health check |
+
+## Error Responses
+
+```json
+{
+  "error": {
+    "code": "TOOL_NOT_FOUND",
+    "message": "Tool 'unknown_tool' not found in this gateway"
+  }
+}
+```
+
+| Error Code | HTTP Status | Description |
+|------------|-------------|-------------|
+| `TOOL_NOT_FOUND` | 404 | Tool does not exist on this gateway |
+| `INVALID_PARAMS` | 400 | Parameters failed validation |
+| `EXECUTION_FAILED` | 500 | Tool execution threw an error |
+| `UNAUTHORIZED` | 401 | Missing or invalid authentication |
+| `RATE_LIMITED` | 429 | Too many requests |
+
+## Integration Examples
+
+### Python
+
+```python
+import requests
+
+base = "https://api.apif.ai/utcp/acme/tools-api"
+headers = {"Authorization": "Bearer your-api-key"}
+
+# List tools
+tools = requests.get(f"{base}/tools", headers=headers).json()["tools"]
+
+# Invoke a tool
+result = requests.post(
+    f"{base}/tools/get_users/invoke",
+    headers=headers,
+    json={"arguments": {"page": 1, "limit": 10}}
+).json()["result"]
+```
+
+### JavaScript
+
+```javascript
+const base = "https://api.apif.ai/utcp/acme/tools-api";
+const headers = { Authorization: "Bearer your-api-key" };
+
+// List tools
+const { tools } = await fetch(`${base}/tools`, { headers }).then(r => r.json());
+
+// Invoke a tool
+const { result } = await fetch(`${base}/tools/get_users/invoke`, {
+  method: "POST",
+  headers: { ...headers, "Content-Type": "application/json" },
+  body: JSON.stringify({ arguments: { page: 1, limit: 10 } }),
+}).then(r => r.json());
+```

@@ -1,0 +1,170 @@
+# GraphQL Tools
+
+GraphQL tools execute custom GraphQL queries or mutations against a specified endpoint.
+They provide a structured way to interact with GraphQL APIs with full parameter mapping
+and result extraction.
+
+## Creating a GraphQL Tool
+
+### Via the UI
+
+1. Navigate to **Tools** and click **Create Tool**
+2. Select **GraphQL** as the execution method
+3. Enter the GraphQL endpoint URL
+4. Write your query or mutation
+5. Define input parameters that map to GraphQL variables
+6. Configure authentication headers
+
+### Via the API
+
+```bash
+curl -X POST https://api.apif.ai/organizations/{orgId}/tools \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "search_repositories",
+    "description": "Search GitHub repositories using GraphQL",
+    "type": "graphql",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string", "description": "Search query" },
+        "first": { "type": "integer", "description": "Number of results", "default": 10 }
+      },
+      "required": ["query"]
+    },
+    "executionConfig": {
+      "endpoint": "https://api.github.com/graphql",
+      "headers": {
+        "Authorization": "Bearer {{env.GITHUB_TOKEN}}"
+      },
+      "query": "query SearchRepos($query: String!, $first: Int!) { search(query: $query, type: REPOSITORY, first: $first) { repositoryCount edges { node { ... on Repository { name description stargazerCount url } } } } }",
+      "variables": {
+        "query": "{{parameters.query}}",
+        "first": "{{parameters.first}}"
+      }
+    }
+  }'
+```
+
+## Configuration
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `endpoint` | string | GraphQL API URL |
+| `headers` | object | Request headers (authentication, content-type, etc.) |
+| `query` | string | GraphQL query or mutation string |
+| `variables` | object | Variable mapping using template expressions |
+| `operationName` | string | Operation name (required for documents with multiple operations) |
+
+## Queries vs Mutations
+
+### Query Example
+
+```graphql
+query GetUser($id: ID!) {
+  user(id: $id) {
+    name
+    email
+    posts {
+      title
+      createdAt
+    }
+  }
+}
+```
+
+### Mutation Example
+
+```graphql
+mutation CreatePost($input: CreatePostInput!) {
+  createPost(input: $input) {
+    id
+    title
+    status
+  }
+}
+```
+
+With variables:
+
+```json
+{
+  "input": {
+    "title": "{{parameters.title}}",
+    "body": "{{parameters.body}}",
+    "published": true
+  }
+}
+```
+
+## Variable Mapping
+
+GraphQL variables are mapped from tool parameters using template expressions:
+
+```json
+{
+  "variables": {
+    "id": "{{parameters.userId}}",
+    "filters": {
+      "status": "{{parameters.status}}",
+      "limit": "{{parameters.limit}}"
+    }
+  }
+}
+```
+
+Type coercion happens automatically:
+- String parameters stay as strings
+- Numeric parameters are passed as numbers
+- Boolean parameters are passed as booleans
+- Object parameters are passed as nested objects
+
+## Authentication
+
+GraphQL endpoints typically use Bearer token authentication:
+
+```json
+{
+  "headers": {
+    "Authorization": "Bearer {{env.API_TOKEN}}",
+    "Content-Type": "application/json"
+  }
+}
+```
+
+For APIs requiring custom authentication schemes, add any headers you need.
+
+## Error Handling
+
+GraphQL APIs return errors in a specific format:
+
+```json
+{
+  "data": null,
+  "errors": [
+    {
+      "message": "Not found",
+      "locations": [{ "line": 2, "column": 3 }],
+      "path": ["user"]
+    }
+  ]
+}
+```
+
+apifai detects GraphQL errors and reports them as tool execution failures,
+including the error messages from the API.
+
+## Response Extraction
+
+By default, the entire `data` object from the GraphQL response is returned
+as the tool's result. For complex responses, you can use a Transform node
+in an agent pipeline to extract specific fields.
+
+## Best Practices
+
+1. **Use variables** — Never interpolate values directly into the query string
+2. **Name your operations** — Helps with debugging and server-side logging
+3. **Request only needed fields** — GraphQL's strength is selective field querying
+4. **Handle nullable fields** — Many GraphQL schemas have nullable fields by default
+5. **Test with GraphiQL** — Verify your queries work before creating tools

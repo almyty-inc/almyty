@@ -1,0 +1,157 @@
+# Skills Gateway
+
+The Skills gateway generates SKILL.md files following the [Agent Skills](https://agentskills.io)
+specification. Skills are markdown files that describe tool capabilities and can be
+automatically injected into 30+ AI agents.
+
+## Overview
+
+Agent Skills is a standard for describing AI tool capabilities in a human-readable
+markdown format. Each skill is a `SKILL.md` file that includes:
+
+- Tool name and description
+- Input parameters with types and examples
+- Authentication requirements
+- Endpoint information
+
+The apifai Skills CLI (`npx @apifai/skills`) handles installation and auto-injection
+into supported agents.
+
+## Creating a Skills Gateway
+
+```bash
+curl -X POST https://api.apif.ai/gateways \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Skills Gateway",
+    "type": "skills",
+    "endpoint": "/my-skills",
+    "configuration": {
+      "format": "skill-md"
+    }
+  }'
+```
+
+## SKILL.md Format
+
+Each tool assigned to a Skills gateway generates a SKILL.md file:
+
+```markdown
+---
+name: get_users
+description: Retrieve a list of users with pagination
+endpoint: https://api.apif.ai/utcp/acme/my-skills/tools/get_users/invoke
+method: POST
+auth: bearer
+---
+
+# get_users
+
+Retrieve a list of users with pagination.
+
+## Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| page | integer | no | Page number |
+| limit | integer | no | Items per page (default: 20) |
+
+## Example Request
+
+\`\`\`json
+{
+  "arguments": {
+    "page": 1,
+    "limit": 10
+  }
+}
+\`\`\`
+
+## Example Response
+
+\`\`\`json
+{
+  "users": [
+    { "id": "1", "name": "Alice" }
+  ],
+  "total": 42
+}
+\`\`\`
+```
+
+## Skills CLI
+
+Install and manage skills using the CLI:
+
+### Installation
+
+```bash
+# Install skills for a gateway
+npx @apifai/skills install @acme/my-skills
+
+# Watch mode — auto-updates when tools change
+npx @apifai/skills watch @acme/my-skills
+
+# List installed skills
+npx @apifai/skills list
+
+# Remove skills
+npx @apifai/skills remove @acme/my-skills
+```
+
+### Authentication
+
+```bash
+# Login to apifai
+npx @apifai/skills login
+
+# Login with a specific token
+npx @apifai/skills login --token your-api-key
+```
+
+### Supported Agents
+
+The Skills CLI auto-detects and injects SKILL.md files into:
+
+| Category | Agents |
+|----------|--------|
+| **IDE** | Cursor, Windsurf, VS Code (Copilot), JetBrains |
+| **AI Assistants** | Claude Desktop, ChatGPT, Gemini |
+| **Dev Tools** | GitHub Copilot CLI, Aider, Continue, Cody |
+| **Frameworks** | LangChain, LlamaIndex, AutoGPT, CrewAI |
+| **Others** | 20+ additional agents |
+
+The CLI writes SKILL.md files to the agent's skill directory and
+registers them for auto-loading.
+
+## Viewing Generated Skills
+
+```bash
+# Via API
+curl https://api.apif.ai/gateways/{id}/skills \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+The response contains the rendered SKILL.md content for all tools
+assigned to the gateway.
+
+## Daemon Mode
+
+Run the Skills CLI in daemon mode for continuous synchronization:
+
+```bash
+npx @apifai/skills watch @acme/my-skills
+```
+
+In watch mode, the CLI:
+1. Polls the gateway every 30 seconds for changes
+2. Updates SKILL.md files when tools are added, removed, or modified
+3. Notifies detected agents of the changes
+4. Logs activity to `~/.apifai/skills.log`
+
+Stop the daemon with Ctrl+C or:
+
+```bash
+npx @apifai/skills stop
+```

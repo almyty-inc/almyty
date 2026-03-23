@@ -1,0 +1,173 @@
+# Agents API
+
+Complete REST API reference for managing agents, invoking pipelines,
+and working with versions and executions.
+
+## Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/agents` | List all agents |
+| `POST` | `/agents` | Create a new agent |
+| `GET` | `/agents/:id` | Get agent by ID |
+| `PATCH` | `/agents/:id` | Update an agent |
+| `DELETE` | `/agents/:id` | Delete an agent |
+| `POST` | `/agents/:id/invoke` | Invoke an agent |
+| `POST` | `/agents/:id/activate` | Activate an agent |
+| `POST` | `/agents/:id/deactivate` | Deactivate an agent |
+| `POST` | `/agents/:id/duplicate` | Duplicate an agent |
+| `GET` | `/agents/:id/executions` | List executions |
+| `GET` | `/agents/:id/executions/:execId` | Get execution detail |
+| `GET` | `/agents/:id/versions` | List versions |
+| `POST` | `/agents/:id/versions` | Save a version |
+| `POST` | `/agents/:id/versions/:idx/rollback` | Rollback to version |
+| `GET` | `/agents/:id/export` | Export agent JSON |
+| `POST` | `/agents/import` | Import agent JSON |
+| `GET` | `/agents/templates` | List available templates |
+| `GET` | `/agents/:id/cost-estimate` | Get cost estimate |
+| `GET` | `/agents/:id/audit-log` | Get audit log |
+| `POST` | `/agents/:id/schedule` | Set schedule |
+| `DELETE` | `/agents/:id/schedule` | Remove schedule |
+
+## List Agents
+
+```bash
+curl https://api.apif.ai/agents \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Response
+
+```json
+{
+  "agents": [
+    {
+      "id": "agent-uuid",
+      "name": "Research Agent",
+      "description": "Searches and summarizes information",
+      "status": "active",
+      "pipeline": {
+        "nodes": [...],
+        "edges": [...]
+      },
+      "totalExecutions": 42,
+      "createdAt": "2026-03-01T10:00:00Z",
+      "updatedAt": "2026-03-20T14:30:00Z"
+    }
+  ]
+}
+```
+
+## Create Agent
+
+```bash
+curl -X POST https://api.apif.ai/agents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Agent",
+    "description": "Description of what this agent does",
+    "pipeline": {
+      "nodes": [
+        { "id": "input_1", "type": "input", "data": { "schema": { "type": "object", "properties": { "message": { "type": "string" } }, "required": ["message"] } } },
+        { "id": "llm_1", "type": "llm_call", "data": { "providerId": "prov-id", "userPromptTemplate": "{{input.message}}" } },
+        { "id": "output_1", "type": "output", "data": { "mapping": "{{nodes.llm_1.output}}" } }
+      ],
+      "edges": [
+        { "id": "e1", "source": "input_1", "target": "llm_1" },
+        { "id": "e2", "source": "llm_1", "target": "output_1" }
+      ]
+    }
+  }'
+```
+
+## Invoke Agent
+
+```bash
+curl -X POST https://api.apif.ai/agents/{id}/invoke \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": { "message": "What is the capital of France?" },
+    "options": {
+      "timeout": 30000,
+      "trace": true
+    }
+  }'
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `input` | object | Yes | Input data matching the agent's input schema |
+| `options.timeout` | number | No | Execution timeout in milliseconds |
+| `options.trace` | boolean | No | Include node-by-node execution trace |
+
+### Response
+
+```json
+{
+  "output": "The capital of France is Paris.",
+  "executionId": "exec-uuid",
+  "duration": 1250,
+  "tokensUsed": 85,
+  "trace": [
+    {
+      "nodeId": "input_1",
+      "type": "input",
+      "duration": 1,
+      "output": { "message": "What is the capital of France?" }
+    },
+    {
+      "nodeId": "llm_1",
+      "type": "llm_call",
+      "duration": 1245,
+      "output": "The capital of France is Paris.",
+      "tokensUsed": 85
+    },
+    {
+      "nodeId": "output_1",
+      "type": "output",
+      "duration": 1,
+      "output": "The capital of France is Paris."
+    }
+  ]
+}
+```
+
+## Get Executions
+
+```bash
+curl "https://api.apif.ai/agents/{id}/executions?limit=20&offset=0" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Query Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | integer | 20 | Number of executions to return |
+| `offset` | integer | 0 | Offset for pagination |
+| `status` | string | — | Filter by status: `success`, `failed`, `running` |
+| `trigger` | string | — | Filter by trigger: `manual`, `webhook`, `schedule` |
+
+## Save Version
+
+```bash
+curl -X POST https://api.apif.ai/agents/{id}/versions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "changelog": "Added error handling branch"
+  }'
+```
+
+## Rollback
+
+```bash
+curl -X POST https://api.apif.ai/agents/{id}/versions/{versionIndex}/rollback \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Replaces the agent's current pipeline with the snapshot from the specified version.

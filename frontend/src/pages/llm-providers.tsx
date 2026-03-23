@@ -783,8 +783,8 @@ export function LlmProvidersPage() {
     queryFn: async () => {
       try {
         const response = await llmProvidersApi.getAll()
-        // Backend returns: { success: true, data: { providers: [...], total: number } }
-        const d = response.data?.data || response.data
+        // Backend wrapper auto-unwrapped by interceptor
+        const d = response.data
         const result = d?.providers || (Array.isArray(d) ? d : [])
         return Array.isArray(result) ? result : []
       } catch (err) {
@@ -925,7 +925,7 @@ export function LlmProvidersPage() {
             ...(data.organizationId && { organizationId: data.organizationId })
           }
         })
-        return response.data?.data || response.data
+        return response.data
       } catch (error) {
         console.error('Create provider error:', error)
         throw error
@@ -1138,7 +1138,7 @@ export function LlmProvidersPage() {
                 setAvailableModels([])
                 try {
                   const res = await llmProvidersApi.getModels(provider.id)
-                  const models = res.data?.data || []
+                  const models = res.data || []
                   setAvailableModels(models)
                 } catch (err) {
                   console.warn('Failed to fetch models dynamically:', err)
@@ -1889,7 +1889,7 @@ export function LlmProvidersPage() {
                             sessionId: chatSessionId || undefined,
                           })
 
-                          const data = response.data?.data || response.data
+                          const data = response.data
                           const assistantMsg = data?.message
 
                           if (assistantMsg) {

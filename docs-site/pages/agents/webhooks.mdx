@@ -1,0 +1,112 @@
+# Webhooks
+
+Agents can be triggered via webhooks, allowing external systems to invoke
+agent pipelines through HTTP POST requests.
+
+## Enabling Webhooks
+
+Navigate to the agent detail page and enable the webhook trigger, or use the API:
+
+```bash
+curl -X PATCH https://api.apif.ai/agents/{id} \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "webhookEnabled": true
+  }'
+```
+
+When enabled, the agent receives a unique webhook URL:
+
+```
+https://api.apif.ai/agents/{id}/webhook
+```
+
+## Triggering via Webhook
+
+Send a POST request to the webhook URL with the agent's expected input:
+
+```bash
+curl -X POST https://api.apif.ai/agents/{id}/webhook \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Process this incoming data",
+    "payload": { "key": "value" }
+  }'
+```
+
+### Response
+
+Webhook invocations return immediately with an execution ID:
+
+```json
+{
+  "success": true,
+  "data": {
+    "executionId": "exec-uuid",
+    "status": "running"
+  }
+}
+```
+
+To get the result, poll the execution endpoint:
+
+```bash
+curl https://api.apif.ai/agents/{id}/executions/{executionId} \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Authentication
+
+Webhooks support two authentication methods:
+
+### Bearer Token
+
+Include the agent's webhook secret in the Authorization header:
+
+```bash
+curl -X POST https://api.apif.ai/agents/{id}/webhook \
+  -H "Authorization: Bearer {webhook-secret}" \
+  -H "Content-Type: application/json" \
+  -d '{ "message": "Hello" }'
+```
+
+### HMAC Signature
+
+For integrations that support webhook signatures (GitHub, Stripe, etc.),
+configure HMAC verification:
+
+| Header | Description |
+|--------|-------------|
+| `X-Webhook-Signature` | HMAC-SHA256 hex digest of the request body |
+
+```bash
+SIGNATURE=$(echo -n '{"message":"Hello"}' | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+
+curl -X POST https://api.apif.ai/agents/{id}/webhook \
+  -H "X-Webhook-Signature: sha256=$SIGNATURE" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Hello"}'
+```
+
+## Use Cases
+
+| Integration | Description |
+|-------------|-------------|
+| **GitHub** | Trigger agents on push, PR, or issue events |
+| **Stripe** | Process payment events with AI analysis |
+| **Slack** | Respond to messages or slash commands |
+| **Custom Apps** | Any system that can make HTTP POST requests |
+
+## Rate Limits
+
+Webhook endpoints are subject to rate limiting:
+
+| Tier | Requests/minute | Concurrent |
+|------|-----------------|------------|
+| Free | 10 | 2 |
+| Pro | 100 | 10 |
+| Enterprise | 1000 | 50 |
+
+Requests exceeding the limit receive a `429 Too Many Requests` response
+with a `Retry-After` header.

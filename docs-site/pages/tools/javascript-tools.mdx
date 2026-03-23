@@ -1,0 +1,169 @@
+# JavaScript Tools
+
+JavaScript tools execute custom JavaScript code in a sandboxed environment.
+They offer maximum flexibility for data transformation, computation, and
+complex logic that doesn't fit neatly into an HTTP request.
+
+## Creating a JavaScript Tool
+
+### Via the UI
+
+1. Navigate to **Tools** and click **Create Tool**
+2. Select **JavaScript** as the execution method
+3. Define input parameters using the JSON Schema builder
+4. Write your JavaScript code in the editor
+5. Test with sample inputs
+
+### Via the API
+
+```bash
+curl -X POST https://api.apif.ai/organizations/{orgId}/tools \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "calculate_discount",
+    "description": "Calculate discount price based on tier and quantity",
+    "type": "javascript",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "price": { "type": "number", "description": "Original price" },
+        "quantity": { "type": "integer", "description": "Number of items" },
+        "tier": {
+          "type": "string",
+          "enum": ["bronze", "silver", "gold"],
+          "description": "Customer tier"
+        }
+      },
+      "required": ["price", "quantity", "tier"]
+    },
+    "code": "const discounts = { bronze: 0.05, silver: 0.10, gold: 0.20 };\nconst discount = discounts[parameters.tier] || 0;\nconst subtotal = parameters.price * parameters.quantity;\nconst discountAmount = subtotal * discount;\nreturn { subtotal, discount: discountAmount, total: subtotal - discountAmount };"
+  }'
+```
+
+## Sandbox Environment
+
+JavaScript tools run in a secure sandbox with the following available:
+
+### Global Variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `parameters` | object | Input parameters passed to the tool |
+| `axios` | function | HTTP client for making external requests |
+| `console` | object | `console.log()` for debugging (logged but not returned) |
+
+### Available APIs
+
+- **`axios`** — Full axios HTTP client (GET, POST, PUT, DELETE, etc.)
+- **`JSON`** — Standard JSON.parse() and JSON.stringify()
+- **`Math`** — Standard Math object
+- **`Date`** — Standard Date constructor
+- **`Array`**, **`Object`**, **`String`** — Standard prototypes
+- **`RegExp`** — Regular expressions
+- **`Promise`** — Async/await support
+
+### Not Available
+
+For security, the following are restricted:
+
+- `require()` / `import` — No module loading
+- `process` — No access to the host process
+- `fs` — No filesystem access
+- `eval()` — No dynamic code evaluation
+- `Function()` constructor — No dynamic function creation
+- Network access is limited to `axios` only
+
+## Code Examples
+
+### Data Transformation
+
+```javascript
+const items = parameters.items;
+const sorted = items.sort((a, b) => b.score - a.score);
+const top5 = sorted.slice(0, 5);
+
+return {
+  topItems: top5.map(item => ({
+    name: item.name,
+    score: item.score,
+    rank: sorted.indexOf(item) + 1,
+  })),
+  totalItems: items.length,
+  averageScore: items.reduce((sum, i) => sum + i.score, 0) / items.length,
+};
+```
+
+### External API Call
+
+```javascript
+const response = await axios.get('https://api.example.com/data', {
+  params: { query: parameters.searchTerm },
+  headers: { 'Authorization': `Bearer ${parameters.apiKey}` },
+});
+
+const results = response.data.items.filter(
+  item => item.category === parameters.category
+);
+
+return {
+  results,
+  count: results.length,
+  source: 'example-api',
+};
+```
+
+### Text Processing
+
+```javascript
+const text = parameters.text;
+const words = text.split(/\s+/);
+const sentences = text.split(/[.!?]+/).filter(Boolean);
+
+const wordFreq = {};
+words.forEach(word => {
+  const lower = word.toLowerCase().replace(/[^a-z]/g, '');
+  if (lower) wordFreq[lower] = (wordFreq[lower] || 0) + 1;
+});
+
+const topWords = Object.entries(wordFreq)
+  .sort((a, b) => b[1] - a[1])
+  .slice(0, 10);
+
+return {
+  wordCount: words.length,
+  sentenceCount: sentences.length,
+  averageWordsPerSentence: Math.round(words.length / sentences.length),
+  topWords: topWords.map(([word, count]) => ({ word, count })),
+};
+```
+
+## Return Values
+
+The tool's return value becomes the execution result. You can return:
+
+- **Objects** — `return { key: "value" }`
+- **Arrays** — `return [1, 2, 3]`
+- **Strings** — `return "result text"`
+- **Numbers** — `return 42`
+- **null** — `return null`
+
+If no explicit `return` statement is present, the tool returns `undefined`.
+
+## Error Handling
+
+Throw errors to signal failures:
+
+```javascript
+if (!parameters.email.includes('@')) {
+  throw new Error('Invalid email address');
+}
+```
+
+Unhandled exceptions are caught and returned as error responses with
+the error message.
+
+## Timeout
+
+JavaScript tools have a default execution timeout of 30 seconds.
+Long-running operations should be optimized or split into multiple tools.

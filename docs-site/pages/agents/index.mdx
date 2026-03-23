@@ -1,0 +1,134 @@
+# Agents
+
+Agents in apifai are composable AI pipelines that orchestrate LLM calls, tool executions,
+conditional logic, and data transformations into repeatable workflows. Each agent is defined
+as a directed acyclic graph (DAG) of nodes connected by edges.
+
+## Key Concepts
+
+### Pipelines
+
+A pipeline is the core structure of an agent. It consists of:
+
+- **Nodes** — individual processing steps (LLM calls, tool invocations, transforms, etc.)
+- **Edges** — connections that define data flow between nodes
+
+Every pipeline starts with an **Input** node and ends with an **Output** node.
+Between them, you wire up any combination of the 9 available node types.
+
+### Execution Model
+
+When an agent is invoked, apifai:
+
+1. Validates the input against the Input node's schema
+2. Topologically sorts the pipeline nodes
+3. Executes each node in order, passing data along edges
+4. Resolves template expressions (`{{nodes.llm_1.output}}`) at runtime
+5. Returns the Output node's result
+
+Execution is synchronous by default. Each node runs only after all its
+upstream dependencies have completed.
+
+### Agent Lifecycle
+
+| Status | Description |
+|--------|-------------|
+| `draft` | Agent is being built, not yet invokable |
+| `active` | Agent is live and accepting invocations |
+| `inactive` | Agent is paused, invocations will be rejected |
+| `error` | Agent has a configuration issue |
+
+## Creating an Agent
+
+### Via the UI
+
+1. Navigate to **Agents** and click **Create Agent**
+2. Give it a name and optional description
+3. The default pipeline has Input -> LLM Call -> Output nodes
+4. Use the visual editor to add, remove, and connect nodes
+5. Configure each node by clicking on it in the canvas
+
+### Via the API
+
+```bash
+curl -X POST https://api.apif.ai/agents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Research Agent",
+    "description": "Searches and summarizes information",
+    "pipeline": {
+      "nodes": [
+        { "id": "input_1", "type": "input", "data": {
+          "schema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] }
+        }},
+        { "id": "llm_1", "type": "llm_call", "data": {
+          "providerId": "provider-uuid",
+          "systemPrompt": "You are a research assistant.",
+          "userPromptTemplate": "Research: {{input.query}}"
+        }},
+        { "id": "output_1", "type": "output", "data": {
+          "mapping": "{{nodes.llm_1.output}}"
+        }}
+      ],
+      "edges": [
+        { "id": "e1", "source": "input_1", "target": "llm_1" },
+        { "id": "e2", "source": "llm_1", "target": "output_1" }
+      ]
+    }
+  }'
+```
+
+### From a Template
+
+apifai ships with several built-in templates:
+
+| Template | Description |
+|----------|-------------|
+| **Simple Chat** | Input -> LLM -> Output. The simplest possible agent. |
+| **Research Agent** | Chains multiple LLM calls with web search tools. |
+| **Tool-Augmented** | LLM with tool calling for dynamic API interaction. |
+| **Multi-Step Pipeline** | Conditional branching with data transformations. |
+
+Select a template when creating an agent to get a pre-wired pipeline.
+
+## Invoking an Agent
+
+```bash
+curl -X POST https://api.apif.ai/agents/{id}/invoke \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": { "query": "What is the weather in Berlin?" }
+  }'
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "output": "The current weather in Berlin is 12°C with partly cloudy skies.",
+    "executionId": "exec-uuid",
+    "duration": 2340,
+    "tokensUsed": 156
+  }
+}
+```
+
+## Import & Export
+
+Export an agent as JSON for version control or sharing:
+
+```bash
+# Export
+curl https://api.apif.ai/agents/{id}/export \
+  -H "Authorization: Bearer $TOKEN" > agent.json
+
+# Import
+curl -X POST https://api.apif.ai/agents/import \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d @agent.json
+```

@@ -1,0 +1,162 @@
+# Tool Scoping
+
+Tool scoping controls which tools are exposed through each gateway.
+Not every tool needs to be available on every gateway — scoping lets you
+create purpose-specific gateways with carefully curated tool sets.
+
+## How It Works
+
+When you create a gateway, it starts with no tools assigned. You explicitly
+assign tools to control the gateway's surface area.
+
+Each assignment creates a `GatewayTool` record that links the tool to the
+gateway with optional per-gateway configuration.
+
+## Assigning Tools
+
+### Single Tool
+
+```bash
+curl -X POST https://api.apif.ai/gateways/{gatewayId}/tools \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "toolId": "tool-uuid"
+  }'
+```
+
+### Bulk Assignment
+
+```bash
+curl -X POST https://api.apif.ai/gateways/{gatewayId}/tools/bulk \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "toolIds": ["tool-1", "tool-2", "tool-3"]
+  }'
+```
+
+### Remove a Tool
+
+```bash
+curl -X DELETE https://api.apif.ai/gateways/{gatewayId}/tools/{toolId} \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Remove All Tools
+
+```bash
+curl -X DELETE https://api.apif.ai/gateways/{gatewayId}/tools \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Scoping Presets
+
+The UI provides quick presets for common scoping patterns:
+
+| Preset | Description |
+|--------|-------------|
+| **All** | Assign all available tools |
+| **None** | Remove all tool assignments |
+| **Read Only** | Assign only GET/query operations |
+| **Admin** | Assign all CRUD operations |
+| **Public** | Assign tools suitable for public access |
+
+### Using Presets via API
+
+Apply presets by filtering tools and using bulk assignment:
+
+```bash
+# Get all available tools
+TOOLS=$(curl -s https://api.apif.ai/gateways/{id}/tools/available \
+  -H "Authorization: Bearer $TOKEN")
+
+# Filter read-only tools (GET methods)
+READ_TOOLS=$(echo $TOOLS | jq '[.tools[] | select(.operation.method == "GET") | .id]')
+
+# Bulk assign
+curl -X POST https://api.apif.ai/gateways/{id}/tools/bulk \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"toolIds\": $READ_TOOLS}"
+```
+
+## Per-Gateway Tool Configuration
+
+Each tool assignment can have gateway-specific configuration:
+
+```bash
+curl -X PATCH https://api.apif.ai/gateways/{gatewayId}/tools/{gatewayToolId} \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "rateLimit": 100,
+    "securityPolicy": {
+      "requireAuth": true,
+      "allowedScopes": ["tools:execute"]
+    }
+  }'
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | boolean | Whether the tool is active on this gateway |
+| `rateLimit` | number | Max requests per minute for this tool |
+| `securityPolicy` | object | Gateway-specific security overrides |
+
+## Available Tools
+
+List all tools available for assignment (not yet assigned):
+
+```bash
+curl https://api.apif.ai/gateways/{gatewayId}/tools/available \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Gateway Tool Stats
+
+View usage statistics for tools on a gateway:
+
+```bash
+curl https://api.apif.ai/gateways/{gatewayId}/tools/stats \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "stats": [
+    {
+      "toolId": "tool-1",
+      "toolName": "get_users",
+      "totalCalls": 1250,
+      "successRate": 98.4,
+      "avgDuration": 234,
+      "lastCalledAt": "2026-03-23T10:30:00Z"
+    }
+  ]
+}
+```
+
+## Common Patterns
+
+### Read-Only Public Gateway
+
+Expose only safe, read operations to the public:
+- Assign only GET/query tools
+- Enable API key auth
+- Set rate limits per tool
+
+### Internal Admin Gateway
+
+Full CRUD access for internal tooling:
+- Assign all tools
+- Require Bearer token auth
+- No rate limits
+
+### Per-Team Gateways
+
+Create separate gateways for different teams:
+- Marketing team gets analytics and content tools
+- Engineering team gets deployment and monitoring tools
+- Each gateway has its own API keys

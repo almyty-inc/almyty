@@ -536,7 +536,7 @@ export function ToolsPage() {
     }
   })
 
-  const tools = toolsData?.data?.data?.tools || []
+  const tools = toolsData?.data?.tools || []
   const filteredTools = tools.filter(tool => {
     const matchesSearch = tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (tool.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||

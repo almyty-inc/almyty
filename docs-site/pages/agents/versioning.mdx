@@ -1,0 +1,93 @@
+# Versioning & Rollback
+
+apifai tracks versions of your agent pipelines, allowing you to save snapshots,
+compare changes, and rollback to a previous configuration.
+
+## Saving a Version
+
+Each time you save an agent, you can optionally create a named version snapshot:
+
+```bash
+curl -X POST https://api.apif.ai/agents/{id}/versions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "changelog": "Added error handling branch and retry logic"
+  }'
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "versionIndex": 3,
+    "changelog": "Added error handling branch and retry logic",
+    "createdAt": "2026-03-20T14:30:00Z",
+    "pipeline": { ... }
+  }
+}
+```
+
+## Listing Versions
+
+```bash
+curl https://api.apif.ai/agents/{id}/versions \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Returns an array of version snapshots, each containing:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `versionIndex` | number | Sequential version number |
+| `changelog` | string | Description of changes |
+| `createdAt` | string | ISO 8601 timestamp |
+| `pipeline` | object | Full pipeline snapshot at that version |
+
+## Rolling Back
+
+To restore a previous version:
+
+```bash
+curl -X POST https://api.apif.ai/agents/{id}/versions/{versionIndex}/rollback \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Rollback replaces the agent's current pipeline with the snapshot from the
+specified version. The rollback itself is recorded in the audit log.
+
+**Important:** Rollback does not delete newer versions. You can always
+roll forward to a later version if needed.
+
+## Audit Log
+
+Every change to an agent is recorded in the audit log:
+
+```bash
+curl https://api.apif.ai/agents/{id}/audit-log \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Events tracked:
+
+| Event | Description |
+|-------|-------------|
+| `created` | Agent was created |
+| `updated` | Pipeline or metadata was modified |
+| `activated` | Agent status changed to active |
+| `deactivated` | Agent status changed to inactive |
+| `version_saved` | A version snapshot was created |
+| `rolled_back` | Pipeline was restored from a previous version |
+| `invoked` | Agent was executed |
+
+Each entry includes the timestamp, the user who performed the action,
+and relevant metadata about the change.
+
+## Best Practices
+
+1. **Save versions before major changes** — Create a snapshot before restructuring the pipeline
+2. **Write meaningful changelogs** — Future you will thank present you
+3. **Test after rollback** — Verify the agent works correctly with the restored pipeline
+4. **Use the audit log** — Review the history to understand how an agent evolved

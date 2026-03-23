@@ -64,7 +64,7 @@ export function GatewaysPage() {
     enabled: !!currentOrganization,
   })
 
-  const gatewaysExtracted = gatewaysData?.data?.data?.gateways || gatewaysData?.data?.data || []
+  const gatewaysExtracted = gatewaysData?.data?.gateways || gatewaysData?.data || []
   const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
 
   const filteredGateways = gateways.filter((gateway: Gateway) => {
@@ -275,7 +275,7 @@ export function GatewaysPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Gateways</h1>
           <p className="text-muted-foreground">
-            {gateways.length} gateways ({gateways.filter((g: Gateway) => g.status === 'active').length} active) &middot; {gateways.reduce((sum: number, g: Gateway) => sum + (g.tools?.length || 0), 0)} tool assignments
+            {isLoading ? 'Loading...' : `${gateways.length} gateways (${gateways.filter((g: Gateway) => g.status === 'active').length} active) \u00B7 ${gateways.reduce((sum: number, g: Gateway) => sum + (g.tools?.length || 0), 0)} tool assignments`}
           </p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>

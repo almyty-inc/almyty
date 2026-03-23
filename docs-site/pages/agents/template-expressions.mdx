@@ -1,0 +1,118 @@
+# Template Expressions
+
+Template expressions allow nodes in an agent pipeline to reference data from
+the input or from other nodes' outputs. They use the `{{...}}` syntax and are
+resolved at runtime just before each node executes.
+
+## Syntax
+
+```
+{{source.path.to.value}}
+```
+
+All expressions are wrapped in double curly braces. The first segment identifies
+the data source, and subsequent segments navigate into the data structure using
+dot notation.
+
+## Data Sources
+
+### Input Data
+
+Reference the agent's invocation input:
+
+```
+{{input.message}}          // Top-level property
+{{input.user.name}}        // Nested property
+{{input.items[0].title}}   // Array access
+```
+
+### Node Outputs
+
+Reference the output of any upstream node by its ID:
+
+```
+{{nodes.llm_1.output}}          // Full output of node llm_1
+{{nodes.tool_1.output.data}}    // Nested property
+{{nodes.transform_1.output}}    // Transform result
+```
+
+### Loop Context
+
+Inside a Loop node's body, access iteration data:
+
+```
+{{loop.item}}         // Current item being iterated
+{{loop.index}}        // Zero-based index
+{{loop.item.name}}    // Property of the current item
+```
+
+## Examples
+
+### Simple String Interpolation
+
+```
+You asked: {{input.message}}
+```
+
+Resolves to: `You asked: What is the weather?`
+
+### Composing Multi-Node Data
+
+```
+Based on the search results ({{nodes.tool_1.output.count}} found),
+here is a summary: {{nodes.llm_1.output}}
+```
+
+### JSON Construction in Transform Nodes
+
+```javascript
+const query = "{{input.query}}";
+const results = {{nodes.tool_1.output}};
+return {
+  query,
+  resultCount: results.length,
+  summary: results.map(r => r.title).join(", ")
+};
+```
+
+## Type Handling
+
+Template expressions resolve to the actual JavaScript type of the referenced value:
+
+| Expression Target | Resolved Type |
+|-------------------|--------------|
+| String property | `string` |
+| Number property | `number` |
+| Object | `object` (JSON) |
+| Array | `array` (JSON) |
+| Boolean property | `boolean` |
+| Null/undefined | `null` |
+
+When an expression is used inside a string (like a prompt template), non-string
+values are automatically serialized to JSON.
+
+When an expression is the entire value of a field (like a Transform node's input),
+the original type is preserved.
+
+## Error Handling
+
+If a template expression references a node that:
+
+- **Does not exist** — Pipeline validation will catch this before execution
+- **Has not executed yet** — Topological sorting ensures this cannot happen for valid pipelines
+- **Returned an error** — The downstream node will receive `null` and the execution log records the failure
+
+To handle optional data, use JavaScript in Transform nodes:
+
+```javascript
+const data = {{nodes.tool_1.output}};
+const name = data?.name || "Unknown";
+return { name };
+```
+
+## Best Practices
+
+1. **Keep expressions simple** — Use Transform nodes for complex data manipulation
+2. **Validate your schema** — Define Input node schemas to catch bad data early
+3. **Use meaningful node IDs** — `search_api` is clearer than `tool_1` in expressions
+4. **Test incrementally** — Use the agent test panel to verify expressions resolve correctly

@@ -1,0 +1,140 @@
+# A2A Gateway
+
+The Agent-to-Agent (A2A) gateway implements Google's A2A protocol, enabling
+multi-agent systems where AI agents can discover and communicate with each
+other through standardized interfaces.
+
+## Overview
+
+A2A (Agent-to-Agent) is a protocol designed for agent interoperability.
+It allows agents to:
+
+- Discover other agents and their capabilities
+- Send tasks to remote agents
+- Receive structured results
+
+apifai A2A gateways expose your tools as agent capabilities that other
+A2A-compatible agents can invoke.
+
+## Creating an A2A Gateway
+
+```bash
+curl -X POST https://api.apif.ai/gateways \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My A2A Agent",
+    "type": "a2a",
+    "endpoint": "/my-agent",
+    "configuration": {
+      "agentCapabilities": {
+        "streaming": false,
+        "pushNotifications": false
+      }
+    }
+  }'
+```
+
+## Agent Card
+
+Every A2A gateway automatically generates an Agent Card at:
+
+```
+https://api.apif.ai/a2a/{org-slug}{endpoint}/.well-known/agent.json
+```
+
+The Agent Card describes the agent's capabilities:
+
+```json
+{
+  "name": "My A2A Agent",
+  "description": "Tools exposed via A2A protocol",
+  "url": "https://api.apif.ai/a2a/acme/my-agent",
+  "version": "1.0.0",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "skills": [
+    {
+      "id": "get_users",
+      "name": "Get Users",
+      "description": "Retrieve a list of users"
+    }
+  ]
+}
+```
+
+## Sending Tasks
+
+Other agents send tasks to your A2A gateway:
+
+```bash
+curl -X POST https://api.apif.ai/a2a/acme/my-agent \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tasks/send",
+    "params": {
+      "id": "task-uuid",
+      "message": {
+        "role": "user",
+        "parts": [
+          { "type": "text", "text": "Get me the list of active users" }
+        ]
+      }
+    },
+    "id": 1
+  }'
+```
+
+### Response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "id": "task-uuid",
+    "status": {
+      "state": "completed"
+    },
+    "artifacts": [
+      {
+        "parts": [
+          { "type": "text", "text": "Found 42 active users..." }
+        ]
+      }
+    ]
+  },
+  "id": 1
+}
+```
+
+## Task Lifecycle
+
+| State | Description |
+|-------|-------------|
+| `submitted` | Task received and queued |
+| `working` | Task is being processed |
+| `completed` | Task finished successfully |
+| `failed` | Task execution failed |
+| `canceled` | Task was canceled |
+
+## Discovery
+
+A2A agents discover each other through Agent Cards. Register your gateway's
+Agent Card URL with other agents to enable inter-agent communication.
+
+## Supported A2A Methods
+
+| Method | Description |
+|--------|-------------|
+| `tasks/send` | Send a new task to the agent |
+| `tasks/get` | Get the status of a task |
+| `tasks/cancel` | Cancel a running task |
+
+## Use Cases
+
+- **Multi-agent orchestration** — Chain multiple specialized agents
+- **Agent marketplace** — Expose tools as discoverable agent services
+- **Cross-platform interop** — Connect agents built on different frameworks

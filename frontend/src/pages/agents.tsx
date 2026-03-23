@@ -118,7 +118,7 @@ export function AgentsPage() {
     queryKey: ['agents', currentOrganization?.id],
     queryFn: async () => {
       const response = await agentsApi.getAll()
-      const d = response.data?.data || response.data
+      const d = response.data
       const result = d?.agents || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
@@ -130,7 +130,7 @@ export function AgentsPage() {
     queryKey: ['agent-templates'],
     queryFn: async () => {
       const response = await agentsApi.getTemplates()
-      return response.data?.data || []
+      return response.data || []
     },
     enabled: !!currentOrganization,
   })
@@ -258,7 +258,7 @@ export function AgentsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
           <p className="text-muted-foreground">
-            {agents.length} agents ({activeCount} active)
+            {isLoading ? 'Loading...' : `${agents.length} agents (${activeCount} active)`}
           </p>
         </div>
         <div className="flex items-center gap-2">

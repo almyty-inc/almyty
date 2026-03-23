@@ -1,0 +1,182 @@
+# OpenAI Compatible API
+
+apifai agents can be invoked using an OpenAI-compatible chat completions API.
+This means any application that works with the OpenAI API can be pointed at
+an apifai agent without code changes.
+
+## Endpoint
+
+```
+POST https://api.apif.ai/agents/{agentId}/v1/chat/completions
+```
+
+## Request Format
+
+The request follows the OpenAI chat completions format:
+
+```bash
+curl -X POST https://api.apif.ai/agents/{agentId}/v1/chat/completions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "agent",
+    "messages": [
+      { "role": "system", "content": "You are a helpful assistant." },
+      { "role": "user", "content": "What is the weather in Berlin?" }
+    ],
+    "temperature": 0.7,
+    "max_tokens": 1024,
+    "stream": false
+  }'
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `model` | string | Yes | Use `"agent"` or the agent name |
+| `messages` | array | Yes | Array of message objects with `role` and `content` |
+| `temperature` | number | No | Override the agent's default temperature |
+| `max_tokens` | number | No | Override the agent's default max tokens |
+| `stream` | boolean | No | Enable streaming responses (SSE) |
+| `tools` | array | No | Additional tool definitions (merged with agent tools) |
+
+### Message Roles
+
+| Role | Description |
+|------|-------------|
+| `system` | System instructions (overrides agent's system prompt if provided) |
+| `user` | User message |
+| `assistant` | Previous assistant response (for multi-turn conversations) |
+
+## Response Format
+
+### Non-Streaming
+
+```json
+{
+  "id": "chatcmpl-uuid",
+  "object": "chat.completion",
+  "created": 1711234567,
+  "model": "agent",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The current weather in Berlin is 12°C with partly cloudy skies."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 25,
+    "completion_tokens": 18,
+    "total_tokens": 43
+  }
+}
+```
+
+### Streaming
+
+When `stream: true`, the response uses Server-Sent Events:
+
+```
+data: {"id":"chatcmpl-uuid","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-uuid","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"The "},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-uuid","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"current "},"finish_reason":null}]}
+
+data: [DONE]
+```
+
+## Tool Calling
+
+If the agent has tools configured, the response may include tool calls:
+
+```json
+{
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_uuid",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"city\": \"Berlin\"}"
+            }
+          }
+        ]
+      },
+      "finish_reason": "tool_calls"
+    }
+  ]
+}
+```
+
+Submit tool results back:
+
+```json
+{
+  "messages": [
+    { "role": "user", "content": "What is the weather?" },
+    { "role": "assistant", "tool_calls": [...] },
+    {
+      "role": "tool",
+      "tool_call_id": "call_uuid",
+      "content": "{\"temperature\": 12, \"condition\": \"partly cloudy\"}"
+    }
+  ]
+}
+```
+
+## Integration Examples
+
+### Python (openai library)
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.apif.ai/agents/{agentId}/v1",
+    api_key="your-apifai-token",
+)
+
+response = client.chat.completions.create(
+    model="agent",
+    messages=[
+        {"role": "user", "content": "Summarize today's news"}
+    ],
+)
+
+print(response.choices[0].message.content)
+```
+
+### JavaScript (openai library)
+
+```javascript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://api.apif.ai/agents/{agentId}/v1",
+  apiKey: "your-apifai-token",
+});
+
+const response = await client.chat.completions.create({
+  model: "agent",
+  messages: [{ role: "user", content: "Summarize today's news" }],
+});
+
+console.log(response.choices[0].message.content);
+```
+
+## Limitations
+
+- The `model` parameter is accepted but ignored — the agent's configured LLM provider is always used
+- Function calling follows the agent's pipeline, not ad-hoc function definitions
+- Token limits are subject to the configured LLM provider's constraints

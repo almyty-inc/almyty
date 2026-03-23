@@ -124,7 +124,7 @@ export function AgentDetailPage() {
     queryKey: ['agent', id],
     queryFn: async () => {
       const res = await agentsApi.getById(id!)
-      return res.data?.data || res.data
+      return res.data || res.data
     },
     enabled: !!id,
   })
@@ -136,7 +136,7 @@ export function AgentDetailPage() {
     queryKey: ['agent-executions', id],
     queryFn: async () => {
       const res = await agentsApi.getExecutions(id!, { limit: 20 })
-      const d = res.data?.data || res.data
+      const d = res.data
       return Array.isArray(d) ? d : d?.executions || []
     },
     enabled: !!id,
@@ -149,7 +149,7 @@ export function AgentDetailPage() {
     queryKey: ['agent-versions', id],
     queryFn: async () => {
       const res = await agentsApi.getVersions(id!)
-      return res.data?.data || []
+      return res.data || []
     },
     enabled: !!id,
   })
@@ -161,7 +161,7 @@ export function AgentDetailPage() {
     queryKey: ['agent-cost-estimate', id],
     queryFn: async () => {
       const res = await agentsApi.getCostEstimate(id!)
-      return res.data?.data || null
+      return res.data || null
     },
     enabled: !!id,
   })
@@ -173,7 +173,7 @@ export function AgentDetailPage() {
     queryKey: ['agent-audit-log', id],
     queryFn: async () => {
       const res = await agentsApi.getAuditLog(id!)
-      return res.data?.data || []
+      return res.data || []
     },
     enabled: !!id,
   })
@@ -228,7 +228,7 @@ export function AgentDetailPage() {
         throw new Error('Invalid JSON input')
       }
       const res = await agentsApi.invoke(id!, input)
-      return res.data?.data || res.data
+      return res.data || res.data
     },
     onSuccess: (result) => {
       setInvokeResult(result)
@@ -275,7 +275,7 @@ export function AgentDetailPage() {
   const handleExport = async () => {
     try {
       const res = await agentsApi.exportAgent(id!)
-      const exportData = res.data?.data || res.data
+      const exportData = res.data || res.data
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -459,7 +459,7 @@ export function AgentDetailPage() {
                       setTestOutput(null)
                       agentsApi.invoke(agent.id, { message: testInput })
                         .then((res: any) => {
-                          const output = res.data?.data?.output || res.data?.output || JSON.stringify(res.data)
+                          const output = res.data?.output || JSON.stringify(res.data)
                           setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
                           setTestInput('')
                         })
@@ -480,7 +480,7 @@ export function AgentDetailPage() {
                     setTestOutput(null)
                     agentsApi.invoke(agent.id, { message: testInput })
                       .then((res: any) => {
-                        const output = res.data?.data?.output || res.data?.output || JSON.stringify(res.data)
+                        const output = res.data?.output || JSON.stringify(res.data)
                         setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
                         setTestInput('')
                       })

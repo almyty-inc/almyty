@@ -1,0 +1,242 @@
+# Node Types
+
+apifai agents support 9 node types. Each node performs a specific function
+within the pipeline and can be connected to other nodes via edges.
+
+## Input Node
+
+The entry point of every pipeline. Defines the JSON Schema that incoming
+data must conform to.
+
+**Configuration:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `schema` | JSON Schema | Defines the shape of accepted input |
+
+```json
+{
+  "id": "input_1",
+  "type": "input",
+  "data": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "message": { "type": "string" },
+        "context": { "type": "string" }
+      },
+      "required": ["message"]
+    }
+  }
+}
+```
+
+Every pipeline must have exactly one Input node. Access its data in templates
+via `{{input.message}}` or `{{input.context}}`.
+
+## Output Node
+
+The exit point of the pipeline. Maps the final result from upstream nodes.
+
+**Configuration:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `mapping` | Template string | Expression resolving to the output value |
+
+```json
+{
+  "id": "output_1",
+  "type": "output",
+  "data": {
+    "mapping": "{{nodes.llm_1.output}}"
+  }
+}
+```
+
+Every pipeline must have exactly one Output node.
+
+## LLM Call Node
+
+Sends a prompt to a configured LLM provider and returns the response.
+
+**Configuration:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `providerId` | string | — | ID of the LLM provider to use |
+| `model` | string | Provider default | Specific model (e.g., `gpt-4o`, `claude-sonnet-4-20250514`) |
+| `systemPrompt` | string | — | System prompt for the LLM |
+| `userPromptTemplate` | string | — | User prompt with template expressions |
+| `temperature` | number | `0.7` | Sampling temperature (0-2) |
+| `maxTokens` | number | `1024` | Maximum tokens in the response |
+| `toolIds` | string[] | `[]` | Tool IDs to make available for function calling |
+
+```json
+{
+  "id": "llm_1",
+  "type": "llm_call",
+  "data": {
+    "providerId": "provider-uuid",
+    "model": "gpt-4o",
+    "systemPrompt": "You are a helpful assistant.",
+    "userPromptTemplate": "Answer this: {{input.message}}",
+    "temperature": 0.5,
+    "maxTokens": 2048,
+    "toolIds": ["tool-1", "tool-2"]
+  }
+}
+```
+
+When `toolIds` are provided, the LLM can invoke those tools during execution.
+The tool call results are fed back to the LLM automatically.
+
+## Tool Call Node
+
+Directly invokes a tool with explicit parameter mapping.
+
+**Configuration:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `toolId` | string | ID of the tool to execute |
+| `parameterMapping` | array | Maps template expressions to tool parameters |
+
+```json
+{
+  "id": "tool_1",
+  "type": "tool_call",
+  "data": {
+    "toolId": "tool-uuid",
+    "parameterMapping": [
+      { "key": "query", "value": "{{input.message}}" },
+      { "key": "limit", "value": "10" }
+    ]
+  }
+}
+```
+
+The result is available downstream as `{{nodes.tool_1.output}}`.
+
+## Condition Node
+
+Branches the pipeline based on a boolean expression.
+
+**Configuration:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `expression` | string | JavaScript expression that evaluates to true/false |
+
+```json
+{
+  "id": "cond_1",
+  "type": "condition",
+  "data": {
+    "expression": "{{nodes.llm_1.output}}.includes('error')"
+  }
+}
+```
+
+A Condition node has two outgoing edges: one for `true` and one for `false`.
+Connect each branch to different downstream nodes.
+
+## Transform Node
+
+Applies a JavaScript transformation to data flowing through the pipeline.
+
+**Configuration:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `code` | string | JavaScript code that processes input and returns output |
+
+```json
+{
+  "id": "transform_1",
+  "type": "transform",
+  "data": {
+    "code": "const data = {{nodes.tool_1.output}};\nreturn data.map(item => item.name).join(', ');"
+  }
+}
+```
+
+Transform nodes run in a sandboxed environment. They receive the resolved
+template values and must return a value.
+
+## Loop Node
+
+Iterates over an array, executing a sub-pipeline for each item.
+
+**Configuration:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `iterableExpression` | string | Template expression resolving to an array |
+| `maxIterations` | number | Safety limit for iteration count (default: 100) |
+
+```json
+{
+  "id": "loop_1",
+  "type": "loop",
+  "data": {
+    "iterableExpression": "{{nodes.tool_1.output.items}}",
+    "maxIterations": 50
+  }
+}
+```
+
+Inside the loop body, access the current item as `{{loop.item}}` and the
+index as `{{loop.index}}`.
+
+## Parallel Node
+
+Executes multiple downstream branches simultaneously and aggregates results.
+
+**Configuration:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `branches` | string[] | IDs of downstream nodes to run in parallel |
+| `aggregation` | string | How to combine results: `array`, `object`, or `first` |
+
+```json
+{
+  "id": "parallel_1",
+  "type": "parallel",
+  "data": {
+    "branches": ["llm_1", "llm_2", "tool_1"],
+    "aggregation": "array"
+  }
+}
+```
+
+Results are available as `{{nodes.parallel_1.output}}`, which is an array
+or object depending on the aggregation strategy.
+
+## Sub-Agent Node
+
+Invokes another agent as a step within this pipeline.
+
+**Configuration:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `agentId` | string | ID of the agent to invoke |
+| `inputMapping` | array | Maps expressions to the sub-agent's input schema |
+
+```json
+{
+  "id": "sub_1",
+  "type": "sub_agent",
+  "data": {
+    "agentId": "agent-uuid",
+    "inputMapping": [
+      { "key": "query", "value": "{{nodes.llm_1.output}}" }
+    ]
+  }
+}
+```
+
+The sub-agent's output is available as `{{nodes.sub_1.output}}`. This enables
+composable, modular agent architectures.
