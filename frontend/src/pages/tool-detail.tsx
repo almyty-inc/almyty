@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, BookOpen, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, BookOpen, Copy, Check, ChevronRight } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -102,6 +102,13 @@ export function ToolDetailPage() {
 
   return (
     <div className="space-y-8">
+      {/* Breadcrumbs */}
+      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+        <Link to="/tools" className="hover:text-foreground">Tools</Link>
+        <ChevronRight className="h-3 w-3" />
+        <span className="text-foreground">{tool.name}</span>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -365,7 +372,7 @@ export function ToolDetailPage() {
                     </Badge>
                   </div>
 
-                  <div className={executionResult.success ? 'bg-green-50 border border-green-200 rounded p-4' : 'bg-red-50 border border-red-200 rounded p-4'}>
+                  <div className={executionResult.success ? 'bg-green-500/10 border border-green-500/20 rounded p-4' : 'bg-red-500/10 border border-red-500/20 rounded p-4'}>
                     {executionResult.success ? (
                       <div>
                         <p className="text-sm font-medium mb-3">Response Data:</p>
@@ -380,10 +387,10 @@ export function ToolDetailPage() {
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        <p className="text-sm text-red-900 font-medium">Execution Failed</p>
+                        <p className="text-sm text-destructive font-medium">Execution Failed</p>
                         <div className="space-y-3 text-xs">
                           <div className="bg-background/50 p-3 rounded space-y-2">
-                            <p className="text-red-700"><strong>Error:</strong> {executionResult.error || executionResult.message || 'Unknown error'}</p>
+                            <p className="text-destructive"><strong>Error:</strong> {executionResult.error || executionResult.message || 'Unknown error'}</p>
                             {executionResult.statusCode && (
                               <p><strong>HTTP Status:</strong> {executionResult.statusCode}</p>
                             )}

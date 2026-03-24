@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Upload, Zap, Copy, Code, Globe, Database, Cloud, Server, TestTube, Edit, Plus, Trash2, Key, Shield, Check,
-  Search, ExternalLink
+  Search, ExternalLink, ChevronRight
 } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -474,6 +474,13 @@ export function ApiDetailPage() {
 
   return (
     <div className="space-y-8">
+      {/* Breadcrumbs */}
+      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+        <Link to="/apis" className="hover:text-foreground">APIs</Link>
+        <ChevronRight className="h-3 w-3" />
+        <span className="text-foreground">{api.name}</span>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">

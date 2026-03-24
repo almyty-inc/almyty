@@ -30,7 +30,7 @@ export function SettingsPage() {
       </div>
 
       <Tabs defaultValue="organization" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList>
           <TabsTrigger value="organization">Organization</TabsTrigger>
           <TabsTrigger value="members">Members & Teams</TabsTrigger>
           <TabsTrigger value="profile">Profile</TabsTrigger>
@@ -71,7 +71,7 @@ function OrganizationTab({ organization }: { organization: any }) {
     enabled: !!organization?.id,
   })
 
-  const fullOrg = orgDetails?.data || organization
+  const fullOrg = orgDetails?.data || orgDetails || organization
 
   // Initialize form values when organization data loads
   React.useEffect(() => {
@@ -183,7 +183,7 @@ function OrganizationTab({ organization }: { organization: any }) {
         <div>
           <label className="text-sm font-medium text-muted-foreground">Created</label>
           <div className="text-sm mt-1">
-            {fullOrg.createdAt ? new Date(fullOrg.createdAt).toLocaleDateString() : 'Unknown'}
+            {(fullOrg.createdAt || fullOrg.created_at) ? new Date(fullOrg.createdAt || fullOrg.created_at).toLocaleDateString() : 'Unknown'}
           </div>
         </div>
       </CardContent>

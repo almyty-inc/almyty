@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ReactFlow,
@@ -28,6 +28,7 @@ import {
   Webhook,
   Timer,
   Save,
+  ChevronRight,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -315,6 +316,13 @@ export function AgentDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumbs */}
+      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+        <Link to="/agents" className="hover:text-foreground">Agents</Link>
+        <ChevronRight className="h-3 w-3" />
+        <span className="text-foreground">{agent.name}</span>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">

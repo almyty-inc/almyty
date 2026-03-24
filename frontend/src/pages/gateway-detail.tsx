@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { ArrowLeft, Router, Copy, Zap, Edit2, Settings, BookOpen, Check, Package, Shield, Plus, Trash2, Key, Lock } from 'lucide-react'
+import { ArrowLeft, Router, Copy, Zap, Edit2, Settings, BookOpen, Check, Package, Shield, Plus, Trash2, Key, Lock, ChevronRight } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -1138,6 +1138,13 @@ export function GatewayDetailPage() {
 
   return (
     <div className="space-y-8">
+      {/* Breadcrumbs */}
+      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+        <Link to="/gateways" className="hover:text-foreground">Gateways</Link>
+        <ChevronRight className="h-3 w-3" />
+        <span className="text-foreground">{gateway.name}</span>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
