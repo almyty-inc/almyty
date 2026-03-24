@@ -21,10 +21,11 @@ test.describe('Organizations - Management', () => {
   })
 
   test('should edit organization name and description', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
-    // Get current organization
+    // Get current organization (interceptor unwraps {success, data} so we get the array directly)
     const orgs = await apiHelper.getOrganizations()
-    if (orgs.data && orgs.data.length > 0) {
-      const org = orgs.data[0]
+    const orgsList = Array.isArray(orgs) ? orgs : (orgs?.data || orgs?.organizations || [])
+    if (orgsList.length > 0) {
+      const org = orgsList[0]
 
       // Click edit
       await page.getByRole('button', { name: /edit.*organization|settings/i }).click()

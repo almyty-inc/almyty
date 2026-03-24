@@ -475,7 +475,7 @@ describe('AgentsController', () => {
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Version saved successfully');
-      expect(agentsService.saveVersion).toHaveBeenCalledWith('agent-1', 'org-1', 'Added new node');
+      expect(agentsService.saveVersion).toHaveBeenCalledWith('agent-1', 'org-1', 'Added new node', 'user-1');
     });
   });
 
@@ -504,7 +504,7 @@ describe('AgentsController', () => {
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAgent);
       expect(result.message).toBe('Agent rolled back successfully');
-      expect(agentsService.rollbackToVersion).toHaveBeenCalledWith('agent-1', 'org-1', 0);
+      expect(agentsService.rollbackToVersion).toHaveBeenCalledWith('agent-1', 'org-1', 0, 'user-1');
     });
 
     it('should throw for invalid version index', async () => {

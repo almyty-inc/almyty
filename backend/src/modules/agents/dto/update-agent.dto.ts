@@ -1,11 +1,17 @@
 import { IsString, IsOptional, IsObject, IsEnum, IsUrl } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { AgentStatus } from '../../../entities/agent.entity';
 
+const stripHtml = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
+
 export class UpdateAgentDto {
+  @Transform(stripHtml)
   @IsOptional()
   @IsString()
   name?: string;
 
+  @Transform(stripHtml)
   @IsOptional()
   @IsString()
   description?: string;

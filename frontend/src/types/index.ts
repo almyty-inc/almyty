@@ -444,6 +444,79 @@ export interface PaginatedResponse<T> {
   totalPages: number
 }
 
+// Entity-specific paginated responses matching backend shapes
+export interface PaginatedTools {
+  tools: Tool[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface PaginatedGateways {
+  gateways: Gateway[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface PaginatedApis {
+  apis: Api[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface PaginatedAgents {
+  data: Agent[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface PaginatedAgentExecutions {
+  data: AgentExecution[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface PaginatedLlmProviders {
+  providers: LlmProvider[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface PaginatedUsers {
+  users: User[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface PaginatedGatewayTools {
+  gatewayTools: GatewayTool[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface PaginatedSessions {
+  sessions: LlmSession[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
 export interface Dashboard {
   totalRequests: number
   totalUsers: number

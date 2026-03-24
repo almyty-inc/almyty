@@ -157,13 +157,17 @@ export class GatewayProtocolService {
       }
 
       // Route to appropriate protocol handler
+      let response: ProtocolResponse;
       switch (gateway.type) {
         case GatewayType.MCP:
-          return this.handleMCPRequest(gateway, request);
+          response = await this.handleMCPRequest(gateway, request);
+          break;
         case GatewayType.A2A:
-          return this.handleA2ARequest(gateway, request);
+          response = await this.handleA2ARequest(gateway, request);
+          break;
         case GatewayType.UTCP:
-          return this.handleUTCPRequest(gateway, request);
+          response = await this.handleUTCPRequest(gateway, request);
+          break;
         default:
           return {
             success: false,
@@ -173,6 +177,16 @@ export class GatewayProtocolService {
             },
           };
       }
+
+      // Update gateway request metrics
+      try {
+        gateway.incrementRequest(response.success);
+        await this.gatewayRepository.save(gateway);
+      } catch (metricsError) {
+        this.logger.error(`Failed to update gateway metrics: ${metricsError.message}`);
+      }
+
+      return response;
     } catch (error) {
       this.logger.error(`Protocol request error: ${error.message}`, error.stack);
       return {

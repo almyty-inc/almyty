@@ -32,18 +32,22 @@ export const useAuthStore = create<AuthState>()(
           const response = await authApi.login({ email, password })
           const { accessToken } = response
 
+          // Token is now set as httpOnly cookie by the backend.
+          // We no longer store it in localStorage to prevent XSS access.
+          // Keep localStorage token temporarily for backward compat during transition.
           localStorage.setItem('token', accessToken)
 
           // Fetch user profile to populate organization data
+          // (cookie is already set, so this request will authenticate via cookie)
           const profileResponse = await authApi.getProfile()
-          const user = profileResponse.data.data
-          
+          const user = profileResponse
+
           localStorage.setItem('user', JSON.stringify(user))
-          
+
           // Initialize organization store from user data
           const { initializeFromUser } = useOrganizationStore.getState()
           initializeFromUser(user)
-          
+
           set({
             user,
             token: accessToken,
@@ -62,18 +66,19 @@ export const useAuthStore = create<AuthState>()(
           const response = await authApi.register({ email, password, firstName, lastName, organizationName })
           const { accessToken } = response
 
+          // Token is now set as httpOnly cookie by the backend.
           localStorage.setItem('token', accessToken)
 
           // Fetch user profile to populate organization data
           const profileResponse = await authApi.getProfile()
-          const user = profileResponse.data.data
-          
+          const user = profileResponse
+
           localStorage.setItem('user', JSON.stringify(user))
-          
+
           // Initialize organization store from user data
           const { initializeFromUser } = useOrganizationStore.getState()
           initializeFromUser(user)
-          
+
           set({
             user,
             token: accessToken,
@@ -87,9 +92,14 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // Call backend to clear the httpOnly cookie
+        authApi.logout().catch(() => {
+          // Best-effort — even if the call fails, clear local state
+        })
+
         localStorage.removeItem('token')
         localStorage.removeItem('user')
-        
+
         set({
           user: null,
           token: null,
@@ -101,7 +111,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await authApi.updateProfile(data)
           const updatedUser = response
-          
+
           localStorage.setItem('user', JSON.stringify(updatedUser))
           set({ user: updatedUser })
         } catch (error) {
@@ -110,8 +120,13 @@ export const useAuthStore = create<AuthState>()(
       },
 
       checkAuth: async () => {
+        // With httpOnly cookies, we check auth by attempting to fetch the profile.
+        // The cookie is sent automatically — no need to check localStorage for token.
+        const { user: persistedUser } = get()
         const token = localStorage.getItem('token')
-        if (!token) {
+
+        // If no persisted user AND no token, skip the network call
+        if (!persistedUser && !token) {
           set({ isAuthenticated: false, user: null, token: null })
           return
         }
@@ -128,7 +143,7 @@ export const useAuthStore = create<AuthState>()(
 
           set({
             user,
-            token,
+            token: token || null,
             isAuthenticated: true,
           })
         } catch (error) {

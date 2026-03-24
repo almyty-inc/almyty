@@ -4,8 +4,24 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Request } from 'express';
 import { User } from '../../../entities/user.entity';
 import { JwtPayload } from '../auth.service';
+
+/**
+ * Extract JWT from httpOnly cookie first, then fall back to Authorization header.
+ * This keeps backward compatibility with Bearer token auth for programmatic clients
+ * while allowing the web UI to use secure httpOnly cookies.
+ */
+function extractJwtFromCookieOrHeader(req: Request): string | null {
+  // 1. Try httpOnly cookie
+  if (req.cookies?.access_token) {
+    return req.cookies.access_token;
+  }
+  // 2. Fall back to Authorization: Bearer <token> header
+  const extractor = ExtractJwt.fromAuthHeaderAsBearerToken();
+  return extractor(req);
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -15,7 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private userRepository: Repository<User>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: extractJwtFromCookieOrHeader,
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('JWT_SECRET'),
     });

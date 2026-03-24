@@ -1,12 +1,17 @@
 import { IsString, IsOptional, IsUrl, MinLength, MaxLength, IsObject } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrganizationSettings } from '../../../entities/organization.entity';
+
+const stripHtml = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
 
 export class CreateOrganizationDto {
   @ApiProperty({
     description: 'Organization name',
     example: 'Acme Corporation',
   })
+  @Transform(stripHtml)
   @IsString()
   @MinLength(1)
   @MaxLength(100)
@@ -16,6 +21,7 @@ export class CreateOrganizationDto {
     description: 'Organization URL slug (auto-generated if not provided)',
     example: 'acme-corp',
   })
+  @Transform(stripHtml)
   @IsOptional()
   @IsString()
   @MinLength(1)
@@ -26,6 +32,7 @@ export class CreateOrganizationDto {
     description: 'Organization description',
     example: 'Leading provider of innovative solutions',
   })
+  @Transform(stripHtml)
   @IsOptional()
   @IsString()
   @MaxLength(500)

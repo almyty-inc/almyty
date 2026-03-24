@@ -16,10 +16,13 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 second timeout
+  timeout: 30000,
+  withCredentials: true, // Send cookies for httpOnly JWT auth
 })
 
-// Add auth token to requests
+// Add auth token to requests (fallback for programmatic/transition use).
+// Primary auth is via httpOnly cookie sent automatically with withCredentials: true.
+// The Bearer header is only added if a token exists in localStorage (legacy/API client compat).
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) {
@@ -68,6 +71,8 @@ api.interceptors.response.use(
       localStorage.removeItem('user')
       // Also clear persisted Zustand auth store
       localStorage.removeItem('auth-storage')
+      // Clear httpOnly cookie via backend (best-effort, don't block redirect)
+      api.post('/auth/logout').catch(() => {})
       window.location.href = '/auth/login'
       return Promise.reject(error)
     }

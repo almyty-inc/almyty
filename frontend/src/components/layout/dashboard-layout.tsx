@@ -184,7 +184,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           )}
 
           {/* Navigation */}
-          <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+          <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto" aria-label="Main navigation">
             {navigation.map((item) => {
               const isActive = location.pathname === item.href
               return (
@@ -263,6 +263,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               variant="ghost"
               size="icon"
               onClick={toggleSidebar}
+              aria-label="Toggle navigation menu"
             >
               <Menu className="h-6 w-6" />
             </Button>

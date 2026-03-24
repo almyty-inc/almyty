@@ -1,6 +1,9 @@
 import { IsString, IsOptional, IsEnum, IsObject, IsNumber, IsBoolean, ValidateNested, Matches } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { ApiType } from '../../../entities/api.entity';
+
+const stripHtml = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
 
 export class AuthenticationConfigDto {
   @IsEnum(['none', 'api_key', 'bearer', 'basic', 'oauth2'])
@@ -25,9 +28,11 @@ export class RateLimitsDto {
 }
 
 export class CreateApiDto {
+  @Transform(stripHtml)
   @IsString()
   name: string;
 
+  @Transform(stripHtml)
   @IsOptional()
   @IsString()
   description?: string;
@@ -71,10 +76,12 @@ export class CreateApiDto {
 }
 
 export class UpdateApiDto {
+  @Transform(stripHtml)
   @IsOptional()
   @IsString()
   name?: string;
 
+  @Transform(stripHtml)
   @IsOptional()
   @IsString()
   description?: string;
@@ -125,6 +132,7 @@ export class ImportSchemaDto {
   @IsString()
   schemaUrl?: string;
 
+  @Transform(stripHtml)
   @IsOptional()
   @IsString()
   description?: string;

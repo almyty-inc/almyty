@@ -728,7 +728,8 @@ export class AgentsController {
         );
       }
 
-      await this.agentsService.saveVersion(id, organizationId, body?.changelog);
+      const userId = req.user.sub || req.user.id;
+      await this.agentsService.saveVersion(id, organizationId, body?.changelog, userId);
 
       return {
         success: true,
@@ -813,7 +814,8 @@ export class AgentsController {
         );
       }
 
-      const agent = await this.agentsService.rollbackToVersion(id, organizationId, versionIndex);
+      const userId = req.user.sub || req.user.id;
+      const agent = await this.agentsService.rollbackToVersion(id, organizationId, versionIndex, userId);
 
       return {
         success: true,
@@ -911,6 +913,70 @@ export class AgentsController {
   }
 
   // ── Scheduling ──
+
+  @Patch(':id/schedule')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Enable/disable agent schedule and update interval' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiBody({ description: 'Schedule configuration: enabled, intervalMinutes, and optional input' })
+  @ApiResponse({ status: 200, description: 'Agent schedule updated successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid schedule configuration' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
+  async updateSchedule(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { enabled: boolean; intervalMinutes?: number; input?: Record<string, any> },
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (body.enabled) {
+        const intervalMinutes = body.intervalMinutes;
+        if (!intervalMinutes || intervalMinutes < 1) {
+          throw new HttpException(
+            { success: false, message: 'intervalMinutes must be at least 1 when enabling schedule', error: 'INVALID_INTERVAL' },
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        const agent = await this.schedulerService.scheduleAgent(
+          id,
+          organizationId,
+          intervalMinutes,
+          body.input || {},
+        );
+
+        return {
+          success: true,
+          data: agent,
+          message: `Agent scheduled to run every ${intervalMinutes} minute(s)`,
+        };
+      } else {
+        const agent = await this.schedulerService.unscheduleAgent(id, organizationId);
+
+        return {
+          success: true,
+          data: agent,
+          message: 'Agent schedule disabled',
+        };
+      }
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'SCHEDULE_UPDATE_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
 
   @Post(':id/schedule')
   @Roles('admin', 'owner')
