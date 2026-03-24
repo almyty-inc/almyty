@@ -45,6 +45,16 @@ interface DataTableProps<TData, TValue> {
   hideColumnsButton?: boolean
   headerExtra?: React.ReactNode
   hidePaginationWhenSinglePage?: boolean
+  /** Enable server-side pagination. When true, pagination is managed externally. */
+  manualPagination?: boolean
+  /** Total page count (required when manualPagination is true) */
+  pageCount?: number
+  /** Current page index, 0-based (required when manualPagination is true) */
+  pageIndex?: number
+  /** Callback when page changes (required when manualPagination is true) */
+  onPageChange?: (pageIndex: number) => void
+  /** Page size for manual pagination (default: 10) */
+  pageSize?: number
 }
 
 export function DataTable<TData, TValue>({
@@ -58,6 +68,11 @@ export function DataTable<TData, TValue>({
   hideColumnsButton = false,
   headerExtra,
   hidePaginationWhenSinglePage = true,
+  manualPagination = false,
+  pageCount,
+  pageIndex,
+  onPageChange,
+  pageSize = 10,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -70,7 +85,14 @@ export function DataTable<TData, TValue>({
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    ...(manualPagination
+      ? {
+          manualPagination: true,
+          pageCount: pageCount ?? -1,
+        }
+      : {
+          getPaginationRowModel: getPaginationRowModel(),
+        }),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
@@ -80,7 +102,21 @@ export function DataTable<TData, TValue>({
       columnFilters,
       columnVisibility,
       rowSelection,
+      ...(manualPagination && pageIndex !== undefined
+        ? { pagination: { pageIndex, pageSize } }
+        : {}),
     },
+    ...(manualPagination && onPageChange
+      ? {
+          onPaginationChange: (updater: any) => {
+            const newState =
+              typeof updater === "function"
+                ? updater({ pageIndex: pageIndex ?? 0, pageSize })
+                : updater
+            onPageChange(newState.pageIndex)
+          },
+        }
+      : {}),
   })
 
   return (
@@ -203,7 +239,11 @@ export function DataTable<TData, TValue>({
               {table.getFilteredRowModel().rows.length} row(s) selected.
             </div>
           )}
-          {hideSelectionCount && <div className="flex-1" />}
+          {hideSelectionCount && manualPagination && pageCount !== undefined && pageIndex !== undefined ? (
+            <div className="flex-1 text-sm text-muted-foreground">
+              Page {pageIndex + 1} of {pageCount}
+            </div>
+          ) : hideSelectionCount ? <div className="flex-1" /> : null}
           <div className="space-x-2">
             <Button
               variant="outline"

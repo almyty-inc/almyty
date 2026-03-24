@@ -7,11 +7,25 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
 
+// Sentry error tracking — enabled when VITE_SENTRY_DSN is configured
+if (import.meta.env.VITE_SENTRY_DSN) {
+  // @ts-ignore — @sentry/react is optional, installed only when DSN configured
+  import('@sentry/react').then((Sentry: any) => {
+    Sentry.init({
+      dsn: import.meta.env.VITE_SENTRY_DSN,
+      environment: import.meta.env.MODE || 'development',
+    })
+  }).catch(() => {
+    // @sentry/react not installed — skip initialization
+  })
+}
+
 // Create a client
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
+      staleTime: 30000, // 30 seconds before refetch
+      gcTime: 5 * 60 * 1000, // keep unused data 5 minutes
       retry: 1,
       refetchOnWindowFocus: false,
     },
