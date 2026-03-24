@@ -417,6 +417,56 @@ export class AgentsController {
     }
   }
 
+  @Post(':id/duplicate')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Duplicate agent' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiResponse({ status: 201, description: 'Agent duplicated successfully' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
+  async duplicateAgent(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const original = await this.agentsService.findOne(id, organizationId);
+      if (!original) {
+        throw new HttpException(
+          { success: false, message: 'Agent not found', error: 'NOT_FOUND' },
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      const duplicate = await this.agentsService.create({
+        name: `${original.name} (Copy)`,
+        description: original.description,
+        pipeline: original.pipeline,
+        variables: original.variables,
+        settings: original.settings,
+        status: 'draft',
+      } as any, organizationId, req.user.id);
+
+      return {
+        success: true,
+        data: duplicate,
+        message: 'Agent duplicated successfully',
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { success: false, message: error.message, error: 'AGENT_DUPLICATION_FAILED' },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   @Post(':id/invoke')
   @Roles('member', 'admin', 'owner')
   @Throttle({ default: { ttl: 60000, limit: 30 } })
