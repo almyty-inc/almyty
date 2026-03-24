@@ -53,6 +53,8 @@ export function GatewaysPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [toolSearch, setToolSearch] = useState('')
+  const [toolFilter, setToolFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
 
   const { currentOrganization } = useOrganizationStore()
   const { success, error: errorNotif } = useNotifications()
@@ -64,7 +66,7 @@ export function GatewaysPage() {
     enabled: !!currentOrganization,
   })
 
-  const gatewaysExtracted = gatewaysData?.data?.gateways || gatewaysData?.data || []
+  const gatewaysExtracted = gatewaysData?.gateways || []
   const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
 
   // Tool scoping queries
@@ -81,11 +83,11 @@ export function GatewaysPage() {
   })
 
   const gatewayTools = (() => {
-    const raw = gatewayToolsData?.data?.gatewayTools || gatewayToolsData?.data?.tools || gatewayToolsData?.data || gatewayToolsData || []
+    const raw = gatewayToolsData?.gatewayTools || gatewayToolsData?.tools || []
     return Array.isArray(raw) ? raw : []
   })()
   const allTools = (() => {
-    const raw = allToolsData?.data?.tools || allToolsData?.data || allToolsData || []
+    const raw = allToolsData?.tools || []
     return Array.isArray(raw) ? raw : []
   })()
 
@@ -163,8 +165,7 @@ export function GatewaysPage() {
   // Create gateway mutation
   const createGatewayMutation = useMutation({
     mutationFn: async (payload: CreateGatewayForm & { configuration: Record<string, unknown> }) => {
-      const response = await gatewaysApi.create(payload)
-      return response.data
+      return await gatewaysApi.create(payload)
     },
     onSuccess: async (result) => {
       // Show success message first
@@ -568,42 +569,70 @@ export function GatewaysPage() {
               <TabsContent value="tools" className="space-y-4 mt-4">
                 <div>
                   <h3 className="font-semibold mb-2">Tool Scoping</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Control which tools are available through this gateway
+                  <p className="text-sm text-muted-foreground mb-2">
+                    {assignedToolIds.size} of {allTools.length} tools assigned
                   </p>
-                  <div className="text-sm mb-4">{assignedToolIds.size} of {allTools.length} assigned</div>
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                    {allTools.map((tool: any) => {
-                      const isAssigned = assignedToolIds.has(tool.id)
-                      return (
-                        <div key={tool.id} className="flex items-center justify-between py-2 px-3 rounded-md border">
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium text-sm truncate">{tool.name}</div>
-                            {tool.description && (
-                              <div className="text-xs text-muted-foreground truncate">{tool.description}</div>
-                            )}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search tools..."
+                        value={toolSearch}
+                        onChange={(e) => setToolSearch(e.target.value)}
+                        className="pl-8 h-9"
+                      />
+                    </div>
+                    <Select value={toolFilter} onValueChange={(v) => setToolFilter(v as 'all' | 'assigned' | 'unassigned')}>
+                      <SelectTrigger className="w-[130px] h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="assigned">Assigned</SelectItem>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5 max-h-[350px] overflow-y-auto">
+                    {(() => {
+                      const filtered = allTools.filter((tool: any) => {
+                        const isAssigned = assignedToolIds.has(tool.id)
+                        const matchesSearch = !toolSearch || tool.name.toLowerCase().includes(toolSearch.toLowerCase()) || (tool.description || '').toLowerCase().includes(toolSearch.toLowerCase())
+                        const matchesFilter = toolFilter === 'all' || (toolFilter === 'assigned' && isAssigned) || (toolFilter === 'unassigned' && !isAssigned)
+                        return matchesSearch && matchesFilter
+                      })
+                      if (filtered.length === 0) {
+                        return <p className="text-sm text-muted-foreground text-center py-4">{allTools.length === 0 ? 'No tools available. Create tools first.' : 'No tools match your filter.'}</p>
+                      }
+                      return filtered.map((tool: any) => {
+                        const isAssigned = assignedToolIds.has(tool.id)
+                        return (
+                          <div key={tool.id} className={`flex items-center justify-between py-2 px-3 rounded-md border ${isAssigned ? 'border-primary/30 bg-primary/5' : ''}`}>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-sm truncate">{tool.name}</div>
+                              {tool.description && (
+                                <div className="text-xs text-muted-foreground truncate">{tool.description}</div>
+                              )}
+                            </div>
+                            <Button
+                              variant={isAssigned ? 'destructive' : 'outline'}
+                              size="sm"
+                              className="ml-2 shrink-0"
+                              disabled={assignToolMutation.isPending || removeToolMutation.isPending}
+                              onClick={() => {
+                                if (isAssigned) {
+                                  removeToolMutation.mutate(tool.id)
+                                } else {
+                                  assignToolMutation.mutate(tool.id)
+                                }
+                              }}
+                            >
+                              {isAssigned ? 'Remove' : 'Assign'}
+                            </Button>
                           </div>
-                          <Button
-                            variant={isAssigned ? 'destructive' : 'outline'}
-                            size="sm"
-                            className="ml-2 shrink-0"
-                            disabled={assignToolMutation.isPending || removeToolMutation.isPending}
-                            onClick={() => {
-                              if (isAssigned) {
-                                removeToolMutation.mutate(tool.id)
-                              } else {
-                                assignToolMutation.mutate(tool.id)
-                              }
-                            }}
-                          >
-                            {isAssigned ? 'Remove' : 'Assign'}
-                          </Button>
-                        </div>
-                      )
-                    })}
-                    {allTools.length === 0 && (
-                      <p className="text-sm text-muted-foreground text-center py-4">No tools available. Create tools first.</p>
-                    )}
+                        )
+                      })
+                    })()}
                   </div>
                 </div>
               </TabsContent>

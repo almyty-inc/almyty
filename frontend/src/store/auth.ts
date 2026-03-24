@@ -30,13 +30,13 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true })
         try {
           const response = await authApi.login({ email, password })
-          const { accessToken } = response.data
-          
+          const { accessToken } = response
+
           localStorage.setItem('token', accessToken)
-          
+
           // Fetch user profile to populate organization data
           const profileResponse = await authApi.getProfile()
-          const user = profileResponse.data
+          const user = profileResponse.data.data
           
           localStorage.setItem('user', JSON.stringify(user))
           
@@ -60,13 +60,13 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true })
         try {
           const response = await authApi.register({ email, password, firstName, lastName, organizationName })
-          const { accessToken } = response.data
-          
+          const { accessToken } = response
+
           localStorage.setItem('token', accessToken)
-          
+
           // Fetch user profile to populate organization data
           const profileResponse = await authApi.getProfile()
-          const user = profileResponse.data
+          const user = profileResponse.data.data
           
           localStorage.setItem('user', JSON.stringify(user))
           
@@ -100,7 +100,7 @@ export const useAuthStore = create<AuthState>()(
       updateProfile: async (data: Partial<User>) => {
         try {
           const response = await authApi.updateProfile(data)
-          const updatedUser = response.data
+          const updatedUser = response
           
           localStorage.setItem('user', JSON.stringify(updatedUser))
           set({ user: updatedUser })
@@ -118,14 +118,14 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const response = await authApi.getProfile()
-          const user = response.data
-          
+          const user = response
+
           localStorage.setItem('user', JSON.stringify(user))
-          
+
           // Initialize organization store from user data
           const { initializeFromUser } = useOrganizationStore.getState()
           initializeFromUser(user)
-          
+
           set({
             user,
             token,

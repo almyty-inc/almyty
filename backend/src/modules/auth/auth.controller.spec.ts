@@ -49,7 +49,8 @@ describe('AuthController', () => {
       const result = await controller.checkOrganizationName('Available Name');
 
       expect(result).toEqual({
-        available: true,
+        success: true,
+        data: { available: true },
         message: 'Organization name is available',
       });
     });
@@ -60,7 +61,8 @@ describe('AuthController', () => {
       const result = await controller.checkOrganizationName('Taken Name');
 
       expect(result).toEqual({
-        available: false,
+        success: true,
+        data: { available: false },
         message: 'Organization name is already taken',
       });
     });
@@ -103,8 +105,9 @@ describe('AuthController', () => {
       const result = await controller.register(createUserDto);
 
       expect(result).toEqual({
-        ...mockTokens,
-        message: 'User registered successfully',
+        success: true,
+        data: mockTokens,
+        message: 'Registration successful',
       });
     });
   });
@@ -125,7 +128,11 @@ describe('AuthController', () => {
 
       const result = await controller.login(mockRequest);
 
-      expect(result).toBe(mockTokens);
+      expect(result).toEqual({
+        success: true,
+        data: mockTokens,
+        message: 'Login successful',
+      });
     });
   });
 
@@ -143,7 +150,11 @@ describe('AuthController', () => {
 
       const result = await controller.refresh(refreshToken);
 
-      expect(result).toBe(mockTokens);
+      expect(result).toEqual({
+        success: true,
+        data: mockTokens,
+        message: 'Token refreshed successfully',
+      });
     });
 
     it('should throw error when refresh token is missing', async () => {
@@ -183,10 +194,12 @@ describe('AuthController', () => {
 
       const result = await controller.getProfile(mockUser);
 
-      expect(result.id).toBe('user-1');
-      expect(result.email).toBe('test@example.com');
-      expect('passwordHash' in result).toBe(false);
-      expect(result.organizationMemberships).toHaveLength(1);
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('Profile retrieved successfully');
+      expect(result.data.id).toBe('user-1');
+      expect(result.data.email).toBe('test@example.com');
+      expect('passwordHash' in result.data).toBe(false);
+      expect(result.data.organizationMemberships).toHaveLength(1);
     });
 
     it('should return profile without memberships when undefined', async () => {
@@ -202,8 +215,9 @@ describe('AuthController', () => {
 
       const result = await controller.getProfile(mockUser);
 
-      expect(result.id).toBe('user-1');
-      expect(result.organizationMemberships).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.data.id).toBe('user-1');
+      expect(result.data.organizationMemberships).toBeUndefined();
     });
 
     it('should return profile with empty memberships array', async () => {
@@ -220,8 +234,9 @@ describe('AuthController', () => {
 
       const result = await controller.getProfile(mockUser);
 
-      expect(result.id).toBe('user-1');
-      expect(result.organizationMemberships).toEqual([]);
+      expect(result.success).toBe(true);
+      expect(result.data.id).toBe('user-1');
+      expect(result.data.organizationMemberships).toEqual([]);
     });
   });
 
@@ -257,8 +272,9 @@ describe('AuthController', () => {
 
       const result = await controller.createApiKey(mockUser, createApiKeyDto);
 
+      expect(result.success).toBe(true);
       expect(result.message).toBe('API key created successfully');
-      expect(result.apiKey).toBe('api-key-value');
+      expect(result.data.apiKey).toBe('api-key-value');
     });
   });
 
@@ -268,6 +284,8 @@ describe('AuthController', () => {
 
       const result = await controller.forgotPassword('test@example.com');
 
+      expect(result.success).toBe(true);
+      expect(result.data).toBeNull();
       expect(result.message).toBe('If a user with this email exists, a password reset link has been sent.');
     });
 
@@ -290,6 +308,8 @@ describe('AuthController', () => {
 
       const result = await controller.resetPassword('reset-token', 'newpassword');
 
+      expect(result.success).toBe(true);
+      expect(result.data).toBeNull();
       expect(result.message).toBe('Password reset successfully');
     });
 
@@ -322,6 +342,8 @@ describe('AuthController', () => {
 
       const result = await controller.changePassword(mockUser, 'oldpass', 'newpass');
 
+      expect(result.success).toBe(true);
+      expect(result.data).toBeNull();
       expect(result.message).toBe('Password changed successfully');
     });
 
@@ -357,6 +379,8 @@ describe('AuthController', () => {
 
       const result = await controller.verifyEmail('verify-token');
 
+      expect(result.success).toBe(true);
+      expect(result.data).toBeNull();
       expect(result.message).toBe('Email verified successfully');
     });
 
@@ -403,7 +427,9 @@ describe('AuthController', () => {
 
       const result = await controller.getApiKeys(mockUser);
 
-      expect(result.apiKeys).toEqual(mockApiKeys);
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('API keys retrieved successfully');
+      expect(result.data.apiKeys).toEqual(mockApiKeys);
       expect(authService.getUserApiKeys).toHaveBeenCalledWith('user-1');
     });
   });
@@ -416,6 +442,8 @@ describe('AuthController', () => {
 
       const result = await controller.revokeApiKey(mockUser, 'key-1');
 
+      expect(result.success).toBe(true);
+      expect(result.data).toBeNull();
       expect(result.message).toBe('API key revoked successfully');
       expect(authService.revokeApiKey).toHaveBeenCalledWith('key-1', 'user-1');
     });

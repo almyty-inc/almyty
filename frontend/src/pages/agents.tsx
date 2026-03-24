@@ -117,8 +117,7 @@ export function AgentsPage() {
   const { data: agentsData, isLoading } = useQuery({
     queryKey: ['agents', currentOrganization?.id],
     queryFn: async () => {
-      const response = await agentsApi.getAll()
-      const d = response.data
+      const d = await agentsApi.getAll()
       const result = d?.agents || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
@@ -129,8 +128,8 @@ export function AgentsPage() {
   const { data: templatesData } = useQuery({
     queryKey: ['agent-templates'],
     queryFn: async () => {
-      const response = await agentsApi.getTemplates()
-      return response.data || []
+      const d = await agentsApi.getTemplates()
+      return d || []
     },
     enabled: !!currentOrganization,
   })
@@ -163,8 +162,7 @@ export function AgentsPage() {
         description: data.description || undefined,
         pipeline: DEFAULT_PIPELINE,
       }
-      const response = await agentsApi.create(payload, currentOrganization?.id)
-      return response.data
+      return agentsApi.create(payload, currentOrganization?.id)
     },
     onSuccess: async (result) => {
       success('Agent Created', `${createForm.getValues('name')} is ready to configure.`)
@@ -233,8 +231,7 @@ export function AgentsPage() {
   const importAgentMutation = useMutation({
     mutationFn: async (jsonStr: string) => {
       const data = JSON.parse(jsonStr)
-      const response = await agentsApi.importAgent(data)
-      return response.data
+      return agentsApi.importAgent(data)
     },
     onSuccess: async () => {
       success('Agent Imported', 'Agent has been imported successfully.')

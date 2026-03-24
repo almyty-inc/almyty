@@ -126,15 +126,23 @@ describe('Complete apifai System (e2e)', () => {
         .send(testUser)
         .expect(201);
 
-      expect(response.body.user).toBeDefined();
-      expect(response.body.token).toBeDefined();
-      expect(response.body.user.organizationMemberships).toBeDefined();
-      expect(response.body.user.organizationMemberships.length).toBeGreaterThan(0);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.accessToken).toBeDefined();
 
-      authToken = response.body.token;
-      organizationId = response.body.user.organizationMemberships[0].organizationId;
+      authToken = response.body.data.accessToken;
 
       expect(authToken).toMatch(/^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/); // JWT format
+
+      // Fetch profile to get organization membership
+      const profileRes = await request(app.getHttpServer())
+        .get('/auth/profile')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(profileRes.body.data.organizationMemberships).toBeDefined();
+      expect(profileRes.body.data.organizationMemberships.length).toBeGreaterThan(0);
+
+      organizationId = profileRes.body.data.organizationMemberships[0].organization.id;
       expect(organizationId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/); // UUID format
     });
 
@@ -694,8 +702,7 @@ describe('Complete apifai System (e2e)', () => {
         .send(secondUser)
         .expect(201);
 
-      const secondToken = registerResponse.body.token;
-      const secondOrgId = registerResponse.body.user.organizationMemberships[0].organizationId;
+      const secondToken = registerResponse.body.data.accessToken;
 
       // Second user shouldn't see first user's APIs
       const apisResponse = await request(app.getHttpServer())

@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
+// No global response interceptor — each controller is responsible for consistent {success, data} format
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { RequestLog } from './entities/request-log.entity';
 import { UsageMetric } from './entities/usage-metric.entity';

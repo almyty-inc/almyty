@@ -509,8 +509,8 @@ describe('All Parser Types — Full Pipeline E2E (Live Backend)', () => {
     // Register (returns accessToken directly)
     const reg = await api('POST', '/auth/register', testUser);
     console.log(`Register status: ${reg.status}, keys: ${Object.keys(reg.body).join(', ')}`);
-    if (reg.body.accessToken) {
-      authToken = reg.body.accessToken;
+    if (reg.body.data?.accessToken) {
+      authToken = reg.body.data.accessToken;
     }
 
     // Login if register failed (user exists) or didn't return token
@@ -520,7 +520,7 @@ describe('All Parser Types — Full Pipeline E2E (Live Backend)', () => {
         password: testUser.password,
       });
       console.log(`Login status: ${login.status}, keys: ${Object.keys(login.body).join(', ')}`);
-      authToken = login.body.accessToken;
+      authToken = login.body.data?.accessToken;
     }
 
     if (!authToken) {

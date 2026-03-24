@@ -91,7 +91,7 @@ describe('MonitoringController', () => {
 
       const result = await controller.getMetrics(mockRequest as any);
 
-      expect(result).toBe(mockMetrics);
+      expect(result).toEqual({ success: true, data: mockMetrics, message: 'Latest metrics retrieved successfully' });
       expect(monitoringService.getLatestMetrics).toHaveBeenCalled();
     });
   });
@@ -108,7 +108,7 @@ describe('MonitoringController', () => {
 
       const result = await controller.getMetricsHistory(24, mockRequest as any);
 
-      expect(result).toBe(mockHistory);
+      expect(result).toEqual({ success: true, data: mockHistory, message: 'Metrics history retrieved successfully' });
       expect(monitoringService.getMetricsHistory).toHaveBeenCalledWith(24);
     });
   });
@@ -125,7 +125,7 @@ describe('MonitoringController', () => {
 
       const result = await controller.getAlerts(mockRequest as any);
 
-      expect(result).toBe(mockAlerts);
+      expect(result).toEqual({ success: true, data: mockAlerts, message: 'Active alerts retrieved successfully' });
       expect(monitoringService.getActiveAlerts).toHaveBeenCalled();
     });
   });
@@ -139,6 +139,8 @@ describe('MonitoringController', () => {
       const result = await controller.resolveAlert('alert-1', mockRequest as any);
 
       expect(result).toEqual({
+        success: true,
+        data: null,
         message: 'Alert resolved successfully',
       });
       expect(monitoringService.resolveAlert).toHaveBeenCalledWith('alert-1', 'user-1');
@@ -192,16 +194,20 @@ describe('MonitoringController', () => {
       const result = await controller.getLiveStats(mockRequest as any);
 
       expect(result).toEqual({
-        timestamp: expect.any(String),
-        summary: {
-          totalRequests: 1000,
-          activeTools: 5,
-          activeSessions: 3,
-          activeAlerts: 2,
+        success: true,
+        data: {
+          timestamp: expect.any(String),
+          summary: {
+            totalRequests: 1000,
+            activeTools: 5,
+            activeSessions: 3,
+            activeAlerts: 2,
+          },
+          protocols: mockMetrics.protocols,
+          performance: mockMetrics.performance,
+          security: mockMetrics.security,
         },
-        protocols: mockMetrics.protocols,
-        performance: mockMetrics.performance,
-        security: mockMetrics.security,
+        message: 'Live stats retrieved successfully',
       });
     });
   });
@@ -232,34 +238,38 @@ describe('MonitoringController', () => {
       const result = await controller.getEnterpriseDashboard(mockRequest as any);
 
       expect(result).toEqual({
-        organization: {
-          id: 'org-1',
-          metrics: {
-            apis: mockMetrics.application.apis,
-            tools: mockMetrics.application.tools,
-            protocols: mockMetrics.protocols,
+        success: true,
+        data: {
+          organization: {
+            id: 'org-1',
+            metrics: {
+              apis: mockMetrics.application.apis,
+              tools: mockMetrics.application.tools,
+              protocols: mockMetrics.protocols,
+            },
           },
+          compliance: {
+            piiFiltering: {
+              enabled: true,
+              instancesFiltered: 100,
+            },
+            securityScanning: {
+              enabled: true,
+              threatsBlocked: 5,
+            },
+            auditLogging: {
+              enabled: true,
+              retentionDays: 90,
+            },
+          },
+          alerts: {
+            total: 3,
+            critical: 1,
+            warning: 2,
+          },
+          sla: expect.any(Object),
         },
-        compliance: {
-          piiFiltering: {
-            enabled: true,
-            instancesFiltered: 100,
-          },
-          securityScanning: {
-            enabled: true,
-            threatsBlocked: 5,
-          },
-          auditLogging: {
-            enabled: true,
-            retentionDays: 90,
-          },
-        },
-        alerts: {
-          total: 3,
-          critical: 1,
-          warning: 2,
-        },
-        sla: expect.any(Object),
+        message: 'Enterprise dashboard retrieved successfully',
       });
     });
 
@@ -271,12 +281,13 @@ describe('MonitoringController', () => {
 
       const result = await controller.getEnterpriseDashboard(mockRequest as any);
 
-      expect(result.organization.metrics.apis).toEqual({});
-      expect(result.organization.metrics.tools).toEqual({});
-      expect(result.compliance.piiFiltering.instancesFiltered).toBe(0);
-      expect(result.compliance.securityScanning.threatsBlocked).toBe(0);
-      expect(result.sla.uptime).toBe(0);
-      expect(result.sla.currentResponseTime).toBe(0);
+      expect(result.success).toBe(true);
+      expect(result.data.organization.metrics.apis).toEqual({});
+      expect(result.data.organization.metrics.tools).toEqual({});
+      expect(result.data.compliance.piiFiltering.instancesFiltered).toBe(0);
+      expect(result.data.compliance.securityScanning.threatsBlocked).toBe(0);
+      expect(result.data.sla.uptime).toBe(0);
+      expect(result.data.sla.currentResponseTime).toBe(0);
     });
 
     it('should handle partial metrics data', async () => {
@@ -299,8 +310,8 @@ describe('MonitoringController', () => {
       const result = await controller.getEnterpriseDashboard(mockRequest as any);
 
       expect(result).toBeDefined();
-      expect(result.compliance.piiFiltering.instancesFiltered).toBe(0);
-      expect(result.compliance.securityScanning.threatsBlocked).toBe(0);
+      expect(result.data.compliance.piiFiltering.instancesFiltered).toBe(0);
+      expect(result.data.compliance.securityScanning.threatsBlocked).toBe(0);
     });
   });
 
@@ -313,10 +324,11 @@ describe('MonitoringController', () => {
 
       const result = await controller.getLiveStats(mockRequest as any);
 
-      expect(result.summary.totalRequests).toBe(0);
-      expect(result.summary.activeTools).toBe(0);
-      expect(result.summary.activeSessions).toBe(0);
-      expect(result.summary.activeAlerts).toBe(0);
+      expect(result.success).toBe(true);
+      expect(result.data.summary.totalRequests).toBe(0);
+      expect(result.data.summary.activeTools).toBe(0);
+      expect(result.data.summary.activeSessions).toBe(0);
+      expect(result.data.summary.activeAlerts).toBe(0);
     });
 
     it('should handle partial metrics data', async () => {
@@ -338,8 +350,8 @@ describe('MonitoringController', () => {
       const result = await controller.getLiveStats(mockRequest as any);
 
       expect(result).toBeDefined();
-      expect(result.summary.totalRequests).toBe(0);
-      expect(result.summary.activeTools).toBe(0);
+      expect(result.data.summary.totalRequests).toBe(0);
+      expect(result.data.summary.activeTools).toBe(0);
     });
 
     it('should handle missing user context', async () => {
@@ -363,7 +375,7 @@ describe('MonitoringController', () => {
 
       const result = await controller.getAlerts(mockRequest as any);
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({ success: true, data: [], message: 'Active alerts retrieved successfully' });
       expect(monitoringService.getActiveAlerts).toHaveBeenCalledWith(undefined);
     });
   });

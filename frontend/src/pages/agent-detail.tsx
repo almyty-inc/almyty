@@ -123,10 +123,7 @@ export function AgentDetailPage() {
   // Fetch agent
   const { data: agentData, isLoading } = useQuery({
     queryKey: ['agent', id],
-    queryFn: async () => {
-      const res = await agentsApi.getById(id!)
-      return res.data || res.data
-    },
+    queryFn: () => agentsApi.getById(id!),
     enabled: !!id,
   })
 
@@ -136,8 +133,7 @@ export function AgentDetailPage() {
   const { data: executionsData, error: executionsError } = useQuery({
     queryKey: ['agent-executions', id],
     queryFn: async () => {
-      const res = await agentsApi.getExecutions(id!, { limit: 20 })
-      const d = res.data
+      const d = await agentsApi.getExecutions(id!, { limit: 20 })
       return Array.isArray(d) ? d : d?.executions || []
     },
     enabled: !!id,
@@ -149,8 +145,8 @@ export function AgentDetailPage() {
   const { data: versionsData } = useQuery({
     queryKey: ['agent-versions', id],
     queryFn: async () => {
-      const res = await agentsApi.getVersions(id!)
-      return res.data || []
+      const d = await agentsApi.getVersions(id!)
+      return d || []
     },
     enabled: !!id,
   })
@@ -161,8 +157,8 @@ export function AgentDetailPage() {
   const { data: costEstimateData } = useQuery({
     queryKey: ['agent-cost-estimate', id],
     queryFn: async () => {
-      const res = await agentsApi.getCostEstimate(id!)
-      return res.data || null
+      const d = await agentsApi.getCostEstimate(id!)
+      return d || null
     },
     enabled: !!id,
   })
@@ -173,8 +169,8 @@ export function AgentDetailPage() {
   const { data: auditLogData } = useQuery({
     queryKey: ['agent-audit-log', id],
     queryFn: async () => {
-      const res = await agentsApi.getAuditLog(id!)
-      return res.data || []
+      const d = await agentsApi.getAuditLog(id!)
+      return d || []
     },
     enabled: !!id,
   })
@@ -228,8 +224,7 @@ export function AgentDetailPage() {
       } catch {
         throw new Error('Invalid JSON input')
       }
-      const res = await agentsApi.invoke(id!, input)
-      return res.data || res.data
+      return agentsApi.invoke(id!, input)
     },
     onSuccess: (result) => {
       setInvokeResult(result)
@@ -275,8 +270,7 @@ export function AgentDetailPage() {
   // Export handler
   const handleExport = async () => {
     try {
-      const res = await agentsApi.exportAgent(id!)
-      const exportData = res.data || res.data
+      const exportData = await agentsApi.exportAgent(id!)
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -467,7 +461,7 @@ export function AgentDetailPage() {
                       setTestOutput(null)
                       agentsApi.invoke(agent.id, { message: testInput })
                         .then((res: any) => {
-                          const output = res.data?.output || JSON.stringify(res.data)
+                          const output = res?.output || JSON.stringify(res)
                           setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
                           setTestInput('')
                         })
@@ -488,7 +482,7 @@ export function AgentDetailPage() {
                     setTestOutput(null)
                     agentsApi.invoke(agent.id, { message: testInput })
                       .then((res: any) => {
-                        const output = res.data?.output || JSON.stringify(res.data)
+                        const output = res?.output || JSON.stringify(res)
                         setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
                         setTestInput('')
                       })

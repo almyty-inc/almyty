@@ -79,10 +79,7 @@ export function AnalyticsPage() {
 
   const { data: overview, isLoading: loadingOverview } = useQuery({
     queryKey: ['analytics-overview', currentOrganization?.id],
-    queryFn: async () => {
-      const res = await analyticsApi.getOverview()
-      return res.data
-    },
+    queryFn: () => analyticsApi.getOverview(),
     enabled: !!currentOrganization,
     refetchInterval: 30000,
   })
@@ -92,36 +89,26 @@ export function AnalyticsPage() {
     queryFn: async () => {
       const params: Record<string, string> = { page: String(logPage), limit: '25' }
       if (statusFilter) params.status = statusFilter
-      const res = await analyticsApi.getRequestLogs(params)
-      return res.data
+      return analyticsApi.getRequestLogs(params)
     },
     enabled: !!currentOrganization && tab === 'requests',
   })
 
   const { data: toolUsage, isLoading: loadingToolUsage } = useQuery({
     queryKey: ['analytics-tool-usage', currentOrganization?.id, timeframe],
-    queryFn: async () => {
-      const res = await analyticsApi.getToolUsage(timeframe)
-      return res.data
-    },
+    queryFn: () => analyticsApi.getToolUsage(timeframe),
     enabled: !!currentOrganization && tab === 'tools',
   })
 
   const { data: gatewayUsage, isLoading: loadingGatewayUsage } = useQuery({
     queryKey: ['analytics-gateway-usage', currentOrganization?.id, timeframe],
-    queryFn: async () => {
-      const res = await analyticsApi.getGatewayUsage(timeframe)
-      return res.data
-    },
+    queryFn: () => analyticsApi.getGatewayUsage(timeframe),
     enabled: !!currentOrganization && tab === 'gateways',
   })
 
   const { data: llmUsage, isLoading: loadingLlmUsage } = useQuery({
     queryKey: ['analytics-llm-usage', currentOrganization?.id, timeframe],
-    queryFn: async () => {
-      const res = await analyticsApi.getLlmUsage(timeframe)
-      return res.data
-    },
+    queryFn: () => analyticsApi.getLlmUsage(timeframe),
     enabled: !!currentOrganization && tab === 'llm',
   })
 
@@ -131,7 +118,7 @@ export function AnalyticsPage() {
     enabled: !!currentOrganization && tab === 'llm',
   })
   const providerNameMap = useMemo(() => {
-    const providers = llmProvidersData?.data?.providers || llmProvidersData?.data || []
+    const providers = llmProvidersData?.providers || llmProvidersData || []
     const arr = Array.isArray(providers) ? providers : []
     const map: Record<string, string> = {}
     arr.forEach((p: any) => { map[p.id] = p.name })
@@ -140,10 +127,7 @@ export function AnalyticsPage() {
 
   const { data: timeline } = useQuery({
     queryKey: ['analytics-timeline', currentOrganization?.id],
-    queryFn: async () => {
-      const res = await analyticsApi.getTimeline('7d', 'day')
-      return res.data
-    },
+    queryFn: () => analyticsApi.getTimeline('7d', 'day'),
     enabled: !!currentOrganization && tab === 'overview',
   })
 
@@ -171,8 +155,7 @@ export function AnalyticsPage() {
   const { data: agentsRaw, isLoading: loadingAgents } = useQuery({
     queryKey: ['analytics-agents', currentOrganization?.id],
     queryFn: async () => {
-      const res = await agentsApi.getAll()
-      const d = res.data
+      const d = await agentsApi.getAll()
       const result = d?.agents || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
@@ -188,8 +171,7 @@ export function AnalyticsPage() {
       await Promise.all(
         agents.map(async (agent) => {
           try {
-            const res = await agentsApi.getExecutions(agent.id, { limit: 50 })
-            const d = res.data
+            const d = await agentsApi.getExecutions(agent.id, { limit: 50 })
             map[agent.id] = Array.isArray(d) ? d : d?.executions || []
           } catch {
             map[agent.id] = []
@@ -283,8 +265,7 @@ export function AnalyticsPage() {
   const { data: toolsRaw } = useQuery({
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
-      const res = await toolsApi.getAll(currentOrganization?.id)
-      const d = res.data
+      const d = await toolsApi.getAll(currentOrganization?.id)
       const result = d?.tools || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
@@ -295,8 +276,7 @@ export function AnalyticsPage() {
   const { data: gatewaysRaw } = useQuery({
     queryKey: ['gateways', currentOrganization?.id],
     queryFn: async () => {
-      const res = await gatewaysApi.getAll()
-      const d = res.data
+      const d = await gatewaysApi.getAll()
       const result = d?.gateways || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
@@ -310,7 +290,7 @@ export function AnalyticsPage() {
   const handleExport = async (type: string, format: string) => {
     try {
       const res = await analyticsApi.exportData(format, type)
-      const blob = new Blob([typeof res.data === 'string' ? res.data : JSON.stringify(res.data, null, 2)], {
+      const blob = new Blob([typeof res === 'string' ? res : JSON.stringify(res, null, 2)], {
         type: format === 'csv' ? 'text/csv' : 'application/json',
       })
       const url = URL.createObjectURL(blob)

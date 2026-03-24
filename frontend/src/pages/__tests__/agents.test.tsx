@@ -112,12 +112,8 @@ describe('AgentsPage', () => {
 
   describe('Empty State', () => {
     beforeEach(() => {
-      vi.mocked(agentsApi.getAll).mockResolvedValue({
-        data: [],
-      })
-      vi.mocked(agentsApi.getTemplates).mockResolvedValue({
-        data: [],
-      })
+      vi.mocked(agentsApi.getAll).mockResolvedValue([])
+      vi.mocked(agentsApi.getTemplates).mockResolvedValue([])
     })
 
     it('should show empty state with CTA when no agents exist', async () => {
@@ -184,12 +180,8 @@ describe('AgentsPage', () => {
     ]
 
     beforeEach(() => {
-      vi.mocked(agentsApi.getAll).mockResolvedValue({
-        data: mockAgents,
-      })
-      vi.mocked(agentsApi.getTemplates).mockResolvedValue({
-        data: [],
-      })
+      vi.mocked(agentsApi.getAll).mockResolvedValue(mockAgents)
+      vi.mocked(agentsApi.getTemplates).mockResolvedValue([])
     })
 
     it('should display agent list when data exists', async () => {
@@ -271,8 +263,7 @@ describe('AgentsPage', () => {
     ]
 
     beforeEach(() => {
-      vi.mocked(agentsApi.getAll).mockResolvedValue({
-        data: [
+      vi.mocked(agentsApi.getAll).mockResolvedValue([
           {
             id: 'agent-1',
             name: 'Existing Agent',
@@ -282,11 +273,8 @@ describe('AgentsPage', () => {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },
-        ],
-      })
-      vi.mocked(agentsApi.getTemplates).mockResolvedValue({
-        data: mockTemplates,
-      })
+        ])
+      vi.mocked(agentsApi.getTemplates).mockResolvedValue(mockTemplates)
     })
 
     it('should show templates section when templates exist', async () => {
@@ -325,12 +313,8 @@ describe('AgentsPage', () => {
 
   describe('Create Button Navigation', () => {
     beforeEach(() => {
-      vi.mocked(agentsApi.getAll).mockResolvedValue({
-        data: [],
-      })
-      vi.mocked(agentsApi.getTemplates).mockResolvedValue({
-        data: [],
-      })
+      vi.mocked(agentsApi.getAll).mockResolvedValue([])
+      vi.mocked(agentsApi.getTemplates).mockResolvedValue([])
     })
 
     it('should have a Create Agent button in the header', async () => {

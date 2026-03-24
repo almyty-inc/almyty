@@ -45,11 +45,10 @@ export function ToolDetailPage() {
       return toolsApi.execute(id!, { parameters }, currentOrganization.id)
     },
     onSuccess: (response: any) => {
-      // Interceptor unwraps {success, data} → response.data is just the tool output
-      const toolOutput = response.data
+      // API returns clean data directly
       setExecutionResult({
         success: true,
-        data: toolOutput,
+        data: response,
       })
       notifications.success('Success', 'Tool executed successfully')
     },
@@ -85,7 +84,7 @@ export function ToolDetailPage() {
     )
   }
 
-  if (!toolData?.data) {
+  if (!toolData) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -99,7 +98,7 @@ export function ToolDetailPage() {
     )
   }
 
-  const tool = toolData.data || toolData.data
+  const tool = toolData
 
   return (
     <div className="space-y-8">
@@ -565,9 +564,9 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
     URL.revokeObjectURL(url)
   }
 
-  const skill = skillData?.data || skillData?.data
-  const cli = cliData?.data || cliData?.data
-  const sdk = sdkData?.data || sdkData?.data
+  const skill = skillData
+  const cli = cliData
+  const sdk = sdkData
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

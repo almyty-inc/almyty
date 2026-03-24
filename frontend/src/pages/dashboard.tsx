@@ -99,10 +99,7 @@ export function DashboardPage() {
 
   const { data: recentLogsData } = useQuery({
     queryKey: ['analytics', 'recent-logs', orgId],
-    queryFn: async () => {
-      const res = await analyticsApi.getRequestLogs({ page: '1', limit: '10' })
-      return res.data
-    },
+    queryFn: () => analyticsApi.getRequestLogs({ page: '1', limit: '10' }),
     enabled: !!orgId,
   })
 
@@ -116,16 +113,16 @@ export function DashboardPage() {
     )
   }
 
-  const gatewaysExtracted = gatewaysData?.data?.gateways || gatewaysData?.data || []
+  const gatewaysExtracted = gatewaysData?.gateways || []
   const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
-  const gatewaysTotal = gatewaysData?.data?.total ?? gateways.length
-  const toolsExtracted = toolsData?.data?.tools || toolsData?.data || []
+  const gatewaysTotal = gatewaysData?.total ?? gateways.length
+  const toolsExtracted = toolsData?.tools || []
   const tools = Array.isArray(toolsExtracted) ? toolsExtracted : []
-  const toolsTotal = toolsData?.data?.total ?? tools.length
-  const apisExtracted = apisData?.data?.apis || apisData?.data || []
+  const toolsTotal = toolsData?.total ?? tools.length
+  const apisExtracted = apisData?.apis || []
   const apis = Array.isArray(apisExtracted) ? apisExtracted : []
-  const apisTotal = apisData?.data?.total ?? apis.length
-  const agentsExtracted = agentsData?.data || []
+  const apisTotal = apisData?.total ?? apis.length
+  const agentsExtracted = agentsData || []
   const agents = Array.isArray(agentsExtracted) ? agentsExtracted : []
 
   const recentLogs = recentLogsData?.data || []
