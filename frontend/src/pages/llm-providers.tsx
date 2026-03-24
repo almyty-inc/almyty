@@ -1210,7 +1210,7 @@ export function LlmProvidersPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">AI Models</h1>
           <p className="text-muted-foreground">
-            {isLoading ? 'Loading...' : `${providers.length} providers (${providers.filter((p: any) => p.status === 'active').length} active) \u00B7 $${totalCost.toFixed(2)} total cost \u00B7 ${totalRequests.toLocaleString()} requests`}
+            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${providers.length} providers (${providers.filter((p: any) => p.status === 'active').length} active) \u00B7 $${totalCost.toFixed(2)} total cost \u00B7 ${totalRequests.toLocaleString()} requests`}
           </p>
         </div>
         {/* Only show Add Provider button when not in empty state */}
