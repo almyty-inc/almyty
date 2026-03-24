@@ -81,7 +81,7 @@ export function GatewaysPage() {
   })
 
   const gatewayTools = (() => {
-    const raw = gatewayToolsData?.data?.tools || gatewayToolsData?.data || gatewayToolsData || []
+    const raw = gatewayToolsData?.data?.gatewayTools || gatewayToolsData?.data?.tools || gatewayToolsData?.data || gatewayToolsData || []
     return Array.isArray(raw) ? raw : []
   })()
   const allTools = (() => {
