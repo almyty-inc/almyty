@@ -436,7 +436,7 @@ export class AgentsController {
         );
       }
 
-      const original = await this.agentsService.findOne(id, organizationId);
+      const original = await this.agentsService.getAgent(id, organizationId);
       if (!original) {
         throw new HttpException(
           { success: false, message: 'Agent not found', error: 'NOT_FOUND' },
@@ -444,7 +444,7 @@ export class AgentsController {
         );
       }
 
-      const duplicate = await this.agentsService.create({
+      const duplicate = await this.agentsService.createAgent({
         name: `${original.name} (Copy)`,
         description: original.description,
         pipeline: original.pipeline,
