@@ -761,13 +761,13 @@ describe('AgentsService', () => {
   // ── estimateCost ──────────────────────────────────────────────────────────
 
   describe('estimateCost', () => {
-    it('should count LLM and tool nodes correctly', async () => {
+    it('should count LLM and tool nodes correctly with model-based pricing', async () => {
       const agent = makeAgent({
         pipeline: {
           nodes: [
             { id: 'input_1', type: 'input', config: {} },
-            { id: 'llm_1', type: 'llm_call', config: {} },
-            { id: 'llm_2', type: 'llm_call', config: {} },
+            { id: 'llm_1', type: 'llm_call', config: {}, data: { model: 'claude-3-sonnet', providerType: 'anthropic' } },
+            { id: 'llm_2', type: 'llm_call', config: {}, data: { model: 'gpt-4', providerType: 'openai' } },
             { id: 'tool_1', type: 'tool_call', config: {}, data: { toolId: 't-1' } },
             { id: 'merge_1', type: 'merge', config: {} },
             { id: 'output_1', type: 'output', config: {} },
@@ -792,8 +792,33 @@ describe('AgentsService', () => {
       expect(result.nodeCount).toBe(6);
       expect(result.edgeCount).toBe(6);
       expect(result.estimatedCostRange).toBeDefined();
-      expect(result.estimatedCostRange.low).toBe(3 * 0.5);
-      expect(result.estimatedCostRange.high).toBe(3 * 10);
+      // sonnet: 1-4, gpt-4: 3-8, merge (unknown): 1-5, tool: 0.1
+      expect(result.estimatedCostRange.low).toBe(5.1);
+      expect(result.estimatedCostRange.high).toBe(17.1);
+    });
+
+    it('should use provider-type fallback for nodes without model', async () => {
+      const agent = makeAgent({
+        pipeline: {
+          nodes: [
+            { id: 'input_1', type: 'input', config: {} },
+            { id: 'llm_1', type: 'llm_call', config: {}, data: { providerType: 'anthropic' } },
+            { id: 'output_1', type: 'output', config: {} },
+          ],
+          edges: [
+            { id: 'e1', source: 'input_1', target: 'llm_1' },
+            { id: 'e2', source: 'llm_1', target: 'output_1' },
+          ],
+        },
+      });
+      agentRepo.findOne.mockResolvedValue(agent);
+
+      const result = await service.estimateCost('agent-1', 'org-1');
+
+      expect(result.estimatedLlmCalls).toBe(1);
+      // anthropic fallback: 2-4 cents
+      expect(result.estimatedCostRange.low).toBe(2);
+      expect(result.estimatedCostRange.high).toBe(4);
     });
 
     it('should detect parallel execution', async () => {

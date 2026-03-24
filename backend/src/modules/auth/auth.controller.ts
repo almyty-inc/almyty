@@ -12,6 +12,7 @@ import {
   BadRequestException,
   Query,
   Patch,
+  Res,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,6 +21,7 @@ import {
   ApiBearerAuth,
   ApiBody,
 } from '@nestjs/swagger';
+import { Response } from 'express';
 
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -31,6 +33,15 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../../entities/user.entity';
+
+/** Shared cookie options for the access_token httpOnly cookie */
+const ACCESS_TOKEN_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: 24 * 60 * 60 * 1000, // 24 hours
+};
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -92,8 +103,14 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 400, description: 'Bad request - user already exists or validation failed' })
-  async register(@Body() createUserDto: CreateUserDto) {
+  async register(
+    @Body() createUserDto: CreateUserDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const tokens = await this.authService.register(createUserDto);
+
+    // Set httpOnly cookie for web UI security
+    res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
 
     return {
       success: true,
@@ -121,8 +138,14 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(@Request() req: any) {
+  async login(
+    @Request() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const tokens = await this.authService.generateTokens(req.user);
+
+    // Set httpOnly cookie for web UI security
+    res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
 
     return {
       success: true,
@@ -149,17 +172,37 @@ export class AuthController {
     description: 'Token refreshed successfully',
   })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  async refresh(@Body('refreshToken') refreshToken: string) {
+  async refresh(
+    @Body('refreshToken') refreshToken: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     if (!refreshToken) {
       throw new BadRequestException('Refresh token is required');
     }
 
     const tokens = await this.authService.refreshToken(refreshToken);
 
+    // Update httpOnly cookie with new access token
+    res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
+
     return {
       success: true,
       data: tokens,
       message: 'Token refreshed successfully',
+    };
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout and clear auth cookie' })
+  @ApiResponse({ status: 200, description: 'Logged out successfully' })
+  async logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie('access_token', { path: '/' });
+
+    return {
+      success: true,
+      data: null,
+      message: 'Logged out successfully',
     };
   }
 

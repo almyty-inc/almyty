@@ -103,6 +103,7 @@ export class AgentsService {
         variables: createDto.variables || {},
         settings: createDto.settings || {},
         metadata: createDto.metadata || {},
+        webhookUrl: createDto.webhookUrl || null,
         createdBy: userId,
       });
 
@@ -374,17 +375,29 @@ export class AgentsService {
     if (versionIndex < 0 || versionIndex >= versions.length) {
       throw new BadRequestException('Invalid version index');
     }
+
+    // Save the current pipeline state before rolling back so the rollback itself can be undone
+    if (agent.pipeline && agent.pipeline.nodes && agent.pipeline.nodes.length > 0) {
+      versions.push({
+        version: agent.version,
+        pipeline: JSON.parse(JSON.stringify(agent.pipeline)),
+        savedAt: new Date().toISOString(),
+        changelog: `Auto-saved before rollback to version index ${versionIndex}`,
+      });
+    }
+
     const targetVersion = versions[versionIndex];
-    agent.pipeline = targetVersion.pipeline;
+    agent.pipeline = JSON.parse(JSON.stringify(targetVersion.pipeline));
     agent.version = targetVersion.version;
+    agent.metadata = { ...agent.metadata, versions };
     const saved = await this.agentRepository.save(agent);
-    this.logger.log(`[ROLLBACK] Agent=${agentId} rolled back to version index=${versionIndex}`);
+    this.logger.log(`[ROLLBACK] Agent=${agentId} rolled back to version index=${versionIndex}, total versions=${versions.length}`);
 
     if (userId) {
       await this.auditService.log({
         agentId, organizationId, userId,
         action: 'rolled_back',
-        details: { versionIndex, targetVersion: targetVersion.version },
+        details: { versionIndex, targetVersion: targetVersion.version, totalVersions: versions.length },
       });
     }
 
@@ -517,6 +530,15 @@ export class AgentsService {
 
   // ── Cost Estimation ──
 
+  /**
+   * Estimate the cost per invocation of an agent pipeline based on its nodes.
+   * LLM cost is estimated per call based on the model/provider:
+   *   - Claude (Anthropic): ~2-4 cents per call
+   *   - GPT-4 class (OpenAI): ~3-8 cents per call
+   *   - GPT-3.5 / smaller models: ~0.2-1 cent per call
+   *   - Unknown/unset: ~1-5 cents per call (conservative range)
+   * Tool calls add a small fixed cost (~0.1 cents each).
+   */
   async estimateCost(agentId: string, organizationId: string): Promise<any> {
     const agent = await this.getAgent(agentId, organizationId);
     const llmNodes = agent.pipeline.nodes.filter(
@@ -529,19 +551,82 @@ export class AgentsService {
       (n: any) => n.type === 'parallel',
     );
 
-    const estimatedCalls = llmNodes.length;
+    // Estimate cost per LLM node based on model/provider
+    let totalLow = 0;
+    let totalHigh = 0;
+    for (const node of llmNodes) {
+      const model = ((node.data?.model as string) || '').toLowerCase();
+      const providerType = ((node.data?.providerType as string) || '').toLowerCase();
+      const { low, high } = this.estimateNodeCost(model, providerType);
+      totalLow += low;
+      totalHigh += high;
+    }
+
+    // Add a small cost per tool call (API execution overhead)
+    const toolCost = toolCallNodes.length * 0.1;
+    totalLow += toolCost;
+    totalHigh += toolCost;
+
+    // If no LLM nodes exist, report zero
+    if (llmNodes.length === 0 && toolCallNodes.length === 0) {
+      totalLow = 0;
+      totalHigh = 0;
+    }
 
     return {
-      estimatedLlmCalls: estimatedCalls,
+      estimatedLlmCalls: llmNodes.length,
       estimatedToolCalls: toolCallNodes.length,
       hasParallelExecution: parallelNodes.length > 0,
       estimatedCostRange: {
-        low: estimatedCalls * 0.5, // cents
-        high: estimatedCalls * 10, // cents
+        low: Math.round(totalLow * 10) / 10,
+        high: Math.round(totalHigh * 10) / 10,
       },
       nodeCount: agent.pipeline.nodes.length,
       edgeCount: agent.pipeline.edges.length,
     };
+  }
+
+  /**
+   * Return low/high cost estimate in cents for a single LLM call
+   * based on model name and provider type.
+   */
+  private estimateNodeCost(
+    model: string,
+    providerType: string,
+  ): { low: number; high: number } {
+    // Cheap OpenAI models (check before gpt-4o since gpt-4o-mini contains gpt-4o)
+    if (model.includes('gpt-3.5') || model.includes('gpt-4o-mini') || model.includes('mini')) {
+      return { low: 0.2, high: 1 };
+    }
+    // GPT-4 class models (expensive)
+    if (model.includes('gpt-4o')) {
+      return { low: 1, high: 4 };
+    }
+    if (model.includes('gpt-4')) {
+      return { low: 3, high: 8 };
+    }
+    // Claude models
+    if (model.includes('opus')) {
+      return { low: 5, high: 15 };
+    }
+    if (model.includes('sonnet')) {
+      return { low: 1, high: 4 };
+    }
+    if (model.includes('haiku')) {
+      return { low: 0.2, high: 1 };
+    }
+    if (model.includes('claude')) {
+      return { low: 2, high: 4 };
+    }
+    // Provider-based fallback when model is unknown/empty
+    if (providerType === 'anthropic') {
+      return { low: 2, high: 4 };
+    }
+    if (providerType === 'openai') {
+      return { low: 1, high: 5 };
+    }
+    // Completely unknown — conservative range
+    return { low: 1, high: 5 };
   }
 
   /**

@@ -216,10 +216,10 @@ export class APIHelper {
     console.log(`[APIHelper] getTools: calling ${endpoint}`)
     const response = await this.client.get(endpoint)
     console.log(`[APIHelper] getTools: status=${response.status}, data=`, JSON.stringify(response.data, null, 2))
-    // Normalize response: backend returns { success, data: { tools: [...], total: N } }
+    // After interceptor unwraps {success, data}, response.data is { tools: [...], total: N }
     // We extract the tools array and return it as { data: [...] } for backward compatibility
     const rawData = response.data
-    const toolsArray = rawData?.data?.tools || rawData?.data || rawData?.tools || []
+    const toolsArray = rawData?.tools || rawData?.data?.tools || rawData?.data || []
     return { data: Array.isArray(toolsArray) ? toolsArray : [] }
   }
 
@@ -227,8 +227,8 @@ export class APIHelper {
     const startTime = Date.now()
     while (Date.now() - startTime < timeout) {
       const response = await this.getTools(this.organizationId)
-      // Response structure is: { success: true, data: { tools: [...], total: N } }
-      const toolsList = response.data?.tools || response.data || []
+      // getTools() returns { data: [...] } where data is the normalized tools array
+      const toolsList = response.data || []
       const toolCount = Array.isArray(toolsList) ? toolsList.length : 0
       console.log(`[APIHelper] waitForTools: organizationId=${this.organizationId}, got ${toolCount} tools (need ${minCount})`)
       if (toolCount >= minCount) {
@@ -296,8 +296,8 @@ export class APIHelper {
       endpoint,
       configuration: data.configuration || defaultConfig,
     })
-    // Return the actual gateway object, not the wrapped response
-    return response.data.data || response.data
+    // After interceptor unwraps {success, data}, response.data is the gateway object
+    return response.data
   }
 
   async getGateways(organizationId?: string) {
@@ -411,15 +411,17 @@ export class APIHelper {
    * Delete all test data for cleanup
    */
   async cleanupTestData(organizationId: string) {
+    // After interceptor unwraps {success, data}, list endpoints return
+    // objects like { gateways: [...], total } or { apis: [...], total }
+
     // Delete all gateways
-    const gateways = await this.getGateways(organizationId)
-    if (gateways.data) {
-      for (const gateway of gateways.data) {
-        await this.deleteGateway(gateway.id)
-      }
+    const gatewaysResult = await this.getGateways(organizationId)
+    const gatewaysList = gatewaysResult?.gateways || gatewaysResult?.data || []
+    for (const gateway of gatewaysList) {
+      await this.deleteGateway(gateway.id)
     }
 
-    // Delete all tools
+    // Delete all tools (getTools already normalizes to { data: [...] })
     const tools = await this.getTools(organizationId)
     if (tools.data) {
       for (const tool of tools.data) {
@@ -428,19 +430,17 @@ export class APIHelper {
     }
 
     // Delete all APIs
-    const apis = await this.getAPIs(organizationId)
-    if (apis.data) {
-      for (const api of apis.data) {
-        await this.deleteAPI(api.id)
-      }
+    const apisResult = await this.getAPIs(organizationId)
+    const apisList = apisResult?.apis || apisResult?.data || []
+    for (const api of apisList) {
+      await this.deleteAPI(api.id)
     }
 
     // Delete all LLM providers
-    const providers = await this.getLLMProviders(organizationId)
-    if (providers.data) {
-      for (const provider of providers.data) {
-        await this.deleteLLMProvider(provider.id)
-      }
+    const providersResult = await this.getLLMProviders(organizationId)
+    const providersList = providersResult?.providers || providersResult?.data || []
+    for (const provider of providersList) {
+      await this.deleteLLMProvider(provider.id)
     }
   }
 }

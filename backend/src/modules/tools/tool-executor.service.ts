@@ -1070,6 +1070,15 @@ export class ToolExecutorService {
       });
 
       await this.toolExecutionRepository.save(execution);
+
+      // Update tool stats (usageCount, lastUsedAt, successRate, averageResponseTime)
+      try {
+        tool.incrementUsage();
+        tool.updateMetrics(metadata.executionTime, result.success);
+        await this.toolRepository.save(tool);
+      } catch (statsError) {
+        this.logger.error(`Failed to update tool stats: ${statsError.message}`);
+      }
     } catch (error) {
       this.logger.error(`Failed to record tool execution: ${error.message}`);
     }

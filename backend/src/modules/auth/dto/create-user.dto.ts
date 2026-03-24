@@ -1,5 +1,9 @@
 import { IsEmail, IsString, MinLength, MaxLength, IsNotEmpty } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+
+const stripHtml = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
 
 export class CreateUserDto {
   @ApiProperty({
@@ -25,6 +29,7 @@ export class CreateUserDto {
     description: 'User first name',
     example: 'John',
   })
+  @Transform(stripHtml)
   @IsString()
   @MinLength(1)
   @MaxLength(50)
@@ -35,6 +40,7 @@ export class CreateUserDto {
     description: 'User last name',
     example: 'Doe',
   })
+  @Transform(stripHtml)
   @IsString()
   @MinLength(1)
   @MaxLength(50)
@@ -45,6 +51,7 @@ export class CreateUserDto {
     description: 'Organization name (must be unique)',
     example: 'Acme Corporation',
   })
+  @Transform(stripHtml)
   @IsString()
   @MinLength(2)
   @MaxLength(100)

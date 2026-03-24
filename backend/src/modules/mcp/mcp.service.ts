@@ -138,13 +138,41 @@ export class McpService {
           );
       }
       
-      return {
+      const response: JsonRpcResponse = {
         jsonrpc: '2.0',
         id: request.id,
         result,
       };
-      
+
+      // Update gateway request metrics
+      if (gatewayId) {
+        try {
+          const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId } });
+          if (gateway) {
+            gateway.incrementRequest(true);
+            await this.gatewayRepository.save(gateway);
+          }
+        } catch (metricsError) {
+          this.logger.error(`Failed to update gateway metrics: ${metricsError.message}`);
+        }
+      }
+
+      return response;
+
     } catch (error) {
+      // Update gateway metrics for failed requests
+      if (gatewayId) {
+        try {
+          const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId } });
+          if (gateway) {
+            gateway.incrementRequest(false);
+            await this.gatewayRepository.save(gateway);
+          }
+        } catch (metricsError) {
+          this.logger.error(`Failed to update gateway metrics: ${metricsError.message}`);
+        }
+      }
+
       if (error && typeof error === 'object' && 'code' in error && 'message' in error) {
         return {
           jsonrpc: '2.0',

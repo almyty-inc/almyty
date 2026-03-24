@@ -7,8 +7,14 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 describe('AuthController', () => {
   let controller: AuthController;
   let authService: jest.Mocked<AuthService>;
+  let mockResponse: any;
 
   beforeEach(async () => {
+    mockResponse = {
+      cookie: jest.fn(),
+      clearCookie: jest.fn(),
+    };
+
     const mockAuthService = {
       register: jest.fn(),
       generateTokens: jest.fn(),
@@ -102,13 +108,18 @@ describe('AuthController', () => {
 
       authService.register.mockResolvedValue(mockTokens);
 
-      const result = await controller.register(createUserDto);
+      const result = await controller.register(createUserDto, mockResponse);
 
       expect(result).toEqual({
         success: true,
         data: mockTokens,
         message: 'Registration successful',
       });
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'access_token',
+        'access-token',
+        expect.objectContaining({ httpOnly: true, path: '/' }),
+      );
     });
   });
 
@@ -126,13 +137,18 @@ describe('AuthController', () => {
 
       authService.generateTokens.mockResolvedValue(mockTokens);
 
-      const result = await controller.login(mockRequest);
+      const result = await controller.login(mockRequest, mockResponse);
 
       expect(result).toEqual({
         success: true,
         data: mockTokens,
         message: 'Login successful',
       });
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'access_token',
+        'access-token',
+        expect.objectContaining({ httpOnly: true, path: '/' }),
+      );
     });
   });
 
@@ -148,25 +164,43 @@ describe('AuthController', () => {
 
       authService.refreshToken.mockResolvedValue(mockTokens);
 
-      const result = await controller.refresh(refreshToken);
+      const result = await controller.refresh(refreshToken, mockResponse);
 
       expect(result).toEqual({
         success: true,
         data: mockTokens,
         message: 'Token refreshed successfully',
       });
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'access_token',
+        'new-access-token',
+        expect.objectContaining({ httpOnly: true, path: '/' }),
+      );
     });
 
     it('should throw error when refresh token is missing', async () => {
-      await expect(controller.refresh('')).rejects.toThrow('Refresh token is required');
+      await expect(controller.refresh('', mockResponse)).rejects.toThrow('Refresh token is required');
     });
 
     it('should throw error when refresh token is undefined', async () => {
-      await expect(controller.refresh(undefined)).rejects.toThrow('Refresh token is required');
+      await expect(controller.refresh(undefined, mockResponse)).rejects.toThrow('Refresh token is required');
     });
 
     it('should throw error when refresh token is null', async () => {
-      await expect(controller.refresh(null)).rejects.toThrow('Refresh token is required');
+      await expect(controller.refresh(null, mockResponse)).rejects.toThrow('Refresh token is required');
+    });
+  });
+
+  describe('logout', () => {
+    it('should clear access_token cookie and return success', async () => {
+      const result = await controller.logout(mockResponse);
+
+      expect(result).toEqual({
+        success: true,
+        data: null,
+        message: 'Logged out successfully',
+      });
+      expect(mockResponse.clearCookie).toHaveBeenCalledWith('access_token', { path: '/' });
     });
   });
 

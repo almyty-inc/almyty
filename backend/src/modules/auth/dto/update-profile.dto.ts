@@ -1,11 +1,16 @@
 import { IsString, IsEmail, IsOptional, MinLength, MaxLength } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+
+const stripHtml = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
 
 export class UpdateProfileDto {
   @ApiPropertyOptional({
     description: 'User full name (will be split into firstName and lastName)',
     example: 'John Doe',
   })
+  @Transform(stripHtml)
   @IsOptional()
   @IsString()
   @MinLength(2)
