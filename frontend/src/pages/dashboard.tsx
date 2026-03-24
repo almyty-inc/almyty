@@ -20,9 +20,9 @@ import type { RequestLog } from '@/types'
 
 // Helper to humanize a log path
 const humanizePath = (path: string, method: string) => {
-  if (path.includes('/mcp/')) return `MCP ${method} request`
-  if (path.includes('/a2a/')) return `A2A agent discovery`
-  if (path.includes('/utcp/')) return `UTCP manifest request`
+  if (path.includes('/mcp/') || path.includes('/mcp')) return `MCP ${method} request`
+  if (path.includes('/a2a/') || path.includes('/a2a')) return `A2A agent discovery`
+  if (path.includes('/utcp/') || path.includes('/utcp')) return `UTCP manifest request`
   if (path.includes('/auth/api-keys')) return `API key check`
   if (path.includes('/auth')) return `Auth check on gateway`
   if (path.includes('/tools')) return `Tools listing`
