@@ -18,6 +18,14 @@ export class APIHelper {
       validateStatus: () => true, // Don't throw on any status
     })
 
+    // Unwrap {success, data} backend response envelope
+    this.client.interceptors.response.use((response) => {
+      if (response.data && typeof response.data === 'object' && 'success' in response.data && 'data' in response.data) {
+        response.data = response.data.data
+      }
+      return response
+    })
+
     // Add retry logic for network errors
     this.client.interceptors.response.use(
       (response) => response,
