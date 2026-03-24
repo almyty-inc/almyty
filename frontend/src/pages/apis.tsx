@@ -83,6 +83,7 @@ export function ApisPage() {
 
   const allToolsExtracted = allToolsData?.data?.tools || allToolsData?.data || []
   const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
+  const allToolsTotal = allToolsData?.data?.total ?? allTools.length
   
   const [selectedApi, setSelectedApi] = React.useState<Api | null>(null)
   const [editingApi, setEditingApi] = React.useState<Api | null>(null)
@@ -497,7 +498,7 @@ export function ApisPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">APIs</h1>
           <p className="text-muted-foreground">
-            {apis.length} connected &middot; {apis.reduce((sum: number, a: any) => sum + (a.operations?.length || 0), 0)} operations &middot; {allTools.length} tools generated
+            {apis.length} connected &middot; {apis.reduce((sum: number, a: any) => sum + (a.operations?.length || 0), 0)} operations &middot; {allToolsTotal} tools generated
           </p>
         </div>
         <div className="flex items-center space-x-2">

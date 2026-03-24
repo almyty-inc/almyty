@@ -23,7 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { DataTable, createSelectColumn, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
 import type { ColumnDef } from '@tanstack/react-table'
 
-import { gatewaysApi } from '@/lib/api'
+import { gatewaysApi, toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import type { Gateway } from '@/types'
@@ -66,6 +66,49 @@ export function GatewaysPage() {
 
   const gatewaysExtracted = gatewaysData?.data?.gateways || gatewaysData?.data || []
   const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
+
+  // Tool scoping queries
+  const { data: gatewayToolsData } = useQuery({
+    queryKey: ['gateway-tools', selectedGateway?.id],
+    queryFn: () => gatewaysApi.getTools(selectedGateway!.id),
+    enabled: !!selectedGateway && gatewayDetailsOpen,
+  })
+
+  const { data: allToolsData } = useQuery({
+    queryKey: ['all-tools', currentOrganization?.id],
+    queryFn: () => toolsApi.getAll(currentOrganization?.id),
+    enabled: !!currentOrganization && gatewayDetailsOpen,
+  })
+
+  const gatewayTools = (() => {
+    const raw = gatewayToolsData?.data?.tools || gatewayToolsData?.data || gatewayToolsData || []
+    return Array.isArray(raw) ? raw : []
+  })()
+  const allTools = (() => {
+    const raw = allToolsData?.data?.tools || allToolsData?.data || allToolsData || []
+    return Array.isArray(raw) ? raw : []
+  })()
+
+  // Determine which tools are assigned (map gatewayTool.toolId to tool data)
+  const assignedToolIds = new Set(gatewayTools.map((gt: any) => gt.toolId || gt.id))
+
+  const assignToolMutation = useMutation({
+    mutationFn: (toolId: string) => gatewaysApi.assignTool(selectedGateway!.id, toolId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gateway-tools', selectedGateway?.id] })
+      queryClient.invalidateQueries({ queryKey: ['gateways'] })
+    },
+    onError: () => errorNotif('Failed to assign tool'),
+  })
+
+  const removeToolMutation = useMutation({
+    mutationFn: (toolId: string) => gatewaysApi.removeTool(selectedGateway!.id, toolId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gateway-tools', selectedGateway?.id] })
+      queryClient.invalidateQueries({ queryKey: ['gateways'] })
+    },
+    onError: () => errorNotif('Failed to remove tool'),
+  })
 
   const filteredGateways = gateways.filter((gateway: Gateway) => {
     const matchesSearch =
@@ -528,8 +571,40 @@ export function GatewaysPage() {
                   <p className="text-sm text-muted-foreground mb-4">
                     Control which tools are available through this gateway
                   </p>
-                  <div className="text-sm mb-4">0 of 0 assigned</div>
-                  <Button variant="outline" size="sm">Assign All Tools</Button>
+                  <div className="text-sm mb-4">{assignedToolIds.size} of {allTools.length} assigned</div>
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                    {allTools.map((tool: any) => {
+                      const isAssigned = assignedToolIds.has(tool.id)
+                      return (
+                        <div key={tool.id} className="flex items-center justify-between py-2 px-3 rounded-md border">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-sm truncate">{tool.name}</div>
+                            {tool.description && (
+                              <div className="text-xs text-muted-foreground truncate">{tool.description}</div>
+                            )}
+                          </div>
+                          <Button
+                            variant={isAssigned ? 'destructive' : 'outline'}
+                            size="sm"
+                            className="ml-2 shrink-0"
+                            disabled={assignToolMutation.isPending || removeToolMutation.isPending}
+                            onClick={() => {
+                              if (isAssigned) {
+                                removeToolMutation.mutate(tool.id)
+                              } else {
+                                assignToolMutation.mutate(tool.id)
+                              }
+                            }}
+                          >
+                            {isAssigned ? 'Remove' : 'Assign'}
+                          </Button>
+                        </div>
+                      )
+                    })}
+                    {allTools.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">No tools available. Create tools first.</p>
+                    )}
+                  </div>
                 </div>
               </TabsContent>
             </Tabs>

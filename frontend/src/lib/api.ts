@@ -285,11 +285,12 @@ export const apisApi = {
 
 // Tools API
 export const toolsApi = {
-  getAll: (organizationId?: string) => {
+  getAll: (organizationId?: string, params?: { limit?: number; page?: number }) => {
+    const queryParams = params ? { params } : { params: { limit: 200 } }
     if (organizationId) {
-      return api.get(`/organizations/${organizationId}/tools`)
+      return api.get(`/organizations/${organizationId}/tools`, queryParams)
     }
-    return api.get('/tools')
+    return api.get('/tools', queryParams)
   },
   
   getById: (id: string, organizationId: string) => api.get(`/organizations/${organizationId}/tools/${id}`),
