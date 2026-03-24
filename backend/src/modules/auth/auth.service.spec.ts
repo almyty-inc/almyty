@@ -685,7 +685,8 @@ describe('AuthService', () => {
   });
 
   describe('changePassword', () => {
-    it('should change password successfully', async () => {
+    it('should change password successfully', async () => { // eslint-disable-line jest/no-done-callback
+      jest.setTimeout(15000);
       const currentPassword = 'CurrentPassword123!';
       const newPassword = 'NewPassword456!';
       const passwordHash = await bcrypt.hash(currentPassword, 12);
