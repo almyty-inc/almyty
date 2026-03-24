@@ -89,6 +89,7 @@ function OrganizationTab({ organization }: { organization: any }) {
       success('Organization updated', 'Organization details have been updated.')
       setIsEditing(false)
       await queryClient.invalidateQueries({ queryKey: ['organizations'] })
+      await queryClient.invalidateQueries({ queryKey: ['organization-details'] })
     },
     onError: (err: any) => {
       error('Failed to update organization', err.response?.data?.message || 'Please try again.')
