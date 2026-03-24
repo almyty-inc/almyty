@@ -45,6 +45,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -1031,10 +1032,10 @@ export function LlmProvidersPage() {
         const provider = row.original
         const status = provider.status
         const colors = {
-          active: 'bg-green-100 text-green-800',
+          active: 'bg-green-500/15 text-green-700 dark:text-green-400',
           inactive: 'bg-muted text-muted-foreground',
-          error: 'bg-red-100 text-red-800',
-          configuring: 'bg-yellow-100 text-yellow-800'
+          error: 'bg-red-500/15 text-red-700 dark:text-red-400',
+          configuring: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400'
         }
         return (
           <div className="flex items-center gap-2">
@@ -1214,7 +1215,7 @@ export function LlmProvidersPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">AI Models</h1>
           <p className="text-muted-foreground">
-            Connect AI model providers to power tool execution, chat, and agent capabilities.
+            {isLoading ? 'Loading...' : `${providers.length} providers (${providers.filter((p: any) => p.status === 'active').length} active) \u00B7 $${totalCost.toFixed(2)} total cost \u00B7 ${totalRequests.toLocaleString()} requests`}
           </p>
         </div>
         {/* Only show Add Provider button when not in empty state */}
@@ -1231,65 +1232,12 @@ export function LlmProvidersPage() {
         )}
       </div>
 
-      {/* Stats Cards - Only show when there are providers */}
-      {!(!isLoading && providers.length === 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Providers</CardTitle>
-            <Server className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{providers.length}</div>
-            <p className="text-xs text-muted-foreground">
-              {providers.filter((p: any) => p.status === 'active').length} active
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${totalCost.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">
-              across all providers
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalRequests.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              total API calls
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Success Rate</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{providersWithRequests.length > 0 ? `${avgSuccessRate.toFixed(1)}%` : 'N/A'}</div>
-            <p className="text-xs text-muted-foreground">
-              {providersWithRequests.length > 0 ? 'average across providers' : 'no requests yet'}
-            </p>
-          </CardContent>
-        </Card>
-        </div>
-      )}
-
       {/* Providers Table or Empty State */}
-      {!isLoading && providers.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center h-96">
+          <LoadingSpinner size="lg" />
+        </div>
+      ) : providers.length === 0 ? (
         <Card className="p-12">
           <div className="text-center space-y-4">
             <div className="flex justify-center">
