@@ -45,11 +45,14 @@ export function ToolDetailPage() {
       return toolsApi.execute(id!, { parameters }, currentOrganization.id)
     },
     onSuccess: (response: { data: Record<string, any> }) => {
-      setExecutionResult(response.data)
-      if (response.data.success) {
+      // After interceptor, response.data is the unwrapped payload
+      const result = response.data
+      setExecutionResult(result)
+      // If result has data.uuid or similar, it succeeded
+      if (result && !result.error) {
         notifications.success('Success', 'Tool executed successfully')
       } else {
-        notifications.error('Execution Failed', response.data.error || 'Tool execution failed')
+        notifications.error('Execution Failed', result?.error || 'Tool execution failed')
       }
     },
     onError: (error: Error & { response?: { data?: Record<string, any>; status?: number }; config?: { url?: string; method?: string } }) => {
