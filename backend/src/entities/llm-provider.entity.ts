@@ -145,7 +145,7 @@ export class LlmProvider {
   @Column({ default: 0 })
   totalTokensUsed: number;
 
-  @Column({ default: 0 })
+  @Column({ type: 'float', default: 0 })
   totalCost: number; // in cents
 
   @Column({ nullable: true })
