@@ -52,12 +52,14 @@ export class ApisController {
       throw new BadRequestException('Organization ID is required');
     }
 
-    return this.apisService.findAllByOrganization(orgId, {
+    const result = await this.apisService.findAllByOrganization(orgId, {
       type,
       status,
       page: parseInt(page.toString()),
       limit: parseInt(limit.toString()),
     });
+
+    return { success: true, data: result, message: 'APIs retrieved successfully' };
   }
 
   @Get(':id')
@@ -73,7 +75,7 @@ export class ApisController {
       throw new ForbiddenException('Access denied');
     }
 
-    return api;
+    return { success: true, data: api, message: 'API retrieved successfully' };
   }
 
   @Post()
@@ -83,10 +85,12 @@ export class ApisController {
       throw new BadRequestException('Organization context required');
     }
 
-    return this.apisService.create({
+    const result = await this.apisService.create({
       ...createApiDto,
       organizationId: req.user.currentOrganizationId,
     });
+
+    return { success: true, data: result, message: 'API created successfully' };
   }
 
   @Put(':id')
@@ -106,7 +110,9 @@ export class ApisController {
       throw new ForbiddenException('Access denied');
     }
 
-    return this.apisService.update(id, updateApiDto);
+    const result = await this.apisService.update(id, updateApiDto);
+
+    return { success: true, data: result, message: 'API updated successfully' };
   }
 
   @Delete(':id')
@@ -122,7 +128,9 @@ export class ApisController {
       throw new ForbiddenException('Access denied');
     }
 
-    return this.apisService.remove(id);
+    await this.apisService.remove(id);
+
+    return { success: true, data: null, message: 'API deleted successfully' };
   }
 
   @Post(':id/import-schema')
@@ -169,8 +177,11 @@ export class ApisController {
 
     // Return immediately with job ID
     return {
-      jobId: job.id,
-      status: 'processing',
+      success: true,
+      data: {
+        jobId: job.id,
+        status: 'processing',
+      },
       message: 'Schema import started in background',
     };
   }
@@ -189,20 +200,32 @@ export class ApisController {
 
     if (state === 'completed') {
       return {
-        status: 'completed',
-        progress: 100,
-        result: job.returnvalue,
+        success: true,
+        data: {
+          status: 'completed',
+          progress: 100,
+          result: job.returnvalue,
+        },
+        message: 'Import completed successfully',
       };
     } else if (state === 'failed') {
       return {
-        status: 'failed',
-        progress: 0,
-        error: job.failedReason,
+        success: true,
+        data: {
+          status: 'failed',
+          progress: 0,
+          error: job.failedReason,
+        },
+        message: 'Import failed',
       };
     } else {
       return {
-        status: 'processing',
-        progress,
+        success: true,
+        data: {
+          status: 'processing',
+          progress,
+        },
+        message: 'Import in progress',
       };
     }
   }
@@ -220,7 +243,9 @@ export class ApisController {
       throw new ForbiddenException('Access denied');
     }
 
-    return this.apisService.generateToolsFromApi(id);
+    const result = await this.apisService.generateToolsFromApi(id);
+
+    return { success: true, data: result, message: 'Tools generated successfully' };
   }
 
   @Get(':id/operations')
@@ -236,7 +261,9 @@ export class ApisController {
       throw new ForbiddenException('Access denied');
     }
 
-    return this.apisService.getApiOperations(id);
+    const result = await this.apisService.getApiOperations(id);
+
+    return { success: true, data: result, message: 'Operations retrieved successfully' };
   }
 
   @Get(':id/resources')
@@ -252,7 +279,9 @@ export class ApisController {
       throw new ForbiddenException('Access denied');
     }
 
-    return this.apisService.getApiResources(id);
+    const result = await this.apisService.getApiResources(id);
+
+    return { success: true, data: result, message: 'Resources retrieved successfully' };
   }
 
   @Post(':id/test-connection')
@@ -268,7 +297,9 @@ export class ApisController {
       throw new ForbiddenException('Access denied');
     }
 
-    return this.apisService.testApiConnection(id);
+    const result = await this.apisService.testApiConnection(id);
+
+    return { success: true, data: result, message: 'Connection test completed successfully' };
   }
 
   @Get(':id/schemas')
@@ -284,7 +315,9 @@ export class ApisController {
       throw new ForbiddenException('Access denied');
     }
 
-    return this.apisService.getApiSchemas(id);
+    const result = await this.apisService.getApiSchemas(id);
+
+    return { success: true, data: result, message: 'Schemas retrieved successfully' };
   }
 
   @Put(':id/status')
@@ -304,7 +337,9 @@ export class ApisController {
       throw new ForbiddenException('Access denied');
     }
 
-    return this.apisService.updateStatus(id, status);
+    const result = await this.apisService.updateStatus(id, status);
+
+    return { success: true, data: result, message: 'API status updated successfully' };
   }
 
   // ─── Credential Management ──────────────────────────────────────
@@ -318,7 +353,9 @@ export class ApisController {
   ) {
     const orgId = req.user.currentOrganizationId;
     if (!orgId) throw new BadRequestException('Organization context required');
-    return this.credentialService.createCredential(apiId, orgId, dto);
+    const result = await this.credentialService.createCredential(apiId, orgId, dto);
+
+    return { success: true, data: result, message: 'Credential created successfully' };
   }
 
   @Get(':id/credentials')
@@ -326,7 +363,9 @@ export class ApisController {
   async getCredentials(@Request() req, @Param('id') apiId: string) {
     const orgId = req.user.currentOrganizationId;
     if (!orgId) throw new BadRequestException('Organization context required');
-    return this.credentialService.getCredentials(apiId, orgId);
+    const result = await this.credentialService.getCredentials(apiId, orgId);
+
+    return { success: true, data: result, message: 'Credentials retrieved successfully' };
   }
 
   @Put(':id/credentials/:credentialId')
@@ -338,7 +377,9 @@ export class ApisController {
   ) {
     const orgId = req.user.currentOrganizationId;
     if (!orgId) throw new BadRequestException('Organization context required');
-    return this.credentialService.updateCredential(credentialId, orgId, dto);
+    const result = await this.credentialService.updateCredential(credentialId, orgId, dto);
+
+    return { success: true, data: result, message: 'Credential updated successfully' };
   }
 
   @Delete(':id/credentials/:credentialId')
@@ -350,7 +391,7 @@ export class ApisController {
     const orgId = req.user.currentOrganizationId;
     if (!orgId) throw new BadRequestException('Organization context required');
     await this.credentialService.deleteCredential(credentialId, orgId);
-    return { success: true, message: 'Credential deleted' };
+    return { success: true, data: null, message: 'Credential deleted successfully' };
   }
 
   @Post(':id/credentials/:credentialId/test')
@@ -361,6 +402,8 @@ export class ApisController {
   ) {
     const orgId = req.user.currentOrganizationId;
     if (!orgId) throw new BadRequestException('Organization context required');
-    return this.credentialService.testCredential(credentialId, orgId);
+    const result = await this.credentialService.testCredential(credentialId, orgId);
+
+    return { success: true, data: result, message: 'Credential test completed successfully' };
   }
 }

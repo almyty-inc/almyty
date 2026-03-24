@@ -166,13 +166,18 @@ describe('API to Tools Pipeline (e2e)', () => {
         .send(testUser)
         .expect(201);
 
-      expect(response.body.user).toBeDefined();
-      expect(response.body.user.email).toBe(testUser.email);
-      expect(response.body.token).toBeDefined();
-      
-      authToken = response.body.token;
-      organizationId = response.body.user.organizationMemberships[0]?.organizationId;
-      
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.accessToken).toBeDefined();
+
+      authToken = response.body.data.accessToken;
+
+      // Fetch profile to get organization membership
+      const profileRes = await request(app.getHttpServer())
+        .get('/auth/profile')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      organizationId = profileRes.body.data.organizationMemberships?.[0]?.organization?.id;
       expect(organizationId).toBeDefined();
     });
 

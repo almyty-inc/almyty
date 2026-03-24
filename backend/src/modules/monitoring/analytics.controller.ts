@@ -21,7 +21,8 @@ export class AnalyticsController {
   @Get('/overview')
   async getOverview(@Request() req) {
     const orgId = req.user?.currentOrganizationId;
-    return this.analyticsService.getOverview(orgId);
+    const data = await this.analyticsService.getOverview(orgId);
+    return { success: true, data, message: 'Analytics overview retrieved successfully' };
   }
 
   @Get('/requests')
@@ -37,7 +38,7 @@ export class AnalyticsController {
     @Query('to') to?: string,
   ) {
     const orgId = req.user?.currentOrganizationId;
-    return this.analyticsService.getRequestLogs({
+    const data = await this.analyticsService.getRequestLogs({
       organizationId: orgId,
       page: parseInt(page, 10),
       limit: Math.min(parseInt(limit, 10), 100),
@@ -48,6 +49,7 @@ export class AnalyticsController {
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
     });
+    return { success: true, data, message: 'Request logs retrieved successfully' };
   }
 
   @Get('/tool-usage')
@@ -56,7 +58,8 @@ export class AnalyticsController {
     @Query('timeframe') timeframe: string = '7d',
   ) {
     const orgId = req.user?.currentOrganizationId;
-    return this.analyticsService.getToolUsage(orgId, timeframe);
+    const data = await this.analyticsService.getToolUsage(orgId, timeframe);
+    return { success: true, data, message: 'Tool usage retrieved successfully' };
   }
 
   @Get('/gateway-usage')
@@ -65,7 +68,8 @@ export class AnalyticsController {
     @Query('timeframe') timeframe: string = '7d',
   ) {
     const orgId = req.user?.currentOrganizationId;
-    return this.analyticsService.getGatewayUsage(orgId, timeframe);
+    const data = await this.analyticsService.getGatewayUsage(orgId, timeframe);
+    return { success: true, data, message: 'Gateway usage retrieved successfully' };
   }
 
   @Get('/llm-usage')
@@ -74,7 +78,8 @@ export class AnalyticsController {
     @Query('timeframe') timeframe: string = '7d',
   ) {
     const orgId = req.user?.currentOrganizationId;
-    return this.analyticsService.getLlmUsage(orgId, timeframe);
+    const data = await this.analyticsService.getLlmUsage(orgId, timeframe);
+    return { success: true, data, message: 'LLM usage retrieved successfully' };
   }
 
   @Get('/timeline')
@@ -84,7 +89,8 @@ export class AnalyticsController {
     @Query('granularity') granularity: string = 'hour',
   ) {
     const orgId = req.user?.currentOrganizationId;
-    return this.analyticsService.getTimeline(orgId, timeframe, granularity);
+    const data = await this.analyticsService.getTimeline(orgId, timeframe, granularity);
+    return { success: true, data, message: 'Timeline data retrieved successfully' };
   }
 
   @Get('/export')

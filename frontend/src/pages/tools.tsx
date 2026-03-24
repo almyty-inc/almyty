@@ -216,7 +216,7 @@ export function ToolsPage() {
     queryFn: () => llmProvidersApi.getAll(),
     enabled: !!currentOrganization,
   })
-  const llmProvidersExtracted = providersData?.data?.providers || providersData?.data || []
+  const llmProvidersExtracted = providersData?.providers || providersData || []
   const llmProviders = Array.isArray(llmProvidersExtracted) ? llmProvidersExtracted : []
   const activeProviders = llmProviders.filter((p: any) => p.status === 'active' || p.isActive)
 
@@ -343,11 +343,11 @@ return new Promise((resolve, reject) => {
     mutationFn: ({ id, parameters }: { id: string; parameters: Record<string, any> }) =>
       toolsApi.execute(id, { parameters }, currentOrganization?.id || ''),
     onSuccess: (response: any) => {
-      setExecutionResult(response.data)
-      if (response.data.success) {
+      setExecutionResult(response)
+      if (response.success) {
         notifications.success('Success', 'Tool executed successfully')
       } else {
-        notifications.error('Execution Failed', response.data.error || 'Tool execution failed')
+        notifications.error('Execution Failed', response.error || 'Tool execution failed')
       }
     },
     onError: (error: any) => {
@@ -359,9 +359,9 @@ return new Promise((resolve, reject) => {
     },
   })
 
-  const toolsExtracted = toolsData?.data?.tools || toolsData?.data || []
+  const toolsExtracted = toolsData?.tools || toolsData || []
   const tools = Array.isArray(toolsExtracted) ? toolsExtracted : []
-  const toolsTotal = toolsData?.data?.total ?? tools.length
+  const toolsTotal = toolsData?.total ?? tools.length
 
   // Get unique API sources for filter
   const apiSources = Array.from(

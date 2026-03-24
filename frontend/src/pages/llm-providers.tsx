@@ -783,9 +783,7 @@ export function LlmProvidersPage() {
     queryKey: ['llm-providers'],
     queryFn: async () => {
       try {
-        const response = await llmProvidersApi.getAll()
-        // Backend wrapper auto-unwrapped by interceptor
-        const d = response.data
+        const d = await llmProvidersApi.getAll()
         const result = d?.providers || (Array.isArray(d) ? d : [])
         return Array.isArray(result) ? result : []
       } catch (err) {
@@ -839,10 +837,10 @@ export function LlmProvidersPage() {
     mutationFn: async ({ providerId, input }: { providerId: string; input: string }) => {
       setTestLoading(true)
       const response = await llmProvidersApi.test(providerId)
-      return response.data
+      return response
     },
     onSuccess: (responseData) => {
-      // Backend returns { success: true, data: actualResult } - map to UI format
+      // API returns clean data directly
       const result = responseData.data || responseData
       setTestResult({
         output: {
@@ -882,8 +880,7 @@ export function LlmProvidersPage() {
 
   const toggleProviderStatusMutation = useMutation({
     mutationFn: async ({ providerId, status }: { providerId: string; status: string }) => {
-      const response = await llmProvidersApi.update(providerId, { status })
-      return response.data
+      return llmProvidersApi.update(providerId, { status })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
@@ -918,7 +915,7 @@ export function LlmProvidersPage() {
   const createProviderMutation = useMutation({
     mutationFn: async (data: CreateProviderFormData) => {
       try {
-        const response = await llmProvidersApi.create({
+        return await llmProvidersApi.create({
           name: data.name,
           type: data.type,
           configuration: {
@@ -926,7 +923,6 @@ export function LlmProvidersPage() {
             ...(data.organizationId && { organizationId: data.organizationId })
           }
         })
-        return response.data
       } catch (error) {
         console.error('Create provider error:', error)
         throw error
@@ -946,7 +942,7 @@ export function LlmProvidersPage() {
 
   const updateProviderMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const response = await llmProvidersApi.update(id, {
+      return llmProvidersApi.update(id, {
         name: data.name,
         configuration: {
           model: data.model,
@@ -954,7 +950,6 @@ export function LlmProvidersPage() {
           temperature: data.temperature,
         }
       })
-      return response.data
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
@@ -1139,7 +1134,7 @@ export function LlmProvidersPage() {
                 setAvailableModels([])
                 try {
                   const res = await llmProvidersApi.getModels(provider.id)
-                  const models = res.data || []
+                  const models = res || []
                   setAvailableModels(models)
                 } catch (err) {
                   console.warn('Failed to fetch models dynamically:', err)
@@ -1837,7 +1832,7 @@ export function LlmProvidersPage() {
                             sessionId: chatSessionId || undefined,
                           })
 
-                          const data = response.data
+                          const data = response
                           const assistantMsg = data?.message
 
                           if (assistantMsg) {

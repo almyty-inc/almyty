@@ -36,7 +36,8 @@ export class OrganizationsController {
   @ApiOperation({ summary: 'Get user organizations' })
   @ApiResponse({ status: 200, description: 'Organizations retrieved successfully' })
   async getUserOrganizations(@Request() req: any) {
-    return this.organizationsService.findAll(req.user.id);
+    const data = await this.organizationsService.findAll(req.user.id);
+    return { success: true, data, message: 'Organizations retrieved successfully' };
   }
 
   @Post()
@@ -44,7 +45,8 @@ export class OrganizationsController {
   @ApiOperation({ summary: 'Create organization' })
   @ApiResponse({ status: 201, description: 'Organization created successfully' })
   async createOrganization(@Body() createOrgDto: any, @Request() req: any) {
-    return this.organizationsService.create(createOrgDto, req.user.id);
+    const data = await this.organizationsService.create(createOrgDto, req.user.id);
+    return { success: true, data, message: 'Organization created successfully' };
   }
 
   @Get(':id')
@@ -52,7 +54,8 @@ export class OrganizationsController {
   @ApiOperation({ summary: 'Get organization by ID' })
   @ApiResponse({ status: 200, description: 'Organization retrieved successfully' })
   async getOrganization(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    return this.organizationsService.findOne(id);
+    const data = await this.organizationsService.findOne(id);
+    return { success: true, data, message: 'Organization retrieved successfully' };
   }
 
   @Patch(':id')
@@ -64,7 +67,8 @@ export class OrganizationsController {
     @Body() updateOrgDto: any,
     @Request() req: any,
   ) {
-    return this.organizationsService.update(id, updateOrgDto);
+    const data = await this.organizationsService.update(id, updateOrgDto);
+    return { success: true, data, message: 'Organization updated successfully' };
   }
 
   @Delete(':id')
@@ -72,7 +76,8 @@ export class OrganizationsController {
   @ApiOperation({ summary: 'Delete organization' })
   @ApiResponse({ status: 200, description: 'Organization deleted successfully' })
   async deleteOrganization(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    return this.organizationsService.delete(id);
+    const data = await this.organizationsService.delete(id);
+    return { success: true, data, message: 'Organization deleted successfully' };
   }
 
   // Member Management
@@ -80,7 +85,8 @@ export class OrganizationsController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get organization members' })
   async getOrganizationMembers(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    return this.organizationsService.getMembers(id, req.user.id);
+    const data = await this.organizationsService.getMembers(id, req.user.id);
+    return { success: true, data, message: 'Members retrieved successfully' };
   }
 
   @Post(':id/members')
@@ -91,7 +97,8 @@ export class OrganizationsController {
     @Body() inviteData: InviteUserDto,
     @Request() req: any
   ) {
-    return this.organizationsService.inviteUser(id, inviteData, req.user.id);
+    const data = await this.organizationsService.inviteUser(id, inviteData, req.user.id);
+    return { success: true, data, message: 'User invited successfully' };
   }
 
   @Put(':id/members/:userId')
@@ -103,7 +110,8 @@ export class OrganizationsController {
     @Body() roleData: { role: OrganizationRole },
     @Request() req: any
   ) {
-    return this.organizationsService.updateMemberRole(id, userId, roleData.role, req.user.id);
+    const data = await this.organizationsService.updateMemberRole(id, userId, roleData.role, req.user.id);
+    return { success: true, data, message: 'Member role updated successfully' };
   }
 
   @Delete(':id/members/:userId')
@@ -114,7 +122,8 @@ export class OrganizationsController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Request() req: any
   ) {
-    return this.organizationsService.removeMember(id, userId);
+    const data = await this.organizationsService.removeMember(id, userId);
+    return { success: true, data, message: 'Member removed successfully' };
   }
 
   // Team Management
@@ -122,7 +131,8 @@ export class OrganizationsController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get organization teams' })
   async getOrganizationTeams(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    return this.organizationsService.getTeams(id);
+    const data = await this.organizationsService.getTeams(id);
+    return { success: true, data, message: 'Teams retrieved successfully' };
   }
 
   @Post(':id/teams')
@@ -133,7 +143,8 @@ export class OrganizationsController {
     @Body() teamData: CreateTeamDto,
     @Request() req: any
   ) {
-    return this.organizationsService.createTeam(id, teamData);
+    const data = await this.organizationsService.createTeam(id, teamData);
+    return { success: true, data, message: 'Team created successfully' };
   }
 
   @Put(':id/teams/:teamId')
@@ -145,7 +156,8 @@ export class OrganizationsController {
     @Body() teamData: { name: string; description?: string },
     @Request() req: any
   ) {
-    return this.organizationsService.updateTeam(teamId, teamData);
+    const data = await this.organizationsService.updateTeam(teamId, teamData);
+    return { success: true, data, message: 'Team updated successfully' };
   }
 
   @Post(':id/teams/:teamId/members')
@@ -157,7 +169,8 @@ export class OrganizationsController {
     @Body() memberData: { userId: string; role?: string },
     @Request() req: any
   ) {
-    return this.organizationsService.addTeamMember(teamId, memberData.userId);
+    const data = await this.organizationsService.addTeamMember(teamId, memberData.userId);
+    return { success: true, data, message: 'Member added to team successfully' };
   }
 
   @Put(':id/teams/:teamId/members/:userId')
@@ -170,7 +183,8 @@ export class OrganizationsController {
     @Body() roleData: { role: string },
     @Request() req: any
   ) {
-    return this.organizationsService.updateTeamMemberRole(teamId, userId, roleData.role);
+    const data = await this.organizationsService.updateTeamMemberRole(teamId, userId, roleData.role);
+    return { success: true, data, message: 'Team member role updated successfully' };
   }
 
   @Delete(':id/teams/:teamId/members/:userId')
@@ -182,6 +196,7 @@ export class OrganizationsController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Request() req: any
   ) {
-    return this.organizationsService.removeTeamMember(teamId, userId);
+    const data = await this.organizationsService.removeTeamMember(teamId, userId);
+    return { success: true, data, message: 'Member removed from team successfully' };
   }
 }

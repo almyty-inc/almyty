@@ -32,13 +32,28 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Auto-unwrap { success, data, message } wrapper from backend responses
-api.interceptors.response.use((response) => {
-  if (response.data && typeof response.data === 'object' && 'success' in response.data && 'data' in response.data) {
-    response.data = response.data.data
+// All backend controllers return { success: true, data: <payload>, message?: string }
+// This helper extracts the payload from any API response.
+// Use it in React Query: queryFn: () => apiGet('/gateways')
+export function extractData<T = any>(response: AxiosResponse): T {
+  const body = response.data
+  if (body && typeof body === 'object' && 'data' in body) {
+    return body.data as T
   }
-  return response
-})
+  return body as T
+}
+
+// Convenience: api call + extract in one step
+export const apiGet = <T = any>(url: string, config?: any): Promise<T> =>
+  api.get(url, config).then(extractData)
+export const apiPost = <T = any>(url: string, data?: any, config?: any): Promise<T> =>
+  api.post(url, data, config).then(extractData)
+export const apiPatch = <T = any>(url: string, data?: any, config?: any): Promise<T> =>
+  api.patch(url, data, config).then(extractData)
+export const apiPut = <T = any>(url: string, data?: any, config?: any): Promise<T> =>
+  api.put(url, data, config).then(extractData)
+export const apiDel = <T = any>(url: string, config?: any): Promise<T> =>
+  api.delete(url, config).then(extractData)
 
 // Handle auth errors and retries
 api.interceptors.response.use(
@@ -92,137 +107,137 @@ api.interceptors.response.use(
 // Auth API
 export const authApi = {
   register: (data: { email: string; password: string; firstName: string; lastName: string; organizationName: string }) =>
-    api.post('/auth/register', data),
+    apiPost('/auth/register', data),
   
   login: (data: { email: string; password: string }) =>
-    api.post('/auth/login', data),
+    apiPost('/auth/login', data),
   
-  logout: () => api.post('/auth/logout'),
+  logout: () => apiPost('/auth/logout'),
   
-  getProfile: () => api.get('/auth/profile'),
+  getProfile: () => apiGet('/auth/profile'),
   
   updateProfile: (data: Partial<{ name: string; email: string }>) =>
-    api.patch('/auth/profile', data),
+    apiPatch('/auth/profile', data),
   
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
-    api.patch('/auth/change-password', data),
+    apiPatch('/auth/change-password', data),
 }
 
 // Organizations API
 export const organizationsApi = {
-  getAll: () => api.get('/organizations'),
+  getAll: () => apiGet('/organizations'),
   
-  getById: (id: string) => api.get(`/organizations/${id}`),
+  getById: (id: string) => apiGet(`/organizations/${id}`),
   
   create: (data: { name: string; description?: string }) =>
-    api.post('/organizations', data),
+    apiPost('/organizations', data),
   
   update: (id: string, data: Partial<{ name: string; description: string }>) =>
-    api.patch(`/organizations/${id}`, data),
+    apiPatch(`/organizations/${id}`, data),
   
-  delete: (id: string) => api.delete(`/organizations/${id}`),
+  delete: (id: string) => apiDel(`/organizations/${id}`),
   
-  getMembers: (id: string) => api.get(`/organizations/${id}/members`),
+  getMembers: (id: string) => apiGet(`/organizations/${id}/members`),
   
   addMember: (id: string, data: { email: string; role: string }) =>
-    api.post(`/organizations/${id}/members`, data),
+    apiPost(`/organizations/${id}/members`, data),
   
   updateMemberRole: (id: string, userId: string, data: { role: string }) =>
-    api.patch(`/organizations/${id}/members/${userId}`, data),
+    apiPatch(`/organizations/${id}/members/${userId}`, data),
   
   removeMember: (id: string, userId: string) =>
-    api.delete(`/organizations/${id}/members/${userId}`),
+    apiDel(`/organizations/${id}/members/${userId}`),
 
   // Teams
-  getTeams: (id: string) => api.get(`/organizations/${id}/teams`),
+  getTeams: (id: string) => apiGet(`/organizations/${id}/teams`),
   
   createTeam: (id: string, data: { name: string; description?: string }) =>
-    api.post(`/organizations/${id}/teams`, data),
+    apiPost(`/organizations/${id}/teams`, data),
     
   updateTeam: (id: string, teamId: string, data: { name: string; description?: string }) =>
-    api.put(`/organizations/${id}/teams/${teamId}`, data),
+    apiPut(`/organizations/${id}/teams/${teamId}`, data),
     
   addTeamMember: (orgId: string, teamId: string, data: { userId: string; role?: string }) =>
-    api.post(`/organizations/${orgId}/teams/${teamId}/members`, data),
+    apiPost(`/organizations/${orgId}/teams/${teamId}/members`, data),
 
   updateTeamMemberRole: (orgId: string, teamId: string, userId: string, data: { role: string }) =>
-    api.put(`/organizations/${orgId}/teams/${teamId}/members/${userId}`, data),
+    apiPut(`/organizations/${orgId}/teams/${teamId}/members/${userId}`, data),
     
   removeTeamMember: (orgId: string, teamId: string, userId: string) =>
-    api.delete(`/organizations/${orgId}/teams/${teamId}/members/${userId}`),
+    apiDel(`/organizations/${orgId}/teams/${teamId}/members/${userId}`),
 }
 
 // Gateways API
 export const gatewaysApi = {
-  getAll: () => api.get('/gateways'),
+  getAll: () => apiGet('/gateways'),
 
-  getById: (id: string) => api.get(`/gateways/${id}`),
+  getById: (id: string) => apiGet(`/gateways/${id}`),
 
-  create: (data: any) => api.post('/gateways', data),
+  create: (data: any) => apiPost('/gateways', data),
 
-  update: (id: string, data: any) => api.patch(`/gateways/${id}`, data),
+  update: (id: string, data: any) => apiPatch(`/gateways/${id}`, data),
 
-  delete: (id: string) => api.delete(`/gateways/${id}`),
+  delete: (id: string) => apiDel(`/gateways/${id}`),
 
   // Tool association endpoints
-  getTools: (id: string) => api.get(`/gateways/${id}/tools`),
+  getTools: (id: string) => apiGet(`/gateways/${id}/tools`),
 
-  getAvailableTools: (id: string) => api.get(`/gateways/${id}/tools/available`),
+  getAvailableTools: (id: string) => apiGet(`/gateways/${id}/tools/available`),
 
   assignTool: (gatewayId: string, toolId: string) =>
-    api.post(`/gateways/${gatewayId}/tools`, { toolId }),
+    apiPost(`/gateways/${gatewayId}/tools`, { toolId }),
 
   removeTool: (gatewayId: string, toolId: string) =>
-    api.delete(`/gateways/${gatewayId}/tools/${toolId}`),
+    apiDel(`/gateways/${gatewayId}/tools/${toolId}`),
 
   bulkAssignTools: (gatewayId: string, toolIds: string[]) =>
-    api.post(`/gateways/${gatewayId}/tools/bulk`, { toolIds }),
+    apiPost(`/gateways/${gatewayId}/tools/bulk`, { toolIds }),
 
   removeAllTools: (gatewayId: string) =>
-    api.delete(`/gateways/${gatewayId}/tools`),
+    apiDel(`/gateways/${gatewayId}/tools`),
 
   updateToolConfig: (gatewayId: string, gatewayToolId: string, data: any) =>
-    api.patch(`/gateways/${gatewayId}/tools/${gatewayToolId}`, data),
+    apiPatch(`/gateways/${gatewayId}/tools/${gatewayToolId}`, data),
 
-  getToolStats: (gatewayId: string) => api.get(`/gateways/${gatewayId}/tools/stats`),
+  getToolStats: (gatewayId: string) => apiGet(`/gateways/${gatewayId}/tools/stats`),
 
   // Gateway operations
-  activate: (id: string) => api.post(`/gateways/${id}/activate`),
+  activate: (id: string) => apiPost(`/gateways/${id}/activate`),
 
-  deactivate: (id: string) => api.post(`/gateways/${id}/deactivate`),
+  deactivate: (id: string) => apiPost(`/gateways/${id}/deactivate`),
 
-  testConnection: (id: string) => api.post(`/gateways/${id}/health-check`),
+  testConnection: (id: string) => apiPost(`/gateways/${id}/health-check`),
 
-  getMetrics: (id: string, params?: any) => api.get(`/gateways/${id}/stats`, { params }),
+  getMetrics: (id: string, params?: any) => apiGet(`/gateways/${id}/stats`, { params }),
 
   // Auth configuration
-  getAuthConfigs: (gatewayId: string) => api.get(`/gateways/${gatewayId}/auth`),
-  createAuthConfig: (gatewayId: string, data: any) => api.post(`/gateways/${gatewayId}/auth`, data),
-  deleteAuthConfig: (gatewayId: string, authId: string) => api.delete(`/gateways/${gatewayId}/auth/${authId}`),
+  getAuthConfigs: (gatewayId: string) => apiGet(`/gateways/${gatewayId}/auth`),
+  createAuthConfig: (gatewayId: string, data: any) => apiPost(`/gateways/${gatewayId}/auth`, data),
+  deleteAuthConfig: (gatewayId: string, authId: string) => apiDel(`/gateways/${gatewayId}/auth/${authId}`),
 
   // API key management
   generateApiKey: (gatewayId: string, data: { name: string; scopes?: string[]; expiresAt?: string }) =>
-    api.post(`/gateways/${gatewayId}/auth/api-keys`, data),
-  listApiKeys: (gatewayId: string) => api.get(`/gateways/${gatewayId}/auth/api-keys`),
-  revokeApiKey: (gatewayId: string, keyId: string) => api.delete(`/gateways/${gatewayId}/auth/api-keys/${keyId}`),
+    apiPost(`/gateways/${gatewayId}/auth/api-keys`, data),
+  listApiKeys: (gatewayId: string) => apiGet(`/gateways/${gatewayId}/auth/api-keys`),
+  revokeApiKey: (gatewayId: string, keyId: string) => apiDel(`/gateways/${gatewayId}/auth/api-keys/${keyId}`),
 
   // Export formats
-  getSkills: (id: string) => api.get(`/gateways/${id}/skills`),
-  getCliBundle: (id: string, format: 'bash' | 'node' = 'bash') => api.get(`/gateways/${id}/cli-bundle`, { params: { format } }),
-  getSdk: (id: string) => api.get(`/gateways/${id}/sdk`),
+  getSkills: (id: string) => apiGet(`/gateways/${id}/skills`),
+  getCliBundle: (id: string, format: 'bash' | 'node' = 'bash') => apiGet(`/gateways/${id}/cli-bundle`, { params: { format } }),
+  getSdk: (id: string) => apiGet(`/gateways/${id}/sdk`),
 }
 
 // APIs API
 export const apisApi = {
-  getAll: () => api.get('/apis'),
+  getAll: () => apiGet('/apis'),
   
-  getById: (id: string) => api.get(`/apis/${id}`),
+  getById: (id: string) => apiGet(`/apis/${id}`),
   
-  create: (data: any) => api.post('/apis', data),
+  create: (data: any) => apiPost('/apis', data),
   
-  update: (id: string, data: any) => api.put(`/apis/${id}`, data),
+  update: (id: string, data: any) => apiPut(`/apis/${id}`, data),
   
-  delete: (id: string) => api.delete(`/apis/${id}`),
+  delete: (id: string) => apiDel(`/apis/${id}`),
   
   importSchema: (id: string, data: {
     schemaContent?: string;
@@ -235,25 +250,25 @@ export const apisApi = {
       formData.append('schema', file)
       if (data.description) formData.append('description', data.description)
       if (data.generateTools !== undefined) formData.append('generateTools', data.generateTools.toString())
-      return api.post(`/apis/${id}/import-schema`, formData, {
+      return apiPost(`/apis/${id}/import-schema`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
     } else {
-      return api.post(`/apis/${id}/import-schema`, data)
+      return apiPost(`/apis/${id}/import-schema`, data)
     }
   },
 
-  getImportStatus: (id: string, jobId: string) => api.get(`/apis/${id}/import-status/${jobId}`),
+  getImportStatus: (id: string, jobId: string) => apiGet(`/apis/${id}/import-status/${jobId}`),
 
   async pollImportStatus(id: string, jobId: string, maxAttempts = 120, intervalMs = 2000): Promise<any> {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const response = await apisApi.getImportStatus(id, jobId)
-      const status = response.data?.status
+      const statusData = await apisApi.getImportStatus(id, jobId)
+      const status = statusData?.status
 
       if (status === 'completed') {
-        return response.data
+        return statusData
       } else if (status === 'failed') {
-        throw new Error(response.data?.error || 'Import failed')
+        throw new Error(statusData?.error || 'Import failed')
       }
 
       // Still processing, wait and retry
@@ -263,24 +278,24 @@ export const apisApi = {
     throw new Error('Import timeout - job did not complete in time')
   },
   
-  generateTools: (id: string) => api.post(`/apis/${id}/generate-tools`),
+  generateTools: (id: string) => apiPost(`/apis/${id}/generate-tools`),
   
-  testConnection: (id: string) => api.post(`/apis/${id}/test-connection`),
+  testConnection: (id: string) => apiPost(`/apis/${id}/test-connection`),
   
-  getOperations: (id: string) => api.get(`/apis/${id}/operations`),
+  getOperations: (id: string) => apiGet(`/apis/${id}/operations`),
   
-  getResources: (id: string) => api.get(`/apis/${id}/resources`),
+  getResources: (id: string) => apiGet(`/apis/${id}/resources`),
   
-  getSchemas: (id: string) => api.get(`/apis/${id}/schemas`),
+  getSchemas: (id: string) => apiGet(`/apis/${id}/schemas`),
   
-  updateStatus: (id: string, status: string) => api.put(`/apis/${id}/status`, { status }),
+  updateStatus: (id: string, status: string) => apiPut(`/apis/${id}/status`, { status }),
 
   // Credential management
-  getCredentials: (apiId: string) => api.get(`/apis/${apiId}/credentials`),
-  createCredential: (apiId: string, data: any) => api.post(`/apis/${apiId}/credentials`, data),
-  updateCredential: (apiId: string, credentialId: string, data: any) => api.put(`/apis/${apiId}/credentials/${credentialId}`, data),
-  deleteCredential: (apiId: string, credentialId: string) => api.delete(`/apis/${apiId}/credentials/${credentialId}`),
-  testCredential: (apiId: string, credentialId: string) => api.post(`/apis/${apiId}/credentials/${credentialId}/test`),
+  getCredentials: (apiId: string) => apiGet(`/apis/${apiId}/credentials`),
+  createCredential: (apiId: string, data: any) => apiPost(`/apis/${apiId}/credentials`, data),
+  updateCredential: (apiId: string, credentialId: string, data: any) => apiPut(`/apis/${apiId}/credentials/${credentialId}`, data),
+  deleteCredential: (apiId: string, credentialId: string) => apiDel(`/apis/${apiId}/credentials/${credentialId}`),
+  testCredential: (apiId: string, credentialId: string) => apiPost(`/apis/${apiId}/credentials/${credentialId}/test`),
 }
 
 // Tools API
@@ -288,132 +303,132 @@ export const toolsApi = {
   getAll: (organizationId?: string, params?: { limit?: number; page?: number }) => {
     const queryParams = params ? { params } : { params: { limit: 100 } }
     if (organizationId) {
-      return api.get(`/organizations/${organizationId}/tools`, queryParams)
+      return apiGet(`/organizations/${organizationId}/tools`, queryParams)
     }
-    return api.get('/tools', queryParams)
+    return apiGet('/tools', queryParams)
   },
   
-  getById: (id: string, organizationId: string) => api.get(`/organizations/${organizationId}/tools/${id}`),
+  getById: (id: string, organizationId: string) => apiGet(`/organizations/${organizationId}/tools/${id}`),
   
   create: (data: any, organizationId?: string) => {
     if (organizationId) {
-      return api.post(`/organizations/${organizationId}/tools`, data)
+      return apiPost(`/organizations/${organizationId}/tools`, data)
     }
-    return api.post('/tools', data)
+    return apiPost('/tools', data)
   },
   
-  update: (id: string, data: any) => api.patch(`/tools/${id}`, data),
+  update: (id: string, data: any) => apiPatch(`/tools/${id}`, data),
   
-  delete: (id: string) => api.delete(`/tools/${id}`),
+  delete: (id: string) => apiDel(`/tools/${id}`),
   
-  execute: (id: string, data: any, organizationId: string) => api.post(`/organizations/${organizationId}/tools/${id}/execute`, data),
+  execute: (id: string, data: any, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/execute`, data),
   
-  getUsage: (id: string, params?: any) => api.get(`/tools/${id}/usage`, { params }),
+  getUsage: (id: string, params?: any) => apiGet(`/tools/${id}/usage`, { params }),
 
-  getSchema: (id: string) => api.get(`/tools/${id}/schema`),
+  getSchema: (id: string) => apiGet(`/tools/${id}/schema`),
 
   // Export formats
-  getSkill: (id: string, organizationId: string) => api.get(`/organizations/${organizationId}/tools/${id}/skill`),
-  getCli: (id: string, organizationId: string, format: 'bash' | 'node' = 'bash') => api.get(`/organizations/${organizationId}/tools/${id}/cli`, { params: { format } }),
-  getSdk: (id: string, organizationId: string) => api.get(`/organizations/${organizationId}/tools/${id}/sdk`),
+  getSkill: (id: string, organizationId: string) => apiGet(`/organizations/${organizationId}/tools/${id}/skill`),
+  getCli: (id: string, organizationId: string, format: 'bash' | 'node' = 'bash') => apiGet(`/organizations/${organizationId}/tools/${id}/cli`, { params: { format } }),
+  getSdk: (id: string, organizationId: string) => apiGet(`/organizations/${organizationId}/tools/${id}/sdk`),
 }
 
 // LLM Providers API
 export const llmProvidersApi = {
-  getAll: () => api.get('/llm-providers'),
+  getAll: () => apiGet('/llm-providers'),
   
-  getById: (id: string) => api.get(`/llm-providers/${id}`),
+  getById: (id: string) => apiGet(`/llm-providers/${id}`),
   
-  create: (data: any) => api.post('/llm-providers', data),
+  create: (data: any) => apiPost('/llm-providers', data),
   
-  update: (id: string, data: any) => api.patch(`/llm-providers/${id}`, data),
+  update: (id: string, data: any) => apiPatch(`/llm-providers/${id}`, data),
   
-  delete: (id: string) => api.delete(`/llm-providers/${id}`),
+  delete: (id: string) => apiDel(`/llm-providers/${id}`),
   
-  test: (id: string) => api.post(`/llm-providers/${id}/test`),
+  test: (id: string) => apiPost(`/llm-providers/${id}/test`),
   
-  chat: (id: string, data: any) => api.post(`/llm-providers/${id}/chat`, data),
+  chat: (id: string, data: any) => apiPost(`/llm-providers/${id}/chat`, data),
   
-  getSessions: (id: string) => api.get(`/llm-providers/${id}/sessions`),
+  getSessions: (id: string) => apiGet(`/llm-providers/${id}/sessions`),
 
-  getUsage: (id: string, params?: any) => api.get(`/llm-providers/${id}/usage`, { params }),
+  getUsage: (id: string, params?: any) => apiGet(`/llm-providers/${id}/usage`, { params }),
 
-  getModels: (id: string) => api.get(`/llm-providers/${id}/models`),
+  getModels: (id: string) => apiGet(`/llm-providers/${id}/models`),
 
-  getModelsByType: (type: string, apiKey: string) => api.post('/llm-providers/models/by-type', { type, apiKey }),
+  getModelsByType: (type: string, apiKey: string) => apiPost('/llm-providers/models/by-type', { type, apiKey }),
 }
 
 // Analytics / Monitoring API
 export const analyticsApi = {
-  getDashboard: () => api.get('/monitoring/enterprise/dashboard'),
-  getLiveStats: () => api.get('/monitoring/stats/live'),
-  getMetrics: () => api.get('/monitoring/metrics'),
-  getMetricsHistory: (hours = 1) => api.get(`/monitoring/metrics/history?hours=${hours}`),
-  getAlerts: () => api.get('/monitoring/alerts'),
-  getHealth: () => api.get('/monitoring/health'),
+  getDashboard: () => apiGet('/monitoring/enterprise/dashboard'),
+  getLiveStats: () => apiGet('/monitoring/stats/live'),
+  getMetrics: () => apiGet('/monitoring/metrics'),
+  getMetricsHistory: (hours = 1) => apiGet(`/monitoring/metrics/history?hours=${hours}`),
+  getAlerts: () => apiGet('/monitoring/alerts'),
+  getHealth: () => apiGet('/monitoring/health'),
   // Real analytics endpoints
-  getOverview: () => api.get('/analytics/overview'),
+  getOverview: () => apiGet('/analytics/overview'),
   getRequestLogs: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
-    return api.get(`/analytics/requests${qs}`)
+    return apiGet(`/analytics/requests${qs}`)
   },
-  getToolUsage: (timeframe = '7d') => api.get(`/analytics/tool-usage?timeframe=${timeframe}`),
-  getGatewayUsage: (timeframe = '7d') => api.get(`/analytics/gateway-usage?timeframe=${timeframe}`),
-  getLlmUsage: (timeframe = '7d') => api.get(`/analytics/llm-usage?timeframe=${timeframe}`),
+  getToolUsage: (timeframe = '7d') => apiGet(`/analytics/tool-usage?timeframe=${timeframe}`),
+  getGatewayUsage: (timeframe = '7d') => apiGet(`/analytics/gateway-usage?timeframe=${timeframe}`),
+  getLlmUsage: (timeframe = '7d') => apiGet(`/analytics/llm-usage?timeframe=${timeframe}`),
   getTimeline: (timeframe = '24h', granularity = 'hour') =>
-    api.get(`/analytics/timeline?timeframe=${timeframe}&granularity=${granularity}`),
+    apiGet(`/analytics/timeline?timeframe=${timeframe}&granularity=${granularity}`),
   exportData: (format: string, type: string, from?: string, to?: string) => {
     const params = new URLSearchParams({ format, type })
     if (from) params.set('from', from)
     if (to) params.set('to', to)
-    return api.get(`/analytics/export?${params.toString()}`, { responseType: 'blob' as any })
+    return apiGet(`/analytics/export?${params.toString()}`, { responseType: 'blob' as any })
   },
 }
 
 // Agents API
 export const agentsApi = {
-  getAll: () => api.get('/agents'),
-  getById: (id: string) => api.get(`/agents/${id}`),
-  create: (data: any, organizationId?: string) => api.post('/agents', data),
-  update: (id: string, data: any) => api.patch(`/agents/${id}`, data),
-  delete: (id: string) => api.delete(`/agents/${id}`),
-  activate: (id: string) => api.post(`/agents/${id}/activate`),
-  deactivate: (id: string) => api.post(`/agents/${id}/deactivate`),
-  duplicate: (id: string) => api.post(`/agents/${id}/duplicate`),
-  invoke: (id: string, input: any, options?: any) => api.post(`/agents/${id}/invoke`, { input, options }),
-  stream: (id: string, input: any) => api.post(`/agents/${id}/stream`, { input }, { responseType: 'stream' }),
-  getExecutions: (id: string, params?: any) => api.get(`/agents/${id}/executions`, { params }),
-  getExecution: (id: string, execId: string) => api.get(`/agents/${id}/executions/${execId}`),
+  getAll: () => apiGet('/agents'),
+  getById: (id: string) => apiGet(`/agents/${id}`),
+  create: (data: any, organizationId?: string) => apiPost('/agents', data),
+  update: (id: string, data: any) => apiPatch(`/agents/${id}`, data),
+  delete: (id: string) => apiDel(`/agents/${id}`),
+  activate: (id: string) => apiPost(`/agents/${id}/activate`),
+  deactivate: (id: string) => apiPost(`/agents/${id}/deactivate`),
+  duplicate: (id: string) => apiPost(`/agents/${id}/duplicate`),
+  invoke: (id: string, input: any, options?: any) => apiPost(`/agents/${id}/invoke`, { input, options }),
+  stream: (id: string, input: any) => apiPost(`/agents/${id}/stream`, { input }, { responseType: 'stream' }),
+  getExecutions: (id: string, params?: any) => apiGet(`/agents/${id}/executions`, { params }),
+  getExecution: (id: string, execId: string) => apiGet(`/agents/${id}/executions/${execId}`),
   // Templates
-  getTemplates: () => api.get('/agents/templates'),
+  getTemplates: () => apiGet('/agents/templates'),
   // Versioning
-  getVersions: (id: string) => api.get(`/agents/${id}/versions`),
-  saveVersion: (id: string, changelog?: string) => api.post(`/agents/${id}/versions`, { changelog }),
-  rollback: (id: string, versionIndex: number) => api.post(`/agents/${id}/versions/${versionIndex}/rollback`),
+  getVersions: (id: string) => apiGet(`/agents/${id}/versions`),
+  saveVersion: (id: string, changelog?: string) => apiPost(`/agents/${id}/versions`, { changelog }),
+  rollback: (id: string, versionIndex: number) => apiPost(`/agents/${id}/versions/${versionIndex}/rollback`),
   // Import / Export
-  exportAgent: (id: string) => api.get(`/agents/${id}/export`),
-  importAgent: (data: any) => api.post('/agents/import', data),
+  exportAgent: (id: string) => apiGet(`/agents/${id}/export`),
+  importAgent: (data: any) => apiPost('/agents/import', data),
   // Cost estimation
-  getCostEstimate: (id: string) => api.get(`/agents/${id}/cost-estimate`),
+  getCostEstimate: (id: string) => apiGet(`/agents/${id}/cost-estimate`),
   // Audit log
-  getAuditLog: (id: string) => api.get(`/agents/${id}/audit-log`),
+  getAuditLog: (id: string) => apiGet(`/agents/${id}/audit-log`),
   // Scheduling
   schedule: (id: string, intervalMinutes: number, input?: any) =>
-    api.post(`/agents/${id}/schedule`, { intervalMinutes, input }),
-  unschedule: (id: string) => api.delete(`/agents/${id}/schedule`),
+    apiPost(`/agents/${id}/schedule`, { intervalMinutes, input }),
+  unschedule: (id: string) => apiDel(`/agents/${id}/schedule`),
 }
 
 // Users API (admin)
 export const usersApi = {
-  getAll: () => api.get('/users'),
+  getAll: () => apiGet('/users'),
   
-  getById: (id: string) => api.get(`/users/${id}`),
+  getById: (id: string) => apiGet(`/users/${id}`),
   
-  update: (id: string, data: any) => api.patch(`/users/${id}`, data),
+  update: (id: string, data: any) => apiPatch(`/users/${id}`, data),
   
-  delete: (id: string) => api.delete(`/users/${id}`),
+  delete: (id: string) => apiDel(`/users/${id}`),
   
-  getActivity: (id: string, params?: any) => api.get(`/users/${id}/activity`, { params }),
+  getActivity: (id: string, params?: any) => apiGet(`/users/${id}/activity`, { params }),
 }
 
 export type ApiResponse<T = any> = AxiosResponse<T>

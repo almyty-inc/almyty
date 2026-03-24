@@ -92,7 +92,7 @@ describe('GatewaysPage', () => {
   describe('Gateway List', () => {
     beforeEach(() => {
       vi.mocked(gatewaysApi.getAll).mockResolvedValue({
-        data: [
+        gateways: [
             { ...mockGateway, id: 'gateway-1', name: 'MCP Gateway', type: 'mcp' },
             { ...mockGateway, id: 'gateway-2', name: 'A2A Gateway', type: 'a2a' },
         ],
@@ -141,7 +141,7 @@ describe('GatewaysPage', () => {
   describe('Empty State', () => {
     beforeEach(() => {
       vi.mocked(gatewaysApi.getAll).mockResolvedValue({
-        data: [],
+        gateways: [],
       })
     })
 
@@ -158,7 +158,7 @@ describe('GatewaysPage', () => {
   describe('Gateway Creation', () => {
     beforeEach(() => {
       vi.mocked(gatewaysApi.getAll).mockResolvedValue({
-        data: [],
+        gateways: [],
       })
     })
 
@@ -233,7 +233,7 @@ describe('GatewaysPage', () => {
       }
 
       vi.mocked(gatewaysApi.getAll).mockResolvedValue({
-        data: [gatewayWithTools],
+        gateways: [gatewayWithTools],
       })
     })
 
@@ -287,7 +287,7 @@ describe('GatewaysPage', () => {
   describe('Subtitle Stats', () => {
     it('should show gateway counts in subtitle', async () => {
       vi.mocked(gatewaysApi.getAll).mockResolvedValue({
-        data: [
+        gateways: [
             { ...mockGateway, id: 'gw-1', name: 'Gateway 1', status: 'active' },
             { ...mockGateway, id: 'gw-2', name: 'Gateway 2', status: 'inactive' },
         ],

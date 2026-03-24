@@ -81,9 +81,9 @@ export function ApisPage() {
     enabled: !!currentOrganization,
   })
 
-  const allToolsExtracted = allToolsData?.data?.tools || allToolsData?.data || []
+  const allToolsExtracted = allToolsData?.tools || allToolsData || []
   const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
-  const allToolsTotal = allToolsData?.data?.total ?? allTools.length
+  const allToolsTotal = allToolsData?.total ?? allTools.length
   
   const [selectedApi, setSelectedApi] = React.useState<Api | null>(null)
   const [editingApi, setEditingApi] = React.useState<Api | null>(null)
@@ -119,8 +119,8 @@ export function ApisPage() {
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       success('API created', 'API has been created successfully.')
-      setCreatedApiForSchema(response.data)
-      setSelectedApi(response.data)
+      setCreatedApiForSchema(response)
+      setSelectedApi(response)
       setCreateStep('schema')
     },
     onError: (err: any) => {
@@ -157,24 +157,24 @@ export function ApisPage() {
 
   const importSchemaMutation = useMutation({
     mutationFn: async ({ id, data, file }: { id: string; data: any; file?: File }) => {
-      const response = await apisApi.importSchema(id, data, file)
+      const importResult = await apisApi.importSchema(id, data, file)
 
       // If response contains jobId, poll for completion
-      if (response.data?.jobId) {
-        console.log('[UI] Got jobId, starting polling:', response.data.jobId)
+      if (importResult?.jobId) {
+        console.log('[UI] Got jobId, starting polling:', importResult.jobId)
         try {
-          const result = await apisApi.pollImportStatus(id, response.data.jobId)
+          const result = await apisApi.pollImportStatus(id, importResult.jobId)
           console.log('[UI] Polling completed, result:', result)
-          return { data: result }
+          return result
         } catch (pollError) {
           console.error('[UI] Polling failed:', pollError)
           throw pollError
         }
       }
 
-      return response
+      return importResult
     },
-    onSuccess: (response) => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       queryClient.invalidateQueries({ queryKey: ['api-operations'] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
@@ -183,12 +183,11 @@ export function ApisPage() {
       if (selectedApi) {
         queryClient.refetchQueries({ queryKey: ['api-operations', selectedApi.id] })
       }
-      const result = response.data
       // Handle both direct result and async job result formats
-      // For async jobs: response.data.result contains the job's returnvalue
-      const jobResult = result.result || result
-      const opCount = jobResult.operations?.length || jobResult.operationCount || 0
-      const toolCount = jobResult.tools?.length || jobResult.toolCount || 0
+      // For async jobs: result.result contains the job's returnvalue
+      const jobResult = result?.result || result
+      const opCount = jobResult?.operations?.length || jobResult?.operationCount || 0
+      const toolCount = jobResult?.tools?.length || jobResult?.toolCount || 0
       success('Schema imported', `Schema imported successfully. ${opCount} operations found, ${toolCount} tools generated.`)
       setUploadDialogOpen(false)
       setUploadFile(null)
@@ -200,11 +199,11 @@ export function ApisPage() {
 
   const generateToolsMutation = useMutation({
     mutationFn: ({ id }: { id: string }) => apisApi.generateTools(id),
-    onSuccess: (response) => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
       queryClient.invalidateQueries({ queryKey: ['tools', currentOrganization?.id] })
-      const toolCount = response.data?.length || 0
+      const toolCount = Array.isArray(result) ? result.length : 0
       success('Tools generated', `${toolCount} tools have been generated successfully.`)
     },
     onError: (err: any) => {
@@ -214,8 +213,8 @@ export function ApisPage() {
 
   const testApiMutation = useMutation({
     mutationFn: ({ id }: { id: string }) => apisApi.testConnection(id),
-    onSuccess: (response) => {
-      setTestResults(response.data)
+    onSuccess: (result) => {
+      setTestResults(result)
       success('API test completed', 'Connection test results are available.')
     },
     onError: (err: any) => {
@@ -475,9 +474,9 @@ export function ApisPage() {
     )
   }
 
-  const apisExtracted = apisData?.data?.apis || apisData?.data || []
+  const apisExtracted = apisData?.apis || apisData || []
   const apis = Array.isArray(apisExtracted) ? apisExtracted : []
-  const operationsExtracted = apiOperations?.data?.operations || apiOperations?.data || []
+  const operationsExtracted = apiOperations?.operations || apiOperations || []
   const operations = Array.isArray(operationsExtracted) ? operationsExtracted : []
 
   const filteredApis = apis.filter((api: Api) => {

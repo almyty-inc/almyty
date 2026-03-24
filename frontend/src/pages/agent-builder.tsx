@@ -107,10 +107,7 @@ export function AgentBuilderPage() {
   // Fetch existing agent when editing
   const { data: agentData, isLoading: isLoadingAgent } = useQuery({
     queryKey: ['agent', id],
-    queryFn: async () => {
-      const res = await agentsApi.getById(id!)
-      return res.data || res.data
-    },
+    queryFn: () => agentsApi.getById(id!),
     enabled: isEditing,
   })
 
@@ -118,8 +115,8 @@ export function AgentBuilderPage() {
   const { data: templatesData } = useQuery({
     queryKey: ['agent-templates'],
     queryFn: async () => {
-      const res = await agentsApi.getTemplates()
-      return res.data || []
+      const d = await agentsApi.getTemplates()
+      return d || []
     },
     enabled: !!templateId && !isEditing,
   })
@@ -340,7 +337,7 @@ export function AgentBuilderPage() {
       success('Saved', `Agent "${agentName}" saved successfully.`)
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
       if (!isEditing) {
-        const newAgent = res.data || res.data
+        const newAgent = res
         if (newAgent?.id) {
           navigate(`/agents/${newAgent.id}/edit`, { replace: true })
         }
@@ -387,8 +384,7 @@ export function AgentBuilderPage() {
               className="hidden sm:flex"
               onClick={async () => {
                 try {
-                  const res = await agentsApi.exportAgent(id!)
-                  const exportData = res.data || res.data
+                  const exportData = await agentsApi.exportAgent(id!)
                   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
                   const url = URL.createObjectURL(blob)
                   const a = document.createElement('a')

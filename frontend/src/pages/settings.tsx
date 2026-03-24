@@ -71,8 +71,8 @@ function OrganizationTab({ organization }: { organization: any }) {
     enabled: !!organization?.id,
   })
 
-  // orgDetails is the Axios response; .data is the actual org object
-  const fullOrg = orgDetails?.data || organization
+  // orgDetails IS the org object now (API returns clean data)
+  const fullOrg = orgDetails || organization
 
   // Initialize form values when organization data loads
   React.useEffect(() => {
@@ -203,7 +203,7 @@ function ProfileTab() {
 
   const { data: userProfile, isLoading } = useQuery({
     queryKey: ['user-profile'],
-    queryFn: () => authApi.getProfile().then(res => res.data),
+    queryFn: () => authApi.getProfile().then(res => res.data || res),
   })
 
   // Initialize form values when profile loads

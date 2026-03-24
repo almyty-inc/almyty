@@ -21,7 +21,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 
-import { AuthService, AuthTokens } from './auth.service';
+import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -59,7 +59,8 @@ export class AuthController {
     const available = await this.authService.isOrganizationNameAvailable(name.trim());
 
     return {
-      available,
+      success: true,
+      data: { available },
       message: available
         ? 'Organization name is available'
         : 'Organization name is already taken',
@@ -93,10 +94,11 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Bad request - user already exists or validation failed' })
   async register(@Body() createUserDto: CreateUserDto) {
     const tokens = await this.authService.register(createUserDto);
-    
+
     return {
-      ...tokens,
-      message: 'User registered successfully',
+      success: true,
+      data: tokens,
+      message: 'Registration successful',
     };
   }
 
@@ -119,8 +121,14 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(@Request() req: any): Promise<AuthTokens> {
-    return this.authService.generateTokens(req.user);
+  async login(@Request() req: any) {
+    const tokens = await this.authService.generateTokens(req.user);
+
+    return {
+      success: true,
+      data: tokens,
+      message: 'Login successful',
+    };
   }
 
   @Public()
@@ -141,12 +149,18 @@ export class AuthController {
     description: 'Token refreshed successfully',
   })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  async refresh(@Body('refreshToken') refreshToken: string): Promise<AuthTokens> {
+  async refresh(@Body('refreshToken') refreshToken: string) {
     if (!refreshToken) {
       throw new BadRequestException('Refresh token is required');
     }
-    
-    return this.authService.refreshToken(refreshToken);
+
+    const tokens = await this.authService.refreshToken(refreshToken);
+
+    return {
+      success: true,
+      data: tokens,
+      message: 'Token refreshed successfully',
+    };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -160,17 +174,21 @@ export class AuthController {
     const { passwordHash, resetPasswordToken, verificationToken, ...profile } = user;
 
     return {
-      ...profile,
-      organizationMemberships: user.organizationMemberships?.map(membership => ({
-        id: membership.id,
-        role: membership.role,
-        joinedAt: membership.joinedAt,
-        organization: {
-          id: membership.organization.id,
-          name: membership.organization.name,
-          slug: membership.organization.slug,
-        },
-      })),
+      success: true,
+      data: {
+        ...profile,
+        organizationMemberships: user.organizationMemberships?.map(membership => ({
+          id: membership.id,
+          role: membership.role,
+          joinedAt: membership.joinedAt,
+          organization: {
+            id: membership.organization.id,
+            name: membership.organization.name,
+            slug: membership.organization.slug,
+          },
+        })),
+      },
+      message: 'Profile retrieved successfully',
     };
   }
 
@@ -191,7 +209,8 @@ export class AuthController {
     const { passwordHash, resetPasswordToken, verificationToken, ...profile } = updatedUser;
 
     return {
-      ...profile,
+      success: true,
+      data: profile,
       message: 'Profile updated successfully',
     };
   }
@@ -207,18 +226,21 @@ export class AuthController {
     @Body() createApiKeyDto: CreateApiKeyDto,
   ) {
     const { apiKey, keyData } = await this.authService.createApiKey(user.id, createApiKeyDto);
-    
+
     return {
-      message: 'API key created successfully',
-      apiKey, // This is the only time the full key is returned
-      keyData: {
-        id: keyData.id,
-        name: keyData.name,
-        keyPrefix: keyData.keyPrefix,
-        scopes: keyData.scopes,
-        expiresAt: keyData.expiresAt,
-        createdAt: keyData.createdAt,
+      success: true,
+      data: {
+        apiKey, // This is the only time the full key is returned
+        keyData: {
+          id: keyData.id,
+          name: keyData.name,
+          keyPrefix: keyData.keyPrefix,
+          scopes: keyData.scopes,
+          expiresAt: keyData.expiresAt,
+          createdAt: keyData.createdAt,
+        },
       },
+      message: 'API key created successfully',
     };
   }
 
@@ -229,18 +251,22 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'API keys retrieved successfully' })
   async getApiKeys(@CurrentUser() user: User) {
     const apiKeys = await this.authService.getUserApiKeys(user.id);
-    
+
     return {
-      apiKeys: apiKeys.map(key => ({
-        id: key.id,
-        name: key.name,
-        keyPrefix: key.keyPrefix,
-        scopes: key.scopes,
-        isActive: key.isActive,
-        expiresAt: key.expiresAt,
-        lastUsedAt: key.lastUsedAt,
-        createdAt: key.createdAt,
-      })),
+      success: true,
+      data: {
+        apiKeys: apiKeys.map(key => ({
+          id: key.id,
+          name: key.name,
+          keyPrefix: key.keyPrefix,
+          scopes: key.scopes,
+          isActive: key.isActive,
+          expiresAt: key.expiresAt,
+          lastUsedAt: key.lastUsedAt,
+          createdAt: key.createdAt,
+        })),
+      },
+      message: 'API keys retrieved successfully',
     };
   }
 
@@ -255,8 +281,10 @@ export class AuthController {
     @Param('keyId') keyId: string,
   ) {
     await this.authService.revokeApiKey(keyId, user.id);
-    
+
     return {
+      success: true,
+      data: null,
       message: 'API key revoked successfully',
     };
   }
@@ -281,8 +309,10 @@ export class AuthController {
     }
     
     await this.authService.resetPassword(email);
-    
+
     return {
+      success: true,
+      data: null,
       message: 'If a user with this email exists, a password reset link has been sent.',
     };
   }
@@ -312,8 +342,10 @@ export class AuthController {
     }
     
     await this.authService.confirmPasswordReset(token, password);
-    
+
     return {
+      success: true,
+      data: null,
       message: 'Password reset successfully',
     };
   }
@@ -345,8 +377,10 @@ export class AuthController {
     }
     
     await this.authService.changePassword(user.id, currentPassword, newPassword);
-    
+
     return {
+      success: true,
+      data: null,
       message: 'Password changed successfully',
     };
   }
@@ -372,8 +406,10 @@ export class AuthController {
     }
     
     await this.authService.verifyEmail(token);
-    
+
     return {
+      success: true,
+      data: null,
       message: 'Email verified successfully',
     };
   }

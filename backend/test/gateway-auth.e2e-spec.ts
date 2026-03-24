@@ -89,7 +89,7 @@ describe('Gateway Authentication (e2e)', () => {
       .send(userData)
       .expect(201);
 
-    const accessToken = regRes.body.accessToken;
+    const accessToken = regRes.body.data.accessToken;
     expect(accessToken).toBeDefined();
 
     // Fetch profile to get org membership
@@ -98,7 +98,7 @@ describe('Gateway Authentication (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
 
-    const membership = profileRes.body.organizationMemberships?.[0];
+    const membership = profileRes.body.data.organizationMemberships?.[0];
     expect(membership).toBeDefined();
 
     return {

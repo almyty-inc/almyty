@@ -2,9 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Put,
-  Delete,
-  Body,
   Param,
   Query,
   Request,
@@ -32,8 +29,9 @@ export class MonitoringController {
   // Latest Metrics
   @Get('/metrics')
   @UseGuards(JwtAuthGuard)
-  async getMetrics(@Request() req): Promise<SystemMetrics | null> {
-    return this.monitoringService.getLatestMetrics();
+  async getMetrics(@Request() req) {
+    const data = await this.monitoringService.getLatestMetrics();
+    return { success: true, data, message: 'Latest metrics retrieved successfully' };
   }
 
   // Historical Metrics
@@ -42,16 +40,18 @@ export class MonitoringController {
   async getMetricsHistory(
     @Query('hours') hours: number = 1,
     @Request() req
-  ): Promise<SystemMetrics[]> {
-    return this.monitoringService.getMetricsHistory(hours);
+  ) {
+    const data = await this.monitoringService.getMetricsHistory(hours);
+    return { success: true, data, message: 'Metrics history retrieved successfully' };
   }
 
   // Alerts
   @Get('/alerts')
   @UseGuards(JwtAuthGuard)
-  async getAlerts(@Request() req): Promise<Alert[]> {
+  async getAlerts(@Request() req) {
     const organizationId = req.user?.currentOrganizationId;
-    return this.monitoringService.getActiveAlerts(organizationId);
+    const data = await this.monitoringService.getActiveAlerts(organizationId);
+    return { success: true, data, message: 'Active alerts retrieved successfully' };
   }
 
   @Post('/alerts/:alertId/resolve')
@@ -63,7 +63,7 @@ export class MonitoringController {
       throw new HttpException('Alert not found', HttpStatus.NOT_FOUND);
     }
     
-    return { message: 'Alert resolved successfully' };
+    return { success: true, data: null, message: 'Alert resolved successfully' };
   }
 
   // Prometheus Metrics Export
@@ -80,7 +80,7 @@ export class MonitoringController {
     const metrics = await this.monitoringService.getLatestMetrics();
     const alerts = await this.monitoringService.getActiveAlerts(req.user?.currentOrganizationId);
 
-    return {
+    const data = {
       timestamp: new Date().toISOString(),
       summary: {
         totalRequests: metrics?.application.requests.total || 0,
@@ -92,6 +92,7 @@ export class MonitoringController {
       performance: metrics?.performance || {},
       security: metrics?.security || {},
     };
+    return { success: true, data, message: 'Live stats retrieved successfully' };
   }
 
   // Enterprise Features Dashboard
@@ -102,7 +103,7 @@ export class MonitoringController {
     const metrics = await this.monitoringService.getLatestMetrics();
     const alerts = await this.monitoringService.getActiveAlerts(organizationId);
 
-    return {
+    const data = {
       organization: {
         id: organizationId,
         metrics: {
@@ -137,5 +138,6 @@ export class MonitoringController {
         currentResponseTime: metrics?.performance.averageResponseTime || 0,
       },
     };
+    return { success: true, data, message: 'Enterprise dashboard retrieved successfully' };
   }
 }

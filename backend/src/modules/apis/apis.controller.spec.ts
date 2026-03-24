@@ -86,7 +86,7 @@ describe('ApisController', () => {
 
       const result = await controller.findAll(mockRequest, undefined, undefined, undefined, 1, 10);
 
-      expect(result).toBe(mockResult);
+      expect(result).toEqual({ success: true, data: mockResult, message: expect.any(String) });
     });
   });
 
@@ -119,7 +119,7 @@ describe('ApisController', () => {
 
       const result = await controller.findOne(mockRequest, 'api-1');
 
-      expect(result).toBe(mockApi);
+      expect(result).toEqual({ success: true, data: mockApi, message: expect.any(String) });
     });
   });
 
@@ -156,7 +156,7 @@ describe('ApisController', () => {
 
       const result = await controller.create(mockRequest, createDto);
 
-      expect(result).toBe(mockApi);
+      expect(result).toEqual({ success: true, data: mockApi, message: expect.any(String) });
     });
   });
 
@@ -194,7 +194,7 @@ describe('ApisController', () => {
 
       const result = await controller.update(mockRequest, 'api-1', updateDto);
 
-      expect(result).toBe(mockApi);
+      expect(result).toEqual({ success: true, data: mockApi, message: expect.any(String) });
     });
   });
 
@@ -210,7 +210,7 @@ describe('ApisController', () => {
 
       const result = await controller.remove(mockRequest, 'api-1');
 
-      expect(result).toBeUndefined();
+      expect(result).toEqual({ success: true, data: null, message: expect.any(String) });
     });
   });
 
@@ -225,8 +225,9 @@ describe('ApisController', () => {
 
       const result = await controller.importSchema(mockRequest, 'api-1', importDto, mockFile);
 
-      expect(result).toHaveProperty('jobId');
-      expect(result).toHaveProperty('status', 'processing');
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveProperty('jobId');
+      expect(result.data).toHaveProperty('status', 'processing');
       expect(result).toHaveProperty('message');
     });
 
@@ -240,8 +241,9 @@ describe('ApisController', () => {
 
       const result = await controller.importSchema(mockRequest, 'api-1', importDto);
 
-      expect(result).toHaveProperty('jobId');
-      expect(result).toHaveProperty('status', 'processing');
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveProperty('jobId');
+      expect(result.data).toHaveProperty('status', 'processing');
     });
 
     it('should import schema from content', async () => {
@@ -253,8 +255,9 @@ describe('ApisController', () => {
 
       const result = await controller.importSchema(mockRequest, 'api-1', importDto);
 
-      expect(result).toHaveProperty('jobId');
-      expect(result).toHaveProperty('status', 'processing');
+      expect(result.success).toBe(true);
+      expect(result.data).toHaveProperty('jobId');
+      expect(result.data).toHaveProperty('status', 'processing');
     });
   });
 
@@ -269,7 +272,7 @@ describe('ApisController', () => {
 
       const result = await controller.generateTools(mockRequest, 'api-1');
 
-      expect(result).toBe(mockTools);
+      expect(result).toEqual({ success: true, data: mockTools, message: expect.any(String) });
     });
   });
 
@@ -284,7 +287,7 @@ describe('ApisController', () => {
 
       const result = await controller.testConnection(mockRequest, 'api-1');
 
-      expect(result).toBe(mockResult);
+      expect(result).toEqual({ success: true, data: mockResult, message: expect.any(String) });
     });
   });
 
@@ -299,7 +302,7 @@ describe('ApisController', () => {
 
       const result = await controller.getOperations(mockRequest, 'api-1');
 
-      expect(result).toBe(mockOperations);
+      expect(result).toEqual({ success: true, data: mockOperations, message: expect.any(String) });
     });
   });
 
@@ -314,7 +317,7 @@ describe('ApisController', () => {
 
       const result = await controller.getResources(mockRequest, 'api-1');
 
-      expect(result).toBe(mockResources);
+      expect(result).toEqual({ success: true, data: mockResources, message: expect.any(String) });
     });
   });
 
@@ -329,7 +332,7 @@ describe('ApisController', () => {
 
       const result = await controller.getSchemas(mockRequest, 'api-1');
 
-      expect(result).toBe(mockSchemas);
+      expect(result).toEqual({ success: true, data: mockSchemas, message: expect.any(String) });
     });
   });
 
@@ -344,7 +347,7 @@ describe('ApisController', () => {
 
       const result = await controller.testConnection(mockRequest, 'api-1');
 
-      expect(result).toBe(mockResult);
+      expect(result).toEqual({ success: true, data: mockResult, message: expect.any(String) });
       expect(apisService.testApiConnection).toHaveBeenCalledWith('api-1');
     });
 
@@ -358,8 +361,8 @@ describe('ApisController', () => {
 
       const result = await controller.testConnection(mockRequest, 'api-1');
 
-      expect(result).toBe(mockResult);
-      expect(result.success).toBe(false);
+      expect(result).toEqual({ success: true, data: mockResult, message: expect.any(String) });
+      expect(result.data.success).toBe(false);
     });
   });
 
@@ -374,8 +377,8 @@ describe('ApisController', () => {
 
       const result = await controller.generateTools(mockRequest, 'api-1');
 
-      expect(result).toBe(mockTools);
-      expect(result).toHaveLength(2);
+      expect(result).toEqual({ success: true, data: mockTools, message: expect.any(String) });
+      expect(result.data).toHaveLength(2);
       expect(apisService.generateToolsFromApi).toHaveBeenCalledWith('api-1');
     });
   });
@@ -390,7 +393,7 @@ describe('ApisController', () => {
 
       const result = await controller.updateStatus(mockRequest, 'api-1', 'active' as any);
 
-      expect(result).toBe(mockApi);
+      expect(result).toEqual({ success: true, data: mockApi, message: expect.any(String) });
     });
 
     it('should throw not found when API does not exist', async () => {

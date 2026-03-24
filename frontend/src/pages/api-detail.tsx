@@ -83,7 +83,7 @@ function ApiCredentialsSection({ apiId, apiName }: { apiId: string; apiName: str
     },
   })
 
-  const credsRaw = credsData?.data?.credentials || credsData?.data || []
+  const credsRaw = credsData?.credentials || credsData || []
   const credentials = Array.isArray(credsRaw) ? credsRaw : []
 
   const handleCreate = () => {
@@ -442,38 +442,38 @@ export function ApiDetailPage() {
     enabled: !!currentOrganization,
   })
 
-  const allToolsExtracted = allToolsData?.data?.tools || allToolsData?.data || []
+  const allToolsExtracted = allToolsData?.tools || allToolsData || []
   const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
   const apiTools = allTools.filter((tool: Tool) => tool.metadata?.sourceApi?.id === id || (tool as unknown as Record<string, string>).apiId === id)
 
   // Initialize auth state when API loads
   React.useEffect(() => {
-    if (apiData?.data) {
-      setAuthType(apiData.data.authentication?.type || ApiAuthType.NONE)
-      setAuthConfig(apiData.data.authentication?.config || {})
+    if (apiData) {
+      setAuthType(apiData.authentication?.type || ApiAuthType.NONE)
+      setAuthConfig(apiData.authentication?.config || {})
     }
   }, [apiData])
 
   const importSchemaMutation = useMutation({
     mutationFn: async ({ data, file }: { data: { schemaContent?: string; schemaUrl?: string; description?: string; generateTools?: boolean }; file?: File }) => {
       if (!id) throw new Error('No API ID')
-      const response = await apisApi.importSchema(id, data, file)
+      const importResult = await apisApi.importSchema(id, data, file)
 
-      if (response.data?.jobId) {
-        const result = await apisApi.pollImportStatus(id, response.data.jobId)
-        return { data: result }
+      if (importResult?.jobId) {
+        const result = await apisApi.pollImportStatus(id, importResult.jobId)
+        return result
       }
-      return response
+      return importResult
     },
-    onSuccess: (response) => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['api', id] })
       queryClient.invalidateQueries({ queryKey: ['api-operations', id] })
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
-      const result = response.data
-      const jobResult = result.result || result
-      const opCount = jobResult.operations?.length || jobResult.operationCount || 0
-      const toolCount = jobResult.tools?.length || jobResult.toolCount || 0
+      // Handle both direct result and async job result formats
+      const jobResult = result?.result || result
+      const opCount = jobResult?.operations?.length || jobResult?.operationCount || 0
+      const toolCount = jobResult?.tools?.length || jobResult?.toolCount || 0
       success('Schema imported', `${opCount} operations found, ${toolCount} tools generated.`)
       setUploadDialogOpen(false)
       setUploadFile(null)
@@ -501,7 +501,7 @@ export function ApiDetailPage() {
     )
   }
 
-  if (!apiData?.data) {
+  if (!apiData) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -515,8 +515,8 @@ export function ApiDetailPage() {
     )
   }
 
-  const api = apiData.data
-  const operationsExtracted = apiOperations?.data?.operations || apiOperations?.data || []
+  const api = apiData
+  const operationsExtracted = apiOperations?.operations || apiOperations || []
   const operations = Array.isArray(operationsExtracted) ? operationsExtracted : []
   const TypeIcon = getApiTypeIcon(api.type)
 
@@ -641,11 +641,11 @@ export function ApiDetailPage() {
           <Button
             onClick={async () => {
               try {
-                const response = await apisApi.generateTools(id!)
+                const result = await apisApi.generateTools(id!)
                 queryClient.invalidateQueries({ queryKey: ['api', id] })
                 queryClient.invalidateQueries({ queryKey: ['apis'] })
                 queryClient.invalidateQueries({ queryKey: ['tools'] })
-                const toolCount = response.data?.length || 0
+                const toolCount = Array.isArray(result) ? result.length : 0
                 success('Tools generated', `${toolCount} tools created successfully`)
               } catch (err: any) {
                 error('Failed to generate tools', err.response?.data?.message || 'Please try again.')
@@ -662,8 +662,8 @@ export function ApiDetailPage() {
             setTesting(true)
             setTestResults(null)
             try {
-              const response = await apisApi.testConnection(id!)
-              setTestResults(response.data)
+              const testResult = await apisApi.testConnection(id!)
+              setTestResults(testResult)
               success('Test completed', 'API connection test successful')
             } catch (err: any) {
               setTestResults({ success: false, error: err.response?.data?.message || 'Connection failed' })
