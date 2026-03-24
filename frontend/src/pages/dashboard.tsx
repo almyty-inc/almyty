@@ -118,10 +118,13 @@ export function DashboardPage() {
 
   const gatewaysExtracted = gatewaysData?.data?.gateways || gatewaysData?.data || []
   const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
+  const gatewaysTotal = gatewaysData?.data?.total ?? gateways.length
   const toolsExtracted = toolsData?.data?.tools || toolsData?.data || []
   const tools = Array.isArray(toolsExtracted) ? toolsExtracted : []
+  const toolsTotal = toolsData?.data?.total ?? tools.length
   const apisExtracted = apisData?.data?.apis || apisData?.data || []
   const apis = Array.isArray(apisExtracted) ? apisExtracted : []
+  const apisTotal = apisData?.data?.total ?? apis.length
   const agentsExtracted = agentsData?.data || []
   const agents = Array.isArray(agentsExtracted) ? agentsExtracted : []
 
@@ -215,17 +218,17 @@ export function DashboardPage() {
             <CardContent className="py-6">
               <div className="flex items-center justify-between gap-4">
                 <button onClick={() => navigate('/apis')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
-                  <div className="text-2xl font-bold">{apis.length}</div>
+                  <div className="text-2xl font-bold">{apisTotal}</div>
                   <div className="text-sm text-muted-foreground">APIs Connected</div>
                 </button>
                 <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
                 <button onClick={() => navigate('/tools')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
-                  <div className="text-2xl font-bold">{tools.length}</div>
+                  <div className="text-2xl font-bold">{toolsTotal}</div>
                   <div className="text-sm text-muted-foreground">Tools Generated</div>
                 </button>
                 <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
                 <button onClick={() => navigate('/gateways')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
-                  <div className="text-2xl font-bold">{gateways.length}</div>
+                  <div className="text-2xl font-bold">{gatewaysTotal}</div>
                   <div className="text-sm text-muted-foreground">Gateways Serving</div>
                 </button>
                 <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
