@@ -334,6 +334,9 @@ export const toolsApi = {
     return apiDel(`/organizations/${orgId}/tools/${id}`)
   },
   
+  activate: (id: string, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/activate`),
+  deactivate: (id: string, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/deactivate`),
+
   execute: (id: string, data: any, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/execute`, data),
   
   getUsage: (id: string, params?: any) => apiGet(`/tools/${id}/usage`, { params }),
