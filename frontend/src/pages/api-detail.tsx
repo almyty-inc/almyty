@@ -210,6 +210,54 @@ function ApiCredentialsSection({ apiId, apiName }: { apiId: string; apiName: str
             </div>
           </>
         )
+      case 'JWT':
+        return (
+          <>
+            <div>
+              <Label>JWT Token</Label>
+              <Input
+                type="password"
+                value={newCredConfig.token || ''}
+                onChange={e => setNewCredConfig({ ...newCredConfig, token: e.target.value })}
+                placeholder="eyJhbGciOiJIUzI1NiIs..."
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>Header Name</Label>
+              <Input
+                value={newCredConfig.headerName || ''}
+                onChange={e => setNewCredConfig({ ...newCredConfig, headerName: e.target.value })}
+                placeholder="Authorization (default)"
+                className="mt-1"
+              />
+            </div>
+          </>
+        )
+      case 'CUSTOM':
+        return (
+          <>
+            <div>
+              <Label>Header Name</Label>
+              <Input
+                value={newCredConfig.headerName || ''}
+                onChange={e => setNewCredConfig({ ...newCredConfig, headerName: e.target.value })}
+                placeholder="X-Custom-Header"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>Header Value</Label>
+              <Input
+                type="password"
+                value={newCredConfig.headerValue || ''}
+                onChange={e => setNewCredConfig({ ...newCredConfig, headerValue: e.target.value })}
+                placeholder="Custom header value"
+                className="mt-1"
+              />
+            </div>
+          </>
+        )
       default:
         return null
     }

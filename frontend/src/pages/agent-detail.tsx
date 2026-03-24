@@ -538,13 +538,28 @@ export function AgentDetailPage() {
           <CardContent>
             {(() => {
               const apiBase = window.location.origin.replace('app.', 'api.')
+              const orgSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
               const agentRef = agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+              const unifiedUrl = `${apiBase}/${orgSlug}/${agentRef}`
               const snippets: Record<string, string> = {
-                curl: `curl ${apiBase}/v1/chat/completions \\
+                curl: `# Unified endpoint
+curl -X POST ${unifiedUrl} \\
+  -H "Content-Type: application/json" \\
+  -d '{"message":"Hello"}'
+
+# OpenAI-compatible endpoint
+curl ${apiBase}/v1/chat/completions \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"agent:${agentRef}","messages":[{"role":"user","content":"Hello"}]}'`,
-                python: `from openai import OpenAI
+                python: `import requests
+
+# Unified endpoint
+r = requests.post("${unifiedUrl}", json={"message": "Hello"})
+print(r.json())
+
+# Or use OpenAI-compatible endpoint
+from openai import OpenAI
 
 client = OpenAI(base_url="${apiBase}/v1", api_key="YOUR_API_KEY")
 r = client.chat.completions.create(
@@ -552,14 +567,23 @@ r = client.chat.completions.create(
     messages=[{"role": "user", "content": "Hello"}]
 )
 print(r.choices[0].message.content)`,
-                node: `import OpenAI from 'openai';
+                node: `// Unified endpoint
+const r = await fetch('${unifiedUrl}', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ message: 'Hello' }),
+});
+console.log(await r.json());
+
+// Or use OpenAI-compatible endpoint
+import OpenAI from 'openai';
 
 const client = new OpenAI({ baseURL: '${apiBase}/v1', apiKey: 'YOUR_API_KEY' });
-const r = await client.chat.completions.create({
+const r2 = await client.chat.completions.create({
   model: 'agent:${agentRef}',
   messages: [{ role: 'user', content: 'Hello' }],
 });
-console.log(r.choices[0].message.content);`,
+console.log(r2.choices[0].message.content);`,
               }
               return (
                 <div className="relative">

@@ -253,7 +253,7 @@ export class CredentialService {
   private maskCredential(credential: Credential): Credential {
     if (credential.config) {
       const maskedConfig = { ...credential.config };
-      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken'];
+      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken', 'headerValue', 'clientSecret'];
       for (const field of sensitiveFields) {
         if (maskedConfig[field] && typeof maskedConfig[field] === 'string') {
           const val = maskedConfig[field];
