@@ -255,7 +255,7 @@ export function AgentsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
           <p className="text-muted-foreground">
-            {isLoading ? 'Loading...' : `${agents.length} agents (${activeCount} active)`}
+            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${agents.length} agents (${activeCount} active)`}
           </p>
         </div>
         <div className="flex items-center gap-2">
