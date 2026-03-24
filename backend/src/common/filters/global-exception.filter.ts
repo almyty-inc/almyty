@@ -59,11 +59,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         `Unhandled error on ${request.method} ${request.path}: ${exception.message}`,
         exception.stack,
       );
+      this.captureToSentry(exception);
     } else {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
       message = 'Internal server error';
       code = 'INTERNAL_ERROR';
       this.logger.error(`Unknown error on ${request.method} ${request.path}`, exception);
+      this.captureToSentry(exception);
     }
 
     response.status(status).json({
@@ -75,6 +77,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         path: request.path,
       },
     });
+  }
+
+  private captureToSentry(exception: unknown): void {
+    try {
+      const Sentry = require('@sentry/node');
+      if (Sentry.isInitialized?.()) {
+        Sentry.captureException(exception);
+      }
+    } catch {
+      // @sentry/node not installed — skip
+    }
   }
 
   private getCodeFromStatus(status: number): string {

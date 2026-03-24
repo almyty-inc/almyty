@@ -13,6 +13,19 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { RequestLog } from './entities/request-log.entity';
 import { UsageMetric } from './entities/usage-metric.entity';
 
+// Sentry error tracking — enabled when SENTRY_DSN is configured
+if (process.env.SENTRY_DSN) {
+  try {
+    const Sentry = require('@sentry/node');
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV || 'development',
+    });
+  } catch {
+    // @sentry/node not installed — skip initialization
+  }
+}
+
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   

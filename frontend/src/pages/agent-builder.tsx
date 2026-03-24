@@ -16,7 +16,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Save, Loader2, Download, AlertTriangle, Plus, X } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Download, AlertTriangle, Plus, X, Undo2, Redo2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -97,6 +97,90 @@ export function AgentBuilderPage() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [initialized, setInitialized] = useState(false)
   const [showMobilePalette, setShowMobilePalette] = useState(false)
+
+  // ── Undo / Redo history ───────────────────────────────────────────────
+  const [history, setHistory] = useState<{ nodes: Node[]; edges: Edge[] }[]>([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const isUndoRedoRef = useRef(false)
+
+  const pushHistory = useCallback((newNodes: Node[], newEdges: Edge[]) => {
+    if (isUndoRedoRef.current) return
+    const snapshot = {
+      nodes: newNodes.map((n) => ({ ...n, data: { ...n.data } })),
+      edges: newEdges.map((e) => ({ ...e })),
+    }
+    setHistoryIndex((prevIndex) => {
+      setHistory((prev) => {
+        const truncated = prev.slice(0, prevIndex + 1)
+        const next = [...truncated, snapshot]
+        // Keep max 50 snapshots
+        if (next.length > 50) next.shift()
+        return next
+      })
+      const newIndex = Math.min(prevIndex + 1, 49)
+      return newIndex
+    })
+  }, [])
+
+  const canUndo = historyIndex > 0
+  const canRedo = historyIndex < history.length - 1
+
+  const undo = useCallback(() => {
+    if (!canUndo) return
+    isUndoRedoRef.current = true
+    const prev = history[historyIndex - 1]
+    setNodes(prev.nodes.map((n) => ({ ...n, data: { ...n.data } })))
+    setEdges(prev.edges.map((e) => ({ ...e })))
+    setHistoryIndex((i) => i - 1)
+    setSelectedNode(null)
+    requestAnimationFrame(() => { isUndoRedoRef.current = false })
+  }, [canUndo, history, historyIndex, setNodes, setEdges])
+
+  const redo = useCallback(() => {
+    if (!canRedo) return
+    isUndoRedoRef.current = true
+    const next = history[historyIndex + 1]
+    setNodes(next.nodes.map((n) => ({ ...n, data: { ...n.data } })))
+    setEdges(next.edges.map((e) => ({ ...e })))
+    setHistoryIndex((i) => i + 1)
+    setSelectedNode(null)
+    requestAnimationFrame(() => { isUndoRedoRef.current = false })
+  }, [canRedo, history, historyIndex, setNodes, setEdges])
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      } else if (mod && e.key === 'z' && e.shiftKey) {
+        e.preventDefault()
+        redo()
+      } else if (mod && e.key === 'y') {
+        e.preventDefault()
+        redo()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [undo, redo])
+
+  // Push to history whenever nodes/edges change (debounced via a stable ref)
+  const historyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!initialized) return
+    if (isUndoRedoRef.current) return
+    if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
+    historyTimerRef.current = setTimeout(() => {
+      pushHistory(nodes, edges)
+    }, 300)
+    return () => {
+      if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
+    }
+    // Only fire when nodes or edges actually change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, edges, initialized])
 
   // Document title
   useEffect(() => {
@@ -377,6 +461,26 @@ export function AgentBuilderPage() {
           </Badge>
         </div>
         <div className="flex items-center gap-1 sm:gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={undo}
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo2 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={redo}
+            disabled={!canRedo}
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            <Redo2 className="h-4 w-4" />
+          </Button>
           {isEditing && (
             <Button
               variant="outline"

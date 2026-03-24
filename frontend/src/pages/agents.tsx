@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -233,16 +233,40 @@ export function AgentsPage() {
       const data = JSON.parse(jsonStr)
       return agentsApi.importAgent(data)
     },
-    onSuccess: async () => {
+    onSuccess: async (result: any) => {
       success('Agent Imported', 'Agent has been imported successfully.')
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
       setImportDialogOpen(false)
       setImportJson('')
+      // Navigate to the newly imported agent
+      if (result?.id) {
+        navigate(`/agents/${result.id}/edit`)
+      }
     },
     onError: (err: any) => {
       errorNotif('Import Failed', err?.message || 'Invalid JSON or import failed')
     },
   })
+
+  // File picker handler for import
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const handleImportFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string
+      if (text) {
+        setImportJson(text)
+      }
+    }
+    reader.onerror = () => {
+      errorNotif('Read Failed', 'Could not read the selected file.')
+    }
+    reader.readAsText(file)
+    // Reset so the same file can be re-selected
+    e.target.value = ''
+  }, [errorNotif])
 
   const handleCreateSubmit = (data: CreateAgentForm) => {
     createAgentMutation.mutate(data)
@@ -539,6 +563,13 @@ export function AgentsPage() {
       </AlertDialog>
 
       {/* Import Agent Dialog */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        onChange={handleImportFile}
+      />
       <Dialog open={importDialogOpen} onOpenChange={(open) => {
         setImportDialogOpen(open)
         if (!open) setImportJson('')
@@ -547,16 +578,33 @@ export function AgentsPage() {
           <DialogHeader>
             <DialogTitle>Import Agent</DialogTitle>
             <DialogDescription>
-              Paste an exported agent JSON to create a new agent from it.
+              Upload a .json file or paste an exported agent JSON to create a new agent.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="import-json">Agent JSON</Label>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <FileUp className="h-4 w-4 mr-2" />
+                Choose .json file
+              </Button>
+            </div>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">or paste JSON</span>
+              </div>
+            </div>
+            <div>
               <Textarea
                 id="import-json"
-                className="mt-1 font-mono text-xs"
-                rows={12}
+                className="font-mono text-xs"
+                rows={10}
                 placeholder='{"name": "My Agent", "pipeline": { ... }}'
                 value={importJson}
                 onChange={(e) => setImportJson(e.target.value)}
