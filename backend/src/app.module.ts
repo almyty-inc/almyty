@@ -49,6 +49,7 @@ import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { HealthModule } from './modules/health/health.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { AgentsModule } from './modules/agents/agents.module';
+import { UnifiedEndpointModule } from './modules/gateways/unified-endpoint.module';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -168,6 +169,8 @@ import { databaseConfig } from './config/database.config';
     MonitoringModule,
     HealthModule,
     AgentsModule,
+    // MUST be last — wildcard /:orgSlug/:resourceSlug catches everything
+    UnifiedEndpointModule,
   ],
   providers: [
     {

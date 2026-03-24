@@ -225,7 +225,9 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
 
   // MCP gateway
   if (gatewayType === 'mcp') {
-    const mcpEndpoint = `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`
+    const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
+    const mcpEndpoint = `${backendUrl}/${orgSlug}/${gwSlug}`
+    const mcpLegacyEndpoint = `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`
     const sseEndpoint = `${backendUrl}/mcp/sse`
     const discoveryUrl = `${backendUrl}/mcp/.well-known/mcp`
 
@@ -350,8 +352,9 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
 
   // A2A gateway
   if (gatewayType === 'a2a') {
-    const a2aBase = `${backendUrl}/a2a`
-    const discoveryUrl = `${backendUrl}/a2a/.well-known/a2a`
+    const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
+    const a2aBase = `${backendUrl}/${orgSlug}/${gwSlug}`
+    const discoveryUrl = `${backendUrl}/${orgSlug}/${gwSlug}/.well-known/a2a`
 
     return (
       <div className="space-y-6">
@@ -404,8 +407,9 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
 
   // UTCP gateway
   if (gatewayType === 'utcp') {
-    const discoveryUrl = `${backendUrl}/utcp/.well-known/utcp`
-    const orgId = gateway.organizationId || orgSlug
+    const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
+    const utcpBase = `${backendUrl}/${orgSlug}/${gwSlug}`
+    const discoveryUrl = `${utcpBase}/.well-known/utcp`
 
     return (
       <div className="space-y-6">
@@ -431,8 +435,8 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
               <Label className="text-sm font-medium">Execute Tool</Label>
               <p className="text-xs text-muted-foreground mb-1">POST to execute a tool via UTCP</p>
               <div className="flex gap-2 mt-1">
-                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{backendUrl}/api/utcp/{orgId}/execute</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${backendUrl}/utcp/${orgId}/execute`, 'utcp-execute')}>
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{utcpBase}/execute</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${utcpBase}/execute`, 'utcp-execute')}>
                   {copiedField === 'utcp-execute' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -441,8 +445,8 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
               <Label className="text-sm font-medium">Tool Manual</Label>
               <p className="text-xs text-muted-foreground mb-1">GET to retrieve the UTCP manual</p>
               <div className="flex gap-2 mt-1">
-                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{backendUrl}/api/utcp/{orgId}/manual</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${backendUrl}/utcp/${orgId}/manual`, 'utcp-manual')}>
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{utcpBase}/manual</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${utcpBase}/manual`, 'utcp-manual')}>
                   {copiedField === 'utcp-manual' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -1187,9 +1191,9 @@ export function GatewayDetailPage() {
           <div className="space-y-4">
             <div>
               <p className="text-sm font-medium text-muted-foreground mb-2">
-                {gateway.type === 'mcp' && 'MCP Endpoint URL'}
-                {gateway.type === 'utcp' && 'UTCP Manual URL'}
-                {gateway.type === 'a2a' && 'A2A Discovery URL'}
+                {gateway.type === 'mcp' && 'Endpoint URL'}
+                {gateway.type === 'utcp' && 'Endpoint URL'}
+                {gateway.type === 'a2a' && 'Endpoint URL'}
                 {gateway.type === 'skills' && 'Install Command'}
               </p>
               <div className="flex gap-2">
@@ -1197,12 +1201,13 @@ export function GatewayDetailPage() {
                   {(() => {
                     const backendUrl = window.location.origin.replace(':3002', ':4000').replace('app.', 'api.')
                     const orgSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
-                    if (gateway.type === 'mcp') return `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`
-                    if (gateway.type === 'utcp') return `${backendUrl}/utcp/${orgSlug}${gateway.endpoint}/manual`
-                    if (gateway.type === 'a2a') return `${backendUrl}/a2a/${orgSlug}${gateway.endpoint}/.well-known/a2a`
+                    const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
+                    if (gateway.type === 'mcp') return `${backendUrl}/${orgSlug}/${gwSlug}`
+                    if (gateway.type === 'utcp') return `${backendUrl}/${orgSlug}/${gwSlug}`
+                    if (gateway.type === 'a2a') return `${backendUrl}/${orgSlug}/${gwSlug}`
                     if (gateway.type === 'skills') {
-                      const gwSlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
-                      return `npx @apifai/skills install @${orgSlug}/${gwSlug}`
+                      const nameSlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
+                      return `npx @apifai/skills install @${orgSlug}/${nameSlug}`
                     }
                     return gateway.endpoint
                   })()}
@@ -1213,13 +1218,14 @@ export function GatewayDetailPage() {
                   onClick={async () => {
                     const backendUrl = window.location.origin.replace(':3002', ':4000').replace('app.', 'api.')
                     const orgSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
+                    const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
                     let fullEndpoint = gateway.endpoint
-                    if (gateway.type === 'mcp') fullEndpoint = `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`
-                    else if (gateway.type === 'utcp') fullEndpoint = `${backendUrl}/utcp/${orgSlug}${gateway.endpoint}/manual`
-                    else if (gateway.type === 'a2a') fullEndpoint = `${backendUrl}/a2a/${orgSlug}${gateway.endpoint}/.well-known/a2a`
+                    if (gateway.type === 'mcp') fullEndpoint = `${backendUrl}/${orgSlug}/${gwSlug}`
+                    else if (gateway.type === 'utcp') fullEndpoint = `${backendUrl}/${orgSlug}/${gwSlug}`
+                    else if (gateway.type === 'a2a') fullEndpoint = `${backendUrl}/${orgSlug}/${gwSlug}`
                     else if (gateway.type === 'skills') {
-                      const gwSlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
-                      fullEndpoint = `npx @apifai/skills install @${orgSlug}/${gwSlug}`
+                      const nameSlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
+                      fullEndpoint = `npx @apifai/skills install @${orgSlug}/${nameSlug}`
                     }
                     try {
                       await navigator.clipboard.writeText(fullEndpoint)

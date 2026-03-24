@@ -91,7 +91,7 @@ export class Credential {
    */
   encryptSensitiveData(): void {
     if (this.config && typeof this.config === 'object') {
-      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken'];
+      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken', 'headerValue', 'clientSecret'];
       const encrypted = { ...this.config };
 
       for (const field of sensitiveFields) {
@@ -171,8 +171,18 @@ export class Credential {
 
       case CredentialType.JWT:
         return {
-          Authorization: `Bearer ${decryptedConfig.token}`,
+          [decryptedConfig.headerName || 'Authorization']: decryptedConfig.headerName
+            ? decryptedConfig.token
+            : `Bearer ${decryptedConfig.token}`,
         };
+
+      case CredentialType.CUSTOM:
+        if (decryptedConfig.headerName && decryptedConfig.headerValue) {
+          return {
+            [decryptedConfig.headerName]: decryptedConfig.headerValue,
+          };
+        }
+        return {};
 
       default:
         return {};
