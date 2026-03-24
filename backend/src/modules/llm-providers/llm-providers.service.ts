@@ -396,14 +396,14 @@ export class LlmProvidersService {
           toolCalls: response.message.toolCalls,
           inputTokens: response.usage.inputTokens,
           outputTokens: response.usage.outputTokens,
-          cost: Math.round(response.cost * 100),
+          cost: response.cost * 100,
           responseTime: response.responseTime,
           model: response.model,
           finishReason: response.message.finishReason,
           status: MessageStatus.COMPLETED,
         }));
 
-        session.addMessage(response.usage.inputTokens, response.usage.outputTokens, Math.round(response.cost * 100));
+        session.addMessage(response.usage.inputTokens, response.usage.outputTokens, response.cost * 100);
         session.addToolCall(true);
 
         // Build follow-up messages with tool results
@@ -435,7 +435,7 @@ export class LlmProvidersService {
         toolCalls: response.message.toolCalls,
         inputTokens: response.usage.inputTokens,
         outputTokens: response.usage.outputTokens,
-        cost: Math.round(response.cost * 100),
+        cost: response.cost * 100,
         responseTime: response.responseTime,
         model: response.model,
         finishReason: response.message.finishReason,
@@ -445,14 +445,14 @@ export class LlmProvidersService {
       const savedMessage = await this.llmMessageRepository.save(message);
 
       // Update session stats
-      session.addMessage(response.usage.inputTokens, response.usage.outputTokens, Math.round(response.cost * 100));
+      session.addMessage(response.usage.inputTokens, response.usage.outputTokens, response.cost * 100);
       if (response.message.toolCalls?.length > 0) {
         session.addToolCall(true);
       }
       await this.llmSessionRepository.save(session);
 
       // Update provider stats
-      provider.incrementUsage(response.usage.totalTokens, Math.round(response.cost * 100), true);
+      provider.incrementUsage(response.usage.totalTokens, response.cost * 100, true);
       await this.llmProviderRepository.save(provider);
 
       return {
