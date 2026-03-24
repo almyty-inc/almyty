@@ -22,7 +22,7 @@ interface Notification {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  sidebarOpen: true,
+  sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 1024,
   theme: 'light',
   notifications: [],
   isLoading: false,

@@ -213,22 +213,22 @@ export function DashboardPage() {
           {/* Pipeline: APIs → Tools → Gateways → Agents */}
           <Card>
             <CardContent className="py-6">
-              <div className="flex items-center justify-between gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
                 <button onClick={() => navigate('/apis')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{apisTotal}</div>
                   <div className="text-sm text-muted-foreground">APIs Connected</div>
                 </button>
-                <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
                 <button onClick={() => navigate('/tools')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{toolsTotal}</div>
                   <div className="text-sm text-muted-foreground">Tools Generated</div>
                 </button>
-                <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
                 <button onClick={() => navigate('/gateways')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{gatewaysTotal}</div>
                   <div className="text-sm text-muted-foreground">Gateways Serving</div>
                 </button>
-                <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
                 <button onClick={() => navigate('/agents')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{agents.length}</div>
                   <div className="text-sm text-muted-foreground">Agents Running</div>
