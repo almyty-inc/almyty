@@ -68,7 +68,9 @@ export function ToolDetailPage() {
 
   const toggleStatusMutation = useMutation({
     mutationFn: ({ status }: { status: string }) =>
-      toolsApi.update(id!, { status }, currentOrganization?.id),
+      status === 'active'
+        ? toolsApi.activate(id!, currentOrganization!.id)
+        : toolsApi.deactivate(id!, currentOrganization!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tool', id] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
