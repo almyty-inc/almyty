@@ -256,10 +256,11 @@ export function GatewaysPage() {
           onClick: async (gateway) => {
             const backendUrl = window.location.origin.replace(':3002', ':4000')
             const simpleSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
-            const fullEndpoint = `${backendUrl}/mcp/${simpleSlug}${gateway.endpoint}`
+            const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
+            const fullEndpoint = `${backendUrl}/${simpleSlug}/${gwSlug}`
             try {
               await navigator.clipboard.writeText(fullEndpoint)
-              success('Copied!', 'Full MCP endpoint URL copied to clipboard')
+              success('Copied!', 'Full endpoint URL copied to clipboard')
             } catch (err) {
               errorNotif('Failed to copy', 'Could not copy endpoint to clipboard')
             }

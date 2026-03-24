@@ -227,9 +227,8 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
   if (gatewayType === 'mcp') {
     const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
     const mcpEndpoint = `${backendUrl}/${orgSlug}/${gwSlug}`
-    const mcpLegacyEndpoint = `${backendUrl}/mcp/${orgSlug}${gateway.endpoint}`
-    const sseEndpoint = `${backendUrl}/mcp/sse`
-    const discoveryUrl = `${backendUrl}/mcp/.well-known/mcp`
+    const sseEndpoint = `${mcpEndpoint}/sse`
+    const discoveryUrl = `${mcpEndpoint}/.well-known/mcp`
 
     return (
       <div className="space-y-6">
@@ -1323,7 +1322,7 @@ export function GatewayDetailPage() {
           ) : (
             <div className="space-y-2">
               {allTools.map((tool: any) => {
-                const isAssigned = gatewayTools.some((gt: any) => gt.id === tool.id || gt.toolId === tool.id || gt.tool?.id === tool.id)
+                const isAssigned = gatewayTools.some((gt: any) => gt.toolId === tool.id || gt.tool?.id === tool.id)
 
                 return (
                   <Card key={tool.id}>
@@ -1345,7 +1344,7 @@ export function GatewayDetailPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              const gt = gatewayTools.find((gt: any) => gt.id === tool.id || gt.toolId === tool.id || gt.tool?.id === tool.id)
+                              const gt = gatewayTools.find((gt: any) => gt.toolId === tool.id || gt.tool?.id === tool.id)
                               setSecurityTarget({
                                 gatewayToolId: gt?.gatewayToolId || gt?.id || tool.id,
                                 toolName: tool.name,
