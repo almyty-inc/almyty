@@ -184,7 +184,7 @@ function OrganizationTab({ organization }: { organization: any }) {
         <div>
           <label className="text-sm font-medium text-muted-foreground">Created</label>
           <div className="text-sm mt-1">
-            {(fullOrg.createdAt || fullOrg.created_at) ? new Date(fullOrg.createdAt || fullOrg.created_at).toLocaleDateString() : 'Unknown'}
+            {(fullOrg.createdAt || fullOrg.created_at) ? new Date(fullOrg.createdAt || fullOrg.created_at).toLocaleDateString() : <span className="inline-block w-20 h-4 bg-muted animate-pulse rounded" />}
           </div>
         </div>
       </CardContent>
