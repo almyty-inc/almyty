@@ -242,6 +242,36 @@ describe('AgentsPage', () => {
       expect(screen.getByText('Research Agent')).toBeInTheDocument()
       expect(screen.queryByText('Chat Agent')).not.toBeInTheDocument()
     })
+
+    it('should show "no match" message when search has no results', async () => {
+      const user = userEvent.setup()
+      renderAgentsPage()
+
+      await waitFor(() => {
+        expect(screen.getByText('Chat Agent')).toBeInTheDocument()
+      })
+
+      const searchInput = screen.getByPlaceholderText('Search agents...')
+      await user.type(searchInput, 'Nonexistent')
+
+      expect(screen.queryByText('Chat Agent')).not.toBeInTheDocument()
+      expect(screen.queryByText('Research Agent')).not.toBeInTheDocument()
+      expect(screen.getByText(/No agents match/)).toBeInTheDocument()
+    })
+
+    it('should navigate to agent detail page when clicking an agent row', async () => {
+      const user = userEvent.setup()
+      renderAgentsPage()
+
+      await waitFor(() => {
+        expect(screen.getByText('Chat Agent')).toBeInTheDocument()
+      })
+
+      // Click the agent row (click on the name text, which is inside the row)
+      await user.click(screen.getByText('Chat Agent'))
+
+      expect(mockNavigate).toHaveBeenCalledWith('/agents/agent-1')
+    })
   })
 
   describe('Templates Section', () => {
@@ -294,6 +324,23 @@ describe('AgentsPage', () => {
         expect(screen.getByText('basic')).toBeInTheDocument()
         expect(screen.getByText('advanced')).toBeInTheDocument()
       })
+    })
+
+    it('should hide templates section when Hide button is clicked', async () => {
+      const user = userEvent.setup()
+      renderAgentsPage()
+
+      await waitFor(() => {
+        expect(screen.getByText('Start from a Template')).toBeInTheDocument()
+      })
+
+      // Click the Hide button
+      await user.click(screen.getByText('Hide'))
+
+      // Templates section should disappear
+      expect(screen.queryByText('Start from a Template')).not.toBeInTheDocument()
+      expect(screen.queryByText('Simple Chat Agent')).not.toBeInTheDocument()
+      expect(screen.queryByText('Research Agent')).not.toBeInTheDocument()
     })
 
     it('should navigate to new agent with template when template is clicked', async () => {

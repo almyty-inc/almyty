@@ -43,6 +43,24 @@ vi.mock('../../store/app', () => ({
   }),
 }))
 
+// Track navigate calls
+const mockNavigate = vi.fn()
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom')
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+    useParams: () => ({}),
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+    useLocation: () => ({
+      pathname: '/gateways',
+      search: '',
+      hash: '',
+      state: null,
+    }),
+  }
+})
+
 // Mock hasPointerCapture for Radix Select in jsdom
 beforeEach(() => {
   if (!Element.prototype.hasPointerCapture) {
@@ -299,6 +317,70 @@ describe('GatewaysPage', () => {
         // Subtitle now shows inline counts like "2 gateways (1 active)"
         expect(screen.getByText(/2 gateways/)).toBeInTheDocument()
       })
+    })
+  })
+
+  describe('Search Filter', () => {
+    beforeEach(() => {
+      vi.mocked(gatewaysApi.getAll).mockResolvedValue({
+        gateways: [
+          { ...mockGateway, id: 'gateway-1', name: 'MCP Gateway', type: 'mcp', endpoint: '/mcp' },
+          { ...mockGateway, id: 'gateway-2', name: 'A2A Gateway', type: 'a2a', endpoint: '/a2a' },
+          { ...mockGateway, id: 'gateway-3', name: 'Skills Gateway', type: 'skills', endpoint: '/skills' },
+        ],
+      })
+    })
+
+    it('should filter gateways by search query showing only matching results', async () => {
+      const user = userEvent.setup()
+      renderGatewaysPage()
+
+      await waitFor(() => {
+        expect(screen.getByText('MCP Gateway')).toBeInTheDocument()
+        expect(screen.getByText('A2A Gateway')).toBeInTheDocument()
+        expect(screen.getByText('Skills Gateway')).toBeInTheDocument()
+      })
+
+      const searchInput = screen.getByPlaceholderText('Search gateways...')
+      await user.type(searchInput, 'MCP')
+
+      // Only the MCP gateway should remain visible
+      expect(screen.getByText('MCP Gateway')).toBeInTheDocument()
+      expect(screen.queryByText('A2A Gateway')).not.toBeInTheDocument()
+      expect(screen.queryByText('Skills Gateway')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Delete Confirmation Dialog', () => {
+    beforeEach(() => {
+      vi.mocked(gatewaysApi.getAll).mockResolvedValue({
+        gateways: [
+          { ...mockGateway, id: 'gateway-1', name: 'My MCP Gateway', type: 'mcp' },
+        ],
+      })
+    })
+
+    it('should show delete confirmation dialog with gateway name when Delete is clicked', async () => {
+      const user = userEvent.setup()
+      renderGatewaysPage()
+
+      await waitFor(() => {
+        expect(screen.getByText('My MCP Gateway')).toBeInTheDocument()
+      })
+
+      // Find the actions button (the "..." button rendered by createActionsColumn)
+      const actionsButton = screen.getByRole('button', { name: /actions/i })
+      await user.click(actionsButton)
+
+      // Click Delete in the dropdown menu
+      await user.click(screen.getByText('Delete'))
+
+      // The confirmation dialog should appear with the gateway name
+      expect(screen.getByText('Delete gateway?')).toBeInTheDocument()
+      // The dialog description includes the gateway name in the delete warning
+      expect(screen.getByText(/permanently delete "My MCP Gateway"/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Delete Gateway/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument()
     })
   })
 
