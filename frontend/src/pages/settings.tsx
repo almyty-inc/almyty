@@ -71,12 +71,8 @@ function OrganizationTab({ organization }: { organization: any }) {
     enabled: !!organization?.id,
   })
 
-  // orgDetails is the Axios response; .data is the org object
-  // Some endpoints wrap in {success, data}, interceptor unwraps those
-  const orgFromQuery = orgDetails?.data || orgDetails
-  const fullOrg = (orgFromQuery && typeof orgFromQuery === 'object' && 'createdAt' in orgFromQuery)
-    ? orgFromQuery
-    : organization
+  // orgDetails is the Axios response; .data is the actual org object
+  const fullOrg = orgDetails?.data || organization
 
   // Initialize form values when organization data loads
   React.useEffect(() => {
