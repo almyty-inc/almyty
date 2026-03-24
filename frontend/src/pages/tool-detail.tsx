@@ -44,16 +44,14 @@ export function ToolDetailPage() {
       setSentParameters(parameters)
       return toolsApi.execute(id!, { parameters }, currentOrganization.id)
     },
-    onSuccess: (response: { data: Record<string, any> }) => {
-      // After interceptor, response.data is the unwrapped payload
-      const result = response.data
-      setExecutionResult(result)
-      // If result has data.uuid or similar, it succeeded
-      if (result && !result.error) {
-        notifications.success('Success', 'Tool executed successfully')
-      } else {
-        notifications.error('Execution Failed', result?.error || 'Tool execution failed')
-      }
+    onSuccess: (response: any) => {
+      // Interceptor unwraps {success, data} → response.data is just the tool output
+      const toolOutput = response.data
+      setExecutionResult({
+        success: true,
+        data: toolOutput,
+      })
+      notifications.success('Success', 'Tool executed successfully')
     },
     onError: (error: Error & { response?: { data?: Record<string, any>; status?: number }; config?: { url?: string; method?: string } }) => {
       notifications.error('Error', error.message || 'Failed to execute tool')
@@ -214,9 +212,18 @@ export function ToolDetailPage() {
                 </div>
                 <div className="mt-2">
                   <span className="text-xs text-muted-foreground">Code:</span>
-                  <pre className="p-4 text-sm font-mono bg-muted/50 rounded-md overflow-auto whitespace-pre-wrap break-words max-h-[300px] mt-1">
-                    {tool.code || tool.configuration?.code || 'No code'}
-                  </pre>
+                  <pre className="p-4 text-sm font-mono bg-muted/50 rounded-md overflow-auto whitespace-pre-wrap break-words max-h-[300px] mt-1">{
+                    (() => {
+                      const raw = tool.code || tool.configuration?.code || 'No code'
+                      // Format single-line code for readability
+                      return raw
+                        .replace(/;\s*/g, ';\n')
+                        .replace(/\{\s*/g, '{\n  ')
+                        .replace(/\}\s*/g, '\n}')
+                        .replace(/,\s*(?=[a-zA-Z])/g, ',\n  ')
+                        .trim()
+                    })()
+                  }</pre>
                 </div>
               </>
             ) : tool.executionMethod === 'http' ? (
