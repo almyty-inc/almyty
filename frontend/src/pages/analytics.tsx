@@ -19,7 +19,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { analyticsApi, gatewaysApi, toolsApi, agentsApi } from '@/lib/api'
+import { analyticsApi, gatewaysApi, toolsApi, agentsApi, llmProvidersApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
@@ -124,6 +124,19 @@ export function AnalyticsPage() {
     },
     enabled: !!currentOrganization && tab === 'llm',
   })
+
+  const { data: llmProvidersData } = useQuery({
+    queryKey: ['llm-providers'],
+    queryFn: () => llmProvidersApi.getAll(),
+    enabled: !!currentOrganization && tab === 'llm',
+  })
+  const providerNameMap = useMemo(() => {
+    const providers = llmProvidersData?.data?.providers || llmProvidersData?.data || []
+    const arr = Array.isArray(providers) ? providers : []
+    const map: Record<string, string> = {}
+    arr.forEach((p: any) => { map[p.id] = p.name })
+    return map
+  }, [llmProvidersData])
 
   const { data: timeline } = useQuery({
     queryKey: ['analytics-timeline', currentOrganization?.id],
@@ -625,7 +638,7 @@ export function AnalyticsPage() {
                 <tbody>
                   {llmUsage.map((l: LlmUsageEntry) => (
                     <tr key={l.providerId} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="px-4 py-2.5 font-medium text-sm">{l.providerId.slice(0, 8)}</td>
+                      <td className="px-4 py-2.5 font-medium text-sm">{providerNameMap[l.providerId] || l.providerId.slice(0, 8)}</td>
                       <td className="px-4 py-2.5 text-right">{l.sessionCount.toLocaleString()}</td>
                       <td className="px-4 py-2.5 text-right">{l.totalMessages.toLocaleString()}</td>
                       <td className="px-4 py-2.5 text-right text-muted-foreground">{formatNumber(l.totalInputTokens)}</td>
