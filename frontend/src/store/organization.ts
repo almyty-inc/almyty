@@ -22,21 +22,17 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
   isInitialized: false,
 
   initializeFromUser: (user: User) => {
-    console.log('[OrganizationStore] initializeFromUser called with user:', user)
+    if (get().isInitialized) return
     const organizations = user.organizationMemberships?.map(membership => ({
       ...membership.organization,
-      members: [membership], // Include the membership info
+      members: [membership],
     })) || []
-
-    console.log('[OrganizationStore] Extracted organizations:', organizations)
 
     set({
       organizations,
       currentOrganization: organizations[0] || null,
       isInitialized: true,
     })
-
-    console.log('[OrganizationStore] Set currentOrganization:', organizations[0] || null)
   },
 
   fetchOrganizations: async () => {
