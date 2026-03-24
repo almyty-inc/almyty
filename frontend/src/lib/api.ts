@@ -317,9 +317,22 @@ export const toolsApi = {
     return apiPost('/tools', data)
   },
   
-  update: (id: string, data: any) => apiPatch(`/tools/${id}`, data),
-  
-  delete: (id: string) => apiDel(`/tools/${id}`),
+  update: (id: string, data: any, organizationId?: string) => {
+    if (organizationId) {
+      return apiPut(`/organizations/${organizationId}/tools/${id}`, data)
+    }
+    // Fallback: get org from store
+    const orgId = JSON.parse(localStorage.getItem('auth-storage') || '{}')?.state?.user?.organizationMemberships?.[0]?.organization?.id
+    return apiPut(`/organizations/${orgId}/tools/${id}`, data)
+  },
+
+  delete: (id: string, organizationId?: string) => {
+    if (organizationId) {
+      return apiDel(`/organizations/${organizationId}/tools/${id}`)
+    }
+    const orgId = JSON.parse(localStorage.getItem('auth-storage') || '{}')?.state?.user?.organizationMemberships?.[0]?.organization?.id
+    return apiDel(`/organizations/${orgId}/tools/${id}`)
+  },
   
   execute: (id: string, data: any, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/execute`, data),
   
