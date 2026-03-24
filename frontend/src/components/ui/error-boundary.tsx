@@ -25,17 +25,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     console.error('[ErrorBoundary]', error, errorInfo)
     this.props.onError?.(error, errorInfo)
 
-    // Report to Sentry if initialized
-    try {
-      // @ts-ignore — optional dependency
-      import('@sentry/react').then((Sentry: any) => {
-        if (Sentry.isInitialized?.()) {
-          Sentry.captureException(error, { contexts: { react: { componentStack: errorInfo.componentStack } } })
-        }
-      }).catch(() => {})
-    } catch {
-      // @sentry/react not available
-    }
+    // Sentry capture — uncomment when @sentry/react is installed
+    // import('@sentry/react').then(S => S.captureException(error)).catch(() => {})
   }
 
   render() {
