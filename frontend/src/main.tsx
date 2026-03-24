@@ -7,18 +7,8 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
 
-// Sentry error tracking — enabled when VITE_SENTRY_DSN is configured
-if (import.meta.env.VITE_SENTRY_DSN) {
-  // @ts-ignore — @sentry/react is optional, installed only when DSN configured
-  import('@sentry/react').then((Sentry: any) => {
-    Sentry.init({
-      dsn: import.meta.env.VITE_SENTRY_DSN,
-      environment: import.meta.env.MODE || 'development',
-    })
-  }).catch(() => {
-    // @sentry/react not installed — skip initialization
-  })
-}
+// Sentry error tracking — install @sentry/react and set VITE_SENTRY_DSN to enable
+// import('@sentry/react').then(Sentry => Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN }))
 
 // Create a client
 const queryClient = new QueryClient({
