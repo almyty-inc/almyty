@@ -59,7 +59,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.getUserOrganizations(mockRequest);
 
-      expect(result).toBe(mockOrganizations);
+      expect(result).toEqual({ success: true, data: mockOrganizations, message: 'Organizations retrieved successfully' });
       expect(organizationsService.findAll).toHaveBeenCalledWith('user-1');
     });
   });
@@ -74,7 +74,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.createOrganization(createDto, mockRequest);
 
-      expect(result).toBe(mockOrganization);
+      expect(result).toEqual({ success: true, data: mockOrganization, message: 'Organization created successfully' });
       expect(organizationsService.create).toHaveBeenCalledWith(createDto, 'user-1');
     });
   });
@@ -88,7 +88,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.getOrganization('org-1', mockRequest);
 
-      expect(result).toBe(mockOrganization);
+      expect(result).toEqual({ success: true, data: mockOrganization, message: 'Organization retrieved successfully' });
       expect(organizationsService.findOne).toHaveBeenCalledWith('org-1');
     });
   });
@@ -103,7 +103,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.updateOrganization('org-1', updateDto, mockRequest);
 
-      expect(result).toBe(mockOrganization);
+      expect(result).toEqual({ success: true, data: mockOrganization, message: 'Organization updated successfully' });
       expect(organizationsService.update).toHaveBeenCalledWith('org-1', updateDto);
     });
   });
@@ -116,7 +116,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.deleteOrganization('org-1', mockRequest);
 
-      expect(result).toBeUndefined();
+      expect(result).toEqual({ success: true, data: undefined, message: 'Organization deleted successfully' });
       expect(organizationsService.delete).toHaveBeenCalledWith('org-1');
     });
   });
@@ -133,7 +133,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.getOrganizationMembers('org-1', mockRequest);
 
-      expect(result).toBe(mockMembers);
+      expect(result).toEqual({ success: true, data: mockMembers, message: 'Members retrieved successfully' });
       expect(organizationsService.getMembers).toHaveBeenCalledWith('org-1', 'user-1');
     });
   });
@@ -148,7 +148,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.inviteUserToOrganization('org-1', inviteDto, mockRequest);
 
-      expect(result).toBe(mockInvite);
+      expect(result).toEqual({ success: true, data: mockInvite, message: 'User invited successfully' });
       expect(organizationsService.inviteUser).toHaveBeenCalledWith('org-1', inviteDto, 'user-1');
     });
   });
@@ -163,7 +163,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.updateMemberRole('org-1', 'user-2', roleData, mockRequest);
 
-      expect(result).toBe(mockMember);
+      expect(result).toEqual({ success: true, data: mockMember, message: 'Member role updated successfully' });
       expect(organizationsService.updateMemberRole).toHaveBeenCalledWith('org-1', 'user-2', OrganizationRole.ADMIN, 'user-1');
     });
   });
@@ -176,7 +176,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.removeMember('org-1', 'user-2', mockRequest);
 
-      expect(result).toBeUndefined();
+      expect(result).toEqual({ success: true, data: undefined, message: 'Member removed successfully' });
       expect(organizationsService.removeMember).toHaveBeenCalledWith('org-1', 'user-2');
     });
   });
@@ -193,7 +193,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.getOrganizationTeams('org-1', mockRequest);
 
-      expect(result).toBe(mockTeams);
+      expect(result).toEqual({ success: true, data: mockTeams, message: 'Teams retrieved successfully' });
       expect(organizationsService.getTeams).toHaveBeenCalledWith('org-1');
     });
   });
@@ -208,7 +208,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.createTeam('org-1', createDto, mockRequest);
 
-      expect(result).toBe(mockTeam);
+      expect(result).toEqual({ success: true, data: mockTeam, message: 'Team created successfully' });
       expect(organizationsService.createTeam).toHaveBeenCalledWith('org-1', createDto);
     });
   });
@@ -223,7 +223,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.updateTeam('org-1', 'team-1', updateDto, mockRequest);
 
-      expect(result).toBe(mockTeam);
+      expect(result).toEqual({ success: true, data: mockTeam, message: 'Team updated successfully' });
       expect(organizationsService.updateTeam).toHaveBeenCalledWith('team-1', updateDto);
     });
   });
@@ -238,7 +238,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.addMemberToTeam('org-1', 'team-1', memberData, mockRequest);
 
-      expect(result).toBe(mockTeamMember);
+      expect(result).toEqual({ success: true, data: mockTeamMember, message: 'Member added to team successfully' });
       expect(organizationsService.addTeamMember).toHaveBeenCalledWith('team-1', 'user-2');
     });
   });
@@ -253,7 +253,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.updateTeamMemberRole('org-1', 'team-1', 'user-2', roleData, mockRequest);
 
-      expect(result).toBe(mockTeamMember);
+      expect(result).toEqual({ success: true, data: mockTeamMember, message: 'Team member role updated successfully' });
       expect(organizationsService.updateTeamMemberRole).toHaveBeenCalledWith('team-1', 'user-2', 'admin');
     });
   });
@@ -266,7 +266,7 @@ describe('OrganizationsController', () => {
 
       const result = await controller.removeMemberFromTeam('org-1', 'team-1', 'user-2', mockRequest);
 
-      expect(result).toBeUndefined();
+      expect(result).toEqual({ success: true, data: undefined, message: 'Member removed from team successfully' });
       expect(organizationsService.removeTeamMember).toHaveBeenCalledWith('team-1', 'user-2');
     });
   });
