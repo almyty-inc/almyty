@@ -280,7 +280,7 @@ describe('GatewaysPage', () => {
 
       // Should see tool scoping section
       expect(screen.getByText('Tool Scoping')).toBeInTheDocument()
-      expect(screen.getByText('Assign All Tools')).toBeInTheDocument()
+      expect(screen.getByText(/assigned/)).toBeInTheDocument()
     })
   })
 
