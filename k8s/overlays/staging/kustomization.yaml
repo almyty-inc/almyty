@@ -90,13 +90,13 @@ patches:
         value: api.staging.almyty.com
       - op: replace
         path: /spec/tls/0/secretName
-        value: api-staging-apif-ai-tls
+        value: api-staging-almyty-com-tls
       - op: replace
         path: /spec/tls/1/hosts/0
         value: app.staging.almyty.com
       - op: replace
         path: /spec/tls/1/secretName
-        value: app-staging-apif-ai-tls
+        value: app-staging-almyty-com-tls
       - op: replace
         path: /spec/rules/0/host
         value: api.staging.almyty.com

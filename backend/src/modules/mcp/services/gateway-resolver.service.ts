@@ -114,7 +114,7 @@ export class GatewayResolverService {
       (ac) => ac.type === GatewayAuthType.API_KEY,
     );
 
-    const baseUrl = process.env.BASE_URL || process.env.API_URL || 'https://api.staging.apif.ai';
+    const baseUrl = process.env.BASE_URL || process.env.API_URL || 'https://api.staging.almyty.com';
     const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || '';
 
     if (hasOAuthAuth) {

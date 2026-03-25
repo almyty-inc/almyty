@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io/frane/apifai
+  REGISTRY: ghcr.io/frane/almyty
   TAG: staging-${{ github.sha }}
 
 permissions:
@@ -53,7 +53,7 @@ jobs:
           target: production
           push: true
           build-args: |
-            VITE_API_BASE_URL=https://api.staging.apif.ai
+            VITE_API_BASE_URL=https://api.staging.almyty.com
           tags: |
             ${{ env.REGISTRY }}/frontend:${{ env.TAG }}
             ${{ env.REGISTRY }}/frontend:staging-latest
@@ -79,24 +79,24 @@ jobs:
 
       - name: Create ImagePullSecret for GHCR
         run: |
-          kubectl create namespace apifai-staging --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace almyty-staging --dry-run=client -o yaml | kubectl apply -f -
           kubectl create secret docker-registry ghcr-secret \
             --docker-server=ghcr.io \
             --docker-username=${{ github.actor }} \
             --docker-password=${{ secrets.GHCR_PAT }} \
-            --namespace=apifai-staging \
+            --namespace=almyty-staging \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create application secrets
         run: |
-          kubectl create secret generic apifai-secrets \
+          kubectl create secret generic almyty-secrets \
             --from-literal=DATABASE_USERNAME=${{ secrets.STAGING_DATABASE_USERNAME }} \
             --from-literal=DATABASE_PASSWORD=${{ secrets.STAGING_DATABASE_PASSWORD }} \
             --from-literal=DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }} \
             --from-literal=REDIS_PASSWORD="" \
-            --from-literal=REDIS_URL="redis://staging-apifai-redis:6379" \
+            --from-literal=REDIS_URL="redis://staging-almyty-redis:6379" \
             --from-literal=JWT_SECRET=${{ secrets.STAGING_JWT_SECRET }} \
-            --namespace=apifai-staging \
+            --namespace=almyty-staging \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Update image tags with git SHA
@@ -112,8 +112,8 @@ jobs:
 
       - name: Wait for rollout
         run: |
-          kubectl rollout status deployment/staging-api -n apifai-staging --timeout=5m
-          kubectl rollout status deployment/staging-frontend -n apifai-staging --timeout=5m
+          kubectl rollout status deployment/staging-api -n almyty-staging --timeout=5m
+          kubectl rollout status deployment/staging-frontend -n almyty-staging --timeout=5m
 
       - name: Deployment summary
         run: |
@@ -121,5 +121,5 @@ jobs:
           echo "📦 Version: staging-${{ github.sha }}"
           echo ""
           echo "🌐 URLs:"
-          echo "  API: https://api.staging.apif.ai"
-          echo "  App: https://app.staging.apif.ai"
+          echo "  API: https://api.staging.almyty.com"
+          echo "  App: https://app.staging.almyty.com"

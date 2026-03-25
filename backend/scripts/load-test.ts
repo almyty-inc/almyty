@@ -1,6 +1,6 @@
 /**
  * Agent Load Test Script
- * Usage: npx ts-node scripts/load-test.ts --url https://api.staging.apif.ai --agent-id <id> --concurrency 10 --total 50
+ * Usage: npx ts-node scripts/load-test.ts --url https://api.staging.almyty.com --agent-id <id> --concurrency 10 --total 50
  *
  * Options:
  *   --url          Base URL of the API server (required)

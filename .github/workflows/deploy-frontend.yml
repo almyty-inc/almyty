@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io/frane/apifai
+  REGISTRY: ghcr.io/frane/almyty
   TAG: staging-${{ github.sha }}
 
 permissions:
@@ -42,7 +42,7 @@ jobs:
           target: production
           push: true
           build-args: |
-            VITE_API_BASE_URL=https://api.staging.apif.ai
+            VITE_API_BASE_URL=https://api.staging.almyty.com
           tags: |
             ${{ env.REGISTRY }}/frontend:${{ env.TAG }}
             ${{ env.REGISTRY }}/frontend:staging-latest
@@ -61,8 +61,8 @@ jobs:
         run: |
           kubectl set image deployment/staging-frontend \
             frontend=${{ env.REGISTRY }}/frontend:${{ env.TAG }} \
-            -n apifai-staging
+            -n almyty-staging
 
       - name: Wait for rollout
         run: |
-          kubectl rollout status deployment/staging-frontend -n apifai-staging --timeout=5m
+          kubectl rollout status deployment/staging-frontend -n almyty-staging --timeout=5m

@@ -3,7 +3,7 @@ Test almyty agent via OpenAI Python SDK.
 
 Usage:
   pip install openai
-  python test-openai-sdk.py --url https://api.staging.apif.ai --api-key <key> --agent-name new-agent
+  python test-openai-sdk.py --url https://api.staging.almyty.com --api-key <key> --agent-name new-agent
 
 This proves any OpenAI SDK can target almyty agents.
 """

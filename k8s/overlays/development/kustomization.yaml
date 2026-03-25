@@ -81,13 +81,13 @@ patches:
         value: api.dev.almyty.com
       - op: replace
         path: /spec/tls/0/secretName
-        value: api-dev-apif-ai-tls
+        value: api-dev-almyty-com-tls
       - op: replace
         path: /spec/tls/1/hosts/0
         value: app.dev.almyty.com
       - op: replace
         path: /spec/tls/1/secretName
-        value: app-dev-apif-ai-tls
+        value: app-dev-almyty-com-tls
       - op: replace
         path: /spec/rules/0/host
         value: api.dev.almyty.com
