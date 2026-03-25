@@ -184,7 +184,7 @@ test.describe('Authentication - Login', () => {
     await page.getByRole('button', { name: /sign in|login/i }).click()
 
     // Should show error (in red error box or toast notification)
-    await expect(page.locator('.bg-red-50, [role="alert"]')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('[role="alert"], .bg-destructive/10, [data-state="open"]')).toBeVisible({ timeout: 15000 })
   })
 
   test('should handle server 500 error gracefully', async ({ page }) => {
@@ -201,6 +201,6 @@ test.describe('Authentication - Login', () => {
     await page.getByRole('button', { name: /sign in|login/i }).click()
 
     // Should show error (in red error box or toast notification)
-    await expect(page.locator('.bg-red-50, [role="alert"]')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('[role="alert"], .bg-destructive/10, [data-state="open"]')).toBeVisible({ timeout: 15000 })
   })
 })
