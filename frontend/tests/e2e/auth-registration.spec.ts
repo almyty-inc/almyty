@@ -182,8 +182,10 @@ test.describe('Authentication - Registration', () => {
 
     await page.getByRole('button', { name: /create account|register|sign up/i }).click()
 
-    // Should show error message (either network error or generic registration failed)
-    // Use .first() to handle multiple matching elements (toast + inline error)
-    await expect(page.getByText(/error|failed/i).first()).toBeVisible()
+    // Should show error message — toast notification with "Registration failed" or inline error
+    // The toast renders as an li[role="status"] and the error text uses theme-aware classes
+    const toastError = page.locator('li[role="status"]').filter({ hasText: /failed|error/i })
+    const inlineError = page.getByText(/failed|error|try again/i).first()
+    await expect(toastError.or(inlineError)).toBeVisible({ timeout: 10000 })
   })
 })
