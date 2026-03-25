@@ -270,7 +270,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
                 </Button>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
+            <div className="text-xs text-muted-foreground bg-muted p-3 rounded">
               <strong>Auth:</strong> {gateway.authConfigs?.length > 0
                 ? <>Include <code className="font-mono">x-api-key: &lt;your-key&gt;</code> header. Generate keys in the Authentication section above.</>
                 : <>Include <code className="font-mono">Authorization: Bearer &lt;jwt&gt;</code> header.</>}
@@ -287,7 +287,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
             <div className="space-y-2">
               <h4 className="text-sm font-medium">Claude Code</h4>
               <div className="relative">
-                <pre className="p-3 bg-muted/50 rounded text-sm font-mono overflow-x-auto">
+                <pre className="p-3 bg-muted rounded text-sm font-mono overflow-x-auto">
 {JSON.stringify({
   mcpServers: {
     [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
@@ -316,7 +316,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
             <div className="space-y-2">
               <h4 className="text-sm font-medium">Cursor / Windsurf</h4>
               <div className="relative">
-                <pre className="p-3 bg-muted/50 rounded text-sm font-mono overflow-x-auto">
+                <pre className="p-3 bg-muted rounded text-sm font-mono overflow-x-auto">
 {JSON.stringify({
   mcpServers: {
     [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
@@ -395,7 +395,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
                 </Button>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
+            <div className="text-xs text-muted-foreground bg-muted p-3 rounded">
               <strong>Auth:</strong> Include <code className="font-mono">Authorization: Bearer &lt;jwt&gt;</code> header. Discovery is public.
             </div>
           </CardContent>
@@ -450,7 +450,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
                 </Button>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
+            <div className="text-xs text-muted-foreground bg-muted p-3 rounded">
               <strong>Auth:</strong> Include <code className="font-mono">Authorization: Bearer &lt;jwt&gt;</code> header. Discovery is public.
             </div>
           </CardContent>
@@ -749,7 +749,7 @@ function GatewayAuthSection({ gatewayId, gatewayName }: { gatewayId: string; gat
           <div className="space-y-2">
             <p className="text-sm font-medium text-muted-foreground">Active Auth Methods</p>
             {authConfigs.map((config: any) => (
-              <div key={config.id} className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg">
+              <div key={config.id} className="flex items-center justify-between px-3 py-2 bg-muted rounded-lg">
                 <div className="flex items-center gap-3">
                   <Lock className="h-4 w-4 text-muted-foreground" />
                   <Badge variant={config.type === 'none' ? 'secondary' : 'default'}>
@@ -791,7 +791,7 @@ function GatewayAuthSection({ gatewayId, gatewayName }: { gatewayId: string; gat
             ) : (
               <div className="space-y-2">
                 {keys.map((key: any) => (
-                  <div key={key.id} className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg">
+                  <div key={key.id} className="flex items-center justify-between px-3 py-2 bg-muted rounded-lg">
                     <div className="flex items-center gap-3">
                       <Key className="h-4 w-4 text-muted-foreground" />
                       <code className="text-xs font-mono bg-background px-2 py-1 rounded">{key.keyPrefix}...</code>

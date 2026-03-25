@@ -140,11 +140,14 @@ docker build --target production -t almyty-frontend ./frontend
 - Always lowercase `almyty` in code and text. Capitalize `Almyty` only at sentence start.
 - ⚡ emoji is a community brand character (README, changelogs, social). Never in formal docs or the SVG logo.
 - Logo: hollow ⚡ polygon, thin circuit strokes (1.5px) + node dots, violet→cyan gradient. Never filled solid.
-- Primary: violet-500 #8b5cf6 (dark) / violet-700 #6d28d9 (light)
-- Accent: cyan-400 #22d3ee (dark) / cyan-700 #0e7490 (light)
-- Fonts: Manrope (headings + logo, weight 500 for wordmark), DM Sans (body), JetBrains Mono (code). All on Google Fonts, SIL OFL.
-- Dark bg: #06060a — Light bg: #f4f2ee
-- Terminal prompt color in examples: violet (#8b5cf6). Shell prompt: `$`
+- Primary: violet-500 `#8b5cf6` (dark) / violet-600 `#7C3AED` (light)
+- Accent: cyan-400 `#22d3ee` (dark) / cyan-600 `#0891B2` (light)
+- Fonts: Manrope (headings + logo), DM Sans (body), JetBrains Mono (code). All Google Fonts, SIL OFL.
+- Dark bg: `#09090b` / Card: `#18181b` / Muted: `#27272a`
+- Light bg: `#FFFFFF` / Muted: `#F4F4F5` / Border: `#E4E4E7`
+- Dark borders: solid `#27272a`, never semi-transparent
+- Primary text dark: `#FAFAFA`, secondary: `#A1A1AA`, muted: `#71717A`
+- Terminal prompt in examples: violet (`#8b5cf6`). Shell prompt: `$`
 - Protocol badges: MCP=violet, A2A=cyan, UTCP=emerald, SOAP=amber, GraphQL=rose, REST=blue
-- Domain: almyty.com (almyty.ai, almyty.dev, almyty.tech, almyty.io, almyty.net redirect to it)
-- See `docs/brand/colors.md`, `docs/brand/typography.md`, `docs/brand/logo.md` for full specs.
+- Primary CTA buttons use violet→cyan gradient. Secondary buttons solid violet. One gradient CTA per page max.
+- Sidebar order: Dashboard → APIs → Tools → Gateways → Agents → Models → Analytics → Settings

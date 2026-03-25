@@ -568,7 +568,7 @@ export function AgentDetailPage() {
                 </Button>
               </div>
               {testOutput && (
-                <div className="bg-muted/50 rounded-lg p-3 text-sm whitespace-pre-wrap max-h-[200px] overflow-auto">
+                <div className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap max-h-[200px] overflow-auto">
                   {testOutput}
                 </div>
               )}
@@ -651,7 +651,7 @@ console.log(r2.choices[0].message.content);`,
               }
               return (
                 <div className="relative">
-                  <pre className="bg-muted/50 rounded-lg p-3 font-mono text-xs overflow-auto max-h-[180px] whitespace-pre-wrap">
+                  <pre className="bg-muted rounded-lg p-3 font-mono text-xs overflow-auto max-h-[180px] whitespace-pre-wrap">
                     {snippets[integrationTab]}
                   </pre>
                   <Button
@@ -936,7 +936,7 @@ console.log(r2.choices[0].message.content);`,
             ) : (
               <div className="space-y-2 max-h-[200px] overflow-y-auto">
                 {versions.map((v, index) => (
-                  <div key={index} className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
+                  <div key={index} className="flex items-center justify-between text-sm p-2 rounded-md bg-muted">
                     <div className="min-w-0">
                       <div className="font-medium text-xs">v{v.version}</div>
                       <div className="text-xs text-muted-foreground truncate">{v.changelog}</div>

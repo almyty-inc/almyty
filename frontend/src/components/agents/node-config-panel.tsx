@@ -63,7 +63,7 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
       {/* Header */}
       <div className="px-4 py-3 border-b flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <div className={`w-2.5 h-2.5 rounded-full ${config?.color || 'bg-gray-500'}`} />
+          <div className={`w-2.5 h-2.5 rounded-full ${config?.color || 'bg-zinc-500'}`} />
           <span className="text-sm font-semibold">{config?.label || nodeType}</span>
         </div>
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>

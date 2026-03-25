@@ -422,7 +422,7 @@ export function AnalyticsPage() {
               <div className="rounded-lg border bg-card overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                    <tr className="border-b text-left text-muted-foreground bg-muted">
                       <th className="px-3 py-2 font-medium">Time</th>
                       <th className="px-3 py-2 font-medium">Method</th>
                       <th className="px-3 py-2 font-medium">Path</th>
@@ -493,7 +493,7 @@ export function AnalyticsPage() {
             <div className="rounded-lg border bg-card">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                  <tr className="border-b text-left text-muted-foreground bg-muted">
                     <th className="px-4 py-3 font-medium">Tool</th>
                     <th className="px-4 py-3 font-medium text-right">Executions</th>
                     <th className="px-4 py-3 font-medium text-right">Success Rate</th>
@@ -545,7 +545,7 @@ export function AnalyticsPage() {
             <div className="rounded-lg border bg-card">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                  <tr className="border-b text-left text-muted-foreground bg-muted">
                     <th className="px-4 py-3 font-medium">Gateway</th>
                     <th className="px-4 py-3 font-medium">Protocol</th>
                     <th className="px-4 py-3 font-medium text-right">Requests</th>
@@ -605,7 +605,7 @@ export function AnalyticsPage() {
             <div className="rounded-lg border bg-card">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                  <tr className="border-b text-left text-muted-foreground bg-muted">
                     <th className="px-4 py-3 font-medium">Provider</th>
                     <th className="px-4 py-3 font-medium text-right">Sessions</th>
                     <th className="px-4 py-3 font-medium text-right">Messages</th>
@@ -667,7 +667,7 @@ export function AnalyticsPage() {
                   <div className="rounded-lg border bg-card">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b text-left text-muted-foreground bg-muted/50">
+                        <tr className="border-b text-left text-muted-foreground bg-muted">
                           <th className="px-4 py-3 font-medium">Agent</th>
                           <th className="px-4 py-3 font-medium">Status</th>
                           <th className="px-4 py-3 font-medium text-right">Total Execs</th>

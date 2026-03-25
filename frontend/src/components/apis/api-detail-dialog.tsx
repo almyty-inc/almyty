@@ -57,7 +57,7 @@ function getHealthStatusColor(status: ApiHealthStatus) {
     case ApiHealthStatus.HEALTHY: return 'text-green-500'
     case ApiHealthStatus.DEGRADED: return 'text-yellow-500'
     case ApiHealthStatus.UNHEALTHY: return 'text-red-500'
-    default: return 'text-gray-500'
+    default: return 'text-muted-foreground'
   }
 }
 

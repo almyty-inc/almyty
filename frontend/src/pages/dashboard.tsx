@@ -41,7 +41,7 @@ function ChecklistItem({ done, label, description, action }: {
       onClick={action}
       className={`flex items-center gap-3 w-full text-left p-3 rounded-lg border transition-colors ${
         done
-          ? 'bg-muted/50 border-muted opacity-60'
+          ? 'bg-muted border-muted opacity-60'
           : 'hover:border-primary hover:bg-primary/5 cursor-pointer'
       }`}
     >

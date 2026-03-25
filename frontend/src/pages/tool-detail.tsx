@@ -213,7 +213,7 @@ export function ToolDetailPage() {
                 </div>
                 <div className="mt-2">
                   <span className="text-xs text-muted-foreground">Code:</span>
-                  <pre className="p-4 text-sm font-mono bg-muted/50 rounded-md overflow-auto whitespace-pre-wrap break-words max-h-[300px] mt-1">{
+                  <pre className="p-4 text-sm font-mono bg-muted rounded-md overflow-auto whitespace-pre-wrap break-words max-h-[300px] mt-1">{
                     (() => {
                       const raw = tool.code || tool.configuration?.code || 'No code'
                       // Format single-line code for readability
@@ -457,7 +457,7 @@ export function ToolDetailPage() {
                   tool.gatewayAssociations.map((assoc: GatewayToolAssociation) => (
                     <div
                       key={assoc.id}
-                      className="flex items-center justify-between p-3 border rounded cursor-pointer hover:bg-muted/50"
+                      className="flex items-center justify-between p-3 border rounded cursor-pointer hover:bg-muted"
                       onClick={() => navigate(`/gateways/${assoc.gateway?.id}`)}
                     >
                       <div>

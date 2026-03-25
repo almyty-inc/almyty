@@ -126,7 +126,7 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
         ) : (
           <div className="space-y-2">
             {properties.map((prop) => (
-              <div key={prop.name} className="border rounded-lg p-3 bg-muted/50">
+              <div key={prop.name} className="border rounded-lg p-3 bg-muted">
                 <div className="flex items-center justify-between mb-1">
                   <code className="text-sm font-semibold">{prop.name}</code>
                   <div className="flex items-center gap-2">

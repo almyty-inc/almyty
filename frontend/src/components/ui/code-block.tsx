@@ -21,9 +21,9 @@ export function CodeBlock({ value, language, copyable = true, className, maxHeig
   }
 
   return (
-    <div className={cn('relative group rounded-md border bg-muted/50', className)}>
+    <div className={cn('relative group rounded-md border bg-muted', className)}>
       {(language || copyable) && (
-        <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/30">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted">
           {language && (
             <span className="text-xs text-muted-foreground font-medium">{language}</span>
           )}

@@ -248,7 +248,7 @@ export function ChatPage() {
   return (
     <div className="flex h-[calc(100vh-140px)] -mx-4 sm:-mx-6 lg:-mx-8 -my-6">
       {/* Session Sidebar */}
-      <div className="w-64 border-r bg-muted/50 flex flex-col shrink-0">
+      <div className="w-64 border-r bg-muted flex flex-col shrink-0">
         <div className="p-3 border-b">
           <Button onClick={handleNewChat} className="w-full gap-2" size="sm">
             <Plus className="h-4 w-4" />
