@@ -7,11 +7,12 @@
 </p>
 
 <p align="center">
-  <strong>Protocol gateway for AI agents ⚡</strong>
+  <strong>The open platform for AI agents ⚡</strong><br>
+  <em>APIs → Tools → Agents — one platform, every protocol</em>
 </p>
 
 <p align="center">
-  <code>MCP</code> · <code>A2A</code> · <code>UTCP</code> · <code>SOAP</code> · <code>GraphQL</code> · <code>REST</code> · <a href="https://agentskills.io">Agent Skills</a>
+  <code>MCP</code> · <code>A2A</code> · <code>UTCP</code> · <code>OpenAI API</code> · <a href="https://agentskills.io">Agent Skills</a>
 </p>
 
 <p align="center">
@@ -24,7 +25,7 @@
 
 ---
 
-**almyty** turns any API into AI-ready tools. Import API schemas (OpenAPI, GraphQL, SOAP, Protobuf) to auto-generate tools, or create custom tools manually (HTTP, JavaScript, LLM-powered). Serve them to any AI agent via MCP, UTCP, A2A, or Agent Skills. Orchestrate multi-LLM pipelines with a visual builder.
+**almyty** is an open platform for building, deploying, and running AI agents. Turn any API into AI-ready tools, compose multi-LLM pipelines with a visual builder, and serve everything via MCP, A2A, UTCP, or an OpenAI-compatible API. One platform from API schema to production agent.
 
 ## Quick Start
 
@@ -40,22 +41,22 @@ Backend API at `http://localhost:4000`. Health check: `curl http://localhost:400
 ## What It Does
 
 ```
-   Any API Schema                    Any AI Agent
-  ┌─────────────┐                  ┌─────────────┐
-  │  OpenAPI     │                  │ Claude Code  │
-  │  GraphQL     │   ┌─────────┐   │ Cursor       │
-  │  SOAP/WSDL   │──>│  almyty │──>│ Copilot      │
-  │  Protobuf    │   └─────────┘   │ Any MCP/A2A  │
-  │  Manual      │                  │   client     │
-  └─────────────┘                  └─────────────┘
+  APIs              Tools              Agents             Protocols
+ ┌──────────┐     ┌──────────┐     ┌──────────────┐    ┌───────────┐
+ │ OpenAPI  │     │ Auto-gen │     │ Visual       │    │ MCP       │
+ │ GraphQL  │────>│ HTTP     │────>│ Pipeline     │───>│ A2A       │
+ │ SOAP     │     │ JS/Code  │     │ Builder      │    │ UTCP      │
+ │ Protobuf │     │ GraphQL  │     │              │    │ OpenAI API│
+ │          │     │ LLM      │     │ Multi-LLM    │    │ Skills    │
+ └──────────┘     └──────────┘     └──────────────┘    └───────────┘
 ```
 
-1. **Import APIs** — Point at any OpenAPI, GraphQL, SOAP, or Protobuf schema URL
+1. **Import APIs** — Point at any OpenAPI, GraphQL, SOAP, or Protobuf schema
 2. **Auto-generate tools** — Each API operation becomes an executable, validated tool
-3. **Create custom tools** — Build HTTP, JavaScript, GraphQL, or LLM-powered tools manually
-4. **Serve to agents** — Expose tools via MCP, UTCP, A2A, or Agent Skills
-5. **Orchestrate** — Build multi-LLM agent pipelines with a visual drag-and-drop builder
-6. **OpenAI-compatible API** — Use any agent as a drop-in replacement for `POST /v1/chat/completions`
+3. **Create custom tools** — HTTP, JavaScript, GraphQL, or LLM-powered
+4. **Build agents** — Visual drag-and-drop pipeline builder with multi-LLM orchestration
+5. **Deploy everywhere** — Serve via MCP, A2A, UTCP, Agent Skills, or OpenAI-compatible API
+6. **Run at scale** — Scheduling, webhooks, analytics, versioning, RBAC
 
 ## Features
 
