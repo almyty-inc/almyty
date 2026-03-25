@@ -122,7 +122,7 @@ export function ToolDetailPage() {
               <Code className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-heading font-bold tracking-tight">{tool.name}</h1>
+              <h1 className="text-4xl font-heading font-extrabold tracking-tight">{tool.name}</h1>
               <p className="text-muted-foreground">{tool.description || 'AI-generated tool from API operation'}</p>
             </div>
           </div>

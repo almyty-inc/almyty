@@ -496,7 +496,7 @@ export function ApisPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-heading font-bold tracking-tight">APIs</h1>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight">APIs</h1>
           <p className="text-muted-foreground">
             {apis.length} connected &middot; {apis.reduce((sum: number, a: any) => sum + (a.operations?.length || 0), 0)} operations &middot; {allToolsTotal} tools generated
           </p>
