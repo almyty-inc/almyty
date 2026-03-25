@@ -41,7 +41,8 @@ export class LLMProvidersHelper {
     }
 
     try {
-      const response = await fetch(`http://localhost:4000/llm-providers`, {
+      const apiUrl = process.env.E2E_API_URL || 'http://localhost:4000'
+      const response = await fetch(`${apiUrl}/llm-providers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -70,7 +71,8 @@ export class LLMProvidersHelper {
       throw new Error('Token not set. Call setToken() first.')
     }
 
-    const response = await fetch(`${process.env.E2E_BASE_URL || 'http://localhost:3002'}/api/llm-providers/${providerId}`, {
+    const apiUrl = process.env.E2E_API_URL || 'http://localhost:4000'
+    const response = await fetch(`${apiUrl}/llm-providers/${providerId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${this.token}`,
