@@ -24,8 +24,8 @@ test.describe('Complete E2E Workflow', () => {
     await assertHelper.waitForLoadingComplete()
 
     // Close mobile menu if open (mobile viewport)
-    const mobileMenuOverlay = page.locator('.fixed.inset-0.z-40.bg-gray-600')
-    if (await mobileMenuOverlay.isVisible()) {
+    const mobileMenuOverlay = page.locator('.fixed.inset-0.z-40')
+    if (await mobileMenuOverlay.isVisible().catch(() => false)) {
       // Press Escape to close menu instead of clicking overlay (more reliable)
       await page.keyboard.press('Escape')
       await page.waitForTimeout(500)
@@ -46,7 +46,7 @@ test.describe('Complete E2E Workflow', () => {
     // Submit
     await page.getByRole('button', { name: /connect api|create|add|save/i }).click()
 
-    // Schema import dialog opens automatically after API creation
+    // Schema import step opens automatically after API creation (same dialog, step changes)
     await expect(page.getByRole('dialog')).toBeVisible()
     await expect(page.getByRole('heading', { name: /import.*schema/i })).toBeVisible()
     await assertHelper.assertToastMessage(/created|success|added/i)
@@ -54,16 +54,18 @@ test.describe('Complete E2E Workflow', () => {
     // ============================================================
     // STEP 2: Import Schema
     // ============================================================
-    // Dialog is already open - switch to "From URL" tab
-    await page.getByRole('tab', { name: /from url/i }).click()
+    // Dialog is already open with inline schema import - switch to "URL" tab
+    await page.getByRole('tab', { name: /url/i }).click()
 
-    // Fill schema URL using the textbox role
-    await page.getByRole('textbox', { name: /schema.*url/i }).fill(TEST_APIS.PETSTORE.schemaUrl)
+    // Fill schema URL using the inline input (id="inlineSchemaUrl")
+    await page.locator('#inlineSchemaUrl').fill(TEST_APIS.PETSTORE.schemaUrl)
 
     // Auto-generate tools is checked by default - no need to enable
 
-    // Import
+    // Import (button says "Import Schema" or "Importing...")
     await page.getByRole('button', { name: /import schema|import|submit/i }).click()
+    // Wait for the dialog to close (the inline schema import closes the whole create dialog)
+    await page.waitForTimeout(2000)
     await assertHelper.waitForLoadingComplete()
     await assertHelper.assertToastMessage(/imported|success|generated/i)
 

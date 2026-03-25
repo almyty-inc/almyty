@@ -166,7 +166,7 @@ test.describe('Authentication - Registration', () => {
     const testUser = AuthHelper.generateTestUser()
 
     // Intercept and fail the registration request
-    await page.route('**/api/auth/register', route => {
+    await page.route('**/auth/register', route => {
       route.abort('failed')
     })
 

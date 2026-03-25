@@ -1,0 +1,52 @@
+name: Deploy Docs (Quick)
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'docs-site/**'
+
+env:
+  REGISTRY: ghcr.io/frane/almyty
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push docs image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docs-site
+          push: true
+          tags: ${{ env.REGISTRY }}/docs:latest,${{ env.REGISTRY }}/docs:${{ github.sha }}
+
+      - name: Deploy to K8s
+        uses: steebchen/kubectl@v2.0.0
+        with:
+          config: ${{ secrets.KUBE_CONFIG_DATA }}
+          command: apply -f k8s/docs-deployment.yaml
+
+      - name: Restart docs pods
+        uses: steebchen/kubectl@v2.0.0
+        with:
+          config: ${{ secrets.KUBE_CONFIG_DATA }}
+          command: rollout restart deployment/docs -n almyty-staging
+
+      - name: Wait for rollout
+        uses: steebchen/kubectl@v2.0.0
+        with:
+          config: ${{ secrets.KUBE_CONFIG_DATA }}
+          command: rollout status deployment/docs -n almyty-staging --timeout=3m
