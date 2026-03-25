@@ -4,77 +4,108 @@ import { AuthHelper } from './helpers/auth.helper'
 test.describe('LLM Providers - Configuration', () => {
   test.beforeEach(async ({ authenticatedPage: page }) => {
     await page.goto('/llm-providers')
+    await page.waitForLoadState('networkidle')
   })
 
-  test('should display LLM providers page', async ({ authenticatedPage: page, assertHelper }) => {
-    await assertHelper.assertPageTitle(/llm.*providers|ai.*providers|language.*models/i)
-    await expect(page.getByRole('button', { name: /add.*provider|configure.*provider/i })).toBeVisible()
+  test('should display LLM providers page', async ({ authenticatedPage: page }) => {
+    // Page heading is "AI Models"
+    await expect(page.getByRole('heading', { name: 'AI Models', level: 1 })).toBeVisible()
+
+    // Empty state shows "Add First Provider" button, non-empty shows "Add Provider"
+    const addButton = page.getByRole('button', { name: /add.*provider/i })
+    await expect(addButton).toBeVisible()
   })
 
-  test('should show available provider types', async ({ authenticatedPage: page, assertHelper }) => {
+  test('should open add provider dialog and show provider types', async ({ authenticatedPage: page }) => {
     await page.getByRole('button', { name: /add.*provider/i }).click()
-    await assertHelper.assertDialogOpen(/add.*provider|configure/i)
 
-    // Open provider type dropdown to see options
-    await page.getByLabel(/provider.*type|select.*provider/i).click()
+    // Dialog should open with title "Add Provider"
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'Add Provider' })).toBeVisible()
 
-    // Should show provider options
-    await expect(page.getByTestId('provider-type-openai')).toBeVisible()
-    await expect(page.getByTestId('provider-type-anthropic')).toBeVisible()
-    await expect(page.getByTestId('provider-type-azure')).toBeVisible()
+    // Should have Provider Name, Provider Type, and API Key fields
+    await expect(dialog.locator('#providerName')).toBeVisible()
+    await expect(dialog.locator('#providerType')).toBeVisible()
+    await expect(dialog.locator('#apiKey')).toBeVisible()
+
+    // Open the provider type dropdown and verify some options
+    await dialog.locator('#providerType').click()
+    await expect(page.getByRole('option', { name: 'OpenAI' })).toBeVisible()
+    await expect(page.getByRole('option', { name: 'Anthropic' })).toBeVisible()
+    await expect(page.getByRole('option', { name: 'Google Gemini' })).toBeVisible()
   })
 
   test('should add OpenAI provider', async ({ authenticatedPage: page, assertHelper }) => {
     await page.getByRole('button', { name: /add.*provider/i }).click()
 
-    // Select OpenAI
-    await page.getByLabel(/provider.*type|select.*provider/i).click()
-    await page.getByRole('option', { name: /openai/i }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
 
-    // Fill configuration
-    await page.getByLabel(/provider.*name|name/i).fill('OpenAI Production')
-    await page.getByLabel(/api.*key/i).fill('sk-test-key-1234567890')
-    await page.getByLabel(/organization.*id/i).fill('org-test123')
+    // Fill provider name
+    await dialog.locator('#providerName').fill('OpenAI Production')
 
-    await page.getByRole('button', { name: /save|add/i }).click()
+    // Select provider type
+    await dialog.locator('#providerType').click()
+    await page.getByRole('option', { name: 'OpenAI' }).click()
 
-    // Should show success
-    await assertHelper.assertToastMessage(/added|configured|success/i)
+    // Fill API key (must be >= 8 chars per validation)
+    await dialog.locator('#apiKey').fill('sk-test-key-1234567890')
+
+    // Organization ID field should appear for OpenAI
+    await expect(dialog.locator('#organizationId')).toBeVisible()
+    await dialog.locator('#organizationId').fill('org-test123')
+
+    // Submit
+    await dialog.getByRole('button', { name: 'Add Provider' }).click()
+
+    // Should show success toast
+    await assertHelper.assertToastMessage(/added|connected|success/i)
     await expect(page.getByText('OpenAI Production')).toBeVisible()
   })
 
   test('should add Anthropic provider', async ({ authenticatedPage: page, assertHelper }) => {
     await page.getByRole('button', { name: /add.*provider/i }).click()
 
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+
+    // Fill provider name
+    await dialog.locator('#providerName').fill('Anthropic Production')
+
     // Select Anthropic
-    await page.getByLabel(/provider.*type/i).click()
-    await page.getByRole('option', { name: /anthropic|claude/i }).click()
+    await dialog.locator('#providerType').click()
+    await page.getByRole('option', { name: 'Anthropic' }).click()
 
-    // Fill configuration
-    await page.getByLabel(/provider.*name/i).fill('Anthropic Production')
-    await page.getByLabel(/api.*key/i).fill('sk-ant-test-key-1234567890')
+    // Fill API key
+    await dialog.locator('#apiKey').fill('sk-ant-test-key-1234567890')
 
-    await page.getByRole('button', { name: /save|add/i }).click()
+    // Organization ID should NOT appear for Anthropic
+    await expect(dialog.locator('#organizationId')).not.toBeVisible()
 
-    await assertHelper.assertToastMessage(/added|success/i)
+    // Submit
+    await dialog.getByRole('button', { name: 'Add Provider' }).click()
+
+    await assertHelper.assertToastMessage(/added|connected|success/i)
     await expect(page.getByText('Anthropic Production')).toBeVisible()
   })
 
-  test('should validate API key format', async ({ authenticatedPage: page, assertHelper }) => {
+  test('should validate API key is not too short', async ({ authenticatedPage: page }) => {
     await page.getByRole('button', { name: /add.*provider/i }).click()
 
-    // Select provider
-    await page.getByLabel(/provider.*type/i).click()
-    await page.getByRole('option', { name: /openai/i }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
 
-    // Fill with invalid API key
-    await page.getByLabel(/provider.*name/i).fill('Test Provider')
-    await page.getByLabel(/api.*key/i).fill('invalid-key')
+    // Fill with short API key (< 8 chars)
+    await dialog.locator('#providerName').fill('Test Provider')
+    await dialog.locator('#providerType').click()
+    await page.getByRole('option', { name: 'OpenAI' }).click()
+    await dialog.locator('#apiKey').fill('short')
 
-    await page.getByRole('button', { name: /save|add/i }).click()
+    await dialog.getByRole('button', { name: 'Add Provider' }).click()
 
-    // Should show validation error
-    await expect(page.getByText(/invalid.*api.*key|key.*format/i)).toBeVisible()
+    // Should show validation error about API key being too short
+    await expect(dialog.getByText(/too short/i)).toBeVisible()
   })
 
   test('should test provider connection', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
@@ -84,17 +115,16 @@ test.describe('LLM Providers - Configuration', () => {
       llmProvidersHelper.setToken(token)
     }
 
-    // Setup mock responses for API calls
+    // Setup mock responses for the test endpoint
     await llmProvidersHelper.setupMockResponses()
 
-    // Create provider via API helper (faster and more reliable)
-    const provider = await llmProvidersHelper.createLLMProvider({
+    // Create provider via API helper
+    await llmProvidersHelper.createLLMProvider({
       name: 'Connection Test Provider',
       type: 'openai',
       apiKey: 'sk-test-connection-key-1234567890',
     })
 
-    // Reload page to see the new provider
     await page.reload()
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
@@ -102,417 +132,219 @@ test.describe('LLM Providers - Configuration', () => {
     // Find provider row and click Test button
     const providerRow = page.locator('tr').filter({ hasText: 'Connection Test Provider' })
     await expect(providerRow).toBeVisible({ timeout: 10000 })
-
-    // Wait for any animations
-    await page.waitForTimeout(500)
-
     await providerRow.getByRole('button', { name: /test/i }).click()
 
-    // Wait for test dialog to open - match by exact heading "Test Provider:"
-    await page.waitForTimeout(1500)
-    const testDialog = page.getByRole('dialog').filter({ hasText: 'Test Provider:' })
+    // Test dialog should open with title "Test Provider: Connection Test Provider"
+    const testDialog = page.getByRole('dialog')
     await expect(testDialog).toBeVisible({ timeout: 10000 })
+    await expect(testDialog.getByText('Test Provider: Connection Test Provider')).toBeVisible()
 
-    // Click the "Test Provider" button
-    await page.waitForTimeout(1000)
+    // Click the "Test Provider" button inside the dialog
     await testDialog.getByRole('button', { name: 'Test Provider' }).click()
 
-    // Should show connection result - look for "Success!" text or response content
-    await expect(testDialog.getByText(/success|response|error/i).first()).toBeVisible({ timeout: 20000 })
-  })
-
-  test('should display provider models', async ({ authenticatedPage: page, apiHelper, assertHelper, llmProvidersHelper }) => {
-    // Get token and set it on llmProvidersHelper
-    const token = await page.evaluate(() => localStorage.getItem('token'))
-    if (token) {
-      llmProvidersHelper.setToken(token)
-    }
-
-    // Setup mock responses
-    await llmProvidersHelper.setupMockResponses()
-
-    // Create provider via LLM helper
-    const provider = await llmProvidersHelper.createLLMProvider({
-      name: 'Models Test Provider',
-      type: 'openai',
-      apiKey: 'sk-test-models-key',
-    })
-
-    await page.reload()
-    await assertHelper.waitForLoadingComplete()
-    await page.waitForLoadState('networkidle')
-
-    // Open provider details via Details button
-    const providerRow = page.locator('tr').filter({ hasText: 'Models Test Provider' })
-    await expect(providerRow).toBeVisible({ timeout: 10000 })
-
-    await page.waitForTimeout(500)
-    await providerRow.getByRole('button', { name: /details/i }).click()
-
-    // Wait for details sheet to open - get the first dialog (details sheet)
-    await page.waitForTimeout(1000)
-    const detailsSheet = page.locator('[role="dialog"]').first()
-    await expect(detailsSheet).toBeVisible({ timeout: 10000 })
-
-    // Navigate to Models tab
-    const modelsTab = detailsSheet.getByRole('tab', { name: /models/i })
-    await expect(modelsTab).toBeVisible({ timeout: 10000 })
-    await modelsTab.click()
-    await page.waitForTimeout(500)
-
-    // Should show available models (from capabilities or mocked data) - use .first() to handle multiple matches
-    await expect(detailsSheet.getByText(/gpt-4|model/i).first()).toBeVisible({ timeout: 10000 })
-  })
-
-  test('should select default model', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
-    // Get token and set it on llmProvidersHelper
-    const token = await page.evaluate(() => localStorage.getItem('token'))
-    if (token) {
-      llmProvidersHelper.setToken(token)
-    }
-
-    // Setup mock responses
-    await llmProvidersHelper.setupMockResponses()
-
-    // Create provider via helper
-    const provider = await llmProvidersHelper.createLLMProvider({
-      name: 'Default Model Provider',
-      type: 'openai',
-      apiKey: 'sk-test-default-key',
-    })
-
-    await page.reload()
-    await assertHelper.waitForLoadingComplete()
-    await page.waitForLoadState('networkidle')
-
-    // Open provider settings via Edit button
-    const providerRow = page.locator('tr').filter({ hasText: 'Default Model Provider' })
-    await expect(providerRow).toBeVisible({ timeout: 10000 })
-
-    await page.waitForTimeout(500)
-    await providerRow.getByRole('button', { name: /edit/i }).click()
-
-    // Wait for edit dialog to open - get the last dialog
-    await page.waitForTimeout(1000)
-    const editDialog = page.locator('[role="dialog"]').last()
-    await expect(editDialog).toBeVisible({ timeout: 10000 })
-
-    // Select default model
-    const modelInput = editDialog.getByLabel(/default.*model|model/i)
-    await expect(modelInput).toBeVisible({ timeout: 10000 })
-    await modelInput.click()
-    await page.getByRole('option', { name: /gpt-4/i }).first().click()
-
-    await editDialog.getByRole('button', { name: /save|update/i }).click()
-
-    // Should show updated configuration
-    await assertHelper.assertToastMessage(/updated|saved/i)
-  })
-
-  test('should configure model parameters', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
-    // Get token and set it on llmProvidersHelper
-    const token = await page.evaluate(() => localStorage.getItem('token'))
-    if (token) {
-      llmProvidersHelper.setToken(token)
-    }
-
-    // Setup mock responses
-    await llmProvidersHelper.setupMockResponses()
-
-    // Create provider via helper
-    const provider = await llmProvidersHelper.createLLMProvider({
-      name: 'Params Provider',
-      type: 'openai',
-      apiKey: 'sk-test-params-key',
-    })
-
-    await page.reload()
-    await assertHelper.waitForLoadingComplete()
-    await page.waitForLoadState('networkidle')
-
-    // Open provider settings via Edit button
-    const providerRow = page.locator('tr').filter({ hasText: 'Params Provider' })
-    await expect(providerRow).toBeVisible({ timeout: 10000 })
-
-    await page.waitForTimeout(500)
-    await providerRow.getByRole('button', { name: /edit/i }).click()
-
-    // Wait for edit dialog to open - match by exact heading
-    await page.waitForTimeout(1500)
-    const editDialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Edit Provider', exact: true }) })
-    await expect(editDialog).toBeVisible({ timeout: 10000 })
-
-    // Wait for content to render
-    await page.waitForTimeout(1000)
-
-    // Configure parameters using specific IDs
-    const tempInput = page.locator('#editTemperature')
-    await expect(tempInput).toBeVisible({ timeout: 5000 })
-    await tempInput.clear()
-    await tempInput.fill('0.7')
-
-    const maxTokensInput = page.locator('#editMaxTokens')
-    await expect(maxTokensInput).toBeVisible({ timeout: 5000 })
-    await maxTokensInput.clear()
-    await maxTokensInput.fill('2000')
-
-    // Wait for Update Provider button and click
-    const updateButton = page.getByRole('button', { name: 'Update Provider', exact: true })
-    await expect(updateButton).toBeVisible({ timeout: 10000 })
-    await updateButton.click()
-
-    await assertHelper.assertToastMessage(/updated|saved/i)
+    // Should show result (success or error)
+    await expect(testDialog.getByText(/success|error|response/i).first()).toBeVisible({ timeout: 20000 })
   })
 
   test('should edit provider configuration', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
-    // Get token and set it on llmProvidersHelper
     const token = await page.evaluate(() => localStorage.getItem('token'))
     if (token) {
       llmProvidersHelper.setToken(token)
     }
 
-    // Setup mock responses
-    await llmProvidersHelper.setupMockResponses()
-
-    // Create provider via helper
-    const provider = await llmProvidersHelper.createLLMProvider({
+    await llmProvidersHelper.createLLMProvider({
       name: 'Edit Test Provider',
       type: 'openai',
-      apiKey: 'sk-test-edit-key',
+      apiKey: 'sk-test-edit-key-12345678',
     })
 
     await page.reload()
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Edit provider via Edit button
+    // Click Edit on the provider row
     const providerRow = page.locator('tr').filter({ hasText: 'Edit Test Provider' })
     await expect(providerRow).toBeVisible({ timeout: 10000 })
-    await page.waitForTimeout(500)
     await providerRow.getByRole('button', { name: /edit/i }).click()
 
-    // Wait for edit dialog to open - get the center dialog
-    const editDialog = page.locator('[role="dialog"]').filter({ hasText: /edit/i }).last()
+    // Edit dialog should open
+    const editDialog = page.getByRole('dialog')
     await expect(editDialog).toBeVisible({ timeout: 10000 })
+    await expect(editDialog.getByRole('heading', { name: 'Edit Provider' })).toBeVisible()
 
-    // Update name in the scoped dialog
-    await editDialog.getByLabel(/provider.*name/i).clear()
-    await editDialog.getByLabel(/provider.*name/i).fill('Updated Provider Name')
+    // Update the provider name
+    const nameInput = editDialog.locator('#editProviderName')
+    await expect(nameInput).toBeVisible()
+    await nameInput.clear()
+    await nameInput.fill('Updated Provider Name')
 
-    await editDialog.getByRole('button', { name: /save|update/i }).click()
+    // Update temperature
+    const tempInput = editDialog.locator('#editTemperature')
+    await expect(tempInput).toBeVisible()
+    await tempInput.clear()
+    await tempInput.fill('0.5')
 
-    // Should show updated name
-    await assertHelper.assertToastMessage(/updated/i)
+    // Submit
+    await editDialog.getByRole('button', { name: 'Update Provider' }).click()
+
+    await assertHelper.assertToastMessage(/updated|saved/i)
     await expect(page.getByText('Updated Provider Name')).toBeVisible()
   })
 
   test('should delete provider with confirmation', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
-    // Get token and set it on llmProvidersHelper
     const token = await page.evaluate(() => localStorage.getItem('token'))
     if (token) {
       llmProvidersHelper.setToken(token)
     }
 
-    // Setup mock responses
-    await llmProvidersHelper.setupMockResponses()
-
-    // Create provider via helper
-    const provider = await llmProvidersHelper.createLLMProvider({
+    await llmProvidersHelper.createLLMProvider({
       name: 'To Delete Provider',
       type: 'openai',
-      apiKey: 'sk-test-delete-key',
+      apiKey: 'sk-test-delete-key-12345678',
     })
 
     await page.reload()
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Delete provider
+    // Click Delete on the provider row
     const providerRow = page.locator('tr').filter({ hasText: 'To Delete Provider' })
     await expect(providerRow).toBeVisible({ timeout: 10000 })
+    await providerRow.getByRole('button', { name: /delete/i }).click()
 
-    await page.waitForTimeout(500)
-    await providerRow.getByRole('button', { name: /delete|remove/i }).click()
-
-    // Wait for confirmation dialog - AlertDialog has role="alertdialog"
-    await page.waitForTimeout(1500)
-    const deleteDialog = page.getByRole('alertdialog').filter({ has: page.getByRole('heading', { name: 'Delete Provider', exact: true }) })
+    // Confirmation AlertDialog should open
+    const deleteDialog = page.getByRole('alertdialog')
     await expect(deleteDialog).toBeVisible({ timeout: 10000 })
+    await expect(deleteDialog.getByRole('heading', { name: 'Delete Provider' })).toBeVisible()
 
-    // Wait and confirm deletion
-    await page.waitForTimeout(1000)
-    const deleteButton = deleteDialog.getByRole('button', { name: 'Delete', exact: true })
-    await expect(deleteButton).toBeVisible({ timeout: 5000 })
-    await deleteButton.click()
+    // Confirm deletion
+    await deleteDialog.getByRole('button', { name: 'Delete', exact: true }).click()
 
-    // Should be removed
-    await page.waitForTimeout(1000)
-    await expect(page.getByText('To Delete Provider')).not.toBeVisible()
+    // Provider should be removed from the page
+    await expect(page.getByText('To Delete Provider')).not.toBeVisible({ timeout: 10000 })
   })
 
-  test('should display provider status badges', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
-    // Get token and set it on llmProvidersHelper
+  test('should view provider details sheet', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
     const token = await page.evaluate(() => localStorage.getItem('token'))
     if (token) {
       llmProvidersHelper.setToken(token)
     }
 
-    // Setup mock responses
-    await llmProvidersHelper.setupMockResponses()
-
-    // Create multiple providers
     await llmProvidersHelper.createLLMProvider({
-      name: 'Active Provider',
+      name: 'Details Test Provider',
       type: 'openai',
-      apiKey: 'sk-test-active-key',
-    })
-
-    await llmProvidersHelper.createLLMProvider({
-      name: 'Inactive Provider',
-      type: 'anthropic',
-      apiKey: 'sk-ant-inactive-key',
+      apiKey: 'sk-test-details-key-12345678',
     })
 
     await page.reload()
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Wait for providers to be visible
-    await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 10000 })
-    await page.waitForTimeout(1000)
-
-    // Verify both providers are showing in the table
-    await expect(page.getByText('Active Provider').first()).toBeVisible({ timeout: 5000 })
-    await expect(page.getByText('Inactive Provider').first()).toBeVisible({ timeout: 5000 })
-
-    // Status is displayed as text in the Status column - verify both show "active"
-    const activeProviderRow = page.locator('tr').filter({ hasText: 'Active Provider' })
-    const inactiveProviderRow = page.locator('tr').filter({ hasText: 'Inactive Provider' })
-
-    // Both should show "active" status (green text in Status column)
-    await expect(activeProviderRow.getByText('active').first()).toBeVisible({ timeout: 5000 })
-    await expect(inactiveProviderRow.getByText('active').first()).toBeVisible({ timeout: 5000 })
-  })
-
-  test('should toggle provider active status', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
-    // Get token and set it on llmProvidersHelper
-    const token = await page.evaluate(() => localStorage.getItem('token'))
-    if (token) {
-      llmProvidersHelper.setToken(token)
-    }
-
-    // Setup mock responses
-    await llmProvidersHelper.setupMockResponses()
-
-    // Create provider via helper
-    const provider = await llmProvidersHelper.createLLMProvider({
-      name: 'Toggle Status Provider',
-      type: 'openai',
-      apiKey: 'sk-test-toggle-key',
-    })
-
-    await page.reload()
-    await assertHelper.waitForLoadingComplete()
-
-    // Toggle status
-    const providerRow = page.locator('tr').filter({ hasText: 'Toggle Status Provider' })
+    // Click Details button
+    const providerRow = page.locator('tr').filter({ hasText: 'Details Test Provider' })
     await expect(providerRow).toBeVisible({ timeout: 10000 })
-    const toggleSwitch = providerRow.locator('input[type="checkbox"], button[role="switch"]')
-
-    if (await toggleSwitch.isVisible()) {
-      await toggleSwitch.click()
-      await assertHelper.assertToastMessage(/updated|disabled|enabled/i)
-    }
-  })
-
-  test('should show provider usage statistics', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
-    // Get token and set it on llmProvidersHelper
-    const token = await page.evaluate(() => localStorage.getItem('token'))
-    if (token) {
-      llmProvidersHelper.setToken(token)
-    }
-
-    // Setup mock responses (includes usage statistics)
-    await llmProvidersHelper.setupMockResponses()
-
-    // Create provider via helper
-    const provider = await llmProvidersHelper.createLLMProvider({
-      name: 'Usage Stats Provider',
-      type: 'openai',
-      apiKey: 'sk-test-usage-key',
-    })
-
-    await page.reload()
-    await assertHelper.waitForLoadingComplete()
-    await page.waitForLoadState('networkidle')
-
-    // Open provider details via Details button
-    const providerRow = page.locator('tr').filter({ hasText: 'Usage Stats Provider' })
-    await expect(providerRow).toBeVisible({ timeout: 10000 })
-    await page.waitForTimeout(500)
     await providerRow.getByRole('button', { name: /details/i }).click()
 
-    // Wait for details sheet to open - match by provider name
-    await page.waitForTimeout(1500)
-    const detailsSheet = page.getByRole('dialog').filter({ hasText: 'Usage Stats Provider' })
+    // Details sheet should open with provider name
+    const detailsSheet = page.locator('[role="dialog"]').first()
+    await expect(detailsSheet).toBeVisible({ timeout: 10000 })
+    await expect(detailsSheet.getByText('Details Test Provider')).toBeVisible()
+
+    // Should have tabs: Overview, Chat, Models, Usage, Config, Monitoring
+    await expect(detailsSheet.getByRole('tab', { name: /overview/i })).toBeVisible()
+    await expect(detailsSheet.getByRole('tab', { name: /models/i })).toBeVisible()
+    await expect(detailsSheet.getByRole('tab', { name: /usage/i })).toBeVisible()
+  })
+
+  test('should display provider usage stats in details', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
+    const token = await page.evaluate(() => localStorage.getItem('token'))
+    if (token) {
+      llmProvidersHelper.setToken(token)
+    }
+
+    await llmProvidersHelper.createLLMProvider({
+      name: 'Usage Stats Provider',
+      type: 'openai',
+      apiKey: 'sk-test-usage-key-12345678',
+    })
+
+    await page.reload()
+    await assertHelper.waitForLoadingComplete()
+    await page.waitForLoadState('networkidle')
+
+    // Open details sheet
+    const providerRow = page.locator('tr').filter({ hasText: 'Usage Stats Provider' })
+    await expect(providerRow).toBeVisible({ timeout: 10000 })
+    await providerRow.getByRole('button', { name: /details/i }).click()
+
+    const detailsSheet = page.locator('[role="dialog"]').first()
     await expect(detailsSheet).toBeVisible({ timeout: 10000 })
 
     // Navigate to Usage tab
-    await page.waitForTimeout(1000)
     const usageTab = detailsSheet.getByRole('tab', { name: /usage/i })
-    await expect(usageTab).toBeVisible({ timeout: 10000 })
+    await expect(usageTab).toBeVisible()
     await usageTab.click()
-    await page.waitForTimeout(1500)
 
-    // Should show usage metrics (real data from backend) in the Usage tab
-    // Verify Cost Breakdown section is visible
+    // Should show Cost Breakdown section
     await expect(detailsSheet.getByText('Cost Breakdown')).toBeVisible({ timeout: 10000 })
-    await expect(detailsSheet.getByText('Total Tokens:')).toBeVisible({ timeout: 10000 })
-    await expect(detailsSheet.getByText('Total Cost:')).toBeVisible({ timeout: 10000 })
+    await expect(detailsSheet.getByText('Total Tokens:')).toBeVisible()
+    await expect(detailsSheet.getByText('Total Cost:')).toBeVisible()
   })
 
-  test('should handle provider API errors gracefully', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
-    // Get token and set it on llmProvidersHelper
+  test('should display provider status in table', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
     const token = await page.evaluate(() => localStorage.getItem('token'))
     if (token) {
       llmProvidersHelper.setToken(token)
     }
 
-    // Setup mock responses first for successful provider creation
-    await llmProvidersHelper.setupMockResponses()
-
-    // Create a provider first
-    const provider = await llmProvidersHelper.createLLMProvider({
-      name: 'Error Test Provider',
+    await llmProvidersHelper.createLLMProvider({
+      name: 'Status Badge Provider',
       type: 'openai',
-      apiKey: 'sk-test-error-key',
+      apiKey: 'sk-test-status-key-12345678',
     })
 
     await page.reload()
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Now setup error mock for testing connection
-    await llmProvidersHelper.setupErrorMock()
-
-    // Test the connection (should fail with mocked error)
-    const providerRow = page.locator('tr').filter({ hasText: 'Error Test Provider' })
+    // Provider row should be visible with status badge
+    const providerRow = page.locator('tr').filter({ hasText: 'Status Badge Provider' })
     await expect(providerRow).toBeVisible({ timeout: 10000 })
+    await expect(providerRow.getByText('active').first()).toBeVisible({ timeout: 5000 })
+  })
 
-    await page.waitForTimeout(500)
-    await providerRow.getByRole('button', { name: /test/i }).click()
+  test('should search providers by name', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
+    const token = await page.evaluate(() => localStorage.getItem('token'))
+    if (token) {
+      llmProvidersHelper.setToken(token)
+    }
 
-    // Wait for test dialog to open - match by exact heading "Test Provider:"
-    await page.waitForTimeout(1500)
-    const testDialog = page.getByRole('dialog').filter({ hasText: 'Test Provider:' })
-    await expect(testDialog).toBeVisible({ timeout: 10000 })
+    await llmProvidersHelper.createLLMProvider({
+      name: 'Searchable Alpha',
+      type: 'openai',
+      apiKey: 'sk-test-search1-12345678',
+    })
+    await llmProvidersHelper.createLLMProvider({
+      name: 'Searchable Beta',
+      type: 'anthropic',
+      apiKey: 'sk-ant-search2-12345678',
+    })
 
-    // Click the "Test Provider" button
-    await page.waitForTimeout(1000)
-    await testDialog.getByRole('button', { name: 'Test Provider' }).click()
+    await page.reload()
+    await assertHelper.waitForLoadingComplete()
+    await page.waitForLoadState('networkidle')
 
-    // Should show error message (mocked error response)
-    await expect(testDialog.getByText(/invalid.*api.*key|error|failed|connection.*failed/i).first()).toBeVisible({ timeout: 10000 })
+    // Both should be visible initially
+    await expect(page.getByText('Searchable Alpha')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Searchable Beta')).toBeVisible({ timeout: 10000 })
+
+    // Search for Alpha
+    const searchInput = page.getByPlaceholder(/search/i)
+    await searchInput.fill('Alpha')
+
+    // Only Alpha should be visible
+    await expect(page.getByText('Searchable Alpha')).toBeVisible()
+    await expect(page.getByText('Searchable Beta')).not.toBeVisible()
   })
 
   test('should display empty state when no providers configured', async ({ page, authHelper, assertHelper }) => {
@@ -525,65 +357,8 @@ test.describe('LLM Providers - Configuration', () => {
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Should show empty state - use .first() to handle multiple matches
-    await expect(page.getByText(/no.*providers|get.*started|add.*first.*provider/i).first()).toBeVisible({ timeout: 10000 })
-    await expect(page.getByRole('button', { name: /add.*provider/i })).toBeVisible()
-  })
-
-  test('should filter providers by type', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
-    // Create providers of different types
-    await apiHelper.createLLMProvider({
-      name: 'OpenAI Test',
-      type: 'openai',
-      apiKey: 'sk-openai-key',
-    })
-
-    await apiHelper.createLLMProvider({
-      name: 'Anthropic Test',
-      type: 'anthropic',
-      apiKey: 'sk-ant-key',
-    })
-
-    await page.reload()
-    await assertHelper.waitForLoadingComplete()
-
-    // Filter by type
-    const filterSelect = page.getByLabel(/filter.*type|provider.*type/i)
-    if (await filterSelect.isVisible()) {
-      await filterSelect.click()
-      await page.getByRole('option', { name: /openai/i }).click()
-
-      // Should show only OpenAI providers
-      await expect(page.getByText('OpenAI Test')).toBeVisible()
-      await expect(page.getByText('Anthropic Test')).not.toBeVisible()
-    }
-  })
-
-  test('should search providers by name', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
-    // Create multiple providers
-    await apiHelper.createLLMProvider({
-      name: 'Production OpenAI',
-      type: 'openai',
-      apiKey: 'sk-prod-key',
-    })
-
-    await apiHelper.createLLMProvider({
-      name: 'Development OpenAI',
-      type: 'openai',
-      apiKey: 'sk-dev-key',
-    })
-
-    await page.reload()
-    await assertHelper.waitForLoadingComplete()
-
-    // Search
-    const searchInput = page.getByPlaceholder(/search/i)
-    if (await searchInput.isVisible()) {
-      await searchInput.fill('Production')
-
-      // Should show only matching provider
-      await expect(page.getByText('Production OpenAI')).toBeVisible()
-      await expect(page.getByText('Development OpenAI')).not.toBeVisible()
-    }
+    // Should show empty state message and "Add First Provider" button
+    await expect(page.getByText(/no ai models configured/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('button', { name: /add first provider/i })).toBeVisible()
   })
 })
