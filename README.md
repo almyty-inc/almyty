@@ -27,6 +27,8 @@
 
 **almyty** is an open platform for building, deploying, and running AI agents. Turn any API into AI-ready tools, compose multi-LLM pipelines with a visual builder, and serve everything via MCP, A2A, UTCP, or an OpenAI-compatible API. One platform from API schema to production agent.
 
+> **Works with any API you already have.** Legacy SOAP services, internal REST APIs behind your firewall, gRPC/Protobuf microservices, undocumented endpoints — if it speaks HTTP, almyty can wrap it into tools your AI agents can use. No vendor lock-in, runs on your infrastructure.
+
 ## Quick Start
 
 ```bash
