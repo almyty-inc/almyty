@@ -183,8 +183,9 @@ test.describe('Authentication - Login', () => {
     await page.getByLabel('Password').fill(testUser.password)
     await page.getByRole('button', { name: /sign in|login/i }).click()
 
-    // Should show error (in red error box or toast notification)
-    await expect(page.locator('[role="alert"], .bg-destructive/10, [data-state="open"]')).toBeVisible({ timeout: 15000 })
+    // Should show error (inline error div or toast notification)
+    // The login page shows inline error with .text-destructive class, and/or a toast with role="status"
+    await expect(page.locator('.text-destructive, li[role="status"]').first()).toBeVisible({ timeout: 15000 })
   })
 
   test('should handle server 500 error gracefully', async ({ page }) => {
@@ -200,7 +201,7 @@ test.describe('Authentication - Login', () => {
     await page.getByLabel('Password').fill(testUser.password)
     await page.getByRole('button', { name: /sign in|login/i }).click()
 
-    // Should show error (in red error box or toast notification)
-    await expect(page.locator('[role="alert"], .bg-destructive/10, [data-state="open"]')).toBeVisible({ timeout: 15000 })
+    // Should show error (inline error div or toast notification)
+    await expect(page.locator('.text-destructive, li[role="status"]').first()).toBeVisible({ timeout: 15000 })
   })
 })

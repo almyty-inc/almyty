@@ -1,0 +1,70 @@
+# Docs site deployment — docs.almyty.com
+# Build: docker build -t ghcr.io/frane/almyty/docs:latest ./docs-site
+# Push: docker push ghcr.io/frane/almyty/docs:latest
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docs
+  namespace: almyty-staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: docs
+  template:
+    metadata:
+      labels:
+        app: docs
+    spec:
+      imagePullSecrets:
+      - name: ghcr-secret
+      containers:
+      - name: docs
+        image: ghcr.io/frane/almyty/docs:latest
+        ports:
+        - containerPort: 3000
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: docs
+  namespace: almyty-staging
+spec:
+  selector:
+    app: docs
+  ports:
+  - port: 3000
+    targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: docs-ingress
+  namespace: almyty-staging
+  annotations:
+    cert-manager.io/cluster-issuer: "staging-letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - docs.almyty.com
+    secretName: docs-almyty-com-tls
+  rules:
+  - host: docs.almyty.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: docs
+            port:
+              number: 3000

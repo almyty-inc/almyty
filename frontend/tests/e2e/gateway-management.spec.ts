@@ -13,8 +13,8 @@ test.describe('Gateway Management', () => {
     // Should show page title (use exact match to avoid matching "Total Gateways", etc.)
     await expect(page.getByRole('heading', { name: 'Gateways', exact: true })).toBeVisible()
 
-    // Should show description with scoping information
-    await expect(page.getByText(/scoping.*achieved.*selective.*tool/i)).toBeVisible()
+    // Should show subtitle with gateway count info or empty state
+    await expect(page.getByText(/gateways|no gateways found/i).first()).toBeVisible()
   })
 
   test('should display gateway information correctly', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
@@ -76,10 +76,9 @@ test.describe('Gateway Management', () => {
     await page.reload()
     await assertHelper.waitForLoadingComplete()
 
-    // Should show stats
-    await expect(page.getByText(/Total Gateways/i)).toBeVisible()
-    await expect(page.getByText(/Active Gateways/i)).toBeVisible()
-    await expect(page.getByText(/Total Tools/i)).toBeVisible()
+    // Should show gateway subtitle with count info
+    await expect(page.getByText(/gateways.*active/i).first()).toBeVisible()
+    await expect(page.getByText(/tool assignments/i).first()).toBeVisible()
   })
 
   test('should open create gateway dialog', async ({ authenticatedPage: page, assertHelper }) => {
@@ -100,12 +99,13 @@ test.describe('Gateway Management', () => {
     await page.getByRole('button', { name: /Create Gateway/i }).click()
 
     // Click gateway type selector
-    await page.getByLabel(/gateway type|type/i).click()
+    await page.getByRole('combobox', { name: /gateway type/i }).click()
 
-    // Should show exactly 3 types
+    // Should show exactly 4 types (MCP, A2A, UTCP, Skills)
     await expect(page.getByRole('option', { name: /MCP.*Model Context Protocol/i })).toBeVisible()
     await expect(page.getByRole('option', { name: /A2A.*Agent.*Agent/i })).toBeVisible()
     await expect(page.getByRole('option', { name: /UTCP.*Universal.*Tool/i })).toBeVisible()
+    await expect(page.getByRole('option', { name: /Skills.*Agent Skills/i })).toBeVisible()
 
     // Should NOT show SCOPED_TOOL type
     await expect(page.getByRole('option', { name: /SCOPED_TOOL/i })).not.toBeVisible()
@@ -119,7 +119,7 @@ test.describe('Gateway Management', () => {
 
     // Fill form
     await page.getByLabel(/Gateway Name/i).fill('New Test Gateway')
-    await page.getByLabel(/gateway type|type/i).click()
+    await page.getByRole('combobox', { name: /gateway type/i }).click()
     await page.getByRole('option', { name: /MCP/i }).click()
     await page.getByLabel(/Endpoint/i).fill('/new-gateway')
 

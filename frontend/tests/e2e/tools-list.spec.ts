@@ -286,7 +286,7 @@ test.describe('Tools - List & Management', () => {
     await page.waitForTimeout(1000)
   })
 
-  test('should display tool badges (method, type, status)', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
+  test('should display tool badges (status)', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
     const api = await apiHelper.createAPI({
       name: 'Badge Test API',
       baseUrl: 'https://badge.example.com',
@@ -301,12 +301,10 @@ test.describe('Tools - List & Management', () => {
     await page.reload()
     await assertHelper.waitForLoadingComplete()
 
-    // Should show method badges (GET, POST, etc.) in table cells
+    // The tools table has Name, Status, and Actions columns
+    // Should show status badges (Active or Inactive) in table cells
     const toolRow = page.locator('table tbody tr').first()
-    await expect(toolRow.getByText(/GET|POST|PUT|DELETE/i).first()).toBeVisible()
-
-    // Should show status badges (Active, Inactive) in table cells
-    await expect(toolRow.getByText(/active|inactive/i).first()).toBeVisible()
+    await expect(toolRow.getByText(/Active|Inactive/i).first()).toBeVisible()
   })
 
   test('should paginate tool list', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {

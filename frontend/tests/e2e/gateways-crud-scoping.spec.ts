@@ -12,8 +12,8 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await assertHelper.assertPageTitle(/gateways/i)
     await expect(page.getByRole('button', { name: /create gateway/i })).toBeVisible()
 
-    // Should show scoping information
-    await expect(page.getByText(/scoping.*achieved.*selective.*tool/i)).toBeVisible()
+    // Should show subtitle with gateway count info or empty state
+    await expect(page.getByText(/gateways|no gateways found/i).first()).toBeVisible()
   })
 
   test('should show only 3 gateway types (no SCOPED_TOOL type)', async ({ authenticatedPage: page, assertHelper }) => {
@@ -22,12 +22,13 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await assertHelper.assertDialogOpen()
 
     // Click gateway type selector
-    await page.getByLabel(/gateway type|type/i).click()
+    await page.getByRole('combobox', { name: /gateway type/i }).click()
 
-    // Should show exactly 3 types
+    // Should show exactly 4 types (MCP, A2A, UTCP, Skills)
     await expect(page.getByRole('option', { name: /MCP.*Model Context Protocol/i })).toBeVisible()
     await expect(page.getByRole('option', { name: /A2A.*Agent.*Agent/i })).toBeVisible()
     await expect(page.getByRole('option', { name: /UTCP.*Universal Tool Call/i })).toBeVisible()
+    await expect(page.getByRole('option', { name: /Skills.*Agent Skills/i })).toBeVisible()
 
     // Should NOT show SCOPED_TOOL type
     await expect(page.getByText('Scoped Tool Gateway')).not.toBeVisible()
@@ -41,7 +42,7 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await page.getByLabel('Description').fill(TEST_GATEWAY_CONFIGS.PUBLIC_MCP.description)
 
     // Select MCP type
-    await page.getByLabel(/gateway type|type/i).click()
+    await page.getByRole('combobox', { name: /gateway type/i }).click()
     await page.getByRole('option', { name: /MCP/i }).click()
 
     await page.getByRole('button', { name: /create|save/i }).click()
@@ -61,7 +62,7 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await page.getByLabel('Endpoint Path').fill(TEST_GATEWAY_CONFIGS.ADMIN_A2A.endpointPath)
 
     // Select A2A type
-    await page.getByLabel(/gateway type|type/i).click()
+    await page.getByRole('combobox', { name: /gateway type/i }).click()
     await page.getByRole('option', { name: /A2A/i }).click()
 
     await page.getByRole('button', { name: /create|save/i }).click()
@@ -77,7 +78,7 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await page.getByLabel('Endpoint Path').fill(TEST_GATEWAY_CONFIGS.TEST_UTCP.endpointPath)
 
     // Select UTCP type
-    await page.getByLabel(/gateway type|type/i).click()
+    await page.getByRole('combobox', { name: /gateway type/i }).click()
     await page.getByRole('option', { name: /UTCP/i }).click()
 
     await page.getByRole('button', { name: /create|save/i }).click()

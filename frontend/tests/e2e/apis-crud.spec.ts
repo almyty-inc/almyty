@@ -332,9 +332,9 @@ test.describe('APIs - CRUD Operations', () => {
     await expect(page.getByText('OpenAPI Test')).toBeVisible()
     await expect(page.getByText('GraphQL Test')).toBeVisible()
 
-    // Verify type badges show correctly
-    await expect(page.getByText('OPENAPI').first()).toBeVisible()
-    await expect(page.getByText('GRAPHQL').first()).toBeVisible()
+    // Verify type badges show correctly (ApiTypeBadge renders proper case: "OpenAPI", "GraphQL")
+    await expect(page.getByText('OpenAPI').first()).toBeVisible()
+    await expect(page.getByText('GraphQL').first()).toBeVisible()
   })
 
   test('should display API type badges', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
