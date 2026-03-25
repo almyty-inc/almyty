@@ -2,6 +2,25 @@ import { useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import CodeMirror from '@uiw/react-codemirror'
+import { javascript } from '@codemirror/lang-javascript'
+import { json } from '@codemirror/lang-json'
+import { oneDark } from '@codemirror/theme-one-dark'
+import { githubLight } from '@uiw/codemirror-theme-github'
+
+const languageExtensions: Record<string, any> = {
+  javascript: javascript(),
+  js: javascript(),
+  typescript: javascript({ typescript: true }),
+  ts: javascript({ typescript: true }),
+  json: json(),
+  bash: [], // no extension, just plain text with monospace
+  shell: [],
+  curl: [],
+  python: [],
+  py: [],
+  text: [],
+}
 
 interface CodeBlockProps {
   value: string
@@ -20,8 +39,12 @@ export function CodeBlock({ value, language, copyable = true, className, maxHeig
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  const ext = language ? languageExtensions[language.toLowerCase()] : []
+  const extensions = Array.isArray(ext) ? ext : [ext]
+
   return (
-    <div className={cn('relative group rounded-md border bg-muted', className)}>
+    <div className={cn('relative group rounded-md border overflow-hidden', className)}>
       {(language || copyable) && (
         <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted">
           {language && (
@@ -40,12 +63,21 @@ export function CodeBlock({ value, language, copyable = true, className, maxHeig
           )}
         </div>
       )}
-      <pre
-        className="p-4 text-sm font-mono overflow-auto whitespace-pre-wrap break-words"
-        style={{ maxHeight }}
-      >
-        {value}
-      </pre>
+      <CodeMirror
+        value={value}
+        theme={isDark ? oneDark : githubLight}
+        extensions={extensions}
+        readOnly
+        editable={false}
+        maxHeight={maxHeight}
+        basicSetup={{
+          lineNumbers: true,
+          foldGutter: false,
+          highlightActiveLine: false,
+          tabSize: 2,
+        }}
+        className="text-sm"
+      />
     </div>
   )
 }
