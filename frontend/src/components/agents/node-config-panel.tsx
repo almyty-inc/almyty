@@ -192,8 +192,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
     queryKey: ['llm-providers'],
     queryFn: async () => {
       const res = await llmProvidersApi.getAll()
-      const d = res.data
-      return Array.isArray(d) ? d : d?.providers || []
+      return Array.isArray(res) ? res : res?.providers || []
     },
   })
 
@@ -201,8 +200,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
       const res = await toolsApi.getAll(currentOrganization?.id)
-      const d = res.data
-      return Array.isArray(d) ? d : d?.tools || []
+      return Array.isArray(res) ? res : res?.tools || []
     },
     enabled: !!currentOrganization,
   })
@@ -221,7 +219,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
     queryKey: ['provider-models', node.data.providerId],
     queryFn: async () => {
       const res = await llmProvidersApi.getModels(node.data.providerId as string)
-      const models = res.data || []
+      const models = Array.isArray(res) ? res : res?.models || res?.data || []
       return Array.isArray(models) ? models.map((m: Record<string, string>) => m.id || m.name || String(m)) : []
     },
     enabled: !!node.data.providerId,
@@ -460,8 +458,7 @@ function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; update
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
       const res = await toolsApi.getAll(currentOrganization?.id)
-      const d = res.data
-      return Array.isArray(d) ? d : d?.tools || []
+      return Array.isArray(res) ? res : res?.tools || []
     },
     enabled: !!currentOrganization,
   })
@@ -813,8 +810,7 @@ function SubAgentConfig({ node, updateData }: { node: Node; updateData: UpdateDa
     queryKey: ['agents-for-subagent'],
     queryFn: async () => {
       const res = await agentsApi.getAll()
-      const d = res.data
-      const result = d?.agents || (Array.isArray(d) ? d : [])
+      const result = Array.isArray(res) ? res : res?.agents || []
       return Array.isArray(result) ? result : []
     },
   })
