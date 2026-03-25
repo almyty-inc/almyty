@@ -152,10 +152,11 @@ test.describe('Tools - Generation & Execution', () => {
     await page.waitForLoadState('networkidle')
     await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 10000 })
 
-    // Click Test button to open execution dialog
+    // Open actions dropdown and click "Test Tool" from the menu
     await page.waitForTimeout(500)
     const toolRow = page.locator('tbody tr').first()
-    await toolRow.getByRole('button', { name: 'Test' }).click()
+    await toolRow.getByRole('button', { name: /actions/i }).click()
+    await page.getByRole('menuitem', { name: /test tool/i }).click()
 
     // Wait for execution dialog to open - get the last dialog (test dialog)
     const testDialog = page.locator('[role="dialog"]').filter({ hasText: /test tool|execute/i }).last()
@@ -317,21 +318,19 @@ test.describe('Tools - Generation & Execution', () => {
     await page.waitForLoadState('networkidle')
     await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 10000 })
 
-    // Settings is in the actions dropdown, not a direct button in the row.
-    // Click the MoreHorizontal actions button (aria-label "Actions")
+    // Navigate to tool detail page by clicking the row
     await page.waitForTimeout(500)
     const toolRow = page.locator('tbody tr').first()
-    await toolRow.getByRole('button', { name: /actions/i }).click()
+    await toolRow.click()
 
-    // Click "Settings" from the dropdown menu
-    await page.getByRole('menuitem', { name: /^settings$/i }).click()
+    // Wait for navigation to tool detail page
+    await page.waitForURL(/\/tools\/[^/]+$/, { timeout: 10000 })
+    await page.waitForLoadState('networkidle')
 
-    // Wait for settings dialog to open - get the last dialog (settings dialog)
-    const settingsDialog = page.locator('[role="dialog"]').filter({ hasText: /settings|config/i }).last()
-    await expect(settingsDialog).toBeVisible({ timeout: 10000 })
-
-    // Should show configuration UI in the scoped dialog
-    await expect(settingsDialog.getByText(/settings|config|timeout|rate.*limit/i).first()).toBeVisible()
+    // Tool detail page has tabs including "Details" which shows configuration
+    await expect(page.getByRole('tab', { name: /details/i }).first()).toBeVisible({ timeout: 10000 })
+    // Should show tool configuration info on the detail page
+    await expect(page.getByText(/configuration|timeout|status/i).first()).toBeVisible({ timeout: 10000 })
   })
 
   test('should view tool execution history', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {

@@ -26,10 +26,10 @@ export class AssertionsHelper {
   /**
    * Assert toast notification appears with message
    */
-  async assertToastMessage(message: string | RegExp) {
+  async assertToastMessage(message: string | RegExp, options?: { timeout?: number }) {
     // Look for toast specifically (li element with role="status"), not screen reader announcements
     const toast = this.page.locator('li[role="status"]').filter({ hasText: message })
-    await expect(toast).toBeVisible({ timeout: 5000 })
+    await expect(toast).toBeVisible({ timeout: options?.timeout ?? 5000 })
   }
 
   /**

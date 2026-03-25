@@ -408,9 +408,11 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await page.goto('/gateways')
     await assertHelper.waitForLoadingComplete()
 
-    // Should show scoping status near the gateway heading
+    // Should show gateway in the list with tools count
     await expect(page.getByRole('heading', { name: `No Tools Gateway ${timestamp}` })).toBeVisible()
-    await expect(page.getByText(/0.*of.*\d+|0\/\d+/i).first()).toBeVisible()
+    // The gateways DataTable shows "0 tools" for gateways with no assigned tools
+    const gatewayRow = page.locator('tr').filter({ hasText: `No Tools Gateway ${timestamp}` })
+    await expect(gatewayRow.getByText(/0.*tools/i)).toBeVisible()
   })
 
   test('should delete gateway with confirmation', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
