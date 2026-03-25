@@ -2,11 +2,13 @@ import { create } from 'zustand'
 
 interface AppState {
   sidebarOpen: boolean
+  sidebarCollapsed: boolean
   theme: 'light' | 'dark'
   notifications: Notification[]
   isLoading: boolean
   setSidebarOpen: (open: boolean) => void
   toggleSidebar: () => void
+  toggleSidebarCollapse: () => void
   setTheme: (theme: 'light' | 'dark') => void
   addNotification: (notification: Omit<Notification, 'id'>) => void
   removeNotification: (id: string) => void
@@ -23,6 +25,7 @@ interface Notification {
 
 export const useAppStore = create<AppState>((set, get) => ({
   sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 1024,
+  sidebarCollapsed: typeof window !== 'undefined' && localStorage.getItem('sidebar-collapsed') === 'true',
   theme: 'light',
   notifications: [],
   isLoading: false,
@@ -33,6 +36,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   toggleSidebar: () => {
     set(state => ({ sidebarOpen: !state.sidebarOpen }))
+  },
+
+  toggleSidebarCollapse: () => {
+    set(state => {
+      const collapsed = !state.sidebarCollapsed
+      localStorage.setItem('sidebar-collapsed', String(collapsed))
+      return { sidebarCollapsed: collapsed }
+    })
   },
 
   setTheme: (theme: 'light' | 'dark') => {
