@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io/frane/apifai
+  REGISTRY: ghcr.io/frane/almyty
   TAG: dev-${{ github.sha }}
 
 permissions:
@@ -53,7 +53,7 @@ jobs:
           target: production
           push: true
           build-args: |
-            VITE_API_BASE_URL=https://api.dev.apif.ai
+            VITE_API_BASE_URL=https://api.dev.almyty.com
           tags: |
             ${{ env.REGISTRY }}/frontend:${{ env.TAG }}
             ${{ env.REGISTRY }}/frontend:dev-latest
@@ -79,12 +79,12 @@ jobs:
 
       - name: Create ImagePullSecret for GHCR
         run: |
-          kubectl create namespace apifai-dev --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace almyty-dev --dry-run=client -o yaml | kubectl apply -f -
           kubectl create secret docker-registry ghcr-secret \
             --docker-server=ghcr.io \
             --docker-username=${{ github.actor }} \
             --docker-password=${{ secrets.GHCR_PAT }} \
-            --namespace=apifai-dev \
+            --namespace=almyty-dev \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Update image tags with git SHA
@@ -99,8 +99,8 @@ jobs:
 
       - name: Wait for rollout
         run: |
-          kubectl rollout status deployment/dev-api -n apifai-dev --timeout=5m
-          kubectl rollout status deployment/dev-frontend -n apifai-dev --timeout=5m
+          kubectl rollout status deployment/dev-api -n almyty-dev --timeout=5m
+          kubectl rollout status deployment/dev-frontend -n almyty-dev --timeout=5m
 
       - name: Deployment summary
         run: |
@@ -108,5 +108,5 @@ jobs:
           echo "📦 Version: dev-${{ github.sha }}"
           echo ""
           echo "🌐 URLs:"
-          echo "  API: https://api.dev.apif.ai"
-          echo "  App: https://app.dev.apif.ai"
+          echo "  API: https://api.dev.almyty.com"
+          echo "  App: https://app.dev.almyty.com"

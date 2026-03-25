@@ -1,41 +1,44 @@
-# Redirect ingress: all alternate domains → almyty.com
-#
+# Redirect ingress: ALL alternate domains → almyty.com
+# Replaces the old apifai-redirect ingress.
 # DNS: A records for all domains below point to 129.212.254.179 (ingress LB).
-# cert-manager issues TLS certs for each via Let's Encrypt.
-# nginx does 301 permanent redirect preserving the request URI.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: almyty-redirect
-  namespace: almyty
+  namespace: apifai-staging
   annotations:
     nginx.ingress.kubernetes.io/permanent-redirect: "https://almyty.com$request_uri"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    cert-manager.io/cluster-issuer: staging-letsencrypt-prod
 spec:
   ingressClassName: nginx
   tls:
   - hosts:
     - almyty.ai
-    - "*.almyty.ai"
     secretName: almyty-ai-tls
   - hosts:
     - almyty.dev
-    - "*.almyty.dev"
     secretName: almyty-dev-tls
   - hosts:
     - almyty.tech
-    - "*.almyty.tech"
     secretName: almyty-tech-tls
   - hosts:
     - almyty.io
-    - "*.almyty.io"
     secretName: almyty-io-tls
   - hosts:
     - almyty.net
-    - "*.almyty.net"
     secretName: almyty-net-tls
+  - hosts:
+    - apifai.ai
+    secretName: apifai-ai-redirect-tls
+  - hosts:
+    - apifai.com
+    secretName: apifai-com-redirect-tls
+  - hosts:
+    - apif.ai
+    secretName: apif-ai-redirect-tls
   rules:
+  # almyty alternate TLDs
   - host: almyty.ai
     http: &redirect
       paths:
@@ -43,7 +46,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: almyty-frontend
+            name: staging-apifai-frontend
             port:
               number: 8080
   - host: "*.almyty.ai"
@@ -63,4 +66,17 @@ spec:
   - host: almyty.net
     http: *redirect
   - host: "*.almyty.net"
+    http: *redirect
+  # Old apifai domains → almyty.com too
+  - host: apifai.ai
+    http: *redirect
+  - host: "*.apifai.ai"
+    http: *redirect
+  - host: apifai.com
+    http: *redirect
+  - host: "*.apifai.com"
+    http: *redirect
+  - host: apif.ai
+    http: *redirect
+  - host: "*.apif.ai"
     http: *redirect

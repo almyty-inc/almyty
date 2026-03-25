@@ -1,11 +1,11 @@
 /**
  * Test almyty agent via OpenAI Node.js SDK.
- * Usage: npx ts-node scripts/test-openai-sdk.ts --url https://api.staging.apif.ai --api-key <key>
+ * Usage: npx ts-node scripts/test-openai-sdk.ts --url https://api.staging.almyty.com --api-key <key>
  */
 import OpenAI from 'openai';
 
 const args = process.argv.slice(2);
-const url = args[args.indexOf('--url') + 1] || 'https://api.staging.apif.ai';
+const url = args[args.indexOf('--url') + 1] || 'https://api.staging.almyty.com';
 const apiKey = args[args.indexOf('--api-key') + 1] || '';
 const agentName = args[args.indexOf('--agent-name') + 1] || 'new-agent';
 

@@ -304,7 +304,7 @@ export class LlmProvider {
       case LlmProviderType.OPENROUTER:
         if (this.configuration.apiKey) {
           headers['Authorization'] = `Bearer ${this.configuration.apiKey}`;
-          headers['HTTP-Referer'] = 'https://apif.ai';
+          headers['HTTP-Referer'] = 'https://almyty.com';
           headers['X-Title'] = 'almyty';
         }
         break;

@@ -12,7 +12,7 @@ on:
         type: string
 
 env:
-  REGISTRY: ghcr.io/frane/apifai
+  REGISTRY: ghcr.io/frane/almyty
 
 permissions:
   contents: write
@@ -72,7 +72,7 @@ jobs:
           target: production
           push: true
           build-args: |
-            VITE_API_BASE_URL=https://api.apif.ai
+            VITE_API_BASE_URL=https://api.almyty.com
           tags: |
             ${{ env.REGISTRY }}/frontend:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/frontend:${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}
@@ -110,24 +110,24 @@ jobs:
 
       - name: Create ImagePullSecret for GHCR
         run: |
-          kubectl create namespace apifai-production --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace almyty-production --dry-run=client -o yaml | kubectl apply -f -
           kubectl create secret docker-registry ghcr-secret \
             --docker-server=ghcr.io \
             --docker-username=${{ github.actor }} \
             --docker-password=${{ secrets.GHCR_PAT }} \
-            --namespace=apifai-production \
+            --namespace=almyty-production \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create application secrets
         run: |
-          kubectl create secret generic apifai-secrets \
+          kubectl create secret generic almyty-secrets \
             --from-literal=DATABASE_USERNAME=${{ secrets.PROD_DATABASE_USERNAME }} \
             --from-literal=DATABASE_PASSWORD=${{ secrets.PROD_DATABASE_PASSWORD }} \
             --from-literal=DATABASE_URL=${{ secrets.PROD_DATABASE_URL }} \
             --from-literal=REDIS_PASSWORD=${{ secrets.PROD_REDIS_PASSWORD }} \
             --from-literal=REDIS_URL=${{ secrets.PROD_REDIS_URL }} \
             --from-literal=JWT_SECRET=${{ secrets.PROD_JWT_SECRET }} \
-            --namespace=apifai-production \
+            --namespace=almyty-production \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Update image tags with version
@@ -142,8 +142,8 @@ jobs:
 
       - name: Wait for rollout
         run: |
-          kubectl rollout status deployment/prod-api -n apifai-production --timeout=10m
-          kubectl rollout status deployment/prod-frontend -n apifai-production --timeout=5m
+          kubectl rollout status deployment/prod-api -n almyty-production --timeout=10m
+          kubectl rollout status deployment/prod-frontend -n almyty-production --timeout=5m
 
       - name: Deployment summary
         run: |
@@ -151,8 +151,8 @@ jobs:
           echo "📦 Version: ${{ steps.version.outputs.version }}"
           echo ""
           echo "🌐 URLs:"
-          echo "  API: https://api.apif.ai"
-          echo "  App: https://app.apif.ai"
+          echo "  API: https://api.almyty.com"
+          echo "  App: https://app.almyty.com"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -166,11 +166,11 @@ jobs:
             **Version:** ${{ steps.version.outputs.version }}
 
             ### URLs
-            - API: https://api.apif.ai
-            - App: https://app.apif.ai
+            - API: https://api.almyty.com
+            - App: https://app.almyty.com
 
             ### Images
-            - `ghcr.io/frane/apifai/api:${{ steps.version.outputs.version }}`
-            - `ghcr.io/frane/apifai/frontend:${{ steps.version.outputs.version }}`
+            - `ghcr.io/frane/almyty/api:${{ steps.version.outputs.version }}`
+            - `ghcr.io/frane/almyty/frontend:${{ steps.version.outputs.version }}`
           draft: false
           prerelease: false
