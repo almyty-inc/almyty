@@ -157,7 +157,7 @@ export function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between pb-4 border-b border-gradient-to-r from-border to-transparent">
         <div>
-          <h1 className="text-3xl font-heading font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
             Overview of your APIs and tools
           </p>

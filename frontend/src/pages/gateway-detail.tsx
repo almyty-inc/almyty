@@ -1159,7 +1159,7 @@ export function GatewayDetailPage() {
               <Router className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-heading font-bold tracking-tight">{gateway.name}</h1>
+              <h1 className="text-4xl font-heading font-extrabold tracking-tight">{gateway.name}</h1>
               <p className="text-muted-foreground">{gateway.description || 'API Gateway'}</p>
             </div>
           </div>
