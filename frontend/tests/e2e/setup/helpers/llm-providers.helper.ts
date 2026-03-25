@@ -1,5 +1,4 @@
 import { Page } from '@playwright/test'
-import { api } from '../../../src/lib/api'
 
 export interface LLMProviderData {
   name: string
@@ -105,7 +104,7 @@ export class LLMProvidersHelper {
    */
   async setupMockResponses() {
     // Mock test connection endpoint
-    await this.page.route('**/api/llm-providers/*/test', async (route) => {
+    await this.page.route('**/llm-providers/*/test', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -123,7 +122,7 @@ export class LLMProvidersHelper {
     })
 
     // Mock models endpoint
-    await this.page.route('**/api/llm-providers/*/models', async (route) => {
+    await this.page.route('**/llm-providers/*/models', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -136,7 +135,7 @@ export class LLMProvidersHelper {
     })
 
     // Mock usage statistics endpoint
-    await this.page.route('**/api/llm-providers/*/usage', async (route) => {
+    await this.page.route('**/llm-providers/*/usage', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -158,7 +157,7 @@ export class LLMProvidersHelper {
    * Setup mock for provider creation errors (for negative testing)
    */
   async setupErrorMock() {
-    await this.page.route('**/api/llm-providers/*/test', async (route) => {
+    await this.page.route('**/llm-providers/*/test', async (route) => {
       await route.fulfill({
         status: 400,
         contentType: 'application/json',
