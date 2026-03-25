@@ -204,7 +204,7 @@ function ProfileTab() {
 
   const { data: userProfile, isLoading } = useQuery({
     queryKey: ['user-profile'],
-    queryFn: () => authApi.getProfile().then(res => res.data || res),
+    queryFn: () => authApi.getProfile(),
   })
 
   // Initialize form values when profile loads
