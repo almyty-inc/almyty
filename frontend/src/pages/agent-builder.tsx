@@ -16,10 +16,12 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Save, Loader2, Download, AlertTriangle, Plus, X, Undo2, Redo2 } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Download, AlertTriangle, Plus, X, Undo2, Redo2, Play, ChevronUp, ChevronDown } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
@@ -70,6 +72,8 @@ function getDefaultData(type: PipelineNodeType): Record<string, any> {
       return {}
     case 'sub_agent':
       return { agentId: '', agentName: '', inputMapping: [] }
+    case 'loop':
+      return { iterableExpression: '', maxIterations: 100 }
     default:
       return {}
   }
@@ -97,6 +101,10 @@ export function AgentBuilderPage() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [initialized, setInitialized] = useState(false)
   const [showMobilePalette, setShowMobilePalette] = useState(false)
+  const [showTestPanel, setShowTestPanel] = useState(false)
+  const [testInput, setTestInput] = useState('{"message": "Hello"}')
+  const [testOutput, setTestOutput] = useState<string | null>(null)
+  const [testLoading, setTestLoading] = useState(false)
 
   // ── Undo / Redo history ───────────────────────────────────────────────
   const [history, setHistory] = useState<{ nodes: Node[]; edges: Edge[] }[]>([])
@@ -146,6 +154,21 @@ export function AgentBuilderPage() {
     setSelectedNode(null)
     requestAnimationFrame(() => { isUndoRedoRef.current = false })
   }, [canRedo, history, historyIndex, setNodes, setEdges])
+
+  const runTest = async () => {
+    if (!id) return
+    setTestLoading(true)
+    setTestOutput(null)
+    try {
+      const input = JSON.parse(testInput)
+      const result = await agentsApi.invoke(id, input)
+      setTestOutput(JSON.stringify(result, null, 2))
+    } catch (err: any) {
+      setTestOutput(`Error: ${err?.response?.data?.message || err?.message || 'Execution failed'}`)
+    } finally {
+      setTestLoading(false)
+    }
+  }
 
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
@@ -511,6 +534,16 @@ export function AgentBuilderPage() {
               v{(agentData as Agent).version || '1.0.0'}
             </Badge>
           )}
+          {isEditing && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTestPanel(!showTestPanel)}
+            >
+              <Play className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Test</span>
+            </Button>
+          )}
           <Button
             size="sm"
             onClick={() => {
@@ -639,6 +672,39 @@ export function AgentBuilderPage() {
           </div>
         )}
       </div>
+
+      {/* Test Panel */}
+      {showTestPanel && isEditing && (
+        <div className="border-t bg-muted/30 shrink-0">
+          <div className="flex items-center justify-between px-4 py-2 border-b">
+            <span className="text-sm font-semibold">Test Agent</span>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowTestPanel(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex gap-4 p-4 max-h-[250px]">
+            <div className="flex-1 space-y-2">
+              <Label className="text-xs">Input JSON</Label>
+              <Textarea
+                className="font-mono text-xs h-[140px] resize-none"
+                value={testInput}
+                onChange={(e) => setTestInput(e.target.value)}
+                placeholder='{"message": "Hello"}'
+              />
+              <Button size="sm" onClick={runTest} disabled={testLoading}>
+                {testLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
+                Run
+              </Button>
+            </div>
+            <div className="flex-1 space-y-2">
+              <Label className="text-xs">Output</Label>
+              <pre className="font-mono text-xs bg-background border rounded-md p-3 h-[170px] overflow-auto whitespace-pre-wrap">
+                {testOutput || 'Run the agent to see output...'}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

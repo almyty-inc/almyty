@@ -57,47 +57,6 @@ curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
 | `variables` | object | Variable mapping using template expressions |
 | `operationName` | string | Operation name (required for documents with multiple operations) |
 
-## Queries vs Mutations
-
-### Query Example
-
-```graphql
-query GetUser($id: ID!) {
-  user(id: $id) {
-    name
-    email
-    posts {
-      title
-      createdAt
-    }
-  }
-}
-```
-
-### Mutation Example
-
-```graphql
-mutation CreatePost($input: CreatePostInput!) {
-  createPost(input: $input) {
-    id
-    title
-    status
-  }
-}
-```
-
-With variables:
-
-```json
-{
-  "input": {
-    "title": "{{parameters.title}}",
-    "body": "{{parameters.body}}",
-    "published": true
-  }
-}
-```
-
 ## Variable Mapping
 
 GraphQL variables are mapped from tool parameters using template expressions:

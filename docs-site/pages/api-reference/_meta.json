@@ -1,7 +1,11 @@
 {
   "authentication": "Authentication",
-  "agents-api": "Agents API",
-  "openai-compatible": "OpenAI Compatible API",
+  "apis": "APIs",
+  "tools-api": "Tools",
+  "gateways-api": "Gateways",
+  "llm-providers-api": "LLM Providers",
+  "agents-api": "Agents",
+  "openai-compatible": "OpenAI Compatible",
   "error-codes": "Error Codes",
   "rate-limits": "Rate Limits"
 }

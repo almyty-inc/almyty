@@ -38,43 +38,44 @@
 
 ```
 backend/src/
-├── entities/          # 24 TypeORM entities
+├── entities/          # 29 TypeORM entities
 ├── modules/
+│   ├── agents/        # Agent CRUD, DAG execution engine, OpenAI-compat API
 │   ├── apis/          # API CRUD, schema import
-│   ├── auth/          # JWT auth, registration, login
-│   ├── gateways/      # Gateway CRUD, tool scoping, protocol serving, exports
+│   ├── auth/          # JWT auth, registration, login, OAuth
+│   ├── gateway-tool/  # Gateway-tool assignment
+│   ├── gateways/      # Gateway CRUD, auth enforcement, protocol serving
 │   ├── health/        # /health, /health/live, /health/ready
 │   ├── jobs/          # BullMQ background jobs
+│   ├── json-schema-translator/ # JSON Schema conversion
 │   ├── llm-providers/ # OpenAI, Anthropic integration
-│   ├── mcp/           # MCP JSON-RPC 2.0 (HTTP, SSE, WebSocket)
+│   ├── mcp/           # MCP, UTCP, A2A controllers + MCP OAuth 2.1 server
 │   ├── monitoring/    # Metrics, usage tracking
 │   ├── organizations/ # Multi-tenancy, RBAC
+│   ├── plugins/       # Plugin system
 │   ├── schema-parser/ # 4 parsers: OpenAPI, GraphQL, SOAP, Protobuf
 │   ├── tools/         # Tool CRUD, generation, execution, skill export
 │   └── users/         # User management
 
 frontend/src/
 ├── pages/             # Dashboard, APIs, Tools, Gateways, Agents, Chat, etc.
-├── components/        # shadcn/ui components
+├── components/        # shadcn/ui + custom components (agents/, apis/, gateways/, tools/, llm-providers/)
 ├── hooks/             # React Query hooks
 ├── lib/               # API client, utilities
 ├── stores/            # Zustand stores
 └── types/             # TypeScript types
 
-packages/skills-cli/   # npx @almyty/skills CLI
-├── src/
-│   ├── index.ts       # CLI entry (install, watch, list, remove)
-│   ├── agents.ts      # 30+ agent detection
-│   ├── installer.ts   # SKILL.md file writer
-│   ├── client.ts      # HTTP client to backend
-│   └── auth.ts        # JWT authentication
+packages/
+├── skills-cli/        # npx @almyty/skills CLI
+│   └── src/           # install, watch, list, remove + 30+ agent detection
+├── mcp-server/        # @almyty/mcp-server — skill-first API proxy
 ```
 
 ---
 
 ## Key Facts
 
-- **Entities**: 24 (User, Organization, Team, Api, ApiSchema, Operation, Resource, Tool, ToolVersion, ToolCategory, ToolExecution, Gateway, GatewayTool, GatewayAuth, LlmProvider, LlmSession, LlmMessage, RequestLog, UsageMetric, JsonSchema, ApiKey, Credential, UserOrganization, UserTeam)
+- **Entities**: 29 (User, Organization, Team, Api, ApiSchema, Operation, Resource, Tool, ToolVersion, ToolCategory, ToolExecution, Gateway, GatewayTool, GatewayAuth, LlmProvider, LlmSession, LlmMessage, RequestLog, UsageMetric, JsonSchema, ApiKey, Credential, UserOrganization, UserTeam, Agent, AgentExecution, OAuthClient, OAuthAuthorizationCode, OAuthAccessToken)
 - **Gateway types**: MCP, A2A, UTCP, Skills
 - **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed), GraphQL, LLM
 - **Backend tests**: 90 suites, 3,000+ tests
@@ -130,8 +131,10 @@ docker build --target production -t almyty-frontend ./frontend
 ## Design Documents
 
 - `docs/architecture.md` — System architecture
-- `docs/implementation-plan.md` — Original implementation plan
-- `docs/schema-design.md` — Database schema design
+- `_internal/implementation-plan.md` — Original implementation plan
+- `_internal/schema-design.md` — Database schema design
+- `_internal/UX_AUDIT.md` — UX audit & production readiness report
+- `docs/brand/` — Color system, logo specs, typography
 
 ---
 

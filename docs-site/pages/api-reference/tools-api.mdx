@@ -1,0 +1,105 @@
+# Tools API
+
+REST API reference for managing tools.
+
+## Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/organizations/{orgId}/tools` | List tools |
+| `POST` | `/organizations/{orgId}/tools` | Create a tool |
+| `GET` | `/tools/:id` | Get tool by ID |
+| `PATCH` | `/tools/:id` | Update a tool |
+| `DELETE` | `/tools/:id` | Delete a tool |
+| `POST` | `/organizations/{orgId}/tools/:id/execute` | Execute a tool |
+
+## List Tools
+
+```bash
+curl https://api.almyty.com/organizations/{orgId}/tools \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "tools": [
+      {
+        "id": "tool-uuid",
+        "name": "get_users",
+        "description": "Retrieve a list of users",
+        "type": "api",
+        "status": "active",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "page": { "type": "integer" }
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+## Create a Tool
+
+```bash
+curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "calculate_total",
+    "description": "Calculate order total with tax",
+    "type": "javascript",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "price": { "type": "number" },
+        "quantity": { "type": "integer" },
+        "taxRate": { "type": "number", "default": 0.1 }
+      },
+      "required": ["price", "quantity"]
+    },
+    "code": "return { total: parameters.price * parameters.quantity * (1 + parameters.taxRate) };"
+  }'
+```
+
+### Tool Types
+
+| Type | Required Fields |
+|------|----------------|
+| `http` | `executionConfig.method`, `executionConfig.url` |
+| `javascript` | `code` |
+| `graphql` | `executionConfig.endpoint`, `executionConfig.query` |
+| `llm` | `executionConfig.providerId`, `executionConfig.promptTemplate` |
+
+## Execute a Tool
+
+```bash
+curl -X POST https://api.almyty.com/organizations/{orgId}/tools/{id}/execute \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parameters": {
+      "price": 29.99,
+      "quantity": 3
+    }
+  }'
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "result": { "total": 98.97 },
+    "duration": 12,
+    "status": "success"
+  }
+}
+```

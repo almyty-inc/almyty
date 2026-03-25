@@ -1,0 +1,103 @@
+# LLM Providers API
+
+REST API reference for managing LLM provider connections.
+
+## Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/llm-providers` | List all providers |
+| `POST` | `/llm-providers` | Add a provider |
+| `GET` | `/llm-providers/:id` | Get provider by ID |
+| `PATCH` | `/llm-providers/:id` | Update a provider |
+| `DELETE` | `/llm-providers/:id` | Delete a provider |
+| `POST` | `/llm-providers/:id/test` | Test connection |
+| `POST` | `/llm-providers/:id/chat` | Send a chat message |
+
+## Add a Provider
+
+```bash
+curl -X POST https://api.almyty.com/llm-providers \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "OpenAI Production",
+    "provider": "openai",
+    "apiKey": "sk-...",
+    "model": "gpt-4o",
+    "configuration": {
+      "temperature": 0.7,
+      "maxTokens": 4096
+    }
+  }'
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Display name |
+| `provider` | string | Yes | `openai`, `anthropic`, or `custom` |
+| `apiKey` | string | Yes | Provider API key |
+| `model` | string | No | Default model |
+| `baseUrl` | string | No | Custom endpoint URL (for self-hosted or compatible APIs) |
+| `configuration` | object | No | Default parameters (temperature, maxTokens, etc.) |
+
+### Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "prov-uuid",
+    "name": "OpenAI Production",
+    "provider": "openai",
+    "model": "gpt-4o",
+    "status": "active",
+    "totalCost": 0,
+    "createdAt": "2026-03-01T10:00:00Z"
+  }
+}
+```
+
+## Test Connection
+
+Verify the provider is configured correctly:
+
+```bash
+curl -X POST https://api.almyty.com/llm-providers/{id}/test \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "model": "gpt-4o",
+    "responseTime": 450
+  }
+}
+```
+
+## Send a Chat Message
+
+```bash
+curl -X POST https://api.almyty.com/llm-providers/{id}/chat \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Hello, what can you do?",
+    "sessionId": "optional-session-uuid"
+  }'
+```
+
+Sessions maintain conversation history. Omit `sessionId` for one-off messages.
+
+## Supported Providers
+
+| Provider | Models |
+|----------|--------|
+| **OpenAI** | gpt-4o, gpt-4o-mini, gpt-4-turbo, o1, o3 |
+| **Anthropic** | claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5 |
+| **Custom** | Any OpenAI-compatible API (set `baseUrl`) |

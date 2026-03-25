@@ -100,13 +100,6 @@ curl -X POST https://api.almyty.com/agents/{id}/webhook \
 
 ## Rate Limits
 
-Webhook endpoints are subject to rate limiting:
-
-| Tier | Requests/minute | Concurrent |
-|------|-----------------|------------|
-| Free | 10 | 2 |
-| Pro | 100 | 10 |
-| Enterprise | 1000 | 50 |
-
-Requests exceeding the limit receive a `429 Too Many Requests` response
-with a `Retry-After` header.
+Webhook endpoints are subject to rate limiting (100 requests/minute,
+10 concurrent). Requests exceeding the limit receive a `429 Too Many Requests`
+response with a `Retry-After` header.

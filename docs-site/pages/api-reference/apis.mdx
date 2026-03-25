@@ -1,0 +1,114 @@
+# APIs
+
+REST API reference for managing API connections and schema imports.
+
+## Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/apis` | List all APIs |
+| `POST` | `/apis` | Connect a new API |
+| `GET` | `/apis/:id` | Get API by ID |
+| `PATCH` | `/apis/:id` | Update an API |
+| `DELETE` | `/apis/:id` | Delete an API |
+| `POST` | `/apis/:id/import-schema` | Import API schema |
+| `POST` | `/apis/:id/generate-tools` | Generate tools from schema |
+| `GET` | `/apis/:id/operations` | List parsed operations |
+| `GET` | `/apis/:id/schemas` | List imported schemas |
+
+## Connect an API
+
+```bash
+curl -X POST https://api.almyty.com/apis \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My REST API",
+    "type": "openapi",
+    "baseUrl": "https://api.example.com/v1",
+    "description": "Example API for user management"
+  }'
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Human-readable name |
+| `type` | string | Yes | `openapi`, `graphql`, `soap`, `protobuf` |
+| `baseUrl` | string | Yes | Root URL of the API |
+| `description` | string | No | Description of what the API does |
+
+### Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "api-uuid",
+    "name": "My REST API",
+    "type": "openapi",
+    "baseUrl": "https://api.example.com/v1",
+    "status": "active",
+    "createdAt": "2026-03-01T10:00:00Z"
+  }
+}
+```
+
+## Import Schema
+
+Import an API schema to automatically discover operations.
+
+```bash
+curl -X POST https://api.almyty.com/apis/{id}/import-schema \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schemaUrl": "https://api.example.com/v1/openapi.json",
+    "generateTools": true
+  }'
+```
+
+### Import Options
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `schemaUrl` | string | URL to fetch the schema from |
+| `schemaContent` | string | Raw schema content (alternative to URL) |
+| `generateTools` | boolean | Auto-generate tools from operations (default: false) |
+
+Supported formats:
+- **OpenAPI 3.x** — JSON or YAML
+- **GraphQL** — Introspection result or SDL
+- **SOAP** — WSDL documents
+- **Protobuf** — `.proto` definitions
+
+## Generate Tools
+
+Create tools from parsed operations:
+
+```bash
+curl -X POST https://api.almyty.com/apis/{id}/generate-tools \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Each operation becomes one tool with automatically inferred parameters,
+JSON Schema validation, and naming derived from the operation ID.
+
+## API Credentials
+
+APIs can store authentication credentials for making requests to the target API:
+
+```bash
+curl -X POST https://api.almyty.com/apis/{id}/credentials \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "bearer_token",
+    "credentials": {
+      "token": "your-api-token"
+    }
+  }'
+```
+
+Credential types: `api_key`, `bearer_token`, `basic_auth`, `oauth2`.
