@@ -9,19 +9,20 @@ import { User } from '../../entities/user.entity';
 
 import { OrganizationsService } from './organizations.service';
 import { OrganizationsController } from './organizations.controller';
+import { InvitesController } from './invites.controller';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Organization,
-      UserOrganization, 
+      UserOrganization,
       Team,
       UserTeam,
       User,
     ]),
   ],
   providers: [OrganizationsService],
-  controllers: [OrganizationsController],
+  controllers: [OrganizationsController, InvitesController],
   exports: [OrganizationsService],
 })
 export class OrganizationsModule {}
