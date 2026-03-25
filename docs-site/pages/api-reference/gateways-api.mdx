@@ -1,0 +1,133 @@
+# Gateways API
+
+REST API reference for managing gateways, tool assignments, and authentication.
+
+## Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/gateways` | List all gateways |
+| `POST` | `/gateways` | Create a gateway |
+| `GET` | `/gateways/:id` | Get gateway by ID |
+| `PATCH` | `/gateways/:id` | Update a gateway |
+| `DELETE` | `/gateways/:id` | Delete a gateway |
+| `POST` | `/gateways/:id/tools` | Assign a tool |
+| `POST` | `/gateways/:id/tools/bulk` | Bulk assign tools |
+| `DELETE` | `/gateways/:id/tools/:toolId` | Remove a tool |
+| `GET` | `/gateways/:id/tools/available` | List available tools |
+| `POST` | `/gateways/:id/auth` | Add auth method |
+| `GET` | `/gateways/:id/auth` | List auth methods |
+| `DELETE` | `/gateways/:id/auth/:authId` | Remove auth method |
+| `POST` | `/gateways/:id/auth/api-keys` | Generate API key |
+| `GET` | `/gateways/:id/auth/api-keys` | List API keys |
+| `DELETE` | `/gateways/:id/auth/api-keys/:keyId` | Revoke API key |
+
+## Create a Gateway
+
+```bash
+curl -X POST https://api.almyty.com/gateways \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production MCP",
+    "type": "mcp",
+    "endpoint": "/prod-tools",
+    "description": "Production tool gateway"
+  }'
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Gateway name |
+| `type` | string | Yes | `mcp`, `a2a`, `utcp`, `skills` |
+| `endpoint` | string | Yes | URL path (unique within org) |
+| `description` | string | No | Description |
+| `configuration` | object | No | Type-specific config |
+
+### Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "gw-uuid",
+    "name": "Production MCP",
+    "type": "mcp",
+    "endpoint": "/prod-tools",
+    "status": "active",
+    "toolCount": 0,
+    "createdAt": "2026-03-01T10:00:00Z"
+  }
+}
+```
+
+## Bulk Assign Tools
+
+```bash
+curl -X POST https://api.almyty.com/gateways/{id}/tools/bulk \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "toolIds": ["tool-1", "tool-2", "tool-3"]
+  }'
+```
+
+## Add Authentication
+
+```bash
+curl -X POST https://api.almyty.com/gateways/{id}/auth \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "api_key",
+    "isRequired": true,
+    "configuration": {
+      "keyHeader": "X-API-Key"
+    }
+  }'
+```
+
+Auth types: `none`, `api_key`, `bearer_token`, `basic_auth`, `jwt`, `oauth2`.
+
+See [Gateway Authentication](/gateways/authentication) for detailed docs on each type.
+
+## Generate API Key
+
+```bash
+curl -X POST https://api.almyty.com/gateways/{id}/auth/api-keys \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production Key",
+    "scopes": ["tools:read", "tools:execute"],
+    "expiresAt": "2027-01-01T00:00:00Z"
+  }'
+```
+
+Response (key shown once):
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "key-uuid",
+    "name": "Production Key",
+    "key": "almyty_gw_...",
+    "scopes": ["tools:read", "tools:execute"],
+    "expiresAt": "2027-01-01T00:00:00Z"
+  }
+}
+```
+
+## Gateway Endpoint URLs
+
+After creation, the gateway is accessible at:
+
+| Type | URL |
+|------|-----|
+| MCP | `https://api.almyty.com/mcp/{org-slug}{endpoint}` |
+| A2A | `https://api.almyty.com/a2a/{org-slug}{endpoint}` |
+| UTCP | `https://api.almyty.com/utcp/{org-slug}{endpoint}` |
+| Skills | Via `npx @almyty/skills install @{org-slug}{endpoint}` |

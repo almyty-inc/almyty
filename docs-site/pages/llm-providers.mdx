@@ -1,0 +1,107 @@
+# AI Models
+
+AI Models (LLM Providers) are the language model connections that power
+agent pipelines and LLM tools. almyty supports OpenAI, Anthropic, and any
+OpenAI-compatible API endpoint.
+
+## Adding a Provider
+
+### Via the UI
+
+1. Navigate to **AI Models** in the sidebar
+2. Click **Add Provider**
+3. Select the provider type (OpenAI, Anthropic, or Custom)
+4. Enter your API key and optional configuration
+5. Click **Test Connection** to verify
+
+### Via the API
+
+```bash
+curl -X POST https://api.almyty.com/llm-providers \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "OpenAI Production",
+    "provider": "openai",
+    "apiKey": "sk-...",
+    "model": "gpt-4o"
+  }'
+```
+
+## Provider Types
+
+### OpenAI
+
+Works with OpenAI's API and any OpenAI-compatible endpoint (Azure OpenAI,
+Together AI, Groq, Ollama, vLLM, etc.).
+
+| Field | Description |
+|-------|-------------|
+| `apiKey` | OpenAI API key |
+| `model` | Default model (gpt-4o, gpt-4o-mini, o1, etc.) |
+| `baseUrl` | Override for compatible APIs (default: `https://api.openai.com/v1`) |
+
+### Anthropic
+
+Direct integration with Anthropic's API.
+
+| Field | Description |
+|-------|-------------|
+| `apiKey` | Anthropic API key |
+| `model` | Default model (claude-opus-4-6, claude-sonnet-4-6, etc.) |
+
+### Custom
+
+Any OpenAI-compatible HTTP endpoint. Set `baseUrl` to your endpoint and
+`apiKey` to whatever token your server expects.
+
+## Configuration
+
+Each provider has default parameters that can be overridden per-agent or per-tool:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `temperature` | number | 0.7 | Sampling temperature (0-2) |
+| `maxTokens` | number | 4096 | Maximum response tokens |
+| `topP` | number | 1.0 | Nucleus sampling |
+
+## Testing
+
+Test a provider connection from the UI or API:
+
+```bash
+curl -X POST https://api.almyty.com/llm-providers/{id}/test \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Returns the model name, response time, and status.
+
+## Chat Sessions
+
+Each provider supports interactive chat sessions with conversation history:
+
+```bash
+curl -X POST https://api.almyty.com/llm-providers/{id}/chat \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What can you help me with?",
+    "sessionId": "session-uuid"
+  }'
+```
+
+Sessions are stored server-side and maintain full message history.
+
+## Cost Tracking
+
+almyty tracks token usage and estimated cost for every LLM call. View
+aggregate costs per provider in the **Analytics** dashboard or on the
+provider detail page.
+
+## Usage in Agents
+
+When building an agent pipeline, LLM Call nodes reference a provider by ID.
+The provider's default model and parameters are used unless overridden
+in the node configuration.
+
+See [Agents → Node Types](/agents/node-types) for LLM Call node configuration.

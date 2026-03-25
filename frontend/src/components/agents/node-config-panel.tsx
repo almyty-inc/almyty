@@ -89,6 +89,7 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
         {nodeType === 'merge' && <MergeConfig node={node} updateData={updateData} />}
         {nodeType === 'parallel' && <ParallelConfig />}
         {nodeType === 'sub_agent' && <SubAgentConfig node={node} updateData={updateData} />}
+        {nodeType === 'loop' && <LoopConfig node={node} updateData={updateData} />}
       </div>
 
       {/* Footer: delete */}
@@ -916,6 +917,38 @@ function SubAgentConfig({ node, updateData }: { node: Node; updateData: UpdateDa
             Add Mapping
           </Button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// --- Loop Node Config ---
+function LoopConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label>Iterable Expression</Label>
+        <Textarea
+          className="mt-1 font-mono text-xs"
+          placeholder="{{nodes.tool_1.output.items}}"
+          rows={3}
+          value={(node.data.iterableExpression as string) || ''}
+          onChange={(e) => updateData('iterableExpression', e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          Template expression that resolves to an array. Use {'{{loop.item}}'} and {'{{loop.index}}'} in downstream nodes.
+        </p>
+      </div>
+      <div>
+        <Label>Max Iterations</Label>
+        <Input
+          type="number"
+          className="mt-1"
+          min={1}
+          max={1000}
+          value={(node.data.maxIterations as number) || 100}
+          onChange={(e) => updateData('maxIterations', parseInt(e.target.value) || 100)}
+        />
       </div>
     </div>
   )

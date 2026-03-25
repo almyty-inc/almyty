@@ -135,6 +135,24 @@ Tools exposed via MCP follow the MCP tool schema:
 }
 ```
 
+## Authentication
+
+MCP gateways support all [gateway authentication methods](/gateways/authentication),
+including OAuth 2.1 with PKCE. MCP clients that support the OAuth flow
+will automatically discover the authorization server via:
+
+```
+GET /mcp/{org}/{endpoint}/.well-known/oauth-authorization-server
+```
+
+On 401 responses, the gateway returns a `WWW-Authenticate` header with a
+link to the protected resource metadata, allowing MCP clients to
+initiate the OAuth flow automatically.
+
+For simpler setups, use API key or Bearer token auth via headers.
+
+See [Gateway Authentication](/gateways/authentication) for full details.
+
 ## Error Responses
 
 MCP errors follow the JSON-RPC 2.0 error format:

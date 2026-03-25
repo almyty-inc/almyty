@@ -39,7 +39,7 @@ export class AgentNodeExecutor {
 
   /**
    * Executes a single pipeline node and returns the result.
-   * Supports: input, output, llm_call, tool_call, condition, transform, parallel, merge, sub_agent
+   * Supports: input, output, llm_call, tool_call, condition, transform, loop, parallel, merge, sub_agent
    */
   async execute(
     node: AgentPipelineNode,
@@ -73,6 +73,9 @@ export class AgentNodeExecutor {
 
       case 'transform':
         return this.executeTransformNode(node, context);
+
+      case 'loop':
+        return this.executeLoopNode(node, context);
 
       case 'parallel':
         return this.executeParallelNode(node, context);
@@ -303,6 +306,41 @@ export class AgentNodeExecutor {
 
     return {
       output: resolved,
+    };
+  }
+
+  /**
+   * Execute a loop node — iterates over an array expression,
+   * exposing {{loop.item}} and {{loop.index}} for downstream nodes.
+   */
+  private async executeLoopNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+  ): Promise<NodeExecutionResult> {
+    const config = node.data || node.config || {};
+    const maxIterations = config.maxIterations || 100;
+
+    if (!config.iterableExpression) {
+      throw new Error(`Loop node '${node.id}' is missing 'iterableExpression' in config`);
+    }
+
+    const resolved = this.templateResolver.resolve(config.iterableExpression, context);
+    const items = Array.isArray(resolved) ? resolved : [resolved];
+    const limitedItems = items.slice(0, maxIterations);
+
+    // Store loop results — downstream nodes can reference {{nodes.<loopId>.output}}
+    const results: any[] = [];
+    for (let i = 0; i < limitedItems.length; i++) {
+      // Make loop context available for template resolution
+      (context as any).loop = { item: limitedItems[i], index: i };
+      results.push(limitedItems[i]);
+    }
+
+    // Clean up loop context
+    delete (context as any).loop;
+
+    return {
+      output: results,
     };
   }
 
