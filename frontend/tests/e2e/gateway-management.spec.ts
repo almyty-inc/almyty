@@ -126,8 +126,8 @@ test.describe('Gateway Management', () => {
     // Submit
     await page.getByRole('button', { name: /Create Gateway/i }).click()
 
-    // Should show success notification
-    await expect(page.getByText(/Gateway created successfully/i).first()).toBeVisible()
+    // Should show success notification (toast)
+    await expect(page.locator('li[role="status"]').filter({ hasText: /created|success/i })).toBeVisible({ timeout: 10000 })
 
     // Gateway should appear in list
     await expect(page.getByText('New Test Gateway')).toBeVisible()

@@ -79,28 +79,27 @@ test.describe('Complete E2E Workflow', () => {
     await assertHelper.waitForLoadingComplete()
 
     // Wait for tools to appear (tool generation is async)
-    // The page displays stat cards showing "Total Tools", "Active Tools", "Auto-Generated"
+    // The tools page subtitle shows "N tools total"
     await expect(async () => {
       await page.reload()
       await assertHelper.waitForLoadingComplete()
 
-      // Look for the stat cards - they show numbers like "19"
-      const statNumbers = await page.locator('text=/^\\d+$/').allTextContents()
-      const toolCount = Math.max(...statNumbers.map(n => parseInt(n, 10)))
-      expect(toolCount).toBeGreaterThan(10)
+      // Check the subtitle for tool count (e.g., "19 tools total")
+      const subtitleText = await page.getByText(/\d+ tools? total/i).textContent()
+      const count = parseInt(subtitleText?.match(/\d+/)?.[0] || '0')
+      expect(count).toBeGreaterThan(10)
     }).toPass({ timeout: 30000 })
 
-    // Get actual tool count from stat cards
-    const statNumbers = await page.locator('text=/^\\d+$/').allTextContents()
-    const toolCount = Math.max(...statNumbers.map(n => parseInt(n, 10)))
-    console.log(`✅ Generated ${toolCount} tools from Petstore API!`)
+    // Get actual tool count from subtitle
+    const subtitleText = await page.getByText(/\d+ tools? total/i).textContent()
+    const toolCount = parseInt(subtitleText?.match(/\d+/)?.[0] || '0')
+    console.log(`Generated ${toolCount} tools from Petstore API!`)
 
     // Verify we have ~19 tools
     expect(toolCount).toBeGreaterThanOrEqual(19)
 
-    // Verify at least one tool card is visible
-    const firstToolCard = page.locator('text=/E2E Petstore API/i').first()
-    await expect(firstToolCard).toBeVisible()
+    // Verify at least one tool row is visible in the table
+    await expect(page.locator('tbody tr').first()).toBeVisible()
 
     // ============================================================
     // STEP 4: Create Gateway
