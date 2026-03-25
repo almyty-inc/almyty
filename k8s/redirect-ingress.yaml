@@ -5,7 +5,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: almyty-redirect
-  namespace: apifai-staging
+  namespace: almyty-staging
   annotations:
     nginx.ingress.kubernetes.io/permanent-redirect: "https://almyty.com$request_uri"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
