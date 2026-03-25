@@ -1,6 +1,7 @@
 name: Deploy Docs (Quick)
 
 on:
+  workflow_dispatch:
   push:
     branches: [master]
     paths:
