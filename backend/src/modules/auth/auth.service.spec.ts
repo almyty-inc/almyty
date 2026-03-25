@@ -555,13 +555,13 @@ describe('AuthService', () => {
         scopes: ['read:apis'],
       };
 
-      const mockApiKey = { id: 'key-1', name: 'Test Key', keyPrefix: 'apifai_12' } as any;
+      const mockApiKey = { id: 'key-1', name: 'Test Key', keyPrefix: 'almyty_12' } as any;
       apiKeyRepository.create.mockReturnValue(mockApiKey);
       apiKeyRepository.save.mockResolvedValue(mockApiKey);
 
       const result = await service.createApiKey('user-1', createDto);
 
-      expect(result.apiKey).toContain('apifai_');
+      expect(result.apiKey).toContain('almyty_');
       expect(result.keyData).toBe(mockApiKey);
       expect(apiKeyRepository.create).toHaveBeenCalled();
       expect(apiKeyRepository.save).toHaveBeenCalled();

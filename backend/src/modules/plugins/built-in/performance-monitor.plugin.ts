@@ -20,7 +20,7 @@ export class PerformanceMonitorPlugin {
       name: 'Performance Monitor',
       version: '1.0.0',
       description: 'Real-time performance monitoring and optimization for tool executions and API calls',
-      author: 'apifai',
+      author: 'almyty',
       isActive: true,
       configuration: {
         enabled: true,

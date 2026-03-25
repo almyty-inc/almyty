@@ -118,7 +118,7 @@ export class McpTransportController {
         },
       },
       serverInfo: {
-        name: 'apifai',
+        name: 'almyty',
         version: '1.0.0',
         supportedTransports: ['http', 'sse', 'websocket'],
       },

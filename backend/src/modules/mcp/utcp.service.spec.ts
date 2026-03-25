@@ -264,13 +264,13 @@ describe('UtcpService', () => {
 
       expect(result.protocol).toBe('utcp');
       expect(result.version).toBeDefined();
-      expect(result.server.name).toBe('apifai');
+      expect(result.server.name).toBe('almyty');
       expect(result.endpoints.manual).toContain('/api/utcp/org-1/manual');
       expect(result.endpoints.execute).toContain('/api/utcp/org-1/execute');
       expect(result.capabilities.directCalling).toBe(true);
       expect(result.capabilities.proxyMode).toBe(true);
       expect(result.capabilities.authentication).toContain('bearer');
-      expect(result.experimental.apifai.universalApiTranslation).toBe(true);
+      expect(result.experimental.almyty.universalApiTranslation).toBe(true);
     });
   });
 

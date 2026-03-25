@@ -1,4 +1,4 @@
-# apifai E2E Test Suite
+# almyty E2E Test Suite
 
 Playwright-based end-to-end tests running against the real backend (no mocks).
 

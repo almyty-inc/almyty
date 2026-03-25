@@ -184,7 +184,7 @@ export class GatewayA2AController {
       const agentCard: Record<string, any> = {
         protocol: 'a2a',
         version: '1.0.0',
-        server: { name: 'apifai', version: '1.0.0', description: gateway.name },
+        server: { name: 'almyty', version: '1.0.0', description: gateway.name },
         endpoints: {
           agents: `${baseUrl}/a2a/${orgSlugOrId}${gatewayEndpoint}/agents`,
           messages: `${baseUrl}/a2a/${orgSlugOrId}${gatewayEndpoint}/messages`,

@@ -65,8 +65,8 @@ function ChecklistItem({ done, label, description, action }: {
 
 export function DashboardPage() {
   useEffect(() => {
-    document.title = 'Dashboard | apifai'
-    return () => { document.title = 'apifai' }
+    document.title = 'Dashboard | almyty'
+    return () => { document.title = 'almyty' }
   }, [])
 
   const { currentOrganization } = useOrganizationStore()
@@ -157,7 +157,7 @@ export function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between pb-4 border-b border-gradient-to-r from-border to-transparent">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-3xl font-heading font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
             Overview of your APIs and tools
           </p>

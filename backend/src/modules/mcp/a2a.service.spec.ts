@@ -329,7 +329,7 @@ describe('A2AService - Real Business Logic', () => {
 
         expect(config.timeout).toBe(30000);
         expect(config.retries).toBe(3);
-        expect(config.headers['User-Agent']).toBe('apifai-a2a/1.0.0');
+        expect(config.headers['User-Agent']).toBe('almyty-a2a/1.0.0');
       });
     });
   });

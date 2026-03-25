@@ -287,7 +287,7 @@ describe('AuthController', () => {
         keyData: {
           id: 'key-1',
           name: 'Test API Key',
-          keyPrefix: 'apifai_12',
+          keyPrefix: 'almyty_12',
           keyHash: 'hash',
           userId: 'user-1',
           organizationId: 'org-1',
@@ -438,7 +438,7 @@ describe('AuthController', () => {
         {
           id: 'key-1',
           name: 'Test Key 1',
-          keyPrefix: 'apifai_12',
+          keyPrefix: 'almyty_12',
           isActive: true,
           createdAt: new Date(),
           lastUsedAt: null,
@@ -448,7 +448,7 @@ describe('AuthController', () => {
         {
           id: 'key-2',
           name: 'Test Key 2',
-          keyPrefix: 'apifai_34',
+          keyPrefix: 'almyty_34',
           isActive: true,
           createdAt: new Date(),
           lastUsedAt: new Date(),

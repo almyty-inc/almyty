@@ -105,13 +105,13 @@ describe('SkillGeneratorService', () => {
       expect(result.content).toContain('Find pet by ID');
       // Metadata
       expect(result.content).toContain('metadata:');
-      expect(result.content).toContain('author: apifai');
+      expect(result.content).toContain('author: almyty');
       expect(result.content).toContain('generated: "true"');
       // Content sections
       expect(result.content).toContain('# getPetById');
       expect(result.content).toContain('## When to use');
       expect(result.content).toContain('retrieve or look up data');
-      // HTTP endpoint (real curl, not fictional apifai_execute)
+      // HTTP endpoint (real curl, not fictional almyty_execute)
       expect(result.content).toContain('## HTTP endpoint');
       expect(result.content).toContain('GET https://petstore.swagger.io/v2/pet/{petId}');
       // Parameters
@@ -229,12 +229,12 @@ describe('SkillGeneratorService', () => {
       expect(result.content).toContain('**addPet**');
       expect(result.content).toContain('### getPetById');
       expect(result.content).toContain('### addPet');
-      // Should have HTTP endpoints, not apifai_execute
+      // Should have HTTP endpoints, not almyty_execute
       expect(result.content).toContain('GET https://petstore.swagger.io/v2/pet/{petId}');
       expect(result.content).toContain('curl');
       // Metadata
       expect(result.content).toContain('metadata:');
-      expect(result.content).toContain('author: apifai');
+      expect(result.content).toContain('author: almyty');
     });
 
     it('should generate an empty skill for a gateway with no tools', async () => {
@@ -292,13 +292,13 @@ describe('SkillGeneratorService', () => {
 
       expect(result).toHaveLength(2);
       expect(result[0].name).toBe('getpetbyid');
-      expect(result[0].fileName).toBe('apifai-getpetbyid');
+      expect(result[0].fileName).toBe('almyty-getpetbyid');
       // Frontmatter name MUST match directory name (Agent Skills spec compliance)
-      expect(result[0].content).toContain('name: apifai-getpetbyid');
+      expect(result[0].content).toContain('name: almyty-getpetbyid');
       expect(result[0].content).toContain('curl');
       expect(result[1].name).toBe('addpet');
-      expect(result[1].fileName).toBe('apifai-addpet');
-      expect(result[1].content).toContain('name: apifai-addpet');
+      expect(result[1].fileName).toBe('almyty-addpet');
+      expect(result[1].content).toContain('name: almyty-addpet');
     });
 
     it('should throw NotFoundException for missing gateway', async () => {

@@ -326,7 +326,7 @@ describe('McpController', () => {
       expect(result).toBeDefined();
       expect(result.protocol).toBe('mcp');
       expect(result.version).toBe('2024-11-05');
-      expect(result.server.name).toBe('apifai');
+      expect(result.server.name).toBe('almyty');
       expect(result.capabilities.tools).toBeDefined();
       expect(result.capabilities.resources).toBeDefined();
       expect(result.capabilities.prompts).toBeDefined();

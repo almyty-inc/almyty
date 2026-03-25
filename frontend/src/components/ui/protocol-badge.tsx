@@ -2,10 +2,14 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 const protocolStyles: Record<string, string> = {
-  mcp: 'bg-blue-50 text-blue-700 border-blue-200',
-  a2a: 'bg-purple-50 text-purple-700 border-purple-200',
-  utcp: 'bg-orange-50 text-orange-700 border-orange-200',
-  skills: 'bg-green-50 text-green-700 border-green-200',
+  mcp: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
+  a2a: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+  utcp: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  skills: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  soap: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  graphql: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+  rest: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  openapi: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
 }
 
 interface ProtocolBadgeProps {

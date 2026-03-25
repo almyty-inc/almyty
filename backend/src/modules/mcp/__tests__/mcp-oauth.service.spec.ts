@@ -104,7 +104,7 @@ describe('McpOAuthService', () => {
 
   describe('getAuthorizationServerMetadata', () => {
     it('should return correct metadata structure', () => {
-      const baseUrl = 'https://api.apif.ai';
+      const baseUrl = 'https://api.almyty.dev';
       const result = service.getAuthorizationServerMetadata(
         mockGateway as any,
         baseUrl,
@@ -125,7 +125,7 @@ describe('McpOAuthService', () => {
       const gatewayNoOauth = { ...mockGateway, configuration: {} };
       const result = service.getAuthorizationServerMetadata(
         gatewayNoOauth as any,
-        'https://api.apif.ai',
+        'https://api.almyty.dev',
       );
 
       expect(result.scopes_supported).toEqual(['tools:read', 'tools:execute']);
@@ -138,7 +138,7 @@ describe('McpOAuthService', () => {
 
   describe('getProtectedResourceMetadata', () => {
     it('should return correct resource metadata', () => {
-      const baseUrl = 'https://api.apif.ai';
+      const baseUrl = 'https://api.almyty.dev';
       const result = service.getProtectedResourceMetadata(
         mockGateway as any,
         baseUrl,
@@ -639,9 +639,9 @@ describe('McpOAuthService', () => {
       );
 
       expect(result.access_token).toBeDefined();
-      expect(result.access_token).toMatch(/^apifai_at_/);
+      expect(result.access_token).toMatch(/^almyty_at_/);
       expect(result.refresh_token).toBeDefined();
-      expect(result.refresh_token).toMatch(/^apifai_rt_/);
+      expect(result.refresh_token).toMatch(/^almyty_rt_/);
       expect(result.token_type).toBe('bearer');
       expect(result.expires_in).toBe(3600);
       expect(result.scope).toBe('tools:read tools:execute');
@@ -814,7 +814,7 @@ describe('McpOAuthService', () => {
   // ---------------------------------------------------------------------------
 
   describe('refreshToken', () => {
-    const rawRefreshToken = 'apifai_rt_testrefreshtoken123';
+    const rawRefreshToken = 'almyty_rt_testrefreshtoken123';
     const tokenHash = sha256(rawRefreshToken);
 
     const mockRefreshToken: Partial<OAuthAccessToken> = {
@@ -845,9 +845,9 @@ describe('McpOAuthService', () => {
 
       // New tokens should be generated
       expect(result.access_token).toBeDefined();
-      expect(result.access_token).toMatch(/^apifai_at_/);
+      expect(result.access_token).toMatch(/^almyty_at_/);
       expect(result.refresh_token).toBeDefined();
-      expect(result.refresh_token).toMatch(/^apifai_rt_/);
+      expect(result.refresh_token).toMatch(/^almyty_rt_/);
       expect(result.token_type).toBe('bearer');
       expect(result.expires_in).toBe(3600);
     });
@@ -918,7 +918,7 @@ describe('McpOAuthService', () => {
   // ---------------------------------------------------------------------------
 
   describe('validateAccessToken', () => {
-    const rawAccessToken = 'apifai_at_testaccesstoken123';
+    const rawAccessToken = 'almyty_at_testaccesstoken123';
     const tokenHash = sha256(rawAccessToken);
 
     const mockAccessToken: Partial<OAuthAccessToken> = {
@@ -994,7 +994,7 @@ describe('McpOAuthService', () => {
   // ---------------------------------------------------------------------------
 
   describe('revokeToken', () => {
-    const rawToken = 'apifai_at_sometokenvalue';
+    const rawToken = 'almyty_at_sometokenvalue';
     const tokenHash = sha256(rawToken);
 
     const mockAccessTokenForRevoke: Partial<OAuthAccessToken> = {
@@ -1106,8 +1106,8 @@ describe('McpOAuthService', () => {
         'tools:read',
       );
 
-      expect(result.access_token).toMatch(/^apifai_at_/);
-      expect(result.refresh_token).toMatch(/^apifai_rt_/);
+      expect(result.access_token).toMatch(/^almyty_at_/);
+      expect(result.refresh_token).toMatch(/^almyty_rt_/);
       expect(result.token_type).toBe('bearer');
       expect(result.expires_in).toBe(3600);
       expect(result.scope).toBe('tools:read');

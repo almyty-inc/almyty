@@ -305,7 +305,7 @@ export class LlmProvider {
         if (this.configuration.apiKey) {
           headers['Authorization'] = `Bearer ${this.configuration.apiKey}`;
           headers['HTTP-Referer'] = 'https://apif.ai';
-          headers['X-Title'] = 'apifai';
+          headers['X-Title'] = 'almyty';
         }
         break;
 
@@ -335,7 +335,7 @@ export class LlmProvider {
         break;
     }
 
-    headers['User-Agent'] = 'apifai/1.0';
+    headers['User-Agent'] = 'almyty/1.0';
     headers['Content-Type'] = 'application/json';
 
     return headers;

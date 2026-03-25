@@ -1,11 +1,11 @@
 """
-Test apifai agent via OpenAI Python SDK.
+Test almyty agent via OpenAI Python SDK.
 
 Usage:
   pip install openai
   python test-openai-sdk.py --url https://api.staging.apif.ai --api-key <key> --agent-name new-agent
 
-This proves any OpenAI SDK can target apifai agents.
+This proves any OpenAI SDK can target almyty agents.
 """
 import argparse
 from openai import OpenAI

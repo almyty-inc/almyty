@@ -45,7 +45,7 @@ export class McpService {
   private readonly logger = new Logger(McpService.name);
   private readonly sessions = new Map<string, McpSession>();
   private readonly serverInfo = {
-    name: 'apifai',
+    name: 'almyty',
     version: '1.0.0',
   };
 
@@ -240,7 +240,7 @@ export class McpService {
       },
       logging: {},
       experimental: {
-        apifai: {
+        almyty: {
           universalApiTranslation: true,
           multiProtocolSupport: ['mcp', 'utcp', 'a2a'],
           apiFormats: ['openapi', 'graphql', 'soap', 'protobuf'],
@@ -621,7 +621,7 @@ export class McpService {
     });
 
     const mcpResources: McpResource[] = resources.map(resource => ({
-      uri: `apifai://resources/${resource.id}`,
+      uri: `almyty://resources/${resource.id}`,
       name: resource.name,
       description: resource.description,
       mimeType: 'application/json',
@@ -637,7 +637,7 @@ export class McpService {
     organizationId: string,
   ): Promise<McpReadResourceResult> {
     // Extract resource ID from URI
-    const match = params.uri.match(/apifai:\/\/resources\/(.+)/);
+    const match = params.uri.match(/almyty:\/\/resources\/(.+)/);
     if (!match) {
       throw this.createJsonRpcError(
         JsonRpcErrorCode.RESOURCE_NOT_FOUND,

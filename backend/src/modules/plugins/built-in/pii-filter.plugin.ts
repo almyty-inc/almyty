@@ -19,7 +19,7 @@ export class PiiFilterPlugin {
       name: 'PII Filter',
       version: '1.0.0',
       description: 'Automatically detects and filters personally identifiable information (PII) from requests and responses',
-      author: 'apifai',
+      author: 'almyty',
       isActive: true,
       configuration: {
         enabled: true,

@@ -1222,15 +1222,15 @@ describe('MonitoringService', () => {
 
         const prometheusOutput = await service.getPrometheusMetrics();
 
-        expect(prometheusOutput).toContain('apifai_uptime_seconds 1000');
-        expect(prometheusOutput).toContain('apifai_memory_usage_bytes{type="heap"} 150');
-        expect(prometheusOutput).toContain('apifai_tools_total 20');
-        expect(prometheusOutput).toContain('apifai_tools_active 15');
-        expect(prometheusOutput).toContain('apifai_requests_total{status="success"} 950');
-        expect(prometheusOutput).toContain('apifai_requests_total{status="error"} 50');
-        expect(prometheusOutput).toContain('apifai_response_time_ms 250');
-        expect(prometheusOutput).toContain('apifai_mcp_sessions 5');
-        expect(prometheusOutput).toContain('apifai_a2a_agents 3');
+        expect(prometheusOutput).toContain('almyty_uptime_seconds 1000');
+        expect(prometheusOutput).toContain('almyty_memory_usage_bytes{type="heap"} 150');
+        expect(prometheusOutput).toContain('almyty_tools_total 20');
+        expect(prometheusOutput).toContain('almyty_tools_active 15');
+        expect(prometheusOutput).toContain('almyty_requests_total{status="success"} 950');
+        expect(prometheusOutput).toContain('almyty_requests_total{status="error"} 50');
+        expect(prometheusOutput).toContain('almyty_response_time_ms 250');
+        expect(prometheusOutput).toContain('almyty_mcp_sessions 5');
+        expect(prometheusOutput).toContain('almyty_a2a_agents 3');
       });
 
       it('should return empty string when no metrics available', async () => {

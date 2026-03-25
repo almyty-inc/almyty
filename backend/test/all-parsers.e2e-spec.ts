@@ -489,7 +489,7 @@ describe('All Parser Types — Full Pipeline E2E (Live Backend)', () => {
   const createdGateways: Record<string, { id: string; endpoint: string }> = {};
 
   const testUser = {
-    email: `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@apifai.dev`,
+    email: `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@almyty.dev`,
     password: 'TestPass123',
     firstName: 'Parser',
     lastName: 'Tester',

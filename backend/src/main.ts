@@ -78,8 +78,8 @@ async function bootstrap() {
   const swaggerEnabled = configService.get<string>('SWAGGER_ENABLED', 'true') === 'true';
   if (swaggerEnabled) {
     const config = new DocumentBuilder()
-      .setTitle('apifai API')
-      .setDescription('apifai - Universal API to AI Tool Gateway System')
+      .setTitle('almyty API')
+      .setDescription('almyty - Universal API to AI Tool Gateway System')
       .setVersion('1.0')
       .addBearerAuth(
         {

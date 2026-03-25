@@ -122,7 +122,7 @@ export function ToolDetailPage() {
               <Code className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">{tool.name}</h1>
+              <h1 className="text-3xl font-heading font-bold tracking-tight">{tool.name}</h1>
               <p className="text-muted-foreground">{tool.description || 'AI-generated tool from API operation'}</p>
             </div>
           </div>
@@ -740,12 +740,12 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
             <Label className="text-xs text-muted-foreground">Install & run</Label>
             <div className="flex items-center gap-2 mt-1">
               <code className="flex-1 text-xs bg-muted p-2 rounded font-mono">
-                npx @apifai/mcp-server
+                npx @almyty/mcp-server
               </code>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => copyToClipboard('npx @apifai/mcp-server', 'npx')}
+                onClick={() => copyToClipboard('npx @almyty/mcp-server', 'npx')}
               >
                 {copiedField === 'npx' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               </Button>
@@ -756,14 +756,14 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
             <div className="flex items-center gap-2 mt-1">
               <pre className="flex-1 text-xs bg-muted p-2 rounded font-mono overflow-auto">
 {`"mcpServers": {
-  "apifai": { "command": "npx", "args": ["@apifai/mcp-server"] }
+  "almyty": { "command": "npx", "args": ["@almyty/mcp-server"] }
 }`}
               </pre>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => copyToClipboard(
-                  `"mcpServers": {\n  "apifai": { "command": "npx", "args": ["@apifai/mcp-server"] }\n}`,
+                  `"mcpServers": {\n  "almyty": { "command": "npx", "args": ["@almyty/mcp-server"] }\n}`,
                   'claude-config'
                 )}
               >

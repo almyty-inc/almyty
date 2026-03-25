@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: apifai-staging
+namespace: almyty-staging
 
 namePrefix: staging-
 
@@ -12,15 +12,15 @@ resources:
 patches:
   - target:
       kind: Namespace
-      name: apifai
+      name: almyty
     patch: |-
       - op: replace
         path: /metadata/name
-        value: apifai-staging
+        value: almyty-staging
 
   - target:
       kind: ConfigMap
-      name: apifai-config
+      name: almyty-config
     patch: |-
       - op: replace
         path: /data/NODE_ENV
@@ -33,22 +33,22 @@ patches:
         value: info
       - op: replace
         path: /data/CORS_ORIGIN
-        value: "https://app.staging.apif.ai"
+        value: "https://app.staging.almyty.dev"
       - op: replace
         path: /data/DATABASE_HOST
-        value: "apifai-db-do-user-4308986-0.j.db.ondigitalocean.com"
+        value: "almyty-db-do-user-4308986-0.j.db.ondigitalocean.com"
       - op: replace
         path: /data/DATABASE_PORT
         value: "25060"
       - op: replace
         path: /data/REDIS_HOST
-        value: "staging-apifai-redis"
+        value: "staging-almyty-redis"
       - op: replace
         path: /data/DB_SSL
         value: "true"
       - op: replace
         path: /data/BASE_URL
-        value: "https://api.staging.apif.ai"
+        value: "https://api.staging.almyty.dev"
       - op: replace
         path: /data/DB_SYNC
         value: "true"
@@ -80,32 +80,32 @@ patches:
 
   - target:
       kind: Ingress
-      name: apifai-ingress
+      name: almyty-ingress
     patch: |-
       - op: replace
         path: /metadata/annotations/cert-manager.io~1cluster-issuer
         value: staging-letsencrypt-prod
       - op: replace
         path: /spec/tls/0/hosts/0
-        value: api.staging.apif.ai
+        value: api.staging.almyty.dev
       - op: replace
         path: /spec/tls/0/secretName
         value: api-staging-apif-ai-tls
       - op: replace
         path: /spec/tls/1/hosts/0
-        value: app.staging.apif.ai
+        value: app.staging.almyty.dev
       - op: replace
         path: /spec/tls/1/secretName
         value: app-staging-apif-ai-tls
       - op: replace
         path: /spec/rules/0/host
-        value: api.staging.apif.ai
+        value: api.staging.almyty.dev
       - op: replace
         path: /spec/rules/1/host
-        value: app.staging.apif.ai
+        value: app.staging.almyty.dev
 
 images:
-  - name: ghcr.io/frane/apifai/api
+  - name: ghcr.io/frane/almyty/api
     newTag: staging-latest
-  - name: ghcr.io/frane/apifai/frontend
+  - name: ghcr.io/frane/almyty/frontend
     newTag: staging-latest

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-pvc
-  namespace: apifai
+  namespace: almyty
 spec:
   accessModes:
     - ReadWriteOnce
@@ -15,7 +15,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres
-  namespace: apifai
+  namespace: almyty
   labels:
     app: postgres
 spec:
@@ -40,17 +40,17 @@ spec:
         - name: POSTGRES_DB
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: DATABASE_NAME
         - name: POSTGRES_USER
           valueFrom:
             secretKeyRef:
-              name: apifai-secrets
+              name: almyty-secrets
               key: DATABASE_USERNAME
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: apifai-secrets
+              name: almyty-secrets
               key: DATABASE_PASSWORD
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
@@ -90,8 +90,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: apifai-postgres
-  namespace: apifai
+  name: almyty-postgres
+  namespace: almyty
   labels:
     app: postgres
 spec:

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api
-  namespace: apifai
+  namespace: almyty
   labels:
     app: api
     component: backend
@@ -26,7 +26,7 @@ spec:
       - name: ghcr-secret
       containers:
       - name: api
-        image: ghcr.io/frane/apifai/api:latest
+        image: ghcr.io/frane/almyty/api:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
@@ -35,112 +35,112 @@ spec:
         - name: NODE_ENV
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: NODE_ENV
         - name: PORT
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: PORT
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: apifai-secrets
+              name: almyty-secrets
               key: DATABASE_URL
         - name: DATABASE_HOST
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: DATABASE_HOST
         - name: DATABASE_PORT
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: DATABASE_PORT
         - name: DATABASE_USERNAME
           valueFrom:
             secretKeyRef:
-              name: apifai-secrets
+              name: almyty-secrets
               key: DATABASE_USERNAME
         - name: DATABASE_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: apifai-secrets
+              name: almyty-secrets
               key: DATABASE_PASSWORD
         - name: DATABASE_NAME
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: DATABASE_NAME
         - name: REDIS_URL
           valueFrom:
             secretKeyRef:
-              name: apifai-secrets
+              name: almyty-secrets
               key: REDIS_URL
         - name: REDIS_HOST
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: REDIS_HOST
         - name: REDIS_PORT
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: REDIS_PORT
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: apifai-secrets
+              name: almyty-secrets
               key: REDIS_PASSWORD
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: apifai-secrets
+              name: almyty-secrets
               key: JWT_SECRET
         - name: JWT_EXPIRES_IN
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: JWT_EXPIRES_IN
         - name: CORS_ORIGIN
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: CORS_ORIGIN
         - name: RATE_LIMIT_TTL
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: RATE_LIMIT_TTL
         - name: RATE_LIMIT_MAX
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: RATE_LIMIT_MAX
         - name: SWAGGER_ENABLED
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: SWAGGER_ENABLED
         - name: LOG_LEVEL
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: LOG_LEVEL
         - name: DB_SSL
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: DB_SSL
         - name: DB_SYNC
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: DB_SYNC
         - name: BASE_URL
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: BASE_URL
         livenessProbe:
           httpGet:
@@ -172,12 +172,12 @@ spec:
         - name: DATABASE_HOST
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: DATABASE_HOST
         - name: DATABASE_PORT
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: DATABASE_PORT
         command:
         - sh
@@ -193,7 +193,7 @@ spec:
         - name: REDIS_HOST
           valueFrom:
             configMapKeyRef:
-              name: apifai-config
+              name: almyty-config
               key: REDIS_HOST
         command:
         - sh
@@ -207,8 +207,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: apifai-api
-  namespace: apifai
+  name: almyty-api
+  namespace: almyty
   labels:
     app: api
 spec:

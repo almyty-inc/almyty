@@ -218,7 +218,7 @@ export class UnifiedEndpointController {
       return res.json({
         protocol: 'a2a',
         version: '1.0.0',
-        server: { name: 'apifai', version: '1.0.0', description: gateway.name },
+        server: { name: 'almyty', version: '1.0.0', description: gateway.name },
         endpoints: {
           agents: `${baseUrl}/${orgSlug}/${resourceSlug}/agents`,
           messages: `${baseUrl}/${orgSlug}/${resourceSlug}/messages`,

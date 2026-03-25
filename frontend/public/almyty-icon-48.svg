@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <defs>
+    <linearGradient id="bolt-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="12" fill="#06060a"/>
+  <g transform="translate(12, 5) scale(1)">
+    <polygon
+      points="10,0 20,0 12,12 19,12 6,26 12,12 4,12"
+      fill="none"
+      stroke="url(#bolt-grad)"
+      stroke-width="1.5"
+      stroke-linejoin="round"
+    />
+    <circle cx="10" cy="0"  r="2"   fill="#a78bfa"/>
+    <circle cx="20" cy="0"  r="2"   fill="#8b5cf6"/>
+    <circle cx="12" cy="12" r="1.5" fill="#7c3aed"/>
+    <circle cx="6"  cy="26" r="2"   fill="#22d3ee"/>
+  </g>
+</svg>

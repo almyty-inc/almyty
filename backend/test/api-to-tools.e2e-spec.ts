@@ -11,7 +11,7 @@ describe('API to Tools Pipeline (e2e)', () => {
   let apiId: string;
 
   const testUser = {
-    email: `test-${Date.now()}@apifai.dev`,
+    email: `test-${Date.now()}@almyty.dev`,
     password: 'testpass123',
     firstName: 'Test',
     lastName: 'User'
@@ -21,7 +21,7 @@ describe('API to Tools Pipeline (e2e)', () => {
     openapi: '3.0.0',
     info: {
       title: 'Pet Store API',
-      description: 'A simple Pet Store API for testing apifai',
+      description: 'A simple Pet Store API for testing almyty',
       version: '1.0.0'
     },
     servers: [
@@ -184,7 +184,7 @@ describe('API to Tools Pipeline (e2e)', () => {
     it('should create a new API', async () => {
       const apiData = {
         name: 'Pet Store API Test',
-        description: 'Test API for apifai pipeline',
+        description: 'Test API for almyty pipeline',
         baseUrl: 'https://petstore.swagger.io/v2',
         type: ApiType.OPENAPI,
         version: '1.0.0'

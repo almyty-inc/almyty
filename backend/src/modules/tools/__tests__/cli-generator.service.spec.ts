@@ -68,8 +68,8 @@ describe('CliGeneratorService', () => {
       expect(result.toolCount).toBe(1);
       expect(result.content).toContain('#!/usr/bin/env bash');
       expect(result.content).toContain('getPetById');
-      expect(result.content).toContain('APIFAI_BASE_URL');
-      expect(result.content).toContain('APIFAI_TOKEN');
+      expect(result.content).toContain('ALMYTY_BASE_URL');
+      expect(result.content).toContain('ALMYTY_TOKEN');
       expect(result.content).toContain('--pet-id');
       expect(result.content).toContain('(required)');
       expect(result.content).toContain('curl');
@@ -91,7 +91,7 @@ describe('CliGeneratorService', () => {
       expect(result.format).toBe('node');
       expect(result.content).toContain('#!/usr/bin/env node');
       expect(result.content).toContain('fetch');
-      expect(result.content).toContain('APIFAI_BASE_URL');
+      expect(result.content).toContain('ALMYTY_BASE_URL');
       expect(result.content).toContain('--pet-id');
       expect(result.content).toContain('is required');
     });

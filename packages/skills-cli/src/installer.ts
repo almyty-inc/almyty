@@ -7,7 +7,7 @@ import { join, basename } from 'path';
 import type { SkillFile } from './client.js';
 import type { AgentTarget } from './agents.js';
 
-const SKILL_PREFIX = 'apifai-';
+const SKILL_PREFIX = 'almyty-';
 
 export interface InstallResult {
   agent: string;
@@ -18,7 +18,7 @@ export interface InstallResult {
 
 /**
  * Install skill files into an agent's skills directory.
- * Each skill gets its own directory: <skillsDir>/apifai-<name>/SKILL.md
+ * Each skill gets its own directory: <skillsDir>/almyty-<name>/SKILL.md
  */
 export function installSkills(
   skills: SkillFile[],
@@ -47,7 +47,7 @@ export function installSkills(
 }
 
 /**
- * Remove all apifai-installed skills from an agent's skills directory.
+ * Remove all almyty-installed skills from an agent's skills directory.
  */
 export function removeSkills(target: AgentTarget): number {
   if (!existsSync(target.skillsDir)) return 0;
@@ -66,7 +66,7 @@ export function removeSkills(target: AgentTarget): number {
 }
 
 /**
- * List installed apifai skills in an agent's skills directory.
+ * List installed almyty skills in an agent's skills directory.
  */
 export function listInstalledSkills(target: AgentTarget): string[] {
   if (!existsSync(target.skillsDir)) return [];

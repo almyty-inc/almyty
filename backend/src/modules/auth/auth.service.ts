@@ -272,7 +272,7 @@ export class AuthService {
   }
 
   private generateApiKeyValue(): string {
-    return `apifai_${crypto.randomBytes(32).toString('hex')}`;
+    return `almyty_${crypto.randomBytes(32).toString('hex')}`;
   }
 
   private hashApiKey(key: string): string {

@@ -43,7 +43,7 @@ export class A2AController {
       protocol: 'a2a',
       version: '1.0.0',
       server: {
-        name: 'apifai',
+        name: 'almyty',
         version: '1.0.0',
         description: 'Universal API-to-AI Tool Translation Platform with enhanced A2A support',
       },
@@ -70,7 +70,7 @@ export class A2AController {
         ],
       },
       experimental: {
-        apifai: {
+        almyty: {
           universalApiTranslation: true,
           workflowOrchestration: true,
           multiProtocolBridge: true,
@@ -297,7 +297,7 @@ export class A2AController {
     return {
       protocol: 'a2a',
       status: 'healthy',
-      server: 'apifai',
+      server: 'almyty',
       version: '1.0.0',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),

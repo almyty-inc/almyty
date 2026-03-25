@@ -50,7 +50,7 @@ export function RegisterPage() {
   const onSubmit = async (data: RegisterFormData) => {
     try {
       await registerUser(data.email, data.password, data.firstName, data.lastName, data.organizationName)
-      success('Account created successfully', 'Welcome to apifai!')
+      success('Account created successfully', 'Welcome to almyty!')
       navigate('/dashboard')
     } catch (err: any) {
       error(
@@ -62,7 +62,7 @@ export function RegisterPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Sign up</h1>
+      <h1 className="text-2xl font-heading font-bold mb-6">Sign up</h1>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
           <Label htmlFor="firstName">First Name</Label>

@@ -1,18 +1,18 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: apifai-config
-  namespace: apifai
+  name: almyty-config
+  namespace: almyty
 data:
   # Database Configuration
-  DATABASE_HOST: "apifai-postgres"
+  DATABASE_HOST: "almyty-postgres"
   DATABASE_PORT: "5432"
-  DATABASE_NAME: "apifai"
+  DATABASE_NAME: "almyty"
   DB_SSL: "false"
   DB_SYNC: "false"
 
   # Redis Configuration
-  REDIS_HOST: "apifai-redis"
+  REDIS_HOST: "almyty-redis"
   REDIS_PORT: "6379"
 
   # API Configuration
@@ -29,7 +29,7 @@ data:
   JWT_EXPIRES_IN: "24h"
 
   # CORS
-  CORS_ORIGIN: "https://app.apif.ai"
+  CORS_ORIGIN: "https://app.almyty.dev"
 
   # Base URL (used by MCP discovery, CLI exports, protocol endpoints)
-  BASE_URL: "https://api.apif.ai"
+  BASE_URL: "https://api.almyty.dev"

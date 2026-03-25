@@ -540,7 +540,7 @@ export function ApiDetailPage() {
               <TypeIcon className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">{api.name}</h1>
+              <h1 className="text-3xl font-heading font-bold tracking-tight">{api.name}</h1>
               <p className="text-muted-foreground">{api.baseUrl}</p>
             </div>
           </div>

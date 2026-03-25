@@ -29,9 +29,9 @@ describe('Working Endpoints Test (e2e)', () => {
       expect(response.body).toBeDefined();
       expect(response.body.protocol).toBe('mcp');
       expect(response.body.version).toBe('2024-11-05');
-      expect(response.body.server.name).toBe('apifai');
+      expect(response.body.server.name).toBe('almyty');
       expect(response.body.capabilities.tools.listChanged).toBe(true);
-      expect(response.body.capabilities.experimental.apifai.universalApiTranslation).toBe(true);
+      expect(response.body.capabilities.experimental.almyty.universalApiTranslation).toBe(true);
       
       // Verify transport endpoints
       expect(response.body.transports.http).toContain('/api/mcp');
@@ -48,10 +48,10 @@ describe('Working Endpoints Test (e2e)', () => {
       expect(response.body).toBeDefined();
       expect(response.body.protocol).toBe('utcp');
       expect(response.body.version).toBe('1.0.0');
-      expect(response.body.server.name).toBe('apifai');
+      expect(response.body.server.name).toBe('almyty');
       expect(response.body.capabilities.directCalling).toBe(true);
       expect(response.body.capabilities.proxyMode).toBe(true);
-      expect(response.body.experimental.apifai.universalApiTranslation).toBe(true);
+      expect(response.body.experimental.almyty.universalApiTranslation).toBe(true);
     });
 
     it('should provide UTCP capabilities', async () => {
@@ -71,7 +71,7 @@ describe('Working Endpoints Test (e2e)', () => {
       expect(response.body.capabilities.apiFormats).toContain('soap');
       expect(response.body.capabilities.apiFormats).toContain('protobuf');
       
-      // Verify apifai differentiators
+      // Verify almyty differentiators
       expect(response.body.differentiators.vs_mcp).toBe('Direct calling instead of proxy-only');
       expect(response.body.differentiators.unique_features).toContain('Automatic tool generation from any API format');
       expect(response.body.differentiators.unique_features).toContain('Multi-protocol output (MCP + UTCP + A2A)');
@@ -104,7 +104,7 @@ describe('Working Endpoints Test (e2e)', () => {
 
       expect(response.body.protocol).toBe('utcp');
       expect(response.body.status).toBe('healthy');
-      expect(response.body.server).toBe('apifai');
+      expect(response.body.server).toBe('almyty');
       expect(response.body.uptime).toBeGreaterThan(0);
     });
   });

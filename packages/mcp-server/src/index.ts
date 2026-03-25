@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * @apifai/mcp-server — Skill-first API proxy for any LLM
+ * @almyty/mcp-server — Skill-first API proxy for any LLM
  *
  * Instead of dumping N tool schemas into context (N * ~200 tokens each),
  * this injects:
@@ -13,7 +13,7 @@
  *   Traditional MCP: 20 tools = ~4,000 tokens always in context
  *   Skill-first:     2 tools + skills on-demand = ~300 tokens base
  *
- * The LLM reads a skill to understand a workflow, then calls apifai_execute
+ * The LLM reads a skill to understand a workflow, then calls almyty_execute
  * with the tool name and parameters. Skills are loaded on demand via
  * MCP prompts — only when the LLM actually needs them.
  *
@@ -26,7 +26,7 @@
  *   - Google Gemini CLI (~/.gemini/settings.json)
  *
  * Environment variables:
- *   APIFAI_URL        - Base URL of the apifai backend (default: http://localhost:4000)
+ *   APIFAI_URL        - Base URL of the almyty backend (default: http://localhost:4000)
  *   APIFAI_TOKEN      - JWT Bearer token for authentication
  *   APIFAI_GATEWAY_ID - Optional: scope to a specific gateway
  *   APIFAI_MODE       - "skill-first" (default) | "full" (registers all tools individually)
@@ -36,7 +36,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { loadCredentials } from './auth.js';
-import { ApifaiProxy } from './proxy.js';
+import { AlmytyProxy } from './proxy.js';
 
 const APIFAI_URL = process.env.APIFAI_URL || 'http://localhost:4000';
 const APIFAI_GATEWAY_ID = process.env.APIFAI_GATEWAY_ID;
@@ -53,12 +53,12 @@ async function main() {
   if (!token) {
     console.error(
       'Error: No authentication token found.\n' +
-      'Set APIFAI_TOKEN environment variable or run: npx @apifai/mcp-server login'
+      'Set APIFAI_TOKEN environment variable or run: npx @almyty/mcp-server login'
     );
     process.exit(1);
   }
 
-  const proxy = new ApifaiProxy(APIFAI_URL, token, APIFAI_GATEWAY_ID);
+  const proxy = new AlmytyProxy(APIFAI_URL, token, APIFAI_GATEWAY_ID);
 
   // Fetch tools + skills from backend
   const [tools, skills] = await Promise.all([
@@ -66,10 +66,10 @@ async function main() {
     proxy.fetchSkills(),
   ]);
 
-  console.error(`apifai: ${tools.length} tools, ${skills.length} skills (mode: ${APIFAI_MODE})`);
+  console.error(`almyty: ${tools.length} tools, ${skills.length} skills (mode: ${APIFAI_MODE})`);
 
   const server = new McpServer({
-    name: 'apifai',
+    name: 'almyty',
     version: '1.0.0',
   });
 
@@ -78,12 +78,12 @@ async function main() {
     // SKILL-FIRST MODE (default) — minimal token overhead
     // =====================================================
     // Register only 2 tools instead of N:
-    //   1. apifai_execute — universal tool executor
-    //   2. apifai_search  — find tools by query
+    //   1. almyty_execute — universal tool executor
+    //   2. almyty_search  — find tools by query
     //
     // Skills are registered as prompts (loaded on-demand).
     // The LLM reads a skill, learns the workflow, then calls
-    // apifai_execute with the right tool name + params.
+    // almyty_execute with the right tool name + params.
     // =====================================================
 
     // Build a compact tool index for the search tool
@@ -93,13 +93,13 @@ async function main() {
     }));
 
     // --- Universal executor ---
-    // ONE tool that can call ANY apifai tool by name.
+    // ONE tool that can call ANY almyty tool by name.
     // ~150 tokens in context instead of N * ~200 tokens.
     server.tool(
-      'apifai_execute',
-      'Execute any apifai API tool by name. Read the relevant skill prompt first to understand which tool to use and what parameters are needed.',
+      'almyty_execute',
+      'Execute any almyty API tool by name. Read the relevant skill prompt first to understand which tool to use and what parameters are needed.',
       {
-        tool_name: z.string().describe('Name of the apifai tool to execute (from skill instructions)'),
+        tool_name: z.string().describe('Name of the almyty tool to execute (from skill instructions)'),
         parameters: z.record(z.unknown()).describe('Parameters for the tool (see skill for required params)'),
       },
       async (args) => {
@@ -123,8 +123,8 @@ async function main() {
     // --- Search tool ---
     // Helps the LLM find the right tool/skill without having all schemas in context.
     server.tool(
-      'apifai_search',
-      'Search available API tools by keyword. Returns matching tool names and descriptions. Use this to discover which tools are available before calling apifai_execute.',
+      'almyty_search',
+      'Search available API tools by keyword. Returns matching tool names and descriptions. Use this to discover which tools are available before calling almyty_execute.',
       {
         query: z.string().describe('Search query (e.g., "create pet", "list users", "payment")'),
       },
@@ -151,7 +151,7 @@ async function main() {
         return {
           content: [{
             type: 'text' as const,
-            text: `Found ${matches.length} tools:\n${resultText}\n\nLoad the relevant skill prompt for detailed usage instructions, then call apifai_execute.`,
+            text: `Found ${matches.length} tools:\n${resultText}\n\nLoad the relevant skill prompt for detailed usage instructions, then call almyty_execute.`,
           }],
         };
       },
@@ -216,11 +216,11 @@ async function main() {
   // Overview prompt — compact index of all available skills
   if (skills.length > 0 || tools.length > 0) {
     server.prompt(
-      'apifai-overview',
-      `Overview: ${tools.length} API tools available via apifai`,
+      'almyty-overview',
+      `Overview: ${tools.length} API tools available via almyty`,
       async () => {
         const lines = [
-          '# apifai API Tools',
+          '# almyty API Tools',
           '',
           `Connected to: ${APIFAI_URL}`,
           APIFAI_GATEWAY_ID ? `Gateway: ${APIFAI_GATEWAY_ID}` : '',
@@ -244,8 +244,8 @@ async function main() {
           '## How to use',
           '',
           '1. Load a skill prompt to understand the workflow',
-          '2. Call `apifai_execute` with `tool_name` and `parameters`',
-          '3. Or use `apifai_search` to find the right tool first',
+          '2. Call `almyty_execute` with `tool_name` and `parameters`',
+          '3. Or use `almyty_search` to find the right tool first',
           '',
         );
 
@@ -261,8 +261,8 @@ async function main() {
 
   // Server info resource
   server.resource(
-    'apifai-info',
-    'apifai://info',
+    'almyty-info',
+    'almyty://info',
     async (uri) => ({
       contents: [{
         uri: uri.href,
@@ -295,7 +295,7 @@ if (subcommand === 'login') {
   console.log('Logged out successfully.');
 } else if (subcommand === '--help' || subcommand === '-h') {
   console.log(`
-@apifai/mcp-server — Skill-first API proxy for any LLM
+@almyty/mcp-server — Skill-first API proxy for any LLM
 
 Turn any API into AI skills. Instead of dumping tool schemas into context
 (expensive), this injects compact skills that teach the LLM workflows,
@@ -306,9 +306,9 @@ Token overhead comparison:
   Skill-first:      2 tools  = ~300 tokens/turn (skills loaded on demand)
 
 Usage:
-  npx @apifai/mcp-server              Start server (skill-first mode)
-  npx @apifai/mcp-server login        Interactive login
-  npx @apifai/mcp-server logout       Clear credentials
+  npx @almyty/mcp-server              Start server (skill-first mode)
+  npx @almyty/mcp-server login        Interactive login
+  npx @almyty/mcp-server logout       Clear credentials
 
 Environment:
   APIFAI_URL         Base URL (default: http://localhost:4000)
@@ -317,18 +317,18 @@ Environment:
   APIFAI_MODE        "skill-first" (default) | "full" (all tools individually)
 
 Modes:
-  skill-first  2 tools (apifai_execute + apifai_search) + skills as prompts
+  skill-first  2 tools (almyty_execute + almyty_search) + skills as prompts
                Minimal token overhead. LLM loads skills on demand.
   full         All tools registered individually (traditional MCP)
                Higher overhead but works without prompt loading.
 
 Configuration:
 
-  Claude Code:  claude mcp add apifai -- npx -y @apifai/mcp-server
-  Cursor:       .cursor/mcp.json → { "mcpServers": { "apifai": { "command": "npx", "args": ["-y", "@apifai/mcp-server"] } } }
-  Codex:        ~/.codex/config.toml → [mcp_servers.apifai] command="npx" args=["-y","@apifai/mcp-server"]
-  Copilot:      .vscode/mcp.json → { "servers": { "apifai": { "command": "npx", "args": ["-y", "@apifai/mcp-server"] } } }
-  Gemini:       ~/.gemini/settings.json → { "mcpServers": { "apifai": { ... } } }
+  Claude Code:  claude mcp add almyty -- npx -y @almyty/mcp-server
+  Cursor:       .cursor/mcp.json → { "mcpServers": { "almyty": { "command": "npx", "args": ["-y", "@almyty/mcp-server"] } } }
+  Codex:        ~/.codex/config.toml → [mcp_servers.almyty] command="npx" args=["-y","@almyty/mcp-server"]
+  Copilot:      .vscode/mcp.json → { "servers": { "almyty": { "command": "npx", "args": ["-y", "@almyty/mcp-server"] } } }
+  Gemini:       ~/.gemini/settings.json → { "mcpServers": { "almyty": { ... } } }
 `);
 } else {
   main().catch((err) => {

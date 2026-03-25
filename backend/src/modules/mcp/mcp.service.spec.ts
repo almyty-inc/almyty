@@ -402,7 +402,7 @@ describe('McpService', () => {
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('5');
       expect(result.result.resources).toHaveLength(2);
-      expect(result.result.resources[0].uri).toBe('apifai://resources/resource-1');
+      expect(result.result.resources[0].uri).toBe('almyty://resources/resource-1');
       expect(result.result.resources[0].name).toBe('User Schema');
     });
 
@@ -412,7 +412,7 @@ describe('McpService', () => {
         id: '6',
         method: 'resources/read',
         params: {
-          uri: 'apifai://resources/resource-1',
+          uri: 'almyty://resources/resource-1',
         },
       };
 
@@ -617,7 +617,7 @@ describe('McpService', () => {
         id: '12',
         method: 'resources/read',
         params: {
-          uri: 'apifai://resources/non-existent',
+          uri: 'almyty://resources/non-existent',
         },
       };
 

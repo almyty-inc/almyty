@@ -2,16 +2,16 @@ import type { SkillFile } from './client.js';
 
 export function generateMetaSkill(): SkillFile {
   const content = `---
-name: apifai-skills
-description: Discover, search, install, and run API skills from apifai. Use when the user wants to find or use API tools.
+name: almyty-skills
+description: Discover, search, install, and run API skills from almyty. Use when the user wants to find or use API tools.
 metadata:
-  author: apifai
+  author: almyty
   type: meta
 ---
 
-# apifai Skills Manager
+# almyty Skills Manager
 
-Manage API skills powered by apifai — a universal API-to-AI tool gateway.
+Manage API skills powered by almyty — a universal API-to-AI tool gateway.
 
 ## When to use
 
@@ -24,33 +24,33 @@ Manage API skills powered by apifai — a universal API-to-AI tool gateway.
 
 ### List all available skills
 \`\`\`bash
-npx @apifai/skills list
+npx @almyty/skills list
 \`\`\`
 
 ### Search for skills
 \`\`\`bash
-npx @apifai/skills search <query>
+npx @almyty/skills search <query>
 \`\`\`
 
 ### Install a specific skill
 \`\`\`bash
-npx @apifai/skills install @<org>/<gateway>/<skill-name>
+npx @almyty/skills install @<org>/<gateway>/<skill-name>
 \`\`\`
 
 ### Run a skill directly
 \`\`\`bash
-npx @apifai/skills run @<org>/<gateway>/<skill-name> --param1 value1 --param2 value2
+npx @almyty/skills run @<org>/<gateway>/<skill-name> --param1 value1 --param2 value2
 \`\`\`
 
 ### Start the skill daemon (auto-syncs all skills)
 \`\`\`bash
-npx @apifai/skills daemon
+npx @almyty/skills daemon
 \`\`\`
 `;
 
   return {
     name: 'skills',
-    fileName: 'apifai-skills',
+    fileName: 'almyty-skills',
     content,
   };
 }

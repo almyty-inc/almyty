@@ -18,7 +18,7 @@ export class RateLimiterPlugin {
       name: 'Rate Limiter',
       version: '1.0.0',
       description: 'Advanced rate limiting with multiple strategies and organization-based quotas',
-      author: 'apifai',
+      author: 'almyty',
       isActive: true,
       configuration: {
         enabled: true,

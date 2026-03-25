@@ -1,7 +1,7 @@
 {
-  "name": "apifai-backend",
+  "name": "almyty-backend",
   "version": "1.0.0",
-  "description": "apifai Backend - Universal API to AI Tool Gateway System",
+  "description": "almyty Backend - Universal API to AI Tool Gateway System",
   "author": "frane",
   "private": true,
   "license": "BSL-1.1",

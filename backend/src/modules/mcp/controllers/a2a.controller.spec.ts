@@ -84,7 +84,7 @@ describe('A2AController - Real Business Logic', () => {
         expect(result.status).toBeDefined();
         expect(result.uptime).toBeGreaterThanOrEqual(0);
         expect(result.features).toBeDefined();
-        expect(result.server).toBe('apifai');
+        expect(result.server).toBe('almyty');
         expect(result.version).toBeDefined();
       });
     });

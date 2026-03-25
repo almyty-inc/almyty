@@ -167,7 +167,7 @@ export class CredentialService {
       const response = await axios({
         method: 'GET',
         url: credential.api.baseUrl,
-        headers: { ...headers, 'User-Agent': 'apifai-credential-test/1.0' },
+        headers: { ...headers, 'User-Agent': 'almyty-credential-test/1.0' },
         params,
         timeout: 10000,
         validateStatus: (status) => status < 500, // 4xx is OK (means API responded)

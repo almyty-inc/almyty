@@ -142,9 +142,9 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
   // Skills gateway
   if (gatewayType === 'skills') {
     const gatewaySlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
-    const installCommand = `npx @apifai/skills install @${orgSlug}/${gatewaySlug}`
-    const watchCommand = `npx @apifai/skills watch @${orgSlug}/${gatewaySlug}`
-    const loginCommand = `npx @apifai/skills login`
+    const installCommand = `npx @almyty/skills install @${orgSlug}/${gatewaySlug}`
+    const watchCommand = `npx @almyty/skills watch @${orgSlug}/${gatewaySlug}`
+    const loginCommand = `npx @almyty/skills login`
 
     // Extract the actual SKILL.md markdown content
     const skillMarkdown = (() => {
@@ -189,7 +189,7 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
             </div>
             <div>
               <Label className="text-sm font-medium">First-Time Setup</Label>
-              <p className="text-xs text-muted-foreground mb-2">Authenticate once (or use APIFAI_TOKEN env var):</p>
+              <p className="text-xs text-muted-foreground mb-2">Authenticate once (or use ALMYTY_TOKEN env var):</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{loginCommand}</code>
                 <Button size="sm" variant="outline" onClick={() => copyToClipboard(loginCommand, 'login-cmd')}>
@@ -1159,7 +1159,7 @@ export function GatewayDetailPage() {
               <Router className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">{gateway.name}</h1>
+              <h1 className="text-3xl font-heading font-bold tracking-tight">{gateway.name}</h1>
               <p className="text-muted-foreground">{gateway.description || 'API Gateway'}</p>
             </div>
           </div>
@@ -1206,7 +1206,7 @@ export function GatewayDetailPage() {
                     if (gateway.type === 'a2a') return `${backendUrl}/${orgSlug}/${gwSlug}`
                     if (gateway.type === 'skills') {
                       const nameSlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
-                      return `npx @apifai/skills install @${orgSlug}/${nameSlug}`
+                      return `npx @almyty/skills install @${orgSlug}/${nameSlug}`
                     }
                     return gateway.endpoint
                   })()}
@@ -1224,7 +1224,7 @@ export function GatewayDetailPage() {
                     else if (gateway.type === 'a2a') fullEndpoint = `${backendUrl}/${orgSlug}/${gwSlug}`
                     else if (gateway.type === 'skills') {
                       const nameSlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
-                      fullEndpoint = `npx @apifai/skills install @${orgSlug}/${nameSlug}`
+                      fullEndpoint = `npx @almyty/skills install @${orgSlug}/${nameSlug}`
                     }
                     try {
                       await navigator.clipboard.writeText(fullEndpoint)

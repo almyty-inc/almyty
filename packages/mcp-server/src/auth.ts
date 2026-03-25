@@ -1,10 +1,10 @@
 /**
- * Authentication helpers for the apifai MCP server.
+ * Authentication helpers for the almyty MCP server.
  *
  * Supports:
  * 1. Environment variable (APIFAI_TOKEN) — for CI/scripts
- * 2. Stored credentials (~/.apifai/credentials.json) — for interactive use
- * 3. Interactive login (npx @apifai/mcp-server login) — stores credentials
+ * 2. Stored credentials (~/.almyty/credentials.json) — for interactive use
+ * 3. Interactive login (npx @almyty/mcp-server login) — stores credentials
  */
 
 import { readFileSync, writeFileSync, mkdirSync, unlinkSync, existsSync } from 'fs';
@@ -12,7 +12,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { createInterface } from 'readline';
 
-const CREDENTIALS_DIR = join(homedir(), '.apifai');
+const CREDENTIALS_DIR = join(homedir(), '.almyty');
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.json');
 
 interface StoredCredentials {
@@ -23,7 +23,7 @@ interface StoredCredentials {
 }
 
 /**
- * Load stored credentials from ~/.apifai/credentials.json
+ * Load stored credentials from ~/.almyty/credentials.json
  */
 export function loadCredentials(): StoredCredentials | null {
   try {
@@ -36,7 +36,7 @@ export function loadCredentials(): StoredCredentials | null {
 }
 
 /**
- * Save credentials to ~/.apifai/credentials.json
+ * Save credentials to ~/.almyty/credentials.json
  */
 export function saveCredentials(creds: StoredCredentials): void {
   mkdirSync(CREDENTIALS_DIR, { recursive: true });
@@ -58,7 +58,7 @@ export function logout(): void {
 
 /**
  * Interactive login: prompts for email/password, authenticates against
- * the apifai backend, and stores the JWT token.
+ * the almyty backend, and stores the JWT token.
  */
 export async function login(baseUrl: string): Promise<void> {
   const rl = createInterface({
@@ -106,7 +106,7 @@ export async function login(baseUrl: string): Promise<void> {
     console.error(`\nLogged in successfully as ${email}`);
     console.error(`Credentials saved to ${CREDENTIALS_FILE}`);
     console.error('\nYou can now use the MCP server without APIFAI_TOKEN:');
-    console.error('  npx @apifai/mcp-server');
+    console.error('  npx @almyty/mcp-server');
   } finally {
     rl.close();
   }

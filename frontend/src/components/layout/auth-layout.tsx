@@ -13,7 +13,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
             <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">ai</span>
             </div>
-            <span className="text-2xl font-bold text-foreground">apifai</span>
+            <span className="text-2xl font-bold text-foreground">almyty</span>
           </div>
         </div>
       </div>

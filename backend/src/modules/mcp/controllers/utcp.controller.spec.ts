@@ -72,7 +72,7 @@ describe('UtcpController', () => {
   describe('discovery', () => {
     it('should return global discovery info', async () => {
       const discoveryInfo = {
-        name: 'apifai UTCP Server',
+        name: 'almyty UTCP Server',
         version: '1.0.0',
         capabilities: ['manual-generation', 'direct-calling'],
       } as any;
@@ -245,7 +245,7 @@ describe('UtcpController', () => {
       expect(result).toEqual({
         protocol: 'utcp',
         version: '1.0.0',
-        server: 'apifai',
+        server: 'almyty',
         capabilities: expect.objectContaining({
           manualGeneration: true,
           directCalling: true,
@@ -267,7 +267,7 @@ describe('UtcpController', () => {
       expect(result).toEqual({
         protocol: 'utcp',
         status: 'healthy',
-        server: 'apifai',
+        server: 'almyty',
         version: '1.0.0',
         timestamp: expect.any(String),
         uptime: expect.any(Number),

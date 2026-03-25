@@ -518,8 +518,8 @@ export class McpOAuthService {
     scope: string,
     resource?: string,
   ): Promise<TokenResponse> {
-    const rawAccessToken = `apifai_at_${crypto.randomBytes(48).toString('base64url')}`;
-    const rawRefreshToken = `apifai_rt_${crypto.randomBytes(48).toString('base64url')}`;
+    const rawAccessToken = `almyty_at_${crypto.randomBytes(48).toString('base64url')}`;
+    const rawRefreshToken = `almyty_rt_${crypto.randomBytes(48).toString('base64url')}`;
 
     const accessTokenHash = this.hashValue(rawAccessToken);
     const refreshTokenHash = this.hashValue(rawRefreshToken);

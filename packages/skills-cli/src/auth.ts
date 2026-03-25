@@ -1,12 +1,12 @@
 /**
- * Authentication helpers for the apifai skills CLI.
+ * Authentication helpers for the almyty skills CLI.
  *
- * Shares credentials with @apifai/mcp-server via ~/.apifai/credentials.json.
+ * Shares credentials with @almyty/mcp-server via ~/.almyty/credentials.json.
  *
  * Supports:
  * 1. Environment variable (APIFAI_TOKEN) — for CI/scripts
- * 2. Stored credentials (~/.apifai/credentials.json) — for interactive use
- * 3. Interactive login (npx @apifai/skills login) — stores credentials
+ * 2. Stored credentials (~/.almyty/credentials.json) — for interactive use
+ * 3. Interactive login (npx @almyty/skills login) — stores credentials
  */
 
 import { readFileSync, writeFileSync, mkdirSync, unlinkSync, existsSync } from 'fs';
@@ -14,7 +14,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { createInterface } from 'readline';
 
-const CREDENTIALS_DIR = join(homedir(), '.apifai');
+const CREDENTIALS_DIR = join(homedir(), '.almyty');
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.json');
 
 interface StoredCredentials {
@@ -25,7 +25,7 @@ interface StoredCredentials {
 }
 
 /**
- * Load stored credentials from ~/.apifai/credentials.json
+ * Load stored credentials from ~/.almyty/credentials.json
  */
 export function loadCredentials(): StoredCredentials | null {
   try {
@@ -38,7 +38,7 @@ export function loadCredentials(): StoredCredentials | null {
 }
 
 /**
- * Save credentials to ~/.apifai/credentials.json
+ * Save credentials to ~/.almyty/credentials.json
  */
 export function saveCredentials(creds: StoredCredentials): void {
   mkdirSync(CREDENTIALS_DIR, { recursive: true });
@@ -66,7 +66,7 @@ export function logout(): void {
  */
 export function resolveAuth(): { url: string; token: string } {
   const envToken = process.env.APIFAI_TOKEN;
-  const envUrl = process.env.APIFAI_URL || 'https://api.apif.ai';
+  const envUrl = process.env.APIFAI_URL || 'https://api.almyty.dev';
 
   if (envToken) {
     return { url: envUrl, token: envToken };
@@ -78,14 +78,14 @@ export function resolveAuth(): { url: string; token: string } {
   }
 
   console.error('Not authenticated. Run one of:');
-  console.error('  npx @apifai/skills login');
+  console.error('  npx @almyty/skills login');
   console.error('  export APIFAI_TOKEN=<your-token>');
   process.exit(1);
 }
 
 /**
  * Interactive login: prompts for email/password, authenticates against
- * the apifai backend, and stores the JWT token.
+ * the almyty backend, and stores the JWT token.
  */
 export async function login(baseUrl: string): Promise<void> {
   const rl = createInterface({
@@ -133,7 +133,7 @@ export async function login(baseUrl: string): Promise<void> {
     console.error(`\n✓ Logged in as ${email}`);
     console.error(`  Credentials saved to ${CREDENTIALS_FILE}`);
     console.error('\nYou can now install skills:');
-    console.error('  npx @apifai/skills install --gateway <id>');
+    console.error('  npx @almyty/skills install --gateway <id>');
   } finally {
     rl.close();
   }
