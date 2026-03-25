@@ -135,22 +135,16 @@ docker build --target production -t almyty-frontend ./frontend
 
 ---
 
-## Brand: almyty
+## Brand: Almyty
 
-### Rules
-- Always lowercase `almyty` in code, CLI, and running text. Capitalize `Almyty` only at sentence start.
-- Logo icon: hollow lightning bolt polygon outline (thin 1.5px circuit strokes, small node dots at vertices). Never filled solid.
-- Gradient direction: always violet→cyan. Icon: top→bottom. Wordmark: left→right. Never reversed.
-- Shell prompt color in docs/examples: violet (`#8b5cf6`), not green.
-
-### Quick reference
-- **Primary:** violet-500 `#8b5cf6` (dark) / violet-700 `#6d28d9` (light)
-- **Accent:** cyan-400 `#22d3ee` (dark) / cyan-700 `#0e7490` (light)
-- **Fonts:** Manrope (headings + logo), DM Sans (body), JetBrains Mono (code)
-- **Dark bg:** `#06060a` — **Light bg:** `#f4f2ee`
-- **Domain:** almyty.com (almyty.ai and almyty.dev redirect to it)
-
-### Brand docs
-- `docs/brand/colors.md` — Full color tokens, gradients, shadcn/ui variables
-- `docs/brand/typography.md` — Font stack, weights, sizing scale
-- `docs/brand/logo.md` — SVG construction, usage tiers, favicon specs
+- Always lowercase `almyty` in code and text. Capitalize `Almyty` only at sentence start.
+- ⚡ emoji is a community brand character (README, changelogs, social). Never in formal docs or the SVG logo.
+- Logo: hollow ⚡ polygon, thin circuit strokes (1.5px) + node dots, violet→cyan gradient. Never filled solid.
+- Primary: violet-500 #8b5cf6 (dark) / violet-700 #6d28d9 (light)
+- Accent: cyan-400 #22d3ee (dark) / cyan-700 #0e7490 (light)
+- Fonts: Manrope (headings + logo, weight 500 for wordmark), DM Sans (body), JetBrains Mono (code). All on Google Fonts, SIL OFL.
+- Dark bg: #06060a — Light bg: #f4f2ee
+- Terminal prompt color in examples: violet (#8b5cf6). Shell prompt: `$`
+- Protocol badges: MCP=violet, A2A=cyan, UTCP=emerald, SOAP=amber, GraphQL=rose, REST=blue
+- Domain: almyty.com (almyty.ai, almyty.dev, almyty.tech, almyty.io, almyty.net redirect to it)
+- See `docs/brand/colors.md`, `docs/brand/typography.md`, `docs/brand/logo.md` for full specs.
