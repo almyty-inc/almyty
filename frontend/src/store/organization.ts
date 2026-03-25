@@ -39,7 +39,7 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
     set({ isLoading: true })
     try {
       const response = await organizationsApi.getAll()
-      const organizations = response.data
+      const organizations = Array.isArray(response) ? response : response?.organizations || []
       
       set({
         organizations,
@@ -60,7 +60,7 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
   createOrganization: async (data: { name: string; description?: string }) => {
     try {
       const response = await organizationsApi.create(data)
-      const newOrg = response.data
+      const newOrg = response
       
       set(state => ({
         organizations: [...state.organizations, newOrg],
@@ -76,7 +76,7 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
   updateOrganization: async (id: string, data: Partial<Organization>) => {
     try {
       const response = await organizationsApi.update(id, data)
-      const updatedOrg = response.data
+      const updatedOrg = response
       
       set(state => ({
         organizations: state.organizations.map(org =>
