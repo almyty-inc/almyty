@@ -23,7 +23,7 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-heading font-extrabold tracking-tight">Settings</h1>
+        <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Settings</h1>
         <p className="text-muted-foreground">
           Manage your organization and account settings
         </p>
@@ -60,6 +60,7 @@ export function SettingsPage() {
 function OrganizationTab({ organization }: { organization: any }) {
   const { success, error } = useNotifications()
   const queryClient = useQueryClient()
+  const { setCurrentOrganization } = useOrganizationStore()
   const [isEditing, setIsEditing] = useState(false)
   const [orgName, setOrgName] = useState('')
   const [orgDescription, setOrgDescription] = useState('')
@@ -85,9 +86,11 @@ function OrganizationTab({ organization }: { organization: any }) {
   const updateOrgMutation = useMutation({
     mutationFn: (data: { name: string; description?: string }) =>
       organizationsApi.update(organization.id, data),
-    onSuccess: async () => {
+    onSuccess: async (updatedOrg: any) => {
       success('Organization updated', 'Organization details have been updated.')
       setIsEditing(false)
+      // Update the Zustand store so the UI reflects the new name/description immediately
+      setCurrentOrganization({ ...organization, ...updatedOrg, name: orgName.trim(), description: orgDescription.trim() || undefined })
       await queryClient.invalidateQueries({ queryKey: ['organizations'] })
       await queryClient.invalidateQueries({ queryKey: ['organization-details'] })
     },
@@ -170,7 +173,7 @@ function OrganizationTab({ organization }: { organization: any }) {
               className="mt-1"
             />
           ) : (
-            <div className="text-sm mt-1">{organization.description || <span className="text-muted-foreground italic">No description added</span>}</div>
+            <div className="text-sm mt-1">{fullOrg.description || <span className="text-muted-foreground italic">No description added</span>}</div>
           )}
         </div>
         

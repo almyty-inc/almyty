@@ -52,6 +52,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { agentsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
@@ -111,6 +118,7 @@ export function AgentsPage() {
   const [importJson, setImportJson] = useState('')
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [showTemplates, setShowTemplates] = useState(true)
 
   // Fetch agents
@@ -139,11 +147,14 @@ export function AgentsPage() {
   const agents: Agent[] = Array.isArray(agentsData) ? agentsData : []
 
   const filteredAgents = agents.filter((agent) => {
-    if (!searchQuery) return true
-    return (
+    const matchesSearch =
+      !searchQuery ||
       agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (agent.description || '').toLowerCase().includes(searchQuery.toLowerCase())
-    )
+
+    const matchesStatus = statusFilter === 'all' || agent.status === statusFilter
+
+    return matchesSearch && matchesStatus
   })
 
   const activeCount = agents.filter((a) => a.status === 'active').length
@@ -277,7 +288,7 @@ export function AgentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight">Agents</h1>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Agents</h1>
           <p className="text-muted-foreground">
             {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${agents.length} agents (${activeCount} active)`}
           </p>
@@ -362,22 +373,34 @@ export function AgentsPage() {
             </div>
           )}
 
-          {/* Search */}
-          {agents.length > 0 && (
-            <div className="relative max-w-sm">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search agents..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          )}
-
           {/* Agent Table */}
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 space-y-4">
+              {/* Filters */}
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search agents..."
+                      className="pl-10"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border/50">

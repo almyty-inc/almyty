@@ -496,7 +496,7 @@ export function ApisPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight">APIs</h1>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">APIs</h1>
           <p className="text-muted-foreground">
             {apis.length} connected &middot; {apis.reduce((sum: number, a: any) => sum + (a.operations?.length || 0), 0)} operations &middot; {allToolsTotal} tools generated
           </p>
@@ -913,51 +913,51 @@ export function ApisPage() {
         <>
           <Card>
             <CardContent className="pt-6 space-y-4">
-              {/* Filters */}
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search APIs..."
-                      className="pl-10"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value={ApiType.OPENAPI}>OpenAPI</SelectItem>
-                    <SelectItem value={ApiType.GRAPHQL}>GraphQL</SelectItem>
-                    <SelectItem value={ApiType.SOAP}>SOAP</SelectItem>
-                    <SelectItem value={ApiType.GRPC}>gRPC</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={healthFilter} onValueChange={setHealthFilter}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Health" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value={ApiHealthStatus.HEALTHY}>Healthy</SelectItem>
-                    <SelectItem value={ApiHealthStatus.DEGRADED}>Degraded</SelectItem>
-                    <SelectItem value={ApiHealthStatus.UNHEALTHY}>Unhealthy</SelectItem>
-                    <SelectItem value={ApiHealthStatus.UNKNOWN}>Unknown</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
               <DataTable
                 columns={apiColumns}
                 data={filteredApis}
                 onRowClick={(api) => navigate(`/apis/${api.id}`)}
                 hideSelectionCount
                 hideColumnsButton
+                headerExtra={
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="flex-1">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search APIs..."
+                          className="pl-10"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <Select value={typeFilter} onValueChange={setTypeFilter}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue placeholder="Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        <SelectItem value={ApiType.OPENAPI}>OpenAPI</SelectItem>
+                        <SelectItem value={ApiType.GRAPHQL}>GraphQL</SelectItem>
+                        <SelectItem value={ApiType.SOAP}>SOAP</SelectItem>
+                        <SelectItem value={ApiType.GRPC}>gRPC</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={healthFilter} onValueChange={setHealthFilter}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue placeholder="Health" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value={ApiHealthStatus.HEALTHY}>Healthy</SelectItem>
+                        <SelectItem value={ApiHealthStatus.DEGRADED}>Degraded</SelectItem>
+                        <SelectItem value={ApiHealthStatus.UNHEALTHY}>Unhealthy</SelectItem>
+                        <SelectItem value={ApiHealthStatus.UNKNOWN}>Unknown</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                }
               />
             </CardContent>
           </Card>
