@@ -1,8 +1,8 @@
-# Redirect ingress: almyty.ai + almyty.dev → almyty.com
+# Redirect ingress: all alternate domains → almyty.com
 #
-# DNS: Point A records for almyty.ai and almyty.dev to the same LB IP as almyty.com.
-# This ingress catches those domains and 301-redirects everything to almyty.com.
-# cert-manager issues TLS certs for the redirect domains via Let's Encrypt.
+# DNS: A records for all domains below point to 129.212.254.179 (ingress LB).
+# cert-manager issues TLS certs for each via Let's Encrypt.
+# nginx does 301 permanent redirect preserving the request URI.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -18,13 +18,24 @@ spec:
   - hosts:
     - almyty.ai
     - "*.almyty.ai"
-    secretName: almyty-ai-redirect-tls
+    secretName: almyty-ai-tls
   - hosts:
     - almyty.dev
     - "*.almyty.dev"
-    secretName: almyty-dev-redirect-tls
+    secretName: almyty-dev-tls
+  - hosts:
+    - almyty.tech
+    - "*.almyty.tech"
+    secretName: almyty-tech-tls
+  - hosts:
+    - almyty.io
+    - "*.almyty.io"
+    secretName: almyty-io-tls
+  - hosts:
+    - almyty.net
+    - "*.almyty.net"
+    secretName: almyty-net-tls
   rules:
-  # almyty.ai → almyty.com
   - host: almyty.ai
     http: &redirect
       paths:
@@ -37,8 +48,19 @@ spec:
               number: 8080
   - host: "*.almyty.ai"
     http: *redirect
-  # almyty.dev → almyty.com
   - host: almyty.dev
     http: *redirect
   - host: "*.almyty.dev"
+    http: *redirect
+  - host: almyty.tech
+    http: *redirect
+  - host: "*.almyty.tech"
+    http: *redirect
+  - host: almyty.io
+    http: *redirect
+  - host: "*.almyty.io"
+    http: *redirect
+  - host: almyty.net
+    http: *redirect
+  - host: "*.almyty.net"
     http: *redirect
