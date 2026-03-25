@@ -142,6 +142,19 @@ spec:
             configMapKeyRef:
               name: almyty-config
               key: BASE_URL
+        - name: RESEND_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: RESEND_API_KEY
+              optional: true
+        - name: EMAIL_FROM
+          value: "almyty <noreply@almyty.com>"
+        - name: FRONTEND_URL
+          valueFrom:
+            configMapKeyRef:
+              name: almyty-config
+              key: CORS_ORIGIN
         livenessProbe:
           httpGet:
             path: /health/live
