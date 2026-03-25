@@ -385,66 +385,99 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
       </div>
 
       <div>
-        <Label>Tools (available for function calling)</Label>
-        <Input
-          placeholder="Search tools..."
-          value={toolSearch}
-          onChange={(e) => {
-            setToolSearch(e.target.value)
-            setShowAllTools(false)
-          }}
-          className="mt-1 mb-1 text-xs"
-        />
-        <div className="space-y-1 max-h-[200px] overflow-y-auto border rounded-md p-2">
-          {filteredTools.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {toolList.length === 0 ? 'No tools available' : 'No tools match your search'}
-            </p>
-          ) : (
+        {(() => {
+          const selectedTools: string[] = (node.data.toolIds as string[]) || []
+          const allIds = toolList.map((t: any) => t.id)
+
+          // Group tools by source
+          const grouped: Record<string, typeof toolList> = {}
+          toolList.forEach((t: any) => {
+            const source = t.metadata?.sourceApi?.name || t.metadata?.apiName || (t.type === 'api' ? 'API Tools' : 'Custom Tools')
+            if (!grouped[source]) grouped[source] = []
+            grouped[source].push(t)
+          })
+          const groups = Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b))
+
+          return (
             <>
-              {visibleTools.map((tool) => {
-                const selectedTools: string[] = (node.data.toolIds as string[]) || []
-                const isSelected = selectedTools.includes(tool.id)
-                return (
-                  <label key={tool.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-accent/50 rounded px-1 py-0.5">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={(e) => {
-                        const newSelected = e.target.checked
-                          ? [...selectedTools, tool.id]
-                          : selectedTools.filter((id) => id !== tool.id)
-                        updateData('toolIds', newSelected)
-                      }}
-                      className="rounded"
-                    />
-                    <span className="truncate">{tool.name}</span>
-                  </label>
-                )
-              })}
-              {hasMoreTools && !showAllTools && (
-                <button
-                  type="button"
-                  className="w-full text-xs text-center text-muted-foreground hover:text-foreground py-1 transition-colors"
-                  onClick={() => setShowAllTools(true)}
-                >
-                  <ChevronDown className="h-3 w-3 inline mr-1" />
-                  Show all {filteredTools.length} tools
-                </button>
-              )}
-              {hasMoreTools && showAllTools && (
-                <button
-                  type="button"
-                  className="w-full text-xs text-center text-muted-foreground hover:text-foreground py-1 transition-colors"
-                  onClick={() => setShowAllTools(false)}
-                >
-                  <ChevronUp className="h-3 w-3 inline mr-1" />
-                  Show fewer
-                </button>
+              <div className="flex items-center justify-between">
+                <Label>Tools for function calling</Label>
+                <span className="text-xs text-muted-foreground">{selectedTools.length} of {toolList.length}</span>
+              </div>
+
+              {toolList.length === 0 ? (
+                <p className="text-xs text-muted-foreground mt-1">No tools available. Create tools first.</p>
+              ) : (
+                <>
+                  <div className="flex gap-1 mt-1 mb-2">
+                    <button type="button" className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                      onClick={() => updateData('toolIds', allIds)}>All</button>
+                    <button type="button" className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => updateData('toolIds', [])}>None</button>
+                    {groups.map(([source, tools]) => (
+                      <button key={source} type="button" className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors truncate max-w-[80px]"
+                        onClick={() => {
+                          const groupIds = (tools as any[]).map(t => t.id)
+                          const otherIds = selectedTools.filter(id => !groupIds.includes(id))
+                          const allGroupSelected = groupIds.every(id => selectedTools.includes(id))
+                          updateData('toolIds', allGroupSelected ? otherIds : [...otherIds, ...groupIds])
+                        }}
+                        title={source}
+                      >{source}</button>
+                    ))}
+                  </div>
+
+                  <Input
+                    placeholder="Filter tools..."
+                    value={toolSearch}
+                    onChange={(e) => { setToolSearch(e.target.value); setShowAllTools(false) }}
+                    className="mb-1 text-xs h-7"
+                  />
+
+                  <div className="space-y-0.5 max-h-[180px] overflow-y-auto border rounded-md p-1.5">
+                    {groups.map(([source, tools]) => {
+                      const filtered = toolSearch
+                        ? (tools as any[]).filter(t => t.name?.toLowerCase().includes(toolSearch.toLowerCase()))
+                        : tools as any[]
+                      if (filtered.length === 0) return null
+                      const groupIds = (tools as any[]).map(t => t.id)
+                      const allSelected = groupIds.every(id => selectedTools.includes(id))
+                      return (
+                        <div key={source}>
+                          <button type="button" className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider py-1 w-full hover:text-foreground"
+                            onClick={() => {
+                              const otherIds = selectedTools.filter(id => !groupIds.includes(id))
+                              updateData('toolIds', allSelected ? otherIds : [...otherIds, ...groupIds])
+                            }}
+                          >
+                            <input type="checkbox" checked={allSelected} readOnly className="rounded" />
+                            {source} ({filtered.length})
+                          </button>
+                          {(!showAllTools && filtered.length > 5 ? filtered.slice(0, 5) : filtered).map((tool: any) => {
+                            const isSelected = selectedTools.includes(tool.id)
+                            return (
+                              <label key={tool.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-accent/10 rounded px-1 py-0.5 ml-3">
+                                <input type="checkbox" checked={isSelected} onChange={(e) => {
+                                  updateData('toolIds', e.target.checked ? [...selectedTools, tool.id] : selectedTools.filter(id => id !== tool.id))
+                                }} className="rounded" />
+                                <span className="truncate">{tool.name}</span>
+                              </label>
+                            )
+                          })}
+                          {!showAllTools && filtered.length > 5 && (
+                            <button type="button" className="text-[10px] text-muted-foreground hover:text-foreground ml-3 py-0.5" onClick={() => setShowAllTools(true)}>
+                              +{filtered.length - 5} more
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
               )}
             </>
-          )}
-        </div>
+          )
+        })()}
       </div>
     </div>
   )
