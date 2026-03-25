@@ -281,21 +281,20 @@ export class OrganizationsService {
       return { inviteSent: emailSent };
     }
 
-    // User doesn't exist — create a placeholder membership with no userId
-    // Store invite data so when user registers, we can match by token
-    // We use a temporary placeholder user approach: store email in inviteToken metadata
-    const membership = this.userOrganizationRepository.create({
-      userId: invitedBy, // temporary — will be reassigned on accept
-      organizationId,
+    // User doesn't exist — store pending invite in organization metadata
+    // When the user registers via the invite link, the accept endpoint creates the real membership
+    // We store invite info in the organization's metadata so we can look it up by token
+    const pendingInvites = (org.settings as any)?.pendingInvites || [];
+    pendingInvites.push({
+      email: inviteUserDto.email,
       role: inviteUserDto.role,
-      invitedBy,
       inviteToken,
-      inviteExpiresAt,
-      inviteAccepted: false,
-      isActive: false, // not active until accepted
-      permissions: [inviteUserDto.email], // store email in permissions temporarily
+      inviteExpiresAt: inviteExpiresAt.toISOString(),
+      invitedBy,
     });
-    await this.userOrganizationRepository.save(membership);
+    await this.organizationRepository.update(organizationId, {
+      settings: { ...(org.settings as any || {}), pendingInvites },
+    });
 
     // Send invite email to new user
     const emailSent = await this.mailService.sendInvitation({
@@ -312,63 +311,97 @@ export class OrganizationsService {
   }
 
   async acceptInvite(token: string, userId: string): Promise<{ organizationId: string; organizationName: string }> {
+    // Check membership-based invites (existing users)
     const membership = await this.userOrganizationRepository.findOne({
       where: { inviteToken: token },
       relations: ['organization'],
     });
 
-    if (!membership) {
-      throw new NotFoundException('Invalid or expired invitation');
+    if (membership) {
+      if (membership.inviteExpiresAt && membership.inviteExpiresAt < new Date()) {
+        throw new BadRequestException('Invitation has expired');
+      }
+      if (membership.inviteAccepted) {
+        throw new ConflictException('Invitation has already been accepted');
+      }
+
+      membership.inviteAccepted = true;
+      membership.inviteToken = null;
+      await this.userOrganizationRepository.save(membership);
+
+      return {
+        organizationId: membership.organizationId,
+        organizationName: membership.organization?.name || 'Organization',
+      };
     }
 
-    if (membership.inviteExpiresAt && membership.inviteExpiresAt < new Date()) {
-      throw new BadRequestException('Invitation has expired');
+    // Check pending invites in org metadata (new users)
+    const orgs = await this.organizationRepository.find();
+    for (const org of orgs) {
+      const pendingInvites = (org.settings as any)?.pendingInvites || [];
+      const invite = pendingInvites.find((i: any) => i.inviteToken === token);
+      if (invite) {
+        if (new Date(invite.inviteExpiresAt) < new Date()) {
+          throw new BadRequestException('Invitation has expired');
+        }
+
+        // Create the real membership
+        const newMembership = this.userOrganizationRepository.create({
+          userId,
+          organizationId: org.id,
+          role: invite.role,
+          invitedBy: invite.invitedBy,
+          inviteAccepted: true,
+          isActive: true,
+        });
+        await this.userOrganizationRepository.save(newMembership);
+
+        // Remove from pending
+        const updated = pendingInvites.filter((i: any) => i.inviteToken !== token);
+        await this.organizationRepository.update(org.id, {
+          settings: { ...(org.settings as any || {}), pendingInvites: updated },
+        });
+
+        return { organizationId: org.id, organizationName: org.name };
+      }
     }
 
-    if (membership.inviteAccepted) {
-      throw new ConflictException('Invitation has already been accepted');
-    }
-
-    // If this was a new-user invite, reassign the membership to the actual user
-    if (!membership.isActive) {
-      membership.userId = userId;
-      membership.isActive = true;
-      membership.permissions = null; // clear the temporary email storage
-    }
-
-    membership.inviteAccepted = true;
-    membership.inviteToken = null; // one-time use
-    await this.userOrganizationRepository.save(membership);
-
-    return {
-      organizationId: membership.organizationId,
-      organizationName: membership.organization?.name || 'Organization',
-    };
+    throw new NotFoundException('Invalid or expired invitation');
   }
 
   async getInviteDetails(token: string): Promise<{ organizationName: string; role: string; email: string; isExpired: boolean }> {
+    // Check membership-based invites (existing users)
     const membership = await this.userOrganizationRepository.findOne({
       where: { inviteToken: token },
       relations: ['organization'],
     });
 
-    if (!membership) {
-      throw new NotFoundException('Invalid invitation');
+    if (membership) {
+      const isExpired = membership.inviteExpiresAt ? membership.inviteExpiresAt < new Date() : false;
+      return {
+        organizationName: membership.organization?.name || 'Organization',
+        role: membership.role,
+        email: '',
+        isExpired,
+      };
     }
 
-    const isExpired = membership.inviteExpiresAt ? membership.inviteExpiresAt < new Date() : false;
+    // Check pending invites in org metadata (new users)
+    const orgs = await this.organizationRepository.find();
+    for (const org of orgs) {
+      const pendingInvites = (org.settings as any)?.pendingInvites || [];
+      const invite = pendingInvites.find((i: any) => i.inviteToken === token);
+      if (invite) {
+        return {
+          organizationName: org.name,
+          role: invite.role,
+          email: invite.email,
+          isExpired: new Date(invite.inviteExpiresAt) < new Date(),
+        };
+      }
+    }
 
-    // For new-user invites, email is stored in permissions array temporarily
-    const email = !membership.isActive && membership.permissions?.length
-      ? membership.permissions[0]
-      : '';
-
-    return {
-      organizationName: membership.organization?.name || 'Organization',
-      role: membership.role,
-      email,
-      isExpired,
-    };
+    throw new NotFoundException('Invalid invitation');
   }
 
   async removeMember(organizationId: string, userId: string): Promise<void> {

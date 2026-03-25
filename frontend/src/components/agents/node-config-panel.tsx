@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { CodeEditor } from '@/components/ui/code-editor'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 
 import { llmProvidersApi, toolsApi, agentsApi } from '@/lib/api'
@@ -664,13 +665,15 @@ function ConditionConfig({ node, nodes, updateData }: { node: Node; nodes: Node[
 
       {useRawMode ? (
         <div>
-          <Textarea
-            className="mt-1 font-mono text-xs"
-            rows={4}
-            value={expression}
-            onChange={(e) => updateData('expression', e.target.value)}
-            placeholder="{{nodes.llm_1.output.sentiment}} === 'positive'"
-          />
+          <div className="mt-1">
+            <CodeEditor
+              value={expression}
+              onChange={(value) => updateData('expression', value)}
+              language="javascript"
+              height="100px"
+              placeholder="{{nodes.llm_1.output.sentiment}} === 'positive'"
+            />
+          </div>
           <p className="text-xs text-muted-foreground mt-1">
             JavaScript expression that evaluates to true/false.
           </p>
@@ -751,14 +754,15 @@ function TransformConfig({ node, updateData }: { node: Node; updateData: UpdateD
     <div className="space-y-3">
       <div>
         <Label htmlFor="transform-expr">Transform Expression</Label>
-        <Textarea
-          id="transform-expr"
-          className="mt-1 font-mono text-xs"
-          rows={6}
-          value={(node.data.expression as string) || ''}
-          onChange={(e) => updateData('expression', e.target.value)}
-          placeholder={'{\n  "summary": "{{nodes.llm_1.output}}",\n  "timestamp": "{{Date.now()}}"\n}'}
-        />
+        <div className="mt-1">
+          <CodeEditor
+            value={(node.data.expression as string) || ''}
+            onChange={(value) => updateData('expression', value)}
+            language="javascript"
+            height="140px"
+            placeholder={'{\n  "summary": "{{nodes.llm_1.output}}",\n  "timestamp": "{{Date.now()}}"\n}'}
+          />
+        </div>
         <p className="text-xs text-muted-foreground mt-1">
           JavaScript/template expression to transform input data. Result becomes this node's output.
         </p>
@@ -928,13 +932,15 @@ function LoopConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn
     <div className="space-y-3">
       <div>
         <Label>Iterable Expression</Label>
-        <Textarea
-          className="mt-1 font-mono text-xs"
-          placeholder="{{nodes.tool_1.output.items}}"
-          rows={3}
-          value={(node.data.iterableExpression as string) || ''}
-          onChange={(e) => updateData('iterableExpression', e.target.value)}
-        />
+        <div className="mt-1">
+          <CodeEditor
+            value={(node.data.iterableExpression as string) || ''}
+            onChange={(value) => updateData('iterableExpression', value)}
+            language="javascript"
+            height="80px"
+            placeholder="{{nodes.tool_1.output.items}}"
+          />
+        </div>
         <p className="text-xs text-muted-foreground mt-1">
           Template expression that resolves to an array. Use {'{{loop.item}}'} and {'{{loop.index}}'} in downstream nodes.
         </p>
