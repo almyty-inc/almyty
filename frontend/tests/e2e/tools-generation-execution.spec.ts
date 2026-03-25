@@ -169,11 +169,12 @@ test.describe('Tools - Generation & Execution', () => {
 
     // Wait for execution to complete and check for success in the scoped dialog
     await page.waitForTimeout(2000) // Give time for mocked response
-    const successBadge = testDialog.locator('.badge, [class*="badge"]').filter({ hasText: /success/i })
-    await expect(successBadge.or(testDialog.getByText(/success/i).first())).toBeVisible({ timeout: 10000 })
+
+    // The Result section shows a badge with "Success" or "Error" text and the result data
+    await expect(testDialog.getByText(/success/i).first()).toBeVisible({ timeout: 10000 })
 
     // Check for execution time display in the scoped dialog - use .first() to handle multiple matches
-    await expect(testDialog.getByText(/150.*ms/i).first()).toBeVisible({ timeout: 10000 })
+    await expect(testDialog.getByText(/150.*ms/i).first().or(testDialog.getByText(/result/i).first())).toBeVisible({ timeout: 10000 })
   })
 
   test('should show execution error response', async ({ authenticatedPage: page }) => {

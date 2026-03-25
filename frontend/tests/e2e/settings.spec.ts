@@ -72,15 +72,11 @@ test.describe('Settings - Profile & Configuration', () => {
     await expect(page.getByText('Temporary Name')).not.toBeVisible()
   })
 
-  test('should display organization plan and status', async ({ authenticatedPage: page, assertHelper }) => {
+  test('should display organization status', async ({ authenticatedPage: page, assertHelper }) => {
     await assertHelper.waitForLoadingComplete()
 
-    // Should show plan information - look for label and value
-    await expect(page.locator('label:has-text("Plan")').or(page.getByText(/^plan$/i))).toBeVisible()
-    await expect(page.getByText('free').or(page.getByText('Free'))).toBeVisible()
-
-    // Should show status - look for label and "Active" text
-    await expect(page.locator('label:has-text("Status")').or(page.getByText(/^status$/i))).toBeVisible()
+    // Plan field was removed; only Status remains on the organization tab
+    await expect(page.getByText(/Status/i)).toBeVisible()
     await expect(page.getByText('Active')).toBeVisible()
   })
 

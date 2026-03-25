@@ -34,20 +34,16 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/docs:latest,${{ env.REGISTRY }}/docs:${{ github.sha }}
 
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save DigitalOcean kubeconfig
+        run: doctl kubernetes cluster kubeconfig save ${{ secrets.DIGITALOCEAN_CLUSTER_NAME }}
+
       - name: Deploy to K8s
-        uses: steebchen/kubectl@v2.0.0
-        with:
-          config: ${{ secrets.KUBE_CONFIG_DATA }}
-          command: apply -f k8s/docs-deployment.yaml
-
-      - name: Restart docs pods
-        uses: steebchen/kubectl@v2.0.0
-        with:
-          config: ${{ secrets.KUBE_CONFIG_DATA }}
-          command: rollout restart deployment/docs -n almyty-staging
-
-      - name: Wait for rollout
-        uses: steebchen/kubectl@v2.0.0
-        with:
-          config: ${{ secrets.KUBE_CONFIG_DATA }}
-          command: rollout status deployment/docs -n almyty-staging --timeout=3m
+        run: |
+          kubectl apply -f k8s/docs-deployment.yaml
+          kubectl rollout restart deployment/docs -n almyty-staging
+          kubectl rollout status deployment/docs -n almyty-staging --timeout=3m
