@@ -11,7 +11,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         <div className="flex justify-center">
           <div className="flex items-center gap-2">
             <img src="/almyty-icon-48.svg" alt="almyty" className="w-10 h-10" />
-            <span className="text-2xl font-heading font-medium tracking-tight bg-gradient-to-r from-violet-500 via-violet-500 to-foreground/70 bg-clip-text text-transparent">almyty</span>
+            <span className="text-2xl font-heading font-medium tracking-tight text-foreground">almyty</span>
           </div>
         </div>
       </div>

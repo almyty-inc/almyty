@@ -127,7 +127,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="flex items-center justify-between h-14 px-4 border-b bg-gradient-to-br from-violet-500/5 to-cyan-400/5">
             <div className="flex items-center gap-2">
               <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8" />
-              <span className="text-xl font-heading font-medium tracking-tight bg-gradient-to-r from-violet-500 via-violet-500 to-foreground/70 bg-clip-text text-transparent">almyty</span>
+              <span className="text-xl font-heading font-medium tracking-tight text-foreground">almyty</span>
             </div>
             <Button
               variant="ghost"

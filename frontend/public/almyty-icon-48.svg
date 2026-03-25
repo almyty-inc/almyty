@@ -5,8 +5,9 @@
       <stop offset="100%" stop-color="#22d3ee"/>
     </linearGradient>
   </defs>
-  <rect width="48" height="48" rx="12" fill="#06060a"/>
-  <g transform="translate(12, 5) scale(1)">
+  <rect width="48" height="48" rx="12" fill="#111116"/>
+  <!-- Bolt centered: shape is 16w x 26h, center at (12,13). Canvas center 24,24. Offset: 24-12=12, 24-13=11 -->
+  <g transform="translate(12, 11)">
     <polygon
       points="10,0 20,0 12,12 19,12 6,26 12,12 4,12"
       fill="none"
