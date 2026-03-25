@@ -68,7 +68,7 @@ export function OrganizationsPage() {
       queryClient.invalidateQueries({ queryKey: ['organizations'] })
       success('Organization created', 'Your new organization has been created successfully.')
       setCreateDialogOpen(false)
-      setCurrentOrganization(response.data)
+      setCurrentOrganization(response)
     },
     onError: (err: any) => {
       error('Failed to create organization', err.response?.data?.message || 'Please try again.')

@@ -253,7 +253,7 @@ const response = await axios({
   data: ${httpConfig.body || 'parameters'},
   params: parameters
 });
-return response.data;
+return response;
 `;
       } else if (executionMethod === 'graphql') {
         code = `
@@ -263,7 +263,7 @@ const response = await axios.post('${graphqlConfig.endpoint}', {
   query: \`${graphqlConfig.query}\`,
   variables: parameters
 });
-return response.data;
+return response;
 `;
       } else if (executionMethod === 'soap') {
         code = `

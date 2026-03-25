@@ -86,7 +86,7 @@ export function ChatPage() {
     queryKey: ['llm-providers'],
     queryFn: async () => {
       const response = await llmProvidersApi.getAll()
-      const d = response.data
+      const d = response
       const result = d?.providers || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
@@ -98,7 +98,7 @@ export function ChatPage() {
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
       const response = await toolsApi.getAll(currentOrganization?.id)
-      const d = response.data
+      const d = response
       const result = d?.tools || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
@@ -189,7 +189,7 @@ export function ChatPage() {
         ...(selectedToolIds.length > 0 && { toolIds: selectedToolIds }),
       })
 
-      const data = response.data
+      const data = response
       const assistantMsg = data?.message
 
       if (assistantMsg) {
