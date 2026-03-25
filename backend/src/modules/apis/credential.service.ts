@@ -16,7 +16,12 @@ export interface CreateCredentialDto {
   name: string;
   description?: string;
   type: CredentialType;
-  config: Record<string, any>;
+  config?: Record<string, any>;
+  headerName?: string;
+  headerValue?: string;
+  username?: string;
+  password?: string;
+  token?: string;
   keyName?: string;
   keyLocation?: string;
   scopes?: string[];
@@ -57,11 +62,20 @@ export class CredentialService {
     if (!api) throw new NotFoundException('API not found');
     if (api.organizationId !== organizationId) throw new ForbiddenException('Access denied');
 
+    // Build config from DTO fields if not provided directly
+    const config = dto.config || {
+      ...(dto.headerName && { headerName: dto.headerName }),
+      ...(dto.headerValue && { headerValue: dto.headerValue }),
+      ...(dto.username && { username: dto.username }),
+      ...(dto.password && { password: dto.password }),
+      ...(dto.token && { token: dto.token }),
+    };
+
     const credential = this.credentialRepository.create({
       name: dto.name,
       description: dto.description,
       type: dto.type,
-      config: dto.config,
+      config: Object.keys(config).length > 0 ? config : { type: dto.type },
       keyName: dto.keyName,
       keyLocation: dto.keyLocation,
       scopes: dto.scopes,
