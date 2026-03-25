@@ -19,6 +19,8 @@ import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { CreateTeamDto } from './dto/create-team.dto';
+import { MailService } from '../mail/mail.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class OrganizationsService {
@@ -35,6 +37,7 @@ export class OrganizationsService {
     private userTeamRepository: Repository<UserTeam>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private readonly mailService: MailService,
   ) {}
 
   async create(createOrganizationDto: CreateOrganizationDto, ownerId: string): Promise<Organization> {
@@ -217,56 +220,155 @@ export class OrganizationsService {
     }));
   }
 
-  async inviteUser(organizationId: string, inviteUserDto: InviteUserDto, invitedBy: string): Promise<void> {
-    // Check if user exists
+  async inviteUser(organizationId: string, inviteUserDto: InviteUserDto, invitedBy: string): Promise<{ inviteSent: boolean }> {
+    const org = await this.organizationRepository.findOne({ where: { id: organizationId } });
+    if (!org) throw new NotFoundException('Organization not found');
+
+    const inviter = await this.userRepository.findOne({ where: { id: invitedBy } });
+    const inviterName = inviter ? `${inviter.firstName} ${inviter.lastName}`.trim() : 'A team member';
+
+    const inviteToken = crypto.randomBytes(32).toString('base64url');
+    const inviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Check if user already exists
     const user = await this.userRepository.findOne({
       where: { email: inviteUserDto.email },
     });
 
-    if (!user) {
-      // User doesn't exist yet - in a real app, we'd create a pending invitation
-      // For now, just log and return success (invitation would be sent via email)
-      this.logger.log(`Invitation sent to non-registered user: ${inviteUserDto.email}`);
-      // TODO: Implement pending invitations table and email sending
-      return;
-    }
+    if (user) {
+      // Check if already a member
+      const existingMembership = await this.userOrganizationRepository.findOne({
+        where: { userId: user.id, organizationId },
+      });
 
-    // Check if user is already a member
-    const existingMembership = await this.userOrganizationRepository.findOne({
-      where: {
-        userId: user.id,
-        organizationId,
-      },
-    });
-
-    if (existingMembership) {
-      if (existingMembership.isActive) {
-        throw new ConflictException('User is already a member of this organization');
-      } else {
-        // Reactivate existing membership
-        existingMembership.isActive = true;
+      if (existingMembership) {
+        if (existingMembership.isActive && existingMembership.inviteAccepted) {
+          throw new ConflictException('User is already a member of this organization');
+        }
+        // Update existing pending membership
         existingMembership.role = inviteUserDto.role;
         existingMembership.invitedBy = invitedBy;
-        existingMembership.permissions = inviteUserDto.permissions;
+        existingMembership.inviteToken = inviteToken;
+        existingMembership.inviteExpiresAt = inviteExpiresAt;
+        existingMembership.inviteAccepted = false;
+        existingMembership.isActive = true;
         await this.userOrganizationRepository.save(existingMembership);
-        return;
+      } else {
+        // Create membership for existing user (pending acceptance)
+        const membership = this.userOrganizationRepository.create({
+          userId: user.id,
+          organizationId,
+          role: inviteUserDto.role,
+          invitedBy,
+          inviteToken,
+          inviteExpiresAt,
+          inviteAccepted: false,
+          isActive: true,
+        });
+        await this.userOrganizationRepository.save(membership);
       }
+
+      // Send invite email to existing user
+      const emailSent = await this.mailService.sendInvitation({
+        to: inviteUserDto.email,
+        organizationName: org.name,
+        inviterName,
+        role: inviteUserDto.role,
+        inviteToken,
+        isNewUser: false,
+      });
+
+      return { inviteSent: emailSent };
     }
 
-    // Create new membership
+    // User doesn't exist — create a placeholder membership with no userId
+    // Store invite data so when user registers, we can match by token
+    // We use a temporary placeholder user approach: store email in inviteToken metadata
     const membership = this.userOrganizationRepository.create({
-      userId: user.id,
+      userId: invitedBy, // temporary — will be reassigned on accept
       organizationId,
       role: inviteUserDto.role,
       invitedBy,
-      permissions: inviteUserDto.permissions,
-      isActive: true,
-      inviteAccepted: false, // User needs to accept invitation
+      inviteToken,
+      inviteExpiresAt,
+      inviteAccepted: false,
+      isActive: false, // not active until accepted
+      permissions: [inviteUserDto.email], // store email in permissions temporarily
     });
-
     await this.userOrganizationRepository.save(membership);
 
-    // TODO: Send invitation email
+    // Send invite email to new user
+    const emailSent = await this.mailService.sendInvitation({
+      to: inviteUserDto.email,
+      organizationName: org.name,
+      inviterName,
+      role: inviteUserDto.role,
+      inviteToken,
+      isNewUser: true,
+    });
+
+    this.logger.log(`Invitation sent to new user: ${inviteUserDto.email} (token: ${inviteToken.substring(0, 8)}...)`);
+    return { inviteSent: emailSent };
+  }
+
+  async acceptInvite(token: string, userId: string): Promise<{ organizationId: string; organizationName: string }> {
+    const membership = await this.userOrganizationRepository.findOne({
+      where: { inviteToken: token },
+      relations: ['organization'],
+    });
+
+    if (!membership) {
+      throw new NotFoundException('Invalid or expired invitation');
+    }
+
+    if (membership.inviteExpiresAt && membership.inviteExpiresAt < new Date()) {
+      throw new BadRequestException('Invitation has expired');
+    }
+
+    if (membership.inviteAccepted) {
+      throw new ConflictException('Invitation has already been accepted');
+    }
+
+    // If this was a new-user invite, reassign the membership to the actual user
+    if (!membership.isActive) {
+      membership.userId = userId;
+      membership.isActive = true;
+      membership.permissions = null; // clear the temporary email storage
+    }
+
+    membership.inviteAccepted = true;
+    membership.inviteToken = null; // one-time use
+    await this.userOrganizationRepository.save(membership);
+
+    return {
+      organizationId: membership.organizationId,
+      organizationName: membership.organization?.name || 'Organization',
+    };
+  }
+
+  async getInviteDetails(token: string): Promise<{ organizationName: string; role: string; email: string; isExpired: boolean }> {
+    const membership = await this.userOrganizationRepository.findOne({
+      where: { inviteToken: token },
+      relations: ['organization'],
+    });
+
+    if (!membership) {
+      throw new NotFoundException('Invalid invitation');
+    }
+
+    const isExpired = membership.inviteExpiresAt ? membership.inviteExpiresAt < new Date() : false;
+
+    // For new-user invites, email is stored in permissions array temporarily
+    const email = !membership.isActive && membership.permissions?.length
+      ? membership.permissions[0]
+      : '';
+
+    return {
+      organizationName: membership.organization?.name || 'Organization',
+      role: membership.role,
+      email,
+      isExpired,
+    };
   }
 
   async removeMember(organizationId: string, userId: string): Promise<void> {

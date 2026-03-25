@@ -50,6 +50,7 @@ import { HealthModule } from './modules/health/health.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { AgentsModule } from './modules/agents/agents.module';
 import { UnifiedEndpointModule } from './modules/gateways/unified-endpoint.module';
+import { MailModule } from './modules/mail/mail.module';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -168,6 +169,7 @@ import { databaseConfig } from './config/database.config';
     PluginsModule,
     MonitoringModule,
     HealthModule,
+    MailModule,
     AgentsModule,
     // MUST be last — wildcard /:orgSlug/:resourceSlug catches everything
     UnifiedEndpointModule,

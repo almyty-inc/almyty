@@ -76,6 +76,7 @@
     "protobufjs": "^7.2.6",
     "redis": "^4.6.13",
     "reflect-metadata": "^0.2.1",
+    "resend": "^6.9.4",
     "rxjs": "^7.8.1",
     "soap": "^1.6.0",
     "sqlite3": "^5.1.7",
