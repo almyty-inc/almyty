@@ -13,6 +13,8 @@ import {
   Menu,
   X,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Router,
   Activity,
   Bot,
@@ -58,7 +60,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const navigate = useNavigate()
   const { user, isAuthenticated, logout, hasHydrated } = useAuthStore()
   const { currentOrganization, organizations, setCurrentOrganization, fetchOrganizations } = useOrganizationStore()
-  const { sidebarOpen, setSidebarOpen, toggleSidebar } = useAppStore()
+  const { sidebarOpen, setSidebarOpen, toggleSidebar, sidebarCollapsed, toggleSidebarCollapse } = useAppStore()
   const [darkMode, setDarkMode] = useState(() => {
     // Dark is the default; only light if explicitly stored
     return localStorage.getItem('theme') !== 'light'
@@ -117,29 +119,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Sidebar */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-card border-r transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
+          "fixed inset-y-0 left-0 z-50 bg-card border-r transform transition-all duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
+          sidebarCollapsed ? "w-16" : "w-64",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between h-14 px-4 border-b bg-gradient-to-br from-violet-500/5 to-cyan-400/5">
+          <div className={cn("flex items-center h-14 border-b", sidebarCollapsed ? "justify-center px-2" : "justify-between px-4")}>
             <div className="flex items-center gap-2">
-              <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8" />
-              <span className="text-xl font-heading font-medium tracking-tight text-foreground">almyty</span>
+              <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8 shrink-0" />
+              {!sidebarCollapsed && <span className="text-xl font-heading font-medium tracking-tight text-foreground">almyty</span>}
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden"
-              onClick={() => setSidebarOpen(false)}
-            >
-              <X className="h-6 w-6" />
-            </Button>
+            {!sidebarCollapsed && (
+              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
+                <X className="h-6 w-6" />
+              </Button>
+            )}
           </div>
 
           {/* Organization Selector */}
-          {currentOrganization && (
+          {currentOrganization && !sidebarCollapsed && (
             <div className="p-4 border-b">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -181,47 +181,65 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           )}
 
           {/* Navigation */}
-          <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto" aria-label="Main navigation">
+          <nav className={cn("flex-1 py-4 space-y-1 overflow-y-auto", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation">
             {navigation.map((item) => {
-              const isActive = location.pathname === item.href
+              const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/')
               return (
                 <Link
                   key={item.name}
                   to={item.href}
+                  title={sidebarCollapsed ? item.name : undefined}
                   className={cn(
-                    "group flex items-center px-3 py-1.5 text-[13px] rounded-md transition-colors",
+                    "group flex items-center rounded-md transition-colors",
+                    sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-1.5 text-[13px]",
                     isActive
-                      ? "bg-gradient-to-r from-primary/10 to-primary/5 text-primary border-l-2 border-primary font-medium"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground border-l-2 border-transparent"
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
                   )}
                 >
                   <item.icon
                     className={cn(
-                      "mr-3 flex-shrink-0 h-5 w-5",
+                      "flex-shrink-0 h-5 w-5",
+                      !sidebarCollapsed && "mr-3",
                       isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
                     )}
                   />
-                  {item.name}
+                  {!sidebarCollapsed && item.name}
                 </Link>
               )
             })}
           </nav>
 
+          {/* Collapse toggle — desktop only */}
+          <div className="hidden lg:flex justify-end px-2 py-2 border-t">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleSidebarCollapse}
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </Button>
+          </div>
+
           {/* User Menu */}
-          <div className="flex-shrink-0 border-t p-4">
+          <div className={cn("flex-shrink-0 border-t", sidebarCollapsed ? "p-2" : "p-4")}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="w-full justify-start p-2" aria-label="User menu">
-                  <Avatar className="h-8 w-8 mr-3">
+                <Button variant="ghost" className={cn("w-full p-2", sidebarCollapsed ? "justify-center" : "justify-start")} aria-label="User menu">
+                  <Avatar className={cn("h-8 w-8", !sidebarCollapsed && "mr-3")}>
                     <AvatarImage src={user?.avatar} />
                     <AvatarFallback>
                       {user?.name ? getInitials(user.name) : 'U'}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="text-left truncate">
-                    <p className="text-sm font-medium text-foreground truncate">{user?.name || user?.email}</p>
-                    {user?.name && <p className="text-xs text-muted-foreground truncate">{user?.email}</p>}
-                  </div>
+                  {!sidebarCollapsed && (
+                    <div className="text-left truncate">
+                      <p className="text-sm font-medium text-foreground truncate">{user?.name || user?.email}</p>
+                      {user?.name && <p className="text-xs text-muted-foreground truncate">{user?.email}</p>}
+                    </div>
+                  )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
