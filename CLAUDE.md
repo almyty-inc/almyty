@@ -141,7 +141,8 @@ docker build --target production -t almyty-frontend ./frontend
 - ⚡ emoji is a community brand character (README, changelogs, social). Never in formal docs or the SVG logo.
 - Logo: hollow ⚡ polygon, thin circuit strokes (1.5px) + node dots, violet→cyan gradient. Never filled solid.
 - Primary: violet-500 `#8b5cf6` (dark) / violet-600 `#7C3AED` (light)
-- Accent: cyan-400 `#22d3ee` (dark) / cyan-600 `#0891B2` (light)
+- Cyan accent: use `cyan-400` `#22d3ee` (dark) / `cyan-600` `#0891B2` (light) — Tailwind class `cyan-*`, NOT `accent-*`
+- shadcn `--accent` = neutral zinc (for hover states). Never set to cyan.
 - Fonts: Manrope (headings + logo), DM Sans (body), JetBrains Mono (code). All Google Fonts, SIL OFL.
 - Dark bg: `#09090b` / Card: `#18181b` / Muted: `#27272a`
 - Light bg: `#FFFFFF` / Muted: `#F4F4F5` / Border: `#E4E4E7`
