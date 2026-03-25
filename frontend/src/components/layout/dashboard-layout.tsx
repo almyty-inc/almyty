@@ -19,7 +19,6 @@ import {
   MessageSquare,
   Sun,
   Moon,
-  BookOpen,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -49,9 +48,8 @@ const navigation = [
   { name: 'Tools', href: '/tools', icon: Wrench },
   { name: 'Gateways', href: '/gateways', icon: Zap },
   { name: 'Agents', href: '/agents', icon: Bot },
-  { name: 'AI Models', href: '/llm-providers', icon: Brain },
+  { name: 'Models', href: '/llm-providers', icon: Brain },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'Docs', href: '/docs', icon: BookOpen },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -68,10 +66,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   useEffect(() => {
     if (darkMode) {
+      document.documentElement.classList.add('dark')
       document.documentElement.classList.remove('light')
       localStorage.setItem('theme', 'dark')
     } else {
-      document.documentElement.classList.add('light')
+      document.documentElement.classList.remove('dark')
       localStorage.setItem('theme', 'light')
     }
   }, [darkMode])

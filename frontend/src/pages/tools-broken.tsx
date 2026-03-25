@@ -409,7 +409,7 @@ const mockTools: Tool[] = [
 
 const statusColors = {
   active: 'bg-green-500',
-  inactive: 'bg-gray-500',
+  inactive: 'bg-zinc-500',
   error: 'bg-red-500',
   testing: 'bg-yellow-500'
 }
@@ -572,7 +572,7 @@ export function ToolsPage() {
         return (
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${statusColors[tool.status] || 'bg-gray-400'}`} />
+              <div className={`w-2 h-2 rounded-full ${statusColors[tool.status] || 'bg-zinc-400'}`} />
               <Icon className="h-4 w-4 text-muted-foreground" />
             </div>
             <div>
@@ -605,7 +605,7 @@ export function ToolsPage() {
         const status = row.getValue('status') as string
         const colors = {
           active: 'bg-green-100 text-green-800',
-          inactive: 'bg-gray-100 text-gray-800',
+          inactive: 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200',
           error: 'bg-red-100 text-red-800',
           testing: 'bg-yellow-100 text-yellow-800'
         }

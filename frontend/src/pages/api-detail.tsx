@@ -300,7 +300,7 @@ function ApiCredentialsSection({ apiId, apiName }: { apiId: string; apiName: str
         ) : (
           <div className="space-y-2">
             {credentials.map((cred: ApiCredential) => (
-              <div key={cred.id} className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg">
+              <div key={cred.id} className="flex items-center justify-between px-3 py-2 bg-muted rounded-lg">
                 <div className="flex items-center gap-3">
                   <Key className="h-4 w-4 text-muted-foreground" />
                   <Badge variant="outline">{CREDENTIAL_TYPE_LABELS[cred.type] || cred.type}</Badge>
@@ -700,7 +700,7 @@ export function ApiDetailPage() {
                   {testResults.success ? 'Success' : 'Failed'}
                 </Badge>
               </div>
-              <pre className="p-4 text-sm font-mono bg-muted/50 rounded-md overflow-auto max-h-96">
+              <pre className="p-4 text-sm font-mono bg-muted rounded-md overflow-auto max-h-96">
                 {(() => {
                   try {
                     const data = typeof testResults === 'string' ? JSON.parse(testResults) : testResults
@@ -786,7 +786,7 @@ export function ApiDetailPage() {
                 .map((operation: ApiOperation) => (
                 <div
                   key={operation.id}
-                  className="flex items-center justify-between p-4 border rounded hover:bg-muted/50 cursor-pointer group"
+                  className="flex items-center justify-between p-4 border rounded hover:bg-muted cursor-pointer group"
                   onClick={() => setSelectedOperation(operation)}
                 >
                   <div className="flex items-center space-x-3 flex-1">

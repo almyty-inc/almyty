@@ -206,7 +206,7 @@ export function DataTable<TData, TValue>({
                     if (interactive) return
                     onRowClick?.(row.original)
                   }}
-                  className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
+                  className={onRowClick ? "cursor-pointer hover:bg-muted" : ""}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>

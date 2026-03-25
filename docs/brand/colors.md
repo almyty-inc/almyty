@@ -1,140 +1,154 @@
 # Almyty Color System
 
-## Primary: Violet
+## Violet (primary brand color)
 
 | Step | Hex | Tailwind | Usage |
 |------|-----|----------|-------|
-| 50 | #f5f3ff | violet-50 | Tinted backgrounds (light) |
-| 100 | #ede9fe | violet-100 | Hover states (light) |
+| 50 | #f5f3ff | violet-50 | Tinted bg (light) |
+| 100 | #ede9fe | violet-100 | Badge bg (light), hover bg (light) |
 | 200 | #ddd6fe | violet-200 | |
-| 300 | #c4b5fd | violet-300 | Icon node fills, badge text (dark) |
-| 400 | #a78bfa | violet-400 | Top node fill |
-| 500 | #8b5cf6 | violet-500 | **Primary brand color (dark theme)** |
-| 600 | #7c3aed | violet-600 | Hover state (dark) |
-| 700 | #6d28d9 | violet-700 | **Primary brand color (light theme)** |
+| 300 | #c4b5fd | violet-300 | Badge text (dark), logo node fill |
+| 400 | #a78bfa | violet-400 | Logo top node fill |
+| 500 | #8b5cf6 | violet-500 | **PRIMARY (dark)** — buttons, links, focus rings |
+| 600 | #7c3aed | violet-600 | **PRIMARY (light)** |
+| 700 | #6d28d9 | violet-700 | Badge text (light), hover state (dark) |
 | 800 | #5b21b6 | violet-800 | |
 | 900 | #4c1d95 | violet-900 | |
 
-## Secondary: Cyan
+## Cyan (accent)
 
 | Step | Hex | Tailwind | Usage |
 |------|-----|----------|-------|
-| 50 | #ecfeff | cyan-50 | Tinted backgrounds (light) |
-| 100 | #cffafe | cyan-100 | |
+| 50 | #ecfeff | cyan-50 | Tinted bg (light) |
+| 100 | #cffafe | cyan-100 | Badge bg (light) |
 | 200 | #a5f3fc | cyan-200 | |
 | 300 | #67e8f9 | cyan-300 | Badge text (dark) |
-| 400 | #22d3ee | cyan-400 | **Accent color (dark theme)** |
+| 400 | #22d3ee | cyan-400 | **ACCENT (dark)** — highlights, badges, hover |
 | 500 | #06b6d4 | cyan-500 | |
-| 600 | #0891b2 | cyan-600 | |
-| 700 | #0e7490 | cyan-700 | **Accent color (light theme)** |
+| 600 | #0891b2 | cyan-600 | **ACCENT (light)** |
+| 700 | #0e7490 | cyan-700 | Badge text (light) |
 | 800 | #155e75 | cyan-800 | |
 | 900 | #164e63 | cyan-900 | |
 
+## Dark Theme Surfaces (zinc scale)
+
+Every layer MUST be clearly distinguishable.
+
+| Token | Hex | Zinc | Usage |
+|-------|-----|------|-------|
+| Background | #09090b | zinc-950 | Page bg, deepest layer |
+| Card | #18181b | zinc-900 | Cards, panels, popovers |
+| Muted | #27272a | zinc-800 | Recessed areas, code blocks, borders |
+| Elevated | #3f3f46 | zinc-700 | Hover states, input borders, toggle off |
+| Mid | #52525b | zinc-600 | Secondary text (light mode) |
+| Subtle | #71717A | zinc-500 | Muted text, placeholders |
+| Secondary | #A1A1AA | zinc-400 | Description text, labels |
+| Primary text | #FAFAFA | zinc-50 | Body text, headings |
+
+## Light Theme Surfaces
+
+| Token | Hex | Zinc | Usage |
+|-------|-----|------|-------|
+| Background | #FFFFFF | white | Page bg |
+| Card | #FFFFFF | white | Bordered, not tinted |
+| Muted | #F4F4F5 | zinc-100 | Recessed areas, code blocks |
+| Border | #E4E4E7 | zinc-200 | Card borders, dividers |
+| Input border | #D4D4D8 | zinc-300 | Inputs need more contrast than cards |
+| Secondary text | #52525b | zinc-600 | |
+| Muted text | #71717A | zinc-500 | |
+| Primary text | #09090b | zinc-950 | |
+
 ## Semantic Colors
 
-| Role | Dark | Light | Usage |
-|------|------|-------|-------|
-| Primary | #8b5cf6 | #6d28d9 | Buttons, links, focus rings |
-| Secondary | #22d3ee | #0e7490 | Accents, badges, code highlights |
-| Success | #10b981 | #059669 | Connected, healthy, passing |
-| Warning | #f59e0b | #d97706 | Degraded, pending |
-| Destructive | #f43f5e | #e11d48 | Errors, delete, disconnected |
+| Role | Dark | Light |
+|------|------|-------|
+| Primary | #8b5cf6 | #7C3AED |
+| Accent | #22d3ee | #0891B2 |
+| Success | #22c55e | #16a34a |
+| Warning | #eab308 | #ca8a04 |
+| Destructive | #EF4444 | #DC2626 |
 
-## Dark Theme Neutrals
+## Protocol Badge Colors
 
-| Token | Hex | Usage |
-|-------|-----|-------|
-| Background | #06060a | Page background |
-| Surface | #0a0a0e | Cards, popovers |
-| Card | #111116 | Elevated cards |
-| Border | #141418 | Borders, dividers |
-| Elevated | #1a1a20 | Inputs, elevated surfaces |
-| Muted text | #555555 | Disabled, placeholder |
-| Secondary text | #888888 | Labels, captions |
-| Primary text | #d4d4d4 | Body text |
-
-## Light Theme Neutrals
-
-| Token | Hex | Usage |
-|-------|-----|-------|
-| Background | #f4f2ee | Page background |
-| Surface | #ffffff | Cards |
-| Border | #e0ddd8 | Borders, dividers |
-| Muted text | #666666 | Disabled, placeholder |
-| Primary text | #1a1816 | Body text |
+| Protocol | Dark bg | Dark text | Light bg | Light text |
+|----------|---------|-----------|----------|------------|
+| MCP | violet-500/20 | violet-300 | violet-100 | violet-700 |
+| A2A | cyan-500/20 | cyan-300 | cyan-100 | cyan-700 |
+| UTCP | emerald-500/20 | emerald-300 | emerald-100 | emerald-700 |
+| SOAP | amber-500/20 | amber-300 | amber-100 | amber-700 |
+| GraphQL | rose-500/20 | rose-300 | rose-100 | rose-700 |
+| REST | blue-500/20 | blue-300 | blue-100 | blue-700 |
 
 ## Gradients
 
 ```css
-/* Icon gradient — vertical */
-linear-gradient(180deg, #8b5cf6 0%, #22d3ee 100%)
+/* Primary CTA — one per page max */
+.btn-gradient {
+  background: linear-gradient(135deg, #8b5cf6 0%, #22d3ee 100%);
+}
 
-/* Wordmark gradient — dark mode */
-linear-gradient(90deg, #8b5cf6 0%, #8b5cf6 35%, #d4d4d4 100%)
+/* Text gradient — hero headings, logo */
+.text-gradient {
+  background: linear-gradient(135deg, #8b5cf6 0%, #22d3ee 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 
-/* Wordmark gradient — light mode */
-linear-gradient(90deg, #6d28d9 0%, #6d28d9 35%, #1a1a1a 100%)
-
-/* Background accent (hero sections) */
-linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(34,211,238,0.06) 100%)
-```
-
-## Protocol Badge Colors
-
-| Protocol | Tailwind bg | Tailwind text |
-|----------|-------------|---------------|
-| MCP | violet-500/20 | violet-300 |
-| A2A | cyan-500/20 | cyan-300 |
-| UTCP | emerald-500/20 | emerald-300 |
-| SOAP | amber-500/20 | amber-300 |
-| GraphQL | rose-500/20 | rose-300 |
-| REST | blue-500/20 | blue-300 |
-
-## shadcn/ui CSS Variables
-
-### Dark (default)
-
-```css
-:root {
-  --background: 240 20% 3.5%;
-  --foreground: 0 0% 83%;
-  --card: 240 18% 5%;
-  --card-foreground: 0 0% 83%;
-  --popover: 240 18% 5%;
-  --popover-foreground: 0 0% 83%;
-  --primary: 262 83% 66%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 187 86% 53%;
-  --secondary-foreground: 0 0% 3%;
-  --muted: 240 10% 10%;
-  --muted-foreground: 0 0% 53%;
-  --accent: 187 86% 53%;
-  --accent-foreground: 0 0% 3%;
-  --destructive: 350 89% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 240 10% 10%;
-  --input: 240 10% 12%;
-  --ring: 262 83% 66%;
-  --radius: 0.5rem;
+/* Sidebar active border */
+.sidebar-active {
+  border-left: 2px solid transparent;
+  border-image: linear-gradient(to bottom, #8b5cf6, #22d3ee) 1;
 }
 ```
 
-### Light
+Gradient rules:
+- DO: Primary CTA (one per page), hero headings, sidebar active, progress bars, logo
+- DON'T: Secondary buttons, form submits, table actions, repeated elements
+
+## Component Contrast Rules
+
+**Toggles:** Off = zinc-700 dark, zinc-200 light. On = violet-500. Thumb = white.
+
+**Cards:** Visible border using --border. Card bg (#18181b) clearly different from page bg (#09090b).
+
+**Text:** Description = zinc-400 (#A1A1AA) dark minimum. Never darker than zinc-500.
+
+**Inputs:** Border --input (zinc-700 dark, zinc-300 light). Focus = violet ring. Placeholder = zinc-500 minimum.
+
+**Buttons:** Primary = solid violet-500, white text. Outline = zinc-800 border dark. Ghost = no bg, violet on hover.
+
+## CSS Variables
+
+### Light (`:root`)
 
 ```css
-.light {
-  --background: 30 20% 95%;
-  --foreground: 30 10% 10%;
-  --card: 0 0% 100%;
-  --card-foreground: 30 10% 10%;
-  --primary: 263 70% 50%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 189 82% 31%;
-  --secondary-foreground: 0 0% 100%;
-  --muted: 30 10% 90%;
-  --muted-foreground: 0 0% 40%;
-  --border: 30 10% 88%;
-  --input: 30 10% 88%;
-  --ring: 263 70% 50%;
-}
+--background: 0 0% 100%;
+--foreground: 240 6% 3%;
+--card: 0 0% 100%;
+--primary: 262 83% 58%;
+--secondary: 240 5% 96%;
+--muted: 240 5% 96%;
+--muted-foreground: 240 4% 46%;
+--accent: 189 82% 37%;
+--destructive: 0 72% 51%;
+--border: 240 6% 90%;
+--input: 240 5% 84%;
+--ring: 262 83% 58%;
+```
+
+### Dark (`.dark`)
+
+```css
+--background: 240 6% 3%;
+--foreground: 0 0% 98%;
+--card: 240 6% 10%;
+--primary: 262 83% 66%;
+--secondary: 240 5% 17%;
+--muted: 240 5% 17%;
+--muted-foreground: 240 4% 64%;
+--accent: 187 86% 53%;
+--destructive: 0 84% 60%;
+--border: 240 5% 17%;
+--input: 240 4% 26%;
+--ring: 262 83% 66%;
 ```
