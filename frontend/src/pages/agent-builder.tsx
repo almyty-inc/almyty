@@ -456,7 +456,7 @@ export function AgentBuilderPage() {
             onChange={(e) => setAgentName(e.target.value)}
             placeholder="Agent name"
           />
-          <Badge variant={agentStatus === 'active' ? 'default' : agentStatus === 'error' ? 'destructive' : 'outline'} className="hidden sm:inline-flex">
+          <Badge variant={agentStatus === 'active' ? 'success' : agentStatus === 'error' ? 'destructive' : 'outline'} className="hidden sm:inline-flex">
             {agentStatus}
           </Badge>
         </div>

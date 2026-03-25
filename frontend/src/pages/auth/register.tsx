@@ -148,9 +148,9 @@ export function RegisterPage() {
               onClick={() => setShowPassword(!showPassword)}
             >
               {showPassword ? (
-                <EyeOff className="h-4 w-4 text-gray-400" />
+                <EyeOff className="h-4 w-4 text-muted-foreground" />
               ) : (
-                <Eye className="h-4 w-4 text-gray-400" />
+                <Eye className="h-4 w-4 text-muted-foreground" />
               )}
             </button>
             {errors.password && (
@@ -176,9 +176,9 @@ export function RegisterPage() {
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
             >
               {showConfirmPassword ? (
-                <EyeOff className="h-4 w-4 text-gray-400" />
+                <EyeOff className="h-4 w-4 text-muted-foreground" />
               ) : (
-                <Eye className="h-4 w-4 text-gray-400" />
+                <Eye className="h-4 w-4 text-muted-foreground" />
               )}
             </button>
             {errors.confirmPassword && (
@@ -192,9 +192,9 @@ export function RegisterPage() {
             id="terms"
             type="checkbox"
             {...register('terms')}
-            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+            className="h-4 w-4 text-primary focus:ring-primary border-border rounded"
           />
-          <Label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
+          <Label htmlFor="terms" className="ml-2 block text-sm text-foreground">
             I agree to the{' '}
             <a href="#" className="text-primary hover:text-primary/80">
               Terms of Service
@@ -223,15 +223,15 @@ export function RegisterPage() {
       <div className="mt-6">
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300" />
+            <div className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">Or continue with</span>
+            <span className="px-2 bg-card text-muted-foreground">Or continue with</span>
           </div>
         </div>
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted-foreground">
             Already have an account?{' '}
             <Link
               to="/login"

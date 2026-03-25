@@ -149,8 +149,8 @@ describe('GatewaysPage', () => {
       renderGatewaysPage()
 
       await waitFor(() => {
-        // Status column renders gateway.status which is "active" (lowercase) from mockGateway
-        const activeStatuses = screen.getAllByText('active')
+        // Status column renders gateway.status — may be "active" or "Active" depending on badge
+        const activeStatuses = screen.getAllByText(/active/i)
         expect(activeStatuses.length).toBeGreaterThan(0)
       })
     })

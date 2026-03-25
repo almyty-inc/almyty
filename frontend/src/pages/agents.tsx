@@ -68,8 +68,8 @@ interface AgentTemplate {
   }
 }
 
-const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  active: 'default',
+const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success'> = {
+  active: 'success',
   draft: 'outline',
   inactive: 'secondary',
   error: 'destructive',

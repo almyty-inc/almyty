@@ -17,7 +17,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-card py-8 px-4 shadow sm:rounded-lg sm:px-10">
+        <div className="bg-card py-8 px-4 shadow sm:rounded-lg sm:px-10 border-t-2 border-t-violet-500/30">
           {children}
         </div>
       </div>
