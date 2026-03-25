@@ -13,13 +13,13 @@ It allows agents to:
 - Send tasks to remote agents
 - Receive structured results
 
-apifai A2A gateways expose your tools as agent capabilities that other
+almyty A2A gateways expose your tools as agent capabilities that other
 A2A-compatible agents can invoke.
 
 ## Creating an A2A Gateway
 
 ```bash
-curl -X POST https://api.apif.ai/gateways \
+curl -X POST https://api.almyty.com/gateways \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -40,7 +40,7 @@ curl -X POST https://api.apif.ai/gateways \
 Every A2A gateway automatically generates an Agent Card at:
 
 ```
-https://api.apif.ai/a2a/{org-slug}{endpoint}/.well-known/agent.json
+https://api.almyty.com/a2a/{org-slug}{endpoint}/.well-known/agent.json
 ```
 
 The Agent Card describes the agent's capabilities:
@@ -49,7 +49,7 @@ The Agent Card describes the agent's capabilities:
 {
   "name": "My A2A Agent",
   "description": "Tools exposed via A2A protocol",
-  "url": "https://api.apif.ai/a2a/acme/my-agent",
+  "url": "https://api.almyty.com/a2a/acme/my-agent",
   "version": "1.0.0",
   "capabilities": {
     "streaming": false,
@@ -70,7 +70,7 @@ The Agent Card describes the agent's capabilities:
 Other agents send tasks to your A2A gateway:
 
 ```bash
-curl -X POST https://api.apif.ai/a2a/acme/my-agent \
+curl -X POST https://api.almyty.com/a2a/acme/my-agent \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",

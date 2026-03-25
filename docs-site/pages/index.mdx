@@ -1,6 +1,6 @@
-# Getting Started with apifai
+# Getting Started with almyty
 
-apifai is a universal API-to-AI tool gateway. It parses API schemas (OpenAPI, GraphQL, SOAP, Protobuf),
+almyty is a universal API-to-AI tool gateway. It parses API schemas (OpenAPI, GraphQL, SOAP, Protobuf),
 auto-generates tools, and serves them via MCP, UTCP, A2A, and Agent Skills protocols. You can also
 create custom tools manually using HTTP, JavaScript, GraphQL, or LLM-powered definitions.
 
@@ -8,8 +8,8 @@ create custom tools manually using HTTP, JavaScript, GraphQL, or LLM-powered def
 
 ### 1. Create an Account
 
-Sign up at [app.apif.ai](https://app.apif.ai) and create your first organization.
-Every resource in apifai belongs to an organization, enabling multi-tenant collaboration.
+Sign up at [app.almyty.com](https://app.almyty.com) and create your first organization.
+Every resource in almyty belongs to an organization, enabling multi-tenant collaboration.
 
 ### 2. Connect an API
 
@@ -24,7 +24,7 @@ Navigate to **APIs** and click **Connect API**. Provide:
 
 ```bash
 # Example: connecting via the API
-curl -X POST https://api.apif.ai/apis \
+curl -X POST https://api.almyty.com/apis \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -37,7 +37,7 @@ curl -X POST https://api.apif.ai/apis \
 ### 3. Import a Schema
 
 After connecting, import the API schema to discover operations automatically.
-apifai supports:
+almyty supports:
 
 - **OpenAPI 3.x** — JSON or YAML
 - **GraphQL** — introspection or SDL files
@@ -47,7 +47,7 @@ apifai supports:
 You can paste the schema content directly, provide a URL, or upload a file.
 
 ```bash
-curl -X POST https://api.apif.ai/apis/{id}/import-schema \
+curl -X POST https://api.almyty.com/apis/{id}/import-schema \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -78,7 +78,7 @@ Gateways expose your tools to AI agents via different protocols.
 | **Skills** | SKILL.md files for agent skill injection |
 
 ```bash
-curl -X POST https://api.apif.ai/gateways \
+curl -X POST https://api.almyty.com/gateways \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -93,7 +93,7 @@ curl -X POST https://api.apif.ai/gateways \
 After creating a gateway, assign tools to control which operations are exposed:
 
 ```bash
-curl -X POST https://api.apif.ai/gateways/{gatewayId}/tools/bulk \
+curl -X POST https://api.almyty.com/gateways/{gatewayId}/tools/bulk \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "toolIds": ["tool-1", "tool-2"] }'
@@ -107,7 +107,7 @@ Point your AI agent at the gateway endpoint:
 {
   "mcpServers": {
     "my-tools": {
-      "url": "https://api.apif.ai/mcp/my-org/my-tools"
+      "url": "https://api.almyty.com/mcp/my-org/my-tools"
     }
   }
 }

@@ -1,7 +1,7 @@
 {
-  "name": "apifai",
+  "name": "almyty",
   "version": "1.0.0",
-  "description": "apifai - Universal API to AI Tool Gateway System",
+  "description": "almyty - Universal API to AI Tool Gateway System",
   "main": "index.js",
   "scripts": {
     "backend:install": "cd backend && npm install",
@@ -37,7 +37,7 @@
     "seed": "cd backend && npm run seed"
   },
   "keywords": [
-    "apifai",
+    "almyty",
     "api",
     "ai",
     "gateway",
@@ -60,6 +60,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/frane/apifai.git"
+    "url": "https://github.com/frane/almyty.git"
   }
 }

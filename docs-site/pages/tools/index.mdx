@@ -1,13 +1,13 @@
 # Tools
 
-Tools are the core building blocks of apifai. Each tool represents a single
+Tools are the core building blocks of almyty. Each tool represents a single
 callable action — an API endpoint, a JavaScript function, a GraphQL query,
 or an LLM-powered operation. Tools are what AI agents actually invoke when
 they need to interact with the outside world.
 
 ## Tool Types
 
-apifai supports five tool types:
+almyty supports five tool types:
 
 | Type | Source | Description |
 |------|--------|-------------|
@@ -19,7 +19,7 @@ apifai supports five tool types:
 
 ## Auto-Generated Tools
 
-When you import an API schema, apifai parses each operation and creates a tool:
+When you import an API schema, almyty parses each operation and creates a tool:
 
 - **OpenAPI** — Each path + method combination becomes a tool
 - **GraphQL** — Each query and mutation becomes a tool
@@ -45,7 +45,7 @@ Auto-generated tools include:
 ## Listing Tools
 
 ```bash
-curl https://api.apif.ai/organizations/{orgId}/tools \
+curl https://api.almyty.com/organizations/{orgId}/tools \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -80,7 +80,7 @@ Response:
 ## Executing a Tool
 
 ```bash
-curl -X POST https://api.apif.ai/organizations/{orgId}/tools/{toolId}/execute \
+curl -X POST https://api.almyty.com/organizations/{orgId}/tools/{toolId}/execute \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -107,7 +107,7 @@ Response:
 ## Deleting a Tool
 
 ```bash
-curl -X DELETE https://api.apif.ai/tools/{toolId} \
+curl -X DELETE https://api.almyty.com/tools/{toolId} \
   -H "Authorization: Bearer $TOKEN"
 ```
 

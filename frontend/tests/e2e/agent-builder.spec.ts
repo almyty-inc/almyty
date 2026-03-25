@@ -8,7 +8,7 @@ import { AuthHelper } from './helpers/auth.helper'
  * through the browser UI. They require a running staging environment
  * (backend + frontend) and use the test account from CLAUDE.md.
  *
- * Run with: E2E_API_URL=https://api.staging.almyty.dev npx playwright test agent-builder.spec.ts --config=playwright.staging.config.ts
+ * Run with: E2E_API_URL=https://api.staging.almyty.com npx playwright test agent-builder.spec.ts --config=playwright.staging.config.ts
  */
 test.describe('Agent Builder', () => {
   let testUser: any

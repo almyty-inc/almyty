@@ -7,7 +7,7 @@ and invoke your tools natively.
 ## Overview
 
 MCP is a JSON-RPC 2.0 based protocol for connecting AI models to external tools
-and data sources. apifai implements the full MCP specification, supporting:
+and data sources. almyty implements the full MCP specification, supporting:
 
 - **Tool listing** — `tools/list` method
 - **Tool invocation** — `tools/call` method
@@ -16,7 +16,7 @@ and data sources. apifai implements the full MCP specification, supporting:
 ## Creating an MCP Gateway
 
 ```bash
-curl -X POST https://api.apif.ai/gateways \
+curl -X POST https://api.almyty.com/gateways \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -34,13 +34,13 @@ curl -X POST https://api.apif.ai/gateways \
 After creation, your MCP endpoint is available at:
 
 ```
-https://api.apif.ai/mcp/{org-slug}{endpoint}
+https://api.almyty.com/mcp/{org-slug}{endpoint}
 ```
 
 For example, if your organization is "acme" and endpoint is "/my-tools":
 
 ```
-https://api.apif.ai/mcp/acme/my-tools
+https://api.almyty.com/mcp/acme/my-tools
 ```
 
 ## Connecting Clients
@@ -53,7 +53,7 @@ Add to your Claude Desktop configuration (`claude_desktop_config.json`):
 {
   "mcpServers": {
     "my-tools": {
-      "url": "https://api.apif.ai/mcp/acme/my-tools",
+      "url": "https://api.almyty.com/mcp/acme/my-tools",
       "headers": {
         "Authorization": "Bearer your-api-key"
       }
@@ -69,7 +69,7 @@ In Cursor settings, add a new MCP server:
 ```json
 {
   "name": "my-tools",
-  "url": "https://api.apif.ai/mcp/acme/my-tools",
+  "url": "https://api.almyty.com/mcp/acme/my-tools",
   "apiKey": "your-api-key"
 }
 ```
@@ -81,7 +81,7 @@ import httpx
 
 # List available tools
 response = httpx.post(
-    "https://api.apif.ai/mcp/acme/my-tools",
+    "https://api.almyty.com/mcp/acme/my-tools",
     json={
         "jsonrpc": "2.0",
         "method": "tools/list",
@@ -93,7 +93,7 @@ tools = response.json()["result"]["tools"]
 
 # Call a tool
 response = httpx.post(
-    "https://api.apif.ai/mcp/acme/my-tools",
+    "https://api.almyty.com/mcp/acme/my-tools",
     json={
         "jsonrpc": "2.0",
         "method": "tools/call",

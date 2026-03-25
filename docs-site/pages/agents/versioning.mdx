@@ -1,6 +1,6 @@
 # Versioning & Rollback
 
-apifai tracks versions of your agent pipelines, allowing you to save snapshots,
+almyty tracks versions of your agent pipelines, allowing you to save snapshots,
 compare changes, and rollback to a previous configuration.
 
 ## Saving a Version
@@ -8,7 +8,7 @@ compare changes, and rollback to a previous configuration.
 Each time you save an agent, you can optionally create a named version snapshot:
 
 ```bash
-curl -X POST https://api.apif.ai/agents/{id}/versions \
+curl -X POST https://api.almyty.com/agents/{id}/versions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -33,7 +33,7 @@ Response:
 ## Listing Versions
 
 ```bash
-curl https://api.apif.ai/agents/{id}/versions \
+curl https://api.almyty.com/agents/{id}/versions \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -51,7 +51,7 @@ Returns an array of version snapshots, each containing:
 To restore a previous version:
 
 ```bash
-curl -X POST https://api.apif.ai/agents/{id}/versions/{versionIndex}/rollback \
+curl -X POST https://api.almyty.com/agents/{id}/versions/{versionIndex}/rollback \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -66,7 +66,7 @@ roll forward to a later version if needed.
 Every change to an agent is recorded in the audit log:
 
 ```bash
-curl https://api.apif.ai/agents/{id}/audit-log \
+curl https://api.almyty.com/agents/{id}/audit-log \
   -H "Authorization: Bearer $TOKEN"
 ```
 

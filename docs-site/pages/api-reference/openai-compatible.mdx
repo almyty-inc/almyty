@@ -1,13 +1,13 @@
 # OpenAI Compatible API
 
-apifai agents can be invoked using an OpenAI-compatible chat completions API.
+almyty agents can be invoked using an OpenAI-compatible chat completions API.
 This means any application that works with the OpenAI API can be pointed at
-an apifai agent without code changes.
+an almyty agent without code changes.
 
 ## Endpoint
 
 ```
-POST https://api.apif.ai/agents/{agentId}/v1/chat/completions
+POST https://api.almyty.com/agents/{agentId}/v1/chat/completions
 ```
 
 ## Request Format
@@ -15,7 +15,7 @@ POST https://api.apif.ai/agents/{agentId}/v1/chat/completions
 The request follows the OpenAI chat completions format:
 
 ```bash
-curl -X POST https://api.apif.ai/agents/{agentId}/v1/chat/completions \
+curl -X POST https://api.almyty.com/agents/{agentId}/v1/chat/completions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -143,8 +143,8 @@ Submit tool results back:
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://api.apif.ai/agents/{agentId}/v1",
-    api_key="your-apifai-token",
+    base_url="https://api.almyty.com/agents/{agentId}/v1",
+    api_key="your-almyty-token",
 )
 
 response = client.chat.completions.create(
@@ -163,8 +163,8 @@ print(response.choices[0].message.content)
 import OpenAI from "openai";
 
 const client = new OpenAI({
-  baseURL: "https://api.apif.ai/agents/{agentId}/v1",
-  apiKey: "your-apifai-token",
+  baseURL: "https://api.almyty.com/agents/{agentId}/v1",
+  apiKey: "your-almyty-token",
 });
 
 const response = await client.chat.completions.create({

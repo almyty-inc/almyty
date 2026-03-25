@@ -8,7 +8,7 @@ agent pipelines through HTTP POST requests.
 Navigate to the agent detail page and enable the webhook trigger, or use the API:
 
 ```bash
-curl -X PATCH https://api.apif.ai/agents/{id} \
+curl -X PATCH https://api.almyty.com/agents/{id} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -19,7 +19,7 @@ curl -X PATCH https://api.apif.ai/agents/{id} \
 When enabled, the agent receives a unique webhook URL:
 
 ```
-https://api.apif.ai/agents/{id}/webhook
+https://api.almyty.com/agents/{id}/webhook
 ```
 
 ## Triggering via Webhook
@@ -27,7 +27,7 @@ https://api.apif.ai/agents/{id}/webhook
 Send a POST request to the webhook URL with the agent's expected input:
 
 ```bash
-curl -X POST https://api.apif.ai/agents/{id}/webhook \
+curl -X POST https://api.almyty.com/agents/{id}/webhook \
   -H "Content-Type: application/json" \
   -d '{
     "message": "Process this incoming data",
@@ -52,7 +52,7 @@ Webhook invocations return immediately with an execution ID:
 To get the result, poll the execution endpoint:
 
 ```bash
-curl https://api.apif.ai/agents/{id}/executions/{executionId} \
+curl https://api.almyty.com/agents/{id}/executions/{executionId} \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -65,7 +65,7 @@ Webhooks support two authentication methods:
 Include the agent's webhook secret in the Authorization header:
 
 ```bash
-curl -X POST https://api.apif.ai/agents/{id}/webhook \
+curl -X POST https://api.almyty.com/agents/{id}/webhook \
   -H "Authorization: Bearer {webhook-secret}" \
   -H "Content-Type: application/json" \
   -d '{ "message": "Hello" }'
@@ -83,7 +83,7 @@ configure HMAC verification:
 ```bash
 SIGNATURE=$(echo -n '{"message":"Hello"}' | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
 
-curl -X POST https://api.apif.ai/agents/{id}/webhook \
+curl -X POST https://api.almyty.com/agents/{id}/webhook \
   -H "X-Webhook-Signature: sha256=$SIGNATURE" \
   -H "Content-Type: application/json" \
   -d '{"message":"Hello"}'

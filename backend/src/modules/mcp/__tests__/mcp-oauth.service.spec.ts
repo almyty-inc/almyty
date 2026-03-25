@@ -104,7 +104,7 @@ describe('McpOAuthService', () => {
 
   describe('getAuthorizationServerMetadata', () => {
     it('should return correct metadata structure', () => {
-      const baseUrl = 'https://api.almyty.dev';
+      const baseUrl = 'https://api.almyty.com';
       const result = service.getAuthorizationServerMetadata(
         mockGateway as any,
         baseUrl,
@@ -125,7 +125,7 @@ describe('McpOAuthService', () => {
       const gatewayNoOauth = { ...mockGateway, configuration: {} };
       const result = service.getAuthorizationServerMetadata(
         gatewayNoOauth as any,
-        'https://api.almyty.dev',
+        'https://api.almyty.com',
       );
 
       expect(result.scopes_supported).toEqual(['tools:read', 'tools:execute']);
@@ -138,7 +138,7 @@ describe('McpOAuthService', () => {
 
   describe('getProtectedResourceMetadata', () => {
     it('should return correct resource metadata', () => {
-      const baseUrl = 'https://api.almyty.dev';
+      const baseUrl = 'https://api.almyty.com';
       const result = service.getProtectedResourceMetadata(
         mockGateway as any,
         baseUrl,

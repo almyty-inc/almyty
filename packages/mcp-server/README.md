@@ -1,4 +1,4 @@
-# @apifai/mcp-server
+# @almyty/mcp-server
 
 Skill-first API proxy for any LLM — turns APIs into AI skills with minimal token overhead.
 
@@ -14,25 +14,25 @@ MCP dumps every tool's full JSON Schema into the LLM's context window:
 ## The Skill-First Solution
 
 Instead of N tool schemas, inject:
-1. **2 tools** (`apifai_execute` + `apifai_search`) = ~300 tokens base
+1. **2 tools** (`almyty_execute` + `almyty_search`) = ~300 tokens base
 2. **Skills as prompts** = loaded on-demand, only when needed
 
 ```
 Token overhead: ~300 tokens (fixed) vs ~4,000+ tokens (scales with tool count)
 ```
 
-Skills are compact markdown that teach the LLM **workflows** — when to use a tool, what parameters to collect, how to handle errors. The LLM loads a skill on demand, then calls `apifai_execute` with the right tool name.
+Skills are compact markdown that teach the LLM **workflows** — when to use a tool, what parameters to collect, how to handle errors. The LLM loads a skill on demand, then calls `almyty_execute` with the right tool name.
 
 ## How It Works
 
 ```
 LLM wants to "create a pet"
   ↓
-1. Calls apifai_search("pet") → finds relevant tools
+1. Calls almyty_search("pet") → finds relevant tools
 2. Loads skill-petstore prompt → learns the workflow
-3. Calls apifai_execute(tool_name="addPet", parameters={...})
+3. Calls almyty_execute(tool_name="addPet", parameters={...})
   ↓
-apifai backend executes against the actual API
+almyty backend executes against the actual API
 ```
 
 ## Quick Start
@@ -40,12 +40,12 @@ apifai backend executes against the actual API
 ```bash
 export APIFAI_URL=http://localhost:4000
 export APIFAI_TOKEN=your-jwt-token
-npx @apifai/mcp-server
+npx @almyty/mcp-server
 ```
 
 Or login interactively:
 ```bash
-npx @apifai/mcp-server login
+npx @almyty/mcp-server login
 ```
 
 ## Configuration
@@ -53,7 +53,7 @@ npx @apifai/mcp-server login
 ### Claude Code
 
 ```bash
-claude mcp add apifai -- npx -y @apifai/mcp-server
+claude mcp add almyty -- npx -y @almyty/mcp-server
 ```
 
 ### Cursor (`.cursor/mcp.json`)
@@ -61,9 +61,9 @@ claude mcp add apifai -- npx -y @apifai/mcp-server
 ```json
 {
   "mcpServers": {
-    "apifai": {
+    "almyty": {
       "command": "npx",
-      "args": ["-y", "@apifai/mcp-server"],
+      "args": ["-y", "@almyty/mcp-server"],
       "env": { "APIFAI_URL": "http://localhost:4000", "APIFAI_TOKEN": "..." }
     }
   }
@@ -73,11 +73,11 @@ claude mcp add apifai -- npx -y @apifai/mcp-server
 ### OpenAI Codex CLI (`~/.codex/config.toml`)
 
 ```toml
-[mcp_servers.apifai]
+[mcp_servers.almyty]
 command = "npx"
-args = ["-y", "@apifai/mcp-server"]
+args = ["-y", "@almyty/mcp-server"]
 
-[mcp_servers.apifai.env]
+[mcp_servers.almyty.env]
 APIFAI_URL = "http://localhost:4000"
 APIFAI_TOKEN = "your-jwt-token"
 ```
@@ -85,20 +85,20 @@ APIFAI_TOKEN = "your-jwt-token"
 ### GitHub Copilot (`.vscode/mcp.json`)
 
 ```json
-{ "servers": { "apifai": { "command": "npx", "args": ["-y", "@apifai/mcp-server"] } } }
+{ "servers": { "almyty": { "command": "npx", "args": ["-y", "@almyty/mcp-server"] } } }
 ```
 
 ### Google Gemini CLI (`~/.gemini/settings.json`)
 
 ```json
-{ "mcpServers": { "apifai": { "command": "npx", "args": ["-y", "@apifai/mcp-server"] } } }
+{ "mcpServers": { "almyty": { "command": "npx", "args": ["-y", "@almyty/mcp-server"] } } }
 ```
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `APIFAI_URL` | `http://localhost:4000` | apifai backend URL |
+| `APIFAI_URL` | `http://localhost:4000` | almyty backend URL |
 | `APIFAI_TOKEN` | — | JWT Bearer token |
 | `APIFAI_GATEWAY_ID` | — | Scope to a specific gateway |
 | `APIFAI_MODE` | `skill-first` | `skill-first` or `full` |
@@ -115,16 +115,16 @@ APIFAI_TOKEN = "your-jwt-token"
 ```
 Your LLM (Claude, Cursor, Copilot, Codex, Gemini)
     ↕ MCP stdio (2 tools + skills as prompts)
-@apifai/mcp-server
+@almyty/mcp-server
     ↕ HTTP/JSON-RPC
-apifai backend (tools + skills + auth)
+almyty backend (tools + skills + auth)
     ↕ HTTP/GraphQL/SOAP/gRPC
 Your APIs (OpenAPI, GraphQL, SOAP, Protobuf)
 ```
 
 **Auth model:**
-- User → apifai: JWT token (env var or `npx @apifai/mcp-server login`)
-- apifai → APIs: Managed within apifai (API keys, OAuth, etc.)
+- User → almyty: JWT token (env var or `npx @almyty/mcp-server login`)
+- almyty → APIs: Managed within almyty (API keys, OAuth, etc.)
 
 ## License
 

@@ -42,7 +42,7 @@ Config:
 
 Options:
   --interval, -i <seconds>       Daemon poll interval in seconds (default: 60)
-  --url <url>                    almyty API URL (default: https://api.almyty.dev)
+  --url <url>                    almyty API URL (default: https://api.almyty.com)
   --dir <path>                   Project directory (default: current directory)
   --help, -h                     Show help
   --version, -v                  Show version
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
 
   switch (command) {
     case 'login': {
-      const url = urlOverride || process.env.APIFAI_URL || 'https://api.almyty.dev';
+      const url = urlOverride || process.env.APIFAI_URL || 'https://api.almyty.com';
       await login(url);
       break;
     }
@@ -167,7 +167,7 @@ async function main(): Promise<void> {
       const gateways = await client.listGateways();
 
       if (gateways.length === 0) {
-        console.log('No gateways found. Create one at https://app.almyty.dev/gateways');
+        console.log('No gateways found. Create one at https://app.almyty.com/gateways');
         return;
       }
 

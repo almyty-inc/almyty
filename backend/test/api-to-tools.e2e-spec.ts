@@ -11,7 +11,7 @@ describe('API to Tools Pipeline (e2e)', () => {
   let apiId: string;
 
   const testUser = {
-    email: `test-${Date.now()}@almyty.dev`,
+    email: `test-${Date.now()}@almyty.com`,
     password: 'testpass123',
     firstName: 'Test',
     lastName: 'User'

@@ -14,13 +14,13 @@ markdown format. Each skill is a `SKILL.md` file that includes:
 - Authentication requirements
 - Endpoint information
 
-The apifai Skills CLI (`npx @apifai/skills`) handles installation and auto-injection
+The almyty Skills CLI (`npx @almyty/skills`) handles installation and auto-injection
 into supported agents.
 
 ## Creating a Skills Gateway
 
 ```bash
-curl -X POST https://api.apif.ai/gateways \
+curl -X POST https://api.almyty.com/gateways \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -41,7 +41,7 @@ Each tool assigned to a Skills gateway generates a SKILL.md file:
 ---
 name: get_users
 description: Retrieve a list of users with pagination
-endpoint: https://api.apif.ai/utcp/acme/my-skills/tools/get_users/invoke
+endpoint: https://api.almyty.com/utcp/acme/my-skills/tools/get_users/invoke
 method: POST
 auth: bearer
 ---
@@ -88,26 +88,26 @@ Install and manage skills using the CLI:
 
 ```bash
 # Install skills for a gateway
-npx @apifai/skills install @acme/my-skills
+npx @almyty/skills install @acme/my-skills
 
 # Watch mode — auto-updates when tools change
-npx @apifai/skills watch @acme/my-skills
+npx @almyty/skills watch @acme/my-skills
 
 # List installed skills
-npx @apifai/skills list
+npx @almyty/skills list
 
 # Remove skills
-npx @apifai/skills remove @acme/my-skills
+npx @almyty/skills remove @acme/my-skills
 ```
 
 ### Authentication
 
 ```bash
-# Login to apifai
-npx @apifai/skills login
+# Login to almyty
+npx @almyty/skills login
 
 # Login with a specific token
-npx @apifai/skills login --token your-api-key
+npx @almyty/skills login --token your-api-key
 ```
 
 ### Supported Agents
@@ -129,7 +129,7 @@ registers them for auto-loading.
 
 ```bash
 # Via API
-curl https://api.apif.ai/gateways/{id}/skills \
+curl https://api.almyty.com/gateways/{id}/skills \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -141,17 +141,17 @@ assigned to the gateway.
 Run the Skills CLI in daemon mode for continuous synchronization:
 
 ```bash
-npx @apifai/skills watch @acme/my-skills
+npx @almyty/skills watch @acme/my-skills
 ```
 
 In watch mode, the CLI:
 1. Polls the gateway every 30 seconds for changes
 2. Updates SKILL.md files when tools are added, removed, or modified
 3. Notifies detected agents of the changes
-4. Logs activity to `~/.apifai/skills.log`
+4. Logs activity to `~/.almyty/skills.log`
 
 Stop the daemon with Ctrl+C or:
 
 ```bash
-npx @apifai/skills stop
+npx @almyty/skills stop
 ```

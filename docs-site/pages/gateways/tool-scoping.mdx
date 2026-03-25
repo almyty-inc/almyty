@@ -17,7 +17,7 @@ gateway with optional per-gateway configuration.
 ### Single Tool
 
 ```bash
-curl -X POST https://api.apif.ai/gateways/{gatewayId}/tools \
+curl -X POST https://api.almyty.com/gateways/{gatewayId}/tools \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -28,7 +28,7 @@ curl -X POST https://api.apif.ai/gateways/{gatewayId}/tools \
 ### Bulk Assignment
 
 ```bash
-curl -X POST https://api.apif.ai/gateways/{gatewayId}/tools/bulk \
+curl -X POST https://api.almyty.com/gateways/{gatewayId}/tools/bulk \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -39,14 +39,14 @@ curl -X POST https://api.apif.ai/gateways/{gatewayId}/tools/bulk \
 ### Remove a Tool
 
 ```bash
-curl -X DELETE https://api.apif.ai/gateways/{gatewayId}/tools/{toolId} \
+curl -X DELETE https://api.almyty.com/gateways/{gatewayId}/tools/{toolId} \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Remove All Tools
 
 ```bash
-curl -X DELETE https://api.apif.ai/gateways/{gatewayId}/tools \
+curl -X DELETE https://api.almyty.com/gateways/{gatewayId}/tools \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -68,14 +68,14 @@ Apply presets by filtering tools and using bulk assignment:
 
 ```bash
 # Get all available tools
-TOOLS=$(curl -s https://api.apif.ai/gateways/{id}/tools/available \
+TOOLS=$(curl -s https://api.almyty.com/gateways/{id}/tools/available \
   -H "Authorization: Bearer $TOKEN")
 
 # Filter read-only tools (GET methods)
 READ_TOOLS=$(echo $TOOLS | jq '[.tools[] | select(.operation.method == "GET") | .id]')
 
 # Bulk assign
-curl -X POST https://api.apif.ai/gateways/{id}/tools/bulk \
+curl -X POST https://api.almyty.com/gateways/{id}/tools/bulk \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"toolIds\": $READ_TOOLS}"
@@ -86,7 +86,7 @@ curl -X POST https://api.apif.ai/gateways/{id}/tools/bulk \
 Each tool assignment can have gateway-specific configuration:
 
 ```bash
-curl -X PATCH https://api.apif.ai/gateways/{gatewayId}/tools/{gatewayToolId} \
+curl -X PATCH https://api.almyty.com/gateways/{gatewayId}/tools/{gatewayToolId} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -110,7 +110,7 @@ curl -X PATCH https://api.apif.ai/gateways/{gatewayId}/tools/{gatewayToolId} \
 List all tools available for assignment (not yet assigned):
 
 ```bash
-curl https://api.apif.ai/gateways/{gatewayId}/tools/available \
+curl https://api.almyty.com/gateways/{gatewayId}/tools/available \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -119,7 +119,7 @@ curl https://api.apif.ai/gateways/{gatewayId}/tools/available \
 View usage statistics for tools on a gateway:
 
 ```bash
-curl https://api.apif.ai/gateways/{gatewayId}/tools/stats \
+curl https://api.almyty.com/gateways/{gatewayId}/tools/stats \
   -H "Authorization: Bearer $TOKEN"
 ```
 

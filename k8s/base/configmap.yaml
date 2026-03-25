@@ -29,7 +29,7 @@ data:
   JWT_EXPIRES_IN: "24h"
 
   # CORS
-  CORS_ORIGIN: "https://app.almyty.dev"
+  CORS_ORIGIN: "https://app.almyty.com"
 
   # Base URL (used by MCP discovery, CLI exports, protocol endpoints)
-  BASE_URL: "https://api.almyty.dev"
+  BASE_URL: "https://api.almyty.com"

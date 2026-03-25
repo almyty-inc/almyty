@@ -33,7 +33,7 @@ patches:
         value: debug
       - op: replace
         path: /data/CORS_ORIGIN
-        value: "https://app.dev.almyty.dev"
+        value: "https://app.dev.almyty.com"
       - op: replace
         path: /data/DATABASE_HOST
         value: "dev-almyty-postgres"
@@ -42,7 +42,7 @@ patches:
         value: "dev-almyty-redis"
       - op: replace
         path: /data/BASE_URL
-        value: "https://api.dev.almyty.dev"
+        value: "https://api.dev.almyty.com"
 
   - target:
       kind: Deployment
@@ -78,22 +78,22 @@ patches:
         value: dev-letsencrypt-prod
       - op: replace
         path: /spec/tls/0/hosts/0
-        value: api.dev.almyty.dev
+        value: api.dev.almyty.com
       - op: replace
         path: /spec/tls/0/secretName
         value: api-dev-apif-ai-tls
       - op: replace
         path: /spec/tls/1/hosts/0
-        value: app.dev.almyty.dev
+        value: app.dev.almyty.com
       - op: replace
         path: /spec/tls/1/secretName
         value: app-dev-apif-ai-tls
       - op: replace
         path: /spec/rules/0/host
-        value: api.dev.almyty.dev
+        value: api.dev.almyty.com
       - op: replace
         path: /spec/rules/1/host
-        value: app.dev.almyty.dev
+        value: app.dev.almyty.com
 
 images:
   - name: ghcr.io/frane/almyty/api

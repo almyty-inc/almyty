@@ -1,8 +1,8 @@
-# apifai UX Audit & Production Readiness Report
+# almyty UX Audit & Production Readiness Report
 
 **Date**: 2026-03-17
-**Auditor**: Product/UX Review (staging: app.staging.apif.ai)
-**Account**: test@apif.ai / TestPass123!
+**Auditor**: Product/UX Review (staging: app.staging.almyty.com)
+**Account**: test@almyty.com / TestPass123!
 **Scope**: Every page, sub-page, dialog, action menu, tab, button, and detail view
 
 ---
@@ -516,7 +516,7 @@ Use it everywhere with consistent:
 ## 15. PAGE-BY-PAGE FINDINGS
 
 ### 15.1 Login Page (/auth/login)
-- Logo shows "apifai" twice: once in the icon badge, once as text. Redundant.
+- Logo shows "almyty" twice: once in the icon badge, once as text. Redundant.
 - "Forgot your password?" link points to `#` — dead link. Either implement or remove.
 - No social/OAuth login (Google, GitHub) despite plan mentioning OAuth support.
 - Password visibility toggle (eye icon) — Good.
@@ -526,7 +526,7 @@ Use it everywhere with consistent:
 ### 15.2 Dashboard (/dashboard)
 - Massive empty space below Quick Actions. The page feels 40% empty.
 - "View Analytics" button appears twice: top-right header AND in Quick Actions grid.
-- Org name "apifai Testing" shown in sidebar dropdown AND as a badge top-right. Redundant.
+- Org name "almyty Testing" shown in sidebar dropdown AND as a badge top-right. Redundant.
 - No recent activity feed, no charts, no timeline — just static numbers.
 - Quick Action cards don't show what will happen (no preview, no count of existing items).
 - **Fix**: Add a recent activity feed. Add a mini chart (requests over 7 days). Remove duplicate "View Analytics" button. Add gateway health status indicators.
@@ -594,7 +594,7 @@ Use it everywhere with consistent:
 - Skill File (YAML), CLI Script (Bash/Node.js toggle), TypeScript Client, npx Integration — Impressively comprehensive
 - TypeScript Client shows "Not available" — should be hidden, not shown as broken
 - Skill File and CLI Script code blocks have no syntax highlighting
-- npx Integration shows generic `npx @apifai/mcp-server` — not tool-specific, misleading on a tool detail page
+- npx Integration shows generic `npx @almyty/mcp-server` — not tool-specific, misleading on a tool detail page
 - Claude Code config JSON shown — Good developer experience
 - **Fix**: Hide unavailable exports, add syntax highlighting, make npx command tool-specific or move to gateway page
 
@@ -955,11 +955,11 @@ Before implementing fixes, make these decisions once and apply everywhere:
 
 ## 21. PRODUCT VISION ANALYSIS: Does What's On Screen Actually Make Sense?
 
-This section goes beyond visual bugs. It asks: given what apifai IS (universal API-to-AI tool gateway), does the UI actually serve the product's purpose? Are the right buttons in the right places? Are critical flows missing entirely? Are there buttons that shouldn't exist?
+This section goes beyond visual bugs. It asks: given what almyty IS (universal API-to-AI tool gateway), does the UI actually serve the product's purpose? Are the right buttons in the right places? Are critical flows missing entirely? Are there buttons that shouldn't exist?
 
 ### THE CORE VALUE PROP (and how the UI fails it)
 
-apifai's pitch: **"Paste your API spec → get AI-ready tools → serve them instantly via MCP/A2A/UTCP/Skills."**
+almyty's pitch: **"Paste your API spec → get AI-ready tools → serve them instantly via MCP/A2A/UTCP/Skills."**
 
 This should be a 60-second flow. Instead, here's what a new user actually experiences:
 
@@ -989,7 +989,7 @@ This should be a 60-second flow. Instead, here's what a new user actually experi
 #### 21.3 No "How to use this gateway" integration guide
 - **What exists**: Integrations tab shows raw endpoint URLs
 - **What's missing**: Copy-pasteable configuration snippets for Claude Code, Cursor, Windsurf, Copilot, OpenAI Assistants, etc. Like: "Add this to your claude_desktop_config.json" with the actual JSON pre-filled with this gateway's URL and auth key.
-- **Why it matters**: Users don't just need the URL — they need to know HOW to plug it into their specific AI tool. This is where apifai's value becomes tangible.
+- **Why it matters**: Users don't just need the URL — they need to know HOW to plug it into their specific AI tool. This is where almyty's value becomes tangible.
 - **What to build**: Integrations tab should have cards for each supported client (Claude Code, Cursor, Windsurf, etc.) with ready-to-copy config blocks that include the actual gateway URL and a placeholder for the API key. The Tool detail Exports tab already does this partially (npx integration section) — but it's on the wrong page (should be gateway-level, not tool-level).
 
 #### 21.4 No "Create Gateway from this API" shortcut
@@ -1106,7 +1106,7 @@ For a brand new user with zero data:
 
 **Step 4 — Done:**
 "Your MCP server is live!"
-`https://api.apif.ai/mcp/your-org/httpbin-mcp`
+`https://api.almyty.com/mcp/your-org/httpbin-mcp`
 [Copy to clipboard]
 
 **Add to Claude Code:**
@@ -1114,7 +1114,7 @@ For a brand new user with zero data:
 "mcpServers": {
   "httpbin": {
     "command": "npx",
-    "args": ["@apifai/mcp-server", "--gateway", "httpbin-mcp"]
+    "args": ["@almyty/mcp-server", "--gateway", "httpbin-mcp"]
   }
 }
 ```
@@ -1142,18 +1142,18 @@ The product promises MCP, A2A, UTCP, and Skills as equal first-class protocols. 
 - **UTCP**: UTCP manifest URL (.well-known/utcp), example request/response
 - **Skills**: SKILL.md download, CLI install command, agent detection list
 
-### THE SKILLS CLI (`npx @apifai/skills`) IS INVISIBLE
+### THE SKILLS CLI (`npx @almyty/skills`) IS INVISIBLE
 
 The Skills CLI is a major differentiator (mentioned in CLAUDE.md — 30+ agent detection, daemon mode, auto-injection). But:
 - It's not mentioned anywhere on the Gateways page
 - It's not in the Integrations tab of Skills gateways
-- The npx command on the tool exports page is `@apifai/mcp-server` not `@apifai/skills`
+- The npx command on the tool exports page is `@almyty/mcp-server` not `@almyty/skills`
 - There's no "Install Skills" section anywhere
 
 **Fix**: Skills gateways should prominently feature:
 ```
-npx @apifai/skills install --gateway httpbin-skills
-npx @apifai/skills watch --gateway httpbin-skills
+npx @almyty/skills install --gateway httpbin-skills
+npx @almyty/skills watch --gateway httpbin-skills
 ```
 With explanation of what agents it supports and how daemon mode works.
 

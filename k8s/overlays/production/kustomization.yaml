@@ -33,7 +33,7 @@ patches:
         value: warn
       - op: replace
         path: /data/CORS_ORIGIN
-        value: "https://app.almyty.dev"
+        value: "https://app.almyty.com"
       - op: replace
         path: /data/DATABASE_HOST
         value: "prod-almyty-postgres"
@@ -78,16 +78,16 @@ patches:
         value: prod-letsencrypt-prod
       - op: replace
         path: /spec/tls/0/hosts/0
-        value: api.almyty.dev
+        value: api.almyty.com
       - op: replace
         path: /spec/tls/1/hosts/0
-        value: app.almyty.dev
+        value: app.almyty.com
       - op: replace
         path: /spec/rules/0/host
-        value: api.almyty.dev
+        value: api.almyty.com
       - op: replace
         path: /spec/rules/1/host
-        value: app.almyty.dev
+        value: app.almyty.com
 
 images:
   - name: ghcr.io/frane/almyty/api

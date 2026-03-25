@@ -1,14 +1,14 @@
-# apifai
+# almyty
 
 > Universal API-to-AI Tool Gateway
 
-**apifai** turns any API into AI-ready tools. Import API schemas (OpenAPI, GraphQL, SOAP, Protobuf) to auto-generate tools, or create custom tools manually (HTTP, JavaScript, LLM-powered). Serve them to any AI agent via MCP, UTCP, A2A, or [Agent Skills](https://agentskills.io).
+**almyty** turns any API into AI-ready tools. Import API schemas (OpenAPI, GraphQL, SOAP, Protobuf) to auto-generate tools, or create custom tools manually (HTTP, JavaScript, LLM-powered). Serve them to any AI agent via MCP, UTCP, A2A, or [Agent Skills](https://agentskills.io).
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/frane/apifai.git
-cd apifai
+git clone https://github.com/frane/almyty.git
+cd almyty
 docker-compose up -d          # PostgreSQL, Redis, backend, frontend
 cd frontend && npm run dev    # Dev server at http://localhost:3002
 ```
@@ -22,7 +22,7 @@ Backend API at `http://localhost:4000`. Health check: `curl http://localhost:400
   ┌─────────────┐                  ┌─────────────┐
   │  OpenAPI     │                  │ Claude Code  │
   │  GraphQL     │   ┌─────────┐   │ Cursor       │
-  │  SOAP/WSDL   │──>│  apifai │──>│ Copilot      │
+  │  SOAP/WSDL   │──>│  almyty │──>│ Copilot      │
   │  Protobuf    │   └─────────┘   │ Any MCP/A2A  │
   │  Manual      │                  │   client     │
   └─────────────┘                  └─────────────┘
@@ -37,9 +37,9 @@ Backend API at `http://localhost:4000`. Health check: `curl http://localhost:400
 ## Install Skills into Your Agent
 
 ```bash
-npx @apifai/skills login
-npx @apifai/skills install --gateway <id>    # One-time install
-npx @apifai/skills watch --gateway <id>      # Auto-sync daemon
+npx @almyty/skills login
+npx @almyty/skills install --gateway <id>    # One-time install
+npx @almyty/skills watch --gateway <id>      # Auto-sync daemon
 ```
 
 Supports 30+ agents: Claude Code, Cursor, GitHub Copilot, Windsurf, Codex, Gemini CLI, Cline, Roo Code, OpenHands, Goose, and more. Compatible with the [Agent Skills](https://agentskills.io) open standard.
@@ -79,8 +79,8 @@ cd backend && npm run test
 cd frontend && npx playwright test
 
 # Production Docker builds
-docker build --target production -t apifai-api ./backend
-docker build --target production -t apifai-frontend ./frontend
+docker build --target production -t almyty-api ./backend
+docker build --target production -t almyty-frontend ./frontend
 ```
 
 ## Documentation

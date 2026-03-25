@@ -33,7 +33,7 @@ patches:
         value: info
       - op: replace
         path: /data/CORS_ORIGIN
-        value: "https://app.staging.almyty.dev"
+        value: "https://app.staging.almyty.com"
       - op: replace
         path: /data/DATABASE_HOST
         value: "almyty-db-do-user-4308986-0.j.db.ondigitalocean.com"
@@ -48,7 +48,7 @@ patches:
         value: "true"
       - op: replace
         path: /data/BASE_URL
-        value: "https://api.staging.almyty.dev"
+        value: "https://api.staging.almyty.com"
       - op: replace
         path: /data/DB_SYNC
         value: "true"
@@ -87,22 +87,22 @@ patches:
         value: staging-letsencrypt-prod
       - op: replace
         path: /spec/tls/0/hosts/0
-        value: api.staging.almyty.dev
+        value: api.staging.almyty.com
       - op: replace
         path: /spec/tls/0/secretName
         value: api-staging-apif-ai-tls
       - op: replace
         path: /spec/tls/1/hosts/0
-        value: app.staging.almyty.dev
+        value: app.staging.almyty.com
       - op: replace
         path: /spec/tls/1/secretName
         value: app-staging-apif-ai-tls
       - op: replace
         path: /spec/rules/0/host
-        value: api.staging.almyty.dev
+        value: api.staging.almyty.com
       - op: replace
         path: /spec/rules/1/host
-        value: app.staging.almyty.dev
+        value: app.staging.almyty.com
 
 images:
   - name: ghcr.io/frane/almyty/api

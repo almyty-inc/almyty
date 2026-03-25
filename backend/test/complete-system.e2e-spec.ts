@@ -12,7 +12,7 @@ describe('Complete almyty System (e2e)', () => {
   let generatedTools: any[] = [];
 
   const testUser = {
-    email: `test-${Date.now()}@almyty.dev`,
+    email: `test-${Date.now()}@almyty.com`,
     password: 'testpass123',
     firstName: 'Test',
     lastName: 'User'
@@ -691,7 +691,7 @@ describe('Complete almyty System (e2e)', () => {
     it('should maintain organization isolation', async () => {
       // Create second user with different organization
       const secondUser = {
-        email: `test2-${Date.now()}@almyty.dev`,
+        email: `test2-${Date.now()}@almyty.com`,
         password: 'testpass123',
         firstName: 'Test2',
         lastName: 'User2'

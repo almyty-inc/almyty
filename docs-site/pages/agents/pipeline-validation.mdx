@@ -1,6 +1,6 @@
 # Pipeline Validation
 
-Before an agent can be activated or invoked, apifai validates its pipeline
+Before an agent can be activated or invoked, almyty validates its pipeline
 to ensure correctness. Validation runs automatically when saving an agent
 and can be triggered manually via the API.
 
@@ -42,7 +42,7 @@ Template expressions (`{{...}}`) are checked for:
 
 ```bash
 # Validation happens on save — errors are returned in the response
-curl -X PATCH https://api.apif.ai/agents/{id} \
+curl -X PATCH https://api.almyty.com/agents/{id} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
