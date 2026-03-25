@@ -1,57 +1,44 @@
-# Redirect ingress for alternate domains → almyty.com
-# Applied standalone (not via kustomize) to almyty-staging namespace.
-# DNS A records for these domains point to the same LB IP as almyty.com.
+# Redirect ingress: almyty.ai + almyty.dev → almyty.com
 #
-# Note: Ingress wildcards only match ONE subdomain level.
-# *.almyty.com matches foo.almyty.com but NOT foo.bar.almyty.com.
-# So we add explicit *.staging. and *.dev. rules for multi-level subdomains.
-#
-# TLS certs issued for bare domains only (almyty.com, almyty.com).
-# Wildcard subdomains redirect on HTTP only (no cert = HTTPS cert warning).
+# DNS: Point A records for almyty.ai and almyty.dev to the same LB IP as almyty.com.
+# This ingress catches those domains and 301-redirects everything to almyty.com.
+# cert-manager issues TLS certs for the redirect domains via Let's Encrypt.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: almyty-redirect
-  namespace: almyty-staging
+  namespace: almyty
   annotations:
-    nginx.ingress.kubernetes.io/permanent-redirect: "https://almyty.com"
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    cert-manager.io/cluster-issuer: staging-letsencrypt-prod
+    nginx.ingress.kubernetes.io/permanent-redirect: "https://almyty.com$request_uri"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - almyty.com
+    - almyty.ai
+    - "*.almyty.ai"
     secretName: almyty-ai-redirect-tls
   - hosts:
-    - almyty.com
-    secretName: almyty-com-redirect-tls
+    - almyty.dev
+    - "*.almyty.dev"
+    secretName: almyty-dev-redirect-tls
   rules:
-  # Bare domains
-  - host: almyty.com
+  # almyty.ai → almyty.com
+  - host: almyty.ai
     http: &redirect
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: staging-almyty-frontend
+            name: almyty-frontend
             port:
               number: 8080
-  - host: almyty.com
+  - host: "*.almyty.ai"
     http: *redirect
-  # Single-level wildcards (foo.almyty.com)
-  - host: "*.almyty.com"
+  # almyty.dev → almyty.com
+  - host: almyty.dev
     http: *redirect
-  - host: "*.almyty.com"
-    http: *redirect
-  # Multi-level: *.staging.almyty.com (app.staging.almyty.com)
-  - host: "*.staging.almyty.com"
-    http: *redirect
-  - host: "*.staging.almyty.com"
-    http: *redirect
-  # Multi-level: *.dev.almyty.com (api.dev.almyty.com)
-  - host: "*.dev.almyty.com"
-    http: *redirect
-  - host: "*.dev.almyty.com"
+  - host: "*.almyty.dev"
     http: *redirect

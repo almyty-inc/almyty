@@ -14,10 +14,10 @@ spec:
   tls:
   - hosts:
     - api.almyty.com
-    secretName: api-apif-ai-tls
+    secretName: api-almyty-com-tls
   - hosts:
     - app.almyty.com
-    secretName: app-apif-ai-tls
+    secretName: app-almyty-com-tls
   rules:
   - host: api.almyty.com
     http:
