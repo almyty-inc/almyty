@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: apifai
+  namespace: almyty
   labels:
     app: frontend
     component: frontend
@@ -26,7 +26,7 @@ spec:
       - name: ghcr-secret
       containers:
       - name: frontend
-        image: ghcr.io/frane/apifai/frontend:latest
+        image: ghcr.io/frane/almyty/frontend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -56,8 +56,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: apifai-frontend
-  namespace: apifai
+  name: almyty-frontend
+  namespace: almyty
   labels:
     app: frontend
 spec:

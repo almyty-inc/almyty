@@ -84,7 +84,7 @@ export class WebSocketTransport extends EventEmitter {
         sessionId: session.id,
         protocolVersion: '2024-11-05',
         serverInfo: {
-          name: 'apifai',
+          name: 'almyty',
           version: '1.0.0',
           transport: 'websocket',
         },
@@ -92,7 +92,7 @@ export class WebSocketTransport extends EventEmitter {
           bidirectional: true,
           streaming: true,
           experimental: {
-            apifai: {
+            almyty: {
               universalApiTranslation: true,
               realTimeToolExecution: true,
             },
@@ -187,7 +187,7 @@ export class WebSocketTransport extends EventEmitter {
         tools: { listChanged: true },
         prompts: { listChanged: true },
         experimental: {
-          apifai: {
+          almyty: {
             subscriptions: true,
             realTimeUpdates: true,
           },

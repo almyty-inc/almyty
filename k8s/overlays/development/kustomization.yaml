@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: apifai-dev
+namespace: almyty-dev
 
 namePrefix: dev-
 
@@ -12,15 +12,15 @@ resources:
 patches:
   - target:
       kind: Namespace
-      name: apifai
+      name: almyty
     patch: |-
       - op: replace
         path: /metadata/name
-        value: apifai-dev
+        value: almyty-dev
 
   - target:
       kind: ConfigMap
-      name: apifai-config
+      name: almyty-config
     patch: |-
       - op: replace
         path: /data/NODE_ENV
@@ -33,16 +33,16 @@ patches:
         value: debug
       - op: replace
         path: /data/CORS_ORIGIN
-        value: "https://app.dev.apif.ai"
+        value: "https://app.dev.almyty.dev"
       - op: replace
         path: /data/DATABASE_HOST
-        value: "dev-apifai-postgres"
+        value: "dev-almyty-postgres"
       - op: replace
         path: /data/REDIS_HOST
-        value: "dev-apifai-redis"
+        value: "dev-almyty-redis"
       - op: replace
         path: /data/BASE_URL
-        value: "https://api.dev.apif.ai"
+        value: "https://api.dev.almyty.dev"
 
   - target:
       kind: Deployment
@@ -71,32 +71,32 @@ patches:
 
   - target:
       kind: Ingress
-      name: apifai-ingress
+      name: almyty-ingress
     patch: |-
       - op: replace
         path: /metadata/annotations/cert-manager.io~1cluster-issuer
         value: dev-letsencrypt-prod
       - op: replace
         path: /spec/tls/0/hosts/0
-        value: api.dev.apif.ai
+        value: api.dev.almyty.dev
       - op: replace
         path: /spec/tls/0/secretName
         value: api-dev-apif-ai-tls
       - op: replace
         path: /spec/tls/1/hosts/0
-        value: app.dev.apif.ai
+        value: app.dev.almyty.dev
       - op: replace
         path: /spec/tls/1/secretName
         value: app-dev-apif-ai-tls
       - op: replace
         path: /spec/rules/0/host
-        value: api.dev.apif.ai
+        value: api.dev.almyty.dev
       - op: replace
         path: /spec/rules/1/host
-        value: app.dev.apif.ai
+        value: app.dev.almyty.dev
 
 images:
-  - name: ghcr.io/frane/apifai/api
+  - name: ghcr.io/frane/almyty/api
     newTag: dev-latest
-  - name: ghcr.io/frane/apifai/frontend
+  - name: ghcr.io/frane/almyty/frontend
     newTag: dev-latest

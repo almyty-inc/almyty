@@ -11,7 +11,7 @@ export class RequestLoggerPlugin {
       name: 'Request Logger',
       version: '1.0.0',
       description: 'Comprehensive request and response logging with structured data',
-      author: 'apifai',
+      author: 'almyty',
       isActive: true,
       configuration: {
         enabled: true,

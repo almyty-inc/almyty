@@ -147,8 +147,8 @@ describe('McpGatewayService - Real Business Logic', () => {
         });
 
         expect(server.capabilities.tools.listChanged).toBe(true);
-        expect(server.capabilities.experimental.apifai.universalApiTranslation).toBe(true);
-        expect(server.capabilities.experimental.apifai.virtualServer).toBe(true);
+        expect(server.capabilities.experimental.almyty.universalApiTranslation).toBe(true);
+        expect(server.capabilities.experimental.almyty.virtualServer).toBe(true);
       });
 
       it('should use custom capabilities when provided', async () => {

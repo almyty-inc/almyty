@@ -1166,10 +1166,10 @@ describe('McpOAuthController', () => {
 
       it('should call exchangeCode with correct parameters on valid request', async () => {
         const tokenResponse = {
-          access_token: 'apifai_at_abc123',
+          access_token: 'almyty_at_abc123',
           token_type: 'bearer',
           expires_in: 3600,
-          refresh_token: 'apifai_rt_abc123',
+          refresh_token: 'almyty_rt_abc123',
           scope: 'mcp:tools',
         };
 
@@ -1194,10 +1194,10 @@ describe('McpOAuthController', () => {
 
       it('should return token response with correct shape', async () => {
         const tokenResponse = {
-          access_token: 'apifai_at_abc123',
+          access_token: 'almyty_at_abc123',
           token_type: 'bearer',
           expires_in: 3600,
-          refresh_token: 'apifai_rt_abc123',
+          refresh_token: 'almyty_rt_abc123',
           scope: 'mcp:tools',
         };
 
@@ -1244,17 +1244,17 @@ describe('McpOAuthController', () => {
         await expect(
           controller.token(orgSlug, gatewaySlug, {
             grant_type: 'refresh_token',
-            refresh_token: 'apifai_rt_abc123',
+            refresh_token: 'almyty_rt_abc123',
           }),
         ).rejects.toThrow(HttpException);
       });
 
       it('should call refreshToken with correct parameters on valid request', async () => {
         const tokenResponse = {
-          access_token: 'apifai_at_new',
+          access_token: 'almyty_at_new',
           token_type: 'bearer',
           expires_in: 3600,
-          refresh_token: 'apifai_rt_new',
+          refresh_token: 'almyty_rt_new',
           scope: 'mcp:tools',
         };
 
@@ -1262,12 +1262,12 @@ describe('McpOAuthController', () => {
 
         const result = await controller.token(orgSlug, gatewaySlug, {
           grant_type: 'refresh_token',
-          refresh_token: 'apifai_rt_abc123',
+          refresh_token: 'almyty_rt_abc123',
           client_id: 'mcp_client_abc',
         });
 
         expect(mcpOAuthService.refreshToken).toHaveBeenCalledWith(
-          'apifai_rt_abc123',
+          'almyty_rt_abc123',
           'mcp_client_abc',
         );
         expect(result).toEqual(tokenResponse);
@@ -1296,7 +1296,7 @@ describe('McpOAuthController', () => {
         orgSlug,
         gatewaySlug,
         {
-          token: 'apifai_at_abc123',
+          token: 'almyty_at_abc123',
           client_id: 'mcp_client_abc',
         },
         res,
@@ -1351,7 +1351,7 @@ describe('McpOAuthController', () => {
         orgSlug,
         gatewaySlug,
         {
-          token: 'apifai_at_abc123',
+          token: 'almyty_at_abc123',
           client_id: '',
         },
         res,
@@ -1371,7 +1371,7 @@ describe('McpOAuthController', () => {
         orgSlug,
         gatewaySlug,
         {
-          token: 'apifai_at_abc123',
+          token: 'almyty_at_abc123',
           token_type_hint: 'access_token',
           client_id: 'mcp_client_abc',
         },
@@ -1379,7 +1379,7 @@ describe('McpOAuthController', () => {
       );
 
       expect(mcpOAuthService.revokeToken).toHaveBeenCalledWith(
-        'apifai_at_abc123',
+        'almyty_at_abc123',
         'mcp_client_abc',
       );
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
@@ -1396,7 +1396,7 @@ describe('McpOAuthController', () => {
         orgSlug,
         gatewaySlug,
         {
-          token: 'apifai_at_abc123',
+          token: 'almyty_at_abc123',
           client_id: 'wrong_client',
         },
         res,

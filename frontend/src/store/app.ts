@@ -37,7 +37,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setTheme: (theme: 'light' | 'dark') => {
     set({ theme })
-    document.documentElement.classList.toggle('dark', theme === 'dark')
+    document.documentElement.classList.toggle('light', theme === 'light')
   },
 
   addNotification: (notification: Omit<Notification, 'id'>) => {

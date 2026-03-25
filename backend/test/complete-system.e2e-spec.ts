@@ -4,7 +4,7 @@ import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { ApiType } from '../src/entities/api.entity';
 
-describe('Complete apifai System (e2e)', () => {
+describe('Complete almyty System (e2e)', () => {
   let app: INestApplication;
   let authToken: string;
   let organizationId: string;
@@ -12,7 +12,7 @@ describe('Complete apifai System (e2e)', () => {
   let generatedTools: any[] = [];
 
   const testUser = {
-    email: `test-${Date.now()}@apifai.dev`,
+    email: `test-${Date.now()}@almyty.dev`,
     password: 'testpass123',
     firstName: 'Test',
     lastName: 'User'
@@ -232,7 +232,7 @@ describe('Complete apifai System (e2e)', () => {
 
       expect(response.body.protocol).toBe('mcp');
       expect(response.body.version).toBe('2024-11-05');
-      expect(response.body.server.name).toBe('apifai');
+      expect(response.body.server.name).toBe('almyty');
       expect(response.body.capabilities.tools.listChanged).toBe(true);
       expect(response.body.transports.http).toContain('/api/mcp');
     });
@@ -262,7 +262,7 @@ describe('Complete apifai System (e2e)', () => {
 
       expect(response.body.jsonrpc).toBe('2.0');
       expect(response.body.result.protocolVersion).toBe('2024-11-05');
-      expect(response.body.result.serverInfo.name).toBe('apifai');
+      expect(response.body.result.serverInfo.name).toBe('almyty');
       expect(response.body.result.capabilities.tools.listChanged).toBe(true);
     });
 
@@ -321,10 +321,10 @@ describe('Complete apifai System (e2e)', () => {
 
       expect(response.body.protocol).toBe('utcp');
       expect(response.body.version).toBe('1.0.0');
-      expect(response.body.server.name).toBe('apifai');
+      expect(response.body.server.name).toBe('almyty');
       expect(response.body.capabilities.directCalling).toBe(true);
       expect(response.body.capabilities.proxyMode).toBe(true);
-      expect(response.body.experimental.apifai.universalApiTranslation).toBe(true);
+      expect(response.body.experimental.almyty.universalApiTranslation).toBe(true);
     });
 
     it('should generate UTCP manual for organization', async () => {
@@ -605,11 +605,11 @@ describe('Complete apifai System (e2e)', () => {
         .get('/monitoring/metrics/prometheus')
         .expect(200);
 
-      expect(response.text).toContain('# HELP apifai_uptime_seconds');
-      expect(response.text).toContain('apifai_uptime_seconds');
-      expect(response.text).toContain('# HELP apifai_tools_total');
-      expect(response.text).toContain('apifai_tools_total');
-      expect(response.text).toContain('# HELP apifai_mcp_sessions');
+      expect(response.text).toContain('# HELP almyty_uptime_seconds');
+      expect(response.text).toContain('almyty_uptime_seconds');
+      expect(response.text).toContain('# HELP almyty_tools_total');
+      expect(response.text).toContain('almyty_tools_total');
+      expect(response.text).toContain('# HELP almyty_mcp_sessions');
     });
   });
 
@@ -691,7 +691,7 @@ describe('Complete apifai System (e2e)', () => {
     it('should maintain organization isolation', async () => {
       // Create second user with different organization
       const secondUser = {
-        email: `test2-${Date.now()}@apifai.dev`,
+        email: `test2-${Date.now()}@almyty.dev`,
         password: 'testpass123',
         firstName: 'Test2',
         lastName: 'User2'

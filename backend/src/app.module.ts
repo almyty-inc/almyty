@@ -74,7 +74,7 @@ import { databaseConfig } from './config/database.config';
           port: parseInt(configService.get<string>('DATABASE_PORT', '5432')),
           username: configService.get<string>('DATABASE_USERNAME', 'postgres'),
           password: configService.get<string>('DATABASE_PASSWORD', 'password'),
-          database: configService.get<string>('DATABASE_NAME', 'apifai'),
+          database: configService.get<string>('DATABASE_NAME', 'almyty'),
           entities: [__dirname + '/entities/*.entity{.ts,.js}'],
           migrations: [__dirname + '/migrations/*{.ts,.js}'],
           migrationsRun: false,

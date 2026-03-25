@@ -373,7 +373,7 @@ describe('OpenAI Compatibility', () => {
         expect(model.id).toMatch(/^agent:/);
         expect(model.object).toBe('model');
         expect(typeof model.created).toBe('number');
-        expect(model.owned_by).toBe('apifai');
+        expect(model.owned_by).toBe('almyty');
         expect(Array.isArray(model.permission)).toBe(true);
         expect(model.root).toMatch(/^agent:/);
         expect(model.parent).toBeNull();

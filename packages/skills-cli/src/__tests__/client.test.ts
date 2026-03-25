@@ -82,15 +82,15 @@ describe('parseRef', () => {
 // generateMetaSkill()
 // ---------------------------------------------------------------------------
 describe('generateMetaSkill', () => {
-  it('returns a SkillFile with name "skills" and fileName "apifai-skills"', () => {
+  it('returns a SkillFile with name "skills" and fileName "almyty-skills"', () => {
     const skill = generateMetaSkill();
     expect(skill.name).toBe('skills');
-    expect(skill.fileName).toBe('apifai-skills');
+    expect(skill.fileName).toBe('almyty-skills');
   });
 
-  it('content includes npx @apifai/skills commands', () => {
+  it('content includes npx @almyty/skills commands', () => {
     const { content } = generateMetaSkill();
-    expect(content).toContain('npx @apifai/skills');
+    expect(content).toContain('npx @almyty/skills');
   });
 
   it('content references daemon command', () => {
@@ -116,7 +116,7 @@ describe('generateMetaSkill', () => {
   it('content includes SKILL.md front-matter', () => {
     const { content } = generateMetaSkill();
     expect(content).toContain('---');
-    expect(content).toContain('name: apifai-skills');
+    expect(content).toContain('name: almyty-skills');
     expect(content).toContain('description:');
   });
 });
@@ -138,8 +138,8 @@ describe('loadConfig', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns empty config when no .apifairc exists and no env var', () => {
-    // Use a temp directory that definitely has no .apifairc
+  it('returns empty config when no .almytyrc exists and no env var', () => {
+    // Use a temp directory that definitely has no .almytyrc
     const config = loadConfig('/tmp/nonexistent-dir-' + Date.now());
     expect(config).toEqual({});
   });
@@ -150,7 +150,7 @@ describe('loadConfig', () => {
     expect(config).toEqual({ skillsDir: '/custom/skills/dir' });
   });
 
-  it('env var takes precedence over .apifairc files', () => {
+  it('env var takes precedence over .almytyrc files', () => {
     process.env.APIFAI_SKILLS_DIR = '/env/override';
     // Even if we pass a projectDir, env should take priority
     const config = loadConfig('/some/project');
@@ -158,9 +158,9 @@ describe('loadConfig', () => {
   });
 
   it('returns empty config for a directory with no rc file and no home rc', () => {
-    // Use a deeply nested temp path that certainly has no .apifairc anywhere
-    // and also won't match ~/.apifairc (already handled by the missing file)
-    const fakePath = `/tmp/apifai-test-${Date.now()}/deeply/nested/project`;
+    // Use a deeply nested temp path that certainly has no .almytyrc anywhere
+    // and also won't match ~/.almytyrc (already handled by the missing file)
+    const fakePath = `/tmp/almyty-test-${Date.now()}/deeply/nested/project`;
     const config = loadConfig(fakePath);
     expect(config).toEqual({});
   });

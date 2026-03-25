@@ -156,7 +156,7 @@ export class AgentOpenAICompatController {
           id: `agent:${a.id}`,
           object: 'model',
           created: Math.floor(new Date(a.createdAt).getTime() / 1000),
-          owned_by: 'apifai',
+          owned_by: 'almyty',
           permission: [],
           root: `agent:${a.id}`,
           parent: null,

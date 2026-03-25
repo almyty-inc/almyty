@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: apifai
+  name: almyty
   labels:
-    app.kubernetes.io/name: apifai
-    app.kubernetes.io/part-of: apifai-platform
+    app.kubernetes.io/name: almyty
+    app.kubernetes.io/part-of: almyty-platform

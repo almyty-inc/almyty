@@ -374,7 +374,7 @@ describe('LlmProvider Entity', () => {
       const headers = provider.getAuthHeaders();
 
       expect(headers.Authorization).toBe('Bearer sk-test-key');
-      expect(headers['User-Agent']).toBe('apifai/1.0');
+      expect(headers['User-Agent']).toBe('almyty/1.0');
       expect(headers['Content-Type']).toBe('application/json');
     });
 

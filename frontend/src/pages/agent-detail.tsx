@@ -91,8 +91,8 @@ const execStatusVariant: Record<string, 'default' | 'secondary' | 'destructive' 
 
 export function AgentDetailPage() {
   useEffect(() => {
-    document.title = 'Agent Details | apifai'
-    return () => { document.title = 'apifai' }
+    document.title = 'Agent Details | almyty'
+    return () => { document.title = 'almyty' }
   }, [])
 
   const { id } = useParams<{ id: string }>()
@@ -395,7 +395,7 @@ export function AgentDetailPage() {
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold">{agent.name}</h1>
+              <h1 className="text-2xl font-heading font-bold">{agent.name}</h1>
               <Badge variant={statusVariant[agent.status] || 'secondary'}>{agent.status}</Badge>
             </div>
             {agent.description && (

@@ -85,7 +85,7 @@ describe('GatewayUtcpController - Auth Behavior', () => {
       const discoveryInfo = {
         protocol: 'utcp',
         version: '1.0.0',
-        server: { name: 'apifai' },
+        server: { name: 'almyty' },
       };
 
       gatewayResolver.parsePathSegments.mockReturnValue({

@@ -27,7 +27,7 @@ describe('Protocol Endpoints Only (e2e)', () => {
 
       expect(response.body.protocol).toBe('mcp');
       expect(response.body.version).toBe('2024-11-05');
-      expect(response.body.server.name).toBe('apifai');
+      expect(response.body.server.name).toBe('almyty');
       expect(response.body.capabilities.tools.listChanged).toBe(true);
     });
 
@@ -38,7 +38,7 @@ describe('Protocol Endpoints Only (e2e)', () => {
 
       expect(response.body.protocol).toBe('utcp');
       expect(response.body.version).toBe('1.0.0');
-      expect(response.body.server.name).toBe('apifai');
+      expect(response.body.server.name).toBe('almyty');
       expect(response.body.capabilities.directCalling).toBe(true);
       expect(response.body.capabilities.proxyMode).toBe(true);
     });
@@ -208,8 +208,8 @@ describe('Basic Functionality Without Database Issues', () => {
     expect(a2aResponse.body.protocol).toBe('a2a');
 
     // Verify experimental features
-    expect(mcpResponse.body.capabilities.experimental.apifai.universalApiTranslation).toBe(true);
-    expect(utcpResponse.body.experimental.apifai.universalApiTranslation).toBe(true);
+    expect(mcpResponse.body.capabilities.experimental.almyty.universalApiTranslation).toBe(true);
+    expect(utcpResponse.body.experimental.almyty.universalApiTranslation).toBe(true);
     expect(a2aResponse.body.features.enhanced_beyond_mcp_context_forge).toBeDefined();
 
     // Verify transport support

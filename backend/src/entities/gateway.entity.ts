@@ -257,7 +257,7 @@ export class Gateway {
         return {
           ...baseConfig,
           format: 'skill-md',
-          installCommand: `npx @apifai/skills install --gateway ${this.id}`,
+          installCommand: `npx @almyty/skills install --gateway ${this.id}`,
         };
 
       default:

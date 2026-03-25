@@ -1,11 +1,11 @@
 {
-  "name": "@apifai/mcp-server",
+  "name": "@almyty/mcp-server",
   "version": "1.0.0",
   "description": "Skill-first API proxy for any LLM — turns APIs into AI skills via MCP with minimal token overhead",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "apifai-mcp": "dist/index.js"
+    "almyty-mcp": "dist/index.js"
   },
   "files": [
     "dist"
@@ -22,13 +22,13 @@
     "api-gateway",
     "openapi",
     "graphql",
-    "apifai",
+    "almyty",
     "claude",
     "cursor",
     "copilot",
     "codex"
   ],
-  "author": "apifai",
+  "author": "almyty",
   "license": "BSL-1.1",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",

@@ -4,68 +4,42 @@
 
 @layer base {
   :root {
-    /* Premium neutral palette — color through restraint, not saturation */
-    --background: 0 0% 100%;
-    --foreground: 224 71% 4%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 224 71% 4%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 224 71% 4%;
-
-    /* Deep indigo — sophisticated, not toylike */
-    --primary: 243 75% 59%;
+    --background: 240 20% 3.5%;
+    --foreground: 0 0% 83%;
+    --card: 240 18% 5%;
+    --card-foreground: 0 0% 83%;
+    --popover: 240 18% 5%;
+    --popover-foreground: 0 0% 83%;
+    --primary: 262 83% 66%;
     --primary-foreground: 0 0% 100%;
-
-    /* Neutral grays — no purple tint */
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 224 71% 4%;
-
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 46%;
-
-    --accent: 220 14% 96%;
-    --accent-foreground: 224 71% 4%;
-
-    --destructive: 0 84% 60%;
+    --secondary: 187 86% 53%;
+    --secondary-foreground: 0 0% 3%;
+    --muted: 240 10% 10%;
+    --muted-foreground: 0 0% 53%;
+    --accent: 187 86% 53%;
+    --accent-foreground: 0 0% 3%;
+    --destructive: 350 89% 60%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 243 75% 59%;
-
+    --border: 240 10% 10%;
+    --input: 240 10% 12%;
+    --ring: 262 83% 66%;
     --radius: 0.5rem;
   }
 
-  .dark {
-    --background: 224 71% 4%;
-    --foreground: 210 20% 98%;
-
-    --card: 224 40% 7%;
-    --card-foreground: 210 20% 98%;
-
-    --popover: 224 40% 7%;
-    --popover-foreground: 210 20% 98%;
-
-    --primary: 243 75% 65%;
+  .light {
+    --background: 30 20% 95%;
+    --foreground: 30 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 30 10% 10%;
+    --primary: 263 70% 50%;
     --primary-foreground: 0 0% 100%;
-
-    --secondary: 215 28% 12%;
-    --secondary-foreground: 210 20% 98%;
-
-    --muted: 215 28% 12%;
-    --muted-foreground: 218 11% 55%;
-
-    --accent: 215 28% 12%;
-    --accent-foreground: 210 20% 98%;
-
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 20% 98%;
-
-    --border: 215 28% 14%;
-    --input: 215 28% 14%;
-    --ring: 243 75% 65%;
+    --secondary: 189 82% 31%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 30 10% 90%;
+    --muted-foreground: 0 0% 40%;
+    --border: 30 10% 88%;
+    --input: 30 10% 88%;
+    --ring: 263 70% 50%;
   }
 }
 
@@ -74,6 +48,7 @@
     @apply border-border;
   }
   body {
+    font-family: 'DM Sans', sans-serif;
     @apply bg-background text-foreground antialiased;
   }
 }

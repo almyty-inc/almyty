@@ -48,7 +48,7 @@ export function LoginPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Sign in</h1>
+      <h1 className="text-2xl font-heading font-bold mb-6">Sign in</h1>
       {loginError && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
           <p className="text-sm text-red-600">{loginError}</p>

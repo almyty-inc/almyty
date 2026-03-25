@@ -91,7 +91,7 @@ describe('CodegenService', () => {
       expect(result.files[0].path).toBe('getpetbyid.ts');
 
       const content = result.files[0].content;
-      expect(content).toContain("import { ApifaiClient } from './client'");
+      expect(content).toContain("import { AlmytyClient } from './client'");
       expect(content).toContain('interface GetPetByIdParams');
       expect(content).toContain('petId: number');
       expect(content).toContain('format?: string');
@@ -155,7 +155,7 @@ describe('CodegenService', () => {
       const pkgFile = result.files.find(f => f.path === 'package.json');
       const pkg = JSON.parse(pkgFile!.content);
 
-      expect(pkg.name).toBe('@apifai/petstore-gateway');
+      expect(pkg.name).toBe('@almyty/petstore-gateway');
       expect(pkg.main).toBe('dist/index.js');
       expect(pkg.types).toBe('dist/index.d.ts');
     });
@@ -182,7 +182,7 @@ describe('CodegenService', () => {
       const result = await service.generateGatewaySdk('gw-1');
       const clientFile = result.files.find(f => f.path === 'src/client.ts');
 
-      expect(clientFile!.content).toContain('class ApifaiClient');
+      expect(clientFile!.content).toContain('class AlmytyClient');
       expect(clientFile!.content).toContain('callTool');
       expect(clientFile!.content).toContain('fetch');
       expect(clientFile!.content).toContain('Authorization');

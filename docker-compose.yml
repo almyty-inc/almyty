@@ -5,7 +5,7 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: apifai
+      POSTGRES_DB: almyty
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
@@ -43,7 +43,7 @@ services:
       - DATABASE_PORT=5432
       - DATABASE_USERNAME=postgres
       - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - DATABASE_NAME=apifai
+      - DATABASE_NAME=almyty
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}

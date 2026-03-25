@@ -83,7 +83,7 @@ export class McpGatewayService {
       capabilities: serverData.capabilities || {
         tools: { listChanged: true },
         experimental: {
-          apifai: {
+          almyty: {
             universalApiTranslation: true,
             virtualServer: true,
           },

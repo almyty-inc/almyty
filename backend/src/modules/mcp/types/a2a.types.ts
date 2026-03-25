@@ -236,7 +236,7 @@ export interface A2ADiscoveryInfo {
     features: string[];
   };
   experimental?: {
-    apifai?: {
+    almyty?: {
       universalApiTranslation: boolean;
       workflowOrchestration: boolean;
       multiProtocolBridge: boolean;

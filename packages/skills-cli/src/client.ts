@@ -38,7 +38,7 @@ export function parseRef(ref: string): ParsedRef {
   return { type: 'search', raw: ref };
 }
 
-export class ApifaiClient {
+export class AlmytyClient {
   private baseUrl: string;
   private token: string;
 
@@ -58,7 +58,7 @@ export class ApifaiClient {
 
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('Authentication failed. Run: npx @apifai/skills login');
+        throw new Error('Authentication failed. Run: npx @almyty/skills login');
       }
       const text = await response.text();
       throw new Error(`API error (${response.status}): ${text}`);

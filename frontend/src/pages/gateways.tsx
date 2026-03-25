@@ -40,8 +40,8 @@ type CreateGatewayForm = z.infer<typeof createGatewaySchema>
 
 export function GatewaysPage() {
   useEffect(() => {
-    document.title = 'Gateways | apifai'
-    return () => { document.title = 'apifai' }
+    document.title = 'Gateways | almyty'
+    return () => { document.title = 'almyty' }
   }, [])
 
   const navigate = useNavigate()
@@ -318,7 +318,7 @@ export function GatewaysPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Gateways</h1>
+          <h1 className="text-3xl font-heading font-bold tracking-tight">Gateways</h1>
           <p className="text-muted-foreground">
             {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${gateways.length} gateways (${gateways.filter((g: Gateway) => g.status === 'active').length} active) \u00B7 ${gateways.reduce((sum: number, g: Gateway) => sum + (g.tools?.length || 0), 0)} tool assignments`}
           </p>

@@ -184,8 +184,8 @@ export function AgentBuilderPage() {
 
   // Document title
   useEffect(() => {
-    document.title = isEditing ? `Edit Agent | apifai` : `New Agent | apifai`
-    return () => { document.title = 'apifai' }
+    document.title = isEditing ? `Edit Agent | almyty` : `New Agent | almyty`
+    return () => { document.title = 'almyty' }
   }, [isEditing])
 
   // Fetch existing agent when editing

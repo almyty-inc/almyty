@@ -96,8 +96,8 @@ const DEFAULT_PIPELINE = {
 
 export function AgentsPage() {
   useEffect(() => {
-    document.title = 'Agents | apifai'
-    return () => { document.title = 'apifai' }
+    document.title = 'Agents | almyty'
+    return () => { document.title = 'almyty' }
   }, [])
 
   const navigate = useNavigate()
@@ -277,7 +277,7 @@ export function AgentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
+          <h1 className="text-3xl font-heading font-bold tracking-tight">Agents</h1>
           <p className="text-muted-foreground">
             {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${agents.length} agents (${activeCount} active)`}
           </p>

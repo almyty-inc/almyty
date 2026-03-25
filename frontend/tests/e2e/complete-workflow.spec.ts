@@ -8,7 +8,7 @@ test.describe('Complete E2E Workflow', () => {
     assertHelper,
   }) => {
     /**
-     * This test covers the COMPLETE apifai value proposition:
+     * This test covers the COMPLETE almyty value proposition:
      * 1. Import an API
      * 2. Parse its schema
      * 3. Auto-generate tools

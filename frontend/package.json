@@ -1,7 +1,7 @@
 {
-  "name": "apifai-frontend",
+  "name": "almyty-frontend",
   "version": "1.0.0",
-  "description": "apifai Frontend - React Dashboard",
+  "description": "almyty Frontend - React Dashboard",
   "private": true,
   "dependencies": {
     "@codemirror/autocomplete": "^6.19.1",

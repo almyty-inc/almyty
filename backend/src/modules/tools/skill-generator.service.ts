@@ -87,7 +87,7 @@ export class SkillGeneratorService {
    * Used by the skills CLI to install into agent directories.
    *
    * Per Agent Skills spec: frontmatter `name` must match parent directory name.
-   * Directory = `apifai-{slug}`, so name = `apifai-{slug}`.
+   * Directory = `almyty-{slug}`, so name = `almyty-{slug}`.
    */
   async generateIndividualSkills(gatewayId: string, context?: { orgSlug?: string; gatewaySlug?: string }): Promise<IndividualSkill[]> {
     const gateway = await this.gatewayRepository.findOne({
@@ -102,7 +102,7 @@ export class SkillGeneratorService {
 
     return tools.map(tool => {
       const slug = this.slugify(tool.name);
-      const fileName = `apifai-${slug}`;
+      const fileName = `almyty-${slug}`;
       return {
         name: slug,
         fileName,
@@ -127,7 +127,7 @@ export class SkillGeneratorService {
    *
    * @param tool The tool to render
    * @param skillName Optional override for the frontmatter `name` field.
-   *   When provided (e.g. `apifai-find-pet-by-id`), ensures name matches
+   *   When provided (e.g. `almyty-find-pet-by-id`), ensures name matches
    *   the parent directory per the Agent Skills spec.
    */
   private renderToolSkillMd(tool: Tool, skillName?: string, context?: { orgSlug?: string; gatewaySlug?: string }): string {
@@ -146,7 +146,7 @@ export class SkillGeneratorService {
     lines.push(`name: ${skillName || this.slugify(tool.name)}`);
     lines.push(`description: ${this.escapeYaml(this.buildDescription(tool))}`);
     lines.push('metadata:');
-    lines.push('  author: apifai');
+    lines.push('  author: almyty');
     lines.push('  generated: "true"');
     if (tool.version) {
       lines.push(`  version: "${tool.version}"`);
@@ -215,7 +215,7 @@ export class SkillGeneratorService {
       lines.push('');
       lines.push('Run this tool directly:');
       lines.push('```bash');
-      lines.push(`npx @apifai/skills run @${context.orgSlug}/${context.gatewaySlug}/${skillSlug} --param1 value1`);
+      lines.push(`npx @almyty/skills run @${context.orgSlug}/${context.gatewaySlug}/${skillSlug} --param1 value1`);
       lines.push('```');
       lines.push('');
     }
@@ -242,7 +242,7 @@ export class SkillGeneratorService {
     lines.push(`name: ${this.slugify(gateway.name)}`);
     lines.push(`description: ${this.escapeYaml(`API tools for ${gateway.name}. ${tools.length} tools available. Use when interacting with the ${gateway.name} API.`)}`);
     lines.push('metadata:');
-    lines.push('  author: apifai');
+    lines.push('  author: almyty');
     lines.push('  generated: "true"');
     lines.push('---');
     lines.push('');
@@ -316,7 +316,7 @@ export class SkillGeneratorService {
       `name: ${this.slugify(gateway.name)}`,
       `description: ${this.escapeYaml(`API tools for ${gateway.name}. Use when interacting with the ${gateway.name} API.`)}`,
       'metadata:',
-      '  author: apifai',
+      '  author: almyty',
       '  generated: "true"',
       '---',
       '',

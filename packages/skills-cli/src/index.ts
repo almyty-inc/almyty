@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { login, logout, resolveAuth } from './auth.js';
-import { ApifaiClient, parseRef } from './client.js';
+import { AlmytyClient, parseRef } from './client.js';
 import { detectAgents, getDefaultTargets, getAllTargets } from './agents.js';
 import { installSkills, removeSkills, listInstalledSkills } from './installer.js';
 import { loadConfig, resolveTargets } from './config.js';
@@ -11,13 +11,13 @@ const VERSION = '1.0.0';
 
 function printHelp(): void {
   console.log(`
-apifai Skills CLI v${VERSION}
+almyty Skills CLI v${VERSION}
 
 Usage:
-  npx @apifai/skills <command> [options]
+  npx @almyty/skills <command> [options]
 
 Commands:
-  login                          Authenticate with apifai
+  login                          Authenticate with almyty
   logout                         Remove stored credentials
   daemon                         Start skill daemon (syncs all skills)
   install <ref>                  Install skills
@@ -35,23 +35,23 @@ References:
   <uuid>                         Direct ID reference
 
 Config:
-  .apifairc                      JSON config file (project or home dir)
+  .almytyrc                      JSON config file (project or home dir)
   APIFAI_SKILLS_DIR              Override skill installation directory
   APIFAI_URL                     Override API URL
   APIFAI_TOKEN                   Override auth token
 
 Options:
   --interval, -i <seconds>       Daemon poll interval in seconds (default: 60)
-  --url <url>                    apifai API URL (default: https://api.apif.ai)
+  --url <url>                    almyty API URL (default: https://api.almyty.dev)
   --dir <path>                   Project directory (default: current directory)
   --help, -h                     Show help
   --version, -v                  Show version
 
 Examples:
-  npx @apifai/skills daemon
-  npx @apifai/skills install @myorg/petstore/get-pet
-  npx @apifai/skills search "weather"
-  npx @apifai/skills run @myorg/petstore/get-pet --petId 123
+  npx @almyty/skills daemon
+  npx @almyty/skills install @myorg/petstore/get-pet
+  npx @almyty/skills search "weather"
+  npx @almyty/skills run @myorg/petstore/get-pet --petId 123
 `);
 }
 
@@ -114,8 +114,8 @@ function requireRef(args: ParsedArgs, command: string): string {
   const ref = getRef(args);
   if (!ref) {
     console.error('Error: reference required');
-    console.error(`  npx @apifai/skills ${command} @<org>/<gateway>`);
-    console.error(`  npx @apifai/skills ${command} <skill-name>`);
+    console.error(`  npx @almyty/skills ${command} @<org>/<gateway>`);
+    console.error(`  npx @almyty/skills ${command} <skill-name>`);
     process.exit(1);
   }
   return ref;
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
 
   switch (command) {
     case 'login': {
-      const url = urlOverride || process.env.APIFAI_URL || 'https://api.apif.ai';
+      const url = urlOverride || process.env.APIFAI_URL || 'https://api.almyty.dev';
       await login(url);
       break;
     }
@@ -163,11 +163,11 @@ async function main(): Promise<void> {
 
     case 'gateways': {
       const { url, token } = resolveAuth();
-      const client = new ApifaiClient(urlOverride || url, token);
+      const client = new AlmytyClient(urlOverride || url, token);
       const gateways = await client.listGateways();
 
       if (gateways.length === 0) {
-        console.log('No gateways found. Create one at https://app.apif.ai/gateways');
+        console.log('No gateways found. Create one at https://app.almyty.dev/gateways');
         return;
       }
 
@@ -176,7 +176,7 @@ async function main(): Promise<void> {
         const slug = gw.name.toLowerCase().replace(/\s+/g, '-');
         console.log(`  ${gw.name}`);
         console.log(`    Type: ${gw.type}`);
-        console.log(`    Use:  npx @apifai/skills install @<org>/${slug}`);
+        console.log(`    Use:  npx @almyty/skills install @<org>/${slug}`);
         console.log('');
       }
       break;
@@ -185,7 +185,7 @@ async function main(): Promise<void> {
     case 'list': {
       const ref = getRef(args);
       const { url, token } = resolveAuth();
-      const client = new ApifaiClient(urlOverride || url, token);
+      const client = new AlmytyClient(urlOverride || url, token);
 
       if (!ref) {
         const allSkills = await client.fetchAllSkills();
@@ -213,7 +213,7 @@ async function main(): Promise<void> {
         for (const skill of skills) {
           console.log(`  ${skill.name}`);
         }
-        console.log(`\nInstall: npx @apifai/skills install ${ref}`);
+        console.log(`\nInstall: npx @almyty/skills install ${ref}`);
       } else {
         const allSkills = await client.fetchAllSkills();
         if (!allSkills || (allSkills as any[]).length === 0) {
@@ -234,12 +234,12 @@ async function main(): Promise<void> {
       const query = getRef(args) || args.positional[0];
       if (!query) {
         console.error('Error: search query required');
-        console.error('  npx @apifai/skills search <query>');
+        console.error('  npx @almyty/skills search <query>');
         process.exit(1);
       }
 
       const { url, token } = resolveAuth();
-      const client = new ApifaiClient(urlOverride || url, token);
+      const client = new AlmytyClient(urlOverride || url, token);
       const results = await client.searchSkills(query);
 
       if (!results || results.length === 0) {
@@ -253,15 +253,15 @@ async function main(): Promise<void> {
         const desc = skill.toolDescription ? ` — ${skill.toolDescription}` : '';
         console.log(`  ${label}${desc}`);
       }
-      console.log(`\nInstall: npx @apifai/skills install <ref>`);
-      console.log(`Run:     npx @apifai/skills run <ref>`);
+      console.log(`\nInstall: npx @almyty/skills install <ref>`);
+      console.log(`Run:     npx @almyty/skills run <ref>`);
       break;
     }
 
     case 'install': {
       const ref = requireRef(args, 'install');
       const { url, token } = resolveAuth();
-      const client = new ApifaiClient(urlOverride || url, token);
+      const client = new AlmytyClient(urlOverride || url, token);
       const parsed = parseRef(ref);
 
       let skills: { name: string; fileName: string; content: string }[] = [];
@@ -281,7 +281,7 @@ async function main(): Promise<void> {
         const fetched = await client.fetchSkills(gatewayRef);
         const match = fetched.find(s =>
           s.name === parsed.skillName ||
-          s.fileName === `apifai-${parsed.skillName}`
+          s.fileName === `almyty-${parsed.skillName}`
         );
         if (!match) {
           console.error(`Skill "${parsed.skillName}" not found in ${gatewayRef}`);
@@ -317,7 +317,7 @@ async function main(): Promise<void> {
             const desc = r.toolDescription ? ` — ${r.toolDescription}` : '';
             console.log(`  ${label}${desc}`);
           }
-          console.log(`\nBe more specific: npx @apifai/skills install @org/gateway/skill`);
+          console.log(`\nBe more specific: npx @almyty/skills install @org/gateway/skill`);
           return;
         }
       }
@@ -346,7 +346,7 @@ async function main(): Promise<void> {
     case 'run': {
       const ref = requireRef(args, 'run');
       const { url, token } = resolveAuth();
-      const client = new ApifaiClient(urlOverride || url, token);
+      const client = new AlmytyClient(urlOverride || url, token);
       const parsed = parseRef(ref);
 
       let gatewayId: string;
@@ -385,7 +385,7 @@ async function main(): Promise<void> {
     case 'daemon': {
       const intervalSec = parseInt(args.flags.interval as string, 10) || config.interval || 60;
       const { url, token } = resolveAuth();
-      const client = new ApifaiClient(urlOverride || url, token);
+      const client = new AlmytyClient(urlOverride || url, token);
 
       const targets = resolveTargets(projectDir, config);
       if (targets.length === 0) {
@@ -393,7 +393,7 @@ async function main(): Promise<void> {
         process.exit(1);
       }
 
-      console.log(`apifai skill daemon (every ${intervalSec}s)`);
+      console.log(`almyty skill daemon (every ${intervalSec}s)`);
       console.log(`Syncing to ${targets.length} agent target(s):`);
       for (const t of targets) {
         console.log(`  ${t.name}: ${t.skillsDir}`);
@@ -457,8 +457,8 @@ async function main(): Promise<void> {
       }
 
       if (totalFound === 0) {
-        console.log('No apifai skills installed in this directory.');
-        console.log('Install: npx @apifai/skills install @<org>/<gateway>');
+        console.log('No almyty skills installed in this directory.');
+        console.log('Install: npx @almyty/skills install @<org>/<gateway>');
       }
       break;
     }
@@ -476,7 +476,7 @@ async function main(): Promise<void> {
       }
 
       if (totalRemoved === 0) {
-        console.log('No apifai skills found to remove.');
+        console.log('No almyty skills found to remove.');
       } else {
         console.log(`\nRemoved ${totalRemoved} skill(s) total.`);
       }
@@ -487,7 +487,7 @@ async function main(): Promise<void> {
       const ref = requireRef(args, 'watch');
       const intervalSec = parseInt(args.flags.interval as string, 10) || config.interval || 60;
       const { url, token } = resolveAuth();
-      const client = new ApifaiClient(urlOverride || url, token);
+      const client = new AlmytyClient(urlOverride || url, token);
 
       const gateway = await client.fetchGateway(ref).catch(() => null);
       const gwName = gateway?.name || ref;

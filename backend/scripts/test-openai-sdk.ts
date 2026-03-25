@@ -1,5 +1,5 @@
 /**
- * Test apifai agent via OpenAI Node.js SDK.
+ * Test almyty agent via OpenAI Node.js SDK.
  * Usage: npx ts-node scripts/test-openai-sdk.ts --url https://api.staging.apif.ai --api-key <key>
  */
 import OpenAI from 'openai';

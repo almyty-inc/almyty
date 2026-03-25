@@ -210,7 +210,7 @@ export interface UtcpDiscoveryInfo {
     formats: string[];
   };
   experimental?: {
-    apifai?: {
+    almyty?: {
       universalApiTranslation: boolean;
       supportedApiFormats: string[];
       autoGeneration: boolean;

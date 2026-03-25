@@ -212,7 +212,7 @@ export class McpController {
       protocol: 'mcp',
       version: '2024-11-05',
       server: {
-        name: 'apifai',
+        name: 'almyty',
         version: '1.0.0',
         description: 'Universal API-to-AI Tool Translation Platform',
       },
@@ -221,7 +221,7 @@ export class McpController {
         resources: { listChanged: true, subscribe: false },
         prompts: { listChanged: true },
         experimental: {
-          apifai: {
+          almyty: {
             universalApiTranslation: true,
             multiProtocolSupport: ['mcp', 'utcp', 'a2a'],
             supportedApiFormats: ['openapi', 'graphql', 'soap', 'protobuf'],

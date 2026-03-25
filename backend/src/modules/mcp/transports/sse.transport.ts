@@ -67,7 +67,7 @@ export class SseTransport extends EventEmitter {
       sessionId: session.id,
       protocolVersion: '2024-11-05',
       serverInfo: {
-        name: 'apifai',
+        name: 'almyty',
         version: '1.0.0',
         transport: 'sse',
       },

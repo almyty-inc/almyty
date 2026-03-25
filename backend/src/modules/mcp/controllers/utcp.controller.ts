@@ -127,7 +127,7 @@ export class UtcpController {
     return {
       protocol: 'utcp',
       version: '1.0.0',
-      server: 'apifai',
+      server: 'almyty',
       capabilities: {
         manualGeneration: true,
         directCalling: true,
@@ -153,7 +153,7 @@ export class UtcpController {
     return {
       protocol: 'utcp',
       status: 'healthy',
-      server: 'apifai',
+      server: 'almyty',
       version: '1.0.0',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),

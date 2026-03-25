@@ -248,7 +248,7 @@ export interface PluginMarketplaceEntry {
     currency?: string;
   };
   compatibility: {
-    apifaiVersion: string;
+    almytyVersion: string;
     protocolSupport: string[];
   };
   stats: {

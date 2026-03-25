@@ -1,8 +1,8 @@
-# apifai - Developer Reference
+# almyty - Developer Reference
 
 ## Project Overview
 
-**apifai** is a universal API-to-AI tool gateway. It parses API schemas (OpenAPI, GraphQL, SOAP, Protobuf), auto-generates tools, and serves them via MCP, UTCP, A2A, and Agent Skills protocols. Users can also create custom tools manually (HTTP, JavaScript, GraphQL, LLM-powered).
+**almyty** is a universal API-to-AI tool gateway. It parses API schemas (OpenAPI, GraphQL, SOAP, Protobuf), auto-generates tools, and serves them via MCP, UTCP, A2A, and Agent Skills protocols. Users can also create custom tools manually (HTTP, JavaScript, GraphQL, LLM-powered).
 
 ---
 
@@ -61,7 +61,7 @@ frontend/src/
 ├── stores/            # Zustand stores
 └── types/             # TypeScript types
 
-packages/skills-cli/   # npx @apifai/skills CLI
+packages/skills-cli/   # npx @almyty/skills CLI
 ├── src/
 │   ├── index.ts       # CLI entry (install, watch, list, remove)
 │   ├── agents.ts      # 30+ agent detection
@@ -117,12 +117,12 @@ cd backend && npm run test
 curl http://localhost:4000/health
 
 # Skills CLI
-npx @apifai/skills install --gateway <id>
-npx @apifai/skills watch --gateway <id>
+npx @almyty/skills install --gateway <id>
+npx @almyty/skills watch --gateway <id>
 
 # Docker production builds
-docker build --target production -t apifai-api ./backend
-docker build --target production -t apifai-frontend ./frontend
+docker build --target production -t almyty-api ./backend
+docker build --target production -t almyty-frontend ./frontend
 ```
 
 ---

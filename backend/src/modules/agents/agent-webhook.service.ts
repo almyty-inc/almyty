@@ -33,7 +33,7 @@ export class AgentWebhookService {
           timeout: 5000,
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'apifai-webhook/1.0',
+            'User-Agent': 'almyty-webhook/1.0',
           },
         },
       );

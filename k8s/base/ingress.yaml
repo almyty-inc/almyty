@@ -1,8 +1,8 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: apifai-ingress
-  namespace: apifai
+  name: almyty-ingress
+  namespace: almyty
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -13,29 +13,29 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - api.apif.ai
+    - api.almyty.dev
     secretName: api-apif-ai-tls
   - hosts:
-    - app.apif.ai
+    - app.almyty.dev
     secretName: app-apif-ai-tls
   rules:
-  - host: api.apif.ai
+  - host: api.almyty.dev
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: apifai-api
+            name: almyty-api
             port:
               number: 3000
-  - host: app.apif.ai
+  - host: app.almyty.dev
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: apifai-frontend
+            name: almyty-frontend
             port:
               number: 8080

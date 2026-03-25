@@ -43,7 +43,7 @@ export class SecurityScannerPlugin {
       name: 'Security Scanner',
       version: '1.0.0',
       description: 'Advanced security scanning for requests, responses, and tool parameters',
-      author: 'apifai',
+      author: 'almyty',
       isActive: true,
       configuration: {
         enabled: true,

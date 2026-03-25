@@ -1,5 +1,5 @@
 /**
- * HTTP proxy to the apifai backend.
+ * HTTP proxy to the almyty backend.
  * Fetches tools and executes tool calls via the MCP JSON-RPC API.
  */
 
@@ -9,7 +9,7 @@ export interface McpToolDefinition {
   inputSchema: Record<string, unknown>;
 }
 
-export class ApifaiProxy {
+export class AlmytyProxy {
   private baseUrl: string;
   private token: string;
   private gatewayId?: string;
@@ -21,7 +21,7 @@ export class ApifaiProxy {
   }
 
   /**
-   * Fetch available tools from the apifai backend.
+   * Fetch available tools from the almyty backend.
    */
   async fetchTools(): Promise<McpToolDefinition[]> {
     const endpoint = this.gatewayId
@@ -57,7 +57,7 @@ export class ApifaiProxy {
   }
 
   /**
-   * Fetch skills from the apifai backend and return as resource content.
+   * Fetch skills from the almyty backend and return as resource content.
    */
   async fetchSkills(): Promise<Array<{ name: string; content: string; toolCount: number }>> {
     const endpoint = this.gatewayId
@@ -87,7 +87,7 @@ export class ApifaiProxy {
   }
 
   /**
-   * Execute a tool call via the apifai backend.
+   * Execute a tool call via the almyty backend.
    */
   async callTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     const endpoint = this.gatewayId

@@ -62,16 +62,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { currentOrganization, organizations, setCurrentOrganization, fetchOrganizations } = useOrganizationStore()
   const { sidebarOpen, setSidebarOpen, toggleSidebar } = useAppStore()
   const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem('theme') === 'dark' ||
-      (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
+    // Dark is the default; only light if explicitly stored
+    return localStorage.getItem('theme') !== 'light'
   })
 
   useEffect(() => {
     if (darkMode) {
-      document.documentElement.classList.add('dark')
+      document.documentElement.classList.remove('light')
       localStorage.setItem('theme', 'dark')
     } else {
-      document.documentElement.classList.remove('dark')
+      document.documentElement.classList.add('light')
       localStorage.setItem('theme', 'light')
     }
   }, [darkMode])
@@ -124,12 +124,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between h-14 px-4 border-b bg-gradient-to-r from-blue-600/5 via-purple-600/5 to-transparent">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center shadow-sm shadow-blue-600/20">
-                <span className="text-white font-bold text-sm">ai</span>
-              </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">apifai</span>
+          <div className="flex items-center justify-between h-14 px-4 border-b bg-gradient-to-br from-violet-500/5 to-cyan-400/5">
+            <div className="flex items-center gap-2">
+              <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8" />
+              <span className="text-xl font-heading font-medium tracking-tight bg-gradient-to-r from-violet-500 via-violet-500 to-foreground/70 bg-clip-text text-transparent">almyty</span>
             </div>
             <Button
               variant="ghost"
@@ -267,11 +265,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             >
               <Menu className="h-6 w-6" />
             </Button>
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">ai</span>
-              </div>
-              <span className="text-xl font-bold text-foreground">apifai</span>
+            <div className="flex items-center gap-2">
+              <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8" />
+              <span className="text-xl font-heading font-medium tracking-tight text-foreground">almyty</span>
             </div>
           </div>
         </header>

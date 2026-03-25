@@ -279,7 +279,7 @@ export class A2AService extends EventEmitter {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent': 'apifai-a2a/1.0.0',
+        'User-Agent': 'almyty-a2a/1.0.0',
         ...agent.configuration?.headers,
       },
       data: message,
@@ -1080,7 +1080,7 @@ export class A2AService extends EventEmitter {
       timeout: 30000,
       retries: 3,
       headers: {
-        'User-Agent': 'apifai-a2a/1.0.0',
+        'User-Agent': 'almyty-a2a/1.0.0',
       },
     };
   }

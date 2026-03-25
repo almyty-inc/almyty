@@ -3,26 +3,26 @@ import { homedir } from 'os';
 import { join, resolve } from 'path';
 import { detectAgents, getDefaultTargets, type AgentTarget, filterAgents } from './agents.js';
 
-export interface ApifaiConfig {
+export interface AlmytyConfig {
   skillsDir?: string;
   agents?: string[];
   url?: string;
   interval?: number;
 }
 
-export function loadConfig(projectDir?: string): ApifaiConfig {
+export function loadConfig(projectDir?: string): AlmytyConfig {
   const envDir = process.env.APIFAI_SKILLS_DIR;
   if (envDir) {
     return { skillsDir: envDir };
   }
 
   const cwd = projectDir || process.cwd();
-  const projectRc = join(cwd, '.apifairc');
+  const projectRc = join(cwd, '.almytyrc');
   if (existsSync(projectRc)) {
     return parseRcFile(projectRc);
   }
 
-  const homeRc = join(homedir(), '.apifairc');
+  const homeRc = join(homedir(), '.almytyrc');
   if (existsSync(homeRc)) {
     return parseRcFile(homeRc);
   }
@@ -30,7 +30,7 @@ export function loadConfig(projectDir?: string): ApifaiConfig {
   return {};
 }
 
-function parseRcFile(path: string): ApifaiConfig {
+function parseRcFile(path: string): AlmytyConfig {
   try {
     const data = readFileSync(path, 'utf-8');
     const parsed = JSON.parse(data);
@@ -45,7 +45,7 @@ function parseRcFile(path: string): ApifaiConfig {
   }
 }
 
-export function resolveTargets(projectDir: string, config: ApifaiConfig): AgentTarget[] {
+export function resolveTargets(projectDir: string, config: AlmytyConfig): AgentTarget[] {
   if (config.skillsDir) {
     return [{
       name: 'custom',

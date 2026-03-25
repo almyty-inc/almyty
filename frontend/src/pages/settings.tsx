@@ -14,8 +14,8 @@ import { authApi, organizationsApi } from '@/lib/api'
 
 export function SettingsPage() {
   useEffect(() => {
-    document.title = 'Settings | apifai'
-    return () => { document.title = 'apifai' }
+    document.title = 'Settings | almyty'
+    return () => { document.title = 'almyty' }
   }, [])
 
   const { currentOrganization } = useOrganizationStore()
@@ -23,7 +23,7 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <h1 className="text-3xl font-heading font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
           Manage your organization and account settings
         </p>
