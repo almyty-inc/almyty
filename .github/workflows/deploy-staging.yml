@@ -96,6 +96,7 @@ jobs:
             --from-literal=REDIS_PASSWORD="" \
             --from-literal=REDIS_URL="redis://staging-almyty-redis:6379" \
             --from-literal=JWT_SECRET=${{ secrets.STAGING_JWT_SECRET }} \
+            --from-literal=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
             --namespace=almyty-staging \
             --dry-run=client -o yaml | kubectl apply -f -
 
