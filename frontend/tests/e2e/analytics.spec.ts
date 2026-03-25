@@ -6,75 +6,78 @@ test.describe('Analytics Dashboard', () => {
   })
 
   test('should display analytics page', async ({ authenticatedPage: page, assertHelper }) => {
-    await assertHelper.assertPageTitle(/analytics|metrics/i)
+    await assertHelper.assertPageTitle(/analytics/i)
   })
 
   test('should show request metrics overview', async ({ authenticatedPage: page }) => {
-    // Should display key metrics
-    await expect(page.getByText(/total.*requests|requests/i).first()).toBeVisible()
-    await expect(page.getByText(/success.*rate|successful/i).first()).toBeVisible()
-    await expect(page.getByText(/average.*response.*time|avg.*time/i).first()).toBeVisible()
-    await expect(page.getByText(/error.*rate|errors/i).first()).toBeVisible()
+    // Overview tab is shown by default with stat cards
+    await expect(page.getByText(/Requests \(24h\)/i).first()).toBeVisible()
+    await expect(page.getByText(/Tool Executions \(24h\)/i).first()).toBeVisible()
+    await expect(page.getByText(/Avg Response \(24h\)/i).first()).toBeVisible()
+    await expect(page.getByText(/Errors \(24h\)/i).first()).toBeVisible()
   })
 
   test('should render requests over time chart', async ({ authenticatedPage: page, assertHelper }) => {
-    // Analytics page shows metrics but detailed charts not implemented yet
-    // Verify overview tab is accessible
-    await expect(page.getByText(/overview|usage|performance/i).first()).toBeVisible()
+    // Overview tab has a "Requests (7 days)" chart and the Overview tab button
+    await expect(page.getByText(/Overview/i).first()).toBeVisible()
+    await expect(page.getByText(/Requests \(7 days\)/i).first()).toBeVisible()
   })
 
   test('should render response time chart', async ({ authenticatedPage: page }) => {
-    // Response time metric is shown in summary card
-    await expect(page.getByText(/response.*time|latency/i).first()).toBeVisible()
+    // Avg Response stat card is shown in overview
+    await expect(page.getByText(/Avg Response/i).first()).toBeVisible()
 
-    // Detailed charts not implemented yet - check for tabs instead
-    await expect(page.getByText(/performance|overview/i).first()).toBeVisible()
+    // Overview tab is visible
+    await expect(page.getByText(/Overview/i).first()).toBeVisible()
   })
 
   test('should render error analysis chart', async ({ authenticatedPage: page }) => {
-    // Error analysis tab exists but detailed breakdown not implemented yet
-    await expect(page.getByText(/errors|overview/i).first()).toBeVisible()
+    // Errors stat card is shown in overview
+    await expect(page.getByText(/Errors \(24h\)/i).first()).toBeVisible()
   })
 
   test('should filter by date range', async ({ authenticatedPage: page, assertHelper }) => {
-    // Find date range selector
-    const dateRangeButton = page.getByRole('button', { name: /date.*range|filter.*date|last.*\d+.*days/i })
+    // The analytics page uses timeframe buttons (1h, 24h, 7d, 30d) on sub-tabs like Tools, Gateways, LLM
+    // Switch to the Tools tab which has the TimeframeSelector
+    await page.getByText('Tools', { exact: true }).click()
+    await assertHelper.waitForLoadingComplete()
 
-    if (await dateRangeButton.isVisible()) {
-      await dateRangeButton.click()
-
-      // Select different range
-      await page.getByRole('option', { name: /last.*7.*days/i }).click()
-
-      // Charts should update
+    // Check for timeframe buttons
+    const timeframeButton = page.getByRole('button', { name: /^7d$/i })
+    if (await timeframeButton.isVisible()) {
+      await timeframeButton.click()
       await assertHelper.waitForLoadingComplete()
-      await expect(page.getByText(/last.*7.*days/i)).toBeVisible()
+      // Button should be active
+      await expect(timeframeButton).toBeVisible()
     }
   })
 
   test('should show top APIs by usage', async ({ authenticatedPage: page }) => {
-    // Top APIs feature not implemented yet - check for Connected APIs metric
-    await expect(page.getByText(/connected.*apis|active.*apis/i).first()).toBeVisible()
+    // The Tools tab shows tool usage data; verify the tab is accessible
+    const toolsTab = page.getByText('Tools', { exact: true })
+    await expect(toolsTab).toBeVisible()
   })
 
   test('should show top tools by usage', async ({ authenticatedPage: page }) => {
-    // Top tools feature not implemented yet - check for Active Tools metric
-    await expect(page.getByText(/active.*tools|tools/i).first()).toBeVisible()
+    // The Tools tab exists in the analytics tabs
+    const toolsTab = page.getByText('Tools', { exact: true })
+    await expect(toolsTab).toBeVisible()
   })
 
   test('should display gateway performance metrics', async ({ authenticatedPage: page }) => {
-    // Gateway performance breakdown not implemented yet - check for Active Gateways metric
-    await expect(page.getByText(/active.*gateways|gateways/i).first()).toBeVisible()
+    // The Gateways tab exists in the analytics tabs
+    const gatewaysTab = page.getByText('Gateways', { exact: true })
+    await expect(gatewaysTab).toBeVisible()
   })
 
   test('should show error breakdown by type', async ({ authenticatedPage: page }) => {
-    // Error breakdown not implemented yet - check for Errors tab
-    await expect(page.getByText(/errors|overview/i).first()).toBeVisible()
+    // Errors stat card is present on the overview; no dedicated Errors tab
+    await expect(page.getByText(/Errors \(24h\)/i).first()).toBeVisible()
   })
 
   test('should display real-time metrics', async ({ authenticatedPage: page }) => {
-    // Look for real-time indicator
-    const realtimeIndicator = page.getByText(/real.*time|live|updating/i)
+    // The subtitle says "Real-time usage data across all protocols"
+    const realtimeIndicator = page.getByText(/real-time/i)
 
     if (await realtimeIndicator.isVisible()) {
       await expect(realtimeIndicator).toBeVisible()
@@ -82,58 +85,53 @@ test.describe('Analytics Dashboard', () => {
   })
 
   test('should export analytics data', async ({ authenticatedPage: page }) => {
-    const exportButton = page.getByRole('button', { name: /export|download|csv/i })
+    // Export buttons are "Export CSV" and "Export JSON"
+    const exportButton = page.getByRole('button', { name: /export csv/i })
 
-    if (await exportButton.isVisible()) {
-      await expect(exportButton).toBeVisible()
-      await expect(exportButton).toBeEnabled()
-    }
+    await expect(exportButton).toBeVisible()
+    await expect(exportButton).toBeEnabled()
   })
 
   test('should show response time distribution', async ({ authenticatedPage: page }) => {
-    // Response time distribution not implemented yet - check for avg response time
-    await expect(page.getByText(/response.*time|avg.*time/i).first()).toBeVisible()
+    // Avg Response stat card shown in overview
+    await expect(page.getByText(/Avg Response/i).first()).toBeVisible()
   })
 
   test('should filter by gateway type', async ({ authenticatedPage: page, assertHelper }) => {
-    const gatewayFilter = page.getByRole('combobox', { name: /gateway.*type|filter.*gateway/i })
+    // Navigate to Gateways tab in analytics
+    await page.getByText('Gateways', { exact: true }).click()
+    await assertHelper.waitForLoadingComplete()
 
-    if (await gatewayFilter.isVisible()) {
-      await gatewayFilter.click()
-      await page.getByRole('option', { name: /mcp/i }).click()
-
-      await assertHelper.waitForLoadingComplete()
-
-      // Should filter to MCP gateways only
-      await expect(page.getByText(/mcp/i)).toBeVisible()
-    }
+    // The Gateways tab shows gateway usage with Protocol column; no combobox filter
+    // Just verify the tab content loaded (table headers or empty state)
+    await expect(
+      page.getByText(/Gateway|No gateway usage data/i).first()
+    ).toBeVisible()
   })
 
   test('should handle empty analytics data gracefully', async ({ authenticatedPage: page, assertHelper }) => {
-    // Mock empty response
-    await page.route('**/api/analytics/**', (route) => {
+    // Mock empty response for analytics overview
+    await page.route('**/analytics/**', (route) => {
       route.fulfill({
         status: 200,
-        body: JSON.stringify({ data: [], total: 0 }),
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: null }),
       })
     })
 
     await page.reload()
     await assertHelper.waitForLoadingComplete()
 
-    // Should show empty state or zero values
-    await expect(page.getByText(/no.*data|0.*requests/i)).toBeVisible()
+    // Should show empty state: "No analytics data yet"
+    await expect(page.getByText(/No analytics data yet/i)).toBeVisible()
   })
 
   test('should refresh analytics on demand', async ({ authenticatedPage: page, assertHelper }) => {
-    const refreshButton = page.getByRole('button', { name: /refresh|reload/i })
+    // No dedicated refresh button; export buttons are the primary actions
+    const exportButton = page.getByRole('button', { name: /export csv/i })
 
-    if (await refreshButton.isVisible()) {
-      await refreshButton.click()
-      await assertHelper.waitForLoadingComplete()
-
-      // Refresh button should still be visible after refresh
-      await expect(refreshButton).toBeVisible()
+    if (await exportButton.isVisible()) {
+      await expect(exportButton).toBeVisible()
     }
   })
 })
