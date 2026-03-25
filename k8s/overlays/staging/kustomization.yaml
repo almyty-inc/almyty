@@ -36,10 +36,13 @@ patches:
         value: "https://app.staging.almyty.com"
       - op: replace
         path: /data/DATABASE_HOST
-        value: "almyty-db-do-user-4308986-0.j.db.ondigitalocean.com"
+        value: "apifai-db-do-user-4308986-0.j.db.ondigitalocean.com"
       - op: replace
         path: /data/DATABASE_PORT
         value: "25060"
+      - op: replace
+        path: /data/DATABASE_NAME
+        value: "apifai"
       - op: replace
         path: /data/REDIS_HOST
         value: "staging-almyty-redis"
