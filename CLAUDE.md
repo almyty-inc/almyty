@@ -132,3 +132,25 @@ docker build --target production -t almyty-frontend ./frontend
 - `docs/architecture.md` — System architecture
 - `docs/implementation-plan.md` — Original implementation plan
 - `docs/schema-design.md` — Database schema design
+
+---
+
+## Brand: almyty
+
+### Rules
+- Always lowercase `almyty` in code, CLI, and running text. Capitalize `Almyty` only at sentence start.
+- Logo icon: hollow lightning bolt polygon outline (thin 1.5px circuit strokes, small node dots at vertices). Never filled solid.
+- Gradient direction: always violet→cyan. Icon: top→bottom. Wordmark: left→right. Never reversed.
+- Shell prompt color in docs/examples: violet (`#8b5cf6`), not green.
+
+### Quick reference
+- **Primary:** violet-500 `#8b5cf6` (dark) / violet-700 `#6d28d9` (light)
+- **Accent:** cyan-400 `#22d3ee` (dark) / cyan-700 `#0e7490` (light)
+- **Fonts:** Manrope (headings + logo), DM Sans (body), JetBrains Mono (code)
+- **Dark bg:** `#06060a` — **Light bg:** `#f4f2ee`
+- **Domain:** almyty.com (almyty.ai and almyty.dev redirect to it)
+
+### Brand docs
+- `docs/brand/colors.md` — Full color tokens, gradients, shadcn/ui variables
+- `docs/brand/typography.md` — Font stack, weights, sizing scale
+- `docs/brand/logo.md` — SVG construction, usage tiers, favicon specs

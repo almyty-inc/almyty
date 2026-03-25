@@ -32,7 +32,7 @@ and working with versions and executions.
 ## List Agents
 
 ```bash
-curl https://api.apif.ai/agents \
+curl https://api.almyty.com/agents \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -61,7 +61,7 @@ curl https://api.apif.ai/agents \
 ## Create Agent
 
 ```bash
-curl -X POST https://api.apif.ai/agents \
+curl -X POST https://api.almyty.com/agents \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -84,7 +84,7 @@ curl -X POST https://api.apif.ai/agents \
 ## Invoke Agent
 
 ```bash
-curl -X POST https://api.apif.ai/agents/{id}/invoke \
+curl -X POST https://api.almyty.com/agents/{id}/invoke \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -139,7 +139,7 @@ curl -X POST https://api.apif.ai/agents/{id}/invoke \
 ## Get Executions
 
 ```bash
-curl "https://api.apif.ai/agents/{id}/executions?limit=20&offset=0" \
+curl "https://api.almyty.com/agents/{id}/executions?limit=20&offset=0" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -155,7 +155,7 @@ curl "https://api.apif.ai/agents/{id}/executions?limit=20&offset=0" \
 ## Save Version
 
 ```bash
-curl -X POST https://api.apif.ai/agents/{id}/versions \
+curl -X POST https://api.almyty.com/agents/{id}/versions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -166,7 +166,7 @@ curl -X POST https://api.apif.ai/agents/{id}/versions \
 ## Rollback
 
 ```bash
-curl -X POST https://api.apif.ai/agents/{id}/versions/{versionIndex}/rollback \
+curl -X POST https://api.almyty.com/agents/{id}/versions/{versionIndex}/rollback \
   -H "Authorization: Bearer $TOKEN"
 ```
 

@@ -7,7 +7,7 @@ or any recurring AI workflow.
 ## Creating a Schedule
 
 ```bash
-curl -X POST https://api.apif.ai/agents/{id}/schedule \
+curl -X POST https://api.almyty.com/agents/{id}/schedule \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -44,7 +44,7 @@ curl -X POST https://api.apif.ai/agents/{id}/schedule \
 The schedule is included in the agent detail response:
 
 ```bash
-curl https://api.apif.ai/agents/{id} \
+curl https://api.almyty.com/agents/{id} \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -64,7 +64,7 @@ curl https://api.apif.ai/agents/{id} \
 ### Remove Schedule
 
 ```bash
-curl -X DELETE https://api.apif.ai/agents/{id}/schedule \
+curl -X DELETE https://api.almyty.com/agents/{id}/schedule \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -85,7 +85,7 @@ manual invocations. Each scheduled execution is tagged with
 `trigger: "schedule"` in the metadata.
 
 ```bash
-curl https://api.apif.ai/agents/{id}/executions?trigger=schedule \
+curl https://api.almyty.com/agents/{id}/executions?trigger=schedule \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -94,7 +94,7 @@ curl https://api.apif.ai/agents/{id}/executions?trigger=schedule \
 Before scheduling, check the estimated cost per run:
 
 ```bash
-curl https://api.apif.ai/agents/{id}/cost-estimate \
+curl https://api.almyty.com/agents/{id}/cost-estimate \
   -H "Authorization: Bearer $TOKEN"
 ```
 

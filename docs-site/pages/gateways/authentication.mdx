@@ -1,7 +1,7 @@
 # Gateway Authentication
 
 Gateways can be protected with authentication to control who can discover
-and invoke tools. apifai supports multiple authentication methods that
+and invoke tools. almyty supports multiple authentication methods that
 can be configured per gateway.
 
 ## Authentication Methods
@@ -26,7 +26,7 @@ can be configured per gateway.
 ### Via the API
 
 ```bash
-curl -X POST https://api.apif.ai/gateways/{id}/auth \
+curl -X POST https://api.almyty.com/gateways/{id}/auth \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -44,7 +44,7 @@ Generate API keys for programmatic access to your gateway:
 ### Generate a Key
 
 ```bash
-curl -X POST https://api.apif.ai/gateways/{id}/auth/api-keys \
+curl -X POST https://api.almyty.com/gateways/{id}/auth/api-keys \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -60,7 +60,7 @@ Response (key is only shown once):
 {
   "id": "key-uuid",
   "name": "Production Key",
-  "key": "apifai_gw_abc123...",
+  "key": "almyty_gw_abc123...",
   "scopes": ["tools:read", "tools:execute"],
   "expiresAt": "2027-01-01T00:00:00Z"
 }
@@ -70,25 +70,25 @@ Response (key is only shown once):
 
 ```bash
 # Via header
-curl https://api.apif.ai/mcp/acme/my-tools \
-  -H "X-API-Key: apifai_gw_abc123..."
+curl https://api.almyty.com/mcp/acme/my-tools \
+  -H "X-API-Key: almyty_gw_abc123..."
 
 # Via Authorization header
-curl https://api.apif.ai/mcp/acme/my-tools \
-  -H "Authorization: Bearer apifai_gw_abc123..."
+curl https://api.almyty.com/mcp/acme/my-tools \
+  -H "Authorization: Bearer almyty_gw_abc123..."
 ```
 
 ### List Keys
 
 ```bash
-curl https://api.apif.ai/gateways/{id}/auth/api-keys \
+curl https://api.almyty.com/gateways/{id}/auth/api-keys \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Revoke a Key
 
 ```bash
-curl -X DELETE https://api.apif.ai/gateways/{id}/auth/api-keys/{keyId} \
+curl -X DELETE https://api.almyty.com/gateways/{id}/auth/api-keys/{keyId} \
   -H "Authorization: Bearer $TOKEN"
 ```
 

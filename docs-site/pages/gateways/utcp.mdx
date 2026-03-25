@@ -17,7 +17,7 @@ It requires no special client libraries — any HTTP client works.
 ## Creating a UTCP Gateway
 
 ```bash
-curl -X POST https://api.apif.ai/gateways \
+curl -X POST https://api.almyty.com/gateways \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -35,13 +35,13 @@ curl -X POST https://api.apif.ai/gateways \
 Your UTCP gateway is available at:
 
 ```
-https://api.apif.ai/utcp/{org-slug}{endpoint}
+https://api.almyty.com/utcp/{org-slug}{endpoint}
 ```
 
 ## Listing Tools
 
 ```bash
-curl https://api.apif.ai/utcp/acme/tools-api/tools \
+curl https://api.almyty.com/utcp/acme/tools-api/tools \
   -H "Authorization: Bearer your-api-key"
 ```
 
@@ -80,7 +80,7 @@ Response:
 ## Invoking a Tool
 
 ```bash
-curl -X POST https://api.apif.ai/utcp/acme/tools-api/tools/get_users/invoke \
+curl -X POST https://api.almyty.com/utcp/acme/tools-api/tools/get_users/invoke \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -144,7 +144,7 @@ Response:
 ```python
 import requests
 
-base = "https://api.apif.ai/utcp/acme/tools-api"
+base = "https://api.almyty.com/utcp/acme/tools-api"
 headers = {"Authorization": "Bearer your-api-key"}
 
 # List tools
@@ -161,7 +161,7 @@ result = requests.post(
 ### JavaScript
 
 ```javascript
-const base = "https://api.apif.ai/utcp/acme/tools-api";
+const base = "https://api.almyty.com/utcp/acme/tools-api";
 const headers = { Authorization: "Bearer your-api-key" };
 
 // List tools

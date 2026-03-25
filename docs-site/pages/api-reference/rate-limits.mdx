@@ -1,6 +1,6 @@
 # Rate Limits
 
-apifai applies rate limits to protect the platform and ensure fair usage.
+almyty applies rate limits to protect the platform and ensure fair usage.
 Limits vary by endpoint type and authentication method.
 
 ## Default Limits
@@ -107,7 +107,7 @@ Individual gateway tools can have custom rate limits configured
 through [Tool Scoping](/gateways/tool-scoping):
 
 ```bash
-curl -X PATCH https://api.apif.ai/gateways/{gatewayId}/tools/{gatewayToolId} \
+curl -X PATCH https://api.almyty.com/gateways/{gatewayId}/tools/{gatewayToolId} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

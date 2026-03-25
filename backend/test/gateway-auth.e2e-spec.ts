@@ -44,7 +44,7 @@ describe('Gateway Authentication (e2e)', () => {
 
   const ts = Date.now();
   const userA = {
-    email: `auth-e2e-a-${ts}@almyty.dev`,
+    email: `auth-e2e-a-${ts}@almyty.com`,
     password: 'TestPass123!',
     firstName: 'Alice',
     lastName: 'Auth',
@@ -52,7 +52,7 @@ describe('Gateway Authentication (e2e)', () => {
   };
 
   const userB = {
-    email: `auth-e2e-b-${ts}@almyty.dev`,
+    email: `auth-e2e-b-${ts}@almyty.com`,
     password: 'TestPass123!',
     firstName: 'Bob',
     lastName: 'Isolation',

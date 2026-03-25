@@ -1,6 +1,6 @@
 # Agents
 
-Agents in apifai are composable AI pipelines that orchestrate LLM calls, tool executions,
+Agents in almyty are composable AI pipelines that orchestrate LLM calls, tool executions,
 conditional logic, and data transformations into repeatable workflows. Each agent is defined
 as a directed acyclic graph (DAG) of nodes connected by edges.
 
@@ -18,7 +18,7 @@ Between them, you wire up any combination of the 9 available node types.
 
 ### Execution Model
 
-When an agent is invoked, apifai:
+When an agent is invoked, almyty:
 
 1. Validates the input against the Input node's schema
 2. Topologically sorts the pipeline nodes
@@ -51,7 +51,7 @@ upstream dependencies have completed.
 ### Via the API
 
 ```bash
-curl -X POST https://api.apif.ai/agents \
+curl -X POST https://api.almyty.com/agents \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -81,7 +81,7 @@ curl -X POST https://api.apif.ai/agents \
 
 ### From a Template
 
-apifai ships with several built-in templates:
+almyty ships with several built-in templates:
 
 | Template | Description |
 |----------|-------------|
@@ -95,7 +95,7 @@ Select a template when creating an agent to get a pre-wired pipeline.
 ## Invoking an Agent
 
 ```bash
-curl -X POST https://api.apif.ai/agents/{id}/invoke \
+curl -X POST https://api.almyty.com/agents/{id}/invoke \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -123,11 +123,11 @@ Export an agent as JSON for version control or sharing:
 
 ```bash
 # Export
-curl https://api.apif.ai/agents/{id}/export \
+curl https://api.almyty.com/agents/{id}/export \
   -H "Authorization: Bearer $TOKEN" > agent.json
 
 # Import
-curl -X POST https://api.apif.ai/agents/import \
+curl -X POST https://api.almyty.com/agents/import \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d @agent.json

@@ -1,6 +1,6 @@
 # Authentication
 
-The apifai API uses JWT (JSON Web Tokens) for authentication. All API requests
+The almyty API uses JWT (JSON Web Tokens) for authentication. All API requests
 (except registration and login) require a valid Bearer token.
 
 ## Registration
@@ -8,7 +8,7 @@ The apifai API uses JWT (JSON Web Tokens) for authentication. All API requests
 Create a new account:
 
 ```bash
-curl -X POST https://api.apif.ai/auth/register \
+curl -X POST https://api.almyty.com/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
@@ -55,7 +55,7 @@ curl -X POST https://api.apif.ai/auth/register \
 Authenticate with existing credentials:
 
 ```bash
-curl -X POST https://api.apif.ai/auth/login \
+curl -X POST https://api.almyty.com/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
@@ -85,7 +85,7 @@ curl -X POST https://api.apif.ai/auth/login \
 Include the JWT in the `Authorization` header of all API requests:
 
 ```bash
-curl https://api.apif.ai/apis \
+curl https://api.almyty.com/apis \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -99,14 +99,14 @@ a `401 Unauthorized` response. Obtain a new token by logging in again.
 ### Get Profile
 
 ```bash
-curl https://api.apif.ai/auth/profile \
+curl https://api.almyty.com/auth/profile \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Update Profile
 
 ```bash
-curl -X PATCH https://api.apif.ai/auth/profile \
+curl -X PATCH https://api.almyty.com/auth/profile \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -117,7 +117,7 @@ curl -X PATCH https://api.apif.ai/auth/profile \
 ### Change Password
 
 ```bash
-curl -X PATCH https://api.apif.ai/auth/change-password \
+curl -X PATCH https://api.almyty.com/auth/change-password \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -136,14 +136,14 @@ organization ID as a path parameter or header:
 
 ```bash
 # Organization-scoped endpoints
-curl https://api.apif.ai/organizations/{orgId}/tools \
+curl https://api.almyty.com/organizations/{orgId}/tools \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Logout
 
 ```bash
-curl -X POST https://api.apif.ai/auth/logout \
+curl -X POST https://api.almyty.com/auth/logout \
   -H "Authorization: Bearer $TOKEN"
 ```
 

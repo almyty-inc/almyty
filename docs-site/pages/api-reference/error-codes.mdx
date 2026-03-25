@@ -1,6 +1,6 @@
 # Error Codes
 
-All apifai API errors follow a consistent format with HTTP status codes
+All almyty API errors follow a consistent format with HTTP status codes
 and structured error responses.
 
 ## Error Response Format
@@ -201,7 +201,7 @@ Tool executions return errors in a tool-specific format:
 
 ```javascript
 try {
-  const response = await fetch("https://api.apif.ai/agents", {
+  const response = await fetch("https://api.almyty.com/agents", {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -227,7 +227,7 @@ try {
 import requests
 
 response = requests.get(
-    "https://api.apif.ai/agents",
+    "https://api.almyty.com/agents",
     headers={"Authorization": f"Bearer {token}"}
 )
 

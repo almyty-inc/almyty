@@ -1,6 +1,6 @@
 # Organizations
 
-Organizations are the top-level grouping in apifai. Every resource — APIs, tools,
+Organizations are the top-level grouping in almyty. Every resource — APIs, tools,
 gateways, agents, and LLM providers — belongs to an organization. Organizations
 enable multi-tenancy, team collaboration, and role-based access control.
 
@@ -10,7 +10,7 @@ An organization is automatically created during registration. Additional
 organizations can be created via the API:
 
 ```bash
-curl -X POST https://api.apif.ai/organizations \
+curl -X POST https://api.almyty.com/organizations \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -35,7 +35,7 @@ curl -X POST https://api.apif.ai/organizations \
 ### List Members
 
 ```bash
-curl https://api.apif.ai/organizations/{orgId}/members \
+curl https://api.almyty.com/organizations/{orgId}/members \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -57,7 +57,7 @@ curl https://api.apif.ai/organizations/{orgId}/members \
 ### Add a Member
 
 ```bash
-curl -X POST https://api.apif.ai/organizations/{orgId}/members \
+curl -X POST https://api.almyty.com/organizations/{orgId}/members \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -69,7 +69,7 @@ curl -X POST https://api.apif.ai/organizations/{orgId}/members \
 ### Update Member Role
 
 ```bash
-curl -X PATCH https://api.apif.ai/organizations/{orgId}/members/{userId} \
+curl -X PATCH https://api.almyty.com/organizations/{orgId}/members/{userId} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -80,7 +80,7 @@ curl -X PATCH https://api.apif.ai/organizations/{orgId}/members/{userId} \
 ### Remove a Member
 
 ```bash
-curl -X DELETE https://api.apif.ai/organizations/{orgId}/members/{userId} \
+curl -X DELETE https://api.almyty.com/organizations/{orgId}/members/{userId} \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -111,7 +111,7 @@ Teams are sub-groups within an organization for more granular access control.
 ### Create a Team
 
 ```bash
-curl -X POST https://api.apif.ai/organizations/{orgId}/teams \
+curl -X POST https://api.almyty.com/organizations/{orgId}/teams \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -123,7 +123,7 @@ curl -X POST https://api.apif.ai/organizations/{orgId}/teams \
 ### Add Team Member
 
 ```bash
-curl -X POST https://api.apif.ai/organizations/{orgId}/teams/{teamId}/members \
+curl -X POST https://api.almyty.com/organizations/{orgId}/teams/{teamId}/members \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -150,7 +150,7 @@ endpoints:
 
 ```bash
 # List tools for a specific organization
-curl https://api.apif.ai/organizations/{orgId}/tools \
+curl https://api.almyty.com/organizations/{orgId}/tools \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -159,7 +159,7 @@ curl https://api.apif.ai/organizations/{orgId}/tools \
 Only the organization owner can delete an organization:
 
 ```bash
-curl -X DELETE https://api.apif.ai/organizations/{orgId} \
+curl -X DELETE https://api.almyty.com/organizations/{orgId} \
   -H "Authorization: Bearer $TOKEN"
 ```
 

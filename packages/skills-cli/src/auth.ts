@@ -66,7 +66,7 @@ export function logout(): void {
  */
 export function resolveAuth(): { url: string; token: string } {
   const envToken = process.env.APIFAI_TOKEN;
-  const envUrl = process.env.APIFAI_URL || 'https://api.almyty.dev';
+  const envUrl = process.env.APIFAI_URL || 'https://api.almyty.com';
 
   if (envToken) {
     return { url: envUrl, token: envToken };
