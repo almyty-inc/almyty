@@ -50,3 +50,4 @@ logs/
 
 # Claude worktrees
 .claude/worktrees/
+_internal/
