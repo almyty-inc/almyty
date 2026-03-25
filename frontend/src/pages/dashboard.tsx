@@ -166,7 +166,7 @@ export function DashboardPage() {
           <Badge variant="outline">
             {currentOrganization?.name || 'No Organization'}
           </Badge>
-          <Button variant="outline" onClick={() => navigate('/analytics')}>
+          <Button variant="outline" className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10" onClick={() => navigate('/analytics')}>
             <Activity className="mr-2 h-4 w-4" />
             View Analytics
           </Button>
@@ -175,7 +175,7 @@ export function DashboardPage() {
 
       {showOnboarding ? (
         /* Getting Started Checklist */
-        <Card>
+        <Card className="border-t-2 border-t-violet-500/20">
           <CardHeader>
             <CardTitle className="text-lg">Getting Started</CardTitle>
           </CardHeader>
@@ -214,22 +214,22 @@ export function DashboardPage() {
           <Card>
             <CardContent className="py-6">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
-                <button onClick={() => navigate('/apis')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+                <button onClick={() => navigate('/apis')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-violet-500/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{apisTotal}</div>
                   <div className="text-sm text-muted-foreground">APIs Connected</div>
                 </button>
                 <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
-                <button onClick={() => navigate('/tools')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+                <button onClick={() => navigate('/tools')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-violet-500/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{toolsTotal}</div>
                   <div className="text-sm text-muted-foreground">Tools Generated</div>
                 </button>
                 <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
-                <button onClick={() => navigate('/gateways')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+                <button onClick={() => navigate('/gateways')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-cyan-400/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{gatewaysTotal}</div>
                   <div className="text-sm text-muted-foreground">Gateways Serving</div>
                 </button>
                 <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
-                <button onClick={() => navigate('/agents')} className="flex-1 text-center p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+                <button onClick={() => navigate('/agents')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-cyan-400/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{agents.length}</div>
                   <div className="text-sm text-muted-foreground">Agents Running</div>
                 </button>
@@ -239,7 +239,7 @@ export function DashboardPage() {
 
           {/* Needs Attention */}
           {(apisWithNoTools.length > 0 || gatewaysWithNoAuth.length > 0) && (
-            <Card>
+            <Card className="border-t-2 border-t-amber-500/20">
               <CardHeader>
                 <CardTitle className="text-lg">Needs Attention</CardTitle>
               </CardHeader>
@@ -271,7 +271,7 @@ export function DashboardPage() {
       )}
 
       {/* Recent Activity */}
-      <Card>
+      <Card className="border-t-2 border-t-cyan-400/20">
         <CardHeader>
           <CardTitle className="text-lg">Recent Activity</CardTitle>
         </CardHeader>

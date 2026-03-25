@@ -26,6 +26,8 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { gatewaysApi, toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
+import { CreateGatewayDialog } from '@/components/gateways/create-gateway-dialog'
+import { GatewayDetailsSheet } from '@/components/gateways/gateway-details-sheet'
 import type { Gateway } from '@/types'
 
 // Form Schema
@@ -246,8 +248,8 @@ export function GatewaysPage() {
       cell: ({ row }) => {
         const status = row.original.status
         return (
-          <Badge variant={status === 'active' ? 'default' : 'secondary'}>
-            {status}
+          <Badge variant={status === 'active' ? 'success' : 'secondary'}>
+            {status === 'active' ? 'Active' : status}
           </Badge>
         )
       },
@@ -415,98 +417,13 @@ export function GatewaysPage() {
       )}
 
       {/* Create Gateway Dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={(open) => {
-        setCreateDialogOpen(open)
-        if (!open) {
-          createForm.reset()
-        }
-      }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Create New Gateway</DialogTitle>
-            <DialogDescription>
-              Create a new gateway to expose your tools via different protocols.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={createForm.handleSubmit(handleCreateGateway)} className="space-y-6">
-            <div>
-              <Label htmlFor="name">Gateway Name</Label>
-              <Input
-                id="name"
-                placeholder="Enter gateway name"
-                {...createForm.register('name')}
-              />
-              {createForm.formState.errors.name && (
-                <p className="text-sm text-red-500 mt-1">
-                  {createForm.formState.errors.name.message}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="type">Gateway Type</Label>
-              <Select
-                onValueChange={(value) => createForm.setValue('type', value)}
-                value={createForm.watch('type')}
-              >
-                <SelectTrigger id="type" aria-label="Gateway Type">
-                  <SelectValue placeholder="Select gateway type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="mcp">MCP - Model Context Protocol</SelectItem>
-                  <SelectItem value="a2a">A2A - Agent-to-Agent</SelectItem>
-                  <SelectItem value="utcp">UTCP - Universal Tool Call Protocol</SelectItem>
-                  <SelectItem value="skills">Skills - Agent Skills (SKILL.md)</SelectItem>
-                </SelectContent>
-              </Select>
-              {createForm.formState.errors.type && (
-                <p className="text-sm text-red-500 mt-1">
-                  {createForm.formState.errors.type.message}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="endpoint">Endpoint Path</Label>
-              <Input
-                id="endpoint"
-                placeholder="/my-gateway"
-                {...createForm.register('endpoint')}
-              />
-              {createForm.formState.errors.endpoint && (
-                <p className="text-sm text-red-500 mt-1">
-                  {createForm.formState.errors.endpoint.message}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="description">Description (Optional)</Label>
-              <Textarea
-                id="description"
-                placeholder="Enter gateway description"
-                {...createForm.register('description')}
-              />
-            </div>
-
-            <div className="flex justify-end space-x-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCreateDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={createGatewayMutation.isPending}
-              >
-                {createGatewayMutation.isPending ? 'Creating...' : 'Create Gateway'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CreateGatewayDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        createForm={createForm}
+        onSubmit={handleCreateGateway}
+        createGatewayMutation={createGatewayMutation}
+      />
 
 
       {/* Delete Gateway Confirmation Dialog */}
@@ -535,111 +452,19 @@ export function GatewaysPage() {
       </AlertDialog>
 
       {/* Gateway Details Sheet */}
-      <Sheet open={gatewayDetailsOpen} onOpenChange={setGatewayDetailsOpen}>
-        <SheetContent className="sm:max-w-2xl">
-          <SheetHeader>
-            <SheetTitle>{selectedGateway?.name || 'Gateway Details'}</SheetTitle>
-            <SheetDescription>{selectedGateway?.description}</SheetDescription>
-          </SheetHeader>
-          <div className="mt-6">
-            <Tabs defaultValue="info">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="info">Information</TabsTrigger>
-                <TabsTrigger value="tools">Tools</TabsTrigger>
-              </TabsList>
-              <TabsContent value="info" className="space-y-4 mt-4">
-                <div>
-                  <h3 className="font-semibold mb-2">Gateway Configuration</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Type:</span>
-                      <span className="font-medium">{selectedGateway?.type?.toUpperCase()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Endpoint:</span>
-                      <span className="font-mono text-sm">{selectedGateway?.endpoint}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Status:</span>
-                      <span>{selectedGateway?.status}</span>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-              <TabsContent value="tools" className="space-y-4 mt-4">
-                <div>
-                  <h3 className="font-semibold mb-2">Tool Scoping</h3>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {assignedToolIds.size} of {allTools.length} tools assigned
-                  </p>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search tools..."
-                        value={toolSearch}
-                        onChange={(e) => setToolSearch(e.target.value)}
-                        className="pl-8 h-9"
-                      />
-                    </div>
-                    <Select value={toolFilter} onValueChange={(v) => setToolFilter(v as 'all' | 'assigned' | 'unassigned')}>
-                      <SelectTrigger className="w-[130px] h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All</SelectItem>
-                        <SelectItem value="assigned">Assigned</SelectItem>
-                        <SelectItem value="unassigned">Unassigned</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5 max-h-[350px] overflow-y-auto">
-                    {(() => {
-                      const filtered = allTools.filter((tool: any) => {
-                        const isAssigned = assignedToolIds.has(tool.id)
-                        const matchesSearch = !toolSearch || tool.name.toLowerCase().includes(toolSearch.toLowerCase()) || (tool.description || '').toLowerCase().includes(toolSearch.toLowerCase())
-                        const matchesFilter = toolFilter === 'all' || (toolFilter === 'assigned' && isAssigned) || (toolFilter === 'unassigned' && !isAssigned)
-                        return matchesSearch && matchesFilter
-                      })
-                      if (filtered.length === 0) {
-                        return <p className="text-sm text-muted-foreground text-center py-4">{allTools.length === 0 ? 'No tools available. Create tools first.' : 'No tools match your filter.'}</p>
-                      }
-                      return filtered.map((tool: any) => {
-                        const isAssigned = assignedToolIds.has(tool.id)
-                        return (
-                          <div key={tool.id} className={`flex items-center justify-between py-2 px-3 rounded-md border ${isAssigned ? 'border-primary/30 bg-primary/5' : ''}`}>
-                            <div className="min-w-0 flex-1">
-                              <div className="font-medium text-sm truncate">{tool.name}</div>
-                              {tool.description && (
-                                <div className="text-xs text-muted-foreground truncate">{tool.description}</div>
-                              )}
-                            </div>
-                            <Button
-                              variant={isAssigned ? 'destructive' : 'outline'}
-                              size="sm"
-                              className="ml-2 shrink-0"
-                              disabled={assignToolMutation.isPending || removeToolMutation.isPending}
-                              onClick={() => {
-                                if (isAssigned) {
-                                  removeToolMutation.mutate(tool.id)
-                                } else {
-                                  assignToolMutation.mutate(tool.id)
-                                }
-                              }}
-                            >
-                              {isAssigned ? 'Remove' : 'Assign'}
-                            </Button>
-                          </div>
-                        )
-                      })
-                    })()}
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <GatewayDetailsSheet
+        open={gatewayDetailsOpen}
+        onOpenChange={setGatewayDetailsOpen}
+        selectedGateway={selectedGateway}
+        allTools={allTools}
+        assignedToolIds={assignedToolIds}
+        assignToolMutation={assignToolMutation}
+        removeToolMutation={removeToolMutation}
+        toolSearch={toolSearch}
+        onToolSearchChange={setToolSearch}
+        toolFilter={toolFilter}
+        onToolFilterChange={setToolFilter}
+      />
     </div>
   )
 }

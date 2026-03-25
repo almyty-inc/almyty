@@ -50,8 +50,8 @@ export function LoginPage() {
     <div>
       <h1 className="text-2xl font-heading font-bold mb-6">Sign in</h1>
       {loginError && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-sm text-red-600">{loginError}</p>
+        <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md">
+          <p className="text-sm text-destructive">{loginError}</p>
         </div>
       )}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -89,9 +89,9 @@ export function LoginPage() {
               onClick={() => setShowPassword(!showPassword)}
             >
               {showPassword ? (
-                <EyeOff className="h-4 w-4 text-gray-400" />
+                <EyeOff className="h-4 w-4 text-muted-foreground" />
               ) : (
-                <Eye className="h-4 w-4 text-gray-400" />
+                <Eye className="h-4 w-4 text-muted-foreground" />
               )}
             </button>
             {errors.password && (
@@ -105,9 +105,9 @@ export function LoginPage() {
             id="remember-me"
             name="remember-me"
             type="checkbox"
-            className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+            className="h-4 w-4 text-primary focus:ring-primary border-border rounded"
           />
-          <Label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+          <Label htmlFor="remember-me" className="ml-2 block text-sm text-foreground">
             Remember me
           </Label>
         </div>
@@ -124,7 +124,7 @@ export function LoginPage() {
       </form>
 
       <div className="mt-6 text-center">
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted-foreground">
           Don't have an account?{' '}
           <Link
             to="/auth/register"

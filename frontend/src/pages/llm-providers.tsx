@@ -96,6 +96,10 @@ import {
 import { DataTable, createSelectColumn, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
 import { useNotifications } from '@/store/app'
 import { llmProvidersApi } from '@/lib/api'
+import { CreateProviderDialog } from '@/components/llm-providers/create-provider-dialog'
+import { EditProviderDialog } from '@/components/llm-providers/edit-provider-dialog'
+import { TestProviderDialog } from '@/components/llm-providers/test-provider-dialog'
+import { ProviderDetailsSheet } from '@/components/llm-providers/provider-details-sheet'
 
 interface LlmProvider {
   id: string
@@ -177,7 +181,7 @@ const providerLogos: Record<string, string> = {
 }
 
 const statusColors = {
-  active: 'bg-green-500',
+  active: 'bg-emerald-500',
   inactive: 'bg-muted-foreground',
   error: 'bg-red-500',
   configuring: 'bg-yellow-500'
@@ -1027,7 +1031,7 @@ export function LlmProvidersPage() {
         const provider = row.original
         const status = provider.status
         const colors = {
-          active: 'bg-green-500/15 text-green-700 dark:text-green-400',
+          active: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
           inactive: 'bg-muted text-muted-foreground',
           error: 'bg-red-500/15 text-red-700 dark:text-red-400',
           configuring: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400'
@@ -1312,771 +1316,32 @@ export function LlmProvidersPage() {
       )}
 
       {/* Provider Details Sheet */}
-      <Sheet open={!!selectedProvider} onOpenChange={() => setSelectedProvider(null)}>
-        <SheetContent className="w-full max-w-4xl overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-3">
-              {selectedProvider && (
-                <>
-                  <span className="text-xl">{providerLogos[selectedProvider.type]}</span>
-                  <div className={`w-3 h-3 rounded-full ${statusColors[selectedProvider.status]}`} />
-                  {selectedProvider.name}
-                </>
-              )}
-            </SheetTitle>
-            <SheetDescription>
-              {selectedProvider?.description || 'No description provided'}
-            </SheetDescription>
-          </SheetHeader>
-          
-          {selectedProvider && (
-            <Tabs defaultValue="overview" className="mt-6">
-              <TabsList className="grid w-full grid-cols-6">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="chat">Chat</TabsTrigger>
-                <TabsTrigger value="models">Models</TabsTrigger>
-                <TabsTrigger value="usage">Usage</TabsTrigger>
-                <TabsTrigger value="configuration">Config</TabsTrigger>
-                <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="overview" className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Provider Information</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Type:</span>
-                        <Badge variant="outline" className="capitalize">{selectedProvider.type}</Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Status:</span>
-                        <Badge className={`${statusColors[selectedProvider.status]} text-white`}>
-                          {selectedProvider.status}
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Health:</span>
-                        <span className={`text-sm font-medium ${
-                          selectedProvider.isHealthy
-                            ? healthColors.healthy
-                            : (selectedProvider.status === 'error' ? healthColors.down : healthColors.unknown)
-                        }`}>
-                          {selectedProvider.isHealthy ? 'Healthy' : (selectedProvider.status === 'error' ? 'Down' : 'Unknown')}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Models:</span>
-                        <span className="text-sm">{selectedProvider.capabilities?.supportedModels?.length || 0} available</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Usage Summary</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Total Requests:</span>
-                        <span className="text-sm font-medium">{(selectedProvider.totalRequests || 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Total Cost:</span>
-                        <span className="text-sm font-medium">${(selectedProvider.totalCost || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Success Rate:</span>
-                        <span className="text-sm font-medium">
-                          {selectedProvider.totalRequests > 0
-                            ? (((selectedProvider.successfulRequests || 0) / selectedProvider.totalRequests) * 100).toFixed(1)
-                            : '100.0'}%
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Last Used:</span>
-                        <span className="text-sm">
-                          {selectedProvider.lastRequestAt
-                            ? new Date(selectedProvider.lastRequestAt).toLocaleString()
-                            : 'Never'}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Quota Management removed - not in backend entity */}
-              </TabsContent>
-              
-              <TabsContent value="models" className="space-y-4">
-                <div className="space-y-3">
-                  {selectedProvider.capabilities?.supportedModels && selectedProvider.capabilities.supportedModels.length > 0 ? (
-                    selectedProvider.capabilities.supportedModels.map((modelName, index) => (
-                      <Card key={index}>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-medium">{modelName}</h4>
-                              <Badge variant="default">Available</Badge>
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {(selectedProvider.capabilities as any)?.maxTokens?.toLocaleString() || 'N/A'} tokens
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <div className="text-sm font-medium">Capabilities</div>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {(selectedProvider.capabilities as any)?.supportsFunctionCalling && (
-                                  <Badge variant="outline" className="text-xs">Function Calling</Badge>
-                                )}
-                                {(selectedProvider.capabilities as any)?.supportsStreaming && (
-                                  <Badge variant="outline" className="text-xs">Streaming</Badge>
-                                )}
-                                {(selectedProvider.capabilities as any)?.supportsToolUse && (
-                                  <Badge variant="outline" className="text-xs">Tool Use</Badge>
-                                )}
-                                {(selectedProvider.capabilities as any)?.supportsVision && (
-                                  <Badge variant="outline" className="text-xs">Vision</Badge>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))
-                  ) : (
-                    <div className="text-sm text-muted-foreground text-center py-8">
-                      No model information available
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-              
-              <TabsContent value="usage" className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Performance Metrics</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="text-center">
-                          <div className="text-2xl font-bold">
-                            {selectedProvider.lastRequestAt ? 'Active' : 'Inactive'}
-                          </div>
-                          <div className="text-sm text-muted-foreground">Status</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold">
-                            {selectedProvider.isHealthy ? '✓' : '✗'}
-                          </div>
-                          <div className="text-sm text-muted-foreground">Health</div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Cost Breakdown</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>Total Tokens:</span>
-                          <span>{(selectedProvider.totalTokensUsed || 0).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>Avg Cost/Request:</span>
-                          <span>
-                            ${selectedProvider.totalRequests > 0
-                              ? ((selectedProvider.totalCost || 0) / selectedProvider.totalRequests).toFixed(4)
-                              : '0.0000'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>Total Cost:</span>
-                          <span>${(selectedProvider.totalCost || 0).toFixed(2)}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-                
-                {providerMetrics && (
-                  <>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-sm">Usage by Model</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          {providerMetrics.usageByModel.map((modelUsage, index) => (
-                            <div key={index} className="flex justify-between items-center">
-                              <span className="text-sm">{modelUsage.model}</span>
-                              <div className="text-right">
-                                <div className="text-sm font-medium">${modelUsage.cost.toFixed(2)}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {modelUsage.requests} reqs
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                    
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-sm">Error Analysis</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          {providerMetrics.topErrors.map((error, index) => (
-                            <div key={index} className="flex justify-between items-center">
-                              <span className="text-sm">{error.error}</span>
-                              <div className="text-right">
-                                <Badge variant="destructive" className="text-xs">{error.count}</Badge>
-                                <div className="text-xs text-muted-foreground">
-                                  {new Date(error.lastOccurred).toLocaleString()}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="configuration" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">API Configuration</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label>API Key</Label>
-                      <Input
-                        type="password"
-                        value={selectedProvider.configuration.apiKey || ''}
-                        readOnly
-                      />
-                    </div>
-                    <div>
-                      <Label>Base URL</Label>
-                      <Input
-                        value={selectedProvider.configuration.baseUrl || ''}
-                        readOnly
-                      />
-                    </div>
-                    {selectedProvider.configuration.region && (
-                      <div>
-                        <Label>Region</Label>
-                        <Input
-                          value={selectedProvider.configuration.region}
-                          readOnly
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <Label>Default Model</Label>
-                      <Input
-                        value={selectedProvider.configuration.model || ''}
-                        readOnly
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Max Tokens</Label>
-                        <Input
-                          value={selectedProvider.configuration.maxTokens || ''}
-                          readOnly
-                        />
-                      </div>
-                      <div>
-                        <Label>Temperature</Label>
-                        <Input
-                          value={selectedProvider.configuration.temperature || ''}
-                          readOnly
-                        />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                {selectedProvider.configuration.customHeaders && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Custom Headers</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {Object.entries(selectedProvider.configuration.customHeaders).map(([key, value], index) => (
-                          <div key={index} className="flex gap-2">
-                            <Input value={key} readOnly className="flex-1" />
-                            <Input value={value} readOnly className="flex-1" />
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="monitoring" className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Health Status</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        {selectedProvider.isHealthy ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        ) : selectedProvider.status === 'error' ? (
-                          <XCircle className="h-4 w-4 text-red-500" />
-                        ) : (
-                          <Activity className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <span className="capitalize font-medium">
-                          {selectedProvider.isHealthy ? 'Healthy' : (selectedProvider.status === 'error' ? 'Down' : 'Unknown')}
-                        </span>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Last check: {selectedProvider.lastHealthCheckAt
-                          ? new Date(selectedProvider.lastHealthCheckAt).toLocaleString()
-                          : 'Never'}
-                      </div>
-                      <div className="text-sm">
-                        Status: {selectedProvider.status}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Recent Errors</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {selectedProvider.lastError ? (
-                        <div className="border-l-2 border-red-200 pl-3">
-                          <div className="text-sm font-medium text-red-600">{selectedProvider.lastError}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Last error occurred
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">No recent errors</div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      Actions
-                      <Button
-                        size="sm"
-                        onClick={() => setIsTestDialogOpen(true)}
-                        className="gap-2"
-                      >
-                        <TestTube className="h-4 w-4" />
-                        Test Provider
-                      </Button>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          // Refresh health check
-                        }}
-                        className="gap-2"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                        Refresh Health
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => toggleProviderStatusMutation.mutate({
-                          providerId: selectedProvider.id,
-                          status: selectedProvider.status === 'active' ? 'inactive' : 'active'
-                        })}
-                        className="gap-2"
-                      >
-                        {selectedProvider.status === 'active' ? (
-                          <>
-                            <PowerOff className="h-4 w-4" />
-                            Disable
-                          </>
-                        ) : (
-                          <>
-                            <Power className="h-4 w-4" />
-                            Enable
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* Chat Tab */}
-              <TabsContent value="chat" className="space-y-4">
-                {/* Session info */}
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">
-                    {chatSessionId ? (
-                      <span>Session: <code className="font-mono text-xs">{chatSessionId.slice(0, 8)}...</code></span>
-                    ) : (
-                      <span>New conversation</span>
-                    )}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setChatMessages([])
-                      setChatSessionId(null)
-                      setChatInput('')
-                    }}
-                    className="gap-1"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    New Chat
-                  </Button>
-                </div>
-
-                {/* Messages area */}
-                <div className="border rounded-lg h-[400px] flex flex-col">
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                    {chatMessages.length === 0 && (
-                      <div className="text-sm text-muted-foreground text-center py-12">
-                        Send a message to start chatting with {selectedProvider.name}.
-                        <br />
-                        <span className="text-xs">Model: {selectedProvider.configuration?.model || 'default'}</span>
-                      </div>
-                    )}
-                    {chatMessages.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
-                          msg.role === 'user'
-                            ? 'bg-primary text-primary-foreground'
-                            : msg.role === 'tool'
-                            ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
-                            : 'bg-muted'
-                        }`}>
-                          {msg.role === 'tool' && (
-                            <div className="text-xs font-medium text-amber-600 dark:text-amber-400 mb-1">
-                              Tool: {msg.toolCallId || 'call'}
-                            </div>
-                          )}
-                          {msg.content && (
-                            <div className="whitespace-pre-wrap">{msg.content}</div>
-                          )}
-                          {msg.toolCalls && msg.toolCalls.length > 0 && (
-                            <div className="mt-2 space-y-1">
-                              {msg.toolCalls.map((tc: any, j: number) => (
-                                <div key={j} className="text-xs bg-background/50 rounded p-2 border">
-                                  <div className="font-medium">{tc.function?.name || tc.name || 'tool_call'}</div>
-                                  <pre className="text-xs mt-1 overflow-x-auto">
-                                    {JSON.stringify(tc.function?.arguments || tc.arguments || tc, null, 2).slice(0, 300)}
-                                  </pre>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {isSending && (
-                      <div className="flex justify-start">
-                        <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground">
-                          Thinking...
-                        </div>
-                      </div>
-                    )}
-                    <div ref={chatEndRef} />
-                  </div>
-
-                  {/* Input area */}
-                  <div className="border-t p-3">
-                    <form
-                      onSubmit={async (e) => {
-                        e.preventDefault()
-                        if (!chatInput.trim() || isSending || !selectedProvider) return
-
-                        const userMessage = chatInput.trim()
-                        setChatInput('')
-
-                        // Add user message
-                        const newMessages = [...chatMessages, { role: 'user' as const, content: userMessage }]
-                        setChatMessages(newMessages)
-                        setIsSending(true)
-
-                        // Scroll to bottom
-                        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
-
-                        try {
-                          const response = await llmProvidersApi.chat(selectedProvider.id, {
-                            messages: newMessages.map(m => ({ role: m.role, content: m.content })),
-                            sessionId: chatSessionId || undefined,
-                          })
-
-                          const data = response
-                          const assistantMsg = data?.message
-
-                          if (assistantMsg) {
-                            setChatMessages(prev => [...prev, {
-                              role: 'assistant',
-                              content: assistantMsg.content || '',
-                              toolCalls: assistantMsg.toolCalls,
-                            }])
-                          }
-
-                          if (data?.sessionId) {
-                            setChatSessionId(data.sessionId)
-                          }
-                        } catch (err: any) {
-                          setChatMessages(prev => [...prev, {
-                            role: 'assistant',
-                            content: `Error: ${err.response?.data?.message || err.message || 'Failed to get response'}`,
-                          }])
-                        } finally {
-                          setIsSending(false)
-                          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
-                        }
-                      }}
-                      className="flex gap-2"
-                    >
-                      <Textarea
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        placeholder="Send a message..."
-                        className="min-h-[40px] max-h-[120px] resize-none"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault()
-                            e.currentTarget.form?.requestSubmit()
-                          }
-                        }}
-                      />
-                      <Button type="submit" size="sm" disabled={!chatInput.trim() || isSending} className="self-end">
-                        <Send className="h-4 w-4" />
-                      </Button>
-                    </form>
-                  </div>
-                </div>
-
-                {/* Usage info */}
-                <div className="text-xs text-muted-foreground">
-                  Provider: {selectedProvider.type} | Model: {selectedProvider.configuration?.model || 'default'} | Enter to send, Shift+Enter for newline
-                </div>
-              </TabsContent>
-            </Tabs>
-          )}
-        </SheetContent>
-      </Sheet>
+      <ProviderDetailsSheet
+        selectedProvider={selectedProvider}
+        onClose={() => setSelectedProvider(null)}
+        providerMetrics={providerMetrics}
+        toggleProviderStatusMutation={toggleProviderStatusMutation}
+        onOpenTestDialog={() => setIsTestDialogOpen(true)}
+      />
 
       {/* Create Provider Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Add Provider</DialogTitle>
-            <DialogDescription>
-              Select a provider type and configure your LLM integration
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={createForm.handleSubmit((data) => createProviderMutation.mutate(data))} className="space-y-4">
-            {/* Provider Name */}
-            <div>
-              <Label htmlFor="providerName">Provider Name</Label>
-              <Input
-                id="providerName"
-                {...createForm.register('name')}
-                placeholder="e.g., OpenAI Production"
-              />
-              {createForm.formState.errors.name && (
-                <p className="text-sm text-red-600 mt-1">{createForm.formState.errors.name.message}</p>
-              )}
-            </div>
-
-            {/* Provider Type */}
-            <div>
-              <Label htmlFor="providerType">Provider Type</Label>
-              <Controller
-                name="type"
-                control={createForm.control}
-                render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger id="providerType" aria-label="Provider Type">
-                      <SelectValue placeholder="Select provider type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="openai">OpenAI</SelectItem>
-                      <SelectItem value="anthropic">Anthropic</SelectItem>
-                      <SelectItem value="google">Google Gemini</SelectItem>
-                      <SelectItem value="mistral">Mistral AI</SelectItem>
-                      <SelectItem value="xai">xAI (Grok)</SelectItem>
-                      <SelectItem value="deepseek">DeepSeek</SelectItem>
-                      <SelectItem value="groq">Groq</SelectItem>
-                      <SelectItem value="together">Together AI</SelectItem>
-                      <SelectItem value="openrouter">OpenRouter</SelectItem>
-                      <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
-                      <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
-                      <SelectItem value="cohere">Cohere</SelectItem>
-                      <SelectItem value="huggingface">HuggingFace</SelectItem>
-                      <SelectItem value="custom">Custom</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-              {createForm.formState.errors.type && (
-                <p className="text-sm text-red-600 mt-1">{createForm.formState.errors.type.message}</p>
-              )}
-            </div>
-
-            {/* API Key */}
-            <div>
-              <Label htmlFor="apiKey">API Key</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                {...createForm.register('apiKey')}
-                placeholder="Enter your API key"
-              />
-              {createForm.formState.errors.apiKey && (
-                <p className="text-sm text-red-600 mt-1">{createForm.formState.errors.apiKey.message}</p>
-              )}
-            </div>
-
-            {/* Organization ID - Only for OpenAI */}
-            {createForm.watch('type') === 'openai' && (
-              <div>
-                <Label htmlFor="organizationId">Organization ID (Optional)</Label>
-                <Input
-                  id="organizationId"
-                  {...createForm.register('organizationId')}
-                  placeholder="org-..."
-                />
-                {createForm.formState.errors.organizationId && (
-                  <p className="text-sm text-red-600 mt-1">{createForm.formState.errors.organizationId.message}</p>
-                )}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={createProviderMutation.isPending}>
-                {createProviderMutation.isPending ? 'Adding...' : 'Add Provider'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CreateProviderDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        createForm={createForm}
+        createProviderMutation={createProviderMutation}
+      />
 
       {/* Edit Provider Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Provider</DialogTitle>
-            <DialogDescription>
-              Update provider configuration and model settings
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={editForm.handleSubmit((data) => {
-            if (providerToEdit) {
-              updateProviderMutation.mutate({ id: providerToEdit.id, data })
-            }
-          })} className="space-y-4">
-            {/* Provider Name */}
-            <div>
-              <Label htmlFor="editProviderName">Provider Name</Label>
-              <Input
-                id="editProviderName"
-                {...editForm.register('name')}
-                placeholder="e.g., OpenAI Production"
-              />
-            </div>
-
-            {/* Default Model Selection */}
-            <div>
-              <Label htmlFor="editDefaultModel">Default Model</Label>
-              <Controller
-                name="model"
-                control={editForm.control}
-                render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger id="editDefaultModel" aria-label="Default Model">
-                      <SelectValue placeholder={modelsLoading ? "Loading models..." : "Select default model"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {modelsLoading && (
-                        <div className="px-2 py-1.5 text-sm text-muted-foreground">Fetching models from provider API...</div>
-                      )}
-                      {!modelsLoading && availableModels.length > 0 && availableModels.map((model) => (
-                        <SelectItem key={model.id} value={model.id}>
-                          {model.name !== model.id ? `${model.name} (${model.id})` : model.id}
-                        </SelectItem>
-                      ))}
-                      {!modelsLoading && availableModels.length === 0 && (
-                        <div className="px-2 py-1.5 text-sm text-muted-foreground">No models available — check API key</div>
-                      )}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-
-            {/* Model Parameters */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="editMaxTokens">Max Tokens</Label>
-                <Input
-                  id="editMaxTokens"
-                  type="number"
-                  {...editForm.register('maxTokens', { valueAsNumber: true })}
-                  placeholder="4096"
-                />
-              </div>
-              <div>
-                <Label htmlFor="editTemperature">Temperature</Label>
-                <Input
-                  id="editTemperature"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="2"
-                  {...editForm.register('temperature', { valueAsNumber: true })}
-                  placeholder="0.7"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={updateProviderMutation.isPending}>
-                {updateProviderMutation.isPending ? 'Updating...' : 'Update Provider'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <EditProviderDialog
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        editForm={editForm}
+        providerToEdit={providerToEdit}
+        updateProviderMutation={updateProviderMutation}
+        availableModels={availableModels}
+        modelsLoading={modelsLoading}
+      />
 
       {/* Delete Confirmation AlertDialog */}
       <AlertDialog open={!!providerToDelete} onOpenChange={() => setProviderToDelete(null)}>
@@ -2084,7 +1349,7 @@ export function LlmProvidersPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Provider</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{providerToDelete?.name}"? This action cannot be undone.
+              Are you sure you want to delete &quot;{providerToDelete?.name}&quot;? This action cannot be undone.
               All configuration and usage history will be permanently removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -2106,78 +1371,24 @@ export function LlmProvidersPage() {
       </AlertDialog>
 
       {/* Provider Test Dialog */}
-      <Dialog open={isTestDialogOpen} onOpenChange={setIsTestDialogOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Test Provider: {testProvider?.name}</DialogTitle>
-            <DialogDescription>
-              Send a test request to validate provider configuration and connectivity
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-4">
-              <div>
-                <Label>Test Input</Label>
-                <Textarea
-                  placeholder="Enter test prompt..."
-                  value={testInput}
-                  onChange={(e) => setTestInput(e.target.value)}
-                  className="h-64"
-                />
-              </div>
-              <Button 
-                onClick={handleTestProvider}
-                disabled={testLoading}
-                className="w-full gap-2"
-              >
-                {testLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
-                    Testing...
-                  </>
-                ) : (
-                  <>
-                    <TestTube className="h-4 w-4" />
-                    Test Provider
-                  </>
-                )}
-              </Button>
-            </div>
-            
-            <div className="space-y-4">
-              <Label>Test Result</Label>
-              <div className="h-64 border rounded-md p-4 bg-muted font-mono text-sm overflow-auto">
-                {testResult ? (
-                  testResult.error ? (
-                    <div className="text-red-600">
-                      <div className="font-semibold">Error:</div>
-                      <div>{testResult.error}</div>
-                      <div className="text-xs mt-2">{testResult.timestamp}</div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="text-green-600 font-semibold mb-2">Success!</div>
-                      <div className="mb-2">
-                        <strong>Response:</strong>
-                        <div className="mt-1">{testResult.output.response}</div>
-                      </div>
-                      <div className="text-xs text-muted-foreground space-y-1">
-                        <div>Tokens: {testResult.output.usage.inputTokens} in, {testResult.output.usage.outputTokens} out</div>
-                        <div>Cost: ${testResult.output.cost}</div>
-                        <div>Response Time: {testResult.output.responseTime}ms</div>
-                        <div>Timestamp: {testResult.timestamp}</div>
-                      </div>
-                    </div>
-                  )
-                ) : (
-                  <span className="text-muted-foreground">No test result yet</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <TestProviderDialog
+        open={isTestDialogOpen}
+        onOpenChange={setIsTestDialogOpen}
+        testProvider={testProvider}
+        testInput={testInput}
+        onTestInputChange={setTestInput}
+        onTest={handleTestProvider}
+        testLoading={testLoading}
+        testResult={testResult}
+      />
     </div>
   )
 }
+
+/*
+Extracted components:
+- Provider Details Sheet -> provider-details-sheet.tsx
+- Create Provider Dialog -> create-provider-dialog.tsx
+- Edit Provider Dialog -> edit-provider-dialog.tsx
+- Test Provider Dialog -> test-provider-dialog.tsx
+*/

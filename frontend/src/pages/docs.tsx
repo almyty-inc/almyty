@@ -23,7 +23,7 @@ export function DocsPage() {
         <ExternalLink className="h-4 w-4" />
         Open Documentation
       </a>
-      <p className="text-xs text-muted-foreground mt-4">docs.almyty.com</p>
+      <p className="text-xs text-primary/60 mt-4">docs.almyty.com</p>
     </div>
   )
 }

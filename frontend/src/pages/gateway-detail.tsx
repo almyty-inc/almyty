@@ -1169,8 +1169,8 @@ export function GatewayDetailPage() {
             <Settings className="h-4 w-4 mr-2" />
             Edit Gateway
           </Button>
-          <Badge variant={gateway.status === 'active' ? 'default' : 'secondary'}>
-            {gateway.status}
+          <Badge variant={gateway.status === 'active' ? 'success' : 'secondary'}>
+            {gateway.status === 'active' ? 'Active' : gateway.status}
           </Badge>
           <Badge variant="outline">
             {gateway.type?.toUpperCase()}

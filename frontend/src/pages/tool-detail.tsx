@@ -132,8 +132,8 @@ export function ToolDetailPage() {
             <Settings className="h-4 w-4 mr-2" />
             Edit Tool
           </Button>
-          <Badge variant={tool.status === 'active' ? 'default' : 'secondary'}>
-            {tool.status}
+          <Badge variant={tool.status === 'active' ? 'success' : 'secondary'}>
+            {tool.status === 'active' ? 'Active' : tool.status}
           </Badge>
           <Switch
             checked={tool.status === 'active'}

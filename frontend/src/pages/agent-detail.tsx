@@ -73,8 +73,8 @@ import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
 import type { Agent, AgentExecution, PipelineNode, PipelineEdge, AgentVersionSnapshot, AgentCostEstimate, AgentAuditEntry } from '@/types'
 
-const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  active: 'default',
+const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success'> = {
+  active: 'success',
   draft: 'outline',
   inactive: 'secondary',
   error: 'destructive',

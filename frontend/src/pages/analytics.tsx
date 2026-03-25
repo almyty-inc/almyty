@@ -50,10 +50,10 @@ function formatNumber(n: number): string {
 }
 
 const protocolColors: Record<string, string> = {
-  mcp: 'bg-blue-50 text-blue-700 border-blue-200',
-  utcp: 'bg-purple-50 text-purple-700 border-purple-200',
-  a2a: 'bg-green-50 text-green-700 border-green-200',
-  skills: 'bg-orange-50 text-orange-700 border-orange-200',
+  mcp: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
+  utcp: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  a2a: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+  skills: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
 }
 
 const statusColors: Record<string, string> = {
@@ -687,7 +687,7 @@ export function AnalyticsPage() {
                               </Link>
                             </td>
                             <td className="px-4 py-2.5">
-                              <Badge variant={agent.status === 'active' ? 'default' : agent.status === 'error' ? 'destructive' : 'secondary'}
+                              <Badge variant={agent.status === 'active' ? 'success' : agent.status === 'error' ? 'destructive' : 'secondary'}
                                 className="text-xs">
                                 {agent.status}
                               </Badge>
