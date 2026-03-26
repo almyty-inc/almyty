@@ -23,6 +23,7 @@ const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ defau
 const ToolsPage = lazy(() => import('@/pages/tools').then(m => ({ default: m.ToolsPage })))
 const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ default: m.ToolDetailPage })))
 const LlmProvidersPage = lazy(() => import('@/pages/llm-providers').then(m => ({ default: m.LlmProvidersPage })))
+const LlmProviderDetailPage = lazy(() => import('@/pages/llm-provider-detail').then(m => ({ default: m.LlmProviderDetailPage })))
 const AnalyticsPage = lazy(() => import('@/pages/analytics').then(m => ({ default: m.AnalyticsPage })))
 const CredentialsPage = lazy(() => import('@/pages/credentials').then(m => ({ default: m.CredentialsPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
@@ -116,6 +117,11 @@ function App() {
         <Route path="/llm-providers" element={
           <DashboardLayout>
             <LlmProvidersPage />
+          </DashboardLayout>
+        } />
+        <Route path="/llm-providers/:id" element={
+          <DashboardLayout>
+            <LlmProviderDetailPage />
           </DashboardLayout>
         } />
         <Route path="/analytics/*" element={
