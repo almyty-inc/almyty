@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 
+import { CodeBlock } from '@/components/ui/code-block'
 import { gatewaysApi, toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
@@ -208,10 +209,13 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
                 skillsLoading ? (
                   <div className="flex justify-center py-4"><LoadingSpinner /></div>
                 ) : skillMarkdown ? (
-                  <pre className="text-xs bg-muted p-3 rounded max-h-80 overflow-auto font-mono mt-2 whitespace-pre-wrap">
-                    {skillMarkdown.slice(0, 2000)}
-                    {skillMarkdown.length > 2000 ? '\n...' : ''}
-                  </pre>
+                  <div className="mt-2">
+                    <CodeBlock
+                      value={skillMarkdown.slice(0, 2000) + (skillMarkdown.length > 2000 ? '\n...' : '')}
+                      language="text"
+                      maxHeight="320px"
+                    />
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground py-4">No skills generated yet. Assign tools first.</p>
                 )
@@ -286,62 +290,33 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <h4 className="text-sm font-medium">Claude Code</h4>
-              <div className="relative">
-                <pre className="p-3 bg-muted rounded text-sm font-mono overflow-x-auto">
-{JSON.stringify({
-  mcpServers: {
-    [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
-      url: mcpEndpoint
-    }
-  }
-}, null, 2)}
-                </pre>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="absolute top-2 right-2"
-                  onClick={() => copyToClipboard(JSON.stringify({
-                    mcpServers: {
-                      [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
-                        url: mcpEndpoint
-                      }
+              <CodeBlock
+                value={JSON.stringify({
+                  mcpServers: {
+                    [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
+                      url: mcpEndpoint
                     }
-                  }, null, 2), 'claude-config')}
-                >
-                  {copiedField === 'claude-config' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </div>
+                  }
+                }, null, 2)}
+                language="json"
+                maxHeight="200px"
+              />
             </div>
 
             <div className="space-y-2">
               <h4 className="text-sm font-medium">Cursor / Windsurf</h4>
-              <div className="relative">
-                <pre className="p-3 bg-muted rounded text-sm font-mono overflow-x-auto">
-{JSON.stringify({
-  mcpServers: {
-    [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
-      url: mcpEndpoint,
-      transport: "streamable-http"
-    }
-  }
-}, null, 2)}
-                </pre>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="absolute top-2 right-2"
-                  onClick={() => copyToClipboard(JSON.stringify({
-                    mcpServers: {
-                      [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
-                        url: mcpEndpoint,
-                        transport: "streamable-http"
-                      }
+              <CodeBlock
+                value={JSON.stringify({
+                  mcpServers: {
+                    [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
+                      url: mcpEndpoint,
+                      transport: "streamable-http"
                     }
-                  }, null, 2), 'cursor-config')}
-                >
-                  {copiedField === 'cursor-config' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </div>
+                  }
+                }, null, 2)}
+                language="json"
+                maxHeight="200px"
+              />
             </div>
           </CardContent>
         </Card>

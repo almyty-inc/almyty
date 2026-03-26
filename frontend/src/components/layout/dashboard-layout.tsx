@@ -115,7 +115,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="h-[100dvh] flex overflow-hidden bg-muted">
+    <div className="h-dvh flex overflow-hidden bg-muted">
       {/* Sidebar */}
       <div
         className={cn(
@@ -124,7 +124,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex flex-col h-[100dvh] min-h-0">
+        <div className="flex flex-col h-dvh min-h-0">
           {/* Logo */}
           <div className={cn("flex items-center h-12 border-b shrink-0", sidebarCollapsed ? "justify-center px-2" : "justify-between px-3")}>
             <div className="flex items-center gap-2">
@@ -334,7 +334,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 relative overflow-y-auto focus:outline-none">
+        <main className="flex-1 relative overflow-y-auto overflow-x-hidden focus:outline-none">
           <div className="py-6">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-8">
               {children}
