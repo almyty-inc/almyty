@@ -56,7 +56,16 @@ export function CreateGatewayDialog({
             <Input
               id="name"
               placeholder="Enter gateway name"
-              {...createForm.register('name')}
+              {...createForm.register('name', {
+                onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+                  const current = createForm.getValues('endpoint')
+                  // Auto-fill endpoint if empty or was auto-generated
+                  if (!current || current === '/' + (createForm.getValues('name') || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')) {
+                    const slug = e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+                    createForm.setValue('endpoint', '/' + slug)
+                  }
+                }
+              })}
             />
             {createForm.formState.errors.name && (
               <p className="text-sm text-red-500 mt-1">

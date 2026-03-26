@@ -644,9 +644,9 @@ function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolNa
               <Label className="text-xs font-medium">Endpoint</Label>
               <div className="flex items-center gap-2 mt-1">
                 <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono break-all">
-                  {apiBase}/mcp/{orgSlug}{mcpGateway.endpoint}
+                  {apiBase}/{orgSlug}{mcpGateway.endpoint}
                 </code>
-                <Button variant="outline" size="sm" onClick={() => copyToClipboard(`${apiBase}/mcp/${orgSlug}${mcpGateway.endpoint}`, 'mcp-url')}>
+                <Button variant="outline" size="sm" onClick={() => copyToClipboard(`${apiBase}/${orgSlug}${mcpGateway.endpoint}`, 'mcp-url')}>
                   {copiedField === 'mcp-url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                 </Button>
               </div>
@@ -678,9 +678,9 @@ function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolNa
           <CardContent>
             <div className="flex items-center gap-2">
               <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono break-all">
-                {apiBase}/utcp/{orgSlug}{gateways.find(g => g.gateway?.type === 'utcp')?.gateway?.endpoint}
+                {apiBase}/{orgSlug}{gateways.find(g => g.gateway?.type === 'utcp')?.gateway?.endpoint}
               </code>
-              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`${apiBase}/utcp/${orgSlug}${gateways.find(g => g.gateway?.type === 'utcp')?.gateway?.endpoint}`, 'utcp-url')}>
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`${apiBase}/${orgSlug}${gateways.find(g => g.gateway?.type === 'utcp')?.gateway?.endpoint}`, 'utcp-url')}>
                 {copiedField === 'utcp-url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               </Button>
             </div>
@@ -700,9 +700,9 @@ function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolNa
           <CardContent>
             <div className="flex items-center gap-2">
               <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono break-all">
-                {apiBase}/a2a/{orgSlug}{gateways.find(g => g.gateway?.type === 'a2a')?.gateway?.endpoint}
+                {apiBase}/{orgSlug}{gateways.find(g => g.gateway?.type === 'a2a')?.gateway?.endpoint}
               </code>
-              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`${apiBase}/a2a/${orgSlug}${gateways.find(g => g.gateway?.type === 'a2a')?.gateway?.endpoint}`, 'a2a-url')}>
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`${apiBase}/${orgSlug}${gateways.find(g => g.gateway?.type === 'a2a')?.gateway?.endpoint}`, 'a2a-url')}>
                 {copiedField === 'a2a-url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               </Button>
             </div>
