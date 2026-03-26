@@ -581,36 +581,30 @@ function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolNa
   return (
     <div className="space-y-4">
       {/* Show each protocol this tool is exposed on */}
-      {(hasSkills || hasAnyGateway) && (
+      {hasSkills && skillsGateway && (
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <BookOpen className="h-5 w-5 text-purple-500" />
               <CardTitle className="text-sm">Agent Skills</CardTitle>
+              <Badge variant="outline" className="text-[10px]">{skillsGateway.name}</Badge>
             </div>
             <CardDescription className="text-xs">
               Install this tool as a skill in 30+ AI agents
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {gateways.map((g) => {
-              const gw = g.gateway
-              if (!gw) return null
-              const ref = `@${orgSlug}${gw.endpoint}`
-              return (
-                <div key={gw.id}>
-                  <Label className="text-xs font-medium">{gw.name} <Badge variant="outline" className="ml-1 text-[10px]">{gw.type.toUpperCase()}</Badge></Label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
-                      npx @almyty/skills install {ref}
-                    </code>
-                    <Button variant="outline" size="sm" onClick={() => copyToClipboard(`npx @almyty/skills install ${ref}`, `install-${gw.id}`)}>
-                      {copiedField === `install-${gw.id}` ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                    </Button>
-                  </div>
-                </div>
-              )
-            })}
+            <div>
+              <Label className="text-xs font-medium">Install</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
+                  npx @almyty/skills install @{orgSlug}{skillsGateway.endpoint}
+                </code>
+                <Button variant="outline" size="sm" onClick={() => copyToClipboard(`npx @almyty/skills install @${orgSlug}${skillsGateway.endpoint}`, 'skills-install')}>
+                  {copiedField === 'skills-install' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                </Button>
+              </div>
+            </div>
             <div>
               <Label className="text-xs font-medium">Daemon mode</Label>
               <div className="flex items-center gap-2 mt-1">
@@ -619,7 +613,7 @@ function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolNa
                   {copiedField === 'daemon' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Syncs all gateway skills continuously.</p>
+              <p className="text-xs text-muted-foreground mt-1">Syncs skills continuously.</p>
             </div>
             {skill?.content && (
               <details className="text-xs">
