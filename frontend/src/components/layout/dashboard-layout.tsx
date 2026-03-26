@@ -124,7 +124,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex flex-col h-screen min-h-0">
+        <div className="flex flex-col h-full">
           {/* Logo */}
           <div className={cn("flex items-center h-12 border-b shrink-0", sidebarCollapsed ? "justify-center px-2" : "justify-between px-3")}>
             <div className="flex items-center gap-2">
