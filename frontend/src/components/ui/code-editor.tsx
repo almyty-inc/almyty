@@ -1,9 +1,23 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { githubLight } from '@uiw/codemirror-theme-github'
+
+function useIsDark() {
+  const [dark, setDark] = useState(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  )
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setDark(document.documentElement.classList.contains('dark'))
+    })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [])
+  return dark
+}
 
 interface CodeEditorProps {
   value: string
@@ -24,7 +38,7 @@ export function CodeEditor({
   readOnly = false,
   className = '',
 }: CodeEditorProps) {
-  const isDark = document.documentElement.classList.contains('dark')
+  const isDark = useIsDark()
 
   const extensions = []
   if (language === 'javascript') extensions.push(javascript())
