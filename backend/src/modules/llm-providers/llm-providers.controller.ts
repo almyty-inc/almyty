@@ -440,7 +440,7 @@ export class LlmProvidersController {
 
       return {
         success: true,
-        data: canViewSecrets ? provider : provider.toPublicView(),
+        data: provider,
         message: 'LLM provider retrieved successfully',
       };
     } catch (error) {
