@@ -47,7 +47,7 @@ export class AlmytyProxy {
       throw new Error(`Failed to fetch tools (${response.status}): ${text}`);
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
 
     if (data.error) {
       throw new Error(`MCP error: ${data.error.message}`);
@@ -82,7 +82,7 @@ export class AlmytyProxy {
       return [];
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
     return data.result?.skills || [];
   }
 
@@ -116,7 +116,7 @@ export class AlmytyProxy {
       throw new Error(`Tool execution failed (${response.status}): ${text}`);
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
 
     if (data.error) {
       throw new Error(`Tool error: ${data.error.message}`);

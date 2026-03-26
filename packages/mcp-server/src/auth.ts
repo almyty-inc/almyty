@@ -84,7 +84,7 @@ export async function login(baseUrl: string): Promise<void> {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Authentication failed' }));
+      const error: any = await response.json().catch(() => ({ message: 'Authentication failed' }));
       console.error(`Error: ${error.message || 'Authentication failed'}`);
       process.exit(1);
     }
