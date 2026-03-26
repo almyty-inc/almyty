@@ -32,6 +32,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { SchemaImportDialog } from '@/components/SchemaImportDialog'
 
 import { apisApi } from '@/lib/api'
+import { CredentialPicker } from '@/components/credential-picker'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { formatDate, formatDateTime, cn } from '@/lib/utils'
@@ -97,6 +98,9 @@ export function ApisPage() {
   const [testResults, setTestResults] = React.useState<any>(null)
   const [uploadFile, setUploadFile] = React.useState<File | null>(null)
   const [selectedAuthType, setSelectedAuthType] = React.useState<ApiAuthType>(ApiAuthType.NONE)
+  const [apiKeyCredentialId, setApiKeyCredentialId] = React.useState('')
+  const [bearerCredentialId, setBearerCredentialId] = React.useState('')
+  const [oauthCredentialId, setOauthCredentialId] = React.useState('')
   const [selectedApiType, setSelectedApiType] = React.useState<ApiType>(ApiType.OPENAPI)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [typeFilter, setTypeFilter] = React.useState('all')
@@ -763,15 +767,17 @@ export function ApisPage() {
                 {/* Authentication Configuration Fields */}
                 {selectedAuthType === ApiAuthType.API_KEY && (
                   <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="apiKey">API Key</Label>
-                      <Input
-                        id="apiKey"
-                        type="password"
-                        placeholder="Enter your API key"
-                        onChange={(e) => createForm.setValue('authentication.config.apiKey', e.target.value)}
-                      />
-                    </div>
+                    <CredentialPicker
+                      label="API Key"
+                      value={apiKeyCredentialId}
+                      onSelect={(id) => {
+                        setApiKeyCredentialId(id)
+                        createForm.setValue('authentication.config.credentialId', id)
+                      }}
+                      onNewKey={(key) => createForm.setValue('authentication.config.apiKey', key)}
+                      newKeyValue=""
+                      filterType="api_key"
+                    />
                     <div>
                       <Label htmlFor="headerName">Header Name</Label>
                       <Input
@@ -785,15 +791,18 @@ export function ApisPage() {
                 )}
 
                 {selectedAuthType === ApiAuthType.BEARER_TOKEN && (
-                  <div>
-                    <Label htmlFor="bearerToken">Bearer Token</Label>
-                    <Input
-                      id="bearerToken"
-                      type="password"
-                      placeholder="Enter bearer token"
-                      onChange={(e) => createForm.setValue('authentication.config.token', e.target.value)}
-                    />
-                  </div>
+                  <CredentialPicker
+                    label="Bearer Token"
+                    value={bearerCredentialId}
+                    onSelect={(id) => {
+                      setBearerCredentialId(id)
+                      createForm.setValue('authentication.config.credentialId', id)
+                    }}
+                    onNewKey={(key) => createForm.setValue('authentication.config.token', key)}
+                    newKeyValue=""
+                    placeholder="Enter bearer token"
+                    filterType="bearer_token"
+                  />
                 )}
 
                 {selectedAuthType === ApiAuthType.BASIC_AUTH && (
@@ -829,15 +838,18 @@ export function ApisPage() {
                           onChange={(e) => createForm.setValue('authentication.config.clientId', e.target.value)}
                         />
                       </div>
-                      <div>
-                        <Label htmlFor="clientSecret">Client Secret</Label>
-                        <Input
-                          id="clientSecret"
-                          type="password"
-                          placeholder="Your OAuth client secret"
-                          onChange={(e) => createForm.setValue('authentication.config.clientSecret', e.target.value)}
-                        />
-                      </div>
+                      <CredentialPicker
+                        label="Client Secret"
+                        value={oauthCredentialId}
+                        onSelect={(id) => {
+                          setOauthCredentialId(id)
+                          createForm.setValue('authentication.config.credentialId', id)
+                        }}
+                        onNewKey={(key) => createForm.setValue('authentication.config.clientSecret', key)}
+                        newKeyValue=""
+                        placeholder="Your OAuth client secret"
+                        filterType="oauth2"
+                      />
                     </div>
                     <div>
                       <Label htmlFor="authUrl">Authorization URL</Label>

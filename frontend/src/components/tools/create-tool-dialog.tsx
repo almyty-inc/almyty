@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
+import { CredentialPicker } from '@/components/credential-picker'
 import CodeMirror from '@uiw/react-codemirror'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
@@ -465,17 +466,26 @@ export function CreateToolDialog({
               </Select>
 
               {authConfig.type === 'apiKey' && (
-                <div>
-                  <Label htmlFor="auth-apikey">API Key</Label>
-                  <Input id="auth-apikey" type="password" value={authConfig.apiKey} onChange={(e) => onAuthConfigChange({ ...authConfig, apiKey: e.target.value })} placeholder="your-api-key" />
-                </div>
+                <CredentialPicker
+                  label="API Key"
+                  value={(authConfig as any).credentialId || ''}
+                  onSelect={(id) => onAuthConfigChange({ ...authConfig, credentialId: id })}
+                  onNewKey={(key) => onAuthConfigChange({ ...authConfig, apiKey: key })}
+                  newKeyValue={authConfig.apiKey || ''}
+                  filterType="api_key"
+                />
               )}
 
               {authConfig.type === 'bearer' && (
-                <div>
-                  <Label htmlFor="auth-bearer">Bearer Token</Label>
-                  <Input id="auth-bearer" type="password" value={authConfig.bearerToken} onChange={(e) => onAuthConfigChange({ ...authConfig, bearerToken: e.target.value })} placeholder="eyJhbGc..." />
-                </div>
+                <CredentialPicker
+                  label="Bearer Token"
+                  value={(authConfig as any).credentialId || ''}
+                  onSelect={(id) => onAuthConfigChange({ ...authConfig, credentialId: id })}
+                  onNewKey={(key) => onAuthConfigChange({ ...authConfig, bearerToken: key })}
+                  newKeyValue={authConfig.bearerToken || ''}
+                  placeholder="eyJhbGc..."
+                  filterType="bearer_token"
+                />
               )}
 
               {authConfig.type === 'basic' && (

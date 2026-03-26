@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/sheet'
 
 import { llmProvidersApi } from '@/lib/api'
+import { CredentialPicker } from '@/components/credential-picker'
 
 interface LlmProvider {
   id: string
@@ -124,6 +125,10 @@ export function ProviderDetailsSheet({
   toggleProviderStatusMutation,
   onOpenTestDialog,
 }: ProviderDetailsSheetProps) {
+  // Credential state for API key
+  const [providerCredentialId, setProviderCredentialId] = useState('')
+  const [providerApiKey, setProviderApiKey] = useState('')
+
   // Chat state
   const [chatMessages, setChatMessages] = useState<Array<{
     role: 'user' | 'assistant' | 'tool'
@@ -382,14 +387,14 @@ export function ProviderDetailsSheet({
                   <CardTitle className="text-sm">API Configuration</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label>API Key</Label>
-                    <Input
-                      type="password"
-                      value={selectedProvider.configuration.apiKey || ''}
-                      readOnly
-                    />
-                  </div>
+                  <CredentialPicker
+                    label="API Key"
+                    value={providerCredentialId}
+                    onSelect={(id) => setProviderCredentialId(id)}
+                    onNewKey={(key) => setProviderApiKey(key)}
+                    newKeyValue={providerApiKey || selectedProvider.configuration.apiKey || ''}
+                    filterType="api_key"
+                  />
                   <div>
                     <Label>Base URL</Label>
                     <Input
