@@ -51,8 +51,8 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
     enabled: !!organizationId,
   })
 
-  const members = membersData?.data || []
-  const teams = teamsData?.data || []
+  const members = Array.isArray(membersData) ? membersData : membersData?.data || membersData || []
+  const teams = Array.isArray(teamsData) ? teamsData : teamsData?.data || teamsData || []
 
   // Create team mutation
   const createTeamMutation = useMutation({
