@@ -50,7 +50,7 @@ patches:
         value: "true"
       - op: replace
         path: /data/DB_SYNC
-        value: "true"
+        value: "false"
       - op: replace
         path: /data/BASE_URL
         value: "https://api.almyty.com"

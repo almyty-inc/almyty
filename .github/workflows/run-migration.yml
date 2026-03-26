@@ -1,0 +1,71 @@
+name: Run Database Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      confirm:
+        description: 'Type the environment name to confirm'
+        required: true
+        type: string
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "${{ inputs.environment }}" ]; then
+            echo "❌ Confirmation doesn't match. Type '${{ inputs.environment }}' to confirm."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save DigitalOcean kubeconfig
+        run: doctl kubernetes cluster kubeconfig save ${{ secrets.DIGITALOCEAN_CLUSTER_NAME }}
+
+      - name: Run migration job
+        run: |
+          NAMESPACE="almyty-${{ inputs.environment }}"
+          PREFIX="${{ inputs.environment == 'production' && 'prod-' || 'staging-' }}"
+          IMAGE_TAG="${{ inputs.environment == 'production' && 'production-latest' || 'staging-latest' }}"
+
+          # Delete old job if exists
+          kubectl delete job ${PREFIX}db-migration -n $NAMESPACE --ignore-not-found
+
+          # Apply the migration job with correct image tag and namespace
+          cat k8s/base/migration-job.yaml | \
+            sed "s|image: ghcr.io/frane/almyty/api:latest|image: ghcr.io/frane/almyty/api:${IMAGE_TAG}|g" | \
+            sed "s|name: db-migration|name: ${PREFIX}db-migration|g" | \
+            sed "s|name: almyty-config|name: ${PREFIX}almyty-config|g" | \
+            sed "s|name: almyty-secrets|name: ${PREFIX}almyty-secrets|g" | \
+            kubectl apply -n $NAMESPACE -f -
+
+          # Wait for completion
+          echo "Waiting for migration to complete..."
+          kubectl wait --for=condition=complete job/${PREFIX}db-migration -n $NAMESPACE --timeout=120s || true
+
+          # Show logs
+          echo "=== Migration logs ==="
+          kubectl logs job/${PREFIX}db-migration -n $NAMESPACE || true
+
+          # Check status
+          STATUS=$(kubectl get job ${PREFIX}db-migration -n $NAMESPACE -o jsonpath='{.status.succeeded}')
+          if [ "$STATUS" = "1" ]; then
+            echo "✅ Migration completed successfully"
+          else
+            echo "❌ Migration failed"
+            exit 1
+          fi

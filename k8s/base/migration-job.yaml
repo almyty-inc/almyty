@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migration
+  labels:
+    app: almyty
+    component: migration
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: migration
+          image: ghcr.io/frane/almyty/api:latest
+          command: ["node", "dist/run-migrations.js"]
+          env:
+            - name: DATABASE_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: almyty-config
+                  key: DATABASE_HOST
+            - name: DATABASE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: almyty-config
+                  key: DATABASE_PORT
+            - name: DATABASE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: almyty-config
+                  key: DATABASE_NAME
+            - name: DATABASE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: almyty-secrets
+                  key: DATABASE_USERNAME
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: almyty-secrets
+                  key: DATABASE_PASSWORD
+            - name: DB_SSL
+              valueFrom:
+                configMapKeyRef:
+                  name: almyty-config
+                  key: DB_SSL
