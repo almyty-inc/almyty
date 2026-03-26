@@ -6,11 +6,6 @@ import * as z from 'zod'
 import {
   Plus,
   Search,
-  Settings,
-  Eye,
-  Edit,
-  Trash2,
-  TestTube,
   Activity,
   DollarSign,
   TrendingUp,
@@ -35,10 +30,7 @@ import {
   Cloud,
   Globe,
   ExternalLink,
-  Copy,
   RefreshCw,
-  Power,
-  PowerOff,
   Send,
   RotateCcw
 } from 'lucide-react'
@@ -86,13 +78,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu'
 import { DataTable, createSelectColumn, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
 import { useNotifications } from '@/store/app'
 import { llmProvidersApi } from '@/lib/api'
@@ -1085,127 +1070,62 @@ export function LlmProvidersPage() {
     //     )
     //   }
     // }),
-    createActionsColumn<LlmProvider>({
-      cell: ({ row }) => {
-        const provider = row.original
-        return (
-          <div className="flex items-center gap-2">
-            {/* Test Connection Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                setTestProvider(provider)
-                setIsTestDialogOpen(true)
-              }}
-              aria-label="Test Connection"
-            >
-              <TestTube className="h-4 w-4 mr-1" />
-              Test
-            </Button>
-
-            {/* View Details Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                setSelectedProvider(provider)
-              }}
-              aria-label="View Details"
-            >
-              <Eye className="h-4 w-4 mr-1" />
-              Details
-            </Button>
-
-            {/* Edit Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async (e) => {
-                e.stopPropagation()
-                setProviderToEdit(provider)
-                editForm.reset({
-                  name: provider.name,
-                  model: provider.configuration.model || '',
-                  maxTokens: provider.configuration.maxTokens || 4096,
-                  temperature: provider.configuration.temperature || 0.7,
-                })
-                setIsEditDialogOpen(true)
-                // Fetch models dynamically from the provider API
-                setModelsLoading(true)
-                setAvailableModels([])
-                try {
-                  const res = await llmProvidersApi.getModels(provider.id)
-                  const models = res || []
-                  setAvailableModels(models)
-                } catch (err) {
-                  console.warn('Failed to fetch models dynamically:', err)
-                  setAvailableModels([])
-                } finally {
-                  setModelsLoading(false)
-                }
-              }}
-              aria-label="Edit"
-            >
-              <Edit className="h-4 w-4 mr-1" />
-              Edit
-            </Button>
-
-            {/* Delete Button with Confirmation */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                setProviderToDelete(provider)
-              }}
-              aria-label="Delete"
-              className="text-red-600 hover:text-red-700"
-            >
-              <Trash2 className="h-4 w-4 mr-1" />
-              Delete
-            </Button>
-
-            {/* Dropdown for additional actions */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm">
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => {
-                  navigator.clipboard.writeText(provider.configuration.apiKey || '')
-                  notifications.success('Copied', 'API key copied to clipboard')
-                }}>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copy API Key
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => toggleProviderStatusMutation.mutate({
-                  providerId: provider.id,
-                  status: provider.status === 'active' ? 'inactive' : 'active'
-                })}>
-                  {provider.status === 'active' ? (
-                    <>
-                      <PowerOff className="h-4 w-4 mr-2" />
-                      Disable
-                    </>
-                  ) : (
-                    <>
-                      <Power className="h-4 w-4 mr-2" />
-                      Enable
-                    </>
-                  )}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )
-      }
-    })
+    createActionsColumn<LlmProvider>(
+      (provider) => setSelectedProvider(provider),
+      (provider) => setProviderToDelete(provider),
+      [
+        {
+          label: 'View Details',
+          onClick: (provider) => setSelectedProvider(provider),
+        },
+        {
+          label: 'Test Connection',
+          onClick: (provider) => {
+            setTestProvider(provider)
+            setIsTestDialogOpen(true)
+          },
+        },
+        {
+          label: 'Edit',
+          onClick: async (provider) => {
+            setProviderToEdit(provider)
+            editForm.reset({
+              name: provider.name,
+              model: provider.configuration.model || '',
+              maxTokens: provider.configuration.maxTokens || 4096,
+              temperature: provider.configuration.temperature || 0.7,
+            })
+            setIsEditDialogOpen(true)
+            setModelsLoading(true)
+            setAvailableModels([])
+            try {
+              const res = await llmProvidersApi.getModels(provider.id)
+              setAvailableModels(res || [])
+            } catch {
+              setAvailableModels([])
+            } finally {
+              setModelsLoading(false)
+            }
+          },
+        },
+        {
+          label: 'Copy API Key',
+          onClick: (provider) => {
+            navigator.clipboard.writeText(provider.configuration.apiKey || '')
+            notifications.success('Copied', 'API key copied to clipboard')
+          },
+        },
+        {
+          label: 'Toggle Status',
+          onClick: (provider) => {
+            toggleProviderStatusMutation.mutate({
+              providerId: provider.id,
+              status: provider.status === 'active' ? 'inactive' : 'active',
+            })
+          },
+        },
+      ]
+    )
   ]
 
   return (
