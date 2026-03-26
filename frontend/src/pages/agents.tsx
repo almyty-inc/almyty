@@ -111,6 +111,7 @@ export function AgentsPage() {
   const [importJson, setImportJson] = useState('')
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [showTemplates, setShowTemplates] = useState(true)
 
   // Fetch agents
@@ -139,11 +140,11 @@ export function AgentsPage() {
   const agents: Agent[] = Array.isArray(agentsData) ? agentsData : []
 
   const filteredAgents = agents.filter((agent) => {
-    if (!searchQuery) return true
-    return (
+    const matchesSearch = !searchQuery ||
       agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (agent.description || '').toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const matchesStatus = statusFilter === 'all' || agent.status === statusFilter
+    return matchesSearch && matchesStatus
   })
 
   const activeCount = agents.filter((a) => a.status === 'active').length
@@ -362,16 +363,28 @@ export function AgentsPage() {
             </div>
           )}
 
-          {/* Search */}
+          {/* Search + Filter */}
           {agents.length > 0 && (
-            <div className="relative max-w-sm">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search agents..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="flex items-center gap-4">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search agents..."
+                  className="pl-10"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="all">All Status</option>
+                <option value="draft">Draft</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
             </div>
           )}
 
