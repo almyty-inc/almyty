@@ -233,7 +233,7 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
     { accessorKey: 'createdAt', header: 'Created', cell: ({ row }: any) => <span className="text-sm text-muted-foreground">{formatDate(row.original.createdAt)}</span> },
     createActionsColumn<AccessKey>({ cell: ({ row }: any) => (
       <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => revokeMut.mutate(row.original.id)}>
-        <Trash2 className="h-4 w-4 mr-1" /> Revoke
+        <Trash2 className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Revoke</span>
       </Button>
     )}),
   ]
