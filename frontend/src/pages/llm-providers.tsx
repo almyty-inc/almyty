@@ -1212,7 +1212,7 @@ export function LlmProvidersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">AI Models</h1>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight">AI Models</h1>
           <p className="text-muted-foreground">
             {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${providers.length} providers (${providers.filter((p: any) => p.status === 'active').length} active) \u00B7 $${totalCost.toFixed(2)} total cost \u00B7 ${totalRequests.toLocaleString()} requests`}
           </p>
@@ -1257,60 +1257,59 @@ export function LlmProvidersPage() {
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-4">
+            {/* Filters */}
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search providers..."
+                    className="pl-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                  <SelectItem value="configuring">Configuring</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="anthropic">Anthropic</SelectItem>
+                  <SelectItem value="google">Google Gemini</SelectItem>
+                  <SelectItem value="mistral">Mistral AI</SelectItem>
+                  <SelectItem value="xai">xAI</SelectItem>
+                  <SelectItem value="deepseek">DeepSeek</SelectItem>
+                  <SelectItem value="groq">Groq</SelectItem>
+                  <SelectItem value="together">Together AI</SelectItem>
+                  <SelectItem value="openrouter">OpenRouter</SelectItem>
+                  <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
+                  <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
+                  <SelectItem value="cohere">Cohere</SelectItem>
+                  <SelectItem value="huggingface">HuggingFace</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <DataTable
               columns={columns}
               data={filteredProviders}
               loading={isLoading}
               onRowClick={(provider) => setSelectedProvider(provider)}
-              headerExtra={
-                <div className="flex items-center gap-4 flex-1">
-                  <div className="flex-1">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search providers..."
-                        className="pl-10"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                      <SelectItem value="error">Error</SelectItem>
-                      <SelectItem value="configuring">Configuring</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="openai">OpenAI</SelectItem>
-                      <SelectItem value="anthropic">Anthropic</SelectItem>
-                      <SelectItem value="google">Google Gemini</SelectItem>
-                      <SelectItem value="mistral">Mistral AI</SelectItem>
-                      <SelectItem value="xai">xAI</SelectItem>
-                      <SelectItem value="deepseek">DeepSeek</SelectItem>
-                      <SelectItem value="groq">Groq</SelectItem>
-                      <SelectItem value="together">Together AI</SelectItem>
-                      <SelectItem value="openrouter">OpenRouter</SelectItem>
-                      <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
-                      <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
-                      <SelectItem value="cohere">Cohere</SelectItem>
-                      <SelectItem value="huggingface">HuggingFace</SelectItem>
-                      <SelectItem value="custom">Custom</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              }
             />
           </CardContent>
         </Card>
