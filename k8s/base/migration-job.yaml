@@ -16,7 +16,35 @@ spec:
       containers:
         - name: migration
           image: ghcr.io/frane/almyty/api:latest
-          command: ["node", "dist/run-migrations.js"]
+          command: ["node", "-e"]
+          args:
+            - |
+              const {DataSource} = require('typeorm');
+              const path = require('path');
+              const ds = new DataSource({
+                type: 'postgres',
+                host: process.env.DATABASE_HOST,
+                port: parseInt(process.env.DATABASE_PORT || '5432'),
+                username: process.env.DATABASE_USERNAME,
+                password: process.env.DATABASE_PASSWORD,
+                database: process.env.DATABASE_NAME,
+                ssl: process.env.DB_SSL === 'true' ? {rejectUnauthorized: false} : false,
+                entities: [path.join(__dirname, 'dist', 'entities', '*.entity.js')],
+                synchronize: true,
+                logging: true,
+              });
+              ds.initialize()
+                .then(async () => {
+                  const qr = ds.createQueryRunner();
+                  const tables = await qr.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
+                  console.log('Tables:', tables.length);
+                  tables.forEach(t => console.log(' -', t.tablename));
+                  await qr.release();
+                  await ds.destroy();
+                  console.log('Migration complete');
+                  process.exit(0);
+                })
+                .catch(e => { console.error('Migration failed:', e.message); process.exit(1); });
           env:
             - name: DATABASE_HOST
               valueFrom:
