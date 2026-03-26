@@ -308,7 +308,7 @@ export function AnalyticsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between pb-4 border-b">
         <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight">Analytics</h1>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Analytics</h1>
           <p className="text-muted-foreground">Real-time usage data across all protocols</p>
         </div>
         <div className="flex items-center gap-2">
