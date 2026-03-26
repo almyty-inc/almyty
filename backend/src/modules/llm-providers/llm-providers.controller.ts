@@ -455,6 +455,32 @@ export class LlmProvidersController {
     }
   }
 
+  @Get(':providerId/usage')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Get LLM provider usage stats' })
+  async getProviderUsage(
+    @Param('providerId', ParseUUIDPipe) providerId: string,
+    @Request() req: any,
+  ) {
+    const organizationId = req.user.organizations?.[0]?.id;
+    const provider = await this.llmProvidersService.getProvider(providerId, organizationId);
+    return {
+      success: true,
+      data: {
+        totalRequests: provider.totalRequests || 0,
+        successfulRequests: provider.successfulRequests || 0,
+        failedRequests: (provider.totalRequests || 0) - (provider.successfulRequests || 0),
+        totalTokensUsed: provider.totalTokensUsed || 0,
+        totalCost: provider.totalCost || 0,
+        lastRequestAt: provider.lastRequestAt,
+        successRate: provider.totalRequests > 0
+          ? ((provider.successfulRequests / provider.totalRequests) * 100).toFixed(1)
+          : '0',
+      },
+      message: 'Usage stats retrieved',
+    };
+  }
+
   @Patch(':providerId')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update LLM provider' })
