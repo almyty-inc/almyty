@@ -38,6 +38,7 @@ export interface AuthResponse {
 export interface Organization {
   id: string
   name: string
+  slug?: string
   description?: string
   plan: OrganizationPlan
   settings: OrganizationSettings
