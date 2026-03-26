@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, BookOpen, Copy, Check, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, BookOpen, Copy, Check, ChevronRight, Globe, Bot } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -441,7 +441,7 @@ export function ToolDetailPage() {
 
         {/* Exports Tab */}
         <TabsContent value="exports">
-          <ExportsSection toolId={id!} toolName={tool.name} />
+          <ExportsSection toolId={id!} toolName={tool.name} gateways={tool.gatewayAssociations || []} />
         </TabsContent>
 
         {/* Gateways Tab */}
@@ -527,28 +527,35 @@ export function ToolDetailPage() {
   )
 }
 
-function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string }) {
+interface GatewayInfo {
+  gateway?: { id: string; name: string; type: string; endpoint: string; organizationId?: string }
+}
+
+function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolName: string; gateways: GatewayInfo[] }) {
   const [copiedField, setCopiedField] = useState<string | null>(null)
-  const [cliFormat, setCliFormat] = useState<'bash' | 'node'>('bash')
   const { currentOrganization } = useOrganizationStore()
 
   const orgId = currentOrganization?.id || ''
+  const orgSlug = (currentOrganization?.name || 'org').toLowerCase().replace(/\s+/g, '-')
+
+  // Derive which protocols this tool is exposed on
+  const exposedProtocols = gateways.map(g => g.gateway?.type).filter(Boolean) as string[]
+  const hasMcp = exposedProtocols.includes('mcp')
+  const hasA2a = exposedProtocols.includes('a2a')
+  const hasUtcp = exposedProtocols.includes('utcp')
+  const hasSkills = exposedProtocols.includes('skills')
+  const hasAnyGateway = gateways.length > 0
+
+  // Get first gateway of each type for endpoint URLs
+  const mcpGateway = gateways.find(g => g.gateway?.type === 'mcp')?.gateway
+  const skillsGateway = gateways.find(g => g.gateway?.type === 'skills')?.gateway
+  const firstGateway = gateways[0]?.gateway
+
+  const apiBase = window.location.origin.replace('app.', 'api.')
 
   const { data: skillData, isLoading: skillLoading } = useQuery({
     queryKey: ['tool-skill', toolId],
     queryFn: () => toolsApi.getSkill(toolId, orgId),
-    enabled: !!orgId,
-  })
-
-  const { data: cliData, isLoading: cliLoading } = useQuery({
-    queryKey: ['tool-cli', toolId, cliFormat],
-    queryFn: () => toolsApi.getCli(toolId, orgId, cliFormat),
-    enabled: !!orgId,
-  })
-
-  const { data: sdkData, isLoading: sdkLoading } = useQuery({
-    queryKey: ['tool-sdk', toolId],
-    queryFn: () => toolsApi.getSdk(toolId, orgId),
     enabled: !!orgId,
   })
 
@@ -558,139 +565,156 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
     setTimeout(() => setCopiedField(null), 2000)
   }
 
-  const downloadFile = (content: string, filename: string) => {
-    const blob = new Blob([content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   const skill = skillData
-  const cli = cliData
-  const sdk = sdkData
 
-  const gatewayEndpoint = '/your-gateway'
-  const orgSlug = 'your-org'
+  if (!hasAnyGateway) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center">
+          <p className="text-sm text-muted-foreground">This tool is not assigned to any gateway yet.</p>
+          <p className="text-xs text-muted-foreground mt-1">Assign it to a gateway to get integration instructions.</p>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <div className="space-y-4">
-      {/* Skills — install, daemon, manual */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-purple-500" />
-            <CardTitle className="text-sm">Agent Skills</CardTitle>
-          </div>
-          <CardDescription className="text-xs">
-            Install this tool as a skill in 30+ AI agents — Claude Code, Cursor, Windsurf, Copilot, and more
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label className="text-xs font-medium">Install skills from a gateway</Label>
-            <div className="flex items-center gap-2 mt-1">
-              <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
-                npx @almyty/skills install @{orgSlug}{gatewayEndpoint}
-              </code>
-              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`npx @almyty/skills install @${orgSlug}${gatewayEndpoint}`, 'skills-install')}>
-                {copiedField === 'skills-install' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              </Button>
+      {/* Show each protocol this tool is exposed on */}
+      {(hasSkills || hasAnyGateway) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-purple-500" />
+              <CardTitle className="text-sm">Agent Skills</CardTitle>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Downloads SKILL.md files to your project. Auto-detected by 30+ AI agents.</p>
-          </div>
-          <div>
-            <Label className="text-xs font-medium">Daemon mode (continuous sync)</Label>
-            <div className="flex items-center gap-2 mt-1">
-              <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
-                npx @almyty/skills daemon
-              </code>
-              <Button variant="outline" size="sm" onClick={() => copyToClipboard('npx @almyty/skills daemon', 'skills-daemon')}>
-                {copiedField === 'skills-daemon' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              </Button>
+            <CardDescription className="text-xs">
+              Install this tool as a skill in 30+ AI agents
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {gateways.map((g) => {
+              const gw = g.gateway
+              if (!gw) return null
+              const ref = `@${orgSlug}${gw.endpoint}`
+              return (
+                <div key={gw.id}>
+                  <Label className="text-xs font-medium">{gw.name} <Badge variant="outline" className="ml-1 text-[10px]">{gw.type.toUpperCase()}</Badge></Label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
+                      npx @almyty/skills install {ref}
+                    </code>
+                    <Button variant="outline" size="sm" onClick={() => copyToClipboard(`npx @almyty/skills install ${ref}`, `install-${gw.id}`)}>
+                      {copiedField === `install-${gw.id}` ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+            <div>
+              <Label className="text-xs font-medium">Daemon mode</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">npx @almyty/skills daemon</code>
+                <Button variant="outline" size="sm" onClick={() => copyToClipboard('npx @almyty/skills daemon', 'daemon')}>
+                  {copiedField === 'daemon' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Syncs all gateway skills continuously.</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Syncs all your gateway skills continuously. Polls every 60s for changes.</p>
-          </div>
-          <div>
-            <Label className="text-xs font-medium">Run a specific skill</Label>
-            <div className="flex items-center gap-2 mt-1">
-              <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
-                npx @almyty/skills run @{orgSlug}{gatewayEndpoint}/{toolName}
-              </code>
-              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`npx @almyty/skills run @${orgSlug}${gatewayEndpoint}/${toolName}`, 'skills-run')}>
-                {copiedField === 'skills-run' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              </Button>
+            {skill?.content && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">View SKILL.md</summary>
+                <div className="mt-2">
+                  <CodeBlock value={skill.content} language="text" maxHeight="200px" />
+                </div>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {hasMcp && mcpGateway && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-violet-500" />
+              <CardTitle className="text-sm">MCP</CardTitle>
+              <Badge variant="outline" className="text-[10px]">{mcpGateway.name}</Badge>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Execute this tool directly from the command line.</p>
-          </div>
-          {skill?.content && (
+            <CardDescription className="text-xs">
+              Connect via MCP in Claude Code, Cursor, Windsurf, or any MCP client
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label className="text-xs font-medium">Endpoint</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono break-all">
+                  {apiBase}/mcp/{orgSlug}{mcpGateway.endpoint}
+                </code>
+                <Button variant="outline" size="sm" onClick={() => copyToClipboard(`${apiBase}/mcp/${orgSlug}${mcpGateway.endpoint}`, 'mcp-url')}>
+                  {copiedField === 'mcp-url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                </Button>
+              </div>
+            </div>
             <details className="text-xs">
-              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">View SKILL.md content</summary>
-              <div className="mt-2">
-                <CodeBlock value={skill.content} language="text" maxHeight="200px" />
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Client configs</summary>
+              <div className="mt-2 space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Claude Code</Label>
+                  <div className="mt-1">
+                    <CodeBlock value={`"mcpServers": {\n  "${mcpGateway.name.toLowerCase().replace(/\s+/g, '-')}": {\n    "url": "${apiBase}/mcp/${orgSlug}${mcpGateway.endpoint}",\n    "headers": { "X-API-Key": "YOUR_KEY" }\n  }\n}`} language="json" maxHeight="120px" />
+                  </div>
+                </div>
               </div>
             </details>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* MCP — connect via protocol */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <Zap className="h-5 w-5 text-violet-500" />
-            <CardTitle className="text-sm">MCP Server</CardTitle>
-          </div>
-          <CardDescription className="text-xs">
-            Connect this tool via MCP protocol in Claude Code, Cursor, Windsurf, or any MCP-compatible client
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label className="text-xs font-medium">Option 1: npx (recommended)</Label>
-            <div className="flex items-center gap-2 mt-1">
-              <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
-                npx @almyty/mcp-server
-              </code>
-              <Button variant="outline" size="sm" onClick={() => copyToClipboard('npx @almyty/mcp-server', 'npx')}>
-                {copiedField === 'npx' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              </Button>
+      {hasUtcp && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-emerald-500" />
+              <CardTitle className="text-sm">UTCP</CardTitle>
+              <Badge variant="outline" className="text-[10px]">{gateways.find(g => g.gateway?.type === 'utcp')?.gateway?.name}</Badge>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Runs a local MCP server that connects to your almyty tools.</p>
-          </div>
-          <div>
-            <Label className="text-xs font-medium">Option 2: Remote MCP endpoint</Label>
-            <div className="flex items-center gap-2 mt-1">
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
               <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono break-all">
-                {window.location.origin.replace('app.', 'api.')}/mcp/{orgSlug}{gatewayEndpoint}
+                {apiBase}/utcp/{orgSlug}{gateways.find(g => g.gateway?.type === 'utcp')?.gateway?.endpoint}
               </code>
-              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`${window.location.origin.replace('app.', 'api.')}/mcp/${orgSlug}${gatewayEndpoint}`, 'mcp-url')}>
-                {copiedField === 'mcp-url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`${apiBase}/utcp/${orgSlug}${gateways.find(g => g.gateway?.type === 'utcp')?.gateway?.endpoint}`, 'utcp-url')}>
+                {copiedField === 'utcp-url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Point your client directly at the hosted gateway. Requires an API key.</p>
-          </div>
-          <details className="text-xs">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Client config examples</summary>
-            <div className="mt-2 space-y-3">
-              <div>
-                <Label className="text-xs text-muted-foreground">Claude Code (~/.claude/settings.json)</Label>
-                <div className="mt-1">
-                  <CodeBlock value={`"mcpServers": {\n  "almyty": {\n    "command": "npx",\n    "args": ["@almyty/mcp-server"]\n  }\n}`} language="json" maxHeight="120px" />
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Cursor / Windsurf</Label>
-                <div className="mt-1">
-                  <CodeBlock value={`{\n  "name": "almyty",\n  "url": "${window.location.origin.replace('app.', 'api.')}/mcp/${orgSlug}${gatewayEndpoint}",\n  "apiKey": "YOUR_API_KEY"\n}`} language="json" maxHeight="100px" />
-                </div>
-              </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {hasA2a && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-cyan-500" />
+              <CardTitle className="text-sm">A2A</CardTitle>
+              <Badge variant="outline" className="text-[10px]">{gateways.find(g => g.gateway?.type === 'a2a')?.gateway?.name}</Badge>
             </div>
-          </details>
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono break-all">
+                {apiBase}/a2a/{orgSlug}{gateways.find(g => g.gateway?.type === 'a2a')?.gateway?.endpoint}
+              </code>
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`${apiBase}/a2a/${orgSlug}${gateways.find(g => g.gateway?.type === 'a2a')?.gateway?.endpoint}`, 'a2a-url')}>
+                {copiedField === 'a2a-url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
