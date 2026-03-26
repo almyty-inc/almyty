@@ -590,7 +590,7 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label className="text-xs font-medium">Install skills</Label>
+            <Label className="text-xs font-medium">Install skills from a gateway</Label>
             <div className="flex items-center gap-2 mt-1">
               <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
                 npx @almyty/skills install @{orgSlug}{gatewayEndpoint}
@@ -599,19 +599,31 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
                 {copiedField === 'skills-install' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Downloads SKILL.md files to your project. Auto-detected by supported agents.</p>
+            <p className="text-xs text-muted-foreground mt-1">Downloads SKILL.md files to your project. Auto-detected by 30+ AI agents.</p>
           </div>
           <div>
-            <Label className="text-xs font-medium">Watch mode (auto-sync)</Label>
+            <Label className="text-xs font-medium">Daemon mode (continuous sync)</Label>
             <div className="flex items-center gap-2 mt-1">
               <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
-                npx @almyty/skills watch @{orgSlug}{gatewayEndpoint}
+                npx @almyty/skills daemon
               </code>
-              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`npx @almyty/skills watch @${orgSlug}${gatewayEndpoint}`, 'skills-watch')}>
-                {copiedField === 'skills-watch' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard('npx @almyty/skills daemon', 'skills-daemon')}>
+                {copiedField === 'skills-daemon' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Keeps skills in sync — updates when tools are added, removed, or changed.</p>
+            <p className="text-xs text-muted-foreground mt-1">Syncs all your gateway skills continuously. Polls every 60s for changes.</p>
+          </div>
+          <div>
+            <Label className="text-xs font-medium">Run a specific skill</Label>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
+                npx @almyty/skills run @{orgSlug}{gatewayEndpoint}/{toolName}
+              </code>
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`npx @almyty/skills run @${orgSlug}${gatewayEndpoint}/${toolName}`, 'skills-run')}>
+                {copiedField === 'skills-run' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Execute this tool directly from the command line.</p>
           </div>
           {skill?.content && (
             <details className="text-xs">
