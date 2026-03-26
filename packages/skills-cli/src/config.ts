@@ -11,7 +11,7 @@ export interface AlmytyConfig {
 }
 
 export function loadConfig(projectDir?: string): AlmytyConfig {
-  const envDir = process.env.APIFAI_SKILLS_DIR;
+  const envDir = process.env.ALMYTY_SKILLS_DIR;
   if (envDir) {
     return { skillsDir: envDir };
   }

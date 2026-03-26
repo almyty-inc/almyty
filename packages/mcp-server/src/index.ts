@@ -26,10 +26,10 @@
  *   - Google Gemini CLI (~/.gemini/settings.json)
  *
  * Environment variables:
- *   APIFAI_URL        - Base URL of the almyty backend (default: http://localhost:4000)
- *   APIFAI_TOKEN      - JWT Bearer token for authentication
- *   APIFAI_GATEWAY_ID - Optional: scope to a specific gateway
- *   APIFAI_MODE       - "skill-first" (default) | "full" (registers all tools individually)
+ *   ALMYTY_URL        - Base URL of the almyty backend (default: https://api.almyty.com)
+ *   ALMYTY_TOKEN      - JWT Bearer token for authentication
+ *   ALMYTY_GATEWAY_ID - Optional: scope to a specific gateway
+ *   ALMYTY_MODE       - "skill-first" (default) | "full" (registers all tools individually)
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -38,13 +38,13 @@ import { z } from 'zod';
 import { loadCredentials } from './auth.js';
 import { AlmytyProxy } from './proxy.js';
 
-const APIFAI_URL = process.env.APIFAI_URL || 'http://localhost:4000';
-const APIFAI_GATEWAY_ID = process.env.APIFAI_GATEWAY_ID;
-const APIFAI_MODE = (process.env.APIFAI_MODE || 'skill-first') as 'skill-first' | 'full';
+const ALMYTY_URL = process.env.ALMYTY_URL || 'https://api.almyty.com';
+const ALMYTY_GATEWAY_ID = process.env.ALMYTY_GATEWAY_ID;
+const ALMYTY_MODE = (process.env.ALMYTY_MODE || 'skill-first') as 'skill-first' | 'full';
 
 async function main() {
   // Resolve token: env var > stored credentials
-  let token = process.env.APIFAI_TOKEN;
+  let token = process.env.ALMYTY_TOKEN;
   if (!token) {
     const creds = loadCredentials();
     token = creds?.token;
@@ -53,12 +53,12 @@ async function main() {
   if (!token) {
     console.error(
       'Error: No authentication token found.\n' +
-      'Set APIFAI_TOKEN environment variable or run: npx @almyty/mcp-server login'
+      'Set ALMYTY_TOKEN environment variable or run: npx @almyty/mcp-server login'
     );
     process.exit(1);
   }
 
-  const proxy = new AlmytyProxy(APIFAI_URL, token, APIFAI_GATEWAY_ID);
+  const proxy = new AlmytyProxy(ALMYTY_URL, token, ALMYTY_GATEWAY_ID);
 
   // Fetch tools + skills from backend
   const [tools, skills] = await Promise.all([
@@ -66,14 +66,14 @@ async function main() {
     proxy.fetchSkills(),
   ]);
 
-  console.error(`almyty: ${tools.length} tools, ${skills.length} skills (mode: ${APIFAI_MODE})`);
+  console.error(`almyty: ${tools.length} tools, ${skills.length} skills (mode: ${ALMYTY_MODE})`);
 
   const server = new McpServer({
     name: 'almyty',
     version: '1.0.0',
   });
 
-  if (APIFAI_MODE === 'skill-first') {
+  if (ALMYTY_MODE === 'skill-first') {
     // =====================================================
     // SKILL-FIRST MODE (default) — minimal token overhead
     // =====================================================
@@ -222,8 +222,8 @@ async function main() {
         const lines = [
           '# almyty API Tools',
           '',
-          `Connected to: ${APIFAI_URL}`,
-          APIFAI_GATEWAY_ID ? `Gateway: ${APIFAI_GATEWAY_ID}` : '',
+          `Connected to: ${ALMYTY_URL}`,
+          ALMYTY_GATEWAY_ID ? `Gateway: ${ALMYTY_GATEWAY_ID}` : '',
           '',
           `## ${tools.length} tools available`,
           '',
@@ -268,9 +268,9 @@ async function main() {
         uri: uri.href,
         mimeType: 'application/json',
         text: JSON.stringify({
-          server: APIFAI_URL,
-          gatewayId: APIFAI_GATEWAY_ID || 'all',
-          mode: APIFAI_MODE,
+          server: ALMYTY_URL,
+          gatewayId: ALMYTY_GATEWAY_ID || 'all',
+          mode: ALMYTY_MODE,
           tools: tools.length,
           skills: skills.length,
         }, null, 2),
@@ -288,7 +288,7 @@ const subcommand = process.argv[2];
 
 if (subcommand === 'login') {
   const { login } = await import('./auth.js');
-  await login(APIFAI_URL);
+  await login(ALMYTY_URL);
 } else if (subcommand === 'logout') {
   const { logout } = await import('./auth.js');
   logout();
@@ -311,10 +311,10 @@ Usage:
   npx @almyty/mcp-server logout       Clear credentials
 
 Environment:
-  APIFAI_URL         Base URL (default: http://localhost:4000)
-  APIFAI_TOKEN       JWT Bearer token
-  APIFAI_GATEWAY_ID  Scope to specific gateway
-  APIFAI_MODE        "skill-first" (default) | "full" (all tools individually)
+  ALMYTY_URL         Base URL (default: https://api.almyty.com)
+  ALMYTY_TOKEN       JWT Bearer token
+  ALMYTY_GATEWAY_ID  Scope to specific gateway
+  ALMYTY_MODE        "skill-first" (default) | "full" (all tools individually)
 
 Modes:
   skill-first  2 tools (almyty_execute + almyty_search) + skills as prompts

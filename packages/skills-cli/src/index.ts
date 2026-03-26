@@ -36,9 +36,9 @@ References:
 
 Config:
   .almytyrc                      JSON config file (project or home dir)
-  APIFAI_SKILLS_DIR              Override skill installation directory
-  APIFAI_URL                     Override API URL
-  APIFAI_TOKEN                   Override auth token
+  ALMYTY_SKILLS_DIR              Override skill installation directory
+  ALMYTY_URL                     Override API URL
+  ALMYTY_TOKEN                   Override auth token
 
 Options:
   --interval, -i <seconds>       Daemon poll interval in seconds (default: 60)
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
 
   switch (command) {
     case 'login': {
-      const url = urlOverride || process.env.APIFAI_URL || 'https://api.almyty.com';
+      const url = urlOverride || process.env.ALMYTY_URL || 'https://api.almyty.com';
       await login(url);
       break;
     }
