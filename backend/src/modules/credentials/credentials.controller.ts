@@ -29,7 +29,7 @@ export class CredentialsController {
   @ApiOperation({ summary: 'List all credentials for the organization' })
   @ApiResponse({ status: 200, description: 'Credentials retrieved successfully' })
   async findAll(@Request() req: any) {
-    const organizationId = req.user.currentOrganizationId;
+    const organizationId = req.user.organizations?.[0]?.id;
     const data = await this.credentialsService.findAll(organizationId);
     return { success: true, data, message: 'Credentials retrieved successfully' };
   }
@@ -38,7 +38,7 @@ export class CredentialsController {
   @ApiOperation({ summary: 'Create a new credential' })
   @ApiResponse({ status: 201, description: 'Credential created successfully' })
   async create(@Body() body: any, @Request() req: any) {
-    const organizationId = req.user.currentOrganizationId;
+    const organizationId = req.user.organizations?.[0]?.id;
     const data = await this.credentialsService.create(body, organizationId);
     return { success: true, data, message: 'Credential created successfully' };
   }
@@ -47,7 +47,7 @@ export class CredentialsController {
   @ApiOperation({ summary: 'Get a credential by ID' })
   @ApiResponse({ status: 200, description: 'Credential retrieved successfully' })
   async findById(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    const organizationId = req.user.currentOrganizationId;
+    const organizationId = req.user.organizations?.[0]?.id;
     const data = await this.credentialsService.findById(id, organizationId);
     return { success: true, data, message: 'Credential retrieved successfully' };
   }
@@ -60,7 +60,7 @@ export class CredentialsController {
     @Body() body: any,
     @Request() req: any,
   ) {
-    const organizationId = req.user.currentOrganizationId;
+    const organizationId = req.user.organizations?.[0]?.id;
     const data = await this.credentialsService.update(id, body, organizationId);
     return { success: true, data, message: 'Credential updated successfully' };
   }
@@ -69,7 +69,7 @@ export class CredentialsController {
   @ApiOperation({ summary: 'Delete a credential' })
   @ApiResponse({ status: 200, description: 'Credential deleted successfully' })
   async delete(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    const organizationId = req.user.currentOrganizationId;
+    const organizationId = req.user.organizations?.[0]?.id;
     await this.credentialsService.delete(id, organizationId);
     return { success: true, data: null, message: 'Credential deleted successfully' };
   }
@@ -86,7 +86,7 @@ export class CredentialsController {
   @ApiOperation({ summary: 'Get usage info for a credential' })
   @ApiResponse({ status: 200, description: 'Credential usage retrieved successfully' })
   async getUsage(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    const organizationId = req.user.currentOrganizationId;
+    const organizationId = req.user.organizations?.[0]?.id;
     const data = await this.credentialsService.getUsage(id, organizationId);
     return { success: true, data, message: 'Credential usage retrieved successfully' };
   }
@@ -99,7 +99,7 @@ export class CredentialsController {
   @ApiOperation({ summary: 'List all access keys for the organization' })
   @ApiResponse({ status: 200, description: 'Access keys retrieved successfully' })
   async findAllAccessKeys(@Request() req: any) {
-    const organizationId = req.user.currentOrganizationId;
+    const organizationId = req.user.organizations?.[0]?.id;
     const data = await this.credentialsService.findAllAccessKeys(organizationId);
     return { success: true, data, message: 'Access keys retrieved successfully' };
   }
@@ -108,7 +108,7 @@ export class CredentialsController {
   @ApiOperation({ summary: 'Create a new access key' })
   @ApiResponse({ status: 201, description: 'Access key created successfully' })
   async createAccessKey(@Body() body: any, @Request() req: any) {
-    const organizationId = req.user.currentOrganizationId;
+    const organizationId = req.user.organizations?.[0]?.id;
     const userId = req.user.id;
     const { key, plainTextKey } = await this.credentialsService.createAccessKey(
       body,
@@ -126,7 +126,7 @@ export class CredentialsController {
   @ApiOperation({ summary: 'Revoke an access key' })
   @ApiResponse({ status: 200, description: 'Access key revoked successfully' })
   async revokeAccessKey(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    const organizationId = req.user.currentOrganizationId;
+    const organizationId = req.user.organizations?.[0]?.id;
     await this.credentialsService.revokeAccessKey(id, organizationId);
     return { success: true, data: null, message: 'Access key revoked successfully' };
   }

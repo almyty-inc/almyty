@@ -34,9 +34,10 @@ function SecretsTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [form, setForm] = useState({ name: '', type: 'api_key', description: '', value: '' })
 
-  const { data: credentials = [], isLoading } = useQuery<VaultCredential[]>({
+  const { data: credentialsRaw, isLoading } = useQuery({
     queryKey: ['credentials'], queryFn: () => credentialsApi.getAll(),
   })
+  const credentials: VaultCredential[] = Array.isArray(credentialsRaw) ? credentialsRaw : (credentialsRaw as any)?.credentials || []
   const createMut = useMutation({
     mutationFn: (data: any) => credentialsApi.create(data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setIsCreateOpen(false); setForm({ name: '', type: 'api_key', description: '', value: '' }); notify.success('Created', 'Secret created') },
@@ -134,9 +135,12 @@ function AccessKeysTab() {
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const [form, setForm] = useState({ name: '', resourceType: 'gateway' as 'gateway' | 'agent', resourceId: '', scopes: ['read'] as string[] })
 
-  const { data: keys = [], isLoading } = useQuery<AccessKey[]>({ queryKey: ['access-keys'], queryFn: () => accessKeysApi.getAll() })
-  const { data: gateways = [] } = useQuery<any[]>({ queryKey: ['gateways'], queryFn: () => gatewaysApi.getAll() })
-  const { data: agents = [] } = useQuery<any[]>({ queryKey: ['agents'], queryFn: () => agentsApi.getAll() })
+  const { data: keysRaw, isLoading } = useQuery({ queryKey: ['access-keys'], queryFn: () => accessKeysApi.getAll() })
+  const keys: AccessKey[] = Array.isArray(keysRaw) ? keysRaw : (keysRaw as any)?.keys || (keysRaw as any)?.accessKeys || []
+  const { data: gatewaysRaw } = useQuery({ queryKey: ['gateways'], queryFn: () => gatewaysApi.getAll() })
+  const gateways: any[] = Array.isArray(gatewaysRaw) ? gatewaysRaw : (gatewaysRaw as any)?.gateways || []
+  const { data: agentsRaw } = useQuery({ queryKey: ['agents'], queryFn: () => agentsApi.getAll() })
+  const agents: any[] = Array.isArray(agentsRaw) ? agentsRaw : (agentsRaw as any)?.agents || []
 
   const createMut = useMutation({
     mutationFn: (data: any) => accessKeysApi.create(data),
