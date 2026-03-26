@@ -31,6 +31,7 @@ const AgentsPage = lazy(() => import('@/pages/agents').then(m => ({ default: m.A
 const AgentBuilderPage = lazy(() => import('@/pages/agent-builder').then(m => ({ default: m.AgentBuilderPage })))
 const AgentDetailPage = lazy(() => import('@/pages/agent-detail').then(m => ({ default: m.AgentDetailPage })))
 const DocsPage = lazy(() => import('@/pages/docs').then(m => ({ default: m.DocsPage })))
+const AcceptInvitePage = lazy(() => import('@/pages/accept-invite').then(m => ({ default: m.AcceptInvitePage })))
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-96">
@@ -136,6 +137,9 @@ function App() {
             <DocsPage />
           </DashboardLayout>
         } />
+
+        {/* Invite accept */}
+        <Route path="/invite/accept" element={<AcceptInvitePage />} />
 
         {/* Auth routes */}
         <Route path="/auth/*" element={
