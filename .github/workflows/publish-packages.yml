@@ -68,7 +68,7 @@ jobs:
         working-directory: packages/mcp-server
         run: |
           npm version ${{ inputs.version_bump }} --no-git-tag-version
-          npm ci
+          npm install
           npm run build
           npm publish --access public
 
