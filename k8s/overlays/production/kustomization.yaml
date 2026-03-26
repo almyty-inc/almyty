@@ -7,7 +7,6 @@ namePrefix: prod-
 
 resources:
   - ../../base
-  # secret.yaml removed — secrets managed via kubectl in CI/CD workflow
 
 patches:
   - target:
@@ -36,13 +35,25 @@ patches:
         value: "https://app.almyty.com"
       - op: replace
         path: /data/DATABASE_HOST
-        value: "prod-almyty-postgres"
+        value: "apifai-db-do-user-4308986-0.j.db.ondigitalocean.com"
+      - op: replace
+        path: /data/DATABASE_PORT
+        value: "25060"
+      - op: replace
+        path: /data/DATABASE_NAME
+        value: "almyty"
       - op: replace
         path: /data/REDIS_HOST
         value: "prod-almyty-redis"
       - op: replace
         path: /data/DB_SSL
         value: "true"
+      - op: replace
+        path: /data/DB_SYNC
+        value: "false"
+      - op: replace
+        path: /data/BASE_URL
+        value: "https://api.almyty.com"
 
   - target:
       kind: Deployment
@@ -80,8 +91,14 @@ patches:
         path: /spec/tls/0/hosts/0
         value: api.almyty.com
       - op: replace
+        path: /spec/tls/0/secretName
+        value: api-almyty-com-tls
+      - op: replace
         path: /spec/tls/1/hosts/0
         value: app.almyty.com
+      - op: replace
+        path: /spec/tls/1/secretName
+        value: app-almyty-com-tls
       - op: replace
         path: /spec/rules/0/host
         value: api.almyty.com
@@ -91,6 +108,6 @@ patches:
 
 images:
   - name: ghcr.io/frane/almyty/api
-    newTag: v1.0.0
+    newTag: production-latest
   - name: ghcr.io/frane/almyty/frontend
-    newTag: v1.0.0
+    newTag: production-latest
