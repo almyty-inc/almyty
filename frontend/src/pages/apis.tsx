@@ -24,7 +24,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { CodeEditor } from '@/components/ui/code-editor'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
@@ -102,7 +101,6 @@ export function ApisPage() {
   const [searchQuery, setSearchQuery] = React.useState('')
   const [typeFilter, setTypeFilter] = React.useState('all')
   const [healthFilter, setHealthFilter] = React.useState('all')
-  const [schemaContent, setSchemaContent] = React.useState('')
 
   const { data: apisData, isLoading } = useQuery({
     queryKey: ['apis', currentOrganization?.id],
@@ -498,7 +496,7 @@ export function ApisPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">APIs</h1>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight">APIs</h1>
           <p className="text-muted-foreground">
             {apis.length} connected &middot; {apis.reduce((sum: number, a: any) => sum + (a.operations?.length || 0), 0)} operations &middot; {allToolsTotal} tools generated
           </p>
@@ -510,7 +508,6 @@ export function ApisPage() {
               setEditingApi(null)
               setCreateStep('details')
               setCreatedApiForSchema(null)
-              setSchemaContent('')
             }
           }}>
             <DialogTrigger asChild>
@@ -592,12 +589,11 @@ export function ApisPage() {
                     <TabsContent value="paste" className="space-y-3 mt-3">
                       <div>
                         <Label>Schema Content</Label>
-                        <CodeEditor
-                          value={schemaContent}
-                          onChange={(value) => setSchemaContent(value)}
-                          language="json"
-                          height="200px"
+                        <Textarea
+                          id="inlineSchemaContent"
                           placeholder="Paste your schema here..."
+                          rows={8}
+                          className="mt-1"
                         />
                       </div>
                     </TabsContent>
@@ -618,9 +614,10 @@ export function ApisPage() {
                       disabled={importSchemaMutation.isPending}
                       onClick={() => {
                         const urlInput = document.getElementById('inlineSchemaUrl') as HTMLInputElement
+                        const pasteInput = document.getElementById('inlineSchemaContent') as HTMLTextAreaElement
                         const data: any = { generateTools: true }
                         if (urlInput?.value) data.schemaUrl = urlInput.value
-                        if (schemaContent.trim()) data.schemaContent = schemaContent
+                        if (pasteInput?.value) data.schemaContent = pasteInput.value
 
                         importSchemaMutation.mutate({
                           id: createdApiForSchema.id,
@@ -916,51 +913,51 @@ export function ApisPage() {
         <>
           <Card>
             <CardContent className="pt-6 space-y-4">
+              {/* Filters */}
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search APIs..."
+                      className="pl-10"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value={ApiType.OPENAPI}>OpenAPI</SelectItem>
+                    <SelectItem value={ApiType.GRAPHQL}>GraphQL</SelectItem>
+                    <SelectItem value={ApiType.SOAP}>SOAP</SelectItem>
+                    <SelectItem value={ApiType.GRPC}>gRPC</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={healthFilter} onValueChange={setHealthFilter}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Health" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value={ApiHealthStatus.HEALTHY}>Healthy</SelectItem>
+                    <SelectItem value={ApiHealthStatus.DEGRADED}>Degraded</SelectItem>
+                    <SelectItem value={ApiHealthStatus.UNHEALTHY}>Unhealthy</SelectItem>
+                    <SelectItem value={ApiHealthStatus.UNKNOWN}>Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <DataTable
                 columns={apiColumns}
                 data={filteredApis}
                 onRowClick={(api) => navigate(`/apis/${api.id}`)}
                 hideSelectionCount
                 hideColumnsButton
-                headerExtra={
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="flex-1">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Search APIs..."
-                          className="pl-10"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <Select value={typeFilter} onValueChange={setTypeFilter}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue placeholder="Type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Types</SelectItem>
-                        <SelectItem value={ApiType.OPENAPI}>OpenAPI</SelectItem>
-                        <SelectItem value={ApiType.GRAPHQL}>GraphQL</SelectItem>
-                        <SelectItem value={ApiType.SOAP}>SOAP</SelectItem>
-                        <SelectItem value={ApiType.GRPC}>gRPC</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={healthFilter} onValueChange={setHealthFilter}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue placeholder="Health" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value={ApiHealthStatus.HEALTHY}>Healthy</SelectItem>
-                        <SelectItem value={ApiHealthStatus.DEGRADED}>Degraded</SelectItem>
-                        <SelectItem value={ApiHealthStatus.UNHEALTHY}>Unhealthy</SelectItem>
-                        <SelectItem value={ApiHealthStatus.UNKNOWN}>Unknown</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                }
               />
             </CardContent>
           </Card>

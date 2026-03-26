@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Settings, Building, Users, User, Shield } from 'lucide-react'
+import { Settings } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { MembersAndTeamsTab } from '@/components/MembersAndTeamsTab'
@@ -19,46 +19,40 @@ export function SettingsPage() {
   }, [])
 
   const { currentOrganization } = useOrganizationStore()
-  const [settingsTab, setSettingsTab] = useState('organization')
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Settings</h1>
+        <h1 className="text-4xl font-heading font-extrabold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
           Manage your organization and account settings
         </p>
       </div>
 
-      <div className="flex items-center gap-1 border-b">
-        {([
-          { key: 'organization', label: 'Organization', icon: Building },
-          { key: 'members', label: 'Members & Teams', icon: Users },
-          { key: 'profile', label: 'Profile', icon: User },
-          { key: 'security', label: 'Security', icon: Shield },
-        ] as const).map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => setSettingsTab(key)}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-              settingsTab === key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs defaultValue="organization" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="organization">Organization</TabsTrigger>
+          <TabsTrigger value="members">Members & Teams</TabsTrigger>
+          <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+        </TabsList>
 
-      <div className="mt-4">
-        {settingsTab === 'organization' && <OrganizationTab organization={currentOrganization} />}
-        {settingsTab === 'members' && <MembersAndTeamsTab organizationId={currentOrganization?.id} />}
-        {settingsTab === 'profile' && <ProfileTab />}
-        {settingsTab === 'security' && <SecurityTab />}
-      </div>
+        <TabsContent value="organization" className="space-y-4">
+          <OrganizationTab organization={currentOrganization} />
+        </TabsContent>
+
+        <TabsContent value="members" className="space-y-4">
+          <MembersAndTeamsTab organizationId={currentOrganization?.id} />
+        </TabsContent>
+
+        <TabsContent value="profile" className="space-y-4">
+          <ProfileTab />
+        </TabsContent>
+
+        <TabsContent value="security" className="space-y-4">
+          <SecurityTab />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
@@ -66,7 +60,6 @@ export function SettingsPage() {
 function OrganizationTab({ organization }: { organization: any }) {
   const { success, error } = useNotifications()
   const queryClient = useQueryClient()
-  const { setCurrentOrganization } = useOrganizationStore()
   const [isEditing, setIsEditing] = useState(false)
   const [orgName, setOrgName] = useState('')
   const [orgDescription, setOrgDescription] = useState('')
@@ -92,11 +85,9 @@ function OrganizationTab({ organization }: { organization: any }) {
   const updateOrgMutation = useMutation({
     mutationFn: (data: { name: string; description?: string }) =>
       organizationsApi.update(organization.id, data),
-    onSuccess: async (updatedOrg: any) => {
+    onSuccess: async () => {
       success('Organization updated', 'Organization details have been updated.')
       setIsEditing(false)
-      // Update the Zustand store so the UI reflects the new name/description immediately
-      setCurrentOrganization({ ...organization, ...updatedOrg, name: orgName.trim(), description: orgDescription.trim() || undefined })
       await queryClient.invalidateQueries({ queryKey: ['organizations'] })
       await queryClient.invalidateQueries({ queryKey: ['organization-details'] })
     },
@@ -179,7 +170,7 @@ function OrganizationTab({ organization }: { organization: any }) {
               className="mt-1"
             />
           ) : (
-            <div className="text-sm mt-1">{fullOrg.description || <span className="text-muted-foreground italic">No description added</span>}</div>
+            <div className="text-sm mt-1">{organization.description || <span className="text-muted-foreground italic">No description added</span>}</div>
           )}
         </div>
         
