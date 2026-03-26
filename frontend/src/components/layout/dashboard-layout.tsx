@@ -21,6 +21,7 @@ import {
   MessageSquare,
   Sun,
   Moon,
+  Key,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -52,6 +53,7 @@ const navigation = [
   { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'Models', href: '/llm-providers', icon: Brain },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Credentials', href: '/credentials', icon: Key },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 

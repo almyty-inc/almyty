@@ -31,7 +31,7 @@ export class Credential {
   @Column({ nullable: true })
   description: string;
 
-  @Column()
+  @Column({ nullable: true })
   apiId: string;
 
   @Column()
@@ -66,6 +66,9 @@ export class Credential {
 
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
+
+  @Column({ type: 'json', nullable: true })
+  usedBy: { type: string; id: string; name?: string }[];
 
   @CreateDateColumn()
   createdAt: Date;

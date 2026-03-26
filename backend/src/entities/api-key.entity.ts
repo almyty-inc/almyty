@@ -38,6 +38,9 @@ export class ApiKey {
   @Column({ nullable: true })
   gatewayId: string;
 
+  @Column({ nullable: true })
+  agentId: string;
+
   @Column({ default: true })
   isActive: boolean;
 

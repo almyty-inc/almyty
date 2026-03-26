@@ -48,6 +48,7 @@ import { PluginsModule } from './modules/plugins/plugins.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { HealthModule } from './modules/health/health.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { CredentialsModule } from './modules/credentials/credentials.module';
 import { AgentsModule } from './modules/agents/agents.module';
 import { UnifiedEndpointModule } from './modules/gateways/unified-endpoint.module';
 import { MailModule } from './modules/mail/mail.module';
@@ -170,6 +171,7 @@ import { databaseConfig } from './config/database.config';
     MonitoringModule,
     HealthModule,
     MailModule,
+    CredentialsModule,
     AgentsModule,
     // MUST be last — wildcard /:orgSlug/:resourceSlug catches everything
     UnifiedEndpointModule,

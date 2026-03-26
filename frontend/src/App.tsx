@@ -24,6 +24,7 @@ const ToolsPage = lazy(() => import('@/pages/tools').then(m => ({ default: m.Too
 const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ default: m.ToolDetailPage })))
 const LlmProvidersPage = lazy(() => import('@/pages/llm-providers').then(m => ({ default: m.LlmProvidersPage })))
 const AnalyticsPage = lazy(() => import('@/pages/analytics').then(m => ({ default: m.AnalyticsPage })))
+const CredentialsPage = lazy(() => import('@/pages/credentials').then(m => ({ default: m.CredentialsPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
 const OrganizationsPage = lazy(() => import('@/pages/organizations').then(m => ({ default: m.OrganizationsPage })))
 const ChatPage = lazy(() => import('@/pages/chat').then(m => ({ default: m.ChatPage })))
@@ -120,6 +121,11 @@ function App() {
         <Route path="/analytics" element={
           <DashboardLayout>
             <AnalyticsPage />
+          </DashboardLayout>
+        } />
+        <Route path="/credentials" element={
+          <DashboardLayout>
+            <CredentialsPage />
           </DashboardLayout>
         } />
         <Route path="/settings" element={
