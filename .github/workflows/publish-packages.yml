@@ -21,25 +21,27 @@ on:
           - major
         default: patch
 
+permissions:
+  id-token: write
+  contents: write
+
 jobs:
   publish-skills:
     if: inputs.package == 'skills-cli' || inputs.package == 'both'
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '22.14'
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Build and publish @almyty/skills
         working-directory: packages/skills-cli
         run: |
           npm version ${{ inputs.version_bump }} --no-git-tag-version
-          npm install
+          npm ci
           npm run build
           npm publish --access public
 
@@ -54,21 +56,19 @@ jobs:
   publish-mcp-server:
     if: inputs.package == 'mcp-server' || inputs.package == 'both'
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '22.14'
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Build and publish @almyty/mcp-server
         working-directory: packages/mcp-server
         run: |
           npm version ${{ inputs.version_bump }} --no-git-tag-version
-          npm install
+          npm ci
           npm run build
           npm publish --access public
 
