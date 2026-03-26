@@ -4,7 +4,7 @@
  * Shares credentials with @almyty/mcp-server via ~/.almyty/credentials.json.
  *
  * Supports:
- * 1. Environment variable (APIFAI_TOKEN) — for CI/scripts
+ * 1. Environment variable (ALMYTY_TOKEN) — for CI/scripts
  * 2. Stored credentials (~/.almyty/credentials.json) — for interactive use
  * 3. Interactive login (npx @almyty/skills login) — stores credentials
  */
@@ -65,8 +65,8 @@ export function logout(): void {
  * Resolve token: env var > stored credentials
  */
 export function resolveAuth(): { url: string; token: string } {
-  const envToken = process.env.APIFAI_TOKEN;
-  const envUrl = process.env.APIFAI_URL || 'https://api.almyty.com';
+  const envToken = process.env.ALMYTY_TOKEN;
+  const envUrl = process.env.ALMYTY_URL || 'https://api.almyty.com';
 
   if (envToken) {
     return { url: envUrl, token: envToken };
@@ -79,7 +79,7 @@ export function resolveAuth(): { url: string; token: string } {
 
   console.error('Not authenticated. Run one of:');
   console.error('  npx @almyty/skills login');
-  console.error('  export APIFAI_TOKEN=<your-token>');
+  console.error('  export ALMYTY_TOKEN=<your-token>');
   process.exit(1);
 }
 

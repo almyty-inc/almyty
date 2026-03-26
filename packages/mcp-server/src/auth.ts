@@ -2,7 +2,7 @@
  * Authentication helpers for the almyty MCP server.
  *
  * Supports:
- * 1. Environment variable (APIFAI_TOKEN) — for CI/scripts
+ * 1. Environment variable (ALMYTY_TOKEN) — for CI/scripts
  * 2. Stored credentials (~/.almyty/credentials.json) — for interactive use
  * 3. Interactive login (npx @almyty/mcp-server login) — stores credentials
  */
@@ -105,7 +105,7 @@ export async function login(baseUrl: string): Promise<void> {
 
     console.error(`\nLogged in successfully as ${email}`);
     console.error(`Credentials saved to ${CREDENTIALS_FILE}`);
-    console.error('\nYou can now use the MCP server without APIFAI_TOKEN:');
+    console.error('\nYou can now use the MCP server without ALMYTY_TOKEN:');
     console.error('  npx @almyty/mcp-server');
   } finally {
     rl.close();
