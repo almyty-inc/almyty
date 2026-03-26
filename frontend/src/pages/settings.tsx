@@ -5,7 +5,7 @@ import { Settings } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { cn } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { MembersAndTeamsTab } from '@/components/MembersAndTeamsTab'
@@ -19,6 +19,7 @@ export function SettingsPage() {
   }, [])
 
   const { currentOrganization } = useOrganizationStore()
+  const [settingsTab, setSettingsTab] = useState('organization')
 
   return (
     <div className="space-y-6">
@@ -29,30 +30,32 @@ export function SettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="organization" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="organization">Organization</TabsTrigger>
-          <TabsTrigger value="members">Members & Teams</TabsTrigger>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-        </TabsList>
+      <div className="flex items-center gap-1 border-b">
+        {(['organization', 'members', 'profile', 'security'] as const).map((key) => {
+          const labels: Record<string, string> = { organization: 'Organization', members: 'Members & Teams', profile: 'Profile', security: 'Security' }
+          return (
+            <button
+              key={key}
+              onClick={() => setSettingsTab(key)}
+              className={cn(
+                'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
+                settingsTab === key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {labels[key]}
+            </button>
+          )
+        })}
+      </div>
 
-        <TabsContent value="organization" className="space-y-4">
-          <OrganizationTab organization={currentOrganization} />
-        </TabsContent>
-
-        <TabsContent value="members" className="space-y-4">
-          <MembersAndTeamsTab organizationId={currentOrganization?.id} />
-        </TabsContent>
-
-        <TabsContent value="profile" className="space-y-4">
-          <ProfileTab />
-        </TabsContent>
-
-        <TabsContent value="security" className="space-y-4">
-          <SecurityTab />
-        </TabsContent>
-      </Tabs>
+      <div className="mt-4">
+        {settingsTab === 'organization' && <OrganizationTab organization={currentOrganization} />}
+        {settingsTab === 'members' && <MembersAndTeamsTab organizationId={currentOrganization?.id} />}
+        {settingsTab === 'profile' && <ProfileTab />}
+        {settingsTab === 'security' && <SecurityTab />}
+      </div>
     </div>
   )
 }

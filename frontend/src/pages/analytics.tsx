@@ -22,7 +22,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { analyticsApi, gatewaysApi, toolsApi, agentsApi, llmProvidersApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import type { Tool, Gateway, RequestLog, ToolUsageEntry, GatewayUsageEntry, LlmUsageEntry, TimelineEntry, AnalyticsOverview, Agent, AgentExecution } from '@/types'
 
@@ -323,23 +322,30 @@ export function AnalyticsPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="w-full">
-        <TabsList className="w-full justify-start">
-          {([
-            { key: 'overview' as Tab, label: 'Overview', icon: Activity },
-            { key: 'requests' as Tab, label: 'Request Log', icon: Globe },
-            { key: 'tools' as Tab, label: 'Tools', icon: Wrench },
-            { key: 'gateways' as Tab, label: 'Gateways', icon: Zap },
-            { key: 'llm' as Tab, label: 'LLM', icon: MessageSquare },
-            { key: 'agents' as Tab, label: 'Agents', icon: Bot },
-          ]).map(({ key, label, icon: Icon }) => (
-            <TabsTrigger key={key} value={key} className="gap-1.5">
-              <Icon className="h-4 w-4" />
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      <div className="flex items-center gap-1 border-b">
+        {([
+          { key: 'overview' as Tab, label: 'Overview', icon: Activity },
+          { key: 'requests' as Tab, label: 'Request Log', icon: Globe },
+          { key: 'tools' as Tab, label: 'Tools', icon: Wrench },
+          { key: 'gateways' as Tab, label: 'Gateways', icon: Zap },
+          { key: 'llm' as Tab, label: 'LLM', icon: MessageSquare },
+          { key: 'agents' as Tab, label: 'Agents', icon: Bot },
+        ]).map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
+              tab === key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
+      </div>
 
       {/* Overview tab */}
       {tab === 'overview' && (
