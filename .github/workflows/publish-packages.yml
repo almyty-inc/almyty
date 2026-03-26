@@ -1,0 +1,67 @@
+name: Publish npm Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to publish'
+        required: true
+        type: choice
+        options:
+          - skills-cli
+          - mcp-server
+          - both
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish @almyty/skills
+        if: inputs.package == 'skills-cli' || inputs.package == 'both'
+        working-directory: packages/skills-cli
+        run: |
+          npm version ${{ inputs.version_bump }} --no-git-tag-version
+          npm install
+          npm run build
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @almyty/mcp-server
+        if: inputs.package == 'mcp-server' || inputs.package == 'both'
+        working-directory: packages/mcp-server
+        run: |
+          npm version ${{ inputs.version_bump }} --no-git-tag-version
+          npm install
+          npm run build
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Commit version bumps
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packages/*/package.json
+          git diff --cached --quiet || git commit -m "chore: bump ${{ inputs.package }} version (${{ inputs.version_bump }})"
+          git push
