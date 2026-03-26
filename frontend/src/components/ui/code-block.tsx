@@ -84,7 +84,7 @@ export function CodeBlock({ value, language, copyable = true, className, maxHeig
         editable={false}
         maxHeight={maxHeight}
         basicSetup={{
-          lineNumbers: true,
+          lineNumbers: false,
           foldGutter: false,
           highlightActiveLine: false,
           tabSize: 2,
