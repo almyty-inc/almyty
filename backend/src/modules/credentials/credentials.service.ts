@@ -38,14 +38,42 @@ export class CredentialsService {
   // Outbound credentials (secrets vault)
   // ──────────────────────────────────────────────
 
-  async findAll(organizationId: string): Promise<Credential[]> {
+  async findAll(organizationId: string): Promise<any[]> {
     const credentials = await this.credentialRepository.find({
       where: { organizationId },
       order: { createdAt: 'DESC' },
     });
 
-    // Mask sensitive fields — never return decrypted config in list view
-    return credentials.map((cred) => this.maskCredential(cred));
+    // Also surface LLM provider keys not yet linked to a credential
+    const providers = await this.llmProviderRepository.find({
+      where: { organizationId },
+    });
+
+    const results: any[] = credentials.map((cred) => this.maskCredential(cred));
+
+    for (const provider of providers) {
+      // Skip if already linked to a credential
+      if (provider.credentialId) continue;
+      // Skip if no API key stored inline
+      if (!provider.configuration?.apiKey) continue;
+
+      results.push({
+        id: `llm-${provider.id}`,
+        name: `${provider.name} API Key`,
+        description: `Auto-detected from ${provider.name} (${provider.type})`,
+        type: 'api_key',
+        isActive: provider.status === 'active',
+        lastUsedAt: provider.lastRequestAt,
+        createdAt: provider.createdAt,
+        organizationId,
+        config: { apiKey: '***masked***' },
+        usedBy: [{ type: 'llm_provider', id: provider.id, name: provider.name }],
+        _source: 'llm_provider',
+        _sourceId: provider.id,
+      });
+    }
+
+    return results;
   }
 
   async findById(id: string, organizationId: string): Promise<Credential> {
