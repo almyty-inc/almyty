@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -41,14 +42,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet'
+// Sheet imports removed — detail view moved to /llm-providers/:id
 import {
   Dialog,
   DialogContent,
@@ -84,7 +78,7 @@ import { llmProvidersApi } from '@/lib/api'
 import { CreateProviderDialog } from '@/components/llm-providers/create-provider-dialog'
 import { EditProviderDialog } from '@/components/llm-providers/edit-provider-dialog'
 import { TestProviderDialog } from '@/components/llm-providers/test-provider-dialog'
-import { ProviderDetailsSheet } from '@/components/llm-providers/provider-details-sheet'
+// ProviderDetailsSheet removed — now using /llm-providers/:id detail page
 
 interface LlmProvider {
   id: string
@@ -137,15 +131,6 @@ interface Model {
   }
   capabilities: string[]
   status: 'available' | 'deprecated' | 'beta'
-}
-
-interface ProviderMetrics {
-  providerId: string
-  costByDay: Array<{ date: string; cost: number; tokens: number; requests: number }>
-  usageByModel: Array<{ model: string; requests: number; cost: number; tokens: number }>
-  responseTimeByHour: Array<{ hour: number; avgResponseTime: number; p95ResponseTime: number }>
-  errorsByType: Array<{ type: string; count: number; percentage: number }>
-  topErrors: Array<{ error: string; count: number; lastOccurred: string }>
 }
 
 const providerLogos: Record<string, string> = {
@@ -734,7 +719,7 @@ export function LlmProvidersPage() {
     return () => { document.title = 'almyty' }
   }, [])
 
-  const [selectedProvider, setSelectedProvider] = useState<LlmProvider | null>(null)
+  const navigate = useNavigate()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editProvider, setEditProvider] = useState<LlmProvider | null>(null)
@@ -783,44 +768,7 @@ export function LlmProvidersPage() {
   })
   const providers = Array.isArray(providersRaw) ? providersRaw : []
 
-  const { data: providerMetrics } = useQuery({
-    queryKey: ['provider-metrics', selectedProvider?.id],
-    queryFn: async () => {
-      if (!selectedProvider) return null
-      await new Promise(resolve => setTimeout(resolve, 800))
-      return {
-        providerId: selectedProvider.id,
-        costByDay: Array.from({ length: 30 }, (_, i) => ({
-          date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          cost: Math.random() * 50,
-          tokens: Math.floor(Math.random() * 10000),
-          requests: Math.floor(Math.random() * 500)
-        })),
-        usageByModel: ((selectedProvider as any).models || []).map((model: any) => ({
-          model: model.name,
-          requests: Math.floor(Math.random() * 1000),
-          cost: Math.random() * 100,
-          tokens: Math.floor(Math.random() * 50000)
-        })),
-        responseTimeByHour: Array.from({ length: 24 }, (_, i) => ({
-          hour: i,
-          avgResponseTime: Math.floor(Math.random() * 1000) + 500,
-          p95ResponseTime: Math.floor(Math.random() * 2000) + 1000
-        })),
-        errorsByType: [
-          { type: 'Rate Limit', count: 15, percentage: 45 },
-          { type: 'Timeout', count: 12, percentage: 36 },
-          { type: 'Auth Error', count: 6, percentage: 19 }
-        ],
-        topErrors: [
-          { error: 'Rate limit exceeded', count: 25, lastOccurred: '2024-01-15T14:30:00Z' },
-          { error: 'Request timeout', count: 18, lastOccurred: '2024-01-15T13:15:00Z' },
-          { error: 'Invalid API key', count: 12, lastOccurred: '2024-01-15T11:45:00Z' }
-        ]
-      } as ProviderMetrics
-    },
-    enabled: !!selectedProvider
-  })
+  // Provider metrics now live on the detail page (/llm-providers/:id)
 
   const testProviderMutation = useMutation({
     mutationFn: async ({ providerId, input }: { providerId: string; input: string }) => {
@@ -1071,12 +1019,12 @@ export function LlmProvidersPage() {
     //   }
     // }),
     createActionsColumn<LlmProvider>(
-      (provider) => setSelectedProvider(provider),
+      (provider) => navigate(`/llm-providers/${provider.id}`),
       (provider) => setProviderToDelete(provider),
       [
         {
           label: 'View Details',
-          onClick: (provider) => setSelectedProvider(provider),
+          onClick: (provider) => navigate(`/llm-providers/${provider.id}`),
         },
         {
           label: 'Test Connection',
@@ -1229,20 +1177,11 @@ export function LlmProvidersPage() {
               columns={columns}
               data={filteredProviders}
               loading={isLoading}
-              onRowClick={(provider) => setSelectedProvider(provider)}
+              onRowClick={(provider) => navigate(`/llm-providers/${provider.id}`)}
             />
           </CardContent>
         </Card>
       )}
-
-      {/* Provider Details Sheet */}
-      <ProviderDetailsSheet
-        selectedProvider={selectedProvider}
-        onClose={() => setSelectedProvider(null)}
-        providerMetrics={providerMetrics}
-        toggleProviderStatusMutation={toggleProviderStatusMutation}
-        onOpenTestDialog={() => setIsTestDialogOpen(true)}
-      />
 
       {/* Create Provider Dialog */}
       <CreateProviderDialog
