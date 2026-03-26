@@ -27,6 +27,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { CodeEditor } from '@/components/ui/code-editor'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
   Dialog,
@@ -624,13 +625,12 @@ export function AgentsPage() {
               </div>
             </div>
             <div>
-              <Textarea
-                id="import-json"
-                className="font-mono text-xs"
-                rows={10}
-                placeholder='{"name": "My Agent", "pipeline": { ... }}'
+              <CodeEditor
                 value={importJson}
-                onChange={(e) => setImportJson(e.target.value)}
+                onChange={(value) => setImportJson(value)}
+                language="json"
+                height="240px"
+                placeholder='{"name": "My Agent", "pipeline": { ... }}'
               />
             </div>
             <div className="flex justify-end gap-2">
