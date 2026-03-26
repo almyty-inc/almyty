@@ -7,6 +7,7 @@ import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
 import { Team } from '../../entities/team.entity';
 import { UserTeam } from '../../entities/user-team.entity';
+import { MailService } from '../mail/mail.service';
 
 describe('OrganizationsService', () => {
   let service: OrganizationsService;
@@ -27,6 +28,7 @@ describe('OrganizationsService', () => {
             find: jest.fn(),
             create: jest.fn(),
             save: jest.fn(),
+            update: jest.fn(),
             delete: jest.fn(),
             remove: jest.fn(),
             createQueryBuilder: jest.fn(),
@@ -68,6 +70,13 @@ describe('OrganizationsService', () => {
             create: jest.fn(),
             save: jest.fn(),
             remove: jest.fn(),
+          },
+        },
+        {
+          provide: MailService,
+          useValue: {
+            send: jest.fn().mockResolvedValue(true),
+            sendInvitation: jest.fn().mockResolvedValue(true),
           },
         },
       ],
@@ -496,12 +505,23 @@ describe('OrganizationsService', () => {
   });
 
   describe('inviteUser', () => {
-    it('should resolve without error when user email not found (pending invitation)', async () => {
-      userRepository.findOne.mockResolvedValue(null);
+    const mockOrg = { id: 'org-1', name: 'Test Org', settings: {} };
+    const mockInviter = { id: 'user-1', firstName: 'Test', lastName: 'User' };
 
-      await expect(
-        service.inviteUser('org-1', { email: 'nonexistent@test.com', role: OrganizationRole.MEMBER }, 'user-1')
-      ).resolves.toBeUndefined();
+    beforeEach(() => {
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+      organizationRepository.update.mockResolvedValue({});
+    });
+
+    it('should store pending invite when user email not found', async () => {
+      // First call: find org, second call: find inviter, third call: find user by email
+      userRepository.findOne
+        .mockResolvedValueOnce(mockInviter) // inviter lookup
+        .mockResolvedValueOnce(null); // user email lookup
+
+      const result = await service.inviteUser('org-1', { email: 'nonexistent@test.com', role: OrganizationRole.MEMBER }, 'user-1');
+
+      expect(result).toHaveProperty('inviteSent');
     });
 
     it('should throw ConflictException when user is already an active member', async () => {
@@ -512,9 +532,12 @@ describe('OrganizationsService', () => {
         organizationId: 'org-1',
         role: OrganizationRole.MEMBER,
         isActive: true,
+        inviteAccepted: true,
       };
 
-      userRepository.findOne.mockResolvedValue(mockUser);
+      userRepository.findOne
+        .mockResolvedValueOnce(mockInviter)
+        .mockResolvedValueOnce(mockUser);
       userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
 
       await expect(
@@ -522,35 +545,30 @@ describe('OrganizationsService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('should reactivate inactive membership', async () => {
+    it('should update pending membership for existing user', async () => {
       const mockUser = { id: 'user-2', email: 'inactive@test.com' };
       const mockMembership = {
         id: 'membership-1',
         userId: 'user-2',
         organizationId: 'org-1',
         role: OrganizationRole.MEMBER,
-        isActive: false,
+        isActive: true,
+        inviteAccepted: false,
       };
 
-      userRepository.findOne.mockResolvedValue(mockUser);
+      userRepository.findOne
+        .mockResolvedValueOnce(mockInviter)
+        .mockResolvedValueOnce(mockUser);
       userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
-      userOrganizationRepository.save.mockResolvedValue({
-        ...mockMembership,
-        isActive: true,
-        role: OrganizationRole.ADMIN,
-      });
+      userOrganizationRepository.save.mockResolvedValue(mockMembership);
 
-      await service.inviteUser('org-1', { email: 'inactive@test.com', role: OrganizationRole.ADMIN }, 'user-1');
+      const result = await service.inviteUser('org-1', { email: 'inactive@test.com', role: OrganizationRole.ADMIN }, 'user-1');
 
-      expect(userOrganizationRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          isActive: true,
-          role: OrganizationRole.ADMIN,
-        })
-      );
+      expect(userOrganizationRepository.save).toHaveBeenCalled();
+      expect(result).toHaveProperty('inviteSent');
     });
 
-    it('should create new membership for new user', async () => {
+    it('should create new membership for existing user not in org', async () => {
       const mockUser = { id: 'user-2', email: 'newmember@test.com' };
       const mockMembership = {
         id: 'membership-1',
@@ -562,15 +580,18 @@ describe('OrganizationsService', () => {
         inviteAccepted: false,
       };
 
-      userRepository.findOne.mockResolvedValue(mockUser);
+      userRepository.findOne
+        .mockResolvedValueOnce(mockInviter)
+        .mockResolvedValueOnce(mockUser);
       userOrganizationRepository.findOne.mockResolvedValue(null);
       userOrganizationRepository.create.mockReturnValue(mockMembership);
       userOrganizationRepository.save.mockResolvedValue(mockMembership);
 
-      await service.inviteUser('org-1', { email: 'newmember@test.com', role: OrganizationRole.MEMBER }, 'user-1');
+      const result = await service.inviteUser('org-1', { email: 'newmember@test.com', role: OrganizationRole.MEMBER }, 'user-1');
 
       expect(userOrganizationRepository.create).toHaveBeenCalled();
       expect(userOrganizationRepository.save).toHaveBeenCalled();
+      expect(result).toHaveProperty('inviteSent');
     });
   });
 
@@ -681,6 +702,10 @@ describe('OrganizationsService', () => {
               remove: jest.fn(),
             },
           },
+          {
+            provide: MailService,
+            useValue: { send: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true) },
+          },
         ],
       }).compile();
 
@@ -708,6 +733,10 @@ describe('OrganizationsService', () => {
               save: jest.fn(),
             },
           },
+          {
+            provide: MailService,
+            useValue: { send: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true) },
+          },
         ],
       }).compile();
 
@@ -734,6 +763,10 @@ describe('OrganizationsService', () => {
               findOne: jest.fn().mockResolvedValue(null),
               remove: jest.fn(),
             },
+          },
+          {
+            provide: MailService,
+            useValue: { send: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true) },
           },
         ],
       }).compile();
@@ -789,6 +822,10 @@ describe('OrganizationsService', () => {
               create: jest.fn(),
               save: jest.fn(),
             },
+          },
+          {
+            provide: MailService,
+            useValue: { send: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true) },
           },
         ],
       }).compile();

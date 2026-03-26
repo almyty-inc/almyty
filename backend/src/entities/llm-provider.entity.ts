@@ -10,6 +10,7 @@ import {
   Index,
 } from 'typeorm';
 import { Organization } from './organization.entity';
+import { Credential } from './credential.entity';
 import { LlmSession } from './llm-session.entity';
 import { UsageMetric } from './usage-metric.entity';
 
@@ -106,6 +107,9 @@ export class LlmProvider {
   @Column()
   organizationId: string;
 
+  @Column({ nullable: true })
+  credentialId: string;
+
   @Column({ type: 'json' })
   configuration: LlmProviderConfig;
 
@@ -171,6 +175,10 @@ export class LlmProvider {
   })
   @JoinColumn({ name: 'organizationId' })
   organization: Organization;
+
+  @ManyToOne(() => Credential, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'credentialId' })
+  credential: Credential;
 
   @OneToMany(() => LlmSession, session => session.provider)
   sessions: LlmSession[];

@@ -802,6 +802,34 @@ export interface AgentCostEstimate {
   edgeCount: number
 }
 
+export interface VaultCredential {
+  id: string
+  name: string
+  type: string
+  description?: string
+  isActive: boolean
+  lastUsedAt?: string
+  expiresAt?: string
+  createdAt: string
+  usedBy?: { type: string; id: string; name?: string }[]
+  organizationId: string
+}
+
+export interface AccessKey {
+  id: string
+  keyPrefix: string
+  name: string
+  scopes: string[]
+  gatewayId?: string
+  agentId?: string
+  gateway?: { id: string; name: string; type: string }
+  agent?: { id: string; name: string }
+  isActive: boolean
+  lastUsedAt?: string
+  expiresAt?: string
+  createdAt: string
+}
+
 // Agent audit log entry
 export interface AgentAuditEntry {
   action: string

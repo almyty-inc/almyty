@@ -439,6 +439,24 @@ export const agentsApi = {
   unschedule: (id: string) => apiDel(`/agents/${id}/schedule`),
 }
 
+// Credentials Vault API
+export const credentialsApi = {
+  getAll: () => apiGet('/credentials'),
+  getById: (id: string) => apiGet(`/credentials/${id}`),
+  create: (data: any) => apiPost('/credentials', data),
+  update: (id: string, data: any) => apiPatch(`/credentials/${id}`, data),
+  delete: (id: string) => apiDel(`/credentials/${id}`),
+  test: (id: string) => apiPost(`/credentials/${id}/test`, {}),
+  getUsage: (id: string) => apiGet(`/credentials/${id}/usage`),
+}
+
+// Access Keys API
+export const accessKeysApi = {
+  getAll: () => apiGet('/access-keys'),
+  create: (data: any) => apiPost('/access-keys', data),
+  revoke: (id: string) => apiDel(`/access-keys/${id}`),
+}
+
 // Users API (admin)
 export const usersApi = {
   getAll: () => apiGet('/users'),

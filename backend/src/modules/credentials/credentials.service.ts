@@ -1,0 +1,325 @@
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import * as crypto from 'crypto';
+
+import { Credential } from '../../entities/credential.entity';
+import { ApiKey } from '../../entities/api-key.entity';
+import { LlmProvider } from '../../entities/llm-provider.entity';
+import { Api } from '../../entities/api.entity';
+import { Gateway } from '../../entities/gateway.entity';
+import { Agent } from '../../entities/agent.entity';
+
+@Injectable()
+export class CredentialsService {
+  private readonly logger = new Logger(CredentialsService.name);
+
+  constructor(
+    @InjectRepository(Credential)
+    private credentialRepository: Repository<Credential>,
+    @InjectRepository(ApiKey)
+    private apiKeyRepository: Repository<ApiKey>,
+    @InjectRepository(LlmProvider)
+    private llmProviderRepository: Repository<LlmProvider>,
+    @InjectRepository(Api)
+    private apiRepository: Repository<Api>,
+    @InjectRepository(Gateway)
+    private gatewayRepository: Repository<Gateway>,
+    @InjectRepository(Agent)
+    private agentRepository: Repository<Agent>,
+  ) {}
+
+  // ──────────────────────────────────────────────
+  // Outbound credentials (secrets vault)
+  // ──────────────────────────────────────────────
+
+  async findAll(organizationId: string): Promise<Credential[]> {
+    const credentials = await this.credentialRepository.find({
+      where: { organizationId },
+      order: { createdAt: 'DESC' },
+    });
+
+    // Mask sensitive fields — never return decrypted config in list view
+    return credentials.map((cred) => this.maskCredential(cred));
+  }
+
+  async findById(id: string, organizationId: string): Promise<Credential> {
+    const credential = await this.credentialRepository.findOne({
+      where: { id, organizationId },
+    });
+
+    if (!credential) {
+      throw new NotFoundException('Credential not found');
+    }
+
+    return this.maskCredential(credential);
+  }
+
+  async create(
+    data: {
+      name: string;
+      description?: string;
+      type: string;
+      config: Record<string, any>;
+      keyName?: string;
+      keyLocation?: string;
+      apiId?: string;
+      scopes?: string[];
+      expiresAt?: string;
+      metadata?: Record<string, any>;
+    },
+    organizationId: string,
+  ): Promise<Credential> {
+    const credential = this.credentialRepository.create({
+      name: data.name,
+      description: data.description,
+      type: data.type as any,
+      config: data.config || {},
+      keyName: data.keyName,
+      keyLocation: data.keyLocation,
+      apiId: data.apiId,
+      organizationId,
+      scopes: data.scopes,
+      expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+      metadata: data.metadata,
+    });
+
+    // Encrypt sensitive data before saving
+    credential.encryptSensitiveData();
+
+    const saved = await this.credentialRepository.save(credential);
+    this.logger.log(`Credential created: ${saved.id} (${saved.name}) for org ${organizationId}`);
+
+    return this.maskCredential(saved);
+  }
+
+  async update(
+    id: string,
+    data: {
+      name?: string;
+      description?: string;
+      type?: string;
+      config?: Record<string, any>;
+      keyName?: string;
+      keyLocation?: string;
+      apiId?: string;
+      scopes?: string[];
+      expiresAt?: string;
+      isActive?: boolean;
+      metadata?: Record<string, any>;
+    },
+    organizationId: string,
+  ): Promise<Credential> {
+    const credential = await this.credentialRepository.findOne({
+      where: { id, organizationId },
+    });
+
+    if (!credential) {
+      throw new NotFoundException('Credential not found');
+    }
+
+    if (data.name !== undefined) credential.name = data.name;
+    if (data.description !== undefined) credential.description = data.description;
+    if (data.type !== undefined) credential.type = data.type as any;
+    if (data.keyName !== undefined) credential.keyName = data.keyName;
+    if (data.keyLocation !== undefined) credential.keyLocation = data.keyLocation;
+    if (data.apiId !== undefined) credential.apiId = data.apiId;
+    if (data.scopes !== undefined) credential.scopes = data.scopes;
+    if (data.expiresAt !== undefined) credential.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
+    if (data.isActive !== undefined) credential.isActive = data.isActive;
+    if (data.metadata !== undefined) credential.metadata = data.metadata;
+
+    if (data.config !== undefined) {
+      credential.config = data.config;
+      credential.encryptSensitiveData();
+    }
+
+    const saved = await this.credentialRepository.save(credential);
+    this.logger.log(`Credential updated: ${saved.id} (${saved.name})`);
+
+    return this.maskCredential(saved);
+  }
+
+  async delete(id: string, organizationId: string): Promise<void> {
+    const credential = await this.credentialRepository.findOne({
+      where: { id, organizationId },
+    });
+
+    if (!credential) {
+      throw new NotFoundException('Credential not found');
+    }
+
+    await this.credentialRepository.remove(credential);
+    this.logger.log(`Credential deleted: ${id} (${credential.name})`);
+  }
+
+  async getUsage(
+    id: string,
+    organizationId: string,
+  ): Promise<{ llmProviders: any[]; apis: any[] }> {
+    const credential = await this.credentialRepository.findOne({
+      where: { id, organizationId },
+    });
+
+    if (!credential) {
+      throw new NotFoundException('Credential not found');
+    }
+
+    // Find LLM providers using this credential
+    const llmProviders = await this.llmProviderRepository.find({
+      where: { credentialId: id, organizationId },
+      select: ['id', 'name', 'type', 'status'],
+    });
+
+    // Find APIs that have credentials with this id
+    const apis = await this.apiRepository.find({
+      where: { organizationId },
+      relations: ['credentials'],
+    });
+
+    const matchingApis = apis
+      .filter((api) => api.credentials?.some((cred) => cred.id === id))
+      .map((api) => ({ id: api.id, name: api.name, type: api.type }));
+
+    return { llmProviders, apis: matchingApis };
+  }
+
+  // ──────────────────────────────────────────────
+  // Inbound access keys
+  // ──────────────────────────────────────────────
+
+  async findAllAccessKeys(organizationId: string): Promise<any[]> {
+    const keys = await this.apiKeyRepository.find({
+      where: { organizationId },
+      relations: ['gateway'],
+      order: { createdAt: 'DESC' },
+    });
+
+    // Enrich with agent info where applicable
+    const enriched = await Promise.all(
+      keys.map(async (key) => {
+        let agent = null;
+        if (key.agentId) {
+          agent = await this.agentRepository.findOne({
+            where: { id: key.agentId },
+            select: ['id', 'name'],
+          });
+        }
+
+        return {
+          id: key.id,
+          name: key.name,
+          keyPrefix: key.keyPrefix,
+          isActive: key.isActive,
+          scopes: key.scopes,
+          expiresAt: key.expiresAt,
+          lastUsedAt: key.lastUsedAt,
+          rateLimits: key.rateLimits,
+          createdAt: key.createdAt,
+          gateway: key.gateway
+            ? { id: key.gateway.id, name: key.gateway.name }
+            : null,
+          agent: agent ? { id: agent.id, name: agent.name } : null,
+        };
+      }),
+    );
+
+    return enriched;
+  }
+
+  async createAccessKey(
+    data: {
+      name: string;
+      scopes?: string[];
+      gatewayId?: string;
+      agentId?: string;
+      expiresAt?: string;
+      rateLimits?: { requestsPerMinute?: number; requestsPerHour?: number; requestsPerDay?: number };
+    },
+    organizationId: string,
+    userId: string,
+  ): Promise<{ key: ApiKey; plainTextKey: string }> {
+    if (!data.name) {
+      throw new BadRequestException('Access key name is required');
+    }
+
+    // Generate a plain-text key: almyty_sk_ + 32 random hex chars
+    const rawKey = `almyty_sk_${crypto.randomBytes(32).toString('hex')}`;
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const keyPrefix = rawKey.substring(0, 18); // "almyty_sk_" + first 8 hex chars
+
+    const apiKey = this.apiKeyRepository.create({
+      name: data.name,
+      keyHash,
+      keyPrefix,
+      userId,
+      organizationId,
+      gatewayId: data.gatewayId || null,
+      agentId: data.agentId || null,
+      scopes: data.scopes || [],
+      expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+      rateLimits: data.rateLimits || null,
+      isActive: true,
+    });
+
+    const saved = await this.apiKeyRepository.save(apiKey);
+    this.logger.log(`Access key created: ${saved.id} (${saved.name}) for org ${organizationId}`);
+
+    return { key: saved, plainTextKey: rawKey };
+  }
+
+  async revokeAccessKey(id: string, organizationId: string): Promise<void> {
+    const key = await this.apiKeyRepository.findOne({
+      where: { id, organizationId },
+    });
+
+    if (!key) {
+      throw new NotFoundException('Access key not found');
+    }
+
+    key.isActive = false;
+    await this.apiKeyRepository.save(key);
+    this.logger.log(`Access key revoked: ${id} (${key.name})`);
+  }
+
+  // ──────────────────────────────────────────────
+  // Helpers
+  // ──────────────────────────────────────────────
+
+  private maskCredential(credential: Credential): Credential {
+    const sensitiveFields = [
+      'password',
+      'secret',
+      'token',
+      'key',
+      'client_secret',
+      'apiKey',
+      'accessToken',
+      'refreshToken',
+      'headerValue',
+      'clientSecret',
+    ];
+
+    if (credential.config && typeof credential.config === 'object') {
+      const masked = { ...credential.config };
+      for (const field of sensitiveFields) {
+        if (masked[field]) {
+          const val = String(masked[field]);
+          if (val.length > 8) {
+            masked[field] = val.substring(0, 4) + '****' + val.substring(val.length - 4);
+          } else {
+            masked[field] = '********';
+          }
+        }
+      }
+      credential.config = masked;
+    }
+
+    return credential;
+  }
+}
