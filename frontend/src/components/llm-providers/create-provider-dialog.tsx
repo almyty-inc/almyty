@@ -5,6 +5,7 @@ import { UseMutationResult } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CredentialPicker } from '@/components/credential-picker'
 import {
   Dialog,
   DialogContent,
@@ -92,19 +93,18 @@ export function CreateProviderDialog({
             )}
           </div>
 
-          {/* API Key */}
-          <div>
-            <Label htmlFor="apiKey">API Key</Label>
-            <Input
-              id="apiKey"
-              type="password"
-              {...createForm.register('apiKey')}
-              placeholder="Enter your API key"
-            />
-            {createForm.formState.errors.apiKey && (
-              <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.apiKey as any).message}</p>
-            )}
-          </div>
+          {/* API Key — select from vault or enter new */}
+          <CredentialPicker
+            label="API Key"
+            value={createForm.watch('credentialId') || ''}
+            onSelect={(id) => { createForm.setValue('credentialId', id); createForm.setValue('apiKey', '') }}
+            onNewKey={(key) => { createForm.setValue('apiKey', key); createForm.setValue('credentialId', '') }}
+            newKeyValue={createForm.watch('apiKey') || ''}
+            filterType="api_key"
+          />
+          {createForm.formState.errors.apiKey && (
+            <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.apiKey as any).message}</p>
+          )}
 
           {/* Organization ID - Only for OpenAI */}
           {createForm.watch('type') === 'openai' && (
