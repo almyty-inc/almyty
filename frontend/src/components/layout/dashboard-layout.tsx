@@ -68,6 +68,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return localStorage.getItem('theme') !== 'light'
   })
 
+  // Ensure sidebar starts closed on mobile (safety net for store default)
+  useEffect(() => {
+    if (window.innerWidth < 1024) {
+      setSidebarOpen(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark')

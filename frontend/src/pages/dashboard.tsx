@@ -155,7 +155,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-gradient-to-r from-border to-transparent">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-gradient-to-r from-border to-transparent">
         <div>
           <h1 className="text-4xl font-heading font-extrabold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
@@ -163,12 +163,12 @@ export function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Badge variant="outline">
+          <Badge variant="outline" className="hidden sm:inline-flex">
             {currentOrganization?.name || 'No Organization'}
           </Badge>
           <Button variant="outline" className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10" onClick={() => navigate('/analytics')}>
-            <Activity className="mr-2 h-4 w-4" />
-            View Analytics
+            <Activity className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">View Analytics</span>
           </Button>
         </div>
       </div>
