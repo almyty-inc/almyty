@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Settings } from 'lucide-react'
+import { Settings, Building, Users, User, Shield } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,23 +31,26 @@ export function SettingsPage() {
       </div>
 
       <div className="flex items-center gap-1 border-b">
-        {(['organization', 'members', 'profile', 'security'] as const).map((key) => {
-          const labels: Record<string, string> = { organization: 'Organization', members: 'Members & Teams', profile: 'Profile', security: 'Security' }
-          return (
-            <button
-              key={key}
-              onClick={() => setSettingsTab(key)}
-              className={cn(
-                'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-                settingsTab === key
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {labels[key]}
-            </button>
-          )
-        })}
+        {([
+          { key: 'organization', label: 'Organization', icon: Building },
+          { key: 'members', label: 'Members & Teams', icon: Users },
+          { key: 'profile', label: 'Profile', icon: User },
+          { key: 'security', label: 'Security', icon: Shield },
+        ] as const).map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setSettingsTab(key)}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
+              settingsTab === key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
       </div>
 
       <div className="mt-4">
