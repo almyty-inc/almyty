@@ -23,7 +23,7 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-heading font-extrabold tracking-tight">Settings</h1>
+        <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Settings</h1>
         <p className="text-muted-foreground">
           Manage your organization and account settings
         </p>
