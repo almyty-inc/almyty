@@ -95,6 +95,7 @@ describe('CredentialsService', () => {
       ];
 
       credentialRepository.find.mockResolvedValue(mockCredentials);
+      llmProviderRepository.find.mockResolvedValue([]);
 
       const result = await service.findAll('org-1');
 
