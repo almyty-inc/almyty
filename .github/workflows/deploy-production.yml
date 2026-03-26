@@ -82,7 +82,7 @@ jobs:
 
       - name: Create application secrets
         run: |
-          kubectl create secret generic almyty-secrets \
+          kubectl create secret generic prod-almyty-secrets \
             --from-literal=DATABASE_USERNAME=${{ secrets.PROD_DATABASE_USERNAME }} \
             --from-literal=DATABASE_PASSWORD=${{ secrets.PROD_DATABASE_PASSWORD }} \
             --from-literal=REDIS_PASSWORD="" \
