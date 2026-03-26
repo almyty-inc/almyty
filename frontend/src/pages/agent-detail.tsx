@@ -36,8 +36,8 @@ import { Input } from '@/components/ui/input'
 import { useOrganizationStore } from '@/store/organization'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { CodeEditor } from '@/components/ui/code-editor'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -762,12 +762,11 @@ console.log(r2.choices[0].message.content);`,
                   </div>
                   <div>
                     <Label htmlFor="schedule-input">Input JSON</Label>
-                    <Textarea
-                      id="schedule-input"
-                      className="mt-1 font-mono text-xs"
-                      rows={3}
+                    <CodeEditor
                       value={scheduleInput}
-                      onChange={(e) => setScheduleInput(e.target.value)}
+                      onChange={(value) => setScheduleInput(value)}
+                      language="json"
+                      height="80px"
                     />
                   </div>
                   <Button
@@ -1046,12 +1045,11 @@ console.log(r2.choices[0].message.content);`,
           <div className="space-y-4">
             <div>
               <Label htmlFor="invoke-input">Input JSON</Label>
-              <Textarea
-                id="invoke-input"
-                className="mt-1 font-mono text-xs"
-                rows={6}
+              <CodeEditor
                 value={invokeInput}
-                onChange={(e) => setInvokeInput(e.target.value)}
+                onChange={(value) => setInvokeInput(value)}
+                language="json"
+                height="160px"
               />
             </div>
             <Button

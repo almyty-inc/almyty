@@ -20,8 +20,8 @@ import { ArrowLeft, Save, Loader2, Download, AlertTriangle, Plus, X, Undo2, Redo
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { CodeEditor } from '@/components/ui/code-editor'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
@@ -685,10 +685,11 @@ export function AgentBuilderPage() {
           <div className="flex gap-4 p-4 max-h-[250px]">
             <div className="flex-1 space-y-2">
               <Label className="text-xs">Input JSON</Label>
-              <Textarea
-                className="font-mono text-xs h-[140px] resize-none"
+              <CodeEditor
                 value={testInput}
-                onChange={(e) => setTestInput(e.target.value)}
+                onChange={(value) => setTestInput(value)}
+                language="json"
+                height="140px"
                 placeholder='{"message": "Hello"}'
               />
               <Button size="sm" onClick={runTest} disabled={testLoading}>

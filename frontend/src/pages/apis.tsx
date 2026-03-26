@@ -24,6 +24,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { CodeEditor } from '@/components/ui/code-editor'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
@@ -101,6 +102,7 @@ export function ApisPage() {
   const [searchQuery, setSearchQuery] = React.useState('')
   const [typeFilter, setTypeFilter] = React.useState('all')
   const [healthFilter, setHealthFilter] = React.useState('all')
+  const [schemaContent, setSchemaContent] = React.useState('')
 
   const { data: apisData, isLoading } = useQuery({
     queryKey: ['apis', currentOrganization?.id],
@@ -508,6 +510,7 @@ export function ApisPage() {
               setEditingApi(null)
               setCreateStep('details')
               setCreatedApiForSchema(null)
+              setSchemaContent('')
             }
           }}>
             <DialogTrigger asChild>
@@ -589,11 +592,12 @@ export function ApisPage() {
                     <TabsContent value="paste" className="space-y-3 mt-3">
                       <div>
                         <Label>Schema Content</Label>
-                        <Textarea
-                          id="inlineSchemaContent"
+                        <CodeEditor
+                          value={schemaContent}
+                          onChange={(value) => setSchemaContent(value)}
+                          language="json"
+                          height="200px"
                           placeholder="Paste your schema here..."
-                          rows={8}
-                          className="mt-1"
                         />
                       </div>
                     </TabsContent>
@@ -614,10 +618,9 @@ export function ApisPage() {
                       disabled={importSchemaMutation.isPending}
                       onClick={() => {
                         const urlInput = document.getElementById('inlineSchemaUrl') as HTMLInputElement
-                        const pasteInput = document.getElementById('inlineSchemaContent') as HTMLTextAreaElement
                         const data: any = { generateTools: true }
                         if (urlInput?.value) data.schemaUrl = urlInput.value
-                        if (pasteInput?.value) data.schemaContent = pasteInput.value
+                        if (schemaContent.trim()) data.schemaContent = schemaContent
 
                         importSchemaMutation.mutate({
                           id: createdApiForSchema.id,
