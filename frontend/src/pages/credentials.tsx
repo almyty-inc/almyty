@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Key, Shield, Plus, MoreHorizontal, Copy, Trash2, Eye, Pencil, CheckCircle2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -29,9 +31,53 @@ const SECRET_TYPES = [
 ]
 const SCOPE_OPTIONS = ['read', 'write', 'execute', 'admin']
 
-function SecretsTab() {
+export function CredentialsPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const tab = location.pathname.includes('/access-keys') ? 'access-keys' : 'secrets'
+  const setTab = (t: string) => navigate(t === 'secrets' ? '/credentials' : '/credentials/access-keys')
+
+  // Dialog state lifted to page level so buttons in header can trigger them
+  const [isCreateSecretOpen, setIsCreateSecretOpen] = useState(false)
+  const [isGenerateKeyOpen, setIsGenerateKeyOpen] = useState(false)
+
+  useEffect(() => { document.title = 'Credentials | almyty'; return () => { document.title = 'almyty' } }, [])
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Credentials</h1>
+          <p className="text-muted-foreground">Manage secrets and access keys for your APIs and agents</p>
+        </div>
+        {tab === 'secrets' ? (
+          <Button onClick={() => setIsCreateSecretOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> Add Secret
+          </Button>
+        ) : (
+          <Button onClick={() => setIsGenerateKeyOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> Generate Key
+          </Button>
+        )}
+      </div>
+      <div className="flex items-center gap-1 border-b">
+        {([{ key: 'secrets', label: 'Secrets', icon: Shield }, { key: 'access-keys', label: 'Access Keys', icon: Key }] as const).map(({ key, label, icon: Icon }) => (
+          <button key={key} onClick={() => setTab(key)} className={cn(
+            'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
+            tab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+          )}><Icon className="h-4 w-4" />{label}</button>
+        ))}
+      </div>
+      <div>
+        {tab === 'secrets' && <SecretsTabWithDialog isCreateOpen={isCreateSecretOpen} setIsCreateOpen={setIsCreateSecretOpen} />}
+        {tab === 'access-keys' && <AccessKeysTabWithDialog isOpen={isGenerateKeyOpen} setIsOpen={setIsGenerateKeyOpen} />}
+      </div>
+    </div>
+  )
+}
+
+function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen: boolean; setIsCreateOpen: (v: boolean) => void }) {
   const qc = useQueryClient(), notify = useNotifications()
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [form, setForm] = useState({ name: '', type: 'api_key', description: '', value: '' })
 
   const { data: credentialsRaw, isLoading } = useQuery({
@@ -90,8 +136,11 @@ function SecretsTab() {
 
   return (
     <>
-      <DataTable columns={columns} data={credentials} loading={isLoading} searchKey="name" searchPlaceholder="Search secrets..."
-        headerExtra={<Button size="sm" onClick={() => setIsCreateOpen(true)}><Plus className="h-4 w-4 mr-1" /> Add Secret</Button>} />
+      <Card>
+        <CardContent className="pt-6">
+          <DataTable columns={columns} data={credentials} loading={isLoading} searchKey="name" searchPlaceholder="Search secrets..." />
+        </CardContent>
+      </Card>
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -129,9 +178,8 @@ function SecretsTab() {
   )
 }
 
-function AccessKeysTab() {
+function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (v: boolean) => void }) {
   const qc = useQueryClient(), notify = useNotifications()
-  const [isOpen, setIsOpen] = useState(false)
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const [form, setForm] = useState({ name: '', resourceType: 'gateway' as 'gateway' | 'agent', resourceId: '', scopes: ['read'] as string[] })
 
@@ -159,6 +207,16 @@ function AccessKeysTab() {
     createMut.mutate(p)
   }
 
+  // Sync external open state - clear generatedKey when opening fresh
+  useEffect(() => {
+    if (isOpen) setGeneratedKey(null)
+  }, [isOpen])
+
+  const handleClose = (v: boolean) => {
+    setIsOpen(v)
+    if (!v) setGeneratedKey(null)
+  }
+
   const columns = [
     { accessorKey: 'keyPrefix', header: 'Key', cell: ({ row }: any) => <code className="text-xs bg-muted px-2 py-1 rounded">{row.original.keyPrefix}...</code> },
     { accessorKey: 'name', header: 'Name' },
@@ -182,9 +240,12 @@ function AccessKeysTab() {
 
   return (
     <>
-      <DataTable columns={columns} data={keys} loading={isLoading} searchKey="name" searchPlaceholder="Search access keys..."
-        headerExtra={<Button size="sm" onClick={() => { setIsOpen(true); setGeneratedKey(null) }}><Plus className="h-4 w-4 mr-1" /> Generate Key</Button>} />
-      <Dialog open={isOpen} onOpenChange={v => { setIsOpen(v); if (!v) setGeneratedKey(null) }}>
+      <Card>
+        <CardContent className="pt-6">
+          <DataTable columns={columns} data={keys} loading={isLoading} searchKey="name" searchPlaceholder="Search access keys..." />
+        </CardContent>
+      </Card>
+      <Dialog open={isOpen} onOpenChange={handleClose}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{generatedKey ? 'Key Generated' : 'Generate Access Key'}</DialogTitle>
@@ -197,7 +258,7 @@ function AccessKeysTab() {
                 <Button variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(generatedKey); notify.success('Copied', 'Key copied') }}><Copy className="h-4 w-4" /></Button>
               </div>
               <div className="flex items-center gap-2 text-amber-600 text-sm"><Key className="h-4 w-4" /> Store this key securely. It cannot be retrieved later.</div>
-              <Button className="w-full" onClick={() => { setIsOpen(false); setGeneratedKey(null) }}>Done</Button>
+              <Button className="w-full" onClick={() => { handleClose(false) }}>Done</Button>
             </div>
           ) : (
             <div className="space-y-4 pt-2">
@@ -229,31 +290,5 @@ function AccessKeysTab() {
         </DialogContent>
       </Dialog>
     </>
-  )
-}
-
-export function CredentialsPage() {
-  useEffect(() => { document.title = 'Credentials | almyty'; return () => { document.title = 'almyty' } }, [])
-  const [tab, setTab] = useState('secrets')
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Credentials</h1>
-        <p className="text-muted-foreground">Manage secrets and access keys for your APIs and agents</p>
-      </div>
-      <div className="flex items-center gap-1 border-b">
-        {([{ key: 'secrets', label: 'Secrets', icon: Shield }, { key: 'access-keys', label: 'Access Keys', icon: Key }] as const).map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setTab(key)} className={cn(
-            'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-            tab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
-          )}><Icon className="h-4 w-4" />{label}</button>
-        ))}
-      </div>
-      <div>
-        {tab === 'secrets' && <SecretsTab />}
-        {tab === 'access-keys' && <AccessKeysTab />}
-      </div>
-    </div>
   )
 }

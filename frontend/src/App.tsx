@@ -118,17 +118,17 @@ function App() {
             <LlmProvidersPage />
           </DashboardLayout>
         } />
-        <Route path="/analytics" element={
+        <Route path="/analytics/*" element={
           <DashboardLayout>
             <AnalyticsPage />
           </DashboardLayout>
         } />
-        <Route path="/credentials" element={
+        <Route path="/credentials/*" element={
           <DashboardLayout>
             <CredentialsPage />
           </DashboardLayout>
         } />
-        <Route path="/settings" element={
+        <Route path="/settings/*" element={
           <DashboardLayout>
             <SettingsPage />
           </DashboardLayout>

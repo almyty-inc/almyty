@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Settings, Building, Users, User, Shield } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,14 +13,28 @@ import { MembersAndTeamsTab } from '@/components/MembersAndTeamsTab'
 import { SecurityTab } from '@/components/SecurityTab'
 import { authApi, organizationsApi } from '@/lib/api'
 
+const SETTINGS_TABS = ['organization', 'members', 'profile', 'security'] as const
+type SettingsTab = typeof SETTINGS_TABS[number]
+
+function getSettingsTab(pathname: string): SettingsTab {
+  for (const t of SETTINGS_TABS) {
+    if (t !== 'organization' && pathname.includes(`/${t}`)) return t
+  }
+  return 'organization'
+}
+
 export function SettingsPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const settingsTab = getSettingsTab(location.pathname)
+  const setSettingsTab = (t: string) => navigate(t === 'organization' ? '/settings' : `/settings/${t}`)
+
   useEffect(() => {
     document.title = 'Settings | almyty'
     return () => { document.title = 'almyty' }
   }, [])
 
   const { currentOrganization } = useOrganizationStore()
-  const [settingsTab, setSettingsTab] = useState('organization')
 
   return (
     <div className="space-y-6">
@@ -32,11 +47,11 @@ export function SettingsPage() {
 
       <div className="flex items-center gap-1 border-b">
         {([
-          { key: 'organization', label: 'Organization', icon: Building },
-          { key: 'members', label: 'Members & Teams', icon: Users },
-          { key: 'profile', label: 'Profile', icon: User },
-          { key: 'security', label: 'Security', icon: Shield },
-        ] as const).map(({ key, label, icon: Icon }) => (
+          { key: 'organization' as SettingsTab, label: 'Organization', icon: Building },
+          { key: 'members' as SettingsTab, label: 'Members & Teams', icon: Users },
+          { key: 'profile' as SettingsTab, label: 'Profile', icon: User },
+          { key: 'security' as SettingsTab, label: 'Security', icon: Shield },
+        ]).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setSettingsTab(key)}

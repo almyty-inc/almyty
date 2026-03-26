@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   Activity,
   ArrowDownToLine,
@@ -64,15 +64,27 @@ const statusColors: Record<string, string> = {
 }
 
 type Tab = 'overview' | 'requests' | 'tools' | 'gateways' | 'llm' | 'agents'
+const ANALYTICS_TABS: Tab[] = ['overview', 'requests', 'tools', 'gateways', 'llm', 'agents']
+
+function getAnalyticsTab(pathname: string): Tab {
+  for (const t of ANALYTICS_TABS) {
+    if (t !== 'overview' && pathname.includes(`/${t}`)) return t
+  }
+  return 'overview'
+}
 
 export function AnalyticsPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const tab = getAnalyticsTab(location.pathname)
+  const setTab = (t: Tab) => navigate(t === 'overview' ? '/analytics' : `/analytics/${t}`)
+
   useEffect(() => {
     document.title = 'Analytics | almyty'
     return () => { document.title = 'almyty' }
   }, [])
 
   const { currentOrganization } = useOrganizationStore()
-  const [tab, setTab] = useState<Tab>('overview')
   const [timeframe, setTimeframe] = useState('7d')
   const [logPage, setLogPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState<string>('')
