@@ -572,80 +572,111 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
   const cli = cliData
   const sdk = sdkData
 
+  const gatewayEndpoint = '/your-gateway'
+  const orgSlug = 'your-org'
+
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {/* Skill Card */}
+    <div className="space-y-4">
+      {/* Skills — install, daemon, manual */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <BookOpen className="h-5 w-5 text-purple-500" />
-            <CardTitle className="text-sm">Skill File</CardTitle>
+            <CardTitle className="text-sm">Agent Skills</CardTitle>
           </div>
           <CardDescription className="text-xs">
-            YAML + Markdown that teaches LLMs how to use this tool
+            Install this tool as a skill in 30+ AI agents — Claude Code, Cursor, Windsurf, Copilot, and more
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {skillLoading ? (
-            <LoadingSpinner size="sm" />
-          ) : skill?.content ? (
-            <div className="space-y-3">
-              <CodeBlock value={skill.content} language="text" maxHeight="192px" />
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => downloadFile(skill.content, `${skill.name || toolName}.skill.md`)}
-                >
-                  <Download className="h-3 w-3 mr-1" />
-                  Download
-                </Button>
-              </div>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="text-xs font-medium">Install skills</Label>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
+                npx @almyty/skills install @{orgSlug}{gatewayEndpoint}
+              </code>
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`npx @almyty/skills install @${orgSlug}${gatewayEndpoint}`, 'skills-install')}>
+                {copiedField === 'skills-install' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
             </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Not available</p>
+            <p className="text-xs text-muted-foreground mt-1">Downloads SKILL.md files to your project. Auto-detected by supported agents.</p>
+          </div>
+          <div>
+            <Label className="text-xs font-medium">Watch mode (auto-sync)</Label>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
+                npx @almyty/skills watch @{orgSlug}{gatewayEndpoint}
+              </code>
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`npx @almyty/skills watch @${orgSlug}${gatewayEndpoint}`, 'skills-watch')}>
+                {copiedField === 'skills-watch' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Keeps skills in sync — updates when tools are added, removed, or changed.</p>
+          </div>
+          {skill?.content && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">View SKILL.md content</summary>
+              <div className="mt-2">
+                <CodeBlock value={skill.content} language="text" maxHeight="200px" />
+              </div>
+            </details>
           )}
         </CardContent>
       </Card>
 
-      {/* MCP Setup Card */}
-      <Card className="md:col-span-2 lg:col-span-3">
+      {/* MCP — connect via protocol */}
+      <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
-            <Zap className="h-5 w-5 text-orange-500" />
-            <CardTitle className="text-sm">npx Integration</CardTitle>
+            <Zap className="h-5 w-5 text-violet-500" />
+            <CardTitle className="text-sm">MCP Server</CardTitle>
           </div>
           <CardDescription className="text-xs">
-            Use this tool directly in Claude Code, Cursor, Windsurf, Copilot, and other MCP-compatible clients
+            Connect this tool via MCP protocol in Claude Code, Cursor, Windsurf, or any MCP-compatible client
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           <div>
-            <Label className="text-xs text-muted-foreground">Install & run</Label>
+            <Label className="text-xs font-medium">Option 1: npx (recommended)</Label>
             <div className="flex items-center gap-2 mt-1">
-              <code className="flex-1 text-xs bg-muted p-2 rounded font-mono">
+              <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
                 npx @almyty/mcp-server
               </code>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => copyToClipboard('npx @almyty/mcp-server', 'npx')}
-              >
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard('npx @almyty/mcp-server', 'npx')}>
                 {copiedField === 'npx' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground mt-1">Runs a local MCP server that connects to your almyty tools.</p>
           </div>
           <div>
-            <Label className="text-xs text-muted-foreground">Claude Code config (~/.claude/settings.json)</Label>
-            <div className="mt-1">
-              <CodeBlock
-                value={`"mcpServers": {\n  "almyty": { "command": "npx", "args": ["@almyty/mcp-server"] }\n}`}
-                language="json"
-                maxHeight="120px"
-              />
+            <Label className="text-xs font-medium">Option 2: Remote MCP endpoint</Label>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono break-all">
+                {window.location.origin.replace('app.', 'api.')}/mcp/{orgSlug}{gatewayEndpoint}
+              </code>
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard(`${window.location.origin.replace('app.', 'api.')}/mcp/${orgSlug}${gatewayEndpoint}`, 'mcp-url')}>
+                {copiedField === 'mcp-url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
             </div>
+            <p className="text-xs text-muted-foreground mt-1">Point your client directly at the hosted gateway. Requires an API key.</p>
           </div>
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Client config examples</summary>
+            <div className="mt-2 space-y-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">Claude Code (~/.claude/settings.json)</Label>
+                <div className="mt-1">
+                  <CodeBlock value={`"mcpServers": {\n  "almyty": {\n    "command": "npx",\n    "args": ["@almyty/mcp-server"]\n  }\n}`} language="json" maxHeight="120px" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Cursor / Windsurf</Label>
+                <div className="mt-1">
+                  <CodeBlock value={`{\n  "name": "almyty",\n  "url": "${window.location.origin.replace('app.', 'api.')}/mcp/${orgSlug}${gatewayEndpoint}",\n  "apiKey": "YOUR_API_KEY"\n}`} language="json" maxHeight="100px" />
+                </div>
+              </div>
+            </div>
+          </details>
         </CardContent>
       </Card>
     </div>
