@@ -1174,7 +1174,7 @@ export function GatewayDetailPage() {
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">
                   {(() => {
                     const backendUrl = window.location.origin.replace(':3002', ':4000').replace('app.', 'api.')
-                    const orgSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
+                    const orgSlug = currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
                     const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
                     if (gateway.type === 'mcp') return `${backendUrl}/${orgSlug}/${gwSlug}`
                     if (gateway.type === 'utcp') return `${backendUrl}/${orgSlug}/${gwSlug}`
@@ -1191,7 +1191,7 @@ export function GatewayDetailPage() {
                   variant="outline"
                   onClick={async () => {
                     const backendUrl = window.location.origin.replace(':3002', ':4000').replace('app.', 'api.')
-                    const orgSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
+                    const orgSlug = currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
                     const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
                     let fullEndpoint = gateway.endpoint
                     if (gateway.type === 'mcp') fullEndpoint = `${backendUrl}/${orgSlug}/${gwSlug}`
@@ -1389,7 +1389,7 @@ export function GatewayDetailPage() {
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-6">
-          <IntegrationsSection gatewayId={id!} gateway={gateway} orgSlug={currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'} />
+          <IntegrationsSection gatewayId={id!} gateway={gateway} orgSlug={currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'} />
         </TabsContent>
       </Tabs>
 

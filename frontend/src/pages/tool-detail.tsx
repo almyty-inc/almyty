@@ -309,18 +309,8 @@ export function ToolDetailPage() {
                   return (
                     <div className="text-center py-6">
                       <p className="text-muted-foreground mb-4">
-                        {tool.operation?.method === 'POST' || tool.operation?.method === 'PUT' || tool.operation?.method === 'PATCH'
-                          ? 'Parameter schema not available. Tool was generated without parameter details.'
-                          : 'No parameters required for this tool'}
+                        No parameters required for this tool
                       </p>
-                      {(tool.operation?.method === 'POST' || tool.operation?.method === 'PUT' || tool.operation?.method === 'PATCH') && tool.operation?.api?.id && (
-                        <Button
-                          variant="outline"
-                          onClick={() => navigate(`/apis/${tool.operation.api.id}`)}
-                        >
-                          Re-import Schema to Fix
-                        </Button>
-                      )}
                     </div>
                   )
                 }
@@ -536,7 +526,7 @@ function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolNa
   const { currentOrganization } = useOrganizationStore()
 
   const orgId = currentOrganization?.id || ''
-  const orgSlug = (currentOrganization?.name || 'org').toLowerCase().replace(/\s+/g, '-')
+  const orgSlug = currentOrganization?.slug || (currentOrganization?.name || 'org').toLowerCase().replace(/\s+/g, '-')
 
   // Derive which protocols this tool is exposed on
   const exposedProtocols = gateways.map(g => g.gateway?.type).filter(Boolean) as string[]
@@ -657,7 +647,7 @@ function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolNa
                 <div>
                   <Label className="text-xs text-muted-foreground">Claude Code</Label>
                   <div className="mt-1">
-                    <CodeBlock value={`"mcpServers": {\n  "${mcpGateway.name.toLowerCase().replace(/\s+/g, '-')}": {\n    "url": "${apiBase}/mcp/${orgSlug}${mcpGateway.endpoint}",\n    "headers": { "X-API-Key": "YOUR_KEY" }\n  }\n}`} language="json" maxHeight="120px" />
+                    <CodeBlock value={`"mcpServers": {\n  "${mcpGateway.name.toLowerCase().replace(/\s+/g, '-')}": {\n    "url": "${apiBase}/${orgSlug}${mcpGateway.endpoint}",\n    "headers": { "X-API-Key": "YOUR_KEY" }\n  }\n}`} language="json" maxHeight="120px" />
                   </div>
                 </div>
               </div>

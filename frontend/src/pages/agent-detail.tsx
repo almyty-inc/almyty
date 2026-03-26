@@ -603,7 +603,7 @@ export function AgentDetailPage() {
           <CardContent>
             {(() => {
               const apiBase = window.location.origin.replace('app.', 'api.')
-              const orgSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
+              const orgSlug = currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
               const agentRef = agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
               const unifiedUrl = `${apiBase}/${orgSlug}/${agentRef}`
               const snippets: Record<string, string> = {
