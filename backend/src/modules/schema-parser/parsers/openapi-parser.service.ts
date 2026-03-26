@@ -18,10 +18,9 @@ export class OpenAPIParserService implements SchemaParser {
       } catch (jsonError) {
         schemaObject = rawSchema;
       }
-      // Use parse() instead of validate() for faster parsing (3-5x faster)
-      // validate() downloads and validates all $refs which is slow
-      // parse() just dereferences and returns the schema
-      const api = await SwaggerParser.parse(schemaObject) as OpenAPIV3.Document;
+      // Use dereference() to resolve all $ref pointers inline
+      // This ensures parameters, requestBody, schemas are all resolved
+      const api = await SwaggerParser.dereference(schemaObject) as OpenAPIV3.Document;
 
       const operations = await this.extractOperationsFromOpenAPI(api);
       const resources = await this.extractResourcesFromOpenAPI(api);
@@ -116,11 +115,17 @@ export class OpenAPIParserService implements SchemaParser {
     for (const [path, pathItem] of Object.entries(api.paths || {})) {
       if (!pathItem) continue;
 
+      // Path-level parameters apply to all operations in this path
+      const pathParams = (pathItem as any).parameters as (OpenAPIV3.ReferenceObject | OpenAPIV3.ParameterObject)[] | undefined;
+
       for (const [method, operation] of Object.entries(pathItem)) {
         if (!operation || typeof operation !== 'object') continue;
         if (!['get', 'post', 'put', 'patch', 'delete', 'options', 'head'].includes(method)) continue;
 
         const opObject = operation as OpenAPIV3.OperationObject;
+
+        // Merge path-level params with operation-level params (operation takes precedence)
+        const allParams = [...(pathParams || []), ...(opObject.parameters || [])];
 
         const parsedOperation: ParsedOperation = {
           operationId: opObject.operationId || `${method}_${path.replace(/[^a-zA-Z0-9]/g, '_')}`,
@@ -128,7 +133,7 @@ export class OpenAPIParserService implements SchemaParser {
           description: opObject.description,
           method: method.toUpperCase(),
           endpoint: path,
-          parameters: this.extractParameters(opObject.parameters, opObject.requestBody),
+          parameters: this.extractParameters(allParams.length > 0 ? allParams : undefined, opObject.requestBody),
           responses: this.extractResponses(opObject.responses),
           security: opObject.security,
           tags: opObject.tags,
