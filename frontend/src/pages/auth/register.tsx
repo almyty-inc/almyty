@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/store/auth'
 import { useNotifications } from '@/store/app'
-import { apiPost } from '@/lib/api'
 
 const registerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -34,8 +33,6 @@ type RegisterFormData = z.infer<typeof registerSchema>
 
 export function RegisterPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const inviteToken = searchParams.get('invite')
   const { register: registerUser, isLoading } = useAuthStore()
   const { success, error } = useNotifications()
   const [showPassword, setShowPassword] = React.useState(false)
@@ -53,19 +50,7 @@ export function RegisterPage() {
   const onSubmit = async (data: RegisterFormData) => {
     try {
       await registerUser(data.email, data.password, data.firstName, data.lastName, data.organizationName)
-
-      // If registering via invite link, accept the invitation automatically
-      if (inviteToken) {
-        try {
-          await apiPost(`/invites/${inviteToken}/accept`, {})
-          success('Account created', 'Welcome to almyty! Invitation accepted.')
-        } catch {
-          success('Account created', 'Welcome! You can accept the invitation from your dashboard.')
-        }
-      } else {
-        success('Account created successfully', 'Welcome to almyty!')
-      }
-
+      success('Account created successfully', 'Welcome to almyty!')
       navigate('/dashboard')
     } catch (err: any) {
       error(
