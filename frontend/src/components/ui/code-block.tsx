@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useSyncExternalStore } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -30,16 +30,29 @@ interface CodeBlockProps {
   maxHeight?: string
 }
 
+function useIsDark() {
+  const [dark, setDark] = useState(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  )
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setDark(document.documentElement.classList.contains('dark'))
+    })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [])
+  return dark
+}
+
 export function CodeBlock({ value, language, copyable = true, className, maxHeight = '400px' }: CodeBlockProps) {
   const [copied, setCopied] = useState(false)
+  const isDark = useIsDark()
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(value)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
-
-  const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   const ext = language ? languageExtensions[language.toLowerCase()] : []
   const extensions = Array.isArray(ext) ? ext : [ext]
 
