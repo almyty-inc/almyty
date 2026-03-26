@@ -126,7 +126,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className={cn("flex items-center h-12 border-b shrink-0", sidebarCollapsed ? "justify-center px-2" : "justify-between px-3")}>
+          <div className={cn("flex items-center h-14 border-b", sidebarCollapsed ? "justify-center px-2" : "justify-between px-4")}>
             <div className="flex items-center gap-2">
               <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8 shrink-0" />
               {!sidebarCollapsed && <span className="text-xl font-heading font-medium tracking-tight text-foreground">almyty</span>}
@@ -140,10 +140,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
           {/* Organization Selector */}
           {currentOrganization && !sidebarCollapsed && (
-            <div className="px-3 py-2 border-b">
+            <div className="p-4 border-b">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full justify-between h-8 text-xs">
+                  <Button variant="outline" className="w-full justify-between">
                     <div className="flex items-center space-x-2">
                       <div className="w-6 h-6 bg-muted rounded flex items-center justify-center">
                         <span className="text-xs font-medium">
@@ -181,7 +181,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           )}
 
           {/* Navigation */}
-          <nav className={cn("flex-1 min-h-0 py-2 space-y-0.5 overflow-y-auto", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation">
+          <nav className={cn("flex-1 py-4 space-y-1 overflow-y-auto", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation">
             {navigation.map((item) => {
               const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/')
               return (
@@ -191,7 +191,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   title={sidebarCollapsed ? item.name : undefined}
                   className={cn(
                     "group flex items-center rounded-md transition-colors",
-                    sidebarCollapsed ? "justify-center px-2 py-1.5" : "px-3 py-1 text-[13px]",
+                    sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-1.5 text-[13px]",
                     isActive
                       ? "bg-primary/10 text-primary font-medium"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -210,105 +210,61 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             })}
           </nav>
 
-          {/* User Menu + Collapse toggle */}
-          <div className={cn("flex-shrink-0 border-t", sidebarCollapsed ? "p-1.5" : "px-3 py-2")}>
-            {sidebarCollapsed ? (
-              <div className="flex flex-col items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleSidebarCollapse}
-                  className="hidden lg:flex h-8 w-8 text-muted-foreground hover:text-foreground"
-                  title="Expand sidebar"
-                >
-                  <ChevronRight className="h-4 w-4" />
+          {/* Collapse toggle — desktop only */}
+          <div className="hidden lg:flex justify-end px-2 py-2 border-t">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleSidebarCollapse}
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </Button>
+          </div>
+
+          {/* User Menu */}
+          <div className={cn("flex-shrink-0 border-t", sidebarCollapsed ? "p-2" : "p-4")}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className={cn("w-full p-2", sidebarCollapsed ? "justify-center" : "justify-start")} aria-label="User menu">
+                  <Avatar className={cn("h-8 w-8", !sidebarCollapsed && "mr-3")}>
+                    <AvatarImage src={user?.avatar} />
+                    <AvatarFallback>
+                      {user?.name ? getInitials(user.name) : 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  {!sidebarCollapsed && (
+                    <div className="text-left truncate">
+                      <p className="text-sm font-medium text-foreground truncate">{user?.name || user?.email}</p>
+                      {user?.name && <p className="text-xs text-muted-foreground truncate">{user?.email}</p>}
+                    </div>
+                  )}
                 </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="w-full p-2 justify-center" aria-label="User menu">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={user?.avatar} />
-                        <AvatarFallback>
-                          {user?.name ? getInitials(user.name) : 'U'}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56" align="end" forceMount>
-                    <DropdownMenuLabel className="font-normal">
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">{user?.name}</p>
-                        <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
-                      </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => navigate('/settings')}>
-                      <Settings className="mr-2 h-4 w-4" />
-                      <span>Settings</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setDarkMode(!darkMode)}>
-                      {darkMode ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-                      <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout}>
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Log out</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="flex-1 min-w-0 p-2 justify-start" aria-label="User menu">
-                      <Avatar className="h-8 w-8 mr-3 flex-shrink-0">
-                        <AvatarImage src={user?.avatar} />
-                        <AvatarFallback>
-                          {user?.name ? getInitials(user.name) : 'U'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="text-left truncate">
-                        <p className="text-sm font-medium text-foreground truncate">{user?.name || user?.email}</p>
-                        {user?.name && <p className="text-xs text-muted-foreground truncate">{user?.email}</p>}
-                      </div>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56" align="end" forceMount>
-                    <DropdownMenuLabel className="font-normal">
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">{user?.name}</p>
-                        <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
-                      </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => navigate('/settings')}>
-                      <Settings className="mr-2 h-4 w-4" />
-                      <span>Settings</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setDarkMode(!darkMode)}>
-                      {darkMode ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-                      <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout}>
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Log out</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleSidebarCollapse}
-                  className="hidden lg:flex h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground"
-                  title="Collapse sidebar"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user?.name}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate('/settings')}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setDarkMode(!darkMode)}>
+                  {darkMode ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+                  <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
@@ -336,7 +292,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Page Content */}
         <main className="flex-1 relative overflow-y-auto focus:outline-none">
           <div className="py-6">
-            <div className="px-4 sm:px-6 lg:px-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-8">
               {children}
             </div>
           </div>
