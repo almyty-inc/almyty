@@ -154,87 +154,7 @@ export function AgentDetailPage() {
 
   const versions: AgentVersionSnapshot[] = Array.isArray(versionsData) ? versionsData : []
 
-  // Fetch cost estimate from backend
-  const { data: costEstimateData } = useQuery({
-    queryKey: ['agent-cost-estimate', id],
-    queryFn: async () => {
-      const d = await agentsApi.getCostEstimate(id!)
-      return d || null
-    },
-    enabled: !!id,
-  })
-
-  // Compute local cost estimate from pipeline nodes so the card is
-  // immediately dynamic and doesn't depend solely on the backend.
-  const localCostEstimate = useMemo((): AgentCostEstimate | null => {
-    if (!agent?.pipeline?.nodes) return null
-    const nodes = agent.pipeline.nodes as PipelineNode[]
-    const edges = agent.pipeline.edges as PipelineEdge[]
-
-    const llmNodes = nodes.filter(n => n.type === 'llm_call' || n.type === 'merge')
-    const toolCallNodes = nodes.filter(n => n.type === 'tool_call')
-    const parallelNodes = nodes.filter(n => n.type === 'parallel')
-
-    let totalLow = 0
-    let totalHigh = 0
-
-    for (const node of llmNodes) {
-      const model = ((node.data?.model as string) || '').toLowerCase()
-      const providerType = ((node.data?.providerType as string) || '').toLowerCase()
-
-      // Cheap OpenAI models (check before gpt-4o since gpt-4o-mini contains gpt-4o)
-      if (model.includes('gpt-3.5') || model.includes('gpt-4o-mini') || model.includes('mini')) {
-        totalLow += 0.2; totalHigh += 1
-      // GPT-4 class
-      } else if (model.includes('gpt-4o')) {
-        totalLow += 1; totalHigh += 4
-      } else if (model.includes('gpt-4')) {
-        totalLow += 3; totalHigh += 8
-      // Claude models
-      } else if (model.includes('opus')) {
-        totalLow += 5; totalHigh += 15
-      } else if (model.includes('sonnet')) {
-        totalLow += 1; totalHigh += 4
-      } else if (model.includes('haiku')) {
-        totalLow += 0.2; totalHigh += 1
-      } else if (model.includes('claude')) {
-        totalLow += 2; totalHigh += 4
-      // Provider-type fallback
-      } else if (providerType === 'anthropic') {
-        totalLow += 2; totalHigh += 4
-      } else if (providerType === 'openai') {
-        totalLow += 1; totalHigh += 5
-      } else {
-        // Unknown model/provider
-        totalLow += 1; totalHigh += 5
-      }
-    }
-
-    // Tool call overhead
-    const toolCost = toolCallNodes.length * 0.1
-    totalLow += toolCost
-    totalHigh += toolCost
-
-    if (llmNodes.length === 0 && toolCallNodes.length === 0) {
-      totalLow = 0
-      totalHigh = 0
-    }
-
-    return {
-      estimatedLlmCalls: llmNodes.length,
-      estimatedToolCalls: toolCallNodes.length,
-      hasParallelExecution: parallelNodes.length > 0,
-      estimatedCostRange: {
-        low: Math.round(totalLow * 10) / 10,
-        high: Math.round(totalHigh * 10) / 10,
-      },
-      nodeCount: nodes.length,
-      edgeCount: edges.length,
-    }
-  }, [agent])
-
-  // Prefer backend estimate when available, fall back to local computation
-  const costEstimate = (costEstimateData as AgentCostEstimate | null) || localCostEstimate
+  // Cost data comes from real execution history (agent.totalCost / agent.totalExecutions)
 
   // Fetch audit log
   const { data: auditLogData } = useQuery({
@@ -870,43 +790,39 @@ console.log(r2.choices[0].message.content);`,
 
       {/* Cost Estimate & Version Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Cost Estimate */}
+        {/* Pipeline Info */}
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <Calculator className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Pipeline Cost Estimate</CardTitle>
+              <CardTitle className="text-base">Pipeline</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
-            {costEstimate ? (
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">LLM calls per run</span>
-                  <span className="font-medium">{costEstimate.estimatedLlmCalls}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tool calls per run</span>
-                  <span className="font-medium">{costEstimate.estimatedToolCalls}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Parallel execution</span>
-                  <span className="font-medium">{costEstimate.hasParallelExecution ? 'Yes' : 'No'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Est. cost per run</span>
-                  <span className="font-medium">
-                    {costEstimate.estimatedCostRange.low.toFixed(1)}-{costEstimate.estimatedCostRange.high.toFixed(1)} cents
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground pt-1 border-t">
-                  <span>{costEstimate.nodeCount} nodes</span>
-                  <span>{costEstimate.edgeCount} edges</span>
-                </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Nodes</span>
+                <span className="font-medium">{agent.pipeline?.nodes?.length || 0}</span>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Loading cost estimate...</p>
-            )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Edges</span>
+                <span className="font-medium">{agent.pipeline?.edges?.length || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">LLM calls</span>
+                <span className="font-medium">{(agent.pipeline?.nodes || []).filter((n: any) => n.type === 'llm_call').length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tool calls</span>
+                <span className="font-medium">{(agent.pipeline?.nodes || []).filter((n: any) => n.type === 'tool_call').length}</span>
+              </div>
+              {agent.totalExecutions > 0 && (
+                <div className="flex justify-between pt-1 border-t">
+                  <span className="text-muted-foreground">Avg cost per run</span>
+                  <span className="font-medium">${(agent.totalCost / agent.totalExecutions).toFixed(4)}</span>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
