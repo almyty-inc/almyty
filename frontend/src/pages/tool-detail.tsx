@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
+import { CodeBlock } from '@/components/ui/code-block'
 import { toolsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
@@ -213,18 +214,21 @@ export function ToolDetailPage() {
                 </div>
                 <div className="mt-2">
                   <span className="text-xs text-muted-foreground">Code:</span>
-                  <pre className="p-4 text-sm font-mono bg-muted rounded-md overflow-auto whitespace-pre-wrap break-words max-h-[300px] mt-1">{
-                    (() => {
-                      const raw = tool.code || tool.configuration?.code || 'No code'
-                      // Format single-line code for readability
-                      return raw
-                        .replace(/;\s*/g, ';\n')
-                        .replace(/\{\s*/g, '{\n  ')
-                        .replace(/\}\s*/g, '\n}')
-                        .replace(/,\s*(?=[a-zA-Z])/g, ',\n  ')
-                        .trim()
-                    })()
-                  }</pre>
+                  <div className="mt-1">
+                    <CodeBlock
+                      value={(() => {
+                        const raw = tool.code || tool.configuration?.code || 'No code'
+                        return raw
+                          .replace(/;\s*/g, ';\n')
+                          .replace(/\{\s*/g, '{\n  ')
+                          .replace(/\}\s*/g, '\n}')
+                          .replace(/,\s*(?=[a-zA-Z])/g, ',\n  ')
+                          .trim()
+                      })()}
+                      language="javascript"
+                      maxHeight="300px"
+                    />
+                  </div>
                 </div>
               </>
             ) : tool.executionMethod === 'http' ? (
@@ -387,9 +391,7 @@ export function ToolDetailPage() {
                     {executionResult.success ? (
                       <div>
                         <p className="text-sm font-medium mb-3">Response Data:</p>
-                        <pre className="text-xs overflow-x-auto bg-background/50 p-3 rounded">
-                          {JSON.stringify(executionResult.data, null, 2)}
-                        </pre>
+                        <CodeBlock value={JSON.stringify(executionResult.data, null, 2)} language="json" maxHeight="300px" />
                         {executionResult.metadata && (
                           <p className="text-xs text-muted-foreground mt-2">
                             Executed in {executionResult.metadata.executionTime}ms
@@ -413,18 +415,18 @@ export function ToolDetailPage() {
                           {sentParameters && (
                             <div>
                               <strong>Parameters Sent:</strong>
-                              <pre className="mt-1 bg-background/50 p-2 rounded overflow-x-auto">
-                                {JSON.stringify(sentParameters, null, 2)}
-                              </pre>
+                              <div className="mt-1">
+                                <CodeBlock value={JSON.stringify(sentParameters, null, 2)} language="json" maxHeight="200px" />
+                              </div>
                             </div>
                           )}
 
                           {executionResult.fullError && (
                             <div>
                               <strong>Backend Response:</strong>
-                              <pre className="mt-1 bg-background/50 p-2 rounded overflow-x-auto">
-                                {JSON.stringify(executionResult.fullError, null, 2)}
-                              </pre>
+                              <div className="mt-1">
+                                <CodeBlock value={JSON.stringify(executionResult.fullError, null, 2)} language="json" maxHeight="200px" />
+                              </div>
                             </div>
                           )}
                         </div>
@@ -588,19 +590,8 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
             <LoadingSpinner size="sm" />
           ) : skill?.content ? (
             <div className="space-y-3">
-              <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono whitespace-pre-wrap">
-                {skill.content.slice(0, 500)}{skill.content.length > 500 ? '...' : ''}
-              </pre>
+              <CodeBlock value={skill.content} language="text" maxHeight="192px" />
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => copyToClipboard(skill.content, 'skill')}
-                >
-                  {copiedField === 'skill' ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-                  Copy
-                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -652,19 +643,8 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
             <LoadingSpinner size="sm" />
           ) : cli?.content ? (
             <div className="space-y-3">
-              <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono whitespace-pre-wrap">
-                {cli.content.slice(0, 500)}{cli.content.length > 500 ? '...' : ''}
-              </pre>
+              <CodeBlock value={cli.content} language={cliFormat === 'bash' ? 'bash' : 'javascript'} maxHeight="192px" />
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => copyToClipboard(cli.content, 'cli')}
-                >
-                  {copiedField === 'cli' ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-                  Copy
-                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -696,19 +676,8 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <pre className="text-xs bg-muted p-3 rounded max-h-48 overflow-auto font-mono whitespace-pre-wrap">
-                {sdk.content.slice(0, 500)}{sdk.content.length > 500 ? '...' : ''}
-              </pre>
+              <CodeBlock value={sdk.content} language="typescript" maxHeight="192px" />
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => copyToClipboard(sdk.content, 'sdk')}
-                >
-                  {copiedField === 'sdk' ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-                  Copy
-                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -753,22 +722,12 @@ function ExportsSection({ toolId, toolName }: { toolId: string; toolName: string
           </div>
           <div>
             <Label className="text-xs text-muted-foreground">Claude Code config (~/.claude/settings.json)</Label>
-            <div className="flex items-center gap-2 mt-1">
-              <pre className="flex-1 text-xs bg-muted p-2 rounded font-mono overflow-auto">
-{`"mcpServers": {
-  "almyty": { "command": "npx", "args": ["@almyty/mcp-server"] }
-}`}
-              </pre>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => copyToClipboard(
-                  `"mcpServers": {\n  "almyty": { "command": "npx", "args": ["@almyty/mcp-server"] }\n}`,
-                  'claude-config'
-                )}
-              >
-                {copiedField === 'claude-config' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              </Button>
+            <div className="mt-1">
+              <CodeBlock
+                value={`"mcpServers": {\n  "almyty": { "command": "npx", "args": ["@almyty/mcp-server"] }\n}`}
+                language="json"
+                maxHeight="120px"
+              />
             </div>
           </div>
         </CardContent>

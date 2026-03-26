@@ -66,6 +66,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
+import { CodeBlock } from '@/components/ui/code-block'
 import { nodeTypes } from '@/components/agents/nodes'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { agentsApi } from '@/lib/api'
@@ -649,20 +650,13 @@ const r2 = await client.chat.completions.create({
 });
 console.log(r2.choices[0].message.content);`,
               }
+              const langMap: Record<string, string> = { curl: 'bash', python: 'python', node: 'javascript' }
               return (
-                <div className="relative">
-                  <pre className="bg-muted rounded-lg p-3 font-mono text-xs overflow-auto max-h-[180px] whitespace-pre-wrap">
-                    {snippets[integrationTab]}
-                  </pre>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="absolute top-2 right-2 h-6 px-2 text-xs"
-                    onClick={() => navigator.clipboard.writeText(snippets[integrationTab])}
-                  >
-                    <Copy className="h-3 w-3 mr-1" /> Copy
-                  </Button>
-                </div>
+                <CodeBlock
+                  value={snippets[integrationTab]}
+                  language={langMap[integrationTab]}
+                  maxHeight="180px"
+                />
               )
             })()}
           </CardContent>
@@ -1081,9 +1075,9 @@ console.log(r2.choices[0].message.content);`,
             {invokeResult && (
               <div>
                 <Label>Result</Label>
-                <pre className="mt-1 p-3 rounded-md bg-muted text-xs font-mono overflow-x-auto max-h-[200px] overflow-y-auto">
-                  {JSON.stringify(invokeResult, null, 2)}
-                </pre>
+                <div className="mt-1">
+                  <CodeBlock value={JSON.stringify(invokeResult, null, 2)} language="json" maxHeight="200px" />
+                </div>
               </div>
             )}
 
