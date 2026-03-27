@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bull';
 
 import { Agent } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
@@ -37,6 +38,7 @@ import { ToolsModule } from '../tools/tools.module';
       Organization,
       ApiKey,
     ]),
+    BullModule.registerQueue({ name: 'agent-scheduler' }),
     forwardRef(() => LlmProvidersModule),
     forwardRef(() => ToolsModule),
   ],
