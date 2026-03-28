@@ -54,7 +54,7 @@ patches:
         value: "https://api.staging.almyty.com"
       - op: replace
         path: /data/DB_SYNC
-        value: "true"
+        value: "false"
 
   - target:
       kind: Deployment

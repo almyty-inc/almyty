@@ -30,11 +30,14 @@ spec:
                 database: process.env.DATABASE_NAME,
                 ssl: process.env.DB_SSL === 'true' ? {rejectUnauthorized: false} : false,
                 entities: [path.join(__dirname, 'dist', 'entities', '*.entity.js')],
-                synchronize: true,
+                migrations: [path.join(__dirname, 'dist', 'migrations', '*.js')],
+                synchronize: false,
+                migrationsRun: true,
                 logging: true,
               });
               ds.initialize()
                 .then(async () => {
+                  console.log('Migrations applied successfully');
                   const qr = ds.createQueryRunner();
                   const tables = await qr.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
                   console.log('Tables:', tables.length);
