@@ -56,11 +56,11 @@ jobs:
           kubectl delete job ${PREFIX}db-migration -n $NAMESPACE --ignore-not-found
 
           # Apply the migration job with correct image tag and namespace
+          # Note: secrets are created WITHOUT prefix (almyty-secrets), configmaps ARE prefixed (staging-almyty-config)
           cat k8s/base/migration-job.yaml | \
             sed "s|image: ghcr.io/frane/almyty/api:latest|image: ghcr.io/frane/almyty/api:${IMAGE_TAG}|g" | \
             sed "s|name: db-migration|name: ${PREFIX}db-migration|g" | \
             sed "s|name: almyty-config|name: ${PREFIX}almyty-config|g" | \
-            sed "s|name: almyty-secrets|name: ${PREFIX}almyty-secrets|g" | \
             kubectl apply -n $NAMESPACE -f -
 
           # Wait for completion
