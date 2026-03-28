@@ -227,17 +227,19 @@ export function AgentBuilderPage() {
   })
 
   // Fetch available tools (for autonomous mode)
-  const { data: availableTools } = useQuery({
+  const { data: rawTools } = useQuery({
     queryKey: ['tools-list', currentOrganization?.id],
     queryFn: () => toolsApi.getAll(currentOrganization?.id),
     enabled: !!currentOrganization?.id,
   })
+  const availableTools = Array.isArray(rawTools) ? rawTools : (rawTools as any)?.tools || []
 
   // Fetch LLM providers (for autonomous mode)
-  const { data: availableProviders } = useQuery({
+  const { data: rawProviders } = useQuery({
     queryKey: ['llm-providers'],
     queryFn: () => llmProvidersApi.getAll(),
   })
+  const availableProviders = Array.isArray(rawProviders) ? rawProviders : (rawProviders as any)?.providers || []
 
   // Fetch templates for template-based creation
   const { data: templatesData } = useQuery({
@@ -669,7 +671,7 @@ export function AgentBuilderPage() {
                   <Select value={agentModelConfig.providerId || ''} onValueChange={(v) => setAgentModelConfig({ ...agentModelConfig, providerId: v })}>
                     <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
                     <SelectContent>
-                      {(Array.isArray(availableProviders) ? availableProviders : []).map((p: any) => (
+                      {availableProviders.map((p: any) => (
                         <SelectItem key={p.id} value={p.id}>{p.name} ({p.type})</SelectItem>
                       ))}
                     </SelectContent>
@@ -715,7 +717,7 @@ export function AgentBuilderPage() {
             <CardContent>
               <p className="text-xs text-muted-foreground mb-3">Select which tools this agent can use during execution.</p>
               <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                {(Array.isArray(availableTools) ? availableTools : []).map((tool: any) => (
+                {availableTools.map((tool: any) => (
                   <label key={tool.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer">
                     <input
                       type="checkbox"
@@ -735,7 +737,7 @@ export function AgentBuilderPage() {
                     </div>
                   </label>
                 ))}
-                {(Array.isArray(availableTools) ? availableTools : []).length === 0 && (
+                {availableTools.length === 0 && (
                   <p className="text-sm text-muted-foreground py-4 text-center">No tools available. Create tools first.</p>
                 )}
               </div>
