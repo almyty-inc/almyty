@@ -32,6 +32,7 @@ const ChatPage = lazy(() => import('@/pages/chat').then(m => ({ default: m.ChatP
 const AgentsPage = lazy(() => import('@/pages/agents').then(m => ({ default: m.AgentsPage })))
 const AgentBuilderPage = lazy(() => import('@/pages/agent-builder').then(m => ({ default: m.AgentBuilderPage })))
 const AgentDetailPage = lazy(() => import('@/pages/agent-detail').then(m => ({ default: m.AgentDetailPage })))
+const MemoriesPage = lazy(() => import('@/pages/memories').then(m => ({ default: m.MemoriesPage })))
 const DocsPage = lazy(() => import('@/pages/docs').then(m => ({ default: m.DocsPage })))
 const AcceptInvitePage = lazy(() => import('@/pages/accept-invite').then(m => ({ default: m.AcceptInvitePage })))
 
@@ -127,6 +128,11 @@ function App() {
         <Route path="/analytics/*" element={
           <DashboardLayout>
             <AnalyticsPage />
+          </DashboardLayout>
+        } />
+        <Route path="/memories" element={
+          <DashboardLayout>
+            <MemoriesPage />
           </DashboardLayout>
         } />
         <Route path="/credentials/*" element={

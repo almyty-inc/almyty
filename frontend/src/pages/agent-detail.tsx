@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -29,6 +29,15 @@ import {
   Timer,
   Save,
   ChevronRight,
+  Brain,
+  FileText,
+  Plug,
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  Tag,
+  MessageSquare,
+  Upload,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -39,7 +48,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Label } from '@/components/ui/label'
 import { CodeEditor } from '@/components/ui/code-editor'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -69,10 +87,10 @@ import {
 import { CodeBlock } from '@/components/ui/code-block'
 import { nodeTypes } from '@/components/agents/nodes'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
-import { agentsApi } from '@/lib/api'
+import { agentsApi, memoriesApi, filesApi, interfacesApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
-import type { Agent, AgentExecution, PipelineNode, PipelineEdge, AgentVersionSnapshot, AgentCostEstimate, AgentAuditEntry } from '@/types'
+import type { Agent, AgentExecution, PipelineNode, PipelineEdge, AgentVersionSnapshot, AgentCostEstimate, AgentAuditEntry, AgentRun, Memory, AgentFile, AgentInterface, InterfaceType, InterfaceStatus } from '@/types'
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success'> = {
   active: 'success',
@@ -88,6 +106,46 @@ const execStatusVariant: Record<string, 'default' | 'secondary' | 'destructive' 
   failed: 'destructive',
   cancelled: 'secondary',
   timeout: 'destructive',
+}
+
+const runStatusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success'> = {
+  pending: 'secondary',
+  running: 'default',
+  waiting_input: 'outline',
+  completed: 'success',
+  failed: 'destructive',
+  cancelled: 'secondary',
+  timeout: 'destructive',
+}
+
+const interfaceStatusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success'> = {
+  active: 'success',
+  inactive: 'secondary',
+  error: 'destructive',
+}
+
+const interfaceTypeIcons: Record<string, string> = {
+  chat_widget: '💬',
+  slack: '📱',
+  discord: '🎮',
+  telegram: '✈️',
+  whatsapp: '📞',
+  email: '📧',
+  webhook: '🔗',
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  return `${(ms / 60000).toFixed(1)}m`
 }
 
 export function AgentDetailPage() {
@@ -110,6 +168,26 @@ export function AgentDetailPage() {
   const [testInput, setTestInput] = useState('')
   const [testOutput, setTestOutput] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
+
+  // Active tab
+  const [activeTab, setActiveTab] = useState('overview')
+
+  // Runs tab state
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
+
+  // Memory tab state
+  const [addMemoryOpen, setAddMemoryOpen] = useState(false)
+  const [newMemoryContent, setNewMemoryContent] = useState('')
+  const [newMemoryType, setNewMemoryType] = useState<string>('fact')
+  const [newMemoryTags, setNewMemoryTags] = useState('')
+
+  // Files tab state
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Interfaces tab state
+  const [deployInterfaceOpen, setDeployInterfaceOpen] = useState(false)
+  const [newInterfaceType, setNewInterfaceType] = useState<string>('chat_widget')
+  const [newInterfaceName, setNewInterfaceName] = useState('')
 
   // Webhook state
   const [webhookUrl, setWebhookUrl] = useState('')
@@ -167,6 +245,114 @@ export function AgentDetailPage() {
   })
 
   const auditLog: AgentAuditEntry[] = Array.isArray(auditLogData) ? auditLogData : []
+
+  // Fetch runs (autonomous mode)
+  const { data: runsData } = useQuery({
+    queryKey: ['agent-runs', id],
+    queryFn: async () => {
+      const d = await agentsApi.listRuns(id!)
+      return Array.isArray(d) ? d : d?.data || []
+    },
+    enabled: !!id && activeTab === 'runs',
+  })
+
+  const runs: AgentRun[] = Array.isArray(runsData) ? runsData : []
+
+  // Fetch memories
+  const { data: memoriesData } = useQuery({
+    queryKey: ['agent-memories', id],
+    queryFn: async () => {
+      const d = await memoriesApi.getAll({ agentId: id! })
+      return Array.isArray(d) ? d : d?.data || []
+    },
+    enabled: !!id && activeTab === 'memory',
+  })
+
+  const memories: Memory[] = Array.isArray(memoriesData) ? memoriesData : []
+
+  // Fetch files
+  const { data: filesData } = useQuery({
+    queryKey: ['agent-files', id],
+    queryFn: async () => {
+      const d = await filesApi.getAll({ agentId: id! })
+      return Array.isArray(d) ? d : d?.data || []
+    },
+    enabled: !!id && activeTab === 'files',
+  })
+
+  const files: AgentFile[] = Array.isArray(filesData) ? filesData : []
+
+  // Fetch interfaces
+  const { data: interfacesData } = useQuery({
+    queryKey: ['agent-interfaces', id],
+    queryFn: async () => {
+      const d = await interfacesApi.getAll(id!)
+      return Array.isArray(d) ? d : d?.data || []
+    },
+    enabled: !!id && activeTab === 'interfaces',
+  })
+
+  const interfaces: AgentInterface[] = Array.isArray(interfacesData) ? interfacesData : []
+
+  // Add memory mutation
+  const addMemoryMutation = useMutation({
+    mutationFn: async () => {
+      return memoriesApi.create({
+        content: newMemoryContent,
+        type: newMemoryType,
+        scope: 'agent',
+        agentIds: [id!],
+        tags: newMemoryTags.split(',').map(t => t.trim()).filter(Boolean),
+      })
+    },
+    onSuccess: () => {
+      success('Memory Added', 'Memory has been created for this agent.')
+      queryClient.invalidateQueries({ queryKey: ['agent-memories', id] })
+      setAddMemoryOpen(false)
+      setNewMemoryContent('')
+      setNewMemoryType('fact')
+      setNewMemoryTags('')
+    },
+    onError: (err: any) => {
+      errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to add memory')
+    },
+  })
+
+  // Upload file mutation
+  const uploadFileMutation = useMutation({
+    mutationFn: async (file: File) => {
+      return filesApi.upload(file, id!)
+    },
+    onSuccess: () => {
+      success('File Uploaded', 'File has been uploaded.')
+      queryClient.invalidateQueries({ queryKey: ['agent-files', id] })
+    },
+    onError: (err: any) => {
+      errorNotif('Upload Failed', err?.response?.data?.message || err?.message || 'Failed to upload file')
+    },
+  })
+
+  // Deploy interface mutation
+  const deployInterfaceMutation = useMutation({
+    mutationFn: async () => {
+      return interfacesApi.create({
+        agentId: id!,
+        type: newInterfaceType,
+        name: newInterfaceName || `${newInterfaceType} interface`,
+        configuration: {},
+      })
+    },
+    onSuccess: () => {
+      success('Interface Deployed', 'Interface has been created.')
+      queryClient.invalidateQueries({ queryKey: ['agent-interfaces', id] })
+      setDeployInterfaceOpen(false)
+      setNewInterfaceName('')
+      setNewInterfaceType('chat_widget')
+    },
+    onError: (err: any) => {
+      errorNotif('Deploy Failed', err?.response?.data?.message || err?.message || 'Failed to deploy interface')
+    },
+  })
 
   // Sync webhook/schedule state from agent data
   React.useEffect(() => {
@@ -432,102 +618,114 @@ export function AgentDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Try It + Integration */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Try It */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Try It</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Type a message to test this agent..."
-                  value={testInput}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTestInput(e.target.value)}
-                  onKeyDown={(e: React.KeyboardEvent) => {
-                    if (e.key === 'Enter' && testInput.trim() && !testLoading) {
-                      setTestLoading(true)
-                      setTestOutput(null)
-                      agentsApi.invoke(agent.id, { message: testInput })
-                        .then((res: any) => {
-                          const output = res?.output || JSON.stringify(res)
-                          setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
-                          setTestInput('')
-                        })
-                        .catch((err: any) => {
-                          const msg = err.response?.data?.message || err.message || 'Invocation failed'
-                          setTestOutput(`Error: ${msg}`)
-                          errorNotif('Invocation Failed', msg)
-                        })
-                        .finally(() => setTestLoading(false))
-                    }
-                  }}
-                  disabled={testLoading}
-                />
-                <Button
-                  disabled={!testInput.trim() || testLoading}
-                  onClick={() => {
-                    setTestLoading(true)
-                    setTestOutput(null)
-                    agentsApi.invoke(agent.id, { message: testInput })
-                      .then((res: any) => {
-                        const output = res?.output || JSON.stringify(res)
-                        setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
-                        setTestInput('')
-                      })
-                      .catch((err: any) => {
-                        const msg = err.response?.data?.message || err.message || 'Invocation failed'
-                        setTestOutput(`Error: ${msg}`)
-                        errorNotif('Invocation Failed', msg)
-                      })
-                      .finally(() => setTestLoading(false))
-                  }}
-                >
-                  {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                </Button>
-              </div>
-              {testOutput && (
-                <div className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap max-h-[200px] overflow-auto">
-                  {testOutput}
-                </div>
-              )}
-              {!testOutput && (
-                <p className="text-xs text-muted-foreground">Send a message to invoke this agent and see the response.</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="runs">Runs</TabsTrigger>
+          <TabsTrigger value="memory">Memory</TabsTrigger>
+          <TabsTrigger value="files">Files</TabsTrigger>
+          <TabsTrigger value="interfaces">Interfaces</TabsTrigger>
+        </TabsList>
 
-        {/* Integration */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Integration</CardTitle>
-              <div className="flex gap-1">
-                {(['curl', 'python', 'node'] as const).map(tab => (
-                  <Button
-                    key={tab}
-                    variant={integrationTab === tab ? 'default' : 'ghost'}
-                    size="sm"
-                    className="h-7 text-xs px-2"
-                    onClick={() => setIntegrationTab(tab)}
-                  >
-                    {tab === 'curl' ? 'cURL' : tab === 'python' ? 'Python' : 'Node.js'}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const apiBase = window.location.origin.replace('app.', 'api.')
-              const orgSlug = currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
-              const agentRef = agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-              const unifiedUrl = `${apiBase}/${orgSlug}/${agentRef}`
-              const snippets: Record<string, string> = {
-                curl: `# Unified endpoint
+        {/* ── Overview Tab ── */}
+        <TabsContent value="overview" className="space-y-6">
+          {/* Try It + Integration */}
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Try It */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Try It</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Type a message to test this agent..."
+                      value={testInput}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTestInput(e.target.value)}
+                      onKeyDown={(e: React.KeyboardEvent) => {
+                        if (e.key === 'Enter' && testInput.trim() && !testLoading) {
+                          setTestLoading(true)
+                          setTestOutput(null)
+                          agentsApi.invoke(agent.id, { message: testInput })
+                            .then((res: any) => {
+                              const output = res?.output || JSON.stringify(res)
+                              setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
+                              setTestInput('')
+                            })
+                            .catch((err: any) => {
+                              const msg = err.response?.data?.message || err.message || 'Invocation failed'
+                              setTestOutput(`Error: ${msg}`)
+                              errorNotif('Invocation Failed', msg)
+                            })
+                            .finally(() => setTestLoading(false))
+                        }
+                      }}
+                      disabled={testLoading}
+                    />
+                    <Button
+                      disabled={!testInput.trim() || testLoading}
+                      onClick={() => {
+                        setTestLoading(true)
+                        setTestOutput(null)
+                        agentsApi.invoke(agent.id, { message: testInput })
+                          .then((res: any) => {
+                            const output = res?.output || JSON.stringify(res)
+                            setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
+                            setTestInput('')
+                          })
+                          .catch((err: any) => {
+                            const msg = err.response?.data?.message || err.message || 'Invocation failed'
+                            setTestOutput(`Error: ${msg}`)
+                            errorNotif('Invocation Failed', msg)
+                          })
+                          .finally(() => setTestLoading(false))
+                      }}
+                    >
+                      {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  {testOutput && (
+                    <div className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap max-h-[200px] overflow-auto">
+                      {testOutput}
+                    </div>
+                  )}
+                  {!testOutput && (
+                    <p className="text-xs text-muted-foreground">Send a message to invoke this agent and see the response.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Integration */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Integration</CardTitle>
+                  <div className="flex gap-1">
+                    {(['curl', 'python', 'node'] as const).map(tab => (
+                      <Button
+                        key={tab}
+                        variant={integrationTab === tab ? 'default' : 'ghost'}
+                        size="sm"
+                        className="h-7 text-xs px-2"
+                        onClick={() => setIntegrationTab(tab)}
+                      >
+                        {tab === 'curl' ? 'cURL' : tab === 'python' ? 'Python' : 'Node.js'}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const apiBase = window.location.origin.replace('app.', 'api.')
+                  const orgSlug = currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
+                  const agentRef = agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+                  const unifiedUrl = `${apiBase}/${orgSlug}/${agentRef}`
+                  const snippets: Record<string, string> = {
+                    curl: `# Unified endpoint
 curl -X POST ${unifiedUrl} \\
   -H "Content-Type: application/json" \\
   -d '{"message":"Hello"}'
@@ -537,7 +735,7 @@ curl ${apiBase}/v1/chat/completions \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"agent:${agentRef}","messages":[{"role":"user","content":"Hello"}]}'`,
-                python: `import requests
+                    python: `import requests
 
 # Unified endpoint
 r = requests.post("${unifiedUrl}", json={"message": "Hello"})
@@ -552,7 +750,7 @@ r = client.chat.completions.create(
     messages=[{"role": "user", "content": "Hello"}]
 )
 print(r.choices[0].message.content)`,
-                node: `// Unified endpoint
+                    node: `// Unified endpoint
 const r = await fetch('${unifiedUrl}', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -569,359 +767,746 @@ const r2 = await client.chat.completions.create({
   messages: [{ role: 'user', content: 'Hello' }],
 });
 console.log(r2.choices[0].message.content);`,
-              }
-              const langMap: Record<string, string> = { curl: 'bash', python: 'python', node: 'javascript' }
-              return (
-                <CodeBlock
-                  value={snippets[integrationTab]}
-                  language={langMap[integrationTab]}
-                  maxHeight="180px"
-                />
-              )
-            })()}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Webhook + Schedule */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Webhook */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Webhook className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Webhook</CardTitle>
-            </div>
-            <CardDescription className="text-xs">
-              Receive a POST notification when this agent finishes executing
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div>
-                <Label htmlFor="webhook-url">Webhook URL</Label>
-                <Input
-                  id="webhook-url"
-                  placeholder="https://example.com/webhook"
-                  value={webhookUrl}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWebhookUrl(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <Button
-                size="sm"
-                disabled={webhookSaving}
-                onClick={async () => {
-                  setWebhookSaving(true)
-                  try {
-                    await agentsApi.update(agent.id, { webhookUrl: webhookUrl || null })
-                    queryClient.invalidateQueries({ queryKey: ['agent', id] })
-                    success('Saved', 'Webhook URL updated.')
-                  } catch (err: any) {
-                    errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to save webhook URL')
-                  } finally {
-                    setWebhookSaving(false)
                   }
-                }}
-              >
-                {webhookSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                Save
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Schedule */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Timer className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Schedule</CardTitle>
-            </div>
-            <CardDescription className="text-xs">
-              Run this agent automatically at a fixed interval
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="schedule-toggle">Enable schedule</Label>
-                <Switch
-                  id="schedule-toggle"
-                  checked={scheduleEnabled}
-                  onCheckedChange={async (checked: boolean) => {
-                    setScheduleEnabled(checked)
-                    if (!checked) {
-                      setScheduleSaving(true)
-                      try {
-                        await agentsApi.unschedule(agent.id)
-                        queryClient.invalidateQueries({ queryKey: ['agent', id] })
-                        success('Unscheduled', 'Agent schedule removed.')
-                      } catch (err: any) {
-                        errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to unschedule')
-                        setScheduleEnabled(true)
-                      } finally {
-                        setScheduleSaving(false)
-                      }
-                    }
-                  }}
-                />
-              </div>
-              {scheduleEnabled && (
-                <>
-                  <div>
-                    <Label htmlFor="schedule-interval">Interval (minutes)</Label>
-                    <Input
-                      id="schedule-interval"
-                      type="number"
-                      min={1}
-                      value={scheduleInterval}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScheduleInterval(parseInt(e.target.value) || 1)}
-                      className="mt-1"
+                  const langMap: Record<string, string> = { curl: 'bash', python: 'python', node: 'javascript' }
+                  return (
+                    <CodeBlock
+                      value={snippets[integrationTab]}
+                      language={langMap[integrationTab]}
+                      maxHeight="180px"
                     />
-                  </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Webhook + Schedule */}
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Webhook */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <Webhook className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-base">Webhook</CardTitle>
+                </div>
+                <CardDescription className="text-xs">
+                  Receive a POST notification when this agent finishes executing
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
                   <div>
-                    <Label htmlFor="schedule-input">Input JSON</Label>
-                    <CodeEditor
-                      value={scheduleInput}
-                      onChange={(value) => setScheduleInput(value)}
-                      language="json"
-                      height="80px"
+                    <Label htmlFor="webhook-url">Webhook URL</Label>
+                    <Input
+                      id="webhook-url"
+                      placeholder="https://example.com/webhook"
+                      value={webhookUrl}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWebhookUrl(e.target.value)}
+                      className="mt-1"
                     />
                   </div>
                   <Button
                     size="sm"
-                    disabled={scheduleSaving}
+                    disabled={webhookSaving}
                     onClick={async () => {
-                      setScheduleSaving(true)
+                      setWebhookSaving(true)
                       try {
-                        let parsedInput: any = {}
-                        try {
-                          parsedInput = JSON.parse(scheduleInput)
-                        } catch {
-                          errorNotif('Invalid JSON', 'Schedule input must be valid JSON')
-                          setScheduleSaving(false)
-                          return
-                        }
-                        await agentsApi.schedule(agent.id, scheduleInterval, parsedInput)
+                        await agentsApi.update(agent.id, { webhookUrl: webhookUrl || null })
                         queryClient.invalidateQueries({ queryKey: ['agent', id] })
-                        success('Scheduled', `Agent will run every ${scheduleInterval} minute(s).`)
+                        success('Saved', 'Webhook URL updated.')
                       } catch (err: any) {
-                        errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to schedule')
+                        errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to save webhook URL')
                       } finally {
-                        setScheduleSaving(false)
+                        setWebhookSaving(false)
                       }
                     }}
                   >
-                    {scheduleSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                    Save Schedule
+                    {webhookSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                    Save
                   </Button>
-                  {agent.settings?.schedule?.enabled && (
-                    <p className="text-xs text-muted-foreground">
-                      Next run in ~{agent.settings.schedule.intervalMinutes} minute(s) from last execution
-                    </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Schedule */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <Timer className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-base">Schedule</CardTitle>
+                </div>
+                <CardDescription className="text-xs">
+                  Run this agent automatically at a fixed interval
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="schedule-toggle">Enable schedule</Label>
+                    <Switch
+                      id="schedule-toggle"
+                      checked={scheduleEnabled}
+                      onCheckedChange={async (checked: boolean) => {
+                        setScheduleEnabled(checked)
+                        if (!checked) {
+                          setScheduleSaving(true)
+                          try {
+                            await agentsApi.unschedule(agent.id)
+                            queryClient.invalidateQueries({ queryKey: ['agent', id] })
+                            success('Unscheduled', 'Agent schedule removed.')
+                          } catch (err: any) {
+                            errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to unschedule')
+                            setScheduleEnabled(true)
+                          } finally {
+                            setScheduleSaving(false)
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                  {scheduleEnabled && (
+                    <>
+                      <div>
+                        <Label htmlFor="schedule-interval">Interval (minutes)</Label>
+                        <Input
+                          id="schedule-interval"
+                          type="number"
+                          min={1}
+                          value={scheduleInterval}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScheduleInterval(parseInt(e.target.value) || 1)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="schedule-input">Input JSON</Label>
+                        <CodeEditor
+                          value={scheduleInput}
+                          onChange={(value) => setScheduleInput(value)}
+                          language="json"
+                          height="80px"
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        disabled={scheduleSaving}
+                        onClick={async () => {
+                          setScheduleSaving(true)
+                          try {
+                            let parsedInput: any = {}
+                            try {
+                              parsedInput = JSON.parse(scheduleInput)
+                            } catch {
+                              errorNotif('Invalid JSON', 'Schedule input must be valid JSON')
+                              setScheduleSaving(false)
+                              return
+                            }
+                            await agentsApi.schedule(agent.id, scheduleInterval, parsedInput)
+                            queryClient.invalidateQueries({ queryKey: ['agent', id] })
+                            success('Scheduled', `Agent will run every ${scheduleInterval} minute(s).`)
+                          } catch (err: any) {
+                            errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to schedule')
+                          } finally {
+                            setScheduleSaving(false)
+                          }
+                        }}
+                      >
+                        {scheduleSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                        Save Schedule
+                      </Button>
+                      {agent.settings?.schedule?.enabled && (
+                        <p className="text-xs text-muted-foreground">
+                          Next run in ~{agent.settings.schedule.intervalMinutes} minute(s) from last execution
+                        </p>
+                      )}
+                    </>
                   )}
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-      {/* Recent Executions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Recent Executions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {executionsError ? (
-            <div className="text-center py-6">
-              <p className="text-sm text-destructive">Failed to load executions</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {(executionsError as Error)?.message || 'An error occurred while fetching execution history.'}
-              </p>
-            </div>
-          ) : executions.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No executions yet. Click "Invoke" to run this agent.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Cost</TableHead>
-                    <TableHead>Tokens</TableHead>
-                    <TableHead>Started</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {executions.map((exec) => (
-                    <TableRow key={exec.id}>
-                      <TableCell>
-                        <Badge variant={execStatusVariant[exec.status] || 'secondary'}>
-                          {exec.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                          {exec.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
-                          {exec.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {exec.executionTime ? `${(exec.executionTime / 1000).toFixed(2)}s` : '--'}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {exec.totalCost > 0 ? `$${exec.totalCost.toFixed(4)}` : '--'}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {exec.totalTokens > 0 ? exec.totalTokens.toLocaleString() : '--'}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDateTime(exec.createdAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Cost Estimate & Version Info */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Pipeline Info */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <Calculator className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Pipeline</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Nodes</span>
-                <span className="font-medium">{agent.pipeline?.nodes?.length || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Edges</span>
-                <span className="font-medium">{agent.pipeline?.edges?.length || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">LLM calls</span>
-                <span className="font-medium">{(agent.pipeline?.nodes || []).filter((n: any) => n.type === 'llm_call').length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Tool calls</span>
-                <span className="font-medium">{(agent.pipeline?.nodes || []).filter((n: any) => n.type === 'tool_call').length}</span>
-              </div>
-              {agent.totalExecutions > 0 && (
-                <div className="flex justify-between pt-1 border-t">
-                  <span className="text-muted-foreground">Avg cost per run</span>
-                  <span className="font-medium">${(agent.totalCost / agent.totalExecutions).toFixed(4)}</span>
+          {/* Recent Executions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Recent Executions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {executionsError ? (
+                <div className="text-center py-6">
+                  <p className="text-sm text-destructive">Failed to load executions</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {(executionsError as Error)?.message || 'An error occurred while fetching execution history.'}
+                  </p>
+                </div>
+              ) : executions.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No executions yet. Click "Invoke" to run this agent.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Duration</TableHead>
+                        <TableHead>Cost</TableHead>
+                        <TableHead>Tokens</TableHead>
+                        <TableHead>Started</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {executions.map((exec) => (
+                        <TableRow key={exec.id}>
+                          <TableCell>
+                            <Badge variant={execStatusVariant[exec.status] || 'secondary'}>
+                              {exec.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                              {exec.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
+                              {exec.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {exec.executionTime ? `${(exec.executionTime / 1000).toFixed(2)}s` : '--'}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {exec.totalCost > 0 ? `$${exec.totalCost.toFixed(4)}` : '--'}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {exec.totalTokens > 0 ? exec.totalTokens.toLocaleString() : '--'}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDateTime(exec.createdAt)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        {/* Version History */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <History className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Version History</CardTitle>
+          {/* Cost Estimate & Version Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Pipeline Info */}
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <Calculator className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-base">Pipeline</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Nodes</span>
+                    <span className="font-medium">{agent.pipeline?.nodes?.length || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Edges</span>
+                    <span className="font-medium">{agent.pipeline?.edges?.length || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">LLM calls</span>
+                    <span className="font-medium">{(agent.pipeline?.nodes || []).filter((n: any) => n.type === 'llm_call').length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tool calls</span>
+                    <span className="font-medium">{(agent.pipeline?.nodes || []).filter((n: any) => n.type === 'tool_call').length}</span>
+                  </div>
+                  {agent.totalExecutions > 0 && (
+                    <div className="flex justify-between pt-1 border-t">
+                      <span className="text-muted-foreground">Avg cost per run</span>
+                      <span className="font-medium">${(agent.totalCost / agent.totalExecutions).toFixed(4)}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Version History */}
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-base">Version History</CardTitle>
+                </div>
+                <CardDescription className="text-xs">
+                  Current: v{agent.version}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {versions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No version snapshots yet. Versions are saved automatically when the pipeline is updated.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {versions.map((v, index) => (
+                      <div key={index} className="flex items-center justify-between text-sm p-2 rounded-md bg-muted">
+                        <div className="min-w-0">
+                          <div className="font-medium text-xs">v{v.version}</div>
+                          <div className="text-xs text-muted-foreground truncate">{v.changelog}</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            {v.savedAt ? formatDateTime(v.savedAt) : ''}
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="shrink-0 text-xs"
+                          onClick={() => setRollbackIndex(index)}
+                        >
+                          <RotateCcw className="h-3 w-3 mr-1" />
+                          Rollback
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Audit Log */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">Audit Log</CardTitle>
+              </div>
+              <CardDescription className="text-xs">
+                History of changes made to this agent
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {auditLog.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No audit entries yet.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Timestamp</TableHead>
+                        <TableHead>Action</TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead>Details</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {[...auditLog].reverse().map((entry, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                            {formatDateTime(entry.timestamp)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {entry.action.replace(/_/g, ' ')}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground font-mono">
+                            {entry.userId?.slice(0, 8) || '--'}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                            {entry.details ? JSON.stringify(entry.details) : '--'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Runs Tab ── */}
+        <TabsContent value="runs" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Autonomous Runs</CardTitle>
+                <Badge variant="outline">{runs.length} run{runs.length !== 1 ? 's' : ''}</Badge>
+              </div>
+              <CardDescription className="text-xs">
+                Autonomous agent runs with step-by-step execution details
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {runs.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No runs yet. Start a run by invoking the agent in autonomous mode.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-8"></TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Input</TableHead>
+                        <TableHead>Steps</TableHead>
+                        <TableHead>Cost</TableHead>
+                        <TableHead>Tokens</TableHead>
+                        <TableHead>Duration</TableHead>
+                        <TableHead>Created</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {runs.map((run) => (
+                        <React.Fragment key={run.id}>
+                          <TableRow
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => setExpandedRunId(expandedRunId === run.id ? null : run.id)}
+                          >
+                            <TableCell className="px-2">
+                              {expandedRunId === run.id
+                                ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={runStatusVariant[run.status] || 'secondary'}>
+                                {run.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                                {run.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
+                                {run.status === 'running' && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                                {run.status.replace('_', ' ')}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm max-w-[200px] truncate">
+                              {run.input ? JSON.stringify(run.input).slice(0, 80) : '--'}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {run.currentStep}/{run.maxSteps}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {run.totalCost > 0 ? `$${run.totalCost.toFixed(4)}` : '--'}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {run.totalTokens > 0 ? run.totalTokens.toLocaleString() : '--'}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {run.executionTime > 0 ? formatDuration(run.executionTime) : '--'}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {formatDateTime(run.createdAt)}
+                            </TableCell>
+                          </TableRow>
+                          {expandedRunId === run.id && (
+                            <TableRow>
+                              <TableCell colSpan={8} className="bg-muted/30 p-4">
+                                <div className="space-y-4">
+                                  {/* Steps */}
+                                  {run.steps && run.steps.length > 0 && (
+                                    <div>
+                                      <h4 className="text-sm font-medium mb-2">Steps</h4>
+                                      <div className="space-y-2">
+                                        {run.steps.map((step, idx) => (
+                                          <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background border text-sm">
+                                            <div className="flex items-center gap-2 shrink-0">
+                                              <span className="text-xs font-mono text-muted-foreground">#{idx + 1}</span>
+                                              <Badge variant="outline" className="text-[10px]">{step.type}</Badge>
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                              {step.input && (
+                                                <div className="text-xs text-muted-foreground truncate">
+                                                  In: {typeof step.input === 'string' ? step.input : JSON.stringify(step.input)}
+                                                </div>
+                                              )}
+                                              {step.output && (
+                                                <div className="text-xs truncate">
+                                                  Out: {typeof step.output === 'string' ? step.output : JSON.stringify(step.output)}
+                                                </div>
+                                              )}
+                                              {step.error && (
+                                                <div className="text-xs text-destructive truncate">
+                                                  Error: {step.error}
+                                                </div>
+                                              )}
+                                            </div>
+                                            <div className="text-[10px] text-muted-foreground shrink-0 text-right">
+                                              {step.duration ? formatDuration(step.duration) : ''}
+                                              {step.cost ? ` / $${step.cost.toFixed(4)}` : ''}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {/* Thread */}
+                                  {run.thread && run.thread.length > 0 && (
+                                    <div>
+                                      <h4 className="text-sm font-medium mb-2">Thread</h4>
+                                      <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                                        {run.thread.map((msg, idx) => (
+                                          <div key={idx} className={`p-2 rounded text-sm ${msg.role === 'assistant' ? 'bg-primary/5 border-l-2 border-primary' : 'bg-background border'}`}>
+                                            <span className="text-xs font-medium text-muted-foreground">{msg.role}</span>
+                                            <div className="text-xs mt-0.5 whitespace-pre-wrap">
+                                              {typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content, null, 2)}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {/* Error */}
+                                  {run.error && (
+                                    <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+                                      {run.error}
+                                    </div>
+                                  )}
+                                  {/* Output */}
+                                  {run.output && (
+                                    <div>
+                                      <h4 className="text-sm font-medium mb-1">Output</h4>
+                                      <div className="bg-muted rounded p-2 text-xs whitespace-pre-wrap max-h-[200px] overflow-auto">
+                                        {typeof run.output === 'string' ? run.output : JSON.stringify(run.output, null, 2)}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Memory Tab ── */}
+        <TabsContent value="memory" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Memories</CardTitle>
+                  <CardDescription className="text-xs mt-1">
+                    Knowledge and context accessible to this agent
+                  </CardDescription>
+                </div>
+                <Button size="sm" onClick={() => setAddMemoryOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Memory
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {memories.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No memories yet. Add memories to give this agent persistent knowledge.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Content</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Scope</TableHead>
+                        <TableHead>Tags</TableHead>
+                        <TableHead>Access Count</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {memories.map((mem) => (
+                        <TableRow key={mem.id}>
+                          <TableCell className="text-sm max-w-[300px] truncate">
+                            {mem.content}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">{mem.type}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-xs">{mem.scope}</Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {mem.tags && mem.tags.length > 0 ? (
+                              <div className="flex gap-1 flex-wrap">
+                                {mem.tags.map((tag, idx) => (
+                                  <span key={idx} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted text-[10px]">
+                                    <Tag className="h-2.5 w-2.5" />{tag}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : '--'}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {mem.accessCount}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Files Tab ── */}
+        <TabsContent value="files" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Files</CardTitle>
+                  <CardDescription className="text-xs mt-1">
+                    Files uploaded for this agent
+                  </CardDescription>
+                </div>
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        uploadFileMutation.mutate(file)
+                        e.target.value = ''
+                      }
+                    }}
+                  />
+                  <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploadFileMutation.isPending}>
+                    {uploadFileMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    Upload File
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {files.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No files uploaded yet. Upload files to make them available to this agent.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Size</TableHead>
+                        <TableHead>Uploaded By</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead className="w-10"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {files.map((file) => (
+                        <TableRow key={file.id}>
+                          <TableCell className="text-sm font-medium">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                              {file.name}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{file.mimeType}</TableCell>
+                          <TableCell className="text-sm">{formatFileSize(file.size)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground font-mono">
+                            {file.uploadedBy?.slice(0, 8) || '--'}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDateTime(file.createdAt)}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={async () => {
+                                try {
+                                  const response = await filesApi.download(file.id)
+                                  const blob = new Blob([response.data])
+                                  const url = URL.createObjectURL(blob)
+                                  const a = document.createElement('a')
+                                  a.href = url
+                                  a.download = file.name
+                                  a.click()
+                                  URL.revokeObjectURL(url)
+                                } catch (err: any) {
+                                  errorNotif('Download Failed', err?.message || 'Failed to download file')
+                                }
+                              }}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Interfaces Tab ── */}
+        <TabsContent value="interfaces" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold">Deployed Interfaces</h3>
+              <p className="text-xs text-muted-foreground">Channels where this agent is accessible</p>
             </div>
-            <CardDescription className="text-xs">
-              Current: v{agent.version}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {versions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No version snapshots yet. Versions are saved automatically when the pipeline is updated.
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                {versions.map((v, index) => (
-                  <div key={index} className="flex items-center justify-between text-sm p-2 rounded-md bg-muted">
-                    <div className="min-w-0">
-                      <div className="font-medium text-xs">v{v.version}</div>
-                      <div className="text-xs text-muted-foreground truncate">{v.changelog}</div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {v.savedAt ? formatDateTime(v.savedAt) : ''}
+            <Button size="sm" onClick={() => setDeployInterfaceOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Deploy Interface
+            </Button>
+          </div>
+
+          {interfaces.length === 0 ? (
+            <Card>
+              <CardContent className="py-8">
+                <p className="text-sm text-muted-foreground text-center">
+                  No interfaces deployed yet. Deploy an interface to make this agent accessible via chat widgets, Slack, Discord, and more.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {interfaces.map((iface) => (
+                <Card key={iface.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{interfaceTypeIcons[iface.type] || '🔌'}</span>
+                        <div>
+                          <div className="font-medium text-sm">{iface.name}</div>
+                          <div className="text-xs text-muted-foreground">{iface.type.replace('_', ' ')}</div>
+                        </div>
+                      </div>
+                      <Badge variant={interfaceStatusVariant[iface.status] || 'secondary'}>
+                        {iface.status}
+                      </Badge>
+                    </div>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <MessageSquare className="h-3 w-3" />
+                        <span>{iface.totalMessages} message{iface.totalMessages !== 1 ? 's' : ''}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        <span>Last active: {iface.lastMessageAt ? formatDateTime(iface.lastMessageAt) : 'Never'}</span>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 text-xs"
-                      onClick={() => setRollbackIndex(index)}
-                    >
-                      <RotateCcw className="h-3 w-3 mr-1" />
-                      Rollback
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Audit Log */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-base">Audit Log</CardTitle>
-          </div>
-          <CardDescription className="text-xs">
-            History of changes made to this agent
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {auditLog.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No audit entries yet.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Timestamp</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[...auditLog].reverse().map((entry, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDateTime(entry.timestamp)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {entry.action.replace(/_/g, ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground font-mono">
-                        {entry.userId?.slice(0, 8) || '--'}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                        {entry.details ? JSON.stringify(entry.details) : '--'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Rollback Confirmation */}
       <AlertDialog open={rollbackIndex !== null} onOpenChange={(open) => { if (!open) setRollbackIndex(null) }}>
@@ -1000,6 +1585,131 @@ console.log(r2.choices[0].message.content);`,
                 {(invokeMutation.error as any)?.message || 'Execution failed'}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Memory Dialog */}
+      <Dialog open={addMemoryOpen} onOpenChange={setAddMemoryOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Memory</DialogTitle>
+            <DialogDescription>
+              Create a new memory entry scoped to this agent.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="memory-content">Content</Label>
+              <Textarea
+                id="memory-content"
+                placeholder="Enter memory content..."
+                value={newMemoryContent}
+                onChange={(e) => setNewMemoryContent(e.target.value)}
+                className="mt-1"
+                rows={4}
+              />
+            </div>
+            <div>
+              <Label htmlFor="memory-type">Type</Label>
+              <Select value={newMemoryType} onValueChange={setNewMemoryType}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fact">Fact</SelectItem>
+                  <SelectItem value="preference">Preference</SelectItem>
+                  <SelectItem value="context">Context</SelectItem>
+                  <SelectItem value="episode">Episode</SelectItem>
+                  <SelectItem value="instruction">Instruction</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="memory-tags">Tags (comma-separated)</Label>
+              <Input
+                id="memory-tags"
+                placeholder="tag1, tag2, tag3"
+                value={newMemoryTags}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewMemoryTags(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <Button
+              className="w-full"
+              disabled={!newMemoryContent.trim() || addMemoryMutation.isPending}
+              onClick={() => addMemoryMutation.mutate()}
+            >
+              {addMemoryMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Brain className="h-4 w-4 mr-2" />
+                  Add Memory
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deploy Interface Dialog */}
+      <Dialog open={deployInterfaceOpen} onOpenChange={setDeployInterfaceOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Deploy Interface</DialogTitle>
+            <DialogDescription>
+              Deploy this agent to a new channel.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="interface-type">Type</Label>
+              <Select value={newInterfaceType} onValueChange={setNewInterfaceType}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="chat_widget">Chat Widget</SelectItem>
+                  <SelectItem value="slack">Slack</SelectItem>
+                  <SelectItem value="discord">Discord</SelectItem>
+                  <SelectItem value="telegram">Telegram</SelectItem>
+                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="webhook">Webhook</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="interface-name">Name</Label>
+              <Input
+                id="interface-name"
+                placeholder={`${newInterfaceType.replace('_', ' ')} interface`}
+                value={newInterfaceName}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewInterfaceName(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <Button
+              className="w-full"
+              disabled={deployInterfaceMutation.isPending}
+              onClick={() => deployInterfaceMutation.mutate()}
+            >
+              {deployInterfaceMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deploying...
+                </>
+              ) : (
+                <>
+                  <Plug className="h-4 w-4 mr-2" />
+                  Deploy
+                </>
+              )}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

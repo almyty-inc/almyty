@@ -11,6 +11,10 @@ import {
 } from 'typeorm';
 import { Organization } from './organization.entity';
 import { AgentExecution } from './agent-execution.entity';
+import { AgentRun } from './agent-run.entity';
+import { AgentMode } from './agent-run.entity';
+
+export { AgentMode };
 
 export enum AgentStatus {
   DRAFT = 'draft',
@@ -79,6 +83,30 @@ export class Agent {
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
 
+  @Column({ type: 'varchar', default: 'workflow' })
+  mode: 'workflow' | 'autonomous';
+
+  @Column({ type: 'text', nullable: true })
+  instructions: string;
+
+  @Column({ type: 'uuid', array: true, default: '{}' })
+  toolIds: string[];
+
+  @Column({ type: 'json', nullable: true })
+  modelConfig: {
+    providerId?: string;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  };
+
+  @Column({ type: 'json', nullable: true })
+  memoryConfig: {
+    enabled?: boolean;
+    autoSave?: boolean;
+    scopes?: string[];
+  };
+
   @Column({ type: 'varchar', nullable: true })
   webhookUrl: string;
 
@@ -116,6 +144,9 @@ export class Agent {
     cascade: true,
   })
   executions: AgentExecution[];
+
+  @OneToMany(() => AgentRun, run => run.agent, { cascade: true })
+  runs: AgentRun[];
 
   // Methods
   isActive(): boolean {

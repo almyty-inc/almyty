@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AgentsController } from '../agents.controller';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
+import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentSchedulerService } from '../agent-scheduler.service';
 import { AgentAuditService } from '../agent-audit.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -57,6 +58,16 @@ describe('AgentsController', () => {
       getAuditLog: jest.fn().mockResolvedValue([]),
     };
 
+    const mockRuntimeService = {
+      startRun: jest.fn(),
+      listRuns: jest.fn(),
+      getRun: jest.fn(),
+      cancelRun: jest.fn(),
+      sendInput: jest.fn(),
+      getRunEmitter: jest.fn().mockReturnValue(null),
+      processStep: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AgentsController],
       providers: [
@@ -67,6 +78,10 @@ describe('AgentsController', () => {
         {
           provide: AgentExecutionEngine,
           useValue: mockExecutionEngine,
+        },
+        {
+          provide: AgentRuntimeService,
+          useValue: mockRuntimeService,
         },
         {
           provide: AgentSchedulerService,

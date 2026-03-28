@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsObject, IsEnum, IsUrl } from 'class-validator';
+import { IsString, IsOptional, IsObject, IsEnum, IsArray, IsUrl } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { AgentStatus } from '../../../entities/agent.entity';
 
@@ -25,6 +25,10 @@ export class UpdateAgentDto {
   version?: string;
 
   @IsOptional()
+  @IsEnum(['workflow', 'autonomous'])
+  mode?: 'workflow' | 'autonomous';
+
+  @IsOptional()
   @IsObject()
   pipeline?: {
     nodes: Array<{
@@ -41,6 +45,31 @@ export class UpdateAgentDto {
       label?: string;
       condition?: string;
     }>;
+  };
+
+  @IsOptional()
+  @IsString()
+  instructions?: string;
+
+  @IsOptional()
+  @IsArray()
+  toolIds?: string[];
+
+  @IsOptional()
+  @IsObject()
+  modelConfig?: {
+    providerId?: string;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  };
+
+  @IsOptional()
+  @IsObject()
+  memoryConfig?: {
+    enabled?: boolean;
+    autoSave?: boolean;
+    scopes?: string[];
   };
 
   @IsOptional()
