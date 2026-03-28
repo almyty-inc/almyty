@@ -31,6 +31,11 @@ import { UsageMetric } from './entities/usage-metric.entity';
 import { RequestLog } from './entities/request-log.entity';
 import { Agent } from './entities/agent.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
+import { AgentRun } from './entities/agent-run.entity';
+import { Memory } from './entities/memory.entity';
+import { AgentInterface } from './entities/interface.entity';
+import { AgentFile } from './entities/file.entity';
+import { AuditLog } from './entities/audit-log.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -50,6 +55,10 @@ import { HealthModule } from './modules/health/health.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { CredentialsModule } from './modules/credentials/credentials.module';
 import { AgentsModule } from './modules/agents/agents.module';
+import { MemoryModule } from './modules/memory/memory.module';
+import { FilesModule } from './modules/files/files.module';
+import { InterfacesModule } from './modules/interfaces/interfaces.module';
+import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { UnifiedEndpointModule } from './modules/gateways/unified-endpoint.module';
 import { MailModule } from './modules/mail/mail.module';
 
@@ -115,6 +124,11 @@ import { databaseConfig } from './config/database.config';
       RequestLog,
       Agent,
       AgentExecution,
+      AgentRun,
+      Memory,
+      AgentInterface,
+      AgentFile,
+      AuditLog,
     ]),
 
     // Rate limiting
@@ -173,6 +187,10 @@ import { databaseConfig } from './config/database.config';
     MailModule,
     CredentialsModule,
     AgentsModule,
+    MemoryModule,
+    FilesModule,
+    InterfacesModule,
+    AuditLogModule,
     // MUST be last — wildcard /:orgSlug/:resourceSlug catches everything
     UnifiedEndpointModule,
   ],

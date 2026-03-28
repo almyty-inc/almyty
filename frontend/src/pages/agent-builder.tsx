@@ -29,11 +29,14 @@ import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { NodePalette } from '@/components/agents/node-palette'
 import { NodeConfigPanel } from '@/components/agents/node-config-panel'
 import { nodeTypes, type PipelineNodeType } from '@/components/agents/nodes'
-import { agentsApi } from '@/lib/api'
+import { agentsApi, llmProvidersApi, toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { cn } from '@/lib/utils'
 import type { Agent, PipelineNode, PipelineEdge } from '@/types'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
   { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } },
@@ -95,6 +98,11 @@ export function AgentBuilderPage() {
   const [agentName, setAgentName] = useState('New Agent')
   const [agentDescription, setAgentDescription] = useState('')
   const [agentStatus, setAgentStatus] = useState<string>('draft')
+  const [agentMode, setAgentMode] = useState<'workflow' | 'autonomous'>('workflow')
+  const [agentInstructions, setAgentInstructions] = useState('')
+  const [agentToolIds, setAgentToolIds] = useState<string[]>([])
+  const [agentModelConfig, setAgentModelConfig] = useState<{ providerId?: string; model?: string; temperature?: number; maxTokens?: number }>({})
+  const [agentMemoryConfig, setAgentMemoryConfig] = useState<{ enabled?: boolean; autoSave?: boolean }>({ enabled: false, autoSave: false })
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([] as Node[])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([] as Edge[])
@@ -218,6 +226,19 @@ export function AgentBuilderPage() {
     enabled: isEditing,
   })
 
+  // Fetch available tools (for autonomous mode)
+  const { data: availableTools } = useQuery({
+    queryKey: ['tools-list', currentOrganization?.id],
+    queryFn: () => toolsApi.getAll(currentOrganization?.id),
+    enabled: !!currentOrganization?.id,
+  })
+
+  // Fetch LLM providers (for autonomous mode)
+  const { data: availableProviders } = useQuery({
+    queryKey: ['llm-providers'],
+    queryFn: () => llmProvidersApi.getAll(),
+  })
+
   // Fetch templates for template-based creation
   const { data: templatesData } = useQuery({
     queryKey: ['agent-templates'],
@@ -237,6 +258,11 @@ export function AgentBuilderPage() {
       setAgentName(agent.name)
       setAgentDescription(agent.description || '')
       setAgentStatus(agent.status)
+      setAgentMode(agent.mode || 'workflow')
+      setAgentInstructions(agent.instructions || '')
+      setAgentToolIds(agent.toolIds || [])
+      setAgentModelConfig(agent.modelConfig || {})
+      setAgentMemoryConfig(agent.memoryConfig || { enabled: false, autoSave: false })
       const pipelineNodes = (agent.pipeline?.nodes || []).map((n: PipelineNode) => ({
         id: n.id,
         type: n.type,
@@ -378,25 +404,35 @@ export function AgentBuilderPage() {
       errors.push('Agent name is required')
     }
 
-    const hasInput = nodes.some((n) => n.type === 'input')
-    const hasOutput = nodes.some((n) => n.type === 'output')
-    if (!hasInput) {
-      errors.push('Pipeline must have at least one Input node')
-    }
-    if (!hasOutput) {
-      errors.push('Pipeline must have at least one Output node')
-    }
+    if (agentMode === 'workflow') {
+      const hasInput = nodes.some((n) => n.type === 'input')
+      const hasOutput = nodes.some((n) => n.type === 'output')
+      if (!hasInput) {
+        errors.push('Pipeline must have at least one Input node')
+      }
+      if (!hasOutput) {
+        errors.push('Pipeline must have at least one Output node')
+      }
 
-    // Check that all LLM call nodes have a provider selected
-    const llmNodes = nodes.filter((n) => n.type === 'llm_call')
-    for (const llmNode of llmNodes) {
-      if (!llmNode.data?.providerId) {
-        errors.push(`LLM Call node "${llmNode.id}" is missing a provider`)
+      // Check that all LLM call nodes have a provider selected
+      const llmNodes = nodes.filter((n) => n.type === 'llm_call')
+      for (const llmNode of llmNodes) {
+        if (!llmNode.data?.providerId) {
+          errors.push(`LLM Call node "${llmNode.id}" is missing a provider`)
+        }
+      }
+    } else {
+      // Autonomous mode validation
+      if (!agentInstructions.trim()) {
+        errors.push('Instructions are required for autonomous agents')
+      }
+      if (!agentModelConfig.providerId) {
+        errors.push('A model provider must be selected')
       }
     }
 
     return errors
-  }, [agentName, nodes])
+  }, [agentName, agentMode, agentInstructions, agentModelConfig, nodes])
 
   const canSave = validationErrors.length === 0
 
@@ -425,19 +461,28 @@ export function AgentBuilderPage() {
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const pipeline = buildPipeline()
-      if (isEditing) {
-        return agentsApi.update(id!, {
-          name: agentName,
-          description: agentDescription || undefined,
-          pipeline,
-        })
+      const payload: any = {
+        name: agentName,
+        description: agentDescription || undefined,
+        mode: agentMode,
+      }
+
+      if (agentMode === 'workflow') {
+        payload.pipeline = buildPipeline()
       } else {
-        return agentsApi.create({
-          name: agentName,
-          description: agentDescription || undefined,
-          pipeline,
-        }, currentOrganization?.id)
+        // Autonomous mode — save instructions + tools + model config
+        payload.instructions = agentInstructions
+        payload.toolIds = agentToolIds
+        payload.modelConfig = agentModelConfig
+        payload.memoryConfig = agentMemoryConfig
+        // Keep a minimal pipeline for backward compat
+        payload.pipeline = payload.pipeline || { nodes: [], edges: [] }
+      }
+
+      if (isEditing) {
+        return agentsApi.update(id!, payload)
+      } else {
+        return agentsApi.create(payload, currentOrganization?.id)
       }
     },
     onSuccess: async (res) => {
@@ -482,6 +527,20 @@ export function AgentBuilderPage() {
           <Badge variant={agentStatus === 'active' ? 'success' : agentStatus === 'error' ? 'destructive' : 'outline'} className="hidden sm:inline-flex">
             {agentStatus}
           </Badge>
+          <div className="hidden sm:flex items-center gap-1 ml-2 bg-muted rounded-md p-0.5">
+            <button
+              className={cn('px-2 py-1 text-xs rounded font-medium transition-colors', agentMode === 'workflow' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground')}
+              onClick={() => setAgentMode('workflow')}
+            >
+              Workflow
+            </button>
+            <button
+              className={cn('px-2 py-1 text-xs rounded font-medium transition-colors', agentMode === 'autonomous' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground')}
+              onClick={() => setAgentMode('autonomous')}
+            >
+              Autonomous
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-1 sm:gap-2">
           <Button
@@ -579,7 +638,145 @@ export function AgentBuilderPage() {
         </div>
       )}
 
-      {/* Three-panel Layout */}
+      {/* Main content: Workflow pipeline or Autonomous config */}
+      {agentMode === 'autonomous' ? (
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-4xl mx-auto w-full space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Agent Instructions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={agentInstructions}
+                onChange={(e) => setAgentInstructions(e.target.value)}
+                placeholder="You are a helpful assistant that..."
+                className="min-h-[200px] font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                System prompt that defines the agent's behavior, personality, and goals.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Model Configuration</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm">Provider</Label>
+                  <Select value={agentModelConfig.providerId || ''} onValueChange={(v) => setAgentModelConfig({ ...agentModelConfig, providerId: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
+                    <SelectContent>
+                      {(Array.isArray(availableProviders) ? availableProviders : []).map((p: any) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name} ({p.type})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Model</Label>
+                  <Input
+                    value={agentModelConfig.model || ''}
+                    onChange={(e) => setAgentModelConfig({ ...agentModelConfig, model: e.target.value })}
+                    placeholder="e.g. gpt-4o, claude-sonnet-4-20250514"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Temperature</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={2}
+                    step={0.1}
+                    value={agentModelConfig.temperature ?? 0.7}
+                    onChange={(e) => setAgentModelConfig({ ...agentModelConfig, temperature: parseFloat(e.target.value) })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Max Tokens</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={200000}
+                    value={agentModelConfig.maxTokens ?? 4096}
+                    onChange={(e) => setAgentModelConfig({ ...agentModelConfig, maxTokens: parseInt(e.target.value) })}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Tools</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground mb-3">Select which tools this agent can use during execution.</p>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {(Array.isArray(availableTools) ? availableTools : []).map((tool: any) => (
+                  <label key={tool.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={agentToolIds.includes(tool.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setAgentToolIds([...agentToolIds, tool.id])
+                        } else {
+                          setAgentToolIds(agentToolIds.filter((id) => id !== tool.id))
+                        }
+                      }}
+                      className="rounded"
+                    />
+                    <div>
+                      <p className="text-sm font-medium">{tool.name}</p>
+                      {tool.description && <p className="text-xs text-muted-foreground">{tool.description}</p>}
+                    </div>
+                  </label>
+                ))}
+                {(Array.isArray(availableTools) ? availableTools : []).length === 0 && (
+                  <p className="text-sm text-muted-foreground py-4 text-center">No tools available. Create tools first.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Memory</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={agentMemoryConfig.enabled || false}
+                  onChange={(e) => setAgentMemoryConfig({ ...agentMemoryConfig, enabled: e.target.checked })}
+                  className="rounded"
+                />
+                <div>
+                  <p className="text-sm font-medium">Enable Memory</p>
+                  <p className="text-xs text-muted-foreground">Agent will recall relevant memories before each LLM call</p>
+                </div>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={agentMemoryConfig.autoSave || false}
+                  onChange={(e) => setAgentMemoryConfig({ ...agentMemoryConfig, autoSave: e.target.checked })}
+                  className="rounded"
+                />
+                <div>
+                  <p className="text-sm font-medium">Auto-save Memories</p>
+                  <p className="text-xs text-muted-foreground">Automatically extract and save key facts from conversations</p>
+                </div>
+              </label>
+            </CardContent>
+          </Card>
+
+          <div className="h-8" /> {/* Bottom spacer */}
+        </div>
+      ) : (
       <div className="flex flex-1 overflow-hidden relative">
         {/* Left: Palette — visible on lg+, hidden on mobile */}
         <div className="hidden lg:block">
@@ -672,9 +869,10 @@ export function AgentBuilderPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Test Panel */}
-      {showTestPanel && isEditing && (
+      {showTestPanel && isEditing && agentMode === 'workflow' && (
         <div className="border-t bg-muted/30 shrink-0">
           <div className="flex items-center justify-between px-4 py-2 border-b">
             <span className="text-sm font-semibold">Test Agent</span>

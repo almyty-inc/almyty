@@ -437,6 +437,81 @@ export const agentsApi = {
   schedule: (id: string, intervalMinutes: number, input?: any) =>
     apiPost(`/agents/${id}/schedule`, { intervalMinutes, input }),
   unschedule: (id: string) => apiDel(`/agents/${id}/schedule`),
+  // Runs (autonomous mode)
+  startRun: (id: string, input: any, options?: any) => apiPost(`/agents/${id}/runs`, { input, ...options }),
+  listRuns: (id: string, params?: any) => apiGet(`/agents/${id}/runs`, { params }),
+  getRun: (id: string, runId: string) => apiGet(`/agents/${id}/runs/${runId}`),
+  cancelRun: (id: string, runId: string) => apiPost(`/agents/${id}/runs/${runId}/cancel`),
+  sendRunInput: (id: string, runId: string, input: string) => apiPost(`/agents/${id}/runs/${runId}/input`, { input }),
+  // Interfaces
+  getInterfaces: (id: string) => apiGet(`/interfaces?agentId=${id}`),
+}
+
+// Runs API (standalone access)
+export const runsApi = {
+  getRun: (runId: string) => apiGet(`/agents/runs/${runId}`),
+}
+
+// Memories API
+export const memoriesApi = {
+  getAll: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return apiGet(`/memories${qs}`)
+  },
+  getById: (id: string) => apiGet(`/memories/${id}`),
+  create: (data: any) => apiPost('/memories', data),
+  update: (id: string, data: any) => apiPatch(`/memories/${id}`, data),
+  delete: (id: string) => apiDel(`/memories/${id}`),
+  search: (query: string, options?: { agentId?: string; limit?: number; scope?: string; type?: string }) =>
+    apiPost('/memories/search', { query, ...options }),
+  getTags: () => apiGet('/memories/tags'),
+  bulkCreate: (items: any[]) => apiPost('/memories/bulk', { items }),
+}
+
+// Files API
+export const filesApi = {
+  getAll: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return apiGet(`/files${qs}`)
+  },
+  getById: (id: string) => apiGet(`/files/${id}`),
+  upload: (file: File, agentId?: string, runId?: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const params = new URLSearchParams()
+    if (agentId) params.set('agentId', agentId)
+    if (runId) params.set('runId', runId)
+    const qs = params.toString() ? `?${params.toString()}` : ''
+    return apiPost(`/files/upload${qs}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  download: (id: string) => api.get(`/files/${id}/download`, { responseType: 'blob' }),
+  delete: (id: string) => apiDel(`/files/${id}`),
+}
+
+// Interfaces API
+export const interfacesApi = {
+  getAll: (agentId?: string) => {
+    const qs = agentId ? `?agentId=${agentId}` : ''
+    return apiGet(`/interfaces${qs}`)
+  },
+  getById: (id: string) => apiGet(`/interfaces/${id}`),
+  create: (data: any) => apiPost('/interfaces', data),
+  update: (id: string, data: any) => apiPatch(`/interfaces/${id}`, data),
+  delete: (id: string) => apiDel(`/interfaces/${id}`),
+  activate: (id: string) => apiPost(`/interfaces/${id}/activate`),
+  deactivate: (id: string) => apiPost(`/interfaces/${id}/deactivate`),
+}
+
+// Audit Logs API
+export const auditLogsApi = {
+  getAll: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return apiGet(`/audit-logs${qs}`)
+  },
+  getResourceHistory: (resourceType: string, resourceId: string, limit?: number) =>
+    apiGet(`/audit-logs/resource?resourceType=${resourceType}&resourceId=${resourceId}${limit ? `&limit=${limit}` : ''}`),
 }
 
 // Credentials Vault API

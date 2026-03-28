@@ -23,7 +23,12 @@ export interface CreateAgentInput {
   description?: string;
   status?: AgentStatus;
   version?: string;
-  pipeline: AgentPipeline;
+  mode?: 'workflow' | 'autonomous';
+  pipeline?: AgentPipeline;
+  instructions?: string;
+  toolIds?: string[];
+  modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
+  memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -35,7 +40,12 @@ export interface UpdateAgentInput {
   description?: string;
   status?: AgentStatus;
   version?: string;
+  mode?: 'workflow' | 'autonomous';
   pipeline?: AgentPipeline;
+  instructions?: string;
+  toolIds?: string[];
+  modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
+  memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -90,8 +100,11 @@ export class AgentsService {
         throw new NotFoundException('Organization not found');
       }
 
-      // Validate pipeline
-      this.validatePipeline(createDto.pipeline);
+      // Validate pipeline (only for workflow mode)
+      const mode = createDto.mode || 'workflow';
+      if (mode === 'workflow' && createDto.pipeline) {
+        this.validatePipeline(createDto.pipeline);
+      }
 
       const agent = this.agentRepository.create({
         name: createDto.name,
@@ -99,7 +112,12 @@ export class AgentsService {
         organizationId,
         status: createDto.status || AgentStatus.DRAFT,
         version: createDto.version || '1.0.0',
-        pipeline: createDto.pipeline,
+        mode,
+        pipeline: createDto.pipeline || { nodes: [], edges: [] },
+        instructions: createDto.instructions || null,
+        toolIds: createDto.toolIds || [],
+        modelConfig: createDto.modelConfig || null,
+        memoryConfig: createDto.memoryConfig || null,
         variables: createDto.variables || {},
         settings: createDto.settings || {},
         metadata: createDto.metadata || {},
@@ -224,8 +242,9 @@ export class AgentsService {
       await this.checkAgentPermission(agent, organizationId, userId, 'edit_agents');
     }
 
-    // If pipeline is being updated, validate it and auto-save a version snapshot
-    if (updateDto.pipeline) {
+    // If pipeline is being updated, validate it (only for workflow mode) and auto-save a version snapshot
+    const effectiveMode = updateDto.mode || agent.mode || 'workflow';
+    if (updateDto.pipeline && effectiveMode === 'workflow') {
       this.validatePipeline(updateDto.pipeline, id);
 
       // Auto-save previous pipeline state as a version snapshot

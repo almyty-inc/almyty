@@ -4,6 +4,7 @@ import { BullModule } from '@nestjs/bull';
 
 import { Agent } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
 import { Tool } from '../../entities/tool.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { Gateway } from '../../entities/gateway.entity';
@@ -19,6 +20,8 @@ import { AgentTemplateResolver } from './agent-template-resolver';
 import { AgentWebhookService } from './agent-webhook.service';
 import { AgentSchedulerService } from './agent-scheduler.service';
 import { AgentAuditService } from './agent-audit.service';
+import { AgentRuntimeService } from './agent-runtime.service';
+import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentsController } from './agents.controller';
 import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 
@@ -30,6 +33,7 @@ import { ToolsModule } from '../tools/tools.module';
     TypeOrmModule.forFeature([
       Agent,
       AgentExecution,
+      AgentRun,
       Tool,
       LlmProvider,
       Gateway,
@@ -39,11 +43,12 @@ import { ToolsModule } from '../tools/tools.module';
       ApiKey,
     ]),
     BullModule.registerQueue({ name: 'agent-scheduler' }),
+    BullModule.registerQueue({ name: 'agent-runtime' }),
     forwardRef(() => LlmProvidersModule),
     forwardRef(() => ToolsModule),
   ],
-  providers: [AgentsService, AgentExecutionEngine, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService],
+  providers: [AgentsService, AgentExecutionEngine, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeProcessor],
   controllers: [AgentsController, AgentOpenAICompatController],
-  exports: [AgentsService, AgentExecutionEngine],
+  exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })
 export class AgentsModule {}
