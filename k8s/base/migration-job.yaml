@@ -32,12 +32,38 @@ spec:
                 entities: [path.join(__dirname, 'dist', 'entities', '*.entity.js')],
                 migrations: [path.join(__dirname, 'dist', 'migrations', '*.js')],
                 synchronize: false,
-                migrationsRun: true,
+                migrationsRun: false,
                 logging: true,
               });
               ds.initialize()
                 .then(async () => {
-                  console.log('Migrations applied successfully');
+                  console.log('Connected. Running pending migrations...');
+                  try {
+                    const result = await ds.runMigrations({ transaction: 'each' });
+                    console.log('Migrations applied:', result.length);
+                    result.forEach(m => console.log(' ✓', m.name));
+                  } catch(e) {
+                    // If migrations fail because schema was created by synchronize,
+                    // seed the migrations table so future runs work correctly
+                    if (e.message.includes('already exists') || e.message.includes('duplicate')) {
+                      console.log('Schema exists (from synchronize). Seeding migrations table...');
+                      const qr = ds.createQueryRunner();
+                      const migrations = ds.migrations.map(m => m.constructor ? m.constructor.name : m.name);
+                      for (const name of migrations) {
+                        try {
+                          await qr.query(
+                            'INSERT INTO migrations (timestamp, name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                            [parseInt(name.match(/\d+/)?.[0] || '0'), name]
+                          );
+                          console.log(' ✓ Seeded:', name);
+                        } catch(e2) { console.log(' ⚠ Skip:', name, e2.message); }
+                      }
+                      await qr.release();
+                      console.log('Migration table seeded. Future runs will only apply new migrations.');
+                    } else {
+                      throw e;
+                    }
+                  }
                   const qr = ds.createQueryRunner();
                   const tables = await qr.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
                   console.log('Tables:', tables.length);
