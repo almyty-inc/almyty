@@ -8,6 +8,7 @@ import { LlmProvider } from '../../entities/llm-provider.entity';
 import { Api } from '../../entities/api.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Agent } from '../../entities/agent.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 describe('CredentialsService', () => {
   let service: CredentialsService;
@@ -63,6 +64,21 @@ describe('CredentialsService', () => {
           provide: getRepositoryToken(Agent),
           useValue: {
             findOne: jest.fn(),
+          },
+        },
+        {
+          provide: AuditLogService,
+          useValue: {
+            log: jest.fn().mockResolvedValue(null),
+            logCreate: jest.fn().mockResolvedValue(null),
+            logUpdate: jest.fn().mockResolvedValue(null),
+            logDelete: jest.fn().mockResolvedValue(null),
+            logToolExecution: jest.fn().mockResolvedValue(null),
+            logGatewayRequest: jest.fn().mockResolvedValue(null),
+            logRunEvent: jest.fn().mockResolvedValue(null),
+            computeChanges: jest.fn().mockReturnValue([]),
+            findAll: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 }),
+            getResourceHistory: jest.fn().mockResolvedValue([]),
           },
         },
       ],

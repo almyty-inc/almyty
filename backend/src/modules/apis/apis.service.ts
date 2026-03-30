@@ -12,6 +12,8 @@ import { Organization } from '../../entities/organization.entity';
 
 import { SchemaParserService } from '../schema-parser/schema-parser.service';
 import { ToolsService } from '../tools/tools.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 export interface CreateApiData {
   name: string;
@@ -85,6 +87,7 @@ export class ApisService {
     private organizationRepository: Repository<Organization>,
     private schemaParserService: SchemaParserService,
     private toolsService: ToolsService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async create(createApiData: CreateApiData): Promise<Api> {
@@ -124,7 +127,12 @@ export class ApisService {
       status: ApiStatus.DRAFT,
     });
 
-    return this.apiRepository.save(api);
+    const saved = await this.apiRepository.save(api);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.logCreate(createApiData.organizationId, undefined, AuditResource.API, saved.id, saved.name, { type: saved.type });
+
+    return saved;
   }
 
   async findOne(id: string): Promise<Api | null> {
@@ -158,20 +166,33 @@ export class ApisService {
 
   async update(id: string, updateApiData: UpdateApiData): Promise<Api> {
     const api = await this.findOne(id);
-    
+
     if (!api) {
       throw new NotFoundException('API not found');
     }
 
+    const orgId = api.organizationId;
     Object.assign(api, updateApiData);
-    return this.apiRepository.save(api);
+    const saved = await this.apiRepository.save(api);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.logUpdate(orgId, undefined, AuditResource.API, saved.id, saved.name);
+
+    return saved;
   }
 
   async remove(id: string): Promise<void> {
+    const api = await this.apiRepository.findOne({ where: { id } });
+
     const result = await this.apiRepository.delete(id);
-    
+
     if (result.affected === 0) {
       throw new NotFoundException('API not found');
+    }
+
+    // Audit log (fire-and-forget)
+    if (api) {
+      this.auditLogService.logDelete(api.organizationId, undefined, AuditResource.API, id, api.name);
     }
   }
 

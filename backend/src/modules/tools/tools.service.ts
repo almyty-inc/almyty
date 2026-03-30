@@ -11,6 +11,8 @@ import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 export interface CreateToolDto {
   name: string;
@@ -111,6 +113,7 @@ export class ToolsService {
     private userRepository: Repository<User>,
     @InjectRepository(Organization)
     private organizationRepository: Repository<Organization>,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async createTool(
@@ -194,6 +197,9 @@ export class ToolsService {
 
       this.logger.log(`Tool '${savedTool.name}' created by user ${userId} in organization ${organizationId}`);
 
+      // Audit log (fire-and-forget)
+      this.auditLogService.logCreate(organizationId, userId, AuditResource.TOOL, savedTool.id, savedTool.name);
+
       return savedTool;
 
     } catch (error) {
@@ -227,6 +233,9 @@ export class ToolsService {
       if (!user?.hasPermissionInOrganization(organizationId, 'edit_tools') && tool.createdBy !== userId) {
         throw new ForbiddenException('User does not have permission to edit this tool');
       }
+
+      // Capture old values for change tracking (before mutation)
+      const oldValues = { name: tool.name, description: tool.description, parameters: tool.parameters, code: tool.code, configuration: tool.configuration, metadata: tool.metadata };
 
       // Handle categories update
       if (updateToolDto.categoryIds !== undefined) {
@@ -286,6 +295,10 @@ export class ToolsService {
       await this.createToolVersion(updatedTool, 'Tool updated', userId);
 
       this.logger.log(`Tool '${updatedTool.name}' updated by user ${userId}`);
+
+      // Audit log (fire-and-forget)
+      const changes = this.auditLogService.computeChanges(oldValues, updateToolDto, ['name', 'description', 'parameters', 'code', 'configuration', 'metadata']);
+      this.auditLogService.logUpdate(organizationId, userId, AuditResource.TOOL, updatedTool.id, updatedTool.name, changes);
 
       return updatedTool;
 
@@ -442,6 +455,9 @@ export class ToolsService {
 
     this.logger.log(`Tool '${tool.name}' activated by user ${userId}`);
 
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, userId, action: AuditAction.TOOL_ACTIVATE, resourceType: AuditResource.TOOL, resourceId: tool.id, resourceName: tool.name });
+
     return updatedTool;
   }
 
@@ -475,6 +491,9 @@ export class ToolsService {
 
     this.logger.log(`Tool '${tool.name}' deactivated by user ${userId}`);
 
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, userId, action: AuditAction.TOOL_DEACTIVATE, resourceType: AuditResource.TOOL, resourceId: tool.id, resourceName: tool.name });
+
     return updatedTool;
   }
 
@@ -502,6 +521,9 @@ export class ToolsService {
     await this.toolRepository.save(tool);
 
     this.logger.log(`Tool '${tool.name}' deleted by user ${userId}`);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.logDelete(organizationId, userId, AuditResource.TOOL, tool.id, tool.name);
   }
 
   async getToolVersions(

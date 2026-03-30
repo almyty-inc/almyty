@@ -9,6 +9,7 @@ import { Operation } from '../../entities/operation.entity';
 import { User } from '../../entities/user.entity';
 import { Credential } from '../../entities/credential.entity';
 import { CustomCodeExecutorService } from './custom-code-executor.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import axios from 'axios';
 
 jest.mock('axios', () => {
@@ -95,6 +96,21 @@ describe('ToolExecutorService', () => {
           useValue: {
             executeCode: jest.fn().mockResolvedValue({ success: true, data: null, executionTime: 0 }),
             validateCode: jest.fn().mockReturnValue({ valid: true }),
+          },
+        },
+        {
+          provide: AuditLogService,
+          useValue: {
+            log: jest.fn().mockResolvedValue(null),
+            logCreate: jest.fn().mockResolvedValue(null),
+            logUpdate: jest.fn().mockResolvedValue(null),
+            logDelete: jest.fn().mockResolvedValue(null),
+            logToolExecution: jest.fn().mockResolvedValue(null),
+            logGatewayRequest: jest.fn().mockResolvedValue(null),
+            logRunEvent: jest.fn().mockResolvedValue(null),
+            computeChanges: jest.fn().mockReturnValue([]),
+            findAll: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 }),
+            getResourceHistory: jest.fn().mockResolvedValue([]),
           },
         },
       ],

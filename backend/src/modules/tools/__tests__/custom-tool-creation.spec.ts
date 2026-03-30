@@ -10,6 +10,7 @@ import { ApiSchema } from '../../../entities/api-schema.entity';
 import { Operation } from '../../../entities/operation.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { User } from '../../../entities/user.entity';
+import { AuditLogService } from '../../audit-log/audit-log.service';
 
 describe('ToolsService - Custom Tool Creation', () => {
   let service: ToolsService;
@@ -60,6 +61,21 @@ describe('ToolsService - Custom Tool Creation', () => {
         { provide: getRepositoryToken(Operation), useValue: { findOne: jest.fn() } },
         { provide: getRepositoryToken(ToolExecution), useValue: {} },
         { provide: getRepositoryToken(ApiSchema), useValue: {} },
+        {
+          provide: AuditLogService,
+          useValue: {
+            log: jest.fn().mockResolvedValue(null),
+            logCreate: jest.fn().mockResolvedValue(null),
+            logUpdate: jest.fn().mockResolvedValue(null),
+            logDelete: jest.fn().mockResolvedValue(null),
+            logToolExecution: jest.fn().mockResolvedValue(null),
+            logGatewayRequest: jest.fn().mockResolvedValue(null),
+            logRunEvent: jest.fn().mockResolvedValue(null),
+            computeChanges: jest.fn().mockReturnValue([]),
+            findAll: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 }),
+            getResourceHistory: jest.fn().mockResolvedValue([]),
+          },
+        },
       ],
     }).compile();
 

@@ -103,6 +103,13 @@ export function AgentBuilderPage() {
   const [agentToolIds, setAgentToolIds] = useState<string[]>([])
   const [agentModelConfig, setAgentModelConfig] = useState<{ providerId?: string; model?: string; temperature?: number; maxTokens?: number }>({})
   const [agentMemoryConfig, setAgentMemoryConfig] = useState<{ enabled?: boolean; autoSave?: boolean }>({ enabled: false, autoSave: false })
+  const [agentCollaboration, setAgentCollaboration] = useState<{
+    enabled: boolean;
+    strategy: 'sequential' | 'parallel' | 'race' | 'debate';
+    agents: { agentId: string; role?: string }[];
+    judgeAgentId?: string;
+    maxRounds?: number;
+  }>({ enabled: false, strategy: 'sequential', agents: [] })
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([] as Node[])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([] as Edge[])
@@ -241,6 +248,13 @@ export function AgentBuilderPage() {
   })
   const availableProviders = Array.isArray(rawProviders) ? rawProviders : (rawProviders as any)?.providers || []
 
+  // Fetch available agents (for collaboration)
+  const { data: rawAgents } = useQuery({
+    queryKey: ['agents-list'],
+    queryFn: () => agentsApi.getAll(),
+  })
+  const availableAgents = Array.isArray(rawAgents) ? rawAgents : (rawAgents as any)?.data || []
+
   // Fetch templates for template-based creation
   const { data: templatesData } = useQuery({
     queryKey: ['agent-templates'],
@@ -265,6 +279,9 @@ export function AgentBuilderPage() {
       setAgentToolIds(agent.toolIds || [])
       setAgentModelConfig(agent.modelConfig || {})
       setAgentMemoryConfig(agent.memoryConfig || { enabled: false, autoSave: false })
+      if (agent.collaboration) {
+        setAgentCollaboration({ enabled: true, ...agent.collaboration })
+      }
       const pipelineNodes = (agent.pipeline?.nodes || []).map((n: PipelineNode) => ({
         id: n.id,
         type: n.type,
@@ -477,6 +494,16 @@ export function AgentBuilderPage() {
         payload.toolIds = agentToolIds
         payload.modelConfig = agentModelConfig
         payload.memoryConfig = agentMemoryConfig
+        if (agentCollaboration.enabled && agentCollaboration.agents.length > 0) {
+          payload.collaboration = {
+            strategy: agentCollaboration.strategy,
+            agents: agentCollaboration.agents,
+            judgeAgentId: agentCollaboration.judgeAgentId,
+            maxRounds: agentCollaboration.maxRounds,
+          }
+        } else {
+          payload.collaboration = null
+        }
         // Keep a minimal pipeline for backward compat
         payload.pipeline = payload.pipeline || { nodes: [], edges: [] }
       }
@@ -773,6 +800,106 @@ export function AgentBuilderPage() {
                   <p className="text-xs text-muted-foreground">Automatically extract and save key facts from conversations</p>
                 </div>
               </label>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Collaboration</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={agentCollaboration.enabled}
+                  onChange={(e) => setAgentCollaboration({ ...agentCollaboration, enabled: e.target.checked })}
+                  className="rounded"
+                />
+                <div>
+                  <p className="text-sm font-medium">Enable Multi-Agent Collaboration</p>
+                  <p className="text-xs text-muted-foreground">Multiple agents work together on each request</p>
+                </div>
+              </label>
+
+              {agentCollaboration.enabled && (
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Strategy</Label>
+                    <Select value={agentCollaboration.strategy} onValueChange={(v: any) => setAgentCollaboration({ ...agentCollaboration, strategy: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sequential">Sequential — agents run one after another, piping output to input</SelectItem>
+                        <SelectItem value="parallel">Parallel — all agents run simultaneously, results merged</SelectItem>
+                        <SelectItem value="race">Race — all agents run, first to finish wins</SelectItem>
+                        <SelectItem value="debate">Debate — agents discuss in rounds, judge synthesizes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm">Participating Agents</Label>
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                      {availableAgents
+                        .filter((a: any) => a.id !== id)
+                        .map((agent: any) => (
+                          <label key={agent.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={agentCollaboration.agents.some(a => a.agentId === agent.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setAgentCollaboration({
+                                    ...agentCollaboration,
+                                    agents: [...agentCollaboration.agents, { agentId: agent.id }],
+                                  })
+                                } else {
+                                  setAgentCollaboration({
+                                    ...agentCollaboration,
+                                    agents: agentCollaboration.agents.filter(a => a.agentId !== agent.id),
+                                  })
+                                }
+                              }}
+                              className="rounded"
+                            />
+                            <div>
+                              <p className="text-sm font-medium">{agent.name}</p>
+                              {agent.description && <p className="text-xs text-muted-foreground">{agent.description}</p>}
+                            </div>
+                          </label>
+                        ))}
+                      {availableAgents.filter((a: any) => a.id !== id).length === 0 && (
+                        <p className="text-sm text-muted-foreground py-2 text-center">No other agents available.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {agentCollaboration.strategy === 'debate' && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm">Judge Agent</Label>
+                        <Select value={agentCollaboration.judgeAgentId || ''} onValueChange={(v) => setAgentCollaboration({ ...agentCollaboration, judgeAgentId: v })}>
+                          <SelectTrigger><SelectValue placeholder="Select judge" /></SelectTrigger>
+                          <SelectContent>
+                            {availableAgents.map((a: any) => (
+                              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm">Max Rounds</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={agentCollaboration.maxRounds ?? 3}
+                          onChange={(e) => setAgentCollaboration({ ...agentCollaboration, maxRounds: parseInt(e.target.value) })}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 

@@ -11,6 +11,7 @@ import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 // ─── Helper factories ───────────────────────────────────────────────────────
 
@@ -173,6 +174,21 @@ describe('ToolsService', () => {
         { provide: getRepositoryToken(Operation), useValue: operationRepo },
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: getRepositoryToken(Organization), useValue: organizationRepo },
+        {
+          provide: AuditLogService,
+          useValue: {
+            log: jest.fn().mockResolvedValue(null),
+            logCreate: jest.fn().mockResolvedValue(null),
+            logUpdate: jest.fn().mockResolvedValue(null),
+            logDelete: jest.fn().mockResolvedValue(null),
+            logToolExecution: jest.fn().mockResolvedValue(null),
+            logGatewayRequest: jest.fn().mockResolvedValue(null),
+            logRunEvent: jest.fn().mockResolvedValue(null),
+            computeChanges: jest.fn().mockReturnValue([]),
+            findAll: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 }),
+            getResourceHistory: jest.fn().mockResolvedValue([]),
+          },
+        },
       ],
     }).compile();
 

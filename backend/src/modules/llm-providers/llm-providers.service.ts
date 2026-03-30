@@ -5,6 +5,8 @@ import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 
 import { callOpenAI, callAnthropic, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { LlmSession, SessionStatus, SessionType } from '../../entities/llm-session.entity';
 import { LlmMessage, MessageRole, MessageType, MessageStatus, ToolCall, MessageContent } from '../../entities/llm-message.entity';
 import { User } from '../../entities/user.entity';
@@ -54,6 +56,7 @@ export interface ChatRequest {
   stream?: boolean;
   sessionId?: string;
   gatewayId?: string;
+  skipToolExecution?: boolean; // When true, return tool_calls without executing them (used by agent runtime)
 }
 
 export interface ChatResponse {
@@ -107,6 +110,7 @@ export class LlmProvidersService {
     @InjectRepository(Tool)
     private toolRepository: Repository<Tool>,
     private toolExecutorService: ToolExecutorService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async createProvider(
@@ -153,6 +157,9 @@ export class LlmProvidersService {
       setTimeout(() => this.performHealthCheck(savedProvider.id), 1000);
 
       this.logger.log(`LLM provider '${savedProvider.name}' created for organization ${organizationId}`);
+
+      // Audit log (fire-and-forget)
+      this.auditLogService.logCreate(organizationId, userId, AuditResource.LLM_PROVIDER, savedProvider.id, savedProvider.name, { type: savedProvider.type });
 
       return savedProvider;
 
@@ -209,6 +216,9 @@ export class LlmProvidersService {
       setTimeout(() => this.performHealthCheck(provider.id), 1000);
 
       this.logger.log(`LLM provider '${updatedProvider.name}' updated`);
+
+      // Audit log (fire-and-forget)
+      this.auditLogService.logUpdate(organizationId, userId, AuditResource.LLM_PROVIDER, updatedProvider.id, updatedProvider.name);
 
       return updatedProvider;
 
@@ -313,6 +323,9 @@ export class LlmProvidersService {
     await this.llmProviderRepository.remove(provider);
 
     this.logger.log(`LLM provider '${provider.name}' deleted`);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.logDelete(organizationId, userId, AuditResource.LLM_PROVIDER, providerId, provider.name);
   }
 
   async chat(
@@ -380,7 +393,7 @@ export class LlmProvidersService {
       const maxToolRounds = 5;
       const currentMessages = [...request.messages];
 
-      while (response.message.toolCalls && response.message.toolCalls.length > 0 && toolRound < maxToolRounds) {
+      while (response.message.toolCalls && response.message.toolCalls.length > 0 && toolRound < maxToolRounds && !request.skipToolExecution) {
         toolRound++;
         this.logger.log(`[CHAT] Tool call round ${toolRound}: ${response.message.toolCalls.length} tool(s)`);
 

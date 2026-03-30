@@ -657,6 +657,12 @@ export interface Agent {
     autoSave?: boolean
     scopes?: string[]
   }
+  collaboration?: {
+    strategy: 'sequential' | 'parallel' | 'race' | 'debate'
+    agents: { agentId: string; role?: string }[]
+    judgeAgentId?: string
+    maxRounds?: number
+  }
   variables?: Record<string, any>
   settings?: {
     maxExecutionTime?: number
@@ -856,7 +862,7 @@ export interface AgentAuditEntry {
 
 export type AgentRunMode = 'workflow' | 'autonomous'
 
-export type AgentRunStatus = 'pending' | 'running' | 'waiting_input' | 'completed' | 'failed' | 'cancelled' | 'timeout'
+export type AgentRunStatus = 'pending' | 'running' | 'waiting_input' | 'sleeping' | 'completed' | 'failed' | 'cancelled' | 'timeout'
 
 export interface AgentRunStep {
   type: string

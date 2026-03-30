@@ -29,6 +29,7 @@ export interface CreateAgentInput {
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
+  collaboration?: { strategy: string; agents: { agentId: string; role?: string }[]; judgeAgentId?: string; maxRounds?: number } | null;
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -46,6 +47,7 @@ export interface UpdateAgentInput {
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
+  collaboration?: { strategy: string; agents: { agentId: string; role?: string }[]; judgeAgentId?: string; maxRounds?: number } | null;
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -118,6 +120,7 @@ export class AgentsService {
         toolIds: createDto.toolIds || [],
         modelConfig: createDto.modelConfig || null,
         memoryConfig: createDto.memoryConfig || null,
+        collaboration: createDto.collaboration as Agent['collaboration'] || null,
         variables: createDto.variables || {},
         settings: createDto.settings || {},
         metadata: createDto.metadata || {},

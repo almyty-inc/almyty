@@ -8,6 +8,8 @@ import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 export interface CreateGatewayDto {
   name: string;
@@ -131,6 +133,7 @@ export class GatewaysService {
     private organizationRepository: Repository<Organization>,
     @InjectRepository(UsageMetric)
     private usageMetricRepository: Repository<UsageMetric>,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async createGateway(
@@ -198,6 +201,9 @@ export class GatewaysService {
 
       this.logger.log(`[CREATE_GATEWAY] Gateway '${savedGateway.name}' created successfully in organization ${organizationId}`);
 
+      // Audit log (fire-and-forget)
+      this.auditLogService.logCreate(organizationId, userId, AuditResource.GATEWAY, savedGateway.id, savedGateway.name);
+
       return savedGateway;
 
     } catch (error) {
@@ -231,6 +237,9 @@ export class GatewaysService {
         throw new ForbiddenException('User does not have permission to edit gateways');
       }
 
+      // Capture old values for change tracking (before mutation)
+      const oldValues = { name: gateway.name, description: gateway.description, configuration: gateway.configuration, rateLimitConfig: gateway.rateLimitConfig, metadata: gateway.metadata };
+
       // Update fields
       Object.assign(gateway, updateGatewayDto);
 
@@ -242,6 +251,10 @@ export class GatewaysService {
       const updatedGateway = await this.gatewayRepository.save(gateway);
 
       this.logger.log(`Gateway '${updatedGateway.name}' updated`);
+
+      // Audit log (fire-and-forget)
+      const changes = this.auditLogService.computeChanges(oldValues, updateGatewayDto, ['name', 'description', 'configuration', 'rateLimitConfig', 'metadata']);
+      this.auditLogService.logUpdate(organizationId, userId, AuditResource.GATEWAY, updatedGateway.id, updatedGateway.name, changes);
 
       return updatedGateway;
 
@@ -399,6 +412,9 @@ export class GatewaysService {
 
     this.logger.log(`Gateway '${gateway.name}' activated`);
 
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, userId, action: AuditAction.GATEWAY_ACTIVATE, resourceType: AuditResource.GATEWAY, resourceId: gateway.id, resourceName: gateway.name });
+
     return updatedGateway;
   }
 
@@ -428,6 +444,9 @@ export class GatewaysService {
 
     this.logger.log(`Gateway '${gateway.name}' deactivated`);
 
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, userId, action: AuditAction.GATEWAY_DEACTIVATE, resourceType: AuditResource.GATEWAY, resourceId: gateway.id, resourceName: gateway.name });
+
     return updatedGateway;
   }
 
@@ -451,6 +470,9 @@ export class GatewaysService {
     await this.gatewayRepository.remove(gateway);
 
     this.logger.log(`Gateway '${gateway.name}' deleted`);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.logDelete(organizationId, userId, AuditResource.GATEWAY, gatewayId, gateway.name);
   }
 
   async getGatewayStats(

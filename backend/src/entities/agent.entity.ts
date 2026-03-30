@@ -107,6 +107,14 @@ export class Agent {
     scopes?: string[];
   };
 
+  @Column({ type: 'json', nullable: true })
+  collaboration: {
+    strategy: 'sequential' | 'parallel' | 'race' | 'debate';
+    agents: Array<{ agentId: string; role?: string }>;
+    judgeAgentId?: string;
+    maxRounds?: number;
+  };
+
   @Column({ type: 'varchar', nullable: true })
   webhookUrl: string;
 

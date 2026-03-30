@@ -33,7 +33,9 @@ export class AgentRuntimeProcessor {
         });
         this.logger.debug(`Enqueued next step for run ${runId}`);
       } else if (result === 'waiting') {
-        this.logger.log(`Run ${runId} is waiting for input`);
+        // Run is either sleeping (delayed resume enqueued by runtime) or waiting for user input.
+        // Do NOT enqueue the next step — it will be resumed by the runtime when appropriate.
+        this.logger.log(`Run ${runId} is waiting (sleeping or awaiting user input)`);
       } else {
         this.logger.log(`Run ${runId} completed`);
       }

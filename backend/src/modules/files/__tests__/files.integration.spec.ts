@@ -5,6 +5,7 @@ import { FilesService } from '../files.service';
 import { StorageService } from '../storage.service';
 import { TextExtractorService } from '../text-extractor.service';
 import { AgentFile } from '../../../entities/file.entity';
+import { AuditLogService } from '../../audit-log/audit-log.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -82,6 +83,21 @@ describe('FilesService (integration)', () => {
               };
               return config[key] ?? defaultValue;
             },
+          },
+        },
+        {
+          provide: AuditLogService,
+          useValue: {
+            log: jest.fn().mockResolvedValue(null),
+            logCreate: jest.fn().mockResolvedValue(null),
+            logUpdate: jest.fn().mockResolvedValue(null),
+            logDelete: jest.fn().mockResolvedValue(null),
+            logToolExecution: jest.fn().mockResolvedValue(null),
+            logGatewayRequest: jest.fn().mockResolvedValue(null),
+            logRunEvent: jest.fn().mockResolvedValue(null),
+            computeChanges: jest.fn().mockReturnValue([]),
+            findAll: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 }),
+            getResourceHistory: jest.fn().mockResolvedValue([]),
           },
         },
       ],

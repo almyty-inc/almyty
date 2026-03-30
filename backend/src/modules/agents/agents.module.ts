@@ -27,6 +27,7 @@ import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
 import { ToolsModule } from '../tools/tools.module';
+import { MemoryModule } from '../memory/memory.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ToolsModule } from '../tools/tools.module';
     BullModule.registerQueue({ name: 'agent-runtime' }),
     forwardRef(() => LlmProvidersModule),
     forwardRef(() => ToolsModule),
+    forwardRef(() => MemoryModule),
   ],
   providers: [AgentsService, AgentExecutionEngine, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeProcessor],
   controllers: [AgentsController, AgentOpenAICompatController],
