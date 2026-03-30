@@ -13,6 +13,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 export interface JwtPayload {
   sub: string;
@@ -46,6 +48,7 @@ export class AuthService {
     @InjectRepository(UserOrganization)
     private userOrganizationRepository: Repository<UserOrganization>,
     private jwtService: JwtService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async register(createUserDto: CreateUserDto): Promise<AuthTokens> {
@@ -118,6 +121,12 @@ export class AuthService {
     // Update last login
     user.lastLoginAt = new Date();
     await this.userRepository.save(user);
+
+    // Audit log (fire-and-forget) — log to user's first organization
+    const orgId = user.organizationMemberships?.[0]?.organizationId;
+    if (orgId) {
+      this.auditLogService.log({ organizationId: orgId, userId: user.id, userEmail: user.email, action: AuditAction.LOGIN, resourceType: AuditResource.USER, resourceId: user.id, resourceName: user.email });
+    }
 
     return this.generateTokens(user);
   }

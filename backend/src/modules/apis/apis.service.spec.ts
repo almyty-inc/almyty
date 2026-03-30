@@ -11,6 +11,7 @@ import { Resource } from '../../entities/resource.entity';
 import { Organization } from '../../entities/organization.entity';
 import { SchemaParserService } from '../schema-parser/schema-parser.service';
 import { ToolsService } from '../tools/tools.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { TestHelper, mockRepository } from '../../test/setup';
 
 jest.mock('axios');
@@ -64,6 +65,21 @@ describe('ApisService', () => {
           useValue: {
             findByName: jest.fn().mockResolvedValue(null),
             createFromOperation: jest.fn(),
+          },
+        },
+        {
+          provide: AuditLogService,
+          useValue: {
+            log: jest.fn().mockResolvedValue(null),
+            logCreate: jest.fn().mockResolvedValue(null),
+            logUpdate: jest.fn().mockResolvedValue(null),
+            logDelete: jest.fn().mockResolvedValue(null),
+            logToolExecution: jest.fn().mockResolvedValue(null),
+            logGatewayRequest: jest.fn().mockResolvedValue(null),
+            logRunEvent: jest.fn().mockResolvedValue(null),
+            computeChanges: jest.fn().mockReturnValue([]),
+            findAll: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 }),
+            getResourceHistory: jest.fn().mockResolvedValue([]),
           },
         },
       ],

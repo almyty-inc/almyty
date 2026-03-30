@@ -2,6 +2,8 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentInterface, InterfaceType, InterfaceStatus } from '../../entities/interface.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 @Injectable()
 export class InterfacesService {
@@ -10,6 +12,7 @@ export class InterfacesService {
   constructor(
     @InjectRepository(AgentInterface)
     private readonly interfaceRepository: Repository<AgentInterface>,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async create(
@@ -31,7 +34,12 @@ export class InterfacesService {
       configuration: data.configuration || {},
       metadata: data.metadata || null,
     });
-    return this.interfaceRepository.save(iface);
+    const saved = await this.interfaceRepository.save(iface);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, action: AuditAction.INTERFACE_DEPLOY, resourceType: AuditResource.INTERFACE, resourceId: saved.id, resourceName: saved.name, details: { type: saved.type, agentId: data.agentId } });
+
+    return saved;
   }
 
   async findAll(organizationId: string, agentId?: string) {
@@ -63,6 +71,9 @@ export class InterfacesService {
   async remove(id: string, organizationId: string): Promise<void> {
     const iface = await this.findById(id, organizationId);
     await this.interfaceRepository.remove(iface);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.logDelete(organizationId, undefined, AuditResource.INTERFACE, id, iface.name);
   }
 
   async activate(id: string, organizationId: string): Promise<AgentInterface> {

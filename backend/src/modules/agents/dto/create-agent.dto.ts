@@ -73,6 +73,15 @@ export class CreateAgentDto {
 
   @IsOptional()
   @IsObject()
+  collaboration?: {
+    strategy: 'sequential' | 'parallel' | 'race' | 'debate';
+    agents: { agentId: string; role?: string }[];
+    judgeAgentId?: string;
+    maxRounds?: number;
+  };
+
+  @IsOptional()
+  @IsObject()
   variables?: Record<string, any>;
 
   @IsOptional()

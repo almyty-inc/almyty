@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Memory, MemoryType, MemoryScope } from '../../entities/memory.entity';
 import { EmbeddingService } from './embedding.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 export interface MemorySearchFilters {
   organizationId: string;
@@ -24,6 +26,7 @@ export class MemoryService {
     @InjectRepository(Memory)
     private readonly memoryRepository: Repository<Memory>,
     private readonly embeddingService: EmbeddingService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async create(
@@ -54,7 +57,12 @@ export class MemoryService {
       createdBy,
     });
 
-    return this.memoryRepository.save(memory);
+    const saved = await this.memoryRepository.save(memory);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, userId: createdBy, action: AuditAction.MEMORY_STORE, resourceType: AuditResource.MEMORY, resourceId: saved.id, resourceName: data.type, details: { scope: data.scope, tags: data.tags } });
+
+    return saved;
   }
 
   async findAll(filters: MemorySearchFilters) {
@@ -127,12 +135,20 @@ export class MemoryService {
       Object.assign(memory, data);
     }
 
-    return this.memoryRepository.save(memory);
+    const saved = await this.memoryRepository.save(memory);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, action: AuditAction.MEMORY_UPDATE, resourceType: AuditResource.MEMORY, resourceId: saved.id, resourceName: saved.type });
+
+    return saved;
   }
 
   async remove(id: string, organizationId: string): Promise<void> {
     const memory = await this.findById(id, organizationId);
     await this.memoryRepository.remove(memory);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, action: AuditAction.MEMORY_DELETE, resourceType: AuditResource.MEMORY, resourceId: id, resourceName: memory.type });
   }
 
   async bulkCreate(
@@ -225,6 +241,9 @@ export class MemoryService {
         })
         .where('id IN (:...ids)', { ids })
         .execute();
+
+      // Audit log (fire-and-forget)
+      this.auditLogService.log({ organizationId, action: AuditAction.MEMORY_RECALL, resourceType: AuditResource.MEMORY, resourceId: ids[0], details: { query, resultCount: results.length, agentId: options?.agentId } });
     }
 
     return results;

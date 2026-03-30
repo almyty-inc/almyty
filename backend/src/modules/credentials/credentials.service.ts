@@ -14,6 +14,8 @@ import { LlmProvider } from '../../entities/llm-provider.entity';
 import { Api } from '../../entities/api.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Agent } from '../../entities/agent.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 @Injectable()
 export class CredentialsService {
@@ -32,6 +34,7 @@ export class CredentialsService {
     private gatewayRepository: Repository<Gateway>,
     @InjectRepository(Agent)
     private agentRepository: Repository<Agent>,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   // ──────────────────────────────────────────────
@@ -123,6 +126,9 @@ export class CredentialsService {
     const saved = await this.credentialRepository.save(credential);
     this.logger.log(`Credential created: ${saved.id} (${saved.name}) for org ${organizationId}`);
 
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, action: AuditAction.CREDENTIAL_CREATE, resourceType: AuditResource.CREDENTIAL, resourceId: saved.id, resourceName: saved.name, details: { type: saved.type } });
+
     return this.maskCredential(saved);
   }
 
@@ -170,6 +176,9 @@ export class CredentialsService {
     const saved = await this.credentialRepository.save(credential);
     this.logger.log(`Credential updated: ${saved.id} (${saved.name})`);
 
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, action: AuditAction.CREDENTIAL_UPDATE, resourceType: AuditResource.CREDENTIAL, resourceId: saved.id, resourceName: saved.name });
+
     return this.maskCredential(saved);
   }
 
@@ -184,6 +193,9 @@ export class CredentialsService {
 
     await this.credentialRepository.remove(credential);
     this.logger.log(`Credential deleted: ${id} (${credential.name})`);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, action: AuditAction.CREDENTIAL_DELETE, resourceType: AuditResource.CREDENTIAL, resourceId: id, resourceName: credential.name });
   }
 
   async getUsage(

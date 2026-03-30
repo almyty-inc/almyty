@@ -6,6 +6,8 @@ import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { User } from '../../entities/user.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 export interface CreateGatewayToolDto {
   toolId: string;
@@ -113,6 +115,7 @@ export class GatewayToolService {
     private toolRepository: Repository<Tool>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async associateTool(
@@ -173,6 +176,9 @@ export class GatewayToolService {
       const savedAssociation = await this.gatewayToolRepository.save(gatewayTool);
 
       this.logger.log(`Tool '${tool.name}' associated with gateway '${gateway.name}'`);
+
+      // Audit log (fire-and-forget)
+      this.auditLogService.log({ organizationId, userId, action: AuditAction.TOOL_ASSIGN, resourceType: AuditResource.GATEWAY, resourceId: gatewayId, resourceName: gateway.name, details: { toolId: tool.id, toolName: tool.name } });
 
       return savedAssociation;
 
@@ -251,6 +257,9 @@ export class GatewayToolService {
       await this.gatewayToolRepository.remove(gatewayTool);
 
       this.logger.log(`Tool '${gatewayTool.tool.name}' dissociated from gateway '${gatewayTool.gateway.name}'`);
+
+      // Audit log (fire-and-forget)
+      this.auditLogService.log({ organizationId, userId, action: AuditAction.TOOL_REMOVE, resourceType: AuditResource.GATEWAY, resourceId: gatewayTool.gateway.id, resourceName: gatewayTool.gateway.name, details: { toolId: gatewayTool.tool.id, toolName: gatewayTool.tool.name } });
 
     } catch (error) {
       this.logger.error(`Failed to dissociate tool from gateway: ${error.message}`);
@@ -747,6 +756,9 @@ export class GatewayToolService {
       await this.gatewayToolRepository.remove(gatewayTool);
 
       this.logger.log(`Removed tool ${toolId} from gateway ${gatewayId}`);
+
+      // Audit log (fire-and-forget)
+      this.auditLogService.log({ organizationId, userId: undefined, action: AuditAction.TOOL_REMOVE, resourceType: AuditResource.GATEWAY, resourceId: gatewayId, resourceName: gateway.name, details: { toolId } });
     } catch (error) {
       this.logger.error(`Failed to remove tool: ${error.message}`);
       throw error;

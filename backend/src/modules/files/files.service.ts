@@ -5,6 +5,8 @@ import { AgentFile } from '../../entities/file.entity';
 import { StorageService } from './storage.service';
 import { TextExtractorService } from './text-extractor.service';
 import { v4 as uuidv4 } from 'uuid';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 @Injectable()
 export class FilesService {
@@ -15,6 +17,7 @@ export class FilesService {
     private readonly fileRepository: Repository<AgentFile>,
     private readonly storageService: StorageService,
     private readonly textExtractor: TextExtractorService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async upload(
@@ -48,7 +51,12 @@ export class FilesService {
       uploadedBy: options?.uploadedBy || null,
     });
 
-    return this.fileRepository.save(agentFile);
+    const saved = await this.fileRepository.save(agentFile);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, userId: options?.uploadedBy, action: AuditAction.FILE_UPLOAD, resourceType: AuditResource.FILE, resourceId: saved.id, resourceName: saved.name, details: { mimeType: file.mimetype, size: file.size } });
+
+    return saved;
   }
 
   async findAll(organizationId: string, filters?: {
@@ -89,6 +97,10 @@ export class FilesService {
   async download(id: string, organizationId: string): Promise<{ buffer: Buffer; file: AgentFile }> {
     const file = await this.findById(id, organizationId);
     const buffer = await this.storageService.download(file.storageKey);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, action: AuditAction.FILE_DOWNLOAD, resourceType: AuditResource.FILE, resourceId: file.id, resourceName: file.name });
+
     return { buffer, file };
   }
 
@@ -96,5 +108,8 @@ export class FilesService {
     const file = await this.findById(id, organizationId);
     await this.storageService.delete(file.storageKey);
     await this.fileRepository.remove(file);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.log({ organizationId, action: AuditAction.FILE_DELETE, resourceType: AuditResource.FILE, resourceId: id, resourceName: file.name });
   }
 }

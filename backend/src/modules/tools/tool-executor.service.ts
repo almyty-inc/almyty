@@ -16,6 +16,7 @@ import { CustomCodeExecutorService } from './custom-code-executor.service';
 import { validateUrl, sanitizeHeaders, validateResponseSize } from '../../common/security/url-validator';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 export interface ToolExecutionOptions {
   userId: string;
@@ -69,6 +70,7 @@ export class ToolExecutorService {
     @InjectRedis() private readonly redis: Redis.Redis,
     private customCodeExecutor: CustomCodeExecutorService,
     private moduleRef: ModuleRef,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async executeTool(
@@ -1070,6 +1072,15 @@ export class ToolExecutorService {
       });
 
       await this.toolExecutionRepository.save(execution);
+
+      // Audit log (fire-and-forget)
+      this.auditLogService.logToolExecution(
+        options.organizationId,
+        options.userId,
+        tool.id,
+        tool.name,
+        { success: result.success, executionTime: metadata.executionTime, parameters },
+      );
 
       // Update tool stats (usageCount, lastUsedAt, successRate, averageResponseTime)
       try {

@@ -6,6 +6,10 @@ import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../../entities/agent-run.entity';
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
 import { Tool } from '../../../entities/tool.entity';
+import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
+import { ToolExecutorService } from '../../tools/tool-executor.service';
+import { MemoryService } from '../../memory/memory.service';
+import { AuditLogService } from '../../audit-log/audit-log.service';
 
 /**
  * Integration tests for AgentRuntimeService.
@@ -36,6 +40,9 @@ describe('AgentRuntimeService (integration)', () => {
       instructions: 'You are a helpful test agent.',
       toolIds: [],
       pipeline: { nodes: [], edges: [] },
+      modelConfig: { providerId: 'provider-1', model: 'gpt-4', temperature: 0.7, maxTokens: 4096 },
+      memoryConfig: { enabled: false },
+      collaboration: null,
       ...overrides,
     });
     return agent;
@@ -100,9 +107,11 @@ describe('AgentRuntimeService (integration)', () => {
         return Promise.resolve(found || null);
       }),
       find: jest.fn().mockResolvedValue([]),
+      save: jest.fn().mockImplementation((agent: Agent) => Promise.resolve(agent)),
     };
 
     mockToolRepo = {
+      find: jest.fn().mockResolvedValue([]),
       findByIds: jest.fn().mockResolvedValue([]),
     };
 
@@ -128,6 +137,55 @@ describe('AgentRuntimeService (integration)', () => {
         {
           provide: getQueueToken('agent-runtime'),
           useValue: mockQueue,
+        },
+        {
+          provide: LlmProvidersService,
+          useValue: {
+            chat: jest.fn().mockResolvedValue({
+              message: {
+                role: 'assistant',
+                content: 'Mock LLM response.',
+                toolCalls: [],
+                finishReason: 'stop',
+              },
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              cost: 0,
+              model: 'gpt-4',
+              sessionId: 'session-1',
+              messageId: 'msg-1',
+              responseTime: 100,
+            }),
+            findProviderForOrganization: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: ToolExecutorService,
+          useValue: {
+            executeTool: jest.fn().mockResolvedValue({ success: true, data: null }),
+          },
+        },
+        {
+          provide: MemoryService,
+          useValue: {
+            search: jest.fn().mockResolvedValue([]),
+            autoSave: jest.fn().mockResolvedValue([]),
+            create: jest.fn().mockResolvedValue({}),
+          },
+        },
+        {
+          provide: AuditLogService,
+          useValue: {
+            log: jest.fn().mockResolvedValue(null),
+            logCreate: jest.fn().mockResolvedValue(null),
+            logUpdate: jest.fn().mockResolvedValue(null),
+            logDelete: jest.fn().mockResolvedValue(null),
+            logToolExecution: jest.fn().mockResolvedValue(null),
+            logGatewayRequest: jest.fn().mockResolvedValue(null),
+            logRunEvent: jest.fn().mockResolvedValue(null),
+            computeChanges: jest.fn().mockReturnValue([]),
+            findAll: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 }),
+            getResourceHistory: jest.fn().mockResolvedValue([]),
+          },
         },
       ],
     }).compile();
@@ -269,13 +327,8 @@ describe('AgentRuntimeService (integration)', () => {
       expect(updatedRun!.error).toBe('TIMEOUT');
     });
 
-    it('should complete run when last message is assistant without tool calls', async () => {
+    it('should complete run when LLM returns no tool calls', async () => {
       const run = await service.startRun('agent-1', 'org-1', 'user-1', 'test');
-      run.thread.push({
-        role: 'assistant',
-        content: 'Here is the final answer.',
-        timestamp: new Date().toISOString(),
-      });
       await mockRunRepo.save(run);
 
       const result = await service.processStep(run.id);
@@ -283,18 +336,20 @@ describe('AgentRuntimeService (integration)', () => {
       expect(result).toBe('done');
       const updatedRun = runStore.find(r => r.id === run.id);
       expect(updatedRun!.status).toBe(AgentRunStatus.COMPLETED);
-      expect(updatedRun!.output).toBe('Here is the final answer.');
+      expect(updatedRun!.output).toBe('Mock LLM response.');
     });
 
-    it('should continue when last message is a user message', async () => {
+    it('should complete run and increment step when LLM returns final answer', async () => {
       const run = await service.startRun('agent-1', 'org-1', 'user-1', 'test');
-      // Thread has just the user message from startRun, so it should continue
+      // Thread has just the user message from startRun
       await mockRunRepo.save(run);
 
       const result = await service.processStep(run.id);
 
-      expect(result).toBe('continue');
+      // LLM returns no tool calls, so run completes
+      expect(result).toBe('done');
       const updatedRun = runStore.find(r => r.id === run.id);
+      expect(updatedRun!.status).toBe(AgentRunStatus.COMPLETED);
       expect(updatedRun!.currentStep).toBe(1);
       expect(updatedRun!.steps).toHaveLength(1);
       expect(updatedRun!.steps[0].type).toBe('llm_call');
@@ -309,6 +364,7 @@ describe('AgentRuntimeService (integration)', () => {
       await service.processStep(run.id);
 
       const updatedRun = runStore.find(r => r.id === run.id);
+      // LLM returns no tool calls, so run completes with currentStep incremented
       expect(updatedRun!.currentStep).toBe(4);
       expect(updatedRun!.executionTime).toBeGreaterThanOrEqual(500);
     });

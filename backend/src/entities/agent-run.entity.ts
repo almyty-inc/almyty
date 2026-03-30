@@ -9,6 +9,7 @@ export enum AgentRunStatus {
   PENDING = 'pending',
   RUNNING = 'running',
   WAITING_INPUT = 'waiting_input',
+  SLEEPING = 'sleeping',
   COMPLETED = 'completed',
   FAILED = 'failed',
   CANCELLED = 'cancelled',

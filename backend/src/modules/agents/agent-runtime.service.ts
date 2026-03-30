@@ -1,12 +1,71 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
 import { Agent } from '../../entities/agent.entity';
 import { Tool } from '../../entities/tool.entity';
 import { EventEmitter } from 'events';
+import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
+import { ToolExecutorService, ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
+import { MemoryService } from '../memory/memory.service';
+import { MemoryType, MemoryScope } from '../../entities/memory.entity';
+import { MessageRole } from '../../entities/llm-message.entity';
+
+/**
+ * Built-in tool definitions that the agent runtime injects for autonomous agents.
+ */
+const BUILT_IN_TOOLS = {
+  wait: {
+    name: 'wait',
+    description: 'Pause execution for a specified duration (in seconds). Use this when you need to wait before continuing, e.g. waiting for an external process.',
+    parameters: {
+      type: 'object',
+      properties: {
+        seconds: { type: 'number', description: 'Number of seconds to wait (1-3600)' },
+        reason: { type: 'string', description: 'Why the agent is waiting' },
+      },
+      required: ['seconds'],
+    },
+  },
+  ask_user: {
+    name: 'ask_user',
+    description: 'Ask the user a question and wait for their response. Use this when you need clarification or approval.',
+    parameters: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: 'The question to ask the user' },
+      },
+      required: ['question'],
+    },
+  },
+  store_memory: {
+    name: 'store_memory',
+    description: 'Save an important fact, preference, or piece of context to long-term memory for future use.',
+    parameters: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'The memory content to store' },
+        type: { type: 'string', enum: ['fact', 'preference', 'context', 'episode', 'instruction'], description: 'Type of memory' },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Tags for categorization' },
+      },
+      required: ['content'],
+    },
+  },
+  recall_memory: {
+    name: 'recall_memory',
+    description: 'Search long-term memory for relevant information about a topic.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'What to search for in memory' },
+        limit: { type: 'number', description: 'Max number of results (default 5)' },
+      },
+      required: ['query'],
+    },
+  },
+};
 
 @Injectable()
 export class AgentRuntimeService {
@@ -22,6 +81,12 @@ export class AgentRuntimeService {
     private readonly toolRepository: Repository<Tool>,
     @InjectQueue('agent-runtime')
     private readonly runtimeQueue: Queue,
+    @Inject(forwardRef(() => LlmProvidersService))
+    private readonly llmProvidersService: LlmProvidersService,
+    @Inject(forwardRef(() => ToolExecutorService))
+    private readonly toolExecutorService: ToolExecutorService,
+    @Inject(forwardRef(() => MemoryService))
+    private readonly memoryService: MemoryService,
   ) {}
 
   /**
@@ -86,7 +151,9 @@ export class AgentRuntimeService {
   }
 
   /**
-   * Process one step of a run (called by BullMQ processor)
+   * Process one step of a run (called by BullMQ processor).
+   * Makes a single LLM call. If the LLM returns tool_calls, executes them and returns 'continue'.
+   * If the LLM returns content without tool_calls, the run is done.
    */
   async processStep(runId: string): Promise<'continue' | 'done' | 'waiting'> {
     const run = await this.runRepository.findOne({ where: { id: runId }, relations: ['agent'] });
@@ -112,137 +179,947 @@ export class AgentRuntimeService {
     }
 
     const stepStart = Date.now();
+    const agent = run.agent;
+
+    // If this is a collaboration orchestrator, delegate to collaboration handler
+    if (agent.collaboration?.strategy && agent.collaboration.agents?.length > 0) {
+      return this.processCollaborationStep(run, agent);
+    }
 
     try {
-      // Load agent's tools
-      const agent = run.agent;
+      // Load agent's tools from DB
       const tools = agent.toolIds?.length
-        ? await this.toolRepository.findByIds(agent.toolIds)
+        ? await this.toolRepository.find({ where: { id: In(agent.toolIds) } })
         : [];
 
-      // Build messages for LLM
-      const messages = this.buildMessages(agent, run, tools);
+      // Recall memories if memory is enabled
+      let memoryContext = '';
+      if (agent.memoryConfig?.enabled) {
+        try {
+          const lastUserMessage = [...run.thread].reverse().find(m => m.role === 'user');
+          if (lastUserMessage) {
+            const memories = await this.memoryService.search(
+              run.organizationId,
+              typeof lastUserMessage.content === 'string' ? lastUserMessage.content : JSON.stringify(lastUserMessage.content),
+              { agentId: agent.id, limit: 5 },
+            );
+            if (memories.length > 0) {
+              memoryContext = '\n\n## Relevant Memories\n' +
+                memories.map(m => `- [${m.type}] ${m.content}`).join('\n');
+            }
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to recall memories for run ${runId}: ${err.message}`);
+        }
+      }
 
-      // Format tools for LLM
-      const llmTools = tools.map(tool => ({
-        type: 'function' as const,
-        function: {
-          name: tool.name.replace(/[^a-zA-Z0-9_-]/g, '_'),
-          description: tool.description || '',
-          parameters: tool.parameters || { type: 'object', properties: {} },
-        },
-      }));
+      // Build messages for the LLM
+      const messages = this.buildMessages(agent, run, tools, memoryContext);
 
-      // Add sub-agent tool if other agents exist
-      // (agents can call other agents as sub-agents)
+      // Build tool definitions for the LLM (user tools + built-in tools)
+      const llmTools = this.buildToolDefinitions(tools, agent);
+
+      // Resolve sub-agent tools (agents can call other agents)
       const otherAgents = await this.agentRepository.find({
         where: { organizationId: run.organizationId, status: 'active' as any },
         select: ['id', 'name', 'description'],
       });
-      const subAgentTools = otherAgents
+      const subAgentDefs = otherAgents
         .filter(a => a.id !== agent.id)
         .map(a => ({
-          type: 'function' as const,
-          function: {
-            name: `call_agent_${a.name.replace(/[^a-zA-Z0-9_]/g, '_')}`,
-            description: `Call sub-agent "${a.name}": ${a.description || 'No description'}`,
-            parameters: {
-              type: 'object',
-              properties: {
-                input: { type: 'string', description: 'The input/message to send to this agent' },
-              },
-              required: ['input'],
+          name: `call_agent_${a.name.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+          description: `Call sub-agent "${a.name}": ${a.description || 'No description'}`,
+          parameters: {
+            type: 'object',
+            properties: {
+              input: { type: 'string', description: 'The input/message to send to this agent' },
             },
+            required: ['input'],
           },
-          _agentId: a.id,
         }));
+      // Map sub-agent tool name -> agentId for lookup after LLM response
+      const subAgentMap = new Map<string, string>();
+      for (const a of otherAgents.filter(a => a.id !== agent.id)) {
+        subAgentMap.set(`call_agent_${a.name.replace(/[^a-zA-Z0-9_]/g, '_')}`, a.id);
+      }
 
-      const allTools = [...llmTools, ...subAgentTools];
+      const allToolDefs = [...llmTools, ...subAgentDefs];
 
-      // Build step record
-      const step: any = {
-        type: 'llm_call',
-        input: { messageCount: messages.length, toolCount: allTools.length },
-        timestamp: new Date().toISOString(),
+      // Determine the LLM provider
+      const providerId = agent.modelConfig?.providerId;
+      if (!providerId) {
+        throw new Error('Agent has no LLM provider configured (modelConfig.providerId is missing)');
+      }
+
+      // Build the chat request
+      const chatRequest: ChatRequest = {
+        messages: messages as any[],
+        model: agent.modelConfig?.model,
+        temperature: agent.modelConfig?.temperature,
+        maxTokens: agent.modelConfig?.maxTokens,
+        tools: allToolDefs.length > 0 ? allToolDefs : undefined,
+        skipToolExecution: true, // We handle tool execution ourselves
       };
 
-      // The actual LLM integration will be connected via LlmProvidersService.
-      // For the runtime structure, we handle tool calls and responses:
+      // Call the LLM
+      this.logger.debug(`Run ${runId} step ${run.currentStep}: calling LLM with ${messages.length} messages, ${allToolDefs.length} tools`);
+      const llmResponse: ChatResponse = await this.llmProvidersService.chat(
+        providerId,
+        chatRequest,
+        run.organizationId,
+        run.userId,
+      );
 
-      // If the last message in thread is from the assistant with no tool calls, the run is done
-      const lastMessage = run.thread[run.thread.length - 1];
+      // Track cost and tokens
+      const stepCost = llmResponse.cost || 0;
+      const stepInputTokens = llmResponse.usage?.inputTokens || 0;
+      const stepOutputTokens = llmResponse.usage?.outputTokens || 0;
+      const stepTotalTokens = llmResponse.usage?.totalTokens || (stepInputTokens + stepOutputTokens);
 
-      if (lastMessage?.role === 'assistant' && !lastMessage?.toolCalls?.length) {
-        // Agent has responded without tool calls — run is complete
-        run.status = AgentRunStatus.COMPLETED;
-        run.output = lastMessage.content;
-        step.output = { status: 'completed' };
-        step.duration = Date.now() - stepStart;
-        run.steps.push(step);
-        run.executionTime += step.duration;
+      run.totalCost += stepCost;
+      run.totalTokens += stepTotalTokens;
+
+      const responseMessage = llmResponse.message;
+
+      // Check if the LLM returned tool calls
+      if (responseMessage.toolCalls && responseMessage.toolCalls.length > 0) {
+        // Add assistant message with tool calls to thread
+        run.thread.push({
+          role: 'assistant',
+          content: responseMessage.content || '',
+          toolCalls: responseMessage.toolCalls,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Execute each tool call
+        for (const toolCall of responseMessage.toolCalls) {
+          const toolExecStart = Date.now();
+
+          // Check for built-in tools first
+          const builtInResult = await this.executeBuiltInTool(toolCall.name, toolCall.parameters || {}, run, agent);
+          if (builtInResult) {
+            // Built-in tool was handled
+            toolCall.result = builtInResult.result;
+            toolCall.error = builtInResult.error;
+            toolCall.executionTime = Date.now() - toolExecStart;
+
+            // Add tool result to thread
+            run.thread.push({
+              role: 'tool',
+              content: builtInResult.error || (typeof builtInResult.result === 'string' ? builtInResult.result : JSON.stringify(builtInResult.result)),
+              toolCallId: toolCall.id,
+              timestamp: new Date().toISOString(),
+            });
+
+            // Record tool call step
+            run.steps.push({
+              type: 'tool_call',
+              input: { tool: toolCall.name, parameters: toolCall.parameters },
+              output: builtInResult.result,
+              duration: Date.now() - toolExecStart,
+              timestamp: new Date().toISOString(),
+              error: builtInResult.error,
+            });
+
+            // Handle special statuses from built-in tools
+            if (builtInResult.status === 'sleeping') {
+              // wait tool: save and return waiting, the job is re-enqueued with delay
+              const stepDuration = Date.now() - stepStart;
+              run.steps.push({
+                type: 'llm_call',
+                input: { messageCount: messages.length, toolCount: allToolDefs.length },
+                output: { status: 'sleeping', reason: toolCall.parameters?.reason },
+                cost: stepCost,
+                tokens: { input: stepInputTokens, output: stepOutputTokens },
+                duration: stepDuration,
+                timestamp: new Date().toISOString(),
+              });
+              run.currentStep++;
+              run.executionTime += stepDuration;
+              await this.runRepository.save(run);
+              this.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'sleeping' });
+              return 'waiting';
+            }
+
+            if (builtInResult.status === 'waiting_input') {
+              const stepDuration = Date.now() - stepStart;
+              run.steps.push({
+                type: 'llm_call',
+                input: { messageCount: messages.length, toolCount: allToolDefs.length },
+                output: { status: 'waiting_input', question: toolCall.parameters?.question },
+                cost: stepCost,
+                tokens: { input: stepInputTokens, output: stepOutputTokens },
+                duration: stepDuration,
+                timestamp: new Date().toISOString(),
+              });
+              run.currentStep++;
+              run.executionTime += stepDuration;
+              await this.runRepository.save(run);
+              this.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'waiting_input' });
+              return 'waiting';
+            }
+
+            continue;
+          }
+
+          // Check for sub-agent calls
+          const subAgentId = subAgentMap.get(toolCall.name);
+          if (subAgentId) {
+            try {
+              const subRun = await this.startRun(
+                subAgentId,
+                run.organizationId,
+                run.userId,
+                toolCall.parameters?.input || '',
+                { parentRunId: run.id, maxSteps: 20, maxCostCents: 50 },
+              );
+              // Wait for the sub-run to complete (poll with timeout)
+              const subResult = await this.waitForRun(subRun.id, 120000);
+              toolCall.result = subResult?.output || 'Sub-agent completed without output';
+              toolCall.error = subResult?.error;
+              toolCall.executionTime = Date.now() - toolExecStart;
+            } catch (err) {
+              toolCall.error = `Sub-agent call failed: ${err.message}`;
+              toolCall.executionTime = Date.now() - toolExecStart;
+            }
+
+            run.thread.push({
+              role: 'tool',
+              content: toolCall.error || (typeof toolCall.result === 'string' ? toolCall.result : JSON.stringify(toolCall.result)),
+              toolCallId: toolCall.id,
+              timestamp: new Date().toISOString(),
+            });
+
+            run.steps.push({
+              type: 'sub_agent_call',
+              input: { agentId: subAgentId, input: toolCall.parameters?.input },
+              output: toolCall.result,
+              duration: Date.now() - toolExecStart,
+              timestamp: new Date().toISOString(),
+              error: toolCall.error,
+            });
+
+            continue;
+          }
+
+          // Regular tool execution via ToolExecutorService
+          const matchingTool = tools.find(
+            t => t.name.replace(/[^a-zA-Z0-9_-]/g, '_') === toolCall.name || t.name === toolCall.name,
+          );
+
+          if (!matchingTool) {
+            toolCall.error = `Tool '${toolCall.name}' not found`;
+            toolCall.executionTime = Date.now() - toolExecStart;
+
+            run.thread.push({
+              role: 'tool',
+              content: `Error: Tool '${toolCall.name}' not found`,
+              toolCallId: toolCall.id,
+              timestamp: new Date().toISOString(),
+            });
+
+            run.steps.push({
+              type: 'tool_call',
+              input: { tool: toolCall.name, parameters: toolCall.parameters },
+              error: toolCall.error,
+              duration: Date.now() - toolExecStart,
+              timestamp: new Date().toISOString(),
+            });
+
+            continue;
+          }
+
+          try {
+            const execOptions: ToolExecutionOptions = {
+              userId: run.userId || 'system',
+              organizationId: run.organizationId,
+            };
+
+            const toolResult: ToolExecutionResult = await this.toolExecutorService.executeTool(
+              matchingTool.id,
+              toolCall.parameters || {},
+              execOptions,
+            );
+
+            toolCall.result = toolResult.data;
+            toolCall.error = toolResult.success ? undefined : toolResult.error;
+            toolCall.executionTime = toolResult.executionTime;
+            toolCall.cached = toolResult.cached;
+
+            run.thread.push({
+              role: 'tool',
+              content: toolResult.success
+                ? (typeof toolResult.data === 'string' ? toolResult.data : JSON.stringify(toolResult.data))
+                : `Error: ${toolResult.error}`,
+              toolCallId: toolCall.id,
+              timestamp: new Date().toISOString(),
+            });
+
+            run.steps.push({
+              type: 'tool_call',
+              input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: toolCall.parameters },
+              output: toolResult.data,
+              cost: toolResult.metadata?.cost || 0,
+              duration: toolResult.executionTime,
+              timestamp: new Date().toISOString(),
+              error: toolResult.success ? undefined : toolResult.error,
+            });
+          } catch (err) {
+            toolCall.error = err.message;
+            toolCall.executionTime = Date.now() - toolExecStart;
+
+            run.thread.push({
+              role: 'tool',
+              content: `Error executing tool: ${err.message}`,
+              toolCallId: toolCall.id,
+              timestamp: new Date().toISOString(),
+            });
+
+            run.steps.push({
+              type: 'tool_call',
+              input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: toolCall.parameters },
+              error: err.message,
+              duration: Date.now() - toolExecStart,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+
+        // Record the LLM call step
+        const stepDuration = Date.now() - stepStart;
+        run.steps.push({
+          type: 'llm_call',
+          input: { messageCount: messages.length, toolCount: allToolDefs.length },
+          output: { toolCalls: responseMessage.toolCalls.map(tc => ({ name: tc.name, hasResult: !!tc.result })) },
+          cost: stepCost,
+          tokens: { input: stepInputTokens, output: stepOutputTokens },
+          duration: stepDuration,
+          timestamp: new Date().toISOString(),
+        });
+
+        run.currentStep++;
+        run.executionTime += stepDuration;
         await this.runRepository.save(run);
+
+        // Auto-save memory if enabled
+        if (agent.memoryConfig?.autoSave) {
+          await this.autoSaveMemory(run, agent);
+        }
+
+        this.emitEvent(runId, 'step.completed', { step: run.currentStep, total: run.maxSteps });
+        return 'continue';
+
+      } else {
+        // No tool calls — the agent has a final response
+        const finalContent = responseMessage.content || '';
+
+        run.thread.push({
+          role: 'assistant',
+          content: finalContent,
+          timestamp: new Date().toISOString(),
+        });
+
+        run.status = AgentRunStatus.COMPLETED;
+        run.output = finalContent;
+
+        const stepDuration = Date.now() - stepStart;
+        run.steps.push({
+          type: 'llm_call',
+          input: { messageCount: messages.length, toolCount: allToolDefs.length },
+          output: { status: 'completed', content: finalContent.substring(0, 200) },
+          cost: stepCost,
+          tokens: { input: stepInputTokens, output: stepOutputTokens },
+          duration: stepDuration,
+          timestamp: new Date().toISOString(),
+        });
+
+        run.currentStep++;
+        run.executionTime += stepDuration;
+
+        // Update agent stats
+        agent.incrementExecution(true, run.executionTime, run.totalCost);
+        await this.agentRepository.save(agent);
+
+        await this.runRepository.save(run);
+
+        // Auto-save memory if enabled
+        if (agent.memoryConfig?.autoSave) {
+          await this.autoSaveMemory(run, agent);
+        }
+
         this.emitEvent(runId, 'run.completed', { output: run.output });
         return 'done';
       }
-
-      // Otherwise, continue the ReAct loop
-      // Mark that we need an LLM call (the processor will handle it)
-      run.currentStep++;
-      step.output = { status: 'continue', nextAction: 'llm_call' };
-      step.duration = Date.now() - stepStart;
-      run.steps.push(step);
-      run.executionTime += step.duration;
-      await this.runRepository.save(run);
-
-      this.emitEvent(runId, 'step.completed', { step: run.currentStep, total: run.maxSteps });
-
-      return 'continue';
     } catch (error) {
       this.logger.error(`Step failed for run ${runId}: ${error.message}`, error.stack);
 
-      const step = {
+      const stepDuration = Date.now() - stepStart;
+      run.steps.push({
         type: 'error',
         error: error.message,
         timestamp: new Date().toISOString(),
-        duration: Date.now() - stepStart,
-      };
-      run.steps.push(step as any);
+        duration: stepDuration,
+      });
       run.status = AgentRunStatus.FAILED;
       run.error = error.message;
-      run.executionTime += step.duration;
+      run.executionTime += stepDuration;
+
+      // Update agent stats (failure)
+      try {
+        agent.incrementExecution(false, run.executionTime, run.totalCost);
+        await this.agentRepository.save(agent);
+      } catch (_) { /* best effort */ }
+
       await this.runRepository.save(run);
       this.emitEvent(runId, 'run.failed', { error: error.message });
       return 'done';
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Built-in tool execution
+  // ---------------------------------------------------------------------------
+
   /**
-   * Build messages array for LLM call
+   * Execute a built-in tool. Returns null if the tool name is not a built-in.
    */
-  private buildMessages(agent: Agent, run: AgentRun, tools: Tool[]): any[] {
-    const messages: any[] = [];
+  private async executeBuiltInTool(
+    toolName: string,
+    parameters: Record<string, any>,
+    run: AgentRun,
+    agent: Agent,
+  ): Promise<{ result?: any; error?: string; status?: 'sleeping' | 'waiting_input' } | null> {
+    switch (toolName) {
+      case 'wait': {
+        const seconds = Math.min(Math.max(Number(parameters.seconds) || 10, 1), 3600);
+        run.status = AgentRunStatus.SLEEPING;
 
-    // System prompt from agent instructions
-    if (agent.instructions) {
-      let systemPrompt = agent.instructions;
+        // Enqueue the next step with a delay
+        await this.runtimeQueue.add('next-step', { runId: run.id }, {
+          delay: seconds * 1000,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        });
 
-      // Add tool descriptions
-      if (tools.length > 0) {
-        systemPrompt += '\n\nYou have access to the following tools:\n';
-        for (const tool of tools) {
-          systemPrompt += `- ${tool.name}: ${tool.description || 'No description'}\n`;
+        return {
+          result: `Sleeping for ${seconds} seconds. Will resume automatically.`,
+          status: 'sleeping',
+        };
+      }
+
+      case 'ask_user': {
+        const question = parameters.question || 'Please provide input';
+        run.status = AgentRunStatus.WAITING_INPUT;
+
+        return {
+          result: `Waiting for user input. Question: ${question}`,
+          status: 'waiting_input',
+        };
+      }
+
+      case 'store_memory': {
+        try {
+          const memoryType = (parameters.type as MemoryType) || MemoryType.FACT;
+          const memory = await this.memoryService.create(
+            run.organizationId,
+            {
+              content: parameters.content,
+              type: memoryType,
+              scope: MemoryScope.AGENT,
+              agentIds: [agent.id],
+              tags: parameters.tags || [],
+              source: { type: 'agent_runtime', id: run.id, name: agent.name },
+            },
+            run.userId,
+          );
+          return { result: `Memory stored (id: ${memory.id})` };
+        } catch (err) {
+          return { result: null, error: `Failed to store memory: ${err.message}` };
         }
       }
 
-      messages.push({ role: 'system', content: systemPrompt });
+      case 'recall_memory': {
+        try {
+          const memories = await this.memoryService.search(
+            run.organizationId,
+            parameters.query,
+            {
+              agentId: agent.id,
+              limit: parameters.limit || 5,
+            },
+          );
+          if (memories.length === 0) {
+            return { result: 'No relevant memories found.' };
+          }
+          const formatted = memories.map((m, i) =>
+            `${i + 1}. [${m.type}] (similarity: ${m.similarity.toFixed(2)}) ${m.content}`,
+          ).join('\n');
+          return { result: formatted };
+        } catch (err) {
+          return { result: null, error: `Failed to recall memory: ${err.message}` };
+        }
+      }
+
+      default:
+        return null; // Not a built-in tool
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Collaboration strategies
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Handle collaboration orchestration. The orchestrator agent delegates to child agents
+   * based on the configured strategy.
+   */
+  private async processCollaborationStep(run: AgentRun, agent: Agent): Promise<'continue' | 'done' | 'waiting'> {
+    const collab = agent.collaboration;
+    const stepStart = Date.now();
+
+    try {
+      switch (collab.strategy) {
+        case 'sequential':
+          return await this.runSequentialCollaboration(run, agent);
+        case 'parallel':
+          return await this.runParallelCollaboration(run, agent);
+        case 'race':
+          return await this.runRaceCollaboration(run, agent);
+        case 'debate':
+          return await this.runDebateCollaboration(run, agent);
+        default:
+          throw new Error(`Unknown collaboration strategy: ${collab.strategy}`);
+      }
+    } catch (error) {
+      this.logger.error(`Collaboration step failed for run ${run.id}: ${error.message}`, error.stack);
+
+      const stepDuration = Date.now() - stepStart;
+      run.steps.push({
+        type: 'error',
+        error: `Collaboration (${collab.strategy}) failed: ${error.message}`,
+        timestamp: new Date().toISOString(),
+        duration: stepDuration,
+      });
+      run.status = AgentRunStatus.FAILED;
+      run.error = error.message;
+      run.executionTime += stepDuration;
+      await this.runRepository.save(run);
+      this.emitEvent(run.id, 'run.failed', { error: error.message });
+      return 'done';
+    }
+  }
+
+  /**
+   * Sequential: run agents one after another, each receiving the previous agent's output as input.
+   */
+  private async runSequentialCollaboration(run: AgentRun, agent: Agent): Promise<'continue' | 'done'> {
+    const collab = agent.collaboration;
+    const stepStart = Date.now();
+    const inputText = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
+    let currentInput = inputText;
+    const agentOutputs: Array<{ agentId: string; role?: string; output: any }> = [];
+
+    for (const agentDef of collab.agents) {
+      const subRun = await this.startRun(
+        agentDef.agentId,
+        run.organizationId,
+        run.userId,
+        currentInput,
+        { parentRunId: run.id, maxSteps: 20, maxCostCents: 50 },
+      );
+
+      const result = await this.waitForRun(subRun.id, 300000);
+      const output = result?.output || 'No output';
+      agentOutputs.push({ agentId: agentDef.agentId, role: agentDef.role, output });
+
+      run.totalCost += result?.totalCost || 0;
+      run.totalTokens += result?.totalTokens || 0;
+
+      // Feed output as input to next agent
+      currentInput = typeof output === 'string' ? output : JSON.stringify(output);
+    }
+
+    // The final agent's output is the orchestrator's output
+    const finalOutput = agentOutputs[agentOutputs.length - 1]?.output || 'No output';
+    run.output = finalOutput;
+    run.status = AgentRunStatus.COMPLETED;
+
+    const stepDuration = Date.now() - stepStart;
+    run.steps.push({
+      type: 'collaboration_sequential',
+      input: { agentCount: collab.agents.length },
+      output: { agentOutputs: agentOutputs.map(ao => ({ agentId: ao.agentId, role: ao.role, outputPreview: String(ao.output).substring(0, 200) })) },
+      duration: stepDuration,
+      timestamp: new Date().toISOString(),
+    });
+    run.currentStep++;
+    run.executionTime += stepDuration;
+    await this.runRepository.save(run);
+    this.emitEvent(run.id, 'run.completed', { output: run.output });
+    return 'done';
+  }
+
+  /**
+   * Parallel: run all agents simultaneously, wait for all to complete, merge outputs.
+   */
+  private async runParallelCollaboration(run: AgentRun, agent: Agent): Promise<'continue' | 'done'> {
+    const collab = agent.collaboration;
+    const stepStart = Date.now();
+    const inputText = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
+
+    // Start all sub-runs simultaneously
+    const subRunPromises = collab.agents.map(agentDef =>
+      this.startRun(
+        agentDef.agentId,
+        run.organizationId,
+        run.userId,
+        inputText,
+        { parentRunId: run.id, maxSteps: 20, maxCostCents: 50 },
+      ),
+    );
+
+    const subRuns = await Promise.all(subRunPromises);
+
+    // Wait for all to complete
+    const results = await Promise.all(
+      subRuns.map(sr => this.waitForRun(sr.id, 300000)),
+    );
+
+    const agentOutputs = results.map((result, i) => ({
+      agentId: collab.agents[i].agentId,
+      role: collab.agents[i].role,
+      output: result?.output || 'No output',
+      cost: result?.totalCost || 0,
+      tokens: result?.totalTokens || 0,
+    }));
+
+    // Aggregate costs
+    for (const ao of agentOutputs) {
+      run.totalCost += ao.cost;
+      run.totalTokens += ao.tokens;
+    }
+
+    // Merge outputs: if there's a judge, use it; otherwise concatenate
+    let finalOutput: any;
+    if (collab.judgeAgentId) {
+      const judgeInput = `Multiple agents were asked: "${inputText}"\n\nTheir responses:\n\n` +
+        agentOutputs.map((ao, i) => `### Agent ${i + 1}${ao.role ? ` (${ao.role})` : ''}:\n${ao.output}`).join('\n\n') +
+        '\n\nPlease synthesize the best answer from these responses.';
+
+      const judgeRun = await this.startRun(
+        collab.judgeAgentId,
+        run.organizationId,
+        run.userId,
+        judgeInput,
+        { parentRunId: run.id, maxSteps: 10, maxCostCents: 25 },
+      );
+      const judgeResult = await this.waitForRun(judgeRun.id, 120000);
+      finalOutput = judgeResult?.output || 'Judge failed to produce output';
+      run.totalCost += judgeResult?.totalCost || 0;
+      run.totalTokens += judgeResult?.totalTokens || 0;
+    } else {
+      finalOutput = agentOutputs.map((ao, i) =>
+        `[Agent ${i + 1}${ao.role ? ` - ${ao.role}` : ''}]: ${ao.output}`,
+      ).join('\n\n');
+    }
+
+    run.output = finalOutput;
+    run.status = AgentRunStatus.COMPLETED;
+
+    const stepDuration = Date.now() - stepStart;
+    run.steps.push({
+      type: 'collaboration_parallel',
+      input: { agentCount: collab.agents.length, hasJudge: !!collab.judgeAgentId },
+      output: { agentOutputs: agentOutputs.map(ao => ({ agentId: ao.agentId, role: ao.role, outputPreview: String(ao.output).substring(0, 200) })) },
+      duration: stepDuration,
+      timestamp: new Date().toISOString(),
+    });
+    run.currentStep++;
+    run.executionTime += stepDuration;
+    await this.runRepository.save(run);
+    this.emitEvent(run.id, 'run.completed', { output: run.output });
+    return 'done';
+  }
+
+  /**
+   * Race: run all agents, take the first one to complete, cancel the rest.
+   */
+  private async runRaceCollaboration(run: AgentRun, agent: Agent): Promise<'continue' | 'done'> {
+    const collab = agent.collaboration;
+    const stepStart = Date.now();
+    const inputText = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
+
+    // Start all sub-runs simultaneously
+    const subRuns = await Promise.all(
+      collab.agents.map(agentDef =>
+        this.startRun(
+          agentDef.agentId,
+          run.organizationId,
+          run.userId,
+          inputText,
+          { parentRunId: run.id, maxSteps: 20, maxCostCents: 50 },
+        ),
+      ),
+    );
+
+    // Race: wait for the first to complete
+    const winnerResult = await Promise.race(
+      subRuns.map(sr => this.waitForRun(sr.id, 300000)),
+    );
+
+    // Cancel the rest
+    for (const sr of subRuns) {
+      try {
+        const currentRun = await this.runRepository.findOne({ where: { id: sr.id } });
+        if (currentRun && !currentRun.isDone()) {
+          currentRun.status = AgentRunStatus.CANCELLED;
+          await this.runRepository.save(currentRun);
+        }
+      } catch (_) { /* best effort */ }
+    }
+
+    run.output = winnerResult?.output || 'No output from winning agent';
+    run.status = AgentRunStatus.COMPLETED;
+    run.totalCost += winnerResult?.totalCost || 0;
+    run.totalTokens += winnerResult?.totalTokens || 0;
+
+    const stepDuration = Date.now() - stepStart;
+    run.steps.push({
+      type: 'collaboration_race',
+      input: { agentCount: collab.agents.length },
+      output: { winnerId: winnerResult?.agentId, outputPreview: String(run.output).substring(0, 200) },
+      duration: stepDuration,
+      timestamp: new Date().toISOString(),
+    });
+    run.currentStep++;
+    run.executionTime += stepDuration;
+    await this.runRepository.save(run);
+    this.emitEvent(run.id, 'run.completed', { output: run.output });
+    return 'done';
+  }
+
+  /**
+   * Debate: run rounds where each agent sees previous responses, then a judge summarizes.
+   */
+  private async runDebateCollaboration(run: AgentRun, agent: Agent): Promise<'continue' | 'done'> {
+    const collab = agent.collaboration;
+    const stepStart = Date.now();
+    const inputText = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
+    const maxRounds = collab.maxRounds || 3;
+
+    const allResponses: Array<{ round: number; agentId: string; role?: string; output: string }> = [];
+
+    for (let round = 1; round <= maxRounds; round++) {
+      for (const agentDef of collab.agents) {
+        // Build input with previous responses
+        let debateInput = `Original question: "${inputText}"\n\n`;
+        if (allResponses.length > 0) {
+          debateInput += 'Previous responses in this debate:\n\n';
+          for (const resp of allResponses) {
+            debateInput += `[Round ${resp.round}${resp.role ? ` - ${resp.role}` : ''}]: ${resp.output}\n\n`;
+          }
+          debateInput += `\nThis is round ${round}. Please provide your response, taking into account the previous arguments.`;
+        } else {
+          debateInput += 'This is round 1 of a multi-agent debate. Please provide your initial response.';
+        }
+
+        const subRun = await this.startRun(
+          agentDef.agentId,
+          run.organizationId,
+          run.userId,
+          debateInput,
+          { parentRunId: run.id, maxSteps: 10, maxCostCents: 25 },
+        );
+
+        const result = await this.waitForRun(subRun.id, 120000);
+        const output = result?.output || 'No response';
+        allResponses.push({ round, agentId: agentDef.agentId, role: agentDef.role, output: String(output) });
+
+        run.totalCost += result?.totalCost || 0;
+        run.totalTokens += result?.totalTokens || 0;
+      }
+    }
+
+    // Judge summarizes the debate
+    let finalOutput: any;
+    if (collab.judgeAgentId) {
+      const judgeInput = `A multi-agent debate was conducted on: "${inputText}"\n\n` +
+        'Here are all responses from the debate:\n\n' +
+        allResponses.map(r =>
+          `[Round ${r.round}${r.role ? ` - ${r.role}` : ''}]: ${r.output}`,
+        ).join('\n\n') +
+        '\n\nPlease provide a final judgment synthesizing the best arguments.';
+
+      const judgeRun = await this.startRun(
+        collab.judgeAgentId,
+        run.organizationId,
+        run.userId,
+        judgeInput,
+        { parentRunId: run.id, maxSteps: 10, maxCostCents: 25 },
+      );
+      const judgeResult = await this.waitForRun(judgeRun.id, 120000);
+      finalOutput = judgeResult?.output || 'Judge failed to produce output';
+      run.totalCost += judgeResult?.totalCost || 0;
+      run.totalTokens += judgeResult?.totalTokens || 0;
+    } else {
+      // No judge — return the last round's responses
+      const lastRound = allResponses.filter(r => r.round === maxRounds);
+      finalOutput = lastRound.map(r =>
+        `[${r.role || r.agentId}]: ${r.output}`,
+      ).join('\n\n');
+    }
+
+    run.output = finalOutput;
+    run.status = AgentRunStatus.COMPLETED;
+
+    const stepDuration = Date.now() - stepStart;
+    run.steps.push({
+      type: 'collaboration_debate',
+      input: { agentCount: collab.agents.length, rounds: maxRounds, hasJudge: !!collab.judgeAgentId },
+      output: { totalResponses: allResponses.length, outputPreview: String(finalOutput).substring(0, 200) },
+      duration: stepDuration,
+      timestamp: new Date().toISOString(),
+    });
+    run.currentStep++;
+    run.executionTime += stepDuration;
+    await this.runRepository.save(run);
+    this.emitEvent(run.id, 'run.completed', { output: run.output });
+    return 'done';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build messages array for LLM call
+   */
+  private buildMessages(agent: Agent, run: AgentRun, tools: Tool[], memoryContext: string): any[] {
+    const messages: any[] = [];
+
+    // System prompt from agent instructions
+    let systemPrompt = agent.instructions || 'You are a helpful autonomous agent.';
+
+    // Add memory context
+    if (memoryContext) {
+      systemPrompt += memoryContext;
+    }
+
+    // Add tool descriptions (the LLM also gets formal tool definitions, but this helps with context)
+    if (tools.length > 0) {
+      systemPrompt += '\n\nYou have access to the following tools:\n';
+      for (const tool of tools) {
+        systemPrompt += `- ${tool.name}: ${tool.description || 'No description'}\n`;
+      }
+    }
+
+    // Inform about built-in capabilities
+    systemPrompt += '\n\nYou also have built-in tools: wait (pause execution), ask_user (ask user a question), store_memory (save to long-term memory), recall_memory (search long-term memory).';
+
+    messages.push({ role: 'system', content: systemPrompt });
 
     // Thread history
     for (const msg of run.thread) {
-      messages.push({ role: msg.role, content: msg.content, ...(msg.toolCalls ? { tool_calls: msg.toolCalls } : {}) });
+      const msgObj: any = { role: msg.role, content: msg.content };
+      if (msg.toolCalls) {
+        msgObj.toolCalls = msg.toolCalls;
+      }
+      if (msg.toolCallId) {
+        msgObj.toolCallId = msg.toolCallId;
+      }
+      messages.push(msgObj);
     }
 
     return messages;
+  }
+
+  /**
+   * Build tool definitions for the LLM (user tools + built-in tools)
+   */
+  private buildToolDefinitions(tools: Tool[], agent: Agent): Array<{ name: string; description: string; parameters: Record<string, any> }> {
+    const defs: Array<{ name: string; description: string; parameters: Record<string, any> }> = [];
+
+    // User-defined tools
+    for (const tool of tools) {
+      defs.push({
+        name: tool.name.replace(/[^a-zA-Z0-9_-]/g, '_'),
+        description: tool.description || '',
+        parameters: tool.parameters || { type: 'object', properties: {} },
+      });
+    }
+
+    // Built-in tools
+    defs.push(BUILT_IN_TOOLS.wait);
+    defs.push(BUILT_IN_TOOLS.ask_user);
+    if (agent.memoryConfig?.enabled) {
+      defs.push(BUILT_IN_TOOLS.store_memory);
+      defs.push(BUILT_IN_TOOLS.recall_memory);
+    }
+
+    return defs;
+  }
+
+  /**
+   * Wait for a run to complete (polling).
+   */
+  private async waitForRun(runId: string, timeoutMs: number): Promise<AgentRun | null> {
+    const pollInterval = 1000;
+    const maxAttempts = Math.ceil(timeoutMs / pollInterval);
+
+    for (let i = 0; i < maxAttempts; i++) {
+      const run = await this.runRepository.findOne({ where: { id: runId } });
+      if (!run) return null;
+      if (run.isDone()) return run;
+      await this.sleep(pollInterval);
+    }
+
+    // Timeout — cancel the run
+    try {
+      const run = await this.runRepository.findOne({ where: { id: runId } });
+      if (run && !run.isDone()) {
+        run.status = AgentRunStatus.TIMEOUT;
+        run.error = 'Timed out waiting for sub-agent';
+        await this.runRepository.save(run);
+      }
+      return run;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
+   * Auto-save a summary of the run as a memory entry after completion.
+   */
+  private async autoSaveMemory(run: AgentRun, agent: Agent): Promise<void> {
+    try {
+      // Only save on completion with substantive output
+      if (run.status !== AgentRunStatus.COMPLETED || !run.output) return;
+
+      const inputSummary = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
+      const outputSummary = typeof run.output === 'string' ? run.output : JSON.stringify(run.output);
+
+      // Don't save trivially short interactions
+      if (inputSummary.length < 20 && outputSummary.length < 20) return;
+
+      const content = `Task: ${inputSummary.substring(0, 500)}\nResult: ${outputSummary.substring(0, 500)}`;
+
+      await this.memoryService.create(
+        run.organizationId,
+        {
+          content,
+          type: MemoryType.EPISODE,
+          scope: MemoryScope.AGENT,
+          agentIds: [agent.id],
+          tags: ['auto-saved', 'agent-run'],
+          source: { type: 'agent_runtime', id: run.id, name: agent.name },
+        },
+        run.userId,
+      );
+    } catch (err) {
+      this.logger.warn(`Failed to auto-save memory for run ${run.id}: ${err.message}`);
+    }
   }
 
   /**
@@ -265,6 +1142,14 @@ export class AgentRuntimeService {
     }
     return null;
   }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public API (unchanged)
+  // ---------------------------------------------------------------------------
 
   /**
    * Get a run by ID
