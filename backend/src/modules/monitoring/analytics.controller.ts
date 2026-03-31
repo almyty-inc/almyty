@@ -93,6 +93,20 @@ export class AnalyticsController {
     return { success: true, data, message: 'Timeline data retrieved successfully' };
   }
 
+  @Get('/audit-summary')
+  async getAuditSummary(@Request() req) {
+    const orgId = req.user?.currentOrganizationId;
+    const data = await this.analyticsService.getAuditSummary(orgId);
+    return { success: true, data, message: 'Audit summary retrieved successfully' };
+  }
+
+  @Get('/agent-runs')
+  async getAgentRuns(@Request() req) {
+    const orgId = req.user?.currentOrganizationId;
+    const data = await this.analyticsService.getAgentRunsSummary(orgId);
+    return { success: true, data, message: 'Agent runs summary retrieved successfully' };
+  }
+
   @Get('/export')
   async exportLogs(
     @Request() req,
