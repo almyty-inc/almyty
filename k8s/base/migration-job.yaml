@@ -17,28 +17,7 @@ spec:
         - name: migration
           image: ghcr.io/frane/almyty/api:latest
           imagePullPolicy: Always
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              echo "Clearing stale migration records and running migrations..."
-              node -e "
-                const {Client} = require('pg');
-                const c = new Client({
-                  host: process.env.DATABASE_HOST,
-                  port: parseInt(process.env.DATABASE_PORT),
-                  user: process.env.DATABASE_USERNAME,
-                  password: process.env.DATABASE_PASSWORD,
-                  database: process.env.DATABASE_NAME,
-                  ssl: process.env.DB_SSL === 'true' ? {rejectUnauthorized: false} : undefined,
-                });
-                (async () => {
-                  await c.connect();
-                  await c.query('DELETE FROM migrations');
-                  console.log('Cleared migrations table');
-                  await c.end();
-                })().catch(e => console.log('Skip clear:', e.message));
-              "
-              ./node_modules/.bin/typeorm migration:run -d dist/config/database.config.js
+          command: ["./node_modules/.bin/typeorm", "migration:run", "-d", "dist/config/database.config.js"]
           env:
             - name: NODE_ENV
               value: "production"
