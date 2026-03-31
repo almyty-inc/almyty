@@ -16,33 +16,7 @@ spec:
       containers:
         - name: migration
           image: ghcr.io/frane/almyty/api:latest
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              echo "=== Cleaning bogus seeded migration entries ==="
-              node -e "
-              const {Client} = require('pg');
-              const c = new Client({
-                host: process.env.DATABASE_HOST,
-                port: parseInt(process.env.DATABASE_PORT || '5432'),
-                user: process.env.DATABASE_USERNAME,
-                password: process.env.DATABASE_PASSWORD,
-                database: process.env.DATABASE_NAME,
-                ssl: process.env.DB_SSL === 'true' ? {rejectUnauthorized: false} : undefined,
-              });
-              c.connect()
-                .then(() => c.query('TRUNCATE TABLE migrations'))
-                .then(() => { console.log('Migrations table cleaned'); return c.end(); })
-                .catch(e => { console.log('No cleanup needed:', e.message); })
-                .then(() => process.exit(0));
-              "
-              echo "=== Debug: checking file paths ==="
-              ls dist/config/ 2>/dev/null || echo "no dist/config"
-              ls dist/migrations/ 2>/dev/null | head -5 || echo "no dist/migrations"
-              ls dist/entities/ 2>/dev/null | head -3 || echo "no dist/entities"
-              node -e "const d = require('./dist/config/database.config.js'); const ds = d.AppDataSource; console.log('migrations glob:', ds.options.migrations); console.log('entities glob:', ds.options.entities);"
-              echo "=== Running TypeORM migrations ==="
-              ./node_modules/.bin/typeorm migration:run -d dist/config/database.config.js
+          command: ["./node_modules/.bin/typeorm", "migration:run", "-d", "dist/config/database.config.js"]
           env:
             - name: NODE_ENV
               value: "production"
