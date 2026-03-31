@@ -14,9 +14,9 @@ export const AppDataSource = new DataSource({
   username: configService.get('DATABASE_USERNAME', 'postgres'),
   password: configService.get('DATABASE_PASSWORD', 'password'),
   database: configService.get('DATABASE_NAME', 'almyty'),
-  entities: ['src/entities/*.entity{.ts,.js}'],
-  migrations: ['src/migrations/*{.ts,.js}'],
-  synchronize: configService.get('NODE_ENV') === 'development',
+  entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
+  migrations: [__dirname + '/../migrations/*{.ts,.js}'],
+  synchronize: false,
   logging: configService.get('NODE_ENV') === 'development',
   ssl: configService.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
 });
