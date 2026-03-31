@@ -37,6 +37,7 @@ spec:
                   await c.end();
                 })().catch(e => console.log('Skip clear:', e.message));
               "
+              node -e "const fs=require('fs'),p=require('path'); const d=p.resolve('dist/migrations'); console.log('dir exists:',fs.existsSync(d)); if(fs.existsSync(d)){console.log('files:',fs.readdirSync(d).filter(f=>f.endsWith('.js')).length)} const c=require('./dist/config/database.config.js'); console.log('opts.migrations:',c.AppDataSource.options.migrations);"
               ./node_modules/.bin/typeorm migration:run -d dist/config/database.config.js
           env:
             - name: NODE_ENV
