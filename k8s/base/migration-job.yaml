@@ -38,32 +38,49 @@ spec:
               ds.initialize()
                 .then(async () => {
                   console.log('Connected. Running pending migrations...');
-                  try {
-                    const result = await ds.runMigrations({ transaction: 'each' });
-                    console.log('Migrations applied:', result.length);
-                    result.forEach(m => console.log(' ✓', m.name));
-                  } catch(e) {
-                    // If migrations fail because schema was created by synchronize,
-                    // seed the migrations table so future runs work correctly
-                    if (e.message.includes('already exists') || e.message.includes('duplicate')) {
-                      console.log('Schema exists (from synchronize). Seeding migrations table...');
-                      const qr = ds.createQueryRunner();
-                      const migrations = ds.migrations.map(m => m.constructor ? m.constructor.name : m.name);
-                      for (const name of migrations) {
-                        try {
-                          await qr.query(
-                            'INSERT INTO migrations (timestamp, name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-                            [parseInt(name.match(/\d+/)?.[0] || '0'), name]
-                          );
-                          console.log(' ✓ Seeded:', name);
-                        } catch(e2) { console.log(' ⚠ Skip:', name, e2.message); }
+                  const pending = await ds.showMigrations();
+                  console.log('Has pending migrations:', pending);
+
+                  // Run each migration individually to handle partial failures
+                  const allMigrations = ds.migrations;
+                  const qr = ds.createQueryRunner();
+
+                  // Check which are already recorded
+                  await qr.query('CREATE TABLE IF NOT EXISTS migrations (id SERIAL PRIMARY KEY, timestamp BIGINT, name VARCHAR)');
+                  const recorded = await qr.query('SELECT name FROM migrations');
+                  const recordedNames = new Set(recorded.map(r => r.name));
+
+                  let applied = 0;
+                  let skipped = 0;
+                  for (const migration of allMigrations) {
+                    const name = migration.constructor.name || migration.name;
+                    if (recordedNames.has(name)) {
+                      console.log(' ○ Already recorded:', name);
+                      skipped++;
+                      continue;
+                    }
+                    try {
+                      const instance = new (migration.constructor || migration)();
+                      await instance.up(qr);
+                      const ts = parseInt(name.match(/\d+/)?.[0] || '0');
+                      await qr.query('INSERT INTO migrations (timestamp, name) VALUES ($1, $2)', [ts, name]);
+                      console.log(' ✓ Applied:', name);
+                      applied++;
+                    } catch(e) {
+                      if (e.message.includes('already exists') || e.message.includes('duplicate')) {
+                        // Schema exists from synchronize — mark as done
+                        const ts = parseInt(name.match(/\d+/)?.[0] || '0');
+                        await qr.query('INSERT INTO migrations (timestamp, name) VALUES ($1, $2) ON CONFLICT DO NOTHING', [ts, name]);
+                        console.log(' ⊘ Schema exists, marked done:', name);
+                        skipped++;
+                      } else {
+                        console.error(' ✗ Failed:', name, e.message);
+                        throw e;
                       }
-                      await qr.release();
-                      console.log('Migration table seeded. Future runs will only apply new migrations.');
-                    } else {
-                      throw e;
                     }
                   }
+                  await qr.release();
+                  console.log(`Done: ${applied} applied, ${skipped} skipped`);
                   const qr = ds.createQueryRunner();
                   const tables = await qr.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
                   console.log('Tables:', tables.length);
