@@ -1,19 +1,67 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentInterface, InterfaceType, InterfaceStatus } from '../../entities/interface.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AgentRuntimeService } from '../agents/agent-runtime.service';
+import { BaseAdapter, NormalizedMessage } from './adapters/base.adapter';
+import { ChatWidgetAdapter } from './adapters/chat-widget.adapter';
+import { SlackAdapter } from './adapters/slack.adapter';
+import { DiscordAdapter } from './adapters/discord.adapter';
+import { TelegramAdapter } from './adapters/telegram.adapter';
+import { WhatsAppAdapter } from './adapters/whatsapp.adapter';
+import { EmailAdapter } from './adapters/email.adapter';
+import { WebhookAdapter } from './adapters/webhook.adapter';
 
 @Injectable()
 export class InterfacesService {
   private readonly logger = new Logger(InterfacesService.name);
+  private readonly adapters: Map<string, BaseAdapter>;
 
   constructor(
     @InjectRepository(AgentInterface)
     private readonly interfaceRepository: Repository<AgentInterface>,
+    @InjectRepository(AgentRun)
+    private readonly runRepository: Repository<AgentRun>,
     private readonly auditLogService: AuditLogService,
-  ) {}
+    @Inject(forwardRef(() => AgentRuntimeService))
+    private readonly agentRuntimeService: AgentRuntimeService,
+    private readonly chatWidgetAdapter: ChatWidgetAdapter,
+    private readonly slackAdapter: SlackAdapter,
+    private readonly discordAdapter: DiscordAdapter,
+    private readonly telegramAdapter: TelegramAdapter,
+    private readonly whatsAppAdapter: WhatsAppAdapter,
+    private readonly emailAdapter: EmailAdapter,
+    private readonly webhookAdapter: WebhookAdapter,
+  ) {
+    this.adapters = new Map<string, BaseAdapter>([
+      [InterfaceType.CHAT_WIDGET, this.chatWidgetAdapter],
+      [InterfaceType.SLACK, this.slackAdapter],
+      [InterfaceType.DISCORD, this.discordAdapter],
+      [InterfaceType.TELEGRAM, this.telegramAdapter],
+      [InterfaceType.WHATSAPP, this.whatsAppAdapter],
+      [InterfaceType.EMAIL, this.emailAdapter],
+      [InterfaceType.WEBHOOK, this.webhookAdapter],
+    ]);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Adapter lookup
+  // ---------------------------------------------------------------------------
+
+  getAdapter(type: string): BaseAdapter {
+    const adapter = this.adapters.get(type);
+    if (!adapter) {
+      throw new BadRequestException(`No adapter found for interface type: ${type}`);
+    }
+    return adapter;
+  }
+
+  // ---------------------------------------------------------------------------
+  // CRUD
+  // ---------------------------------------------------------------------------
 
   async create(
     organizationId: string,
@@ -57,6 +105,13 @@ export class InterfacesService {
     return iface;
   }
 
+  /**
+   * Find an interface by ID without org scoping (for public endpoints like webhooks/widgets).
+   */
+  async findByIdPublic(id: string): Promise<AgentInterface | null> {
+    return this.interfaceRepository.findOne({ where: { id } });
+  }
+
   async update(id: string, organizationId: string, data: Partial<{
     name: string;
     status: InterfaceStatus;
@@ -98,5 +153,239 @@ export class InterfacesService {
 
   async findByAgentId(agentId: string): Promise<AgentInterface[]> {
     return this.interfaceRepository.find({ where: { agentId }, order: { createdAt: 'DESC' } });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Inbound webhook handling
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Process an inbound message from an external platform (Slack, Discord, etc.).
+   * This runs asynchronously — the controller returns 200 immediately.
+   */
+  async handleInboundMessage(
+    interfaceId: string,
+    rawPayload: any,
+    headers: Record<string, string>,
+  ): Promise<void> {
+    // 1. Look up interface
+    const iface = await this.interfaceRepository.findOne({ where: { id: interfaceId } });
+    if (!iface) {
+      this.logger.warn(`Webhook received for unknown interface: ${interfaceId}`);
+      return;
+    }
+
+    // 2. Check if active
+    if (!iface.isActive()) {
+      this.logger.warn(`Webhook received for inactive interface: ${interfaceId}`);
+      return;
+    }
+
+    // 3. Get adapter
+    const adapter = this.getAdapter(iface.type);
+
+    // 4. Verify webhook signature
+    const isValid = await adapter.verifyWebhook(rawPayload, headers, iface.configuration);
+    if (!isValid) {
+      this.logger.warn(`Webhook signature verification failed for interface: ${interfaceId}`);
+      return;
+    }
+
+    // 5. Normalize inbound message
+    const normalized: NormalizedMessage = adapter.normalizeInbound(rawPayload);
+
+    // 6. Find existing run for this thread, or start a new one
+    let run: AgentRun | null = null;
+
+    if (normalized.threadId) {
+      // Search for an active run with matching threadId in metadata
+      const existingRuns = await this.runRepository
+        .createQueryBuilder('run')
+        .where('run.agentId = :agentId', { agentId: iface.agentId })
+        .andWhere('run.status IN (:...activeStatuses)', {
+          activeStatuses: ['running', 'waiting_input', 'sleeping'],
+        })
+        .andWhere("run.metadata->>'threadId' = :threadId", { threadId: normalized.threadId })
+        .orderBy('run.createdAt', 'DESC')
+        .limit(1)
+        .getMany();
+
+      run = existingRuns[0] || null;
+    }
+
+    if (run) {
+      // Existing run — add user message and resume
+      run.thread.push({
+        role: 'user',
+        content: normalized.text,
+        timestamp: new Date().toISOString(),
+      });
+      run.status = 'running' as any;
+      await this.runRepository.save(run);
+
+      // Resume by listening for completion
+      this.listenForCompletionAndRespond(run.id, iface, adapter, normalized);
+    } else {
+      // New run
+      const newRun = await this.agentRuntimeService.startRun(
+        iface.agentId,
+        iface.organizationId,
+        normalized.userId,
+        normalized.text,
+        { maxSteps: 25 },
+      );
+
+      // Save threadId in metadata for future lookups
+      newRun.metadata = {
+        ...(newRun.metadata || {}),
+        threadId: normalized.threadId,
+        interfaceId: iface.id,
+        interfaceType: iface.type,
+        source: normalized.metadata?.source || iface.type,
+      };
+      await this.runRepository.save(newRun);
+
+      // Listen for completion and send response
+      this.listenForCompletionAndRespond(newRun.id, iface, adapter, normalized);
+    }
+
+    // 7. Increment message count
+    await this.incrementMessages(interfaceId);
+  }
+
+  /**
+   * Listen for a run to complete and send the response back via the adapter.
+   */
+  private listenForCompletionAndRespond(
+    runId: string,
+    iface: AgentInterface,
+    adapter: BaseAdapter,
+    normalized: NormalizedMessage,
+  ): void {
+    const emitter = this.agentRuntimeService.getRunEmitter(runId);
+    if (!emitter) {
+      this.logger.warn(`No emitter found for run ${runId}, cannot send response`);
+      return;
+    }
+
+    const onEvent = async (event: any) => {
+      if (['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)) {
+        cleanup();
+
+        try {
+          // Get the final run state
+          const finalRun = await this.runRepository.findOne({ where: { id: runId } });
+          if (!finalRun) return;
+
+          // Extract the last assistant message from the thread
+          const lastAssistantMsg = [...finalRun.thread]
+            .reverse()
+            .find((m) => m.role === 'assistant');
+          const responseText = lastAssistantMsg?.content || finalRun.output?.text || 'No response';
+
+          // Format and send via adapter
+          const formatted = adapter.formatOutbound({ text: responseText });
+          await adapter.sendResponse(iface.configuration, formatted, {
+            threadId: normalized.threadId,
+            channel: normalized.metadata?.channel,
+            userId: normalized.userId,
+          });
+        } catch (err) {
+          this.logger.error(`Failed to send response for run ${runId}: ${err.message}`);
+        }
+      }
+    };
+
+    const onDone = () => cleanup();
+
+    const cleanup = () => {
+      emitter.removeListener('event', onEvent);
+      emitter.removeListener('done', onDone);
+    };
+
+    emitter.on('event', onEvent);
+    emitter.on('done', onDone);
+
+    // Safety timeout: clean up listener after 5 minutes if no completion
+    setTimeout(() => cleanup(), 5 * 60 * 1000);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Widget message handling
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Handle a message from the chat widget.
+   * Starts or continues a run, returns the run ID for SSE streaming.
+   */
+  async handleWidgetMessage(
+    interfaceId: string,
+    body: { message: string; sessionId?: string; threadId?: string },
+  ): Promise<{ runId: string; threadId: string }> {
+    const iface = await this.interfaceRepository.findOne({ where: { id: interfaceId } });
+    if (!iface) throw new NotFoundException('Interface not found');
+    if (!iface.isActive()) throw new BadRequestException('Interface is not active');
+
+    const adapter = this.getAdapter(iface.type);
+    const normalized = adapter.normalizeInbound({
+      message: body.message,
+      text: body.message,
+      sessionId: body.sessionId,
+      threadId: body.threadId,
+    });
+
+    // Check for existing run with this threadId
+    let run: AgentRun | null = null;
+
+    if (normalized.threadId) {
+      const existingRuns = await this.runRepository
+        .createQueryBuilder('run')
+        .where('run.agentId = :agentId', { agentId: iface.agentId })
+        .andWhere('run.status IN (:...activeStatuses)', {
+          activeStatuses: ['running', 'waiting_input', 'sleeping'],
+        })
+        .andWhere("run.metadata->>'threadId' = :threadId", { threadId: normalized.threadId })
+        .orderBy('run.createdAt', 'DESC')
+        .limit(1)
+        .getMany();
+
+      run = existingRuns[0] || null;
+    }
+
+    if (run) {
+      // Continue existing run
+      run.thread.push({
+        role: 'user',
+        content: normalized.text,
+        timestamp: new Date().toISOString(),
+      });
+      run.status = 'running' as any;
+      await this.runRepository.save(run);
+    } else {
+      // Start new run
+      run = await this.agentRuntimeService.startRun(
+        iface.agentId,
+        iface.organizationId,
+        normalized.userId,
+        normalized.text,
+        { maxSteps: 25 },
+      );
+
+      run.metadata = {
+        ...(run.metadata || {}),
+        threadId: normalized.threadId || run.id,
+        interfaceId: iface.id,
+        interfaceType: iface.type,
+        source: 'chat_widget',
+      };
+      await this.runRepository.save(run);
+    }
+
+    await this.incrementMessages(interfaceId);
+
+    return {
+      runId: run.id,
+      threadId: (run.metadata as any)?.threadId || run.id,
+    };
   }
 }

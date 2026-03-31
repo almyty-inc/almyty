@@ -14,6 +14,8 @@ import { LlmMessage } from '../../entities/llm-message.entity';
 import { Tool } from '../../entities/tool.entity';
 import { Api } from '../../entities/api.entity';
 import { Organization } from '../../entities/organization.entity';
+import { AuditLog } from '../../entities/audit-log.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { Organization } from '../../entities/organization.entity';
       Tool,
       Api,
       Organization,
+      AuditLog,
+      AgentRun,
     ]),
   ],
   controllers: [MonitoringController, AnalyticsController],

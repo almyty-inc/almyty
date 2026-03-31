@@ -14,16 +14,19 @@ import {
   Bot,
   CheckCircle2,
   XCircle,
+  ScrollText,
+  Filter,
+  Users,
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { analyticsApi, gatewaysApi, toolsApi, agentsApi, llmProvidersApi } from '@/lib/api'
+import { analyticsApi, auditLogsApi, gatewaysApi, toolsApi, agentsApi, llmProvidersApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
-import type { Tool, Gateway, RequestLog, ToolUsageEntry, GatewayUsageEntry, LlmUsageEntry, TimelineEntry, AnalyticsOverview, Agent, AgentExecution } from '@/types'
+import type { Tool, Gateway, RequestLog, ToolUsageEntry, GatewayUsageEntry, LlmUsageEntry, TimelineEntry, AnalyticsOverview, Agent, AgentExecution, AuditLogEntry, AuditResource, AuditAction } from '@/types'
 
 function formatMs(ms: number): string {
   if (!ms || ms === 0) return '--'
@@ -63,8 +66,8 @@ const statusColors: Record<string, string> = {
   '5': 'text-red-600',
 }
 
-type Tab = 'overview' | 'requests' | 'tools' | 'gateways' | 'llm' | 'agents'
-const ANALYTICS_TABS: Tab[] = ['overview', 'requests', 'tools', 'gateways', 'llm', 'agents']
+type Tab = 'overview' | 'requests' | 'tools' | 'gateways' | 'llm' | 'agents' | 'audit'
+const ANALYTICS_TABS: Tab[] = ['overview', 'requests', 'tools', 'gateways', 'llm', 'agents', 'audit']
 
 function getAnalyticsTab(pathname: string): Tab {
   for (const t of ANALYTICS_TABS) {
@@ -88,6 +91,11 @@ export function AnalyticsPage() {
   const [timeframe, setTimeframe] = useState('7d')
   const [logPage, setLogPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState<string>('')
+
+  // Audit trail state
+  const [auditPage, setAuditPage] = useState(1)
+  const [auditResourceFilter, setAuditResourceFilter] = useState<string>('')
+  const [auditActionFilter, setAuditActionFilter] = useState<string>('')
 
   const { data: overview, isLoading: loadingOverview } = useQuery({
     queryKey: ['analytics-overview', currentOrganization?.id],
@@ -193,6 +201,25 @@ export function AnalyticsPage() {
       return map
     },
     enabled: !!currentOrganization && tab === 'agents' && agents.length > 0,
+  })
+
+  // Audit trail data
+  const { data: auditSummary, isLoading: loadingAuditSummary } = useQuery({
+    queryKey: ['analytics-audit-summary', currentOrganization?.id],
+    queryFn: () => analyticsApi.getAuditSummary(),
+    enabled: !!currentOrganization && tab === 'audit',
+    refetchInterval: 30000,
+  })
+
+  const { data: auditLogs, isLoading: loadingAuditLogs } = useQuery({
+    queryKey: ['analytics-audit-logs', currentOrganization?.id, auditPage, auditResourceFilter, auditActionFilter],
+    queryFn: async () => {
+      const params: Record<string, string> = { page: String(auditPage), limit: '25' }
+      if (auditResourceFilter) params.resourceType = auditResourceFilter
+      if (auditActionFilter) params.action = auditActionFilter
+      return auditLogsApi.getAll(params)
+    },
+    enabled: !!currentOrganization && tab === 'audit',
   })
 
   // Compute agent analytics from the data we have
@@ -342,6 +369,7 @@ export function AnalyticsPage() {
           { key: 'gateways' as Tab, label: 'Gateways', icon: Zap },
           { key: 'llm' as Tab, label: 'LLM', icon: MessageSquare },
           { key: 'agents' as Tab, label: 'Agents', icon: Bot },
+          { key: 'audit' as Tab, label: 'Audit Trail', icon: ScrollText },
         ]).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -771,6 +799,206 @@ export function AnalyticsPage() {
               <Bot className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
               <p className="text-sm font-medium text-muted-foreground">No agent data yet</p>
               <p className="text-xs text-muted-foreground mt-1">Agent execution stats will appear here once agents are created and invoked.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Audit Trail tab */}
+      {tab === 'audit' && (
+        <div className="space-y-6">
+          {/* Summary cards */}
+          {loadingAuditSummary ? (
+            <div className="flex items-center justify-center h-48"><LoadingSpinner size="lg" /></div>
+          ) : auditSummary ? (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <StatCard icon={ScrollText} label="Actions Today" value={formatNumber(auditSummary.totals?.today || 0)} />
+                <StatCard icon={Activity} label="Actions This Week" value={formatNumber(auditSummary.totals?.thisWeek || 0)} />
+                <StatCard icon={Activity} label="Actions This Month" value={formatNumber(auditSummary.totals?.thisMonth || 0)} />
+                <StatCard icon={Users} label="Active Users"
+                  value={String(auditSummary.topUsers?.length || 0)} />
+              </div>
+
+              {/* Breakdown cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">By Resource Type</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {auditSummary.byResourceType?.length > 0 ? (
+                      <div className="space-y-2">
+                        {auditSummary.byResourceType.map((r: any) => (
+                          <div key={r.resourceType} className="flex items-center justify-between py-1">
+                            <Badge variant="outline" className="text-xs capitalize">{r.resourceType.replace('_', ' ')}</Badge>
+                            <span className="text-sm font-medium">{formatNumber(r.count)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">No data</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Top Users</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {auditSummary.topUsers?.length > 0 ? (
+                      <div className="space-y-2">
+                        {auditSummary.topUsers.map((u: any) => (
+                          <div key={u.userId} className="flex items-center justify-between py-1">
+                            <span className="text-xs text-muted-foreground truncate max-w-[200px]">{u.userEmail || u.userId?.slice(0, 8)}</span>
+                            <span className="text-sm font-medium">{formatNumber(u.count)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">No data</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          ) : null}
+
+          {/* Filters */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Resource:</span>
+              <select
+                value={auditResourceFilter}
+                onChange={e => { setAuditResourceFilter(e.target.value); setAuditPage(1) }}
+                className="text-xs border rounded px-2 py-1 bg-background"
+              >
+                <option value="">All</option>
+                <option value="agent">Agent</option>
+                <option value="agent_run">Agent Run</option>
+                <option value="tool">Tool</option>
+                <option value="gateway">Gateway</option>
+                <option value="api">API</option>
+                <option value="memory">Memory</option>
+                <option value="file">File</option>
+                <option value="interface">Interface</option>
+                <option value="credential">Credential</option>
+                <option value="user">User</option>
+                <option value="organization">Organization</option>
+                <option value="llm_provider">LLM Provider</option>
+                <option value="llm_session">LLM Session</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Action:</span>
+              <select
+                value={auditActionFilter}
+                onChange={e => { setAuditActionFilter(e.target.value); setAuditPage(1) }}
+                className="text-xs border rounded px-2 py-1 bg-background"
+              >
+                <option value="">All</option>
+                <option value="create">Create</option>
+                <option value="update">Update</option>
+                <option value="delete">Delete</option>
+                <option value="execute">Execute</option>
+                <option value="invoke">Invoke</option>
+                <option value="activate">Activate</option>
+                <option value="deactivate">Deactivate</option>
+                <option value="tool_execute">Tool Execute</option>
+                <option value="run_start">Run Start</option>
+                <option value="run_complete">Run Complete</option>
+                <option value="run_fail">Run Fail</option>
+                <option value="login">Login</option>
+              </select>
+            </div>
+            {(auditResourceFilter || auditActionFilter) && (
+              <Button variant="ghost" size="sm" className="h-6 text-xs"
+                onClick={() => { setAuditResourceFilter(''); setAuditActionFilter(''); setAuditPage(1) }}>
+                Clear filters
+              </Button>
+            )}
+          </div>
+
+          {/* Audit log table */}
+          {loadingAuditLogs ? (
+            <div className="flex items-center justify-center h-48"><LoadingSpinner size="lg" /></div>
+          ) : (auditLogs?.data?.length > 0) ? (
+            <>
+              <div className="rounded-lg border bg-card overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground bg-muted">
+                      <th className="px-3 py-2 font-medium">Time</th>
+                      <th className="px-3 py-2 font-medium">User</th>
+                      <th className="px-3 py-2 font-medium">Action</th>
+                      <th className="px-3 py-2 font-medium">Resource</th>
+                      <th className="px-3 py-2 font-medium">Name</th>
+                      <th className="px-3 py-2 font-medium">Status</th>
+                      <th className="px-3 py-2 font-medium text-right">Duration</th>
+                      <th className="px-3 py-2 font-medium">IP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.data.map((entry: AuditLogEntry) => (
+                      <tr key={entry.id} className="border-b last:border-0 hover:bg-muted/30 text-xs">
+                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                          {new Date(entry.createdAt).toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground truncate max-w-[150px]">
+                          {entry.userEmail || entry.userId?.slice(0, 8) || '--'}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge variant="outline" className="text-[10px] capitalize">
+                            {entry.action.replace(/_/g, ' ')}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge variant="secondary" className="text-[10px] capitalize">
+                            {entry.resourceType.replace(/_/g, ' ')}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2 font-medium truncate max-w-[200px]">
+                          {entry.resourceName || entry.resourceId?.slice(0, 8) || '--'}
+                        </td>
+                        <td className="px-3 py-2">
+                          {entry.status ? (
+                            <span className={cn('font-medium',
+                              entry.status === 'success' ? 'text-green-600' : entry.status === 'error' ? 'text-red-600' : 'text-muted-foreground'
+                            )}>
+                              {entry.status}
+                            </span>
+                          ) : '--'}
+                        </td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">
+                          {entry.duration ? formatMs(entry.duration) : '--'}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground font-mono">
+                          {entry.ipAddress || '--'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  Page {auditLogs.pagination?.page || auditLogs.page || 1} of {auditLogs.pagination?.totalPages || auditLogs.totalPages || 1} ({auditLogs.pagination?.total || auditLogs.total || 0} total)
+                </span>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="sm" disabled={auditPage <= 1}
+                    onClick={() => setAuditPage(p => p - 1)}>Prev</Button>
+                  <Button variant="outline" size="sm" disabled={auditPage >= (auditLogs.pagination?.totalPages || auditLogs.totalPages || 1)}
+                    onClick={() => setAuditPage(p => p + 1)}>Next</Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-12">
+              <ScrollText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No audit log entries yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Audit events will appear here as actions are performed in the system.</p>
             </div>
           )}
         </div>

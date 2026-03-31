@@ -398,6 +398,8 @@ export const analyticsApi = {
   getLlmUsage: (timeframe = '7d') => apiGet(`/analytics/llm-usage?timeframe=${timeframe}`),
   getTimeline: (timeframe = '24h', granularity = 'hour') =>
     apiGet(`/analytics/timeline?timeframe=${timeframe}&granularity=${granularity}`),
+  getAuditSummary: () => apiGet('/analytics/audit-summary'),
+  getAgentRunsSummary: () => apiGet('/analytics/agent-runs'),
   exportData: (format: string, type: string, from?: string, to?: string) => {
     const params = new URLSearchParams({ format, type })
     if (from) params.set('from', from)
