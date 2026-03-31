@@ -37,7 +37,7 @@ spec:
                 .then(() => process.exit(0));
               "
               echo "=== Running TypeORM migrations ==="
-              npx typeorm migration:run -d dist/config/database.config.js
+              ./node_modules/.bin/typeorm migration:run -d dist/config/database.config.js
           env:
             - name: NODE_ENV
               value: "production"
