@@ -510,7 +510,8 @@ export const interfacesApi = {
 export const auditLogsApi = {
   getAll: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
-    return apiGet(`/audit-logs${qs}`)
+    // Return full response with data + pagination (not just data array)
+    return api.get(`/audit-logs${qs}`).then(r => r.data)
   },
   getResourceHistory: (resourceType: string, resourceId: string, limit?: number) =>
     apiGet(`/audit-logs/resource?resourceType=${resourceType}&resourceId=${resourceId}${limit ? `&limit=${limit}` : ''}`),
