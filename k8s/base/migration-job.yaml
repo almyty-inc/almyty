@@ -36,6 +36,11 @@ spec:
                 .catch(e => { console.log('No cleanup needed:', e.message); })
                 .then(() => process.exit(0));
               "
+              echo "=== Debug: checking file paths ==="
+              ls dist/config/ 2>/dev/null || echo "no dist/config"
+              ls dist/migrations/ 2>/dev/null | head -5 || echo "no dist/migrations"
+              ls dist/entities/ 2>/dev/null | head -3 || echo "no dist/entities"
+              node -e "const d = require('./dist/config/database.config.js'); const ds = d.AppDataSource; console.log('migrations glob:', ds.options.migrations); console.log('entities glob:', ds.options.entities);"
               echo "=== Running TypeORM migrations ==="
               ./node_modules/.bin/typeorm migration:run -d dist/config/database.config.js
           env:
