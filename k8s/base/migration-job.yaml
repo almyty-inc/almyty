@@ -16,82 +16,31 @@ spec:
       containers:
         - name: migration
           image: ghcr.io/frane/almyty/api:latest
-          command: ["node", "-e"]
+          command: ["/bin/sh", "-c"]
           args:
             - |
-              const {DataSource} = require('typeorm');
-              const path = require('path');
-              const ds = new DataSource({
-                type: 'postgres',
+              echo "=== Cleaning bogus seeded migration entries ==="
+              node -e "
+              const {Client} = require('pg');
+              const c = new Client({
                 host: process.env.DATABASE_HOST,
                 port: parseInt(process.env.DATABASE_PORT || '5432'),
-                username: process.env.DATABASE_USERNAME,
+                user: process.env.DATABASE_USERNAME,
                 password: process.env.DATABASE_PASSWORD,
                 database: process.env.DATABASE_NAME,
-                ssl: process.env.DB_SSL === 'true' ? {rejectUnauthorized: false} : false,
-                entities: [path.join(__dirname, 'dist', 'entities', '*.entity.js')],
-                migrations: [path.join(__dirname, 'dist', 'migrations', '*.js')],
-                synchronize: false,
-                migrationsRun: false,
-                logging: true,
+                ssl: process.env.DB_SSL === 'true' ? {rejectUnauthorized: false} : undefined,
               });
-              ds.initialize()
-                .then(async () => {
-                  console.log('Connected. Running pending migrations...');
-                  const pending = await ds.showMigrations();
-                  console.log('Has pending migrations:', pending);
-
-                  // Run each migration individually to handle partial failures
-                  const allMigrations = ds.migrations;
-                  const qr = ds.createQueryRunner();
-
-                  // Check which are already recorded
-                  await qr.query('CREATE TABLE IF NOT EXISTS migrations (id SERIAL PRIMARY KEY, timestamp BIGINT, name VARCHAR)');
-                  const recorded = await qr.query('SELECT name FROM migrations');
-                  const recordedNames = new Set(recorded.map(r => r.name));
-
-                  let applied = 0;
-                  let skipped = 0;
-                  for (const migration of allMigrations) {
-                    const name = migration.constructor.name || migration.name;
-                    if (recordedNames.has(name)) {
-                      console.log(' ○ Already recorded:', name);
-                      skipped++;
-                      continue;
-                    }
-                    try {
-                      const instance = new (migration.constructor || migration)();
-                      await instance.up(qr);
-                      const ts = parseInt(name.match(/\d+/)?.[0] || '0');
-                      await qr.query('INSERT INTO migrations (timestamp, name) VALUES ($1, $2)', [ts, name]);
-                      console.log(' ✓ Applied:', name);
-                      applied++;
-                    } catch(e) {
-                      if (e.message.includes('already exists') || e.message.includes('duplicate')) {
-                        // Schema exists from synchronize — mark as done
-                        const ts = parseInt(name.match(/\d+/)?.[0] || '0');
-                        await qr.query('INSERT INTO migrations (timestamp, name) VALUES ($1, $2) ON CONFLICT DO NOTHING', [ts, name]);
-                        console.log(' ⊘ Schema exists, marked done:', name);
-                        skipped++;
-                      } else {
-                        console.error(' ✗ Failed:', name, e.message);
-                        throw e;
-                      }
-                    }
-                  }
-                  await qr.release();
-                  console.log(`Done: ${applied} applied, ${skipped} skipped`);
-                  const qr = ds.createQueryRunner();
-                  const tables = await qr.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
-                  console.log('Tables:', tables.length);
-                  tables.forEach(t => console.log(' -', t.tablename));
-                  await qr.release();
-                  await ds.destroy();
-                  console.log('Migration complete');
-                  process.exit(0);
-                })
-                .catch(e => { console.error('Migration failed:', e.message); process.exit(1); });
+              c.connect()
+                .then(() => c.query('TRUNCATE TABLE migrations'))
+                .then(() => { console.log('Migrations table cleaned'); return c.end(); })
+                .catch(e => { console.log('No cleanup needed:', e.message); })
+                .then(() => process.exit(0));
+              "
+              echo "=== Running TypeORM migrations ==="
+              npx typeorm migration:run -d dist/config/database.config.js
           env:
+            - name: NODE_ENV
+              value: "production"
             - name: DATABASE_HOST
               valueFrom:
                 configMapKeyRef:
