@@ -34,7 +34,7 @@ RUN npm ci --legacy-peer-deps
 
 # Copy source code and build
 COPY . .
-RUN npm run build
+RUN npm run build && echo "Build timestamp: $(date)"
 
 # Production image
 FROM base AS production
