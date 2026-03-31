@@ -4,8 +4,8 @@ export class AddExecutionMethodToTools1730200000000 implements MigrationInterfac
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       ALTER TABLE "tools"
-      ADD COLUMN "executionMethod" VARCHAR NULL,
-      ADD COLUMN "authConfig" JSONB NULL
+      ADD COLUMN IF NOT EXISTS "executionMethod" VARCHAR NULL,
+      ADD COLUMN IF NOT EXISTS "authConfig" JSONB NULL
     `);
 
     // Update existing tools with operationId to use HTTP method
@@ -19,8 +19,8 @@ export class AddExecutionMethodToTools1730200000000 implements MigrationInterfac
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       ALTER TABLE "tools"
-      DROP COLUMN "executionMethod",
-      DROP COLUMN "authConfig"
+      DROP COLUMN IF EXISTS "executionMethod",
+      DROP COLUMN IF EXISTS "authConfig"
     `);
   }
 }
