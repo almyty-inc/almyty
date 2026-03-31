@@ -6,7 +6,7 @@ export class CreateAgentTables1741900000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create agents table
     await queryRunner.query(`
-      CREATE TABLE "agents" (
+      CREATE TABLE IF NOT EXISTS "agents" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "name" character varying NOT NULL,
         "description" character varying,
@@ -31,7 +31,7 @@ export class CreateAgentTables1741900000000 implements MigrationInterface {
 
     // Create agent_executions table
     await queryRunner.query(`
-      CREATE TABLE "agent_executions" (
+      CREATE TABLE IF NOT EXISTS "agent_executions" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "agentId" uuid NOT NULL,
         "organizationId" uuid NOT NULL,
@@ -53,57 +53,69 @@ export class CreateAgentTables1741900000000 implements MigrationInterface {
 
     // Add indexes on agents
     await queryRunner.query(
-      `CREATE INDEX "IDX_agent_organizationId_name" ON "agents" ("organizationId", "name")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_agent_organizationId_name" ON "agents" ("organizationId", "name")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_agent_organizationId_status" ON "agents" ("organizationId", "status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_agent_organizationId_status" ON "agents" ("organizationId", "status")`,
     );
 
     // Add indexes on agent_executions
     await queryRunner.query(
-      `CREATE INDEX "IDX_agent_execution_agentId_createdAt" ON "agent_executions" ("agentId", "createdAt")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_agent_execution_agentId_createdAt" ON "agent_executions" ("agentId", "createdAt")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_agent_execution_organizationId_createdAt" ON "agent_executions" ("organizationId", "createdAt")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_agent_execution_organizationId_createdAt" ON "agent_executions" ("organizationId", "createdAt")`,
     );
 
     // Add foreign keys
     await queryRunner.query(`
-      ALTER TABLE "agents"
-      ADD CONSTRAINT "FK_agents_organizationId"
-      FOREIGN KEY ("organizationId") REFERENCES "organizations"("id")
-      ON DELETE CASCADE ON UPDATE NO ACTION
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_agents_organizationId') THEN
+          ALTER TABLE "agents"
+          ADD CONSTRAINT "FK_agents_organizationId"
+          FOREIGN KEY ("organizationId") REFERENCES "organizations"("id")
+          ON DELETE CASCADE ON UPDATE NO ACTION;
+        END IF;
+      END $$;
     `);
 
     await queryRunner.query(`
-      ALTER TABLE "agent_executions"
-      ADD CONSTRAINT "FK_agent_executions_agentId"
-      FOREIGN KEY ("agentId") REFERENCES "agents"("id")
-      ON DELETE CASCADE ON UPDATE NO ACTION
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_agent_executions_agentId') THEN
+          ALTER TABLE "agent_executions"
+          ADD CONSTRAINT "FK_agent_executions_agentId"
+          FOREIGN KEY ("agentId") REFERENCES "agents"("id")
+          ON DELETE CASCADE ON UPDATE NO ACTION;
+        END IF;
+      END $$;
     `);
 
     await queryRunner.query(`
-      ALTER TABLE "agent_executions"
-      ADD CONSTRAINT "FK_agent_executions_organizationId"
-      FOREIGN KEY ("organizationId") REFERENCES "organizations"("id")
-      ON DELETE CASCADE ON UPDATE NO ACTION
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_agent_executions_organizationId') THEN
+          ALTER TABLE "agent_executions"
+          ADD CONSTRAINT "FK_agent_executions_organizationId"
+          FOREIGN KEY ("organizationId") REFERENCES "organizations"("id")
+          ON DELETE CASCADE ON UPDATE NO ACTION;
+        END IF;
+      END $$;
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Drop foreign keys
-    await queryRunner.query(`ALTER TABLE "agent_executions" DROP CONSTRAINT "FK_agent_executions_organizationId"`);
-    await queryRunner.query(`ALTER TABLE "agent_executions" DROP CONSTRAINT "FK_agent_executions_agentId"`);
-    await queryRunner.query(`ALTER TABLE "agents" DROP CONSTRAINT "FK_agents_organizationId"`);
+    await queryRunner.query(`ALTER TABLE IF EXISTS "agent_executions" DROP CONSTRAINT IF EXISTS "FK_agent_executions_organizationId"`);
+    await queryRunner.query(`ALTER TABLE IF EXISTS "agent_executions" DROP CONSTRAINT IF EXISTS "FK_agent_executions_agentId"`);
+    await queryRunner.query(`ALTER TABLE IF EXISTS "agents" DROP CONSTRAINT IF EXISTS "FK_agents_organizationId"`);
 
     // Drop indexes
-    await queryRunner.query(`DROP INDEX "IDX_agent_execution_organizationId_createdAt"`);
-    await queryRunner.query(`DROP INDEX "IDX_agent_execution_agentId_createdAt"`);
-    await queryRunner.query(`DROP INDEX "IDX_agent_organizationId_status"`);
-    await queryRunner.query(`DROP INDEX "IDX_agent_organizationId_name"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_agent_execution_organizationId_createdAt"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_agent_execution_agentId_createdAt"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_agent_organizationId_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_agent_organizationId_name"`);
 
     // Drop tables
-    await queryRunner.query(`DROP TABLE "agent_executions"`);
-    await queryRunner.query(`DROP TABLE "agents"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "agent_executions"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "agents"`);
   }
 }
