@@ -99,7 +99,9 @@ export function AgentBuilderPage() {
   const [agentDescription, setAgentDescription] = useState('')
   const [agentStatus, setAgentStatus] = useState<string>('draft')
   const [agentMode, setAgentMode] = useState<'workflow' | 'autonomous'>('workflow')
+  const [agentSoul, setAgentSoul] = useState('')
   const [agentInstructions, setAgentInstructions] = useState('')
+  const [agentHeartbeat, setAgentHeartbeat] = useState<{ enabled: boolean; intervalMinutes: number; prompt: string }>({ enabled: false, intervalMinutes: 60, prompt: '' })
   const [agentToolIds, setAgentToolIds] = useState<string[]>([])
   const [agentModelConfig, setAgentModelConfig] = useState<{ providerId?: string; model?: string; temperature?: number; maxTokens?: number }>({})
   const [agentMemoryConfig, setAgentMemoryConfig] = useState<{ enabled?: boolean; autoSave?: boolean }>({ enabled: false, autoSave: false })
@@ -275,7 +277,9 @@ export function AgentBuilderPage() {
       setAgentDescription(agent.description || '')
       setAgentStatus(agent.status)
       setAgentMode(agent.mode || 'workflow')
+      setAgentSoul(agent.soul || '')
       setAgentInstructions(agent.instructions || '')
+      setAgentHeartbeat(agent.heartbeat || { enabled: false, intervalMinutes: 60, prompt: '' })
       setAgentToolIds(agent.toolIds || [])
       setAgentModelConfig(agent.modelConfig || {})
       setAgentMemoryConfig(agent.memoryConfig || { enabled: false, autoSave: false })
@@ -489,8 +493,10 @@ export function AgentBuilderPage() {
       if (agentMode === 'workflow') {
         payload.pipeline = buildPipeline()
       } else {
-        // Autonomous mode — save instructions + tools + model config
+        // Autonomous mode — save instructions + soul + heartbeat + tools + model config
+        payload.soul = agentSoul || undefined
         payload.instructions = agentInstructions
+        payload.heartbeat = agentHeartbeat.enabled ? agentHeartbeat : { enabled: false, intervalMinutes: agentHeartbeat.intervalMinutes, prompt: agentHeartbeat.prompt }
         payload.toolIds = agentToolIds
         payload.modelConfig = agentModelConfig
         payload.memoryConfig = agentMemoryConfig
@@ -672,7 +678,24 @@ export function AgentBuilderPage() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-4xl mx-auto w-full space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Agent Instructions</CardTitle>
+              <CardTitle className="text-base">Soul</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={agentSoul}
+                onChange={(e) => setAgentSoul(e.target.value)}
+                placeholder="You are a friendly, professional assistant. You never share personal opinions on politics or religion. You always cite your sources."
+                className="min-h-[120px] font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                Personality, tone, and boundaries. Defines WHO the agent is.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Instructions</CardTitle>
             </CardHeader>
             <CardContent>
               <Textarea
@@ -682,7 +705,7 @@ export function AgentBuilderPage() {
                 className="min-h-[200px] font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground mt-2">
-                System prompt that defines the agent's behavior, personality, and goals.
+                What the agent should do. Goals, tasks, and workflows.
               </p>
             </CardContent>
           </Card>
@@ -898,6 +921,50 @@ export function AgentBuilderPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Heartbeat</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={agentHeartbeat.enabled}
+                  onChange={(e) => setAgentHeartbeat({ ...agentHeartbeat, enabled: e.target.checked })}
+                  className="rounded"
+                />
+                <div>
+                  <p className="text-sm font-medium">Enable Heartbeat</p>
+                  <p className="text-xs text-muted-foreground">Agent wakes up periodically to check conditions or process tasks</p>
+                </div>
+              </label>
+
+              {agentHeartbeat.enabled && (
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Interval (minutes)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={agentHeartbeat.intervalMinutes}
+                      onChange={(e) => setAgentHeartbeat({ ...agentHeartbeat, intervalMinutes: parseInt(e.target.value) || 60 })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Heartbeat Prompt</Label>
+                    <Textarea
+                      value={agentHeartbeat.prompt}
+                      onChange={(e) => setAgentHeartbeat({ ...agentHeartbeat, prompt: e.target.value })}
+                      placeholder="Check my inbox for new messages. If there are urgent items, summarize them."
+                      className="min-h-[100px] font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">What the agent should do on each heartbeat wake-up.</p>
+                  </div>
                 </div>
               )}
             </CardContent>

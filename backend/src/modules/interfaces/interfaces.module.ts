@@ -13,6 +13,11 @@ import { TelegramAdapter } from './adapters/telegram.adapter';
 import { WhatsAppAdapter } from './adapters/whatsapp.adapter';
 import { EmailAdapter } from './adapters/email.adapter';
 import { WebhookAdapter } from './adapters/webhook.adapter';
+import { GoogleChatAdapter } from './adapters/google-chat.adapter';
+import { MicrosoftTeamsAdapter } from './adapters/microsoft-teams.adapter';
+import { SignalAdapter } from './adapters/signal.adapter';
+import { MatrixAdapter } from './adapters/matrix.adapter';
+import { IrcAdapter } from './adapters/irc.adapter';
 import { AgentsModule } from '../agents/agents.module';
 
 @Module({
@@ -29,6 +34,11 @@ import { AgentsModule } from '../agents/agents.module';
     WhatsAppAdapter,
     EmailAdapter,
     WebhookAdapter,
+    GoogleChatAdapter,
+    MicrosoftTeamsAdapter,
+    SignalAdapter,
+    MatrixAdapter,
+    IrcAdapter,
   ],
   controllers: [InterfacesController],
   exports: [InterfacesService],

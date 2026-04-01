@@ -14,6 +14,11 @@ import { TelegramAdapter } from './adapters/telegram.adapter';
 import { WhatsAppAdapter } from './adapters/whatsapp.adapter';
 import { EmailAdapter } from './adapters/email.adapter';
 import { WebhookAdapter } from './adapters/webhook.adapter';
+import { GoogleChatAdapter } from './adapters/google-chat.adapter';
+import { MicrosoftTeamsAdapter } from './adapters/microsoft-teams.adapter';
+import { SignalAdapter } from './adapters/signal.adapter';
+import { MatrixAdapter } from './adapters/matrix.adapter';
+import { IrcAdapter } from './adapters/irc.adapter';
 
 @Injectable()
 export class InterfacesService {
@@ -35,6 +40,11 @@ export class InterfacesService {
     private readonly whatsAppAdapter: WhatsAppAdapter,
     private readonly emailAdapter: EmailAdapter,
     private readonly webhookAdapter: WebhookAdapter,
+    private readonly googleChatAdapter: GoogleChatAdapter,
+    private readonly microsoftTeamsAdapter: MicrosoftTeamsAdapter,
+    private readonly signalAdapter: SignalAdapter,
+    private readonly matrixAdapter: MatrixAdapter,
+    private readonly ircAdapter: IrcAdapter,
   ) {
     this.adapters = new Map<string, BaseAdapter>([
       [InterfaceType.CHAT_WIDGET, this.chatWidgetAdapter],
@@ -44,6 +54,11 @@ export class InterfacesService {
       [InterfaceType.WHATSAPP, this.whatsAppAdapter],
       [InterfaceType.EMAIL, this.emailAdapter],
       [InterfaceType.WEBHOOK, this.webhookAdapter],
+      [InterfaceType.GOOGLE_CHAT, this.googleChatAdapter],
+      [InterfaceType.MICROSOFT_TEAMS, this.microsoftTeamsAdapter],
+      [InterfaceType.SIGNAL, this.signalAdapter],
+      [InterfaceType.MATRIX, this.matrixAdapter],
+      [InterfaceType.IRC, this.ircAdapter],
     ]);
   }
 

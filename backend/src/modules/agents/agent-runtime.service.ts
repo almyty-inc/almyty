@@ -999,24 +999,36 @@ export class AgentRuntimeService {
   private buildMessages(agent: Agent, run: AgentRun, tools: Tool[], memoryContext: string): any[] {
     const messages: any[] = [];
 
-    // System prompt from agent instructions
-    let systemPrompt = agent.instructions || 'You are a helpful autonomous agent.';
+    // Build structured system prompt
+    const parts: string[] = [];
 
-    // Add memory context
-    if (memoryContext) {
-      systemPrompt += memoryContext;
+    // [SOUL] — personality, tone, boundaries
+    if (agent.soul) {
+      parts.push(`[SOUL]\n${agent.soul}`);
     }
 
-    // Add tool descriptions (the LLM also gets formal tool definitions, but this helps with context)
+    // [INSTRUCTIONS] — what to do
+    parts.push(`[INSTRUCTIONS]\n${agent.instructions || 'You are a helpful autonomous agent.'}`);
+
+    // [MEMORY] — relevant memories
+    if (memoryContext) {
+      parts.push(`[MEMORY]\nRelevant memories:${memoryContext}`);
+    }
+
+    // [TOOLS] — available tools
+    const toolLines: string[] = [];
     if (tools.length > 0) {
-      systemPrompt += '\n\nYou have access to the following tools:\n';
       for (const tool of tools) {
-        systemPrompt += `- ${tool.name}: ${tool.description || 'No description'}\n`;
+        toolLines.push(`- ${tool.name}: ${tool.description || 'No description'}`);
       }
     }
+    toolLines.push('- wait: Pause execution');
+    toolLines.push('- ask_user: Ask user a question');
+    toolLines.push('- store_memory: Save to long-term memory');
+    toolLines.push('- recall_memory: Search long-term memory');
+    parts.push(`[TOOLS]\nYou have access to these tools:\n${toolLines.join('\n')}`);
 
-    // Inform about built-in capabilities
-    systemPrompt += '\n\nYou also have built-in tools: wait (pause execution), ask_user (ask user a question), store_memory (save to long-term memory), recall_memory (search long-term memory).';
+    const systemPrompt = parts.join('\n\n');
 
     messages.push({ role: 'system', content: systemPrompt });
 
@@ -1223,6 +1235,72 @@ export class AgentRuntimeService {
    */
   getRunEmitter(runId: string): EventEmitter | null {
     return this.runEmitters.get(runId) || null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Heartbeat management
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Enable heartbeat: creates a repeating BullMQ job for this agent.
+   */
+  async enableHeartbeat(agentId: string, organizationId: string, intervalMinutes: number, prompt: string): Promise<Agent> {
+    const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
+    if (!agent) throw new NotFoundException('Agent not found');
+
+    // Remove any existing heartbeat job for this agent
+    await this.disableHeartbeatJob(agentId);
+
+    // Save heartbeat config on the agent
+    agent.heartbeat = { enabled: true, intervalMinutes, prompt };
+    await this.agentRepository.save(agent);
+
+    // Create a repeating job
+    await this.runtimeQueue.add(
+      'heartbeat',
+      { agentId, organizationId },
+      {
+        repeat: { every: intervalMinutes * 60 * 1000 },
+        jobId: `heartbeat-${agentId}`,
+        removeOnComplete: 50,
+        removeOnFail: 20,
+      },
+    );
+
+    this.logger.log(`Heartbeat enabled for agent ${agentId}: every ${intervalMinutes}m`);
+    return agent;
+  }
+
+  /**
+   * Disable heartbeat: removes the repeating BullMQ job and updates the agent.
+   */
+  async disableHeartbeat(agentId: string, organizationId: string): Promise<Agent> {
+    const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
+    if (!agent) throw new NotFoundException('Agent not found');
+
+    agent.heartbeat = { ...agent.heartbeat, enabled: false } as any;
+    await this.agentRepository.save(agent);
+
+    await this.disableHeartbeatJob(agentId);
+
+    this.logger.log(`Heartbeat disabled for agent ${agentId}`);
+    return agent;
+  }
+
+  /**
+   * Remove the repeating heartbeat job from the queue.
+   */
+  private async disableHeartbeatJob(agentId: string): Promise<void> {
+    try {
+      const repeatableJobs = await this.runtimeQueue.getRepeatableJobs();
+      for (const job of repeatableJobs) {
+        if (job.id === `heartbeat-${agentId}`) {
+          await this.runtimeQueue.removeRepeatableByKey(job.key);
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to remove heartbeat job for agent ${agentId}: ${err.message}`);
+    }
   }
 
   /**

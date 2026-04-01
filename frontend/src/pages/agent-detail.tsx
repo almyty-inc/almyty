@@ -132,6 +132,11 @@ const interfaceTypeIcons: Record<string, string> = {
   whatsapp: '📞',
   email: '📧',
   webhook: '🔗',
+  google_chat: '🟢',
+  microsoft_teams: '🟣',
+  signal: '🔵',
+  matrix: '🟩',
+  irc: '⌨️',
 }
 
 function getDefaultInterfaceConfig(type: string): Record<string, any> {
@@ -150,6 +155,16 @@ function getDefaultInterfaceConfig(type: string): Record<string, any> {
       return { resendApiKey: '', replyFrom: '', receiveAddress: '' }
     case 'webhook':
       return { callbackUrl: '', secret: '' }
+    case 'google_chat':
+      return { webhookUrl: '', spaceId: '' }
+    case 'microsoft_teams':
+      return { botId: '', botPassword: '', tenantId: '' }
+    case 'signal':
+      return { phoneNumber: '', apiUrl: '' }
+    case 'matrix':
+      return { homeserverUrl: '', accessToken: '', roomId: '' }
+    case 'irc':
+      return { server: '', port: '6667', channel: '', nick: '' }
     default:
       return {}
   }
@@ -201,6 +216,35 @@ function getInterfaceConfigSummary(type: string, config: Record<string, any>): {
       return [
         { label: 'URL', value: config.callbackUrl || '' },
         { label: 'Secret', value: config.secret || '', secret: true },
+      ]
+    case 'google_chat':
+      return [
+        { label: 'Webhook URL', value: config.webhookUrl || '', secret: true },
+        { label: 'Space ID', value: config.spaceId || '' },
+      ]
+    case 'microsoft_teams':
+      return [
+        { label: 'Bot ID', value: config.botId || '' },
+        { label: 'Bot Password', value: config.botPassword || '', secret: true },
+        { label: 'Tenant ID', value: config.tenantId || '' },
+      ]
+    case 'signal':
+      return [
+        { label: 'Phone Number', value: config.phoneNumber || '' },
+        { label: 'API URL', value: config.apiUrl || '' },
+      ]
+    case 'matrix':
+      return [
+        { label: 'Homeserver', value: config.homeserverUrl || '' },
+        { label: 'Access Token', value: config.accessToken || '', secret: true },
+        { label: 'Room ID', value: config.roomId || '' },
+      ]
+    case 'irc':
+      return [
+        { label: 'Server', value: config.server || '' },
+        { label: 'Port', value: config.port || '6667' },
+        { label: 'Channel', value: config.channel || '' },
+        { label: 'Nick', value: config.nick || '' },
       ]
     default:
       return []
@@ -1557,7 +1601,7 @@ console.log(r2.choices[0].message.content);`,
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {interfaces.map((iface) => {
                 const configSummary = getInterfaceConfigSummary(iface.type, iface.configuration)
-                const isWebhookType = ['slack', 'discord', 'telegram', 'whatsapp', 'email', 'webhook'].includes(iface.type)
+                const isWebhookType = ['slack', 'discord', 'telegram', 'whatsapp', 'email', 'webhook', 'google_chat', 'microsoft_teams', 'signal', 'matrix', 'irc'].includes(iface.type)
                 const webhookUrl = isWebhookType ? `https://api.staging.almyty.com/interfaces/${iface.id}/webhook` : null
                 const embedSnippet = iface.type === 'chat_widget' ? `<script src="https://api.staging.almyty.com/widget/${iface.id}"></script>` : null
 
@@ -1816,6 +1860,11 @@ console.log(r2.choices[0].message.content);`,
                   <SelectItem value="whatsapp">WhatsApp</SelectItem>
                   <SelectItem value="email">Email</SelectItem>
                   <SelectItem value="webhook">Webhook</SelectItem>
+                  <SelectItem value="google_chat">Google Chat</SelectItem>
+                  <SelectItem value="microsoft_teams">Microsoft Teams</SelectItem>
+                  <SelectItem value="signal">Signal</SelectItem>
+                  <SelectItem value="matrix">Matrix</SelectItem>
+                  <SelectItem value="irc">IRC</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -2059,6 +2108,178 @@ console.log(r2.choices[0].message.content);`,
                     placeholder="HMAC verification secret"
                     value={interfaceConfig.secret || ''}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, secret: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newInterfaceType === 'google_chat' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Google Chat Settings</p>
+                <div>
+                  <Label htmlFor="cfg-gchat-webhook">Webhook URL</Label>
+                  <Input
+                    id="cfg-gchat-webhook"
+                    placeholder="https://chat.googleapis.com/v1/spaces/..."
+                    value={interfaceConfig.webhookUrl || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, webhookUrl: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-gchat-space">Space ID</Label>
+                  <Input
+                    id="cfg-gchat-space"
+                    placeholder="spaces/AAAA..."
+                    value={interfaceConfig.spaceId || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, spaceId: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newInterfaceType === 'microsoft_teams' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Microsoft Teams Settings</p>
+                <div>
+                  <Label htmlFor="cfg-teams-botid">Bot ID</Label>
+                  <Input
+                    id="cfg-teams-botid"
+                    placeholder="Bot (App) ID"
+                    value={interfaceConfig.botId || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, botId: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-teams-password">Bot Password</Label>
+                  <Input
+                    id="cfg-teams-password"
+                    type="password"
+                    placeholder="Bot password / client secret"
+                    value={interfaceConfig.botPassword || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, botPassword: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-teams-tenant">Tenant ID</Label>
+                  <Input
+                    id="cfg-teams-tenant"
+                    placeholder="Azure AD Tenant ID"
+                    value={interfaceConfig.tenantId || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, tenantId: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newInterfaceType === 'signal' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Signal Settings</p>
+                <div>
+                  <Label htmlFor="cfg-signal-phone">Signal Phone Number</Label>
+                  <Input
+                    id="cfg-signal-phone"
+                    placeholder="+1234567890"
+                    value={interfaceConfig.phoneNumber || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-signal-api">signal-cli API URL</Label>
+                  <Input
+                    id="cfg-signal-api"
+                    placeholder="http://localhost:8080"
+                    value={interfaceConfig.apiUrl || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newInterfaceType === 'matrix' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Matrix Settings</p>
+                <div>
+                  <Label htmlFor="cfg-matrix-hs">Homeserver URL</Label>
+                  <Input
+                    id="cfg-matrix-hs"
+                    placeholder="https://matrix.org"
+                    value={interfaceConfig.homeserverUrl || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, homeserverUrl: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-matrix-token">Access Token</Label>
+                  <Input
+                    id="cfg-matrix-token"
+                    type="password"
+                    placeholder="syt_..."
+                    value={interfaceConfig.accessToken || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, accessToken: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-matrix-room">Room ID</Label>
+                  <Input
+                    id="cfg-matrix-room"
+                    placeholder="!abc123:matrix.org"
+                    value={interfaceConfig.roomId || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, roomId: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newInterfaceType === 'irc' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">IRC Settings</p>
+                <div>
+                  <Label htmlFor="cfg-irc-server">Server</Label>
+                  <Input
+                    id="cfg-irc-server"
+                    placeholder="irc.libera.chat"
+                    value={interfaceConfig.server || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, server: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-irc-port">Port</Label>
+                  <Input
+                    id="cfg-irc-port"
+                    placeholder="6667"
+                    value={interfaceConfig.port || '6667'}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, port: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-irc-channel">Channel</Label>
+                  <Input
+                    id="cfg-irc-channel"
+                    placeholder="#my-channel"
+                    value={interfaceConfig.channel || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, channel: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-irc-nick">Nick</Label>
+                  <Input
+                    id="cfg-irc-nick"
+                    placeholder="mybot"
+                    value={interfaceConfig.nick || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, nick: e.target.value }))}
                     className="mt-1"
                   />
                 </div>

@@ -89,6 +89,16 @@ export class Agent {
   @Column({ type: 'text', nullable: true })
   instructions: string;
 
+  @Column({ type: 'text', nullable: true })
+  soul: string;
+
+  @Column({ type: 'json', nullable: true })
+  heartbeat: {
+    enabled: boolean;
+    intervalMinutes: number;
+    prompt: string;
+  };
+
   @Column({ type: 'uuid', array: true, default: '{}' })
   toolIds: string[];
 

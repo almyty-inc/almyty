@@ -13,6 +13,11 @@ export enum InterfaceType {
   EMAIL = 'email',
   TELEGRAM = 'telegram',
   WEBHOOK = 'webhook',
+  GOOGLE_CHAT = 'google_chat',
+  MICROSOFT_TEAMS = 'microsoft_teams',
+  SIGNAL = 'signal',
+  MATRIX = 'matrix',
+  IRC = 'irc',
 }
 
 export enum InterfaceStatus {
