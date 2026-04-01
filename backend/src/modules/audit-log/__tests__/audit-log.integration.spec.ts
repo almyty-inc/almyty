@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { AuditLogService } from '../audit-log.service';
 import { AuditLog, AuditAction, AuditResource } from '../../../entities/audit-log.entity';
+import { User } from '../../../entities/user.entity';
 
 /**
  * Integration tests for AuditLogService.
@@ -42,6 +43,12 @@ describe('AuditLogService (integration)', () => {
         {
           provide: getRepositoryToken(AuditLog),
           useValue: mockRepo,
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(null),
+          },
         },
       ],
     }).compile();

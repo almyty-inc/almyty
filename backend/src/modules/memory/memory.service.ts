@@ -42,7 +42,7 @@ export class MemoryService {
     },
     createdBy?: string,
   ): Promise<Memory> {
-    const embedding = await this.embeddingService.generateEmbedding(data.content);
+    const embedding = await this.embeddingService.generateEmbedding(data.content, organizationId);
 
     const memory = this.memoryRepository.create({
       organizationId,
@@ -129,7 +129,7 @@ export class MemoryService {
 
     // Re-generate embedding if content changed
     if (data.content && data.content !== memory.content) {
-      const embedding = await this.embeddingService.generateEmbedding(data.content);
+      const embedding = await this.embeddingService.generateEmbedding(data.content, organizationId);
       Object.assign(memory, data, { embedding });
     } else {
       Object.assign(memory, data);
@@ -184,7 +184,7 @@ export class MemoryService {
     },
   ): Promise<Array<Memory & { similarity: number }>> {
     const limit = options?.limit || 10;
-    const queryEmbedding = await this.embeddingService.generateEmbedding(query);
+    const queryEmbedding = await this.embeddingService.generateEmbedding(query, organizationId);
 
     // Build filter conditions
     const qb = this.memoryRepository.createQueryBuilder('memory')

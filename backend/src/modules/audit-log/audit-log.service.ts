@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { User } from '../../entities/user.entity';
 
 export interface AuditLogOptions {
   organizationId: string;
@@ -40,6 +41,8 @@ export class AuditLogService {
   constructor(
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   /**
@@ -47,10 +50,23 @@ export class AuditLogService {
    */
   async log(options: AuditLogOptions): Promise<AuditLog | null> {
     try {
+      // Resolve user email if userId is provided but userEmail is not
+      let userEmail = options.userEmail;
+      if (options.userId && !userEmail) {
+        try {
+          const user = await this.userRepository.findOne({ where: { id: options.userId }, select: ['id', 'email'] });
+          if (user) {
+            userEmail = user.email;
+          }
+        } catch (e) {
+          // Never block audit logging for a user lookup failure
+        }
+      }
+
       const entry = this.auditLogRepository.create({
         organizationId: options.organizationId,
         userId: options.userId,
-        userEmail: options.userEmail,
+        userEmail,
         action: options.action,
         resourceType: options.resourceType,
         resourceId: options.resourceId,

@@ -30,7 +30,7 @@ export const databaseConfig = {
   password: configService.get('DATABASE_PASSWORD', 'password'),
   database: configService.get('DATABASE_NAME', 'almyty'),
   entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
-  synchronize: configService.get('NODE_ENV') === 'development',
+  synchronize: false,
   logging: configService.get('NODE_ENV') === 'development',
   autoLoadEntities: true,
   ssl: configService.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
