@@ -137,7 +137,7 @@ export const organizationsApi = {
   create: (data: { name: string; description?: string }) =>
     apiPost('/organizations', data),
   
-  update: (id: string, data: Partial<{ name: string; description: string }>) =>
+  update: (id: string, data: Partial<{ name: string; description: string; agentDefaults: any }>) =>
     apiPatch(`/organizations/${id}`, data),
   
   delete: (id: string) => apiDel(`/organizations/${id}`),

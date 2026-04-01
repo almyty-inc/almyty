@@ -121,6 +121,16 @@ export class Agent {
   collaboration: {
     strategy: 'sequential' | 'parallel' | 'race' | 'debate';
     agents: Array<{ agentId: string; role?: string }>;
+    sharedBrief?: string;
+    rules?: {
+      maxTotalCost?: number;
+      maxChainDepth?: number;
+      outputFormat?: 'text' | 'json';
+      escalation?: 'never' | 'on_failure' | 'on_low_confidence';
+      conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge';
+      allowRevision?: boolean;
+      sharedMemoryScope?: boolean;
+    };
     judgeAgentId?: string;
     maxRounds?: number;
   };

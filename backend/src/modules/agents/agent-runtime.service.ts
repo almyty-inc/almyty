@@ -5,6 +5,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
 import { Agent } from '../../entities/agent.entity';
+import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
 import { EventEmitter } from 'events';
 import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
@@ -79,6 +80,8 @@ export class AgentRuntimeService {
     private readonly agentRepository: Repository<Agent>,
     @InjectRepository(Tool)
     private readonly toolRepository: Repository<Tool>,
+    @InjectRepository(Organization)
+    private readonly organizationRepository: Repository<Organization>,
     @InjectQueue('agent-runtime')
     private readonly runtimeQueue: Queue,
     @Inject(forwardRef(() => LlmProvidersService))
@@ -109,6 +112,21 @@ export class AgentRuntimeService {
 
     if (agent.mode !== 'autonomous') {
       throw new BadRequestException('Agent is not in autonomous mode. Use /invoke for workflow agents.');
+    }
+
+    // Enforce maxChainDepth: if this is a child run, count depth by following parentRunIds
+    if (options?.parentRunId && agent.collaboration?.rules?.maxChainDepth) {
+      let depth = 1;
+      let currentParentId = options.parentRunId;
+      while (currentParentId) {
+        const parentRun = await this.runRepository.findOne({ where: { id: currentParentId }, select: ['id', 'parentRunId'] });
+        if (!parentRun || !parentRun.parentRunId) break;
+        depth++;
+        currentParentId = parentRun.parentRunId;
+        if (depth >= agent.collaboration.rules.maxChainDepth) {
+          throw new BadRequestException(`Chain depth limit exceeded (max: ${agent.collaboration.rules.maxChainDepth})`);
+        }
+      }
     }
 
     const run = this.runRepository.create({
@@ -181,6 +199,19 @@ export class AgentRuntimeService {
     const stepStart = Date.now();
     const agent = run.agent;
 
+    // Enforce collaboration rules.maxTotalCost across sibling runs
+    if (run.parentRunId && agent.collaboration?.rules?.maxTotalCost) {
+      const siblingRuns = await this.runRepository.find({ where: { parentRunId: run.parentRunId } });
+      const totalSiblingCost = siblingRuns.reduce((sum, sr) => sum + (sr.totalCost || 0), 0);
+      if (totalSiblingCost >= agent.collaboration.rules.maxTotalCost) {
+        run.status = AgentRunStatus.FAILED;
+        run.error = `Collaboration total cost limit exceeded ($${totalSiblingCost.toFixed(2)} >= $${agent.collaboration.rules.maxTotalCost})`;
+        await this.runRepository.save(run);
+        this.emitEvent(runId, 'run.failed', { error: run.error });
+        return 'done';
+      }
+    }
+
     // If this is a collaboration orchestrator, delegate to collaboration handler
     if (agent.collaboration?.strategy && agent.collaboration.agents?.length > 0) {
       return this.processCollaborationStep(run, agent);
@@ -213,8 +244,11 @@ export class AgentRuntimeService {
         }
       }
 
+      // Load organization defaults for system prompt
+      const org = await this.organizationRepository.findOne({ where: { id: run.organizationId } });
+
       // Build messages for the LLM
-      const messages = this.buildMessages(agent, run, tools, memoryContext);
+      const messages = this.buildMessages(agent, run, tools, memoryContext, org);
 
       // Build tool definitions for the LLM (user tools + built-in tools)
       const llmTools = this.buildToolDefinitions(tools, agent);
@@ -996,15 +1030,55 @@ export class AgentRuntimeService {
   /**
    * Build messages array for LLM call
    */
-  private buildMessages(agent: Agent, run: AgentRun, tools: Tool[], memoryContext: string): any[] {
+  private buildMessages(agent: Agent, run: AgentRun, tools: Tool[], memoryContext: string, org?: Organization): any[] {
     const messages: any[] = [];
 
     // Build structured system prompt
     const parts: string[] = [];
 
-    // [PERSONALITY] — personality, tone, boundaries
+    // [ORGANIZATION DEFAULTS] — org-level personality and rules
+    const orgDefaults = org?.agentDefaults;
+    if (orgDefaults?.personality || orgDefaults?.rules) {
+      const orgParts: string[] = [];
+      if (orgDefaults.personality) orgParts.push(orgDefaults.personality);
+      if (orgDefaults.rules) orgParts.push(orgDefaults.rules);
+      parts.push(`[ORGANIZATION DEFAULTS]\n${orgParts.join('\n')}`);
+    }
+
+    // [PERSONALITY] — agent-level personality, tone, boundaries
     if (agent.personality) {
       parts.push(`[PERSONALITY]\n${agent.personality}`);
+    }
+
+    // [COLLABORATION CONTEXT] — only if this run is part of a collaboration
+    const collab = agent.collaboration;
+    if (run.parentRunId || (collab?.strategy && collab?.agents?.length > 0)) {
+      const collabParts: string[] = [];
+      // Find the role of the current agent in the collaboration
+      const currentAgentRole = collab?.agents?.find(a => a.agentId === agent.id)?.role;
+      if (currentAgentRole && collab?.strategy) {
+        collabParts.push(`You are the "${currentAgentRole}" in a ${collab.strategy} collaboration.`);
+      } else if (collab?.strategy) {
+        collabParts.push(`You are participating in a ${collab.strategy} collaboration.`);
+      }
+      if (collab?.sharedBrief) {
+        collabParts.push(`Brief: ${collab.sharedBrief}`);
+      }
+      if (collab?.rules) {
+        const rulesParts: string[] = [];
+        if (collab.rules.maxTotalCost) rulesParts.push(`max cost $${collab.rules.maxTotalCost}`);
+        if (collab.rules.outputFormat) rulesParts.push(`output format: ${collab.rules.outputFormat}`);
+        if (collab.rules.escalation) rulesParts.push(`escalation: ${collab.rules.escalation}`);
+        if (collab.rules.conflictResolution) rulesParts.push(`conflict resolution: ${collab.rules.conflictResolution}`);
+        if (rulesParts.length > 0) collabParts.push(`Rules: ${rulesParts.join(', ')}`);
+      }
+      if (collab?.agents?.length > 0) {
+        const teamList = collab.agents.map(a => `${a.role || a.agentId}`).join(', ');
+        collabParts.push(`Team members: ${teamList}`);
+      }
+      if (collabParts.length > 0) {
+        parts.push(`[COLLABORATION CONTEXT]\n${collabParts.join('\n')}`);
+      }
     }
 
     // [INSTRUCTIONS] — what to do
@@ -1012,7 +1086,7 @@ export class AgentRuntimeService {
 
     // [MEMORY] — relevant memories
     if (memoryContext) {
-      parts.push(`[MEMORY]\nRelevant memories:${memoryContext}`);
+      parts.push(`[RELEVANT MEMORIES]\nRelevant memories:${memoryContext}`);
     }
 
     // [TOOLS] — available tools
@@ -1026,7 +1100,7 @@ export class AgentRuntimeService {
     toolLines.push('- ask_user: Ask user a question');
     toolLines.push('- store_memory: Save to long-term memory');
     toolLines.push('- recall_memory: Search long-term memory');
-    parts.push(`[TOOLS]\nYou have access to these tools:\n${toolLines.join('\n')}`);
+    parts.push(`[AVAILABLE TOOLS]\nYou have access to these tools:\n${toolLines.join('\n')}`);
 
     const systemPrompt = parts.join('\n\n');
 

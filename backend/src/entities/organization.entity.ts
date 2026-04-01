@@ -62,6 +62,14 @@ export class Organization {
   settings: OrganizationSettings;
 
   @Column({ type: 'json', nullable: true })
+  agentDefaults: {
+    personality?: string;
+    rules?: string;
+    maxCostPerRun?: number;
+    maxStepsPerRun?: number;
+  };
+
+  @Column({ type: 'json', nullable: true })
   billingInfo: Record<string, any>;
 
   @Column({ default: 'free' })
