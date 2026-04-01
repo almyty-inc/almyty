@@ -671,6 +671,11 @@ export interface Agent {
     autoSave?: boolean
     scopes?: string[]
   }
+  agentConfig?: {
+    canCallAgents?: boolean
+    canCreateAgents?: boolean
+  }
+  isTemporary?: boolean
   collaboration?: {
     strategy: 'sequential' | 'parallel' | 'race' | 'debate'
     agents: { agentId: string; role?: string }[]
