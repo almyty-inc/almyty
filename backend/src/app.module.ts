@@ -89,7 +89,7 @@ import { databaseConfig } from './config/database.config';
           entities: [__dirname + '/entities/*.entity{.ts,.js}'],
           migrations: [__dirname + '/migrations/*{.ts,.js}'],
           migrationsRun: false,
-          synchronize: configService.get('DB_SYNC', 'false') === 'true',
+          synchronize: false,
           logging: configService.get('NODE_ENV') === 'development',
           autoLoadEntities: true,
           ssl: dbSsl ? { rejectUnauthorized: false } : false,

@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { MemoryService } from '../memory.service';
 import { EmbeddingService } from '../embedding.service';
 import { Memory, MemoryType, MemoryScope } from '../../../entities/memory.entity';
+import { LlmProvider } from '../../../entities/llm-provider.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 
 /**
@@ -87,6 +88,12 @@ describe('MemoryService (integration)', () => {
         {
           provide: getRepositoryToken(Memory),
           useValue: mockRepo,
+        },
+        {
+          provide: getRepositoryToken(LlmProvider),
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(null),
+          },
         },
         {
           provide: AuditLogService,

@@ -134,6 +134,79 @@ const interfaceTypeIcons: Record<string, string> = {
   webhook: '🔗',
 }
 
+function getDefaultInterfaceConfig(type: string): Record<string, any> {
+  switch (type) {
+    case 'chat_widget':
+      return { welcomeMessage: '', primaryColor: '#6366f1', position: 'bottom-right', theme: 'auto' }
+    case 'slack':
+      return { botToken: '', signingSecret: '', channelIds: '' }
+    case 'discord':
+      return { botToken: '', guildIds: '' }
+    case 'telegram':
+      return { botToken: '' }
+    case 'whatsapp':
+      return { accountSid: '', authToken: '', phoneNumber: '' }
+    case 'email':
+      return { resendApiKey: '', replyFrom: '', receiveAddress: '' }
+    case 'webhook':
+      return { callbackUrl: '', secret: '' }
+    default:
+      return {}
+  }
+}
+
+function maskSecret(value: string): string {
+  if (!value || value.length <= 4) return '****'
+  return value.slice(0, 4) + '****'
+}
+
+function getInterfaceConfigSummary(type: string, config: Record<string, any>): { label: string; value: string; secret?: boolean }[] {
+  if (!config) return []
+  switch (type) {
+    case 'chat_widget':
+      return [
+        { label: 'Welcome', value: config.welcomeMessage || '(default)' },
+        { label: 'Color', value: config.primaryColor || '#6366f1' },
+        { label: 'Position', value: config.position || 'bottom-right' },
+        { label: 'Theme', value: config.theme || 'auto' },
+      ]
+    case 'slack':
+      return [
+        { label: 'Bot Token', value: config.botToken || '', secret: true },
+        { label: 'Signing Secret', value: config.signingSecret || '', secret: true },
+        { label: 'Channels', value: config.channelIds || '' },
+      ]
+    case 'discord':
+      return [
+        { label: 'Bot Token', value: config.botToken || '', secret: true },
+        { label: 'Guild IDs', value: config.guildIds || '' },
+      ]
+    case 'telegram':
+      return [
+        { label: 'Bot Token', value: config.botToken || '', secret: true },
+      ]
+    case 'whatsapp':
+      return [
+        { label: 'Account SID', value: config.accountSid || '' },
+        { label: 'Auth Token', value: config.authToken || '', secret: true },
+        { label: 'Phone', value: config.phoneNumber || '' },
+      ]
+    case 'email':
+      return [
+        { label: 'API Key', value: config.resendApiKey || '', secret: true },
+        { label: 'Reply From', value: config.replyFrom || '' },
+        { label: 'Receive At', value: config.receiveAddress || '' },
+      ]
+    case 'webhook':
+      return [
+        { label: 'URL', value: config.callbackUrl || '' },
+        { label: 'Secret', value: config.secret || '', secret: true },
+      ]
+    default:
+      return []
+  }
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024
@@ -188,6 +261,12 @@ export function AgentDetailPage() {
   const [deployInterfaceOpen, setDeployInterfaceOpen] = useState(false)
   const [newInterfaceType, setNewInterfaceType] = useState<string>('chat_widget')
   const [newInterfaceName, setNewInterfaceName] = useState('')
+  const [interfaceConfig, setInterfaceConfig] = useState<Record<string, any>>({
+    welcomeMessage: '',
+    primaryColor: '#6366f1',
+    position: 'bottom-right',
+    theme: 'auto',
+  })
 
   // Webhook state
   const [webhookUrl, setWebhookUrl] = useState('')
@@ -339,7 +418,7 @@ export function AgentDetailPage() {
         agentId: id!,
         type: newInterfaceType,
         name: newInterfaceName || `${newInterfaceType} interface`,
-        configuration: {},
+        configuration: interfaceConfig,
       })
     },
     onSuccess: () => {
@@ -348,6 +427,7 @@ export function AgentDetailPage() {
       setDeployInterfaceOpen(false)
       setNewInterfaceName('')
       setNewInterfaceType('chat_widget')
+      setInterfaceConfig(getDefaultInterfaceConfig('chat_widget'))
     },
     onError: (err: any) => {
       errorNotif('Deploy Failed', err?.response?.data?.message || err?.message || 'Failed to deploy interface')
@@ -1475,34 +1555,90 @@ console.log(r2.choices[0].message.content);`,
             </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {interfaces.map((iface) => (
-                <Card key={iface.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="pt-4 pb-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">{interfaceTypeIcons[iface.type] || '🔌'}</span>
-                        <div>
-                          <div className="font-medium text-sm">{iface.name}</div>
-                          <div className="text-xs text-muted-foreground">{iface.type.replace('_', ' ')}</div>
+              {interfaces.map((iface) => {
+                const configSummary = getInterfaceConfigSummary(iface.type, iface.configuration)
+                const isWebhookType = ['slack', 'discord', 'telegram', 'whatsapp', 'email', 'webhook'].includes(iface.type)
+                const webhookUrl = isWebhookType ? `https://api.staging.almyty.com/interfaces/${iface.id}/webhook` : null
+                const embedSnippet = iface.type === 'chat_widget' ? `<script src="https://api.staging.almyty.com/widget/${iface.id}"></script>` : null
+
+                return (
+                  <Card key={iface.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">{interfaceTypeIcons[iface.type] || '🔌'}</span>
+                          <div>
+                            <div className="font-medium text-sm">{iface.name}</div>
+                            <div className="text-xs text-muted-foreground">{iface.type.replace('_', ' ')}</div>
+                          </div>
+                        </div>
+                        <Badge variant={interfaceStatusVariant[iface.status] || 'secondary'}>
+                          {iface.status}
+                        </Badge>
+                      </div>
+
+                      {/* Configuration summary */}
+                      {configSummary.length > 0 && (
+                        <div className="mb-3 rounded border bg-muted/30 p-2 space-y-1">
+                          {configSummary.map((item) => (
+                            <div key={item.label} className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">{item.label}</span>
+                              <span className="font-mono truncate max-w-[60%] text-right">
+                                {item.secret ? maskSecret(item.value) : (item.value || '-')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Webhook URL or Embed snippet */}
+                      {webhookUrl && (
+                        <div className="mb-3 rounded border bg-muted/30 p-2">
+                          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Webhook URL</div>
+                          <div className="flex items-center gap-1">
+                            <code className="text-[11px] break-all flex-1">{webhookUrl}</code>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 shrink-0"
+                              onClick={() => { navigator.clipboard.writeText(webhookUrl); success('Copied', 'Webhook URL copied to clipboard.') }}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {embedSnippet && (
+                        <div className="mb-3 rounded border bg-muted/30 p-2">
+                          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Embed Snippet</div>
+                          <div className="flex items-center gap-1">
+                            <code className="text-[11px] break-all flex-1">{embedSnippet}</code>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 shrink-0"
+                              onClick={() => { navigator.clipboard.writeText(embedSnippet); success('Copied', 'Embed snippet copied to clipboard.') }}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <MessageSquare className="h-3 w-3" />
+                          <span>{iface.totalMessages} message{iface.totalMessages !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          <span>Last active: {iface.lastMessageAt ? formatDateTime(iface.lastMessageAt) : 'Never'}</span>
                         </div>
                       </div>
-                      <Badge variant={interfaceStatusVariant[iface.status] || 'secondary'}>
-                        {iface.status}
-                      </Badge>
-                    </div>
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <MessageSquare className="h-3 w-3" />
-                        <span>{iface.totalMessages} message{iface.totalMessages !== 1 ? 's' : ''}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        <span>Last active: {iface.lastMessageAt ? formatDateTime(iface.lastMessageAt) : 'Never'}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </TabsContent>
@@ -1668,7 +1804,7 @@ console.log(r2.choices[0].message.content);`,
           <div className="space-y-4">
             <div>
               <Label htmlFor="interface-type">Type</Label>
-              <Select value={newInterfaceType} onValueChange={setNewInterfaceType}>
+              <Select value={newInterfaceType} onValueChange={(val) => { setNewInterfaceType(val); setInterfaceConfig(getDefaultInterfaceConfig(val)) }}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
@@ -1693,6 +1829,242 @@ console.log(r2.choices[0].message.content);`,
                 className="mt-1"
               />
             </div>
+
+            {/* ── Type-specific configuration ── */}
+            {newInterfaceType === 'chat_widget' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Widget Settings</p>
+                <div>
+                  <Label htmlFor="cfg-welcome">Welcome Message</Label>
+                  <Input
+                    id="cfg-welcome"
+                    placeholder="Hi! How can I help you?"
+                    value={interfaceConfig.welcomeMessage || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, welcomeMessage: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-color">Primary Color</Label>
+                  <Input
+                    id="cfg-color"
+                    placeholder="#6366f1"
+                    value={interfaceConfig.primaryColor || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, primaryColor: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-position">Position</Label>
+                  <Select value={interfaceConfig.position || 'bottom-right'} onValueChange={(val) => setInterfaceConfig(prev => ({ ...prev, position: val }))}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                      <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="cfg-theme">Theme</Label>
+                  <Select value={interfaceConfig.theme || 'auto'} onValueChange={(val) => setInterfaceConfig(prev => ({ ...prev, theme: val }))}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">Light</SelectItem>
+                      <SelectItem value="dark">Dark</SelectItem>
+                      <SelectItem value="auto">Auto</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {newInterfaceType === 'slack' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Slack Settings</p>
+                <div>
+                  <Label htmlFor="cfg-slack-token">Bot Token</Label>
+                  <Input
+                    id="cfg-slack-token"
+                    type="password"
+                    placeholder="xoxb-..."
+                    value={interfaceConfig.botToken || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, botToken: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-slack-secret">Signing Secret</Label>
+                  <Input
+                    id="cfg-slack-secret"
+                    type="password"
+                    placeholder="Signing secret"
+                    value={interfaceConfig.signingSecret || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, signingSecret: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-slack-channels">Channel IDs</Label>
+                  <Input
+                    id="cfg-slack-channels"
+                    placeholder="C01234, C56789"
+                    value={interfaceConfig.channelIds || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, channelIds: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newInterfaceType === 'discord' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Discord Settings</p>
+                <div>
+                  <Label htmlFor="cfg-discord-token">Bot Token</Label>
+                  <Input
+                    id="cfg-discord-token"
+                    type="password"
+                    placeholder="Bot token"
+                    value={interfaceConfig.botToken || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, botToken: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-discord-guilds">Guild IDs</Label>
+                  <Input
+                    id="cfg-discord-guilds"
+                    placeholder="123456789, 987654321"
+                    value={interfaceConfig.guildIds || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, guildIds: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newInterfaceType === 'telegram' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Telegram Settings</p>
+                <div>
+                  <Label htmlFor="cfg-telegram-token">Bot Token</Label>
+                  <Input
+                    id="cfg-telegram-token"
+                    type="password"
+                    placeholder="123456:ABC-DEF..."
+                    value={interfaceConfig.botToken || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, botToken: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newInterfaceType === 'whatsapp' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">WhatsApp Settings</p>
+                <div>
+                  <Label htmlFor="cfg-wa-sid">Twilio Account SID</Label>
+                  <Input
+                    id="cfg-wa-sid"
+                    placeholder="AC..."
+                    value={interfaceConfig.accountSid || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, accountSid: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-wa-auth">Twilio Auth Token</Label>
+                  <Input
+                    id="cfg-wa-auth"
+                    type="password"
+                    placeholder="Auth token"
+                    value={interfaceConfig.authToken || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, authToken: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-wa-phone">Phone Number</Label>
+                  <Input
+                    id="cfg-wa-phone"
+                    placeholder="+1234567890"
+                    value={interfaceConfig.phoneNumber || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newInterfaceType === 'email' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email Settings</p>
+                <div>
+                  <Label htmlFor="cfg-email-key">Resend API Key</Label>
+                  <Input
+                    id="cfg-email-key"
+                    type="password"
+                    placeholder="re_..."
+                    value={interfaceConfig.resendApiKey || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, resendApiKey: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-email-from">Reply From Address</Label>
+                  <Input
+                    id="cfg-email-from"
+                    placeholder="agent@yourdomain.com"
+                    value={interfaceConfig.replyFrom || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, replyFrom: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-email-receive">Receive Address</Label>
+                  <Input
+                    id="cfg-email-receive"
+                    placeholder="inbox@yourdomain.com"
+                    value={interfaceConfig.receiveAddress || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, receiveAddress: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newInterfaceType === 'webhook' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Webhook Settings</p>
+                <div>
+                  <Label htmlFor="cfg-webhook-url">Callback URL</Label>
+                  <Input
+                    id="cfg-webhook-url"
+                    placeholder="https://..."
+                    value={interfaceConfig.callbackUrl || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, callbackUrl: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-webhook-secret">Secret</Label>
+                  <Input
+                    id="cfg-webhook-secret"
+                    type="password"
+                    placeholder="HMAC verification secret"
+                    value={interfaceConfig.secret || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, secret: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            )}
+
             <Button
               className="w-full"
               disabled={deployInterfaceMutation.isPending}

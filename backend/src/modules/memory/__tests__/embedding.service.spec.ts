@@ -1,12 +1,22 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { EmbeddingService } from '../embedding.service';
+import { LlmProvider } from '../../../entities/llm-provider.entity';
 
 describe('EmbeddingService', () => {
   let service: EmbeddingService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EmbeddingService],
+      providers: [
+        EmbeddingService,
+        {
+          provide: getRepositoryToken(LlmProvider),
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(null),
+          },
+        },
+      ],
     }).compile();
 
     service = module.get<EmbeddingService>(EmbeddingService);
