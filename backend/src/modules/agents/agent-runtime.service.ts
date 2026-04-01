@@ -253,28 +253,30 @@ export class AgentRuntimeService {
       // Build tool definitions for the LLM (user tools + built-in tools)
       const llmTools = this.buildToolDefinitions(tools, agent);
 
-      // Resolve sub-agent tools (agents can call other agents)
-      const otherAgents = await this.agentRepository.find({
-        where: { organizationId: run.organizationId, status: 'active' as any },
-        select: ['id', 'name', 'description'],
-      });
-      const subAgentDefs = otherAgents
-        .filter(a => a.id !== agent.id)
-        .map(a => ({
-          name: `call_agent_${a.name.replace(/[^a-zA-Z0-9_]/g, '_')}`,
-          description: `Call sub-agent "${a.name}": ${a.description || 'No description'}`,
-          parameters: {
-            type: 'object',
-            properties: {
-              input: { type: 'string', description: 'The input/message to send to this agent' },
-            },
-            required: ['input'],
-          },
-        }));
-      // Map sub-agent tool name -> agentId for lookup after LLM response
+      // Resolve sub-agent tools (only if canCallAgents is enabled)
+      let subAgentDefs: Array<{ name: string; description: string; parameters: Record<string, any> }> = [];
       const subAgentMap = new Map<string, string>();
-      for (const a of otherAgents.filter(a => a.id !== agent.id)) {
-        subAgentMap.set(`call_agent_${a.name.replace(/[^a-zA-Z0-9_]/g, '_')}`, a.id);
+      if (agent.agentConfig?.canCallAgents) {
+        const otherAgents = await this.agentRepository.find({
+          where: { organizationId: run.organizationId, status: 'active' as any, isTemporary: false },
+          select: ['id', 'name', 'description'],
+        });
+        subAgentDefs = otherAgents
+          .filter(a => a.id !== agent.id)
+          .map(a => ({
+            name: `call_agent_${a.name.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+            description: `Call sub-agent "${a.name}": ${a.description || 'No description'}`,
+            parameters: {
+              type: 'object',
+              properties: {
+                input: { type: 'string', description: 'The input/message to send to this agent' },
+              },
+              required: ['input'],
+            },
+          }));
+        for (const a of otherAgents.filter(a => a.id !== agent.id)) {
+          subAgentMap.set(`call_agent_${a.name.replace(/[^a-zA-Z0-9_]/g, '_')}`, a.id);
+        }
       }
 
       const allToolDefs = [...llmTools, ...subAgentDefs];
@@ -696,8 +698,73 @@ export class AgentRuntimeService {
         }
       }
 
+      case 'create_agent': {
+        try {
+          const tempAgent = this.agentRepository.create({
+            name: parameters.name,
+            description: `Temporary agent created by ${agent.name}`,
+            organizationId: run.organizationId,
+            mode: 'autonomous' as any,
+            status: 'active' as any,
+            personality: parameters.personality || null,
+            instructions: parameters.instructions,
+            toolIds: parameters.toolIds || [],
+            modelConfig: agent.modelConfig,
+            isTemporary: true,
+            parentRunId: run.id,
+            pipeline: { nodes: [], edges: [] },
+            createdBy: 'system',
+          });
+          const savedAgent = await this.agentRepository.save(tempAgent);
+          return { result: { agentId: savedAgent.id, name: savedAgent.name, status: 'created' } };
+        } catch (err) {
+          return { result: null, error: `Failed to create temporary agent: ${err.message}` };
+        }
+      }
+
+      case 'invoke_agent': {
+        try {
+          const childRun = await this.startRun(
+            parameters.agentId,
+            run.organizationId,
+            run.userId || 'system',
+            parameters.input,
+            { parentRunId: run.id, maxSteps: 20 },
+          );
+          const result = await this.waitForRun(childRun.id, 60000);
+          if (result?.status === AgentRunStatus.COMPLETED) {
+            return { result: { status: 'completed', output: result.output } };
+          } else {
+            return { result: null, error: result?.error || 'Agent did not complete in time' };
+          }
+        } catch (err) {
+          return { result: null, error: `Failed to invoke agent: ${err.message}` };
+        }
+      }
+
       default:
         return null; // Not a built-in tool
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cleanup temporary agents
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Delete all temporary agents created during a specific run.
+   */
+  private async cleanupTemporaryAgents(runId: string): Promise<void> {
+    try {
+      const tempAgents = await this.agentRepository.find({
+        where: { isTemporary: true, parentRunId: runId },
+      });
+      if (tempAgents.length > 0) {
+        await this.agentRepository.remove(tempAgents);
+        this.logger.log(`Cleaned up ${tempAgents.length} temporary agent(s) for run ${runId}`);
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to cleanup temporary agents for run ${runId}: ${err.message}`);
     }
   }
 
@@ -1144,6 +1211,36 @@ export class AgentRuntimeService {
       defs.push(BUILT_IN_TOOLS.recall_memory);
     }
 
+    // Agent creation and invocation tools (only when canCreateAgents is enabled)
+    if (agent.agentConfig?.canCreateAgents) {
+      defs.push({
+        name: 'create_agent',
+        description: 'Create a temporary specialist agent for a specific task. The agent will be automatically cleaned up after your run completes.',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Name for the temporary agent' },
+            instructions: { type: 'string', description: 'What this agent should do' },
+            personality: { type: 'string', description: 'Personality and style of this agent' },
+            toolIds: { type: 'array', items: { type: 'string' }, description: 'Tool IDs this agent can use (from your available tools)' },
+          },
+          required: ['name', 'instructions'],
+        },
+      });
+      defs.push({
+        name: 'invoke_agent',
+        description: 'Run an agent (existing or temporary) with the given input and wait for its response.',
+        parameters: {
+          type: 'object',
+          properties: {
+            agentId: { type: 'string', description: 'ID of the agent to invoke' },
+            input: { type: 'string', description: 'Input message for the agent' },
+          },
+          required: ['agentId', 'input'],
+        },
+      });
+    }
+
     return defs;
   }
 
@@ -1385,10 +1482,12 @@ export class AgentRuntimeService {
     if (emitter) {
       emitter.emit('event', { type, data, timestamp: new Date().toISOString() });
 
-      // Clean up emitter if run is done
+      // Clean up emitter and temporary agents if run is done
       if (['run.completed', 'run.failed', 'run.cancelled'].includes(type)) {
         emitter.emit('done');
         this.runEmitters.delete(runId);
+        // Clean up any temporary agents spawned by this run
+        this.cleanupTemporaryAgents(runId).catch(() => {});
       }
     }
   }

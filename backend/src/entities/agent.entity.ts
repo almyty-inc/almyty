@@ -118,6 +118,18 @@ export class Agent {
   };
 
   @Column({ type: 'json', nullable: true })
+  agentConfig: {
+    canCallAgents?: boolean;
+    canCreateAgents?: boolean;
+  };
+
+  @Column({ default: false })
+  isTemporary: boolean;
+
+  @Column({ nullable: true })
+  parentRunId: string;
+
+  @Column({ type: 'json', nullable: true })
   collaboration: {
     strategy: 'sequential' | 'parallel' | 'race' | 'debate';
     agents: Array<{ agentId: string; role?: string }>;

@@ -85,6 +85,13 @@ export class CreateAgentDto {
 
   @IsOptional()
   @IsObject()
+  agentConfig?: {
+    canCallAgents?: boolean;
+    canCreateAgents?: boolean;
+  };
+
+  @IsOptional()
+  @IsObject()
   collaboration?: {
     strategy: 'sequential' | 'parallel' | 'race' | 'debate';
     agents: { agentId: string; role?: string }[];

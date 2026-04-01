@@ -105,6 +105,7 @@ export function AgentBuilderPage() {
   const [agentToolIds, setAgentToolIds] = useState<string[]>([])
   const [agentModelConfig, setAgentModelConfig] = useState<{ providerId?: string; model?: string; temperature?: number; maxTokens?: number }>({})
   const [agentMemoryConfig, setAgentMemoryConfig] = useState<{ enabled?: boolean; autoSave?: boolean }>({ enabled: false, autoSave: false })
+  const [agentConfig, setAgentConfig] = useState<{ canCallAgents?: boolean; canCreateAgents?: boolean }>({ canCallAgents: false, canCreateAgents: false })
   const [agentCollaboration, setAgentCollaboration] = useState<{
     enabled: boolean;
     strategy: 'sequential' | 'parallel' | 'race' | 'debate';
@@ -293,6 +294,7 @@ export function AgentBuilderPage() {
       setAgentToolIds(agent.toolIds || [])
       setAgentModelConfig(agent.modelConfig || {})
       setAgentMemoryConfig(agent.memoryConfig || { enabled: false, autoSave: false })
+      setAgentConfig(agent.agentConfig || { canCallAgents: false, canCreateAgents: false })
       if (agent.collaboration) {
         setAgentCollaboration({ enabled: true, ...agent.collaboration })
       }
@@ -510,6 +512,7 @@ export function AgentBuilderPage() {
         payload.toolIds = agentToolIds
         payload.modelConfig = agentModelConfig
         payload.memoryConfig = agentMemoryConfig
+        payload.agentConfig = agentConfig
         if (agentCollaboration.enabled && agentCollaboration.agents.length > 0) {
           payload.collaboration = {
             strategy: agentCollaboration.strategy,
@@ -835,6 +838,38 @@ export function AgentBuilderPage() {
                 <div>
                   <p className="text-sm font-medium">Auto-save Memories</p>
                   <p className="text-xs text-muted-foreground">Automatically extract and save key facts from conversations</p>
+                </div>
+              </label>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Agent Capabilities</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={agentConfig.canCallAgents || false}
+                  onChange={(e) => setAgentConfig({ ...agentConfig, canCallAgents: e.target.checked })}
+                  className="rounded"
+                />
+                <div>
+                  <p className="text-sm font-medium">Can call other agents</p>
+                  <p className="text-xs text-muted-foreground">Discover and invoke existing agents as sub-agents</p>
+                </div>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={agentConfig.canCreateAgents || false}
+                  onChange={(e) => setAgentConfig({ ...agentConfig, canCreateAgents: e.target.checked })}
+                  className="rounded"
+                />
+                <div>
+                  <p className="text-sm font-medium">Can create agents</p>
+                  <p className="text-xs text-muted-foreground">Spawn temporary specialist agents during runs</p>
                 </div>
               </label>
             </CardContent>

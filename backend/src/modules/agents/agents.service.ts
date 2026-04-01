@@ -31,6 +31,7 @@ export interface CreateAgentInput {
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
+  agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
   collaboration?: { strategy: string; agents: { agentId: string; role?: string }[]; judgeAgentId?: string; maxRounds?: number } | null;
   variables?: Record<string, any>;
   settings?: Record<string, any>;
@@ -51,6 +52,7 @@ export interface UpdateAgentInput {
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
+  agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
   collaboration?: { strategy: string; agents: { agentId: string; role?: string }[]; judgeAgentId?: string; maxRounds?: number } | null;
   variables?: Record<string, any>;
   settings?: Record<string, any>;
@@ -126,6 +128,7 @@ export class AgentsService {
         toolIds: createDto.toolIds || [],
         modelConfig: createDto.modelConfig || null,
         memoryConfig: createDto.memoryConfig || null,
+        agentConfig: createDto.agentConfig || null,
         collaboration: createDto.collaboration as Agent['collaboration'] || null,
         variables: createDto.variables || {},
         settings: createDto.settings || {},
@@ -208,7 +211,8 @@ export class AgentsService {
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.agentRepository.createQueryBuilder('agent')
-      .where('agent.organizationId = :organizationId', { organizationId: filters.organizationId });
+      .where('agent.organizationId = :organizationId', { organizationId: filters.organizationId })
+      .andWhere('agent.isTemporary = false');
 
     if (filters.search) {
       queryBuilder.andWhere(
