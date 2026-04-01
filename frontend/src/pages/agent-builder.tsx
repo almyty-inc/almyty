@@ -99,7 +99,7 @@ export function AgentBuilderPage() {
   const [agentDescription, setAgentDescription] = useState('')
   const [agentStatus, setAgentStatus] = useState<string>('draft')
   const [agentMode, setAgentMode] = useState<'workflow' | 'autonomous'>('workflow')
-  const [agentSoul, setAgentSoul] = useState('')
+  const [agentPersonality, setAgentSoul] = useState('')
   const [agentInstructions, setAgentInstructions] = useState('')
   const [agentHeartbeat, setAgentHeartbeat] = useState<{ enabled: boolean; intervalMinutes: number; prompt: string }>({ enabled: false, intervalMinutes: 60, prompt: '' })
   const [agentToolIds, setAgentToolIds] = useState<string[]>([])
@@ -277,7 +277,7 @@ export function AgentBuilderPage() {
       setAgentDescription(agent.description || '')
       setAgentStatus(agent.status)
       setAgentMode(agent.mode || 'workflow')
-      setAgentSoul(agent.soul || '')
+      setAgentSoul(agent.personality || '')
       setAgentInstructions(agent.instructions || '')
       setAgentHeartbeat(agent.heartbeat || { enabled: false, intervalMinutes: 60, prompt: '' })
       setAgentToolIds(agent.toolIds || [])
@@ -494,7 +494,7 @@ export function AgentBuilderPage() {
         payload.pipeline = buildPipeline()
       } else {
         // Autonomous mode — save instructions + soul + heartbeat + tools + model config
-        payload.soul = agentSoul || undefined
+        payload.personality = agentPersonality || undefined
         payload.instructions = agentInstructions
         payload.heartbeat = agentHeartbeat.enabled ? agentHeartbeat : { enabled: false, intervalMinutes: agentHeartbeat.intervalMinutes, prompt: agentHeartbeat.prompt }
         payload.toolIds = agentToolIds
@@ -678,11 +678,11 @@ export function AgentBuilderPage() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-4xl mx-auto w-full space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Soul</CardTitle>
+              <CardTitle className="text-base">Personality & Style</CardTitle>
             </CardHeader>
             <CardContent>
               <Textarea
-                value={agentSoul}
+                value={agentPersonality}
                 onChange={(e) => setAgentSoul(e.target.value)}
                 placeholder="You are a friendly, professional assistant. You never share personal opinions on politics or religion. You always cite your sources."
                 className="min-h-[120px] font-mono text-sm"

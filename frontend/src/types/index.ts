@@ -645,7 +645,7 @@ export interface Agent {
   mode: 'workflow' | 'autonomous'
   pipeline: AgentPipeline
   instructions?: string
-  soul?: string
+  personality?: string
   heartbeat?: {
     enabled: boolean
     intervalMinutes: number
