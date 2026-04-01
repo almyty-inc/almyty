@@ -15,6 +15,11 @@ import { TelegramAdapter } from '../adapters/telegram.adapter';
 import { WhatsAppAdapter } from '../adapters/whatsapp.adapter';
 import { EmailAdapter } from '../adapters/email.adapter';
 import { WebhookAdapter } from '../adapters/webhook.adapter';
+import { GoogleChatAdapter } from '../adapters/google-chat.adapter';
+import { MicrosoftTeamsAdapter } from '../adapters/microsoft-teams.adapter';
+import { SignalAdapter } from '../adapters/signal.adapter';
+import { MatrixAdapter } from '../adapters/matrix.adapter';
+import { IrcAdapter } from '../adapters/irc.adapter';
 import { AgentInterface, InterfaceType, InterfaceStatus } from '../../../entities/interface.entity';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -134,6 +139,11 @@ describe('Webhook & Widget Integration Tests', () => {
         WhatsAppAdapter,
         EmailAdapter,
         WebhookAdapter,
+        GoogleChatAdapter,
+        MicrosoftTeamsAdapter,
+        SignalAdapter,
+        MatrixAdapter,
+        IrcAdapter,
       ],
     }).compile();
 

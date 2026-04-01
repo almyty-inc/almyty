@@ -1071,6 +1071,71 @@ export class AgentsController {
     }
   }
 
+  // ── Heartbeat ──
+
+  @Patch(':id/heartbeat')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Enable/disable agent heartbeat (periodic wake-up)' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiBody({ description: 'Heartbeat configuration: enabled, intervalMinutes, prompt' })
+  @ApiResponse({ status: 200, description: 'Agent heartbeat updated successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid heartbeat configuration' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
+  async updateHeartbeat(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { enabled: boolean; intervalMinutes?: number; prompt?: string },
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (body.enabled) {
+        const intervalMinutes = body.intervalMinutes;
+        if (!intervalMinutes || intervalMinutes < 1) {
+          throw new HttpException(
+            { success: false, message: 'intervalMinutes must be at least 1 when enabling heartbeat', error: 'INVALID_INTERVAL' },
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        if (!body.prompt || !body.prompt.trim()) {
+          throw new HttpException(
+            { success: false, message: 'prompt is required when enabling heartbeat', error: 'MISSING_PROMPT' },
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        const agent = await this.runtimeService.enableHeartbeat(id, organizationId, intervalMinutes, body.prompt);
+        return {
+          success: true,
+          data: agent,
+          message: `Heartbeat enabled: every ${intervalMinutes} minute(s)`,
+        };
+      } else {
+        const agent = await this.runtimeService.disableHeartbeat(id, organizationId);
+        return {
+          success: true,
+          data: agent,
+          message: 'Heartbeat disabled',
+        };
+      }
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'HEARTBEAT_UPDATE_FAILED',
+        },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   // ── Autonomous Agent Runs ──
 
   @Post(':id/runs')

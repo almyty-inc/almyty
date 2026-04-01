@@ -645,6 +645,12 @@ export interface Agent {
   mode: 'workflow' | 'autonomous'
   pipeline: AgentPipeline
   instructions?: string
+  soul?: string
+  heartbeat?: {
+    enabled: boolean
+    intervalMinutes: number
+    prompt: string
+  }
   toolIds?: string[]
   modelConfig?: {
     providerId?: string
@@ -977,7 +983,7 @@ export interface PaginatedFiles {
 
 // ── Interfaces (Deployment Channels) ──
 
-export type InterfaceType = 'chat_widget' | 'slack' | 'whatsapp' | 'discord' | 'email' | 'telegram' | 'webhook'
+export type InterfaceType = 'chat_widget' | 'slack' | 'whatsapp' | 'discord' | 'email' | 'telegram' | 'webhook' | 'google_chat' | 'microsoft_teams' | 'signal' | 'matrix' | 'irc'
 export type InterfaceStatus = 'active' | 'inactive' | 'error'
 
 export interface AgentInterface {

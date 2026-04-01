@@ -2,7 +2,10 @@ import { Processor, Process } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job, Queue } from 'bull';
 import { InjectQueue } from '@nestjs/bull';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { AgentRuntimeService } from './agent-runtime.service';
+import { Agent } from '../../entities/agent.entity';
 
 @Processor('agent-runtime')
 export class AgentRuntimeProcessor {
@@ -12,6 +15,8 @@ export class AgentRuntimeProcessor {
     private readonly runtimeService: AgentRuntimeService,
     @InjectQueue('agent-runtime')
     private readonly runtimeQueue: Queue,
+    @InjectRepository(Agent)
+    private readonly agentRepository: Repository<Agent>,
   ) {}
 
   @Process('next-step')
@@ -42,6 +47,33 @@ export class AgentRuntimeProcessor {
     } catch (error) {
       this.logger.error(`Step processing failed for run ${runId}: ${error.message}`, error.stack);
       throw error; // Let BullMQ handle retries
+    }
+  }
+
+  @Process('heartbeat')
+  async handleHeartbeat(job: Job<{ agentId: string; organizationId: string }>) {
+    const { agentId, organizationId } = job.data;
+    this.logger.log(`Processing heartbeat for agent ${agentId}`);
+
+    try {
+      const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
+      if (!agent || !agent.heartbeat?.enabled || !agent.heartbeat?.prompt) {
+        this.logger.warn(`Heartbeat skipped for agent ${agentId}: not configured or disabled`);
+        return;
+      }
+
+      await this.runtimeService.startRun(
+        agentId,
+        organizationId,
+        'system',
+        agent.heartbeat.prompt,
+        { maxSteps: 10 },
+      );
+
+      this.logger.log(`Heartbeat run started for agent ${agentId}`);
+    } catch (error) {
+      this.logger.error(`Heartbeat failed for agent ${agentId}: ${error.message}`, error.stack);
+      throw error;
     }
   }
 

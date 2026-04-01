@@ -26,6 +26,8 @@ export interface CreateAgentInput {
   mode?: 'workflow' | 'autonomous';
   pipeline?: AgentPipeline;
   instructions?: string;
+  soul?: string;
+  heartbeat?: { enabled: boolean; intervalMinutes: number; prompt: string };
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
@@ -44,6 +46,8 @@ export interface UpdateAgentInput {
   mode?: 'workflow' | 'autonomous';
   pipeline?: AgentPipeline;
   instructions?: string;
+  soul?: string;
+  heartbeat?: { enabled: boolean; intervalMinutes: number; prompt: string };
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
@@ -117,6 +121,8 @@ export class AgentsService {
         mode,
         pipeline: createDto.pipeline || { nodes: [], edges: [] },
         instructions: createDto.instructions || null,
+        soul: createDto.soul || null,
+        heartbeat: createDto.heartbeat || null,
         toolIds: createDto.toolIds || [],
         modelConfig: createDto.modelConfig || null,
         memoryConfig: createDto.memoryConfig || null,

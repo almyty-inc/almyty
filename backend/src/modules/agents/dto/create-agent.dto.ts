@@ -51,6 +51,18 @@ export class CreateAgentDto {
   instructions?: string;
 
   @IsOptional()
+  @IsString()
+  soul?: string;
+
+  @IsOptional()
+  @IsObject()
+  heartbeat?: {
+    enabled: boolean;
+    intervalMinutes: number;
+    prompt: string;
+  };
+
+  @IsOptional()
   @IsArray()
   toolIds?: string[];
 
