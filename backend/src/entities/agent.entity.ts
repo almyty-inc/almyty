@@ -90,7 +90,7 @@ export class Agent {
   instructions: string;
 
   @Column({ type: 'text', nullable: true })
-  soul: string;
+  personality: string;
 
   @Column({ type: 'json', nullable: true })
   heartbeat: {

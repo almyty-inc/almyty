@@ -53,7 +53,7 @@ export class UpdateAgentDto {
 
   @IsOptional()
   @IsString()
-  soul?: string;
+  personality?: string;
 
   @IsOptional()
   @IsObject()

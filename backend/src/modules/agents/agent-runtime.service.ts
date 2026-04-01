@@ -1002,9 +1002,9 @@ export class AgentRuntimeService {
     // Build structured system prompt
     const parts: string[] = [];
 
-    // [SOUL] — personality, tone, boundaries
-    if (agent.soul) {
-      parts.push(`[SOUL]\n${agent.soul}`);
+    // [PERSONALITY] — personality, tone, boundaries
+    if (agent.personality) {
+      parts.push(`[PERSONALITY]\n${agent.personality}`);
     }
 
     // [INSTRUCTIONS] — what to do

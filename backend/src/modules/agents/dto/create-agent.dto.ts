@@ -52,7 +52,7 @@ export class CreateAgentDto {
 
   @IsOptional()
   @IsString()
-  soul?: string;
+  personality?: string;
 
   @IsOptional()
   @IsObject()
