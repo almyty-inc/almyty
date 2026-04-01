@@ -5,6 +5,7 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../../entities/agent-run.entity';
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
+import { Organization } from '../../../entities/organization.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
@@ -133,6 +134,12 @@ describe('AgentRuntimeService (integration)', () => {
         {
           provide: getRepositoryToken(Tool),
           useValue: mockToolRepo,
+        },
+        {
+          provide: getRepositoryToken(Organization),
+          useValue: {
+            findOne: jest.fn().mockResolvedValue({ id: 'org-1', agentDefaults: null }),
+          },
         },
         {
           provide: getQueueToken('agent-runtime'),

@@ -109,9 +109,19 @@ export function AgentBuilderPage() {
     enabled: boolean;
     strategy: 'sequential' | 'parallel' | 'race' | 'debate';
     agents: { agentId: string; role?: string }[];
+    sharedBrief?: string;
+    rules?: {
+      maxTotalCost?: number;
+      maxChainDepth?: number;
+      outputFormat?: 'text' | 'json';
+      escalation?: 'never' | 'on_failure' | 'on_low_confidence';
+      conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge';
+      sharedMemoryScope?: boolean;
+      allowRevision?: boolean;
+    };
     judgeAgentId?: string;
     maxRounds?: number;
-  }>({ enabled: false, strategy: 'sequential', agents: [] })
+  }>({ enabled: false, strategy: 'sequential', agents: [], rules: {} })
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([] as Node[])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([] as Edge[])
@@ -504,6 +514,10 @@ export function AgentBuilderPage() {
           payload.collaboration = {
             strategy: agentCollaboration.strategy,
             agents: agentCollaboration.agents,
+            sharedBrief: agentCollaboration.sharedBrief || undefined,
+            rules: agentCollaboration.rules && Object.values(agentCollaboration.rules).some(v => v !== undefined && v !== null && v !== '')
+              ? agentCollaboration.rules
+              : undefined,
             judgeAgentId: agentCollaboration.judgeAgentId,
             maxRounds: agentCollaboration.maxRounds,
           }
@@ -864,39 +878,192 @@ export function AgentBuilderPage() {
                     <div className="space-y-2 max-h-[200px] overflow-y-auto">
                       {availableAgents
                         .filter((a: any) => a.id !== id)
-                        .map((agent: any) => (
-                          <label key={agent.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={agentCollaboration.agents.some(a => a.agentId === agent.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setAgentCollaboration({
-                                    ...agentCollaboration,
-                                    agents: [...agentCollaboration.agents, { agentId: agent.id }],
-                                  })
-                                } else {
-                                  setAgentCollaboration({
-                                    ...agentCollaboration,
-                                    agents: agentCollaboration.agents.filter(a => a.agentId !== agent.id),
-                                  })
-                                }
-                              }}
-                              className="rounded"
-                            />
-                            <div>
-                              <p className="text-sm font-medium">{agent.name}</p>
-                              {agent.description && <p className="text-xs text-muted-foreground">{agent.description}</p>}
+                        .map((agent: any) => {
+                          const isSelected = agentCollaboration.agents.some(a => a.agentId === agent.id)
+                          const agentEntry = agentCollaboration.agents.find(a => a.agentId === agent.id)
+                          return (
+                            <div key={agent.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50">
+                              <label className="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setAgentCollaboration({
+                                        ...agentCollaboration,
+                                        agents: [...agentCollaboration.agents, { agentId: agent.id }],
+                                      })
+                                    } else {
+                                      setAgentCollaboration({
+                                        ...agentCollaboration,
+                                        agents: agentCollaboration.agents.filter(a => a.agentId !== agent.id),
+                                      })
+                                    }
+                                  }}
+                                  className="rounded"
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{agent.name}</p>
+                                  {agent.description && <p className="text-xs text-muted-foreground truncate">{agent.description}</p>}
+                                </div>
+                              </label>
+                              {isSelected && (
+                                <Input
+                                  placeholder="Role..."
+                                  value={agentEntry?.role || ''}
+                                  onChange={(e) => {
+                                    setAgentCollaboration({
+                                      ...agentCollaboration,
+                                      agents: agentCollaboration.agents.map(a =>
+                                        a.agentId === agent.id ? { ...a, role: e.target.value } : a
+                                      ),
+                                    })
+                                  }}
+                                  className="w-32 h-7 text-xs flex-shrink-0"
+                                />
+                              )}
                             </div>
-                          </label>
-                        ))}
+                          )
+                        })}
                       {availableAgents.filter((a: any) => a.id !== id).length === 0 && (
                         <p className="text-sm text-muted-foreground py-2 text-center">No other agents available.</p>
                       )}
                     </div>
                   </div>
 
-                  {agentCollaboration.strategy === 'debate' && (
+                  <div className="space-y-2">
+                    <Label className="text-sm">Shared Brief</Label>
+                    <Textarea
+                      placeholder="Context shared with all participating agents..."
+                      value={agentCollaboration.sharedBrief || ''}
+                      onChange={(e) => setAgentCollaboration({ ...agentCollaboration, sharedBrief: e.target.value })}
+                      rows={2}
+                    />
+                  </div>
+
+                  {/* Rules section */}
+                  <div className="space-y-3 border-t pt-3">
+                    <Label className="text-sm font-medium">Rules of Engagement</Label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Max Total Cost ($)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          placeholder="No limit"
+                          value={agentCollaboration.rules?.maxTotalCost ?? ''}
+                          onChange={(e) => setAgentCollaboration({
+                            ...agentCollaboration,
+                            rules: { ...agentCollaboration.rules, maxTotalCost: e.target.value ? parseFloat(e.target.value) : undefined },
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Max Chain Depth</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10}
+                          placeholder="No limit"
+                          value={agentCollaboration.rules?.maxChainDepth ?? ''}
+                          onChange={(e) => setAgentCollaboration({
+                            ...agentCollaboration,
+                            rules: { ...agentCollaboration.rules, maxChainDepth: e.target.value ? parseInt(e.target.value) : undefined },
+                          })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Output Format</Label>
+                        <Select
+                          value={agentCollaboration.rules?.outputFormat || ''}
+                          onValueChange={(v: any) => setAgentCollaboration({
+                            ...agentCollaboration,
+                            rules: { ...agentCollaboration.rules, outputFormat: v || undefined },
+                          })}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Default" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="text">Text</SelectItem>
+                            <SelectItem value="json">JSON</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Escalation</Label>
+                        <Select
+                          value={agentCollaboration.rules?.escalation || ''}
+                          onValueChange={(v: any) => setAgentCollaboration({
+                            ...agentCollaboration,
+                            rules: { ...agentCollaboration.rules, escalation: v || undefined },
+                          })}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Default" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="never">Never</SelectItem>
+                            <SelectItem value="on_failure">On Failure</SelectItem>
+                            <SelectItem value="on_low_confidence">On Low Confidence</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {agentCollaboration.strategy === 'parallel' && (
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Conflict Resolution</Label>
+                        <Select
+                          value={agentCollaboration.rules?.conflictResolution || ''}
+                          onValueChange={(v: any) => setAgentCollaboration({
+                            ...agentCollaboration,
+                            rules: { ...agentCollaboration.rules, conflictResolution: v || undefined },
+                          })}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Default" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="judge">Judge decides</SelectItem>
+                            <SelectItem value="majority">Majority wins</SelectItem>
+                            <SelectItem value="first_wins">First wins</SelectItem>
+                            <SelectItem value="merge">Merge all</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={agentCollaboration.rules?.sharedMemoryScope ?? false}
+                          onChange={(e) => setAgentCollaboration({
+                            ...agentCollaboration,
+                            rules: { ...agentCollaboration.rules, sharedMemoryScope: e.target.checked },
+                          })}
+                          className="rounded"
+                        />
+                        <span className="text-xs">Shared Memory</span>
+                      </label>
+                      {agentCollaboration.strategy === 'sequential' && (
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={agentCollaboration.rules?.allowRevision ?? false}
+                            onChange={(e) => setAgentCollaboration({
+                              ...agentCollaboration,
+                              rules: { ...agentCollaboration.rules, allowRevision: e.target.checked },
+                            })}
+                            className="rounded"
+                          />
+                          <span className="text-xs">Allow Revision</span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  {(agentCollaboration.strategy === 'debate' || agentCollaboration.strategy === 'parallel') && (
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-sm">Judge Agent</Label>
@@ -909,16 +1076,18 @@ export function AgentBuilderPage() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm">Max Rounds</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={10}
-                          value={agentCollaboration.maxRounds ?? 3}
-                          onChange={(e) => setAgentCollaboration({ ...agentCollaboration, maxRounds: parseInt(e.target.value) })}
-                        />
-                      </div>
+                      {agentCollaboration.strategy === 'debate' && (
+                        <div className="space-y-2">
+                          <Label className="text-sm">Max Rounds</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={agentCollaboration.maxRounds ?? 3}
+                            onChange={(e) => setAgentCollaboration({ ...agentCollaboration, maxRounds: parseInt(e.target.value) })}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

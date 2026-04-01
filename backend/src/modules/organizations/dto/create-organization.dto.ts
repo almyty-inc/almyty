@@ -65,4 +65,22 @@ export class CreateOrganizationDto {
   @IsOptional()
   @IsObject()
   settings?: OrganizationSettings;
+
+  @ApiPropertyOptional({
+    description: 'Default agent configuration applied to all agents in this organization',
+    example: {
+      personality: 'Be professional and concise.',
+      rules: 'Never share internal data.',
+      maxCostPerRun: 100,
+      maxStepsPerRun: 50,
+    },
+  })
+  @IsOptional()
+  @IsObject()
+  agentDefaults?: {
+    personality?: string;
+    rules?: string;
+    maxCostPerRun?: number;
+    maxStepsPerRun?: number;
+  };
 }

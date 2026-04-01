@@ -35,6 +35,13 @@ export interface AuthResponse {
 }
 
 // Organization Types
+export interface OrganizationAgentDefaults {
+  personality?: string
+  rules?: string
+  maxCostPerRun?: number
+  maxStepsPerRun?: number
+}
+
 export interface Organization {
   id: string
   name: string
@@ -42,6 +49,7 @@ export interface Organization {
   description?: string
   plan: OrganizationPlan
   settings: OrganizationSettings
+  agentDefaults?: OrganizationAgentDefaults
   billingInfo?: BillingInfo
   isActive: boolean
   createdAt: string
@@ -666,6 +674,16 @@ export interface Agent {
   collaboration?: {
     strategy: 'sequential' | 'parallel' | 'race' | 'debate'
     agents: { agentId: string; role?: string }[]
+    sharedBrief?: string
+    rules?: {
+      maxTotalCost?: number
+      maxChainDepth?: number
+      outputFormat?: 'text' | 'json'
+      escalation?: 'never' | 'on_failure' | 'on_low_confidence'
+      conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge'
+      sharedMemoryScope?: boolean
+      allowRevision?: boolean
+    }
     judgeAgentId?: string
     maxRounds?: number
   }

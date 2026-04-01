@@ -6,6 +6,8 @@ import { Settings, Building, Users, User, Shield } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
@@ -85,6 +87,12 @@ function OrganizationTab({ organization }: { organization: any }) {
   const [orgName, setOrgName] = useState('')
   const [orgDescription, setOrgDescription] = useState('')
 
+  // Agent defaults state
+  const [defaultPersonality, setDefaultPersonality] = useState('')
+  const [defaultRules, setDefaultRules] = useState('')
+  const [defaultMaxCost, setDefaultMaxCost] = useState<number | ''>('')
+  const [defaultMaxSteps, setDefaultMaxSteps] = useState<number | ''>('')
+
   // Fetch full organization details (store may not include createdAt from auth response)
   const { data: orgDetails } = useQuery({
     queryKey: ['organization-details', organization?.id],
@@ -103,6 +111,16 @@ function OrganizationTab({ organization }: { organization: any }) {
     }
   }, [organization])
 
+  // Initialize agent defaults when org details load
+  React.useEffect(() => {
+    if (fullOrg?.agentDefaults) {
+      setDefaultPersonality(fullOrg.agentDefaults.personality || '')
+      setDefaultRules(fullOrg.agentDefaults.rules || '')
+      setDefaultMaxCost(fullOrg.agentDefaults.maxCostPerRun ?? '')
+      setDefaultMaxSteps(fullOrg.agentDefaults.maxStepsPerRun ?? '')
+    }
+  }, [fullOrg?.agentDefaults])
+
   const updateOrgMutation = useMutation({
     mutationFn: (data: { name: string; description?: string }) =>
       organizationsApi.update(organization.id, data),
@@ -114,6 +132,18 @@ function OrganizationTab({ organization }: { organization: any }) {
     },
     onError: (err: any) => {
       error('Failed to update organization', err.response?.data?.message || 'Please try again.')
+    },
+  })
+
+  const updateAgentDefaultsMutation = useMutation({
+    mutationFn: (agentDefaults: any) =>
+      organizationsApi.update(organization.id, { agentDefaults }),
+    onSuccess: async () => {
+      success('Agent defaults saved', 'Default agent configuration has been updated.')
+      await queryClient.invalidateQueries({ queryKey: ['organization-details'] })
+    },
+    onError: (err: any) => {
+      error('Failed to save agent defaults', err.response?.data?.message || 'Please try again.')
     },
   })
 
@@ -145,72 +175,148 @@ function OrganizationTab({ organization }: { organization: any }) {
     setIsEditing(false)
   }
 
+  const handleSaveAgentDefaults = () => {
+    updateAgentDefaultsMutation.mutate({
+      personality: defaultPersonality.trim() || undefined,
+      rules: defaultRules.trim() || undefined,
+      maxCostPerRun: defaultMaxCost !== '' ? Number(defaultMaxCost) : undefined,
+      maxStepsPerRun: defaultMaxSteps !== '' ? Number(defaultMaxSteps) : undefined,
+    })
+  }
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>Organization Details</CardTitle>
-          <CardDescription>Manage your organization settings</CardDescription>
-        </div>
-        {!isEditing ? (
-          <Button variant="outline" onClick={() => setIsEditing(true)}>
-            Edit Organization
-          </Button>
-        ) : (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleCancel}>Cancel</Button>
-            <Button onClick={handleSave} disabled={updateOrgMutation.isPending}>
-              {updateOrgMutation.isPending ? 'Saving...' : 'Save'}
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Organization Details</CardTitle>
+            <CardDescription>Manage your organization settings</CardDescription>
+          </div>
+          {!isEditing ? (
+            <Button variant="outline" onClick={() => setIsEditing(true)}>
+              Edit Organization
             </Button>
-          </div>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div>
-          <label htmlFor="org-name" className="text-sm font-medium text-muted-foreground">Organization Name</label>
-          {isEditing ? (
-            <Input
-              id="org-name"
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              className="mt-1"
-            />
           ) : (
-            <div className="text-lg font-medium mt-1">{organization.name}</div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleCancel}>Cancel</Button>
+              <Button onClick={handleSave} disabled={updateOrgMutation.isPending}>
+                {updateOrgMutation.isPending ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
           )}
-        </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <label htmlFor="org-name" className="text-sm font-medium text-muted-foreground">Organization Name</label>
+            {isEditing ? (
+              <Input
+                id="org-name"
+                value={orgName}
+                onChange={(e) => setOrgName(e.target.value)}
+                className="mt-1"
+              />
+            ) : (
+              <div className="text-lg font-medium mt-1">{organization.name}</div>
+            )}
+          </div>
 
-        <div>
-          <label htmlFor="org-description" className="text-sm font-medium text-muted-foreground">Description</label>
-          {isEditing ? (
-            <Input
-              id="org-description"
-              value={orgDescription}
-              onChange={(e) => setOrgDescription(e.target.value)}
-              placeholder="Organization description (optional)"
-              className="mt-1"
+          <div>
+            <label htmlFor="org-description" className="text-sm font-medium text-muted-foreground">Description</label>
+            {isEditing ? (
+              <Input
+                id="org-description"
+                value={orgDescription}
+                onChange={(e) => setOrgDescription(e.target.value)}
+                placeholder="Organization description (optional)"
+                className="mt-1"
+              />
+            ) : (
+              <div className="text-sm mt-1">{organization.description || <span className="text-muted-foreground italic">No description added</span>}</div>
+            )}
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-muted-foreground">Status</label>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-2 h-2 bg-green-500 rounded-full" />
+              <span className="text-sm">Active</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-muted-foreground">Created</label>
+            <div className="text-sm mt-1">
+              {(fullOrg.createdAt || fullOrg.created_at) ? new Date(fullOrg.createdAt || fullOrg.created_at).toLocaleDateString() : <span className="inline-block w-20 h-4 bg-muted animate-pulse rounded" />}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Agent Defaults</CardTitle>
+            <CardDescription>Default configuration applied to all agents in this organization</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="default-personality" className="text-sm font-medium text-muted-foreground">Default Personality</Label>
+            <Textarea
+              id="default-personality"
+              value={defaultPersonality}
+              onChange={(e) => setDefaultPersonality(e.target.value)}
+              placeholder="e.g. Be professional and concise. Always respond in the user's language."
+              rows={3}
             />
-          ) : (
-            <div className="text-sm mt-1">{organization.description || <span className="text-muted-foreground italic">No description added</span>}</div>
-          )}
-        </div>
-        
-        <div>
-          <label className="text-sm font-medium text-muted-foreground">Status</label>
-          <div className="flex items-center gap-2 mt-1">
-            <div className="w-2 h-2 bg-green-500 rounded-full" />
-            <span className="text-sm">Active</span>
+            <p className="text-xs text-muted-foreground">Prepended to every agent's personality prompt.</p>
           </div>
-        </div>
 
-        <div>
-          <label className="text-sm font-medium text-muted-foreground">Created</label>
-          <div className="text-sm mt-1">
-            {(fullOrg.createdAt || fullOrg.created_at) ? new Date(fullOrg.createdAt || fullOrg.created_at).toLocaleDateString() : <span className="inline-block w-20 h-4 bg-muted animate-pulse rounded" />}
+          <div className="space-y-2">
+            <Label htmlFor="default-rules" className="text-sm font-medium text-muted-foreground">Default Rules</Label>
+            <Textarea
+              id="default-rules"
+              value={defaultRules}
+              onChange={(e) => setDefaultRules(e.target.value)}
+              placeholder="e.g. Never share internal data. Always cite sources. Escalate if unsure."
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground">Organization-wide rules injected into every agent's system prompt.</p>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="default-max-cost" className="text-sm font-medium text-muted-foreground">Max Cost per Run ($)</Label>
+              <Input
+                id="default-max-cost"
+                type="number"
+                min={0}
+                step={0.01}
+                value={defaultMaxCost}
+                onChange={(e) => setDefaultMaxCost(e.target.value ? parseFloat(e.target.value) : '')}
+                placeholder="No limit"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="default-max-steps" className="text-sm font-medium text-muted-foreground">Max Steps per Run</Label>
+              <Input
+                id="default-max-steps"
+                type="number"
+                min={1}
+                max={500}
+                value={defaultMaxSteps}
+                onChange={(e) => setDefaultMaxSteps(e.target.value ? parseInt(e.target.value) : '')}
+                placeholder="50"
+              />
+            </div>
+          </div>
+
+          <Button onClick={handleSaveAgentDefaults} disabled={updateAgentDefaultsMutation.isPending}>
+            {updateAgentDefaultsMutation.isPending ? 'Saving...' : 'Save Agent Defaults'}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
