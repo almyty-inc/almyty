@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { UseFormReturn } from 'react-hook-form'
-import { UseMutationResult } from '@tanstack/react-query'
+import { UseMutationResult, useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,10 @@ import {
 } from '@/components/ui/dialog'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 import { CredentialPicker } from '@/components/credential-picker'
+import { SdkToolForm } from '@/components/tools/sdk-tool-form'
+import { apisApi } from '@/lib/api'
+import { ApiType } from '@/types'
+import type { SdkMap } from '@/types'
 import CodeMirror from '@uiw/react-codemirror'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
@@ -63,6 +67,8 @@ interface CreateToolDialogProps {
   onLlmConfigChange: (value: any) => void
   activeProviders: any[]
   availableApis?: any[]
+  sdkConfig?: any
+  onSdkConfigChange?: (value: any) => void
 }
 
 export function CreateToolDialog({
@@ -90,7 +96,30 @@ export function CreateToolDialog({
   onLlmConfigChange,
   activeProviders,
   availableApis = [],
+  sdkConfig,
+  onSdkConfigChange,
 }: CreateToolDialogProps) {
+  // SDK tool state
+  const [sdkApiId, setSdkApiId] = useState<string>('')
+  const sdkApis = useMemo(() => availableApis.filter((api: any) => api.type === ApiType.SDK || api.type === 'sdk'), [availableApis])
+
+  const { data: sdkMapsData, isLoading: sdkMapsLoading } = useQuery({
+    queryKey: ['sdk-maps', sdkApiId],
+    queryFn: () => apisApi.getSdkMaps(sdkApiId),
+    enabled: !!sdkApiId && executionMethod === 'sdk',
+  })
+
+  const sdkMaps: Record<string, SdkMap> = useMemo(() => {
+    if (!sdkMapsData) return {}
+    // Backend may return an array or a record
+    if (Array.isArray(sdkMapsData)) {
+      const record: Record<string, SdkMap> = {}
+      sdkMapsData.forEach((m: SdkMap) => { record[m.packageName] = m })
+      return record
+    }
+    return sdkMapsData as Record<string, SdkMap>
+  }, [sdkMapsData])
+
   // HTTP structured config local state
   const [selectedApiId, setSelectedApiId] = useState<string>('')
   const [bodyEncoding, setBodyEncoding] = useState<string>('json')
@@ -150,6 +179,7 @@ export function CreateToolDialog({
                 <SelectItem value="grpc">gRPC</SelectItem>
                 <SelectItem value="custom">Custom JavaScript</SelectItem>
                 <SelectItem value="llm">LLM Prompt</SelectItem>
+                <SelectItem value="sdk">SDK / npm Package</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground mt-1">
@@ -159,6 +189,7 @@ export function CreateToolDialog({
               {executionMethod === 'grpc' && 'Invoke gRPC service methods'}
               {executionMethod === 'custom' && 'Write custom JavaScript code for transformations and logic'}
               {executionMethod === 'llm' && 'Prompt an LLM provider and return the response'}
+              {executionMethod === 'sdk' && 'Call methods on an npm package class (from an SDK API)'}
             </p>
           </div>
           <div>
@@ -694,8 +725,45 @@ export function CreateToolDialog({
             </div>
           )}
 
+          {/* SDK Tool Configuration */}
+          {executionMethod === 'sdk' && (
+            <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+              <Label className="text-base font-semibold">SDK Configuration</Label>
+
+              <div>
+                <Label>SDK API</Label>
+                <Select value={sdkApiId} onValueChange={setSdkApiId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an SDK API..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sdkApis.length === 0 ? (
+                      <SelectItem value="__none" disabled>No SDK APIs found - create one first</SelectItem>
+                    ) : (
+                      sdkApis.map((api: any) => (
+                        <SelectItem key={api.id} value={api.id}>{api.name}</SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {sdkApiId && sdkMapsLoading && (
+                <div className="text-sm text-muted-foreground py-4 text-center">Loading SDK maps...</div>
+              )}
+
+              {sdkApiId && !sdkMapsLoading && (
+                <SdkToolForm
+                  sdkMaps={sdkMaps}
+                  onConfigChange={(config) => onSdkConfigChange?.(config)}
+                  onParamsChange={(params) => onToolParametersChange(params)}
+                />
+              )}
+            </div>
+          )}
+
           {/* Authentication Configuration */}
-          {executionMethod !== 'custom' && executionMethod !== 'llm' && (
+          {executionMethod !== 'custom' && executionMethod !== 'llm' && executionMethod !== 'sdk' && (
             <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
               <Label>Authentication</Label>
               <Select value={authConfig.type} onValueChange={(value) => onAuthConfigChange({ ...authConfig, type: value })}>
@@ -748,12 +816,15 @@ export function CreateToolDialog({
             </div>
           )}
 
-          <div>
-            <JsonSchemaBuilder
-              value={toolParameters}
-              onChange={onToolParametersChange}
-            />
-          </div>
+          {/* SDK tools auto-generate parameters; other methods use the builder */}
+          {executionMethod !== 'sdk' && (
+            <div>
+              <JsonSchemaBuilder
+                value={toolParameters}
+                onChange={onToolParametersChange}
+              />
+            </div>
+          )}
 
           <div className="flex justify-end space-x-2">
             <Button

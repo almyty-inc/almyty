@@ -139,7 +139,8 @@ export function ToolsPage() {
   const [executionResult, setExecutionResult] = useState<any>(null)
   const [toolParameters, setToolParameters] = useState<any>({ type: 'object', properties: {} })
   const [toolCode, setToolCode] = useState('')
-  const [executionMethod, setExecutionMethod] = useState<'http' | 'graphql' | 'soap' | 'grpc' | 'custom' | 'llm'>('http')
+  const [executionMethod, setExecutionMethod] = useState<'http' | 'graphql' | 'soap' | 'grpc' | 'custom' | 'llm' | 'sdk'>('http')
+  const [sdkConfig, setSdkConfig] = useState<any>(null)
   const [llmConfig, setLlmConfig] = useState({
     providerId: '',
     promptTemplate: '',
@@ -300,6 +301,8 @@ return new Promise((resolve, reject) => {
         type = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpConfig.method) ? 'action' : 'query';
       } else if (executionMethod === 'graphql') {
         type = graphqlConfig.query.trim().startsWith('mutation') ? 'mutation' : 'query';
+      } else if (executionMethod === 'sdk') {
+        type = 'function';
       }
 
       // Build LLM config if LLM execution method
@@ -342,6 +345,9 @@ return new Promise((resolve, reject) => {
       // HTTP tools: send httpConfig, no code
       if (executionMethod === 'http') {
         payload.httpConfig = httpConfigPayload;
+      } else if (executionMethod === 'sdk') {
+        // SDK tools: send sdkConfig, no code
+        payload.sdkConfig = sdkConfig;
       } else {
         // All other methods that generate code
         payload.code = code;
@@ -357,6 +363,7 @@ return new Promise((resolve, reject) => {
       setToolParameters({ type: 'object', properties: {} })
       setToolCode('')
       setHttpConfig({ method: 'GET', url: '', headers: {}, body: '' })
+      setSdkConfig(null)
       setExecutionMethod('http')
     },
     onError: (error: any) => {
@@ -439,7 +446,7 @@ return new Promise((resolve, reject) => {
             <div className="max-w-[300px]">
               <span className="font-medium text-primary hover:underline truncate" title={tool.name}>{tool.name}</span>
               <div className="text-sm text-muted-foreground truncate">
-                {tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'LLM Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : 'Custom Tool')}
+                {tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'LLM Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
               </div>
             </div>
           </div>
@@ -915,7 +922,7 @@ return new Promise((resolve, reject) => {
         createForm={createForm}
         createToolMutation={createToolMutation}
         executionMethod={executionMethod}
-        onExecutionMethodChange={(v) => setExecutionMethod(v as 'http' | 'graphql' | 'soap' | 'grpc' | 'custom' | 'llm')}
+        onExecutionMethodChange={(v) => setExecutionMethod(v as 'http' | 'graphql' | 'soap' | 'grpc' | 'custom' | 'llm' | 'sdk')}
         toolParameters={toolParameters}
         onToolParametersChange={setToolParameters}
         toolCode={toolCode}
@@ -934,6 +941,8 @@ return new Promise((resolve, reject) => {
         onLlmConfigChange={setLlmConfig}
         activeProviders={activeProviders}
         availableApis={availableApis}
+        sdkConfig={sdkConfig}
+        onSdkConfigChange={setSdkConfig}
       />
     </div>
   )

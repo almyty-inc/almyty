@@ -212,6 +212,7 @@ export enum ApiType {
   SOAP = 'soap',
   GRPC = 'grpc',
   HTTP = 'http',
+  SDK = 'sdk',
   OTHER = 'other',
 }
 
@@ -315,6 +316,9 @@ export interface Tool {
       maxPages?: number
     }
   } | null
+  dependencies?: Record<string, string> | null
+  npmRegistry?: any | null
+  sdkConfig?: any | null
 }
 
 export interface ToolTemplate {
@@ -1113,4 +1117,54 @@ export interface PaginatedAuditLogs {
   page: number
   limit: number
   totalPages: number
+}
+
+// ── SDK Map Types ──
+
+export interface SdkMap {
+  packageName: string
+  version: string
+  exports: SdkExport[]
+}
+
+export interface SdkExport {
+  name: string
+  kind: 'class' | 'function' | 'const' | 'namespace'
+  description?: string
+  constructorParams?: SdkParam[]
+  methods?: SdkMethod[]
+  properties?: SdkProperty[]
+  params?: SdkParam[]
+}
+
+export interface SdkMethod {
+  name: string
+  description?: string
+  params: SdkParam[]
+  returnType?: SdkType
+  isAsync: boolean
+}
+
+export interface SdkProperty {
+  name: string
+  description?: string
+  type: SdkType
+  methods?: SdkMethod[]
+  properties?: SdkProperty[]
+}
+
+export interface SdkParam {
+  name: string
+  type: SdkType
+  required: boolean
+  description?: string
+}
+
+export interface SdkType {
+  kind: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'union' | 'enum' | 'class_ref' | 'function' | 'any' | 'void' | 'buffer'
+  properties?: SdkParam[]
+  itemType?: SdkType
+  enumValues?: string[]
+  className?: string
+  rawType?: string
 }

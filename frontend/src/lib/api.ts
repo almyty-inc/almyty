@@ -297,6 +297,10 @@ export const apisApi = {
 
   createHttpApi: (data: any) => apiPost('/apis/http', data),
 
+  createSdkApi: (data: any) => apiPost('/apis/sdk', data),
+  getSdkMaps: (apiId: string) => apiGet(`/apis/${apiId}/sdk-maps`),
+  addDependency: (apiId: string, packageName: string, version: string) => apiPost(`/apis/${apiId}/dependencies`, { packageName, version }),
+
   // Credential management
   getCredentials: (apiId: string) => apiGet(`/apis/${apiId}/credentials`),
   createCredential: (apiId: string, data: any) => apiPost(`/apis/${apiId}/credentials`, data),
