@@ -16,7 +16,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Save, Loader2, Download, AlertTriangle, Plus, X, Undo2, Redo2, Play, ChevronUp, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Download, AlertTriangle, Plus, X, Undo2, Redo2, Play, ChevronUp, ChevronDown, ChevronRight, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -133,6 +133,10 @@ export function AgentBuilderPage() {
   const [testInput, setTestInput] = useState('{"message": "Hello"}')
   const [testOutput, setTestOutput] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
+
+  // ── Tool picker state ──────────────────────────────────────────────────
+  const [toolSearch, setToolSearch] = useState('')
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   // ── Undo / Redo history ───────────────────────────────────────────────
   const [history, setHistory] = useState<{ nodes: Node[]; edges: Edge[] }[]>([])
@@ -783,31 +787,160 @@ export function AgentBuilderPage() {
             </CardHeader>
             <CardContent>
               <p className="text-xs text-muted-foreground mb-3">Select which tools this agent can use during execution.</p>
-              <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                {availableTools.map((tool: any) => (
-                  <label key={tool.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={agentToolIds.includes(tool.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setAgentToolIds([...agentToolIds, tool.id])
-                        } else {
-                          setAgentToolIds(agentToolIds.filter((id) => id !== tool.id))
-                        }
-                      }}
-                      className="rounded"
-                    />
-                    <div>
-                      <p className="text-sm font-medium">{tool.name}</p>
-                      {tool.description && <p className="text-xs text-muted-foreground">{tool.description}</p>}
-                    </div>
-                  </label>
-                ))}
-                {availableTools.length === 0 && (
-                  <p className="text-sm text-muted-foreground py-4 text-center">No tools available. Create tools first.</p>
-                )}
+
+              {/* Selected tools summary */}
+              {agentToolIds.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">{agentToolIds.length} tool{agentToolIds.length !== 1 ? 's' : ''} selected</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {agentToolIds.map((tid) => {
+                      const tool = availableTools.find((t: any) => t.id === tid)
+                      return (
+                        <Badge key={tid} variant="secondary" className="text-xs gap-1 pr-1">
+                          {tool?.name || tid}
+                          <button
+                            type="button"
+                            onClick={() => setAgentToolIds(agentToolIds.filter((i) => i !== tid))}
+                            className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Search input */}
+              <div className="relative mb-3">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search tools..."
+                  value={toolSearch}
+                  onChange={(e) => setToolSearch(e.target.value)}
+                  className="pl-8 h-8 text-sm"
+                />
               </div>
+
+              {/* Grouped tool list */}
+              {(() => {
+                const searchLower = toolSearch.toLowerCase()
+                const filtered = availableTools.filter((t: any) =>
+                  !toolSearch || t.name?.toLowerCase().includes(searchLower) || t.description?.toLowerCase().includes(searchLower)
+                )
+
+                if (availableTools.length === 0) {
+                  return <p className="text-sm text-muted-foreground py-4 text-center">No tools available. Create tools first.</p>
+                }
+
+                if (filtered.length === 0) {
+                  return <p className="text-sm text-muted-foreground py-4 text-center">No tools matching &ldquo;{toolSearch}&rdquo;</p>
+                }
+
+                // Group tools by name prefix
+                const prefixBuckets: Record<string, any[]> = {}
+                for (const tool of filtered) {
+                  const prefix = (tool.name || '').split('_')[0]
+                  if (!prefixBuckets[prefix]) prefixBuckets[prefix] = []
+                  prefixBuckets[prefix].push(tool)
+                }
+
+                const groups: Record<string, any[]> = {}
+                const otherTools: any[] = []
+                for (const [prefix, items] of Object.entries(prefixBuckets)) {
+                  if (items.length >= 3) {
+                    groups[prefix] = items
+                  } else {
+                    otherTools.push(...items)
+                  }
+                }
+                if (otherTools.length > 0) groups['Other'] = otherTools
+
+                const groupEntries = Object.entries(groups).sort(([a], [b]) => {
+                  if (a === 'Other') return 1
+                  if (b === 'Other') return -1
+                  return a.localeCompare(b)
+                })
+
+                return (
+                  <div className="max-h-[400px] overflow-y-auto space-y-1">
+                    {groupEntries.map(([groupName, groupTools]) => {
+                      const isExpanded = expandedGroups.has(groupName)
+                      const selectedInGroup = groupTools.filter((t: any) => agentToolIds.includes(t.id)).length
+                      const allSelectedInGroup = selectedInGroup === groupTools.length
+
+                      const toggleGroup = () => {
+                        setExpandedGroups((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(groupName)) next.delete(groupName)
+                          else next.add(groupName)
+                          return next
+                        })
+                      }
+
+                      const selectAllInGroup = () => {
+                        const idsToAdd = groupTools.map((t: any) => t.id).filter((tid: string) => !agentToolIds.includes(tid))
+                        setAgentToolIds([...agentToolIds, ...idsToAdd])
+                      }
+
+                      const deselectAllInGroup = () => {
+                        const idsToRemove = new Set(groupTools.map((t: any) => t.id))
+                        setAgentToolIds(agentToolIds.filter((tid) => !idsToRemove.has(tid)))
+                      }
+
+                      return (
+                        <div key={groupName} className="border rounded-md">
+                          {/* Group header */}
+                          <div
+                            className="flex items-center gap-2 p-2 cursor-pointer hover:bg-muted/50 select-none"
+                            onClick={toggleGroup}
+                          >
+                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                            <span className="text-sm font-medium flex-1">{groupName}</span>
+                            <span className="text-xs text-muted-foreground">{groupTools.length} tool{groupTools.length !== 1 ? 's' : ''}{selectedInGroup > 0 ? `, ${selectedInGroup} selected` : ''}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-xs px-2"
+                              onClick={(e) => { e.stopPropagation(); allSelectedInGroup ? deselectAllInGroup() : selectAllInGroup() }}
+                            >
+                              {allSelectedInGroup ? 'Deselect All' : 'Select All'}
+                            </Button>
+                          </div>
+
+                          {/* Expanded tool list */}
+                          {isExpanded && (
+                            <div className="border-t px-2 pb-2 space-y-0.5">
+                              {groupTools.map((tool: any) => (
+                                <label key={tool.id} className="flex items-center gap-3 p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={agentToolIds.includes(tool.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setAgentToolIds([...agentToolIds, tool.id])
+                                      } else {
+                                        setAgentToolIds(agentToolIds.filter((i) => i !== tool.id))
+                                      }
+                                    }}
+                                    className="rounded"
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium truncate">{tool.name}</p>
+                                    {tool.description && <p className="text-xs text-muted-foreground truncate">{tool.description}</p>}
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
             </CardContent>
           </Card>
 

@@ -742,7 +742,8 @@ export function AgentDetailPage() {
         </Card>
       </div>
 
-      {/* Pipeline Canvas (read-only) */}
+      {/* Pipeline Canvas (read-only) — hidden for autonomous agents */}
+      {agent.mode !== 'autonomous' && (
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Pipeline</CardTitle>
@@ -783,6 +784,7 @@ export function AgentDetailPage() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -1154,7 +1156,8 @@ console.log(r2.choices[0].message.content);`,
 
           {/* Cost Estimate & Version Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Pipeline Info */}
+            {/* Pipeline Info — hidden for autonomous agents */}
+            {agent.mode !== 'autonomous' && (
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center gap-2">
@@ -1189,8 +1192,10 @@ console.log(r2.choices[0].message.content);`,
                 </div>
               </CardContent>
             </Card>
+            )}
 
-            {/* Pipeline Version History */}
+            {/* Pipeline Version History — hidden for autonomous agents */}
+            {agent.mode !== 'autonomous' && (
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center gap-2">
@@ -1232,6 +1237,7 @@ console.log(r2.choices[0].message.content);`,
                 )}
               </CardContent>
             </Card>
+            )}
 
             {/* Entity Change History (typeorm-versions) */}
             <Card>
