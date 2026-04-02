@@ -225,6 +225,40 @@ export class ApisService {
     return saved;
   }
 
+  async createSdkApi(data: {
+    name: string;
+    description?: string;
+    dependencies: Record<string, string>;
+    npmRegistry?: any;
+  }, organizationId: string): Promise<Api> {
+    const organization = await this.organizationRepository.findOne({ where: { id: organizationId } });
+    if (!organization) throw new NotFoundException('Organization not found');
+
+    const existingApi = await this.apiRepository.findOne({ where: { name: data.name, organizationId } });
+    if (existingApi) throw new BadRequestException('API with this name already exists');
+
+    if (!data.dependencies || Object.keys(data.dependencies).length === 0) {
+      throw new BadRequestException('At least one npm package is required');
+    }
+
+    const api = this.apiRepository.create({
+      name: data.name,
+      description: data.description || null,
+      type: 'sdk' as any,
+      status: 'active' as any,
+      baseUrl: '',
+      organizationId,
+      dependencies: data.dependencies,
+      npmRegistry: data.npmRegistry || null,
+      sdkMaps: {},
+    });
+
+    const saved = await this.apiRepository.save(api);
+    this.auditLogService.logCreate(organizationId, undefined, AuditResource.API, saved.id, saved.name, { type: 'sdk', packages: Object.keys(data.dependencies) });
+
+    return saved;
+  }
+
   async update(id: string, updateApiData: UpdateApiData): Promise<Api> {
     const api = await this.findOne(id);
 

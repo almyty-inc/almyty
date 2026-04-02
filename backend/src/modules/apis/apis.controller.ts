@@ -82,6 +82,39 @@ export class ApisController {
     }
   }
 
+  @Post('sdk')
+  @Roles('member', 'admin', 'owner')
+  async createSdkApi(@Body() body: any, @Request() req: any) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException({ success: false, message: 'No organization found' }, HttpStatus.BAD_REQUEST);
+      }
+      const api = await this.apisService.createSdkApi(body, organizationId);
+      return { success: true, data: api, message: 'SDK API created. Installing packages...' };
+    } catch (error) {
+      throw new HttpException(
+        { success: false, message: error.message, error: 'SDK_API_CREATE_FAILED' },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get(':id/sdk-maps')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  async getSdkMaps(@Param('id') id: string, @Request() req: any) {
+    try {
+      const api = await this.apisService.findOne(id);
+      if (!api) throw new NotFoundException('API not found');
+      return { success: true, data: api.sdkMaps || {} };
+    } catch (error) {
+      throw new HttpException(
+        { success: false, message: error.message },
+        error.status || HttpStatus.NOT_FOUND,
+      );
+    }
+  }
+
   @Get(':id')
   @Roles('member', 'admin', 'owner')
   async findOne(@Request() req, @Param('id') id: string) {
