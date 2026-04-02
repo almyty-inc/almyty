@@ -12,6 +12,8 @@ import { Api } from './api.entity';
 import { Organization } from './organization.entity';
 import * as crypto from 'crypto';
 
+const { createHash } = crypto;
+
 export enum CredentialType {
   API_KEY = 'api_key',
   BEARER_TOKEN = 'bearer_token',
@@ -19,11 +21,28 @@ export enum CredentialType {
   OAUTH2 = 'oauth2',
   JWT = 'jwt',
   CUSTOM = 'custom',
+  AWS_SIGV4 = 'aws_sigv4',
+  GOOGLE_SERVICE_ACCOUNT = 'google_service_account',
+  MTLS = 'mtls',
 }
 
 @Entity('credentials')
 @VersionedEntity()
 export class Credential {
+  private static _encryptionWarned = false;
+
+  private static getEncryptionKey(): Buffer {
+    const key = process.env.ENCRYPTION_KEY;
+    if (!key) {
+      // Only warn once
+      if (!Credential._encryptionWarned) {
+        console.warn('[SECURITY WARNING] ENCRYPTION_KEY environment variable not set. Using default key. Set ENCRYPTION_KEY in production!');
+        Credential._encryptionWarned = true;
+      }
+    }
+    return createHash('sha256').update(key || 'default-encryption-key-change-me!').digest();
+  }
+
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -110,8 +129,7 @@ export class Credential {
   }
 
   private encryptValue(value: string): string {
-    const envKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-change-me!';
-    const key = crypto.createHash('sha256').update(envKey).digest();
+    const key = Credential.getEncryptionKey();
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
     let encrypted = cipher.update(value, 'utf8', 'hex');
@@ -129,8 +147,7 @@ export class Credential {
 
     const ivHex = parts[1];
     const encrypted = parts.slice(2).join(':');
-    const envKey = process.env.ENCRYPTION_KEY || 'default-encryption-key-change-me!';
-    const key = crypto.createHash('sha256').update(envKey).digest();
+    const key = Credential.getEncryptionKey();
     const iv = Buffer.from(ivHex, 'hex');
     const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');
@@ -180,6 +197,31 @@ export class Credential {
             ? decryptedConfig.token
             : `Bearer ${decryptedConfig.token}`,
         };
+
+      case CredentialType.OAUTH2: {
+        const tokenType = decryptedConfig.tokenType || 'Bearer';
+        const accessToken = decryptedConfig.accessToken;
+        if (accessToken) {
+          return { Authorization: `${tokenType} ${accessToken}` };
+        }
+        return {};
+      }
+
+      case CredentialType.AWS_SIGV4:
+        // SigV4 headers are computed per-request, not static. Return empty — signing happens in executor.
+        return {};
+
+      case CredentialType.GOOGLE_SERVICE_ACCOUNT: {
+        const decrypted = this.getDecryptedConfig();
+        if (decrypted.accessToken) {
+          return { Authorization: `Bearer ${decrypted.accessToken}` };
+        }
+        return {};
+      }
+
+      case CredentialType.MTLS:
+        // mTLS uses client certificates, not headers
+        return {};
 
       case CredentialType.CUSTOM:
         if (decryptedConfig.headerName && decryptedConfig.headerValue) {

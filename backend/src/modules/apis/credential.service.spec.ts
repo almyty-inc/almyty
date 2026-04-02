@@ -433,10 +433,19 @@ describe('CredentialService', () => {
   });
 
   describe('refreshOAuthToken', () => {
-    it('should refresh OAuth2 token successfully', async () => {
+    // Helper: create an expired OAuth2 mock credential that passes the re-read check
+    const makeOAuth2Cred = (decryptedConfig: Record<string, any>) => {
       const cred = mockCredential();
       cred.type = CredentialType.OAUTH2;
-      (cred.getDecryptedConfig as jest.Mock).mockReturnValue({
+      cred.expiresAt = new Date(Date.now() - 60000); // expired
+      (cred.getDecryptedConfig as jest.Mock).mockReturnValue(decryptedConfig);
+      // Re-read from DB returns the same expired credential
+      credentialRepository.findOne.mockResolvedValue(cred);
+      return cred;
+    };
+
+    it('should refresh OAuth2 token successfully', async () => {
+      const cred = makeOAuth2Cred({
         refreshToken: 'old-refresh-token',
         tokenEndpoint: 'https://auth.example.com/token',
         clientId: 'client-123',
@@ -471,9 +480,7 @@ describe('CredentialService', () => {
     });
 
     it('should keep old refresh token when new one not returned', async () => {
-      const cred = mockCredential();
-      cred.type = CredentialType.OAUTH2;
-      (cred.getDecryptedConfig as jest.Mock).mockReturnValue({
+      const cred = makeOAuth2Cred({
         refreshToken: 'old-refresh-token',
         tokenEndpoint: 'https://auth.example.com/token',
         clientId: 'c',
@@ -494,9 +501,7 @@ describe('CredentialService', () => {
     });
 
     it('should set expiresAt when expires_in returned', async () => {
-      const cred = mockCredential();
-      cred.type = CredentialType.OAUTH2;
-      (cred.getDecryptedConfig as jest.Mock).mockReturnValue({
+      const cred = makeOAuth2Cred({
         refreshToken: 'rt',
         tokenEndpoint: 'https://auth.example.com/token',
         clientId: 'c',
@@ -525,9 +530,7 @@ describe('CredentialService', () => {
     });
 
     it('should throw when refreshToken or tokenEndpoint missing', async () => {
-      const cred = mockCredential();
-      cred.type = CredentialType.OAUTH2;
-      (cred.getDecryptedConfig as jest.Mock).mockReturnValue({});
+      const cred = makeOAuth2Cred({});
 
       await expect(
         service.refreshOAuthToken(cred as unknown as Credential),
@@ -535,9 +538,7 @@ describe('CredentialService', () => {
     });
 
     it('should deactivate credential and throw on refresh failure', async () => {
-      const cred = mockCredential();
-      cred.type = CredentialType.OAUTH2;
-      (cred.getDecryptedConfig as jest.Mock).mockReturnValue({
+      const cred = makeOAuth2Cred({
         refreshToken: 'rt',
         tokenEndpoint: 'https://auth.example.com/token',
         clientId: 'c',
@@ -553,6 +554,55 @@ describe('CredentialService', () => {
 
       expect(cred.isActive).toBe(false);
       expect(credentialRepository.save).toHaveBeenCalled();
+    });
+
+    it('should skip refresh if credential was already refreshed by another process', async () => {
+      const cred = mockCredential();
+      cred.type = CredentialType.OAUTH2;
+      // The re-read returns a credential with a future expiresAt (already refreshed)
+      const freshCred = mockCredential();
+      freshCred.type = CredentialType.OAUTH2;
+      freshCred.expiresAt = new Date(Date.now() + 3600000); // 1 hour from now
+      credentialRepository.findOne.mockResolvedValue(freshCred);
+
+      const result = await service.refreshOAuthToken(cred as unknown as Credential);
+
+      // Should return the fresh credential without calling axios.post
+      expect(axios.post).not.toHaveBeenCalled();
+      expect(result).toEqual(freshCred);
+    });
+
+    it('should throw NotFoundException if credential deleted before refresh', async () => {
+      const cred = mockCredential();
+      cred.type = CredentialType.OAUTH2;
+      credentialRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.refreshOAuthToken(cred as unknown as Credential),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should deduplicate concurrent refresh calls for the same credential', async () => {
+      const cred = makeOAuth2Cred({
+        refreshToken: 'rt',
+        tokenEndpoint: 'https://auth.example.com/token',
+        clientId: 'c',
+        clientSecret: 's',
+      });
+      credentialRepository.save.mockResolvedValue(cred);
+
+      (axios.post as jest.Mock).mockResolvedValue({
+        data: { access_token: 'at', expires_in: 3600 },
+      });
+
+      // Fire two concurrent refreshes
+      const [r1, r2] = await Promise.all([
+        service.refreshOAuthToken(cred as unknown as Credential),
+        service.refreshOAuthToken(cred as unknown as Credential),
+      ]);
+
+      // axios.post should only have been called once (the second call reuses the in-flight promise)
+      expect(axios.post).toHaveBeenCalledTimes(1);
     });
   });
 
