@@ -8,11 +8,13 @@ import { Gateway } from '../../entities/gateway.entity';
 import { Agent } from '../../entities/agent.entity';
 import { CredentialsController } from './credentials.controller';
 import { CredentialsService } from './credentials.service';
+import { OAuth2Controller } from './oauth2.controller';
+import { OAuth2Service } from './oauth2.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Credential, ApiKey, LlmProvider, Api, Gateway, Agent])],
-  controllers: [CredentialsController],
-  providers: [CredentialsService],
-  exports: [CredentialsService],
+  controllers: [CredentialsController, OAuth2Controller],
+  providers: [CredentialsService, OAuth2Service],
+  exports: [CredentialsService, OAuth2Service],
 })
 export class CredentialsModule {}

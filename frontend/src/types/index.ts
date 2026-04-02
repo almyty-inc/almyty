@@ -801,6 +801,26 @@ export interface ApiCredential {
   lastUsedAt?: string
 }
 
+export enum CredentialType {
+  API_KEY = 'api_key',
+  BEARER_TOKEN = 'bearer_token',
+  BASIC_AUTH = 'basic_auth',
+  OAUTH2 = 'oauth2',
+  JWT = 'jwt',
+  CUSTOM = 'custom',
+  AWS_SIGV4 = 'aws_sigv4',
+  GOOGLE_SERVICE_ACCOUNT = 'google_service_account',
+  MTLS = 'mtls',
+}
+
+export interface OAuth2Preset {
+  name: string
+  authorizationUrl: string
+  tokenUrl: string
+  defaultScopes: string[]
+  requiresPKCE: boolean
+}
+
 // Request log entry returned from analytics API
 export interface RequestLog {
   id: string

@@ -42,6 +42,7 @@ export interface UpdateCredentialDto {
 @Injectable()
 export class CredentialService {
   private readonly logger = new Logger(CredentialService.name);
+  private refreshLocks = new Map<string, Promise<Credential>>();
 
   constructor(
     @InjectRepository(Credential)
@@ -200,13 +201,41 @@ export class CredentialService {
   /**
    * Refresh an OAuth2 token using the stored refresh token.
    * Called automatically before tool execution when the access token is expired.
+   * Uses an in-memory lock to prevent concurrent refreshes for the same credential.
    */
   async refreshOAuthToken(credential: Credential): Promise<Credential> {
+    // Check if a refresh is already in progress for this credential
+    const existing = this.refreshLocks.get(credential.id);
+    if (existing) {
+      return existing; // Wait for the in-flight refresh
+    }
+
+    const promise = this.refreshOAuthTokenInternal(credential);
+    this.refreshLocks.set(credential.id, promise);
+    try {
+      return await promise;
+    } finally {
+      this.refreshLocks.delete(credential.id);
+    }
+  }
+
+  private async refreshOAuthTokenInternal(credential: Credential): Promise<Credential> {
     if (credential.type !== CredentialType.OAUTH2) {
       throw new BadRequestException('Only OAuth2 credentials support token refresh');
     }
 
-    const config = credential.getDecryptedConfig();
+    // Re-read from DB to check if another process already refreshed it
+    const freshCredential = await this.credentialRepository.findOne({ where: { id: credential.id } });
+    if (!freshCredential) {
+      throw new NotFoundException('Credential not found');
+    }
+
+    // Check if already refreshed by another process
+    if (freshCredential.expiresAt && freshCredential.expiresAt.getTime() > Date.now() + 60000) {
+      return freshCredential;
+    }
+
+    const config = freshCredential.getDecryptedConfig();
     const refreshToken = config.refreshToken;
     const tokenEndpoint = config.tokenEndpoint;
 
@@ -227,15 +256,23 @@ export class CredentialService {
 
       const { access_token, refresh_token, expires_in } = response.data;
 
-      // Update credential with new tokens
-      credential.config = {
+      // Build updated config
+      const updatedConfig: Record<string, any> = {
         ...config,
         accessToken: access_token,
-        refreshToken: refresh_token || refreshToken, // Keep old if not returned
+        refreshToken: refreshToken, // Default: keep old
         tokenEndpoint,
         clientId: config.clientId,
         clientSecret: config.clientSecret,
       };
+
+      // Refresh token rotation: save the new one if returned
+      if (refresh_token) {
+        updatedConfig.refreshToken = refresh_token;
+        // The old refreshToken is now invalid
+      }
+
+      credential.config = updatedConfig;
 
       if (expires_in) {
         credential.expiresAt = new Date(Date.now() + expires_in * 1000);
