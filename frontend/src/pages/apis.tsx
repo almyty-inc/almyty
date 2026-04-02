@@ -7,7 +7,7 @@ import {
   CheckCircle, XCircle, AlertCircle, Globe, Database, Cloud,
   Code, FileText, Zap, Activity, BarChart3, Shield, Key,
   Search, ExternalLink, Download, Eye, Edit, Trash2,
-  Server, Webhook, Lock, Unlock, Copy, ChevronRight
+  Server, Webhook, Lock, Unlock, Copy, ChevronRight, Package
 } from 'lucide-react'
 import { useForm, useController } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -43,13 +43,27 @@ const createApiSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   description: z.string().optional(),
   type: z.nativeEnum(ApiType),
-  baseUrl: z.string().url('Please enter a valid URL'),
+  baseUrl: z.string().optional().default(''),
   version: z.string().optional(),
   configuration: z.record(z.any()).optional(),
   authentication: z.object({
     type: z.nativeEnum(ApiAuthType),
     config: z.record(z.any()),
   }).optional(),
+}).refine((data) => {
+  // SDK type doesn't require a baseUrl
+  if (data.type === ApiType.SDK) return true
+  // All other types require a valid URL
+  try {
+    if (!data.baseUrl) return false
+    new URL(data.baseUrl)
+    return true
+  } catch {
+    return false
+  }
+}, {
+  message: 'Please enter a valid URL',
+  path: ['baseUrl'],
 })
 
 const importSchemaSchema = z.object({
@@ -102,6 +116,14 @@ export function ApisPage() {
   const [bearerCredentialId, setBearerCredentialId] = React.useState('')
   const [oauthCredentialId, setOauthCredentialId] = React.useState('')
   const [selectedApiType, setSelectedApiType] = React.useState<ApiType>(ApiType.OPENAPI)
+  // SDK API creation state
+  const [sdkPackages, setSdkPackages] = React.useState<Array<{name: string, version: string}>>([])
+  const [newPkgName, setNewPkgName] = React.useState('')
+  const [newPkgVersion, setNewPkgVersion] = React.useState('*')
+  const [usePrivateRegistry, setUsePrivateRegistry] = React.useState(false)
+  const [registryUrl, setRegistryUrl] = React.useState('')
+  const [registryToken, setRegistryToken] = React.useState('')
+  const [registryScope, setRegistryScope] = React.useState('')
   const [searchQuery, setSearchQuery] = React.useState('')
   const [typeFilter, setTypeFilter] = React.useState('all')
   const [healthFilter, setHealthFilter] = React.useState('all')
@@ -281,11 +303,52 @@ export function ApisPage() {
     },
   })
 
+  const createSdkApiMutation = useMutation({
+    mutationFn: (data: any) => apisApi.createSdkApi(data),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['apis'] })
+      success('API created', 'SDK API has been created successfully. Packages are being analyzed.')
+      setCreateDialogOpen(false)
+      setCreateStep('details')
+      setSdkPackages([])
+      setNewPkgName('')
+      setNewPkgVersion('*')
+      setUsePrivateRegistry(false)
+      setRegistryUrl('')
+      setRegistryToken('')
+      setRegistryScope('')
+      // Navigate to API detail page
+      if (response?.id) {
+        navigate(`/apis/${response.id}`)
+      }
+    },
+    onError: (err: any) => {
+      error('Failed to create SDK API', err.response?.data?.message || 'Please try again.')
+    },
+  })
+
   const handleCreateApi = (data: CreateApiFormData) => {
     if (editingApi) {
       // Update existing API - exclude type field as it can't be changed
       const { type, ...updateData } = data
       updateApiMutation.mutate({ id: editingApi.id, data: updateData })
+    } else if (data.type === ApiType.SDK) {
+      // SDK: create with packages, skip schema import
+      const dependencies: Record<string, string> = {}
+      sdkPackages.forEach(pkg => { dependencies[pkg.name] = pkg.version })
+      const sdkData: any = {
+        name: data.name,
+        description: data.description,
+        dependencies,
+      }
+      if (usePrivateRegistry) {
+        sdkData.npmRegistry = {
+          url: registryUrl || undefined,
+          token: registryToken || undefined,
+          scope: registryScope || undefined,
+        }
+      }
+      createSdkApiMutation.mutate(sdkData)
     } else if (data.type === ApiType.HTTP) {
       // Custom HTTP: create directly, skip schema import
       createHttpApiMutation.mutate(data)
@@ -318,6 +381,8 @@ export function ApisPage() {
         return [ApiAuthType.NONE, ApiAuthType.BEARER_TOKEN, ApiAuthType.CUSTOM];
       case ApiType.HTTP:
         return [ApiAuthType.NONE, ApiAuthType.API_KEY, ApiAuthType.BEARER_TOKEN, ApiAuthType.BASIC_AUTH];
+      case ApiType.SDK:
+        return [ApiAuthType.NONE];
       default:
         return [ApiAuthType.NONE, ApiAuthType.CUSTOM];
     }
@@ -336,6 +401,8 @@ export function ApisPage() {
         return { placeholder: 'grpc://api.example.com:443', pattern: /^grpc:\/\/.+:\d+$/ };
       case ApiType.HTTP:
         return { placeholder: 'https://api.example.com', pattern: /^https?:\/\/.+/ };
+      case ApiType.SDK:
+        return { placeholder: 'npm://package-name', pattern: /.*/ };
       default:
         return { placeholder: 'https://api.example.com', pattern: /^https?:\/\/.+/ };
     }
@@ -348,6 +415,7 @@ export function ApisPage() {
       case ApiType.SOAP: return Cloud
       case ApiType.GRPC: return Server
       case ApiType.HTTP: return Webhook
+      case ApiType.SDK: return Package
       case ApiType.OTHER: return Code
       default: return Code
     }
@@ -726,71 +794,193 @@ export function ApisPage() {
                             <span>Custom HTTP</span>
                           </div>
                         </SelectItem>
+                        <SelectItem value={ApiType.SDK}>
+                          <div className="flex items-center space-x-2">
+                            <Package className="h-4 w-4" />
+                            <span>SDK / npm Library</span>
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
                 
-                <div>
-                  <Label htmlFor="baseUrl">
-                    {selectedApiType === ApiType.GRPC ? 'gRPC Server Address' : 'Base URL'}
-                  </Label>
-                  <Input
-                    id="baseUrl"
-                    placeholder={getUrlInfo(selectedApiType).placeholder}
-                    {...createForm.register('baseUrl')}
-                  />
-                  {createForm.formState.errors.baseUrl && (
-                    <p className="text-sm text-red-500 mt-1">
-                      {createForm.formState.errors.baseUrl.message}
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {selectedApiType === ApiType.GRPC && 'gRPC uses grpc:// protocol with port number'}
-                    {selectedApiType === ApiType.GRAPHQL && 'GraphQL typically has a single /graphql endpoint'}
-                    {selectedApiType === ApiType.SOAP && 'SOAP services usually expose WSDL at /soap or /?wsdl'}
-                    {selectedApiType === ApiType.OPENAPI && 'REST APIs can have versioned paths like /v1 or /api/v2'}
-                    {selectedApiType === ApiType.HTTP && 'Base URL for your HTTP API. Tools will use paths relative to this.'}
-                  </p>
-                </div>
+                {/* SDK type: show packages instead of base URL */}
+                {selectedApiType === ApiType.SDK ? (
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Packages</Label>
+                      <div className="border rounded-lg mt-1">
+                        {sdkPackages.length > 0 && (
+                          <div className="divide-y">
+                            {sdkPackages.map((pkg, idx) => (
+                              <div key={idx} className="flex items-center gap-2 p-2">
+                                <div className="flex-1 font-mono text-sm">{pkg.name}</div>
+                                <div className="w-32 text-sm text-muted-foreground">{pkg.version}</div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => setSdkPackages(sdkPackages.filter((_, i) => i !== idx))}
+                                >
+                                  <XCircle className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 p-2 border-t">
+                          <Input
+                            placeholder="Package name (e.g. @aws-sdk/client-s3)"
+                            value={newPkgName}
+                            onChange={(e) => setNewPkgName(e.target.value)}
+                            className="flex-1 h-8"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                if (newPkgName.trim()) {
+                                  setSdkPackages([...sdkPackages, { name: newPkgName.trim(), version: newPkgVersion }])
+                                  setNewPkgName('')
+                                  setNewPkgVersion('*')
+                                }
+                              }
+                            }}
+                          />
+                          <Input
+                            placeholder="Version"
+                            value={newPkgVersion}
+                            onChange={(e) => setNewPkgVersion(e.target.value)}
+                            className="w-32 h-8"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              if (newPkgName.trim()) {
+                                setSdkPackages([...sdkPackages, { name: newPkgName.trim(), version: newPkgVersion }])
+                                setNewPkgName('')
+                                setNewPkgVersion('*')
+                              }
+                            }}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                      {sdkPackages.length === 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">Add at least one npm package to create an SDK API.</p>
+                      )}
+                    </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <Label htmlFor="version">Version (Optional)</Label>
-                    <Input
-                      id="version"
-                      placeholder="v1.0"
-                      {...createForm.register('version')}
-                    />
+                    {/* Private registry */}
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="private-registry"
+                        checked={usePrivateRegistry}
+                        onCheckedChange={(checked) => setUsePrivateRegistry(checked === true)}
+                      />
+                      <Label htmlFor="private-registry" className="text-sm font-normal cursor-pointer">Use private npm registry</Label>
+                    </div>
+                    {usePrivateRegistry && (
+                      <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
+                        <div>
+                          <Label htmlFor="registry-url">Registry URL</Label>
+                          <Input
+                            id="registry-url"
+                            placeholder="https://registry.example.com"
+                            value={registryUrl}
+                            onChange={(e) => setRegistryUrl(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="registry-token">Auth Token</Label>
+                          <Input
+                            id="registry-token"
+                            type="password"
+                            placeholder="npm auth token"
+                            value={registryToken}
+                            onChange={(e) => setRegistryToken(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="registry-scope">Scope (optional)</Label>
+                          <Input
+                            id="registry-scope"
+                            placeholder="@myorg"
+                            value={registryScope}
+                            onChange={(e) => setRegistryScope(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <Label htmlFor="authType">Authentication</Label>
-                    <Select onValueChange={(value) => {
-                      const authType = value as ApiAuthType
-                      setSelectedAuthType(authType)
-                      createForm.setValue('authentication', {
-                        type: authType,
-                        config: {}
-                      })
-                    }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select auth type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {getSupportedAuthMethods(selectedApiType).map((authType) => (
-                          <SelectItem key={authType} value={authType}>
-                            {authType === ApiAuthType.NONE && 'No Authentication'}
-                            {authType === ApiAuthType.API_KEY && 'API Key'}
-                            {authType === ApiAuthType.BEARER_TOKEN && 'Bearer Token'}
-                            {authType === ApiAuthType.BASIC_AUTH && 'Basic Auth'}
-                            {authType === ApiAuthType.OAUTH2 && 'OAuth 2.0'}
-                            {authType === ApiAuthType.CUSTOM && 'Custom'}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div>
+                      <Label htmlFor="baseUrl">
+                        {selectedApiType === ApiType.GRPC ? 'gRPC Server Address' : 'Base URL'}
+                      </Label>
+                      <Input
+                        id="baseUrl"
+                        placeholder={getUrlInfo(selectedApiType).placeholder}
+                        {...createForm.register('baseUrl')}
+                      />
+                      {createForm.formState.errors.baseUrl && (
+                        <p className="text-sm text-red-500 mt-1">
+                          {createForm.formState.errors.baseUrl.message}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {selectedApiType === ApiType.GRPC && 'gRPC uses grpc:// protocol with port number'}
+                        {selectedApiType === ApiType.GRAPHQL && 'GraphQL typically has a single /graphql endpoint'}
+                        {selectedApiType === ApiType.SOAP && 'SOAP services usually expose WSDL at /soap or /?wsdl'}
+                        {selectedApiType === ApiType.OPENAPI && 'REST APIs can have versioned paths like /v1 or /api/v2'}
+                        {selectedApiType === ApiType.HTTP && 'Base URL for your HTTP API. Tools will use paths relative to this.'}
+                      </p>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <Label htmlFor="version">Version (Optional)</Label>
+                        <Input
+                          id="version"
+                          placeholder="v1.0"
+                          {...createForm.register('version')}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="authType">Authentication</Label>
+                        <Select onValueChange={(value) => {
+                          const authType = value as ApiAuthType
+                          setSelectedAuthType(authType)
+                          createForm.setValue('authentication', {
+                            type: authType,
+                            config: {}
+                          })
+                        }}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select auth type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getSupportedAuthMethods(selectedApiType).map((authType) => (
+                              <SelectItem key={authType} value={authType}>
+                                {authType === ApiAuthType.NONE && 'No Authentication'}
+                                {authType === ApiAuthType.API_KEY && 'API Key'}
+                                {authType === ApiAuthType.BEARER_TOKEN && 'Bearer Token'}
+                                {authType === ApiAuthType.BASIC_AUTH && 'Basic Auth'}
+                                {authType === ApiAuthType.OAUTH2 && 'OAuth 2.0'}
+                                {authType === ApiAuthType.CUSTOM && 'Custom'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {/* Authentication Configuration Fields */}
                 {selectedAuthType === ApiAuthType.API_KEY && (
@@ -919,11 +1109,11 @@ export function ApisPage() {
                   </Button>
                   <Button
                     type="submit"
-                    disabled={createApiMutation.isPending || updateApiMutation.isPending || createHttpApiMutation.isPending}
+                    disabled={createApiMutation.isPending || updateApiMutation.isPending || createHttpApiMutation.isPending || createSdkApiMutation.isPending || (selectedApiType === ApiType.SDK && sdkPackages.length === 0)}
                   >
                     {editingApi
                       ? (updateApiMutation.isPending ? 'Saving...' : 'Save Changes')
-                      : (createApiMutation.isPending || createHttpApiMutation.isPending ? 'Connecting...' : 'Connect API')}
+                      : (createApiMutation.isPending || createHttpApiMutation.isPending || createSdkApiMutation.isPending ? 'Connecting...' : 'Connect API')}
                   </Button>
                 </div>
               </form>
@@ -977,6 +1167,7 @@ export function ApisPage() {
                     <SelectItem value={ApiType.SOAP}>SOAP</SelectItem>
                     <SelectItem value={ApiType.GRPC}>gRPC</SelectItem>
                     <SelectItem value={ApiType.HTTP}>Custom HTTP</SelectItem>
+                    <SelectItem value={ApiType.SDK}>SDK / npm</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={healthFilter} onValueChange={setHealthFilter}>

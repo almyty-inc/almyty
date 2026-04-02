@@ -8,6 +8,7 @@ const typeStyles: Record<string, string> = {
   protobuf: 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/30',
   grpc: 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/30',
   http: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30',
+  sdk: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-300 dark:border-orange-500/30',
   other: 'bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-500/20 dark:text-zinc-300 dark:border-zinc-500/30',
 }
 
@@ -18,6 +19,7 @@ const typeLabels: Record<string, string> = {
   protobuf: 'Protobuf',
   grpc: 'gRPC',
   http: 'Custom HTTP',
+  sdk: 'SDK / npm',
   other: 'Other',
 }
 
