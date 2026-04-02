@@ -23,6 +23,7 @@ import {
   Moon,
   Key,
   Database,
+  Store,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -50,6 +51,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'APIs', href: '/apis', icon: Globe },
   { name: 'Tools', href: '/tools', icon: Wrench },
+  { name: 'Tool Hub', href: '/tool-hub', icon: Store },
   { name: 'Gateways', href: '/gateways', icon: Zap },
   { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'Models', href: '/llm-providers', icon: Brain },

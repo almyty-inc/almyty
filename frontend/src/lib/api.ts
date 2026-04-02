@@ -295,6 +295,8 @@ export const apisApi = {
   
   updateStatus: (id: string, status: string) => apiPut(`/apis/${id}/status`, { status }),
 
+  createHttpApi: (data: any) => apiPost('/apis/http', data),
+
   // Credential management
   getCredentials: (apiId: string) => apiGet(`/apis/${apiId}/credentials`),
   createCredential: (apiId: string, data: any) => apiPost(`/apis/${apiId}/credentials`, data),
@@ -552,6 +554,19 @@ export const usersApi = {
 export const versionsApi = {
   getVersions: (entityType: string, entityId: string) => apiGet(`/versions/${entityType}/${entityId}`),
   getVersion: (versionId: string) => apiGet(`/versions/detail/${versionId}`),
+}
+
+// Tool Hub API
+export const toolHubApi = {
+  getTemplates: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return apiGet(`/tool-hub/templates${qs}`)
+  },
+  getTemplate: (id: string) => apiGet(`/tool-hub/templates/${id}`),
+  getProviders: () => apiGet('/tool-hub/providers'),
+  getCategories: () => apiGet('/tool-hub/categories'),
+  installTemplate: (id: string, data?: any) => apiPost(`/tool-hub/templates/${id}/install`, data || {}),
+  installProvider: (provider: string, data?: any) => apiPost(`/tool-hub/providers/${provider}/install`, data || {}),
 }
 
 export type ApiResponse<T = any> = AxiosResponse<T>

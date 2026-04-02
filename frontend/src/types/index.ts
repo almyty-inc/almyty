@@ -211,6 +211,7 @@ export enum ApiType {
   GRAPHQL = 'graphql',
   SOAP = 'soap',
   GRPC = 'grpc',
+  HTTP = 'http',
   OTHER = 'other',
 }
 
@@ -291,6 +292,48 @@ export interface Tool {
   api?: Api
   gatewayTools: GatewayTool[]
   usageMetrics: UsageMetric[]
+  httpConfig?: {
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+    path: string
+    headers?: Record<string, string>
+    queryParams?: Record<string, string>
+    bodyEncoding?: 'json' | 'form-urlencoded' | 'multipart' | 'raw'
+    bodyTemplate?: string
+    responseMapping?: {
+      dataPath?: string
+      errorPath?: string
+      successCondition?: string
+    }
+    pagination?: {
+      type: 'cursor' | 'offset' | 'link-header'
+      cursorPath?: string
+      cursorParam?: string
+      offsetParam?: string
+      limitParam?: string
+      defaultLimit?: number
+      resultsPath?: string
+      maxPages?: number
+    }
+  } | null
+}
+
+export interface ToolTemplate {
+  id: string
+  name: string
+  description: string
+  provider: string
+  providerIcon?: string
+  category: string
+  tags: string[]
+  executionMethod: string
+  httpConfig?: any
+  parameters: Record<string, any>
+  configuration: Record<string, any>
+  examples: Array<{ name: string; input: any; expectedOutput?: any }>
+  apiConfig?: { name: string; baseUrl: string; headers?: Record<string, string>; authRequirements?: { type: string; scopes?: string[]; setupInstructions?: string } }
+  isBuiltIn: boolean
+  version: string
+  installCount: number
 }
 
 export enum ToolType {

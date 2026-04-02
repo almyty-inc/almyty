@@ -268,13 +268,29 @@ export function ApisPage() {
     }
   }, [editingApi])
 
+  const createHttpApiMutation = useMutation({
+    mutationFn: (data: any) => apisApi.createHttpApi(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['apis'] })
+      success('API created', 'Custom HTTP API has been created successfully.')
+      setCreateDialogOpen(false)
+      setCreateStep('details')
+    },
+    onError: (err: any) => {
+      error('Failed to create API', err.response?.data?.message || 'Please try again.')
+    },
+  })
+
   const handleCreateApi = (data: CreateApiFormData) => {
     if (editingApi) {
       // Update existing API - exclude type field as it can't be changed
       const { type, ...updateData } = data
       updateApiMutation.mutate({ id: editingApi.id, data: updateData })
+    } else if (data.type === ApiType.HTTP) {
+      // Custom HTTP: create directly, skip schema import
+      createHttpApiMutation.mutate(data)
     } else {
-      // Create new API
+      // Create new API (goes to schema import step)
       createApiMutation.mutate(data)
     }
   }
@@ -300,6 +316,8 @@ export function ApisPage() {
         return [ApiAuthType.NONE, ApiAuthType.BASIC_AUTH, ApiAuthType.CUSTOM];
       case ApiType.GRPC:
         return [ApiAuthType.NONE, ApiAuthType.BEARER_TOKEN, ApiAuthType.CUSTOM];
+      case ApiType.HTTP:
+        return [ApiAuthType.NONE, ApiAuthType.API_KEY, ApiAuthType.BEARER_TOKEN, ApiAuthType.BASIC_AUTH];
       default:
         return [ApiAuthType.NONE, ApiAuthType.CUSTOM];
     }
@@ -316,6 +334,8 @@ export function ApisPage() {
         return { placeholder: 'https://api.example.com/soap', pattern: /^https?:\/\/.+/ };
       case ApiType.GRPC:
         return { placeholder: 'grpc://api.example.com:443', pattern: /^grpc:\/\/.+:\d+$/ };
+      case ApiType.HTTP:
+        return { placeholder: 'https://api.example.com', pattern: /^https?:\/\/.+/ };
       default:
         return { placeholder: 'https://api.example.com', pattern: /^https?:\/\/.+/ };
     }
@@ -327,6 +347,7 @@ export function ApisPage() {
       case ApiType.GRAPHQL: return Database
       case ApiType.SOAP: return Cloud
       case ApiType.GRPC: return Server
+      case ApiType.HTTP: return Webhook
       case ApiType.OTHER: return Code
       default: return Code
     }
@@ -699,6 +720,12 @@ export function ApisPage() {
                             <span>gRPC</span>
                           </div>
                         </SelectItem>
+                        <SelectItem value={ApiType.HTTP}>
+                          <div className="flex items-center space-x-2">
+                            <Webhook className="h-4 w-4" />
+                            <span>Custom HTTP</span>
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -723,6 +750,7 @@ export function ApisPage() {
                     {selectedApiType === ApiType.GRAPHQL && 'GraphQL typically has a single /graphql endpoint'}
                     {selectedApiType === ApiType.SOAP && 'SOAP services usually expose WSDL at /soap or /?wsdl'}
                     {selectedApiType === ApiType.OPENAPI && 'REST APIs can have versioned paths like /v1 or /api/v2'}
+                    {selectedApiType === ApiType.HTTP && 'Base URL for your HTTP API. Tools will use paths relative to this.'}
                   </p>
                 </div>
 
@@ -891,11 +919,11 @@ export function ApisPage() {
                   </Button>
                   <Button
                     type="submit"
-                    disabled={createApiMutation.isPending || updateApiMutation.isPending}
+                    disabled={createApiMutation.isPending || updateApiMutation.isPending || createHttpApiMutation.isPending}
                   >
                     {editingApi
                       ? (updateApiMutation.isPending ? 'Saving...' : 'Save Changes')
-                      : (createApiMutation.isPending ? 'Connecting...' : 'Connect API')}
+                      : (createApiMutation.isPending || createHttpApiMutation.isPending ? 'Connecting...' : 'Connect API')}
                   </Button>
                 </div>
               </form>
@@ -948,6 +976,7 @@ export function ApisPage() {
                     <SelectItem value={ApiType.GRAPHQL}>GraphQL</SelectItem>
                     <SelectItem value={ApiType.SOAP}>SOAP</SelectItem>
                     <SelectItem value={ApiType.GRPC}>gRPC</SelectItem>
+                    <SelectItem value={ApiType.HTTP}>Custom HTTP</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={healthFilter} onValueChange={setHealthFilter}>
