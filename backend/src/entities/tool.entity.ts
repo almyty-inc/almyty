@@ -18,6 +18,66 @@ import { ToolVersion } from './tool-version.entity';
 import { ToolCategory } from './tool-category.entity';
 import { GatewayTool } from './gateway-tool.entity';
 import { Organization } from './organization.entity';
+import { Api } from './api.entity';
+
+export interface HttpConfig {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  path: string;
+  headers?: Record<string, string>;
+  queryParams?: Record<string, string>;
+  bodyEncoding?: 'json' | 'form-urlencoded' | 'multipart' | 'raw';
+  bodyTemplate?: string;
+  responseMapping?: {
+    dataPath?: string;
+    errorPath?: string;
+    successCondition?: string;
+  };
+  pagination?: {
+    type: 'cursor' | 'offset' | 'link-header';
+    cursorPath?: string;
+    cursorParam?: string;
+    offsetParam?: string;
+    limitParam?: string;
+    defaultLimit?: number;
+    resultsPath?: string;
+    maxPages?: number;
+  };
+}
+
+export interface GraphqlConfig {
+  endpoint?: string;           // override api.baseUrl if needed
+  query: string;               // the GraphQL query/mutation string
+  variables?: Record<string, string>;  // maps tool params to GraphQL variables: { "userId": "{id}" }
+  headers?: Record<string, string>;
+  responseMapping?: {
+    dataPath?: string;          // e.g. 'data.users' to extract from GraphQL response
+    errorPath?: string;
+  };
+}
+
+export interface SoapConfig {
+  endpoint?: string;
+  operation: string;            // SOAP operation name
+  namespace: string;            // XML namespace URL
+  bodyTemplate?: string;        // XML body template with {param} placeholders
+  headers?: Record<string, string>;
+  soapAction?: string;          // SOAPAction header value
+  responseMapping?: {
+    dataPath?: string;
+    errorPath?: string;
+  };
+}
+
+export interface GrpcConfig {
+  endpoint?: string;
+  protoDefinition?: string;     // protobuf schema (inline or reference)
+  serviceName: string;
+  methodName: string;
+  requestMapping?: Record<string, string>;  // maps tool params to proto message fields
+  responseMapping?: {
+    dataPath?: string;
+  };
+}
 
 export enum ToolType {
   FUNCTION = 'function',
@@ -93,6 +153,9 @@ export class Tool {
   @Column({ nullable: true })
   operationId: string | null;
 
+  @Column({ nullable: true })
+  apiId: string | null;
+
   @Column()
   organizationId: string;
 
@@ -142,6 +205,18 @@ export class Tool {
     outputSchema?: Record<string, any>;
   } | null;
 
+  @Column({ type: 'json', nullable: true })
+  httpConfig: HttpConfig | null;
+
+  @Column({ type: 'json', nullable: true })
+  graphqlConfig: GraphqlConfig | null;
+
+  @Column({ type: 'json', nullable: true })
+  soapConfig: SoapConfig | null;
+
+  @Column({ type: 'json', nullable: true })
+  grpcConfig: GrpcConfig | null;
+
   @Column({ type: 'varchar', length: 64, nullable: true })
   definitionHash: string | null; // SHA-256 hash of tool definition for integrity verification
 
@@ -175,6 +250,10 @@ export class Tool {
   })
   @JoinColumn({ name: 'operationId' })
   operation: Operation | null;
+
+  @ManyToOne(() => Api, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'apiId' })
+  api: Api | null;
 
   @ManyToOne(() => Organization, organization => organization.tools, {
     onDelete: 'CASCADE',

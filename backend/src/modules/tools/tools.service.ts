@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestEx
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindManyOptions, Like, In } from 'typeorm';
 
-import { Tool, ToolStatus, ToolType } from '../../entities/tool.entity';
+import { Tool, ToolStatus, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
 import { ToolVersion } from '../../entities/tool-version.entity';
 import { ToolCategory } from '../../entities/tool-category.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
@@ -20,6 +20,17 @@ export interface CreateToolDto {
   type: ToolType;
   parameters: Record<string, any>;
   code?: string; // Custom JavaScript code for custom tools
+  httpConfig?: {
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    path: string;
+    headers?: Record<string, string>;
+    queryParams?: Record<string, string>;
+    bodyEncoding?: 'json' | 'form-urlencoded' | 'multipart' | 'raw';
+    bodyTemplate?: string;
+    responseMapping?: any;
+    pagination?: any;
+  };
+  apiId?: string;
   configuration?: {
     timeout?: number;
     retries?: number;
@@ -173,9 +184,20 @@ export class ToolsService {
         }
       }
 
+      // Validate apiId if provided
+      if (createToolDto.apiId) {
+        const api = await this.apiRepository.findOne({
+          where: { id: createToolDto.apiId, organizationId },
+        });
+        if (!api) {
+          throw new BadRequestException('API not found or not accessible in this organization');
+        }
+      }
+
       // Create the tool
-      // Custom tools (with code) are ACTIVE by default, auto-generated are DRAFT
-      const isCustomTool = !!createToolDto.code && !createToolDto.operationId;
+      // Custom tools (with code or httpConfig) are ACTIVE by default, auto-generated are DRAFT
+      const isCustomTool = (!!createToolDto.code || !!createToolDto.httpConfig) && !createToolDto.operationId;
+      const isHttpTool = !!createToolDto.httpConfig;
       const tool = this.toolRepository.create({
         ...createToolDto,
         organizationId,
@@ -184,6 +206,12 @@ export class ToolsService {
         version: '1.0.0',
         categories,
         operationId: operation?.id || null,
+        ...(isHttpTool ? {
+          executionMethod: ToolExecutionMethod.HTTP,
+          httpConfig: createToolDto.httpConfig,
+          code: null,
+        } : {}),
+        ...(createToolDto.apiId ? { apiId: createToolDto.apiId } : {}),
         metadata: {
           ...createToolDto.metadata,
           isCustomTool,
