@@ -87,9 +87,9 @@ import {
 import { CodeBlock } from '@/components/ui/code-block'
 import { nodeTypes } from '@/components/agents/nodes'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
-import { agentsApi, memoriesApi, filesApi, interfacesApi } from '@/lib/api'
+import { agentsApi, memoriesApi, filesApi, interfacesApi, versionsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 import type { Agent, AgentExecution, PipelineNode, PipelineEdge, AgentVersionSnapshot, AgentCostEstimate, AgentAuditEntry, AgentRun, Memory, AgentFile, AgentInterface, InterfaceType, InterfaceStatus } from '@/types'
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success'> = {
@@ -265,6 +265,27 @@ function formatDuration(ms: number): string {
   return `${(ms / 60000).toFixed(1)}m`
 }
 
+function diffObjects(prev: Record<string, any>, curr: Record<string, any>): { field: string; from: any; to: any }[] {
+  const changes: { field: string; from: any; to: any }[] = []
+  const allKeys = new Set([...Object.keys(prev || {}), ...Object.keys(curr || {})])
+  for (const key of allKeys) {
+    if (JSON.stringify(prev?.[key]) !== JSON.stringify(curr?.[key])) {
+      changes.push({ field: key, from: prev?.[key], to: curr?.[key] })
+    }
+  }
+  return changes
+}
+
+function formatDiffValue(value: any): string {
+  if (value === undefined || value === null) return '(none)'
+  if (typeof value === 'object') {
+    const str = JSON.stringify(value)
+    return str.length > 60 ? str.slice(0, 60) + '...' : str
+  }
+  const str = String(value)
+  return str.length > 60 ? str.slice(0, 60) + '...' : str
+}
+
 export function AgentDetailPage() {
   useEffect(() => {
     document.title = 'Agent Details | almyty'
@@ -281,6 +302,7 @@ export function AgentDetailPage() {
   const [invokeInput, setInvokeInput] = useState('{\n  "message": "Hello"\n}')
   const [invokeResult, setInvokeResult] = useState<Record<string, unknown> | null>(null)
   const [rollbackIndex, setRollbackIndex] = useState<number | null>(null)
+  const [expandedVersionId, setExpandedVersionId] = useState<number | null>(null)
   const [integrationTab, setIntegrationTab] = useState<'curl' | 'python' | 'node'>('curl')
   const [testInput, setTestInput] = useState('')
   const [testOutput, setTestOutput] = useState<string | null>(null)
@@ -354,6 +376,26 @@ export function AgentDetailPage() {
   })
 
   const versions: AgentVersionSnapshot[] = Array.isArray(versionsData) ? versionsData : []
+
+  // Fetch entity version history (typeorm-versions)
+  const { data: entityVersionsData } = useQuery({
+    queryKey: ['entity-versions', 'Agent', id],
+    queryFn: async () => {
+      const res = await versionsApi.getVersions('Agent', id!)
+      return res?.data || []
+    },
+    enabled: !!id,
+  })
+
+  const entityVersions: Array<{
+    id: number
+    itemType: string
+    itemId: string
+    event: string
+    owner: string
+    object: Record<string, any>
+    timestamp: string
+  }> = Array.isArray(entityVersionsData) ? entityVersionsData : []
 
   // Cost data comes from real execution history (agent.totalCost / agent.totalExecutions)
 
@@ -1148,12 +1190,12 @@ console.log(r2.choices[0].message.content);`,
               </CardContent>
             </Card>
 
-            {/* Version History */}
+            {/* Pipeline Version History */}
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center gap-2">
                   <History className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-base">Version History</CardTitle>
+                  <CardTitle className="text-base">Pipeline Versions</CardTitle>
                 </div>
                 <CardDescription className="text-xs">
                   Current: v{agent.version}
@@ -1186,6 +1228,79 @@ console.log(r2.choices[0].message.content);`,
                         </Button>
                       </div>
                     ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Entity Change History (typeorm-versions) */}
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-base">Change History</CardTitle>
+                </div>
+                <CardDescription className="text-xs">
+                  All changes tracked automatically
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {entityVersions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No changes recorded yet.
+                  </p>
+                ) : (
+                  <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                    {entityVersions.map((ev, index) => {
+                      const prevVersion = index < entityVersions.length - 1 ? entityVersions[index + 1] : null
+                      const isExpanded = expandedVersionId === ev.id
+                      const eventLabel = ev.event === 'INSERT' ? 'Created' : ev.event === 'UPDATE' ? 'Updated' : 'Deleted'
+                      const changes = prevVersion ? diffObjects(prevVersion.object || {}, ev.object || {}) : []
+
+                      return (
+                        <div key={ev.id} className="border rounded-md">
+                          <button
+                            className="w-full flex items-center justify-between text-sm p-2 hover:bg-muted/50 transition-colors"
+                            onClick={() => setExpandedVersionId(isExpanded ? null : ev.id)}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Badge variant={ev.event === 'INSERT' ? 'default' : ev.event === 'UPDATE' ? 'secondary' : 'destructive'} className="text-[10px] px-1.5 py-0">
+                                {eventLabel}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground truncate">
+                                {ev.owner && ev.owner !== 'system' ? ev.owner : 'system'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[10px] text-muted-foreground">
+                                {formatRelativeTime(ev.timestamp)}
+                              </span>
+                              {ev.event === 'UPDATE' && changes.length > 0 && (
+                                isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                              )}
+                            </div>
+                          </button>
+                          {isExpanded && ev.event === 'UPDATE' && changes.length > 0 && (
+                            <div className="px-2 pb-2 border-t">
+                              <div className="space-y-1 mt-1">
+                                {changes.map((change, ci) => (
+                                  <div key={ci} className="text-[11px] font-mono bg-muted rounded px-2 py-1">
+                                    <span className="text-muted-foreground">{change.field}:</span>{' '}
+                                    <span className="text-red-500 line-through">{formatDiffValue(change.from)}</span>{' '}
+                                    <span className="text-green-600">{formatDiffValue(change.to)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {isExpanded && ev.event === 'INSERT' && (
+                            <div className="px-2 pb-2 border-t">
+                              <p className="text-[11px] text-muted-foreground mt-1">Entity created</p>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </CardContent>

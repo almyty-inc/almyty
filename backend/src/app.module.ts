@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -8,6 +8,8 @@ import { BullModule } from '@nestjs/bull';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import * as redisStore from 'cache-manager-redis-store';
 import { versionsConfig } from 'typeorm-versions';
+import { CustomVersionSubscriber } from './common/custom-version-subscriber';
+import { VersionContextInterceptor } from './common/interceptors/version-context.interceptor';
 
 // Import entities
 import { User } from './entities/user.entity';
@@ -81,8 +83,7 @@ import { databaseConfig } from './config/database.config';
       useFactory: (configService: ConfigService) => {
         const dbSsl = configService.get('DB_SSL', 'false') === 'true';
 
-        return {
-          ...versionsConfig({
+        const config = versionsConfig({
             type: 'postgres' as const,
             host: configService.get<string>('DATABASE_HOST', 'localhost'),
             port: parseInt(configService.get<string>('DATABASE_PORT', '5432')),
@@ -98,7 +99,11 @@ import { databaseConfig } from './config/database.config';
             extra: {
               ...(dbSsl && { ssl: { rejectUnauthorized: false } }),
             },
-          }),
+          });
+        // Replace default subscriber with our custom one that tracks the user
+        (config as any).subscribers = [CustomVersionSubscriber];
+        return {
+          ...config,
           autoLoadEntities: true,
         };
       },
@@ -203,6 +208,10 @@ import { databaseConfig } from './config/database.config';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: VersionContextInterceptor,
     },
   ],
 })
