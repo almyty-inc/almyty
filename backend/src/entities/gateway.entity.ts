@@ -9,6 +9,7 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
+import { VersionedEntity } from 'typeorm-versions';
 import { Organization } from './organization.entity';
 import { GatewayTool } from './gateway-tool.entity';
 import { GatewayAuth } from './gateway-auth.entity';
@@ -39,6 +40,7 @@ export interface RateLimitConfig {
 }
 
 @Entity('gateways')
+@VersionedEntity()
 @Index(['organizationId', 'name'])
 @Index(['organizationId', 'endpoint'], { unique: true })
 export class Gateway {

@@ -1,13 +1,14 @@
 import { DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { config } from 'dotenv';
+import { versionsConfig } from 'typeorm-versions';
 
 // Load environment variables
 config();
 
 const configService = new ConfigService();
 
-export const AppDataSource = new DataSource({
+export const AppDataSource = new DataSource(versionsConfig({
   type: 'postgres',
   host: configService.get('DATABASE_HOST', 'localhost'),
   port: configService.get('DATABASE_PORT', 5433),
@@ -19,7 +20,7 @@ export const AppDataSource = new DataSource({
   synchronize: false,
   logging: configService.get('NODE_ENV') === 'development',
   ssl: configService.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
-});
+}));
 
 // Database configuration for NestJS - Using PostgreSQL
 export const databaseConfig = {

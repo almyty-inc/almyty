@@ -7,6 +7,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { BullModule } from '@nestjs/bull';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import * as redisStore from 'cache-manager-redis-store';
+import { versionsConfig } from 'typeorm-versions';
 
 // Import entities
 import { User } from './entities/user.entity';
@@ -61,6 +62,7 @@ import { InterfacesModule } from './modules/interfaces/interfaces.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { UnifiedEndpointModule } from './modules/gateways/unified-endpoint.module';
 import { MailModule } from './modules/mail/mail.module';
+import { VersionsModule } from './modules/versions/versions.module';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -80,22 +82,24 @@ import { databaseConfig } from './config/database.config';
         const dbSsl = configService.get('DB_SSL', 'false') === 'true';
 
         return {
-          type: 'postgres' as const,
-          host: configService.get<string>('DATABASE_HOST', 'localhost'),
-          port: parseInt(configService.get<string>('DATABASE_PORT', '5432')),
-          username: configService.get<string>('DATABASE_USERNAME', 'postgres'),
-          password: configService.get<string>('DATABASE_PASSWORD', 'password'),
-          database: configService.get<string>('DATABASE_NAME', 'almyty'),
-          entities: [__dirname + '/entities/*.entity{.ts,.js}'],
-          migrations: [__dirname + '/migrations/*{.ts,.js}'],
-          migrationsRun: false,
-          synchronize: false,
-          logging: configService.get('NODE_ENV') === 'development',
+          ...versionsConfig({
+            type: 'postgres' as const,
+            host: configService.get<string>('DATABASE_HOST', 'localhost'),
+            port: parseInt(configService.get<string>('DATABASE_PORT', '5432')),
+            username: configService.get<string>('DATABASE_USERNAME', 'postgres'),
+            password: configService.get<string>('DATABASE_PASSWORD', 'password'),
+            database: configService.get<string>('DATABASE_NAME', 'almyty'),
+            entities: [__dirname + '/entities/*.entity{.ts,.js}'],
+            migrations: [__dirname + '/migrations/*{.ts,.js}'],
+            migrationsRun: false,
+            synchronize: false,
+            logging: configService.get('NODE_ENV') === 'development',
+            ssl: dbSsl ? { rejectUnauthorized: false } : false,
+            extra: {
+              ...(dbSsl && { ssl: { rejectUnauthorized: false } }),
+            },
+          }),
           autoLoadEntities: true,
-          ssl: dbSsl ? { rejectUnauthorized: false } : false,
-          extra: {
-            ...(dbSsl && { ssl: { rejectUnauthorized: false } }),
-          },
         };
       },
     }),
@@ -191,6 +195,7 @@ import { databaseConfig } from './config/database.config';
     FilesModule,
     InterfacesModule,
     AuditLogModule,
+    VersionsModule,
     // MUST be last — wildcard /:orgSlug/:resourceSlug catches everything
     UnifiedEndpointModule,
   ],

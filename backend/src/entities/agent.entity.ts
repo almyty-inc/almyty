@@ -9,6 +9,7 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
+import { VersionedEntity } from 'typeorm-versions';
 import { Organization } from './organization.entity';
 import { AgentExecution } from './agent-execution.entity';
 import { AgentRun } from './agent-run.entity';
@@ -47,6 +48,7 @@ export interface AgentPipeline {
 }
 
 @Entity('agents')
+@VersionedEntity()
 @Index(['organizationId', 'name'])
 @Index(['organizationId', 'status'])
 export class Agent {

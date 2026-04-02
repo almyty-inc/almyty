@@ -9,6 +9,7 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
+import { VersionedEntity } from 'typeorm-versions';
 import { Organization } from './organization.entity';
 import { Credential } from './credential.entity';
 import { LlmSession } from './llm-session.entity';
@@ -81,6 +82,7 @@ export interface LlmProviderConfig {
 }
 
 @Entity('llm_providers')
+@VersionedEntity()
 @Index(['organizationId', 'name'])
 @Index(['type', 'status'])
 export class LlmProvider {

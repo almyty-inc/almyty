@@ -548,4 +548,10 @@ export const usersApi = {
   getActivity: (id: string, params?: any) => apiGet(`/users/${id}/activity`, { params }),
 }
 
+// Versions API (entity version history via typeorm-versions)
+export const versionsApi = {
+  getVersions: (entityType: string, entityId: string) => apiGet(`/versions/${entityType}/${entityId}`),
+  getVersion: (versionId: string) => apiGet(`/versions/detail/${versionId}`),
+}
+
 export type ApiResponse<T = any> = AxiosResponse<T>

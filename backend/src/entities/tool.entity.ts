@@ -11,6 +11,7 @@ import {
   JoinTable,
   Index,
 } from 'typeorm';
+import { VersionedEntity } from 'typeorm-versions';
 import { Operation } from './operation.entity';
 import { JsonSchema } from './json-schema.entity';
 import { ToolVersion } from './tool-version.entity';
@@ -44,6 +45,7 @@ export enum ToolStatus {
 }
 
 @Entity('tools')
+@VersionedEntity()
 @Index(['name', 'operationId'])
 @Index(['organizationId', 'name'])
 @Index(['organizationId', 'status'])
