@@ -13,6 +13,8 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { User } from '../../entities/user.entity';
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { CustomCodeExecutorService } from './custom-code-executor.service';
+import { NodeSandboxService } from './node-sandbox/node-sandbox.service';
+import { SdkCodeAssemblerService } from './node-sandbox/sdk-code-assembler.service';
 import { validateUrl, sanitizeHeaders, validateResponseSize } from '../../common/security/url-validator';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
@@ -69,6 +71,8 @@ export class ToolExecutorService {
     private credentialRepository: Repository<Credential>,
     @InjectRedis() private readonly redis: Redis.Redis,
     private customCodeExecutor: CustomCodeExecutorService,
+    private readonly nodeSandbox: NodeSandboxService,
+    private readonly sdkCodeAssembler: SdkCodeAssemblerService,
     private moduleRef: ModuleRef,
     private readonly auditLogService: AuditLogService,
   ) {}
@@ -273,37 +277,47 @@ export class ToolExecutorService {
         }
       }
 
-      // Check if this is a custom code tool
-      if (tool.code) {
-        // Execute custom code
+      // SDK tool — structured config, assembled code runs in sandbox
+      if (tool.sdkConfig) {
         try {
-          const codeResult = await this.customCodeExecutor.executeCode(
-            tool.code,
-            parameters,
-            {
-              timeout: options.timeout || tool.configuration?.timeout,
-            }
-          );
+          const api = tool.api ?? tool.operation?.api ?? null;
+          const sdkConfig = tool.sdkConfig;
+          const dependencies = tool.dependencies ?? api?.dependencies ?? {};
+          if (sdkConfig.packageName && !dependencies[sdkConfig.packageName]) {
+            dependencies[sdkConfig.packageName] = '*';
+          }
+          const npmRegistry = tool.npmRegistry ?? api?.npmRegistry ?? undefined;
+          const credentials = await this.resolveToolCredentials(tool, api);
+          const code = this.sdkCodeAssembler.assemble(sdkConfig);
 
-          const executionResult = {
-            success: codeResult.success,
-            data: codeResult.data,
-            error: codeResult.error,
-            executionTime: codeResult.executionTime,
+          const sandboxResult = await this.nodeSandbox.execute({
+            code,
+            parameters,
+            credentials,
+            dependencies,
+            npmRegistry,
+            timeoutMs: tool.configuration?.timeout ?? api?.timeoutMs ?? 30000,
+          });
+
+          let resultData = sandboxResult.data;
+          if (sandboxResult.success && sdkConfig.responseMapping?.dataPath && resultData) {
+            resultData = this.getByDotPath(resultData, sdkConfig.responseMapping.dataPath);
+          }
+
+          const executionResult: ToolExecutionResult = {
+            success: sandboxResult.success,
+            data: resultData,
+            error: sandboxResult.error,
+            executionTime: sandboxResult.executionTimeMs,
             cached,
             rateLimited,
             retryCount: 0,
+            metadata: { executor: 'sdk-sandbox', package: sdkConfig.packageName },
           };
-
-          await this.recordExecution(tool, parameters, executionResult, options, {
-            executionTime: codeResult.executionTime,
-            cached,
-            retryCount: 0,
-          });
-
+          await this.recordExecution(tool, parameters, executionResult, options, { executionTime: sandboxResult.executionTimeMs, cached, retryCount: 0 });
           return executionResult;
-        } catch (error) {
-          const executionResult = {
+        } catch (error: any) {
+          const executionResult: ToolExecutionResult = {
             success: false,
             error: error.message,
             executionTime: Date.now() - startTime,
@@ -311,13 +325,56 @@ export class ToolExecutorService {
             rateLimited,
             retryCount: 0,
           };
+          await this.recordExecution(tool, parameters, executionResult, options, { executionTime: Date.now() - startTime, cached, retryCount: 0 });
+          return executionResult;
+        }
+      }
 
-          await this.recordExecution(tool, parameters, executionResult, options, {
-            executionTime: Date.now() - startTime,
-            cached,
-            retryCount: 0,
+      // Check if this is a custom code tool
+      if (tool.code) {
+        try {
+          const api = tool.api ?? tool.operation?.api ?? null;
+          const dependencies = tool.dependencies ?? api?.dependencies ?? undefined;
+          const npmRegistry = tool.npmRegistry ?? api?.npmRegistry ?? undefined;
+          const credentials = await this.resolveToolCredentials(tool, api);
+
+          const sandboxResult = await this.nodeSandbox.execute({
+            code: tool.code,
+            parameters,
+            credentials,
+            dependencies: dependencies ?? undefined,
+            npmRegistry: npmRegistry ?? undefined,
+            timeoutMs: tool.configuration?.timeout ?? api?.timeoutMs ?? 30000,
           });
 
+          const executionResult: ToolExecutionResult = {
+            success: sandboxResult.success,
+            data: sandboxResult.data,
+            error: sandboxResult.error,
+            executionTime: sandboxResult.executionTimeMs,
+            cached,
+            rateLimited,
+            retryCount: 0,
+            metadata: { executor: 'node-sandbox' },
+          };
+          await this.recordExecution(tool, parameters, executionResult, options, { executionTime: sandboxResult.executionTimeMs, cached, retryCount: 0 });
+          if (!sandboxResult.success) {
+            return executionResult;
+          }
+          if (tool.configuration?.cache?.enabled && executionResult.success) {
+            await this.cacheResult(tool, parameters, executionResult);
+          }
+          return executionResult;
+        } catch (error: any) {
+          const executionResult: ToolExecutionResult = {
+            success: false,
+            error: error.message,
+            executionTime: Date.now() - startTime,
+            cached,
+            rateLimited,
+            retryCount: 0,
+          };
+          await this.recordExecution(tool, parameters, executionResult, options, { executionTime: Date.now() - startTime, cached, retryCount: 0 });
           return executionResult;
         }
       }
@@ -1295,6 +1352,27 @@ export class ToolExecutorService {
     }
 
     return data;
+  }
+
+  private async resolveToolCredentials(tool: Tool, api: Api | null): Promise<Record<string, any>> {
+    const credentials: Record<string, any> = {};
+    try {
+      if (api) {
+        const credential = await this.credentialRepository.findOne({
+          where: { apiId: api.id, organizationId: tool.organizationId, isActive: true },
+        });
+        if (credential) {
+          const decrypted = credential.getDecryptedConfig();
+          Object.assign(credentials, decrypted);
+        }
+      }
+      if (tool.authConfig?.config) {
+        Object.assign(credentials, tool.authConfig.config);
+      }
+    } catch (err) {
+      // Don't fail execution for credential issues — let the SDK handle auth errors
+    }
+    return credentials;
   }
 
   private getByDotPath(obj: any, path: string): any {

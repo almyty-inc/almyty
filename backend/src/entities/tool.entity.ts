@@ -94,6 +94,7 @@ export enum ToolExecutionMethod {
   GRPC = 'grpc',
   CUSTOM = 'custom',
   LLM = 'llm',
+  SDK = 'sdk',
 }
 
 export enum ToolStatus {
@@ -216,6 +217,15 @@ export class Tool {
 
   @Column({ type: 'json', nullable: true })
   grpcConfig: GrpcConfig | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  dependencies: Record<string, string> | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  npmRegistry: any | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  sdkConfig: any | null;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
   definitionHash: string | null; // SHA-256 hash of tool definition for integrity verification

@@ -25,6 +25,7 @@ import { CodegenService } from './codegen.service';
 import { ToolsController } from './tools.controller';
 
 import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schema-translator.module';
+import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schem
       Credential,
     ]),
     JsonSchemaTranslatorModule,
+    NodeSandboxModule,
   ],
   providers: [ToolsService, ToolGeneratorService, ToolExecutorService, CustomCodeExecutorService, SkillGeneratorService, CliGeneratorService, CodegenService],
   controllers: [ToolsController],
