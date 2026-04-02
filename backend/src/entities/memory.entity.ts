@@ -2,6 +2,7 @@ import {
   Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn,
   ManyToOne, JoinColumn, Index,
 } from 'typeorm';
+import { VersionedEntity } from 'typeorm-versions';
 import { Organization } from './organization.entity';
 
 export enum MemoryType {
@@ -19,6 +20,7 @@ export enum MemoryScope {
 }
 
 @Entity('memories')
+@VersionedEntity()
 @Index(['organizationId', 'scope'])
 @Index(['organizationId', 'type'])
 export class Memory {

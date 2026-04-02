@@ -9,6 +9,7 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
+import { VersionedEntity } from 'typeorm-versions';
 import { Organization } from './organization.entity';
 import { ApiSchema } from './api-schema.entity';
 import { Operation } from './operation.entity';
@@ -31,6 +32,7 @@ export enum ApiStatus {
 }
 
 @Entity('apis')
+@VersionedEntity()
 @Index(['organizationId', 'name'])
 export class Api {
   @PrimaryGeneratedColumn('uuid')

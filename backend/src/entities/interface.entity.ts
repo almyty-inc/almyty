@@ -2,6 +2,7 @@ import {
   Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn,
   ManyToOne, JoinColumn, Index,
 } from 'typeorm';
+import { VersionedEntity } from 'typeorm-versions';
 import { Agent } from './agent.entity';
 import { Organization } from './organization.entity';
 
@@ -27,6 +28,7 @@ export enum InterfaceStatus {
 }
 
 @Entity('interfaces')
+@VersionedEntity()
 @Index(['agentId'])
 @Index(['organizationId'])
 export class AgentInterface {

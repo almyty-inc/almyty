@@ -7,6 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
+import { VersionedEntity } from 'typeorm-versions';
 import { Api } from './api.entity';
 import { Organization } from './organization.entity';
 import * as crypto from 'crypto';
@@ -21,6 +22,7 @@ export enum CredentialType {
 }
 
 @Entity('credentials')
+@VersionedEntity()
 export class Credential {
   @PrimaryGeneratedColumn('uuid')
   id: string;
