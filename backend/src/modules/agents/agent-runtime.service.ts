@@ -212,8 +212,8 @@ export class AgentRuntimeService {
       }
     }
 
-    // If this is a collaboration orchestrator, delegate to collaboration handler
-    if (agent.collaboration?.strategy && agent.collaboration.agents?.length > 0) {
+    // If this is a collaboration orchestrator (and NOT a child run), delegate to collaboration handler
+    if (agent.collaboration?.strategy && agent.collaboration.agents?.length > 0 && !run.parentRunId) {
       return this.processCollaborationStep(run, agent);
     }
 
@@ -819,9 +819,27 @@ export class AgentRuntimeService {
     const collab = agent.collaboration;
     const stepStart = Date.now();
     const inputText = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
-    let currentInput = inputText;
     const agentOutputs: Array<{ agentId: string; role?: string; output: any }> = [];
 
+    // Step 1: Run the orchestrator agent itself first (its own ReAct loop with tools)
+    // The child run has parentRunId set, so it won't re-enter collaboration
+    const orchestratorRun = await this.startRun(
+      agent.id,
+      run.organizationId,
+      run.userId,
+      inputText,
+      { parentRunId: run.id, maxSteps: 20, maxCostCents: 50 },
+    );
+    const orchestratorResult = await this.waitForRun(orchestratorRun.id, 300000);
+
+    let currentInput = orchestratorResult?.output
+      ? (typeof orchestratorResult.output === 'string' ? orchestratorResult.output : JSON.stringify(orchestratorResult.output))
+      : inputText;
+    agentOutputs.push({ agentId: agent.id, role: 'orchestrator', output: currentInput });
+    run.totalCost += orchestratorResult?.totalCost || 0;
+    run.totalTokens += orchestratorResult?.totalTokens || 0;
+
+    // Step 2: Run each collaborator agent in sequence, piping output → input
     for (const agentDef of collab.agents) {
       const subRun = await this.startRun(
         agentDef.agentId,
@@ -838,7 +856,6 @@ export class AgentRuntimeService {
       run.totalCost += result?.totalCost || 0;
       run.totalTokens += result?.totalTokens || 0;
 
-      // Feed output as input to next agent
       currentInput = typeof output === 'string' ? output : JSON.stringify(output);
     }
 

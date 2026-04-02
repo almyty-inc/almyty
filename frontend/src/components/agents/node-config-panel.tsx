@@ -210,7 +210,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   const temperature = typeof node.data.temperature === 'number' ? node.data.temperature : 0.7
 
   // Get the selected provider to determine type for model suggestions
-  const providerList = (providers || []) as Array<Pick<LlmProvider, 'id' | 'name' | 'type'>>
+  const providerList = (Array.isArray(providers) ? providers : (providers as any)?.providers || []) as Array<Pick<LlmProvider, 'id' | 'name' | 'type'>>
   const selectedProvider = useMemo(() => {
     if (!providerList.length || !node.data.providerId) return null
     return providerList.find((p) => p.id === node.data.providerId) || null
@@ -230,7 +230,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   const modelSuggestions: string[] = dynamicModels || []
 
   // Filter tools by search
-  const toolList = (tools || []) as Array<Pick<Tool, 'id' | 'name'>>
+  const toolList = (Array.isArray(tools) ? tools : (tools as any)?.tools || []) as Array<Pick<Tool, 'id' | 'name'>>
   const filteredTools = useMemo(() => {
     if (!toolSearch.trim()) return toolList
     const q = toolSearch.toLowerCase()
@@ -498,7 +498,7 @@ function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; update
     enabled: !!currentOrganization,
   })
 
-  const toolList = (tools || []) as Array<Pick<Tool, 'id' | 'name'>>
+  const toolList = (Array.isArray(tools) ? tools : (tools as any)?.tools || []) as Array<Pick<Tool, 'id' | 'name'>>
   const params: ParameterMapping[] = (node.data.parameterMapping as ParameterMapping[]) || []
 
   const addParam = () => {
