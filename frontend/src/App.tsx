@@ -34,6 +34,7 @@ const AgentBuilderPage = lazy(() => import('@/pages/agent-builder').then(m => ({
 const AgentDetailPage = lazy(() => import('@/pages/agent-detail').then(m => ({ default: m.AgentDetailPage })))
 const MemoriesPage = lazy(() => import('@/pages/memories').then(m => ({ default: m.MemoriesPage })))
 const DocsPage = lazy(() => import('@/pages/docs').then(m => ({ default: m.DocsPage })))
+const ToolHubPage = lazy(() => import('@/pages/tool-hub').then(m => ({ default: m.ToolHubPage })))
 const AcceptInvitePage = lazy(() => import('@/pages/accept-invite').then(m => ({ default: m.AcceptInvitePage })))
 
 const PageLoader = () => (
@@ -88,6 +89,11 @@ function App() {
         <Route path="/tools/:id" element={
           <DashboardLayout>
             <ToolDetailPage />
+          </DashboardLayout>
+        } />
+        <Route path="/tool-hub" element={
+          <DashboardLayout>
+            <ToolHubPage />
           </DashboardLayout>
         } />
         <Route path="/agents" element={

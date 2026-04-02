@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { UseFormReturn } from 'react-hook-form'
 import { UseMutationResult } from '@tanstack/react-query'
+import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,6 +62,7 @@ interface CreateToolDialogProps {
   }
   onLlmConfigChange: (value: any) => void
   activeProviders: any[]
+  availableApis?: any[]
 }
 
 export function CreateToolDialog({
@@ -87,7 +89,18 @@ export function CreateToolDialog({
   llmConfig,
   onLlmConfigChange,
   activeProviders,
+  availableApis = [],
 }: CreateToolDialogProps) {
+  // HTTP structured config local state
+  const [selectedApiId, setSelectedApiId] = useState<string>('')
+  const [bodyEncoding, setBodyEncoding] = useState<string>('json')
+  const [responseMappingOpen, setResponseMappingOpen] = useState(false)
+  const [responseMapping, setResponseMapping] = useState({ dataPath: '', errorPath: '', successCondition: '' })
+  const [paginationOpen, setPaginationOpen] = useState(false)
+  const [paginationType, setPaginationType] = useState<string>('none')
+  const [paginationConfig, setPaginationConfig] = useState({ cursorPath: '', cursorParam: '', offsetParam: '', limitParam: '', defaultLimit: 20, maxPages: 5 })
+  const [customHeaders, setCustomHeaders] = useState<Array<{ key: string; value: string }>>([])
+
   // Create parameter autocomplete extension for CodeMirror
   const parameterAutocomplete = useMemo(() => {
     const paramNames = Object.keys(toolParameters.properties || {});
@@ -113,7 +126,7 @@ export function CreateToolDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Manual Tool</DialogTitle>
           <DialogDescription>
@@ -169,12 +182,33 @@ export function CreateToolDialog({
             />
           </div>
 
-          {/* Configuration based on execution method */}
+          {/* HTTP REST API — Structured Config (no code generation) */}
           {executionMethod === 'http' && (
             <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
-              <div className="grid grid-cols-2 gap-3">
+              {/* Link to API */}
+              {availableApis.length > 0 && (
                 <div>
-                  <Label htmlFor="http-method">HTTP Method</Label>
+                  <Label>Link to API (optional)</Label>
+                  <Select value={selectedApiId} onValueChange={setSelectedApiId}>
+                    <SelectTrigger><SelectValue placeholder="None - use full URL" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None - use full URL</SelectItem>
+                      {availableApis.map((api: any) => (
+                        <SelectItem key={api.id} value={api.id}>{api.name} ({api.baseUrl})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedApiId && selectedApiId !== 'none'
+                      ? 'Path will be relative to the API base URL'
+                      : 'Enter a full URL below'}
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label htmlFor="http-method">Method</Label>
                   <Select value={httpConfig.method} onValueChange={(value) => onHttpConfigChange({ ...httpConfig, method: value })}>
                     <SelectTrigger id="http-method"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -186,43 +220,254 @@ export function CreateToolDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label htmlFor="http-url">URL</Label>
-                  <Input id="http-url" value={httpConfig.url} onChange={(e) => onHttpConfigChange({ ...httpConfig, url: e.target.value })} placeholder="https://api.example.com/endpoint" />
+                <div className="col-span-2">
+                  <Label htmlFor="http-path">
+                    {selectedApiId && selectedApiId !== 'none' ? 'Path' : 'URL'}
+                  </Label>
+                  <Input
+                    id="http-path"
+                    value={httpConfig.url}
+                    onChange={(e) => onHttpConfigChange({ ...httpConfig, url: e.target.value })}
+                    placeholder={selectedApiId && selectedApiId !== 'none' ? '/users/{id}' : 'https://api.example.com/users/{id}'}
+                  />
                 </div>
               </div>
+
+              {/* Body Encoding */}
+              {['POST', 'PUT', 'PATCH'].includes(httpConfig.method) && (
+                <>
+                  <div>
+                    <Label>Body Encoding</Label>
+                    <Select value={bodyEncoding} onValueChange={setBodyEncoding}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="json">JSON</SelectItem>
+                        <SelectItem value="form-urlencoded">Form URL-encoded</SelectItem>
+                        <SelectItem value="multipart">Multipart</SelectItem>
+                        <SelectItem value="raw">Raw</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Body Template</Label>
+                    <CodeMirror theme={githubLight}
+                      value={httpConfig.body}
+                      height="100px"
+                      extensions={[
+                        json(),
+                        autocompletion({
+                          override: [
+                            (context) => {
+                              const word = context.matchBefore(/\{\w*/);
+                              if (!word) return null;
+                              const paramNames = Object.keys(toolParameters.properties || {});
+                              return {
+                                from: word.from,
+                                options: paramNames.map((name) => ({
+                                  label: `{${name}}`,
+                                  type: 'variable',
+                                  detail: 'parameter',
+                                  apply: `{${name}}`,
+                                })),
+                              };
+                            },
+                          ],
+                        }),
+                      ]}
+                      onChange={(value) => onHttpConfigChange({ ...httpConfig, body: value })}
+                      className="border rounded-md"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Use <code>{'{paramName}'}</code> to inject parameters
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {/* Custom Headers */}
               <div>
-                <Label htmlFor="http-body">Request Body (JSON)</Label>
-                <CodeMirror theme={githubLight}
-                  value={httpConfig.body}
-                  height="100px"
-                  extensions={[
-                    json(),
-                    autocompletion({
-                      override: [
-                        (context) => {
-                          const word = context.matchBefore(/\{\w*/);
-                          if (!word) return null;
-                          const paramNames = Object.keys(toolParameters.properties || {});
-                          return {
-                            from: word.from,
-                            options: paramNames.map((name) => ({
-                              label: `{${name}}`,
-                              type: 'variable',
-                              detail: 'parameter',
-                              apply: `{${name}}`,
-                            })),
-                          };
-                        },
-                      ],
-                    }),
-                  ]}
-                  onChange={(value) => onHttpConfigChange({ ...httpConfig, body: value })}
-                  className="border rounded-md"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Use <code>{'{paramName}'}</code> to inject parameters
-                </p>
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Custom Headers</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCustomHeaders([...customHeaders, { key: '', value: '' }])}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add
+                  </Button>
+                </div>
+                {customHeaders.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No custom headers</p>
+                )}
+                {customHeaders.map((header, idx) => (
+                  <div key={idx} className="flex items-center gap-2 mb-2">
+                    <Input
+                      placeholder="Header name"
+                      value={header.key}
+                      onChange={(e) => {
+                        const updated = [...customHeaders]
+                        updated[idx] = { ...updated[idx], key: e.target.value }
+                        setCustomHeaders(updated)
+                      }}
+                      className="flex-1"
+                    />
+                    <Input
+                      placeholder="Value"
+                      value={header.value}
+                      onChange={(e) => {
+                        const updated = [...customHeaders]
+                        updated[idx] = { ...updated[idx], value: e.target.value }
+                        setCustomHeaders(updated)
+                      }}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setCustomHeaders(customHeaders.filter((_, i) => i !== idx))}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Response Mapping — collapsible */}
+              <div className="border rounded-md">
+                <button
+                  type="button"
+                  className="flex items-center justify-between w-full p-3 text-sm font-medium hover:bg-muted/50"
+                  onClick={() => setResponseMappingOpen(!responseMappingOpen)}
+                >
+                  <span>Response Mapping</span>
+                  {responseMappingOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {responseMappingOpen && (
+                  <div className="p-3 pt-0 space-y-2">
+                    <div>
+                      <Label className="text-xs">Data Path</Label>
+                      <Input
+                        value={responseMapping.dataPath}
+                        onChange={(e) => setResponseMapping({ ...responseMapping, dataPath: e.target.value })}
+                        placeholder="e.g. data.results, value"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Error Path</Label>
+                      <Input
+                        value={responseMapping.errorPath}
+                        onChange={(e) => setResponseMapping({ ...responseMapping, errorPath: e.target.value })}
+                        placeholder="e.g. error.message"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Success Condition</Label>
+                      <Input
+                        value={responseMapping.successCondition}
+                        onChange={(e) => setResponseMapping({ ...responseMapping, successCondition: e.target.value })}
+                        placeholder="e.g. data.ok === true"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Pagination — collapsible */}
+              <div className="border rounded-md">
+                <button
+                  type="button"
+                  className="flex items-center justify-between w-full p-3 text-sm font-medium hover:bg-muted/50"
+                  onClick={() => setPaginationOpen(!paginationOpen)}
+                >
+                  <span>Pagination</span>
+                  {paginationOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {paginationOpen && (
+                  <div className="p-3 pt-0 space-y-2">
+                    <div>
+                      <Label className="text-xs">Type</Label>
+                      <Select value={paginationType} onValueChange={setPaginationType}>
+                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="cursor">Cursor</SelectItem>
+                          <SelectItem value="offset">Offset</SelectItem>
+                          <SelectItem value="link-header">Link Header</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {paginationType === 'cursor' && (
+                      <>
+                        <div>
+                          <Label className="text-xs">Cursor Path</Label>
+                          <Input
+                            value={paginationConfig.cursorPath}
+                            onChange={(e) => setPaginationConfig({ ...paginationConfig, cursorPath: e.target.value })}
+                            placeholder="e.g. meta.next_cursor"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Cursor Param</Label>
+                          <Input
+                            value={paginationConfig.cursorParam}
+                            onChange={(e) => setPaginationConfig({ ...paginationConfig, cursorParam: e.target.value })}
+                            placeholder="e.g. cursor"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                      </>
+                    )}
+                    {paginationType === 'offset' && (
+                      <>
+                        <div>
+                          <Label className="text-xs">Offset Param</Label>
+                          <Input
+                            value={paginationConfig.offsetParam}
+                            onChange={(e) => setPaginationConfig({ ...paginationConfig, offsetParam: e.target.value })}
+                            placeholder="e.g. offset"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Limit Param</Label>
+                          <Input
+                            value={paginationConfig.limitParam}
+                            onChange={(e) => setPaginationConfig({ ...paginationConfig, limitParam: e.target.value })}
+                            placeholder="e.g. limit"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Default Limit</Label>
+                          <Input
+                            type="number"
+                            value={paginationConfig.defaultLimit}
+                            onChange={(e) => setPaginationConfig({ ...paginationConfig, defaultLimit: parseInt(e.target.value) || 20 })}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                      </>
+                    )}
+                    {paginationType !== 'none' && (
+                      <div>
+                        <Label className="text-xs">Max Pages</Label>
+                        <Input
+                          type="number"
+                          value={paginationConfig.maxPages}
+                          onChange={(e) => setPaginationConfig({ ...paginationConfig, maxPages: parseInt(e.target.value) || 5 })}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

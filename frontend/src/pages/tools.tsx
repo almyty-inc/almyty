@@ -237,24 +237,22 @@ export function ToolsPage() {
     },
   })
 
+  // Fetch available APIs for linking HTTP tools
+  const { data: apisData } = useQuery({
+    queryKey: ['apis', currentOrganization?.id],
+    queryFn: () => import('@/lib/api').then(m => m.apisApi.getAll()),
+    enabled: !!currentOrganization,
+  })
+  const apisExtracted = apisData?.apis || apisData || []
+  const availableApis = Array.isArray(apisExtracted) ? apisExtracted : []
+
   const createToolMutation = useMutation({
     mutationFn: (data: any) => {
       let code = undefined;
 
       if (executionMethod === 'custom') {
+        // Custom JavaScript: user writes their own code, no auto-generation
         code = toolCode;
-      } else if (executionMethod === 'http') {
-        code = `
-// axios is available as a global — no require needed
-// Parameters are available both as individual variables and as 'parameters' object
-const response = await axios({
-  method: '${httpConfig.method}',
-  url: '${httpConfig.url}',
-  data: ${httpConfig.body || 'parameters'},
-  params: parameters
-});
-return response;
-`;
       } else if (executionMethod === 'graphql') {
         code = `
 // axios is available as a global — no require needed
@@ -294,6 +292,7 @@ return new Promise((resolve, reject) => {
 });
 `;
       }
+      // HTTP: no code generation — uses httpConfig instead
 
       // Auto-assign tool type based on execution method
       let type = 'function';
@@ -320,14 +319,35 @@ return new Promise((resolve, reject) => {
         };
       }
 
-      return toolsApi.create({
+      // Build httpConfig payload for HTTP tools (structured, no code)
+      let httpConfigPayload = undefined;
+      if (executionMethod === 'http') {
+        httpConfigPayload = {
+          method: httpConfig.method,
+          path: httpConfig.url,
+          bodyEncoding: ['POST', 'PUT', 'PATCH'].includes(httpConfig.method) ? undefined : undefined,
+          bodyTemplate: httpConfig.body || undefined,
+          headers: httpConfig.headers && Object.keys(httpConfig.headers).length > 0 ? httpConfig.headers : undefined,
+        };
+      }
+
+      const payload: any = {
         ...data,
         type,
         parameters: toolParameters,
-        code,
         executionMethod,
         llmConfig: llmConfigPayload,
-      }, currentOrganization?.id);
+      };
+
+      // HTTP tools: send httpConfig, no code
+      if (executionMethod === 'http') {
+        payload.httpConfig = httpConfigPayload;
+      } else {
+        // All other methods that generate code
+        payload.code = code;
+      }
+
+      return toolsApi.create(payload, currentOrganization?.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tools'] })
@@ -913,6 +933,7 @@ return new Promise((resolve, reject) => {
         llmConfig={llmConfig}
         onLlmConfigChange={setLlmConfig}
         activeProviders={activeProviders}
+        availableApis={availableApis}
       />
     </div>
   )
