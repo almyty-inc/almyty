@@ -278,11 +278,44 @@ export class AgentNodeExecutor {
     }
 
     const resolved = this.templateResolver.resolve(expression, context);
+    const resolvedStr = typeof resolved === 'string' ? resolved : String(resolved);
 
-    // Evaluate as boolean: "true", "1", non-empty string => true; "false", "0", "" => false
+    // Try to evaluate as a comparison expression (e.g. "overweight == overweight", "29.4 > 25")
     let result: boolean;
-    if (typeof resolved === 'string') {
-      const lower = resolved.toLowerCase().trim();
+    const comparisonMatch = resolvedStr.match(/^(.+?)\s*(===?|!==?|>=?|<=?)\s*(.+)$/);
+    if (comparisonMatch) {
+      const [, left, op, right] = comparisonMatch;
+      const lVal = left.trim();
+      const rVal = right.trim();
+      const lNum = parseFloat(lVal);
+      const rNum = parseFloat(rVal);
+      const isNumeric = !isNaN(lNum) && !isNaN(rNum);
+
+      switch (op) {
+        case '==': case '===':
+          result = isNumeric ? lNum === rNum : lVal === rVal;
+          break;
+        case '!=': case '!==':
+          result = isNumeric ? lNum !== rNum : lVal !== rVal;
+          break;
+        case '>':
+          result = isNumeric ? lNum > rNum : lVal > rVal;
+          break;
+        case '<':
+          result = isNumeric ? lNum < rNum : lVal < rVal;
+          break;
+        case '>=':
+          result = isNumeric ? lNum >= rNum : lVal >= rVal;
+          break;
+        case '<=':
+          result = isNumeric ? lNum <= rNum : lVal <= rVal;
+          break;
+        default:
+          result = Boolean(resolved);
+      }
+    } else if (typeof resolved === 'string') {
+      // Simple boolean check: "true", "1", non-empty => true; "false", "0", "" => false
+      const lower = resolvedStr.toLowerCase().trim();
       result = lower !== '' && lower !== 'false' && lower !== '0' && lower !== 'null' && lower !== 'undefined';
     } else {
       result = Boolean(resolved);
