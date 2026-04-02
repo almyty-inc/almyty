@@ -231,9 +231,13 @@ export class AgentNodeExecutor {
     }
 
     // Resolve each parameter template
+    // parameterMapping can be an array of {key, value} or an object {key: value}
     const resolvedParams: Record<string, any> = {};
     if (parameterMapping) {
-      for (const [key, template] of Object.entries(parameterMapping)) {
+      const mappingEntries: Array<[string, any]> = Array.isArray(parameterMapping)
+        ? parameterMapping.map((m: any) => [m.key, m.value])
+        : Object.entries(parameterMapping);
+      for (const [key, template] of mappingEntries) {
         if (typeof template === 'string') {
           resolvedParams[key] = this.templateResolver.resolve(template, context);
         } else {
