@@ -21,6 +21,7 @@ export enum ApiType {
   GRAPHQL = 'graphql',
   SOAP = 'soap',
   GRPC = 'grpc',
+  HTTP = 'http',
   OTHER = 'other',
 }
 

@@ -87,7 +87,7 @@ export class ToolExecutorService {
       // Get tool with relations
       const tool = await this.toolRepository.findOne({
         where: { id: toolId },
-        relations: ['operation', 'operation.api', 'inputSchema', 'outputSchema'],
+        relations: ['operation', 'operation.api', 'api', 'inputSchema', 'outputSchema'],
       });
 
       if (!tool) {
@@ -322,7 +322,146 @@ export class ToolExecutorService {
         }
       }
 
-      // Execute API-based tool with retries
+      // HTTP config-based execution (structured HTTP tools)
+      if (tool.httpConfig) {
+        try {
+          const httpResult = await this.executeHttpTool(tool, parameters, {
+            organizationId: options.organizationId,
+            userId: options.userId,
+          });
+
+          const executionResult: ToolExecutionResult = {
+            success: httpResult.success,
+            data: httpResult.data,
+            error: httpResult.error,
+            executionTime: httpResult.executionTime,
+            cached,
+            rateLimited,
+            retryCount: 0,
+            metadata: httpResult.metadata,
+          };
+
+          await this.recordExecution(tool, parameters, executionResult, options, {
+            executionTime: httpResult.executionTime,
+            cached,
+            retryCount: 0,
+          });
+
+          // Cache result if enabled
+          if (tool.configuration?.cache?.enabled && executionResult.success) {
+            await this.cacheResult(tool, parameters, executionResult);
+          }
+
+          return executionResult;
+        } catch (error) {
+          const executionResult: ToolExecutionResult = {
+            success: false,
+            error: error.message || 'HTTP tool execution failed',
+            executionTime: Date.now() - startTime,
+            cached,
+            rateLimited,
+            retryCount: 0,
+          };
+
+          await this.recordExecution(tool, parameters, executionResult, options, {
+            executionTime: Date.now() - startTime,
+            cached,
+            retryCount: 0,
+          });
+
+          return executionResult;
+        }
+      }
+
+      // GraphQL config-based execution
+      if (tool.graphqlConfig) {
+        try {
+          const api = tool.api ?? tool.operation?.api ?? null;
+          const endpoint = tool.graphqlConfig.endpoint || (api?.baseUrl ?? '');
+          const variables: Record<string, any> = {};
+          if (tool.graphqlConfig.variables) {
+            for (const [k, v] of Object.entries(tool.graphqlConfig.variables)) {
+              variables[k] = typeof v === 'string' ? v.replace(/\{(\w+)\}/g, (_, n) => n in parameters ? parameters[n] : `{${n}}`) : v;
+            }
+          } else {
+            Object.assign(variables, parameters);
+          }
+          const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(api?.headers || {}), ...(tool.graphqlConfig.headers || {}) };
+          const axConfig: any = { method: 'POST', url: endpoint, headers, data: { query: tool.graphqlConfig.query, variables }, timeout: tool.configuration?.timeout ?? 30000 };
+          if (api) await this.addAuthentication(axConfig, api, options);
+          const response = await axios(axConfig);
+          let data = response.data;
+          if (tool.graphqlConfig.responseMapping?.dataPath) data = this.getByDotPath(data, tool.graphqlConfig.responseMapping.dataPath);
+          const result: ToolExecutionResult = { success: true, data, executionTime: Date.now() - startTime, cached, rateLimited, retryCount: 0 };
+          await this.recordExecution(tool, parameters, result, options, { executionTime: result.executionTime, cached, retryCount: 0 });
+          return result;
+        } catch (error) {
+          const result: ToolExecutionResult = { success: false, error: error.message, executionTime: Date.now() - startTime, cached, rateLimited, retryCount: 0 };
+          await this.recordExecution(tool, parameters, result, options, { executionTime: result.executionTime, cached, retryCount: 0 });
+          return result;
+        }
+      }
+
+      // SOAP config-based execution
+      if (tool.soapConfig) {
+        try {
+          const api = tool.api ?? tool.operation?.api ?? null;
+          const endpoint = tool.soapConfig.endpoint || (api?.baseUrl ?? '');
+          let soapBody = tool.soapConfig.bodyTemplate || '';
+          soapBody = soapBody.replace(/\{(\w+)\}/g, (_, n) => n in parameters ? String(parameters[n]) : `{${n}}`);
+          const envelope = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="${tool.soapConfig.namespace}"><soap:Body>${soapBody}</soap:Body></soap:Envelope>`;
+          const headers: Record<string, string> = { 'Content-Type': 'text/xml;charset=UTF-8', ...(api?.headers || {}), ...(tool.soapConfig.headers || {}) };
+          if (tool.soapConfig.soapAction) headers['SOAPAction'] = tool.soapConfig.soapAction;
+          const axConfig: any = { method: 'POST', url: endpoint, headers, data: envelope, timeout: tool.configuration?.timeout ?? 30000 };
+          if (api) await this.addAuthentication(axConfig, api, options);
+          const response = await axios(axConfig);
+          let data = response.data;
+          if (tool.soapConfig.responseMapping?.dataPath) data = this.getByDotPath(data, tool.soapConfig.responseMapping.dataPath);
+          const result: ToolExecutionResult = { success: true, data, executionTime: Date.now() - startTime, cached, rateLimited, retryCount: 0 };
+          await this.recordExecution(tool, parameters, result, options, { executionTime: result.executionTime, cached, retryCount: 0 });
+          return result;
+        } catch (error) {
+          const result: ToolExecutionResult = { success: false, error: error.message, executionTime: Date.now() - startTime, cached, rateLimited, retryCount: 0 };
+          await this.recordExecution(tool, parameters, result, options, { executionTime: result.executionTime, cached, retryCount: 0 });
+          return result;
+        }
+      }
+
+      // gRPC config-based execution
+      if (tool.grpcConfig) {
+        try {
+          // gRPC requires the grpc library — for now, return a descriptive error if not available
+          // Full gRPC execution needs @grpc/grpc-js + @grpc/proto-loader
+          const api = tool.api ?? tool.operation?.api ?? null;
+          const endpoint = tool.grpcConfig.endpoint || (api?.baseUrl ?? '');
+          // Map parameters to request fields
+          const requestData: Record<string, any> = {};
+          if (tool.grpcConfig.requestMapping) {
+            for (const [k, v] of Object.entries(tool.grpcConfig.requestMapping)) {
+              requestData[k] = typeof v === 'string' ? v.replace(/\{(\w+)\}/g, (_, n) => n in parameters ? parameters[n] : `{${n}}`) : v;
+            }
+          } else {
+            Object.assign(requestData, parameters);
+          }
+          // For now, make an HTTP/2 JSON call (gRPC-Web compatible)
+          const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(api?.headers || {}) };
+          const url = `${endpoint}/${tool.grpcConfig.serviceName}/${tool.grpcConfig.methodName}`;
+          const axConfig: any = { method: 'POST', url, headers, data: requestData, timeout: tool.configuration?.timeout ?? 30000 };
+          if (api) await this.addAuthentication(axConfig, api, options);
+          const response = await axios(axConfig);
+          let data = response.data;
+          if (tool.grpcConfig.responseMapping?.dataPath) data = this.getByDotPath(data, tool.grpcConfig.responseMapping.dataPath);
+          const result: ToolExecutionResult = { success: true, data, executionTime: Date.now() - startTime, cached, rateLimited, retryCount: 0 };
+          await this.recordExecution(tool, parameters, result, options, { executionTime: result.executionTime, cached, retryCount: 0 });
+          return result;
+        } catch (error) {
+          const result: ToolExecutionResult = { success: false, error: error.message, executionTime: Date.now() - startTime, cached, rateLimited, retryCount: 0 };
+          await this.recordExecution(tool, parameters, result, options, { executionTime: result.executionTime, cached, retryCount: 0 });
+          return result;
+        }
+      }
+
+      // Execute API-based tool with retries (legacy path for spec-imported tools)
       const maxRetries = options.retries ?? tool.configuration?.retries ?? 3;
       let lastError: Error;
 
@@ -901,6 +1040,388 @@ export class ToolExecutorService {
 
     // Mark as used (fire-and-forget)
     this.credentialRepository.update(credential.id, { lastUsedAt: new Date() }).catch(() => {});
+  }
+
+  private async executeHttpTool(
+    tool: Tool,
+    parameters: Record<string, any>,
+    options: { organizationId: string; userId?: string },
+  ): Promise<any> {
+    const httpConfig = tool.httpConfig!;
+    const startTime = Date.now();
+    const api = tool.api ?? tool.operation?.api ?? null;
+
+    try {
+      // 1. URL construction
+      let url = httpConfig.path;
+      if (api?.baseUrl && !url.startsWith('http')) {
+        const base = api.baseUrl.replace(/\/+$/, '');
+        const path = url.replace(/^\/+/, '');
+        url = `${base}/${path}`;
+      }
+
+      // 2. Path param substitution
+      const pathParamNames: string[] = [];
+      url = url.replace(/\{(\w+)\}/g, (match, name) => {
+        pathParamNames.push(name);
+        if (name in parameters) {
+          return encodeURIComponent(String(parameters[name]));
+        }
+        return match;
+      });
+
+      // 3. SSRF validation
+      const urlCheck = validateUrl(url);
+      if (!urlCheck.valid) {
+        this.logger.warn(`SSRF blocked for HTTP tool ${tool.name}: ${urlCheck.error}`);
+        return {
+          success: false,
+          data: null,
+          error: `Blocked: ${urlCheck.error}`,
+          executionTime: Date.now() - startTime,
+          cached: false,
+          metadata: { url, method: httpConfig.method },
+        };
+      }
+
+      // 4. Query params
+      const queryParams: Record<string, any> = {};
+      if (httpConfig.queryParams) {
+        for (const [key, val] of Object.entries(httpConfig.queryParams)) {
+          queryParams[key] = String(val).replace(/\{(\w+)\}/g, (_, n) =>
+            n in parameters ? String(parameters[n]) : `{${n}}`
+          );
+        }
+      }
+      if (['GET', 'DELETE'].includes(httpConfig.method)) {
+        for (const [key, value] of Object.entries(parameters)) {
+          if (!pathParamNames.includes(key) && !(key in queryParams)) {
+            queryParams[key] = value;
+          }
+        }
+      }
+
+      // 5. Body
+      let body: any = undefined;
+      const encoding = httpConfig.bodyEncoding ?? 'json';
+      if (['POST', 'PUT', 'PATCH'].includes(httpConfig.method)) {
+        if (httpConfig.bodyTemplate) {
+          try {
+            let templated = httpConfig.bodyTemplate;
+            templated = templated.replace(/\{(\w+)\}/g, (match, name) => {
+              if (name in parameters) {
+                const v = parameters[name];
+                return typeof v === 'string' ? v : JSON.stringify(v);
+              }
+              return match;
+            });
+            body = JSON.parse(templated);
+          } catch {
+            body = httpConfig.bodyTemplate.replace(/\{(\w+)\}/g, (_, n) =>
+              n in parameters ? String(parameters[n]) : `{${n}}`
+            );
+          }
+        } else {
+          const bodyParams: Record<string, any> = {};
+          for (const [k, v] of Object.entries(parameters)) {
+            if (!pathParamNames.includes(k)) bodyParams[k] = v;
+          }
+          body = bodyParams;
+        }
+      }
+
+      // 6. Headers
+      const headers: Record<string, string> = {};
+      if (api?.headers) Object.assign(headers, api.headers);
+      if (httpConfig.headers) {
+        for (const [k, v] of Object.entries(httpConfig.headers)) {
+          headers[k] = String(v).replace(/\{(\w+)\}/g, (_, n) =>
+            n in parameters ? String(parameters[n]) : `{${n}}`
+          );
+        }
+      }
+      if (body !== undefined) {
+        switch (encoding) {
+          case 'json': headers['Content-Type'] = 'application/json'; break;
+          case 'form-urlencoded': headers['Content-Type'] = 'application/x-www-form-urlencoded'; break;
+          case 'raw': headers['Content-Type'] = headers['Content-Type'] ?? 'text/plain'; break;
+        }
+      }
+      const safeHeaders = sanitizeHeaders(headers);
+
+      // 7. Axios config
+      const timeout = tool.configuration?.timeout ?? api?.timeoutMs ?? 30000;
+      const axiosConfig: any = {
+        method: httpConfig.method,
+        url,
+        timeout,
+        maxContentLength: 10 * 1024 * 1024,
+        headers: safeHeaders,
+        params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+        paramsSerializer: (params: any) => {
+          const sp = new URLSearchParams();
+          for (const [k, v] of Object.entries(params)) {
+            if (Array.isArray(v)) {
+              (v as any[]).forEach(item => sp.append(`${k}[]`, String(item)));
+            } else if (v !== undefined && v !== null) {
+              sp.append(k, String(v));
+            }
+          }
+          return sp.toString();
+        },
+      };
+
+      // 8. Auth
+      if (api) {
+        await this.addAuthentication(axiosConfig, api, {
+          organizationId: options.organizationId,
+          userId: options.userId,
+        } as ToolExecutionOptions);
+      } else if (tool.authConfig) {
+        // Inline auth for standalone tools
+        if (tool.authConfig.type === 'bearer' && tool.authConfig.config?.token) {
+          axiosConfig.headers['Authorization'] = `Bearer ${tool.authConfig.config.token}`;
+        } else if (tool.authConfig.type === 'apiKey' && tool.authConfig.config?.key) {
+          axiosConfig.headers[tool.authConfig.config.headerName || 'X-API-Key'] = tool.authConfig.config.key;
+        }
+      }
+
+      // 9. Body data encoding
+      if (body !== undefined) {
+        switch (encoding) {
+          case 'json':
+            axiosConfig.data = body;
+            break;
+          case 'form-urlencoded':
+            axiosConfig.data = this.encodeFormUrlencoded(body);
+            break;
+          case 'multipart': {
+            const FormData = require('form-data');
+            const fd = new FormData();
+            for (const [k, v] of Object.entries(body)) {
+              fd.append(k, v);
+            }
+            axiosConfig.data = fd;
+            Object.assign(axiosConfig.headers, fd.getHeaders());
+            break;
+          }
+          case 'raw':
+            axiosConfig.data = typeof body === 'string' ? body : JSON.stringify(body);
+            break;
+        }
+      }
+
+      // 10. Execute (with or without pagination)
+      let result: any;
+      if (httpConfig.pagination?.type) {
+        result = await this.executeWithPagination(axiosConfig, httpConfig);
+      } else {
+        const response = await axios(axiosConfig);
+        result = this.processHttpResponse(response, httpConfig);
+      }
+
+      return {
+        success: true,
+        data: result,
+        executionTime: Date.now() - startTime,
+        cached: false,
+        metadata: { url, method: httpConfig.method, httpStatus: 200 },
+      };
+
+    } catch (error: any) {
+      const executionTime = Date.now() - startTime;
+      if (axios.isAxiosError(error) || error.isAxiosError) {
+        const status = error.response?.status ?? 0;
+        const errorData = error.response?.data;
+        let errorMessage = error.message;
+        if (httpConfig.responseMapping?.errorPath && errorData) {
+          const extracted = this.getByDotPath(errorData, httpConfig.responseMapping.errorPath);
+          if (extracted) errorMessage = String(extracted);
+        }
+        return {
+          success: false,
+          data: errorData ?? null,
+          error: errorMessage,
+          executionTime,
+          cached: false,
+          metadata: { url: httpConfig.path, method: httpConfig.method, httpStatus: status },
+        };
+      }
+      return {
+        success: false,
+        data: null,
+        error: error.message,
+        executionTime,
+        cached: false,
+      };
+    }
+  }
+
+  private encodeFormUrlencoded(body: Record<string, any>): string {
+    const params = new URLSearchParams();
+    const flatten = (obj: any, prefix = '') => {
+      for (const [key, value] of Object.entries(obj)) {
+        const fullKey = prefix ? `${prefix}[${key}]` : key;
+        if (Array.isArray(value)) {
+          value.forEach(v => params.append(`${fullKey}[]`, String(v)));
+        } else if (typeof value === 'object' && value !== null) {
+          flatten(value, fullKey);
+        } else if (value !== undefined && value !== null) {
+          params.append(fullKey, String(value));
+        }
+      }
+    };
+    flatten(body);
+    return params.toString();
+  }
+
+  private processHttpResponse(response: any, httpConfig: any): any {
+    const mapping = httpConfig.responseMapping;
+    let data = response.data;
+
+    if (mapping?.successCondition) {
+      const success = this.evaluateHttpSuccessCondition(mapping.successCondition, response.status, data);
+      if (!success) {
+        const errorMsg = mapping.errorPath ? this.getByDotPath(data, mapping.errorPath) : 'Request failed';
+        const err: any = new Error(String(errorMsg));
+        err.response = response;
+        err.isAxiosError = true;
+        throw err;
+      }
+    }
+
+    if (mapping?.dataPath) {
+      data = this.getByDotPath(data, mapping.dataPath);
+    }
+
+    return data;
+  }
+
+  private getByDotPath(obj: any, path: string): any {
+    return path.split('.').reduce((curr, key) => {
+      if (curr === null || curr === undefined) return undefined;
+      return curr[key];
+    }, obj);
+  }
+
+  private evaluateHttpSuccessCondition(condition: string, status: number, data: any): boolean {
+    const trimmed = condition.trim();
+
+    // "status < 400"
+    const statusMatch = trimmed.match(/^status\s*(===?|!==?|<|>|<=|>=)\s*(\d+)$/);
+    if (statusMatch) {
+      const [, op, val] = statusMatch;
+      return this.compareConditionValues(status, op, Number(val));
+    }
+
+    // "data.ok === true"
+    const dataMatch = trimmed.match(/^data\.(.+?)\s*(===?|!==?)\s*(.+)$/);
+    if (dataMatch) {
+      const [, path, op, rawVal] = dataMatch;
+      const actual = this.getByDotPath(data, path);
+      let expected: any = rawVal.trim();
+      if (expected === 'true') expected = true;
+      else if (expected === 'false') expected = false;
+      else if (expected === 'null') expected = null;
+      else if (expected === 'undefined') expected = undefined;
+      else if (/^\d+$/.test(expected)) expected = Number(expected);
+      else expected = expected.replace(/^['"]|['"]$/g, '');
+      return this.compareConditionValues(actual, op, expected);
+    }
+
+    return status >= 200 && status < 400;
+  }
+
+  private compareConditionValues(a: any, op: string, b: any): boolean {
+    switch (op) {
+      case '==': case '===': return a === b;
+      case '!=': case '!==': return a !== b;
+      case '<': return a < b;
+      case '>': return a > b;
+      case '<=': return a <= b;
+      case '>=': return a >= b;
+      default: return false;
+    }
+  }
+
+  private async executeWithPagination(baseConfig: any, httpConfig: any): Promise<any[]> {
+    const pagination = httpConfig.pagination;
+    const maxPages = pagination.maxPages ?? 5;
+    const allResults: any[] = [];
+    let pageCount = 0;
+    let nextCursor: string | null = null;
+    let nextUrl: string | null = null;
+    let offset = 0;
+
+    while (pageCount < maxPages) {
+      const pageConfig = { ...baseConfig, params: { ...baseConfig.params }, headers: { ...baseConfig.headers } };
+
+      switch (pagination.type) {
+        case 'cursor':
+          if (nextUrl) {
+            pageConfig.url = nextUrl.startsWith('http') ? nextUrl : `${baseConfig.url}${nextUrl}`;
+            if (nextUrl.startsWith('http')) pageConfig.params = undefined;
+          } else if (nextCursor && pagination.cursorParam) {
+            pageConfig.params = pageConfig.params || {};
+            pageConfig.params[pagination.cursorParam] = nextCursor;
+          }
+          break;
+        case 'offset':
+          pageConfig.params = pageConfig.params || {};
+          if (pagination.offsetParam) pageConfig.params[pagination.offsetParam] = offset;
+          if (pagination.limitParam && pagination.defaultLimit) pageConfig.params[pagination.limitParam] = pagination.defaultLimit;
+          break;
+        case 'link-header':
+          if (nextUrl) { pageConfig.url = nextUrl; pageConfig.params = undefined; }
+          break;
+      }
+
+      const response = await axios(pageConfig);
+      const processed = this.processHttpResponse(response, httpConfig);
+
+      const results = pagination.resultsPath
+        ? this.getByDotPath(response.data, pagination.resultsPath)
+        : processed;
+
+      if (Array.isArray(results)) allResults.push(...results);
+      else if (results !== undefined && results !== null) allResults.push(results);
+
+      pageCount++;
+      let hasNext = false;
+
+      switch (pagination.type) {
+        case 'cursor':
+          if (pagination.cursorPath) {
+            const cursor = this.getByDotPath(response.data, pagination.cursorPath);
+            if (cursor) {
+              if (typeof cursor === 'string' && (cursor.startsWith('http') || cursor.startsWith('/'))) {
+                nextUrl = cursor; nextCursor = null;
+              } else {
+                nextCursor = String(cursor); nextUrl = null;
+              }
+              hasNext = true;
+            }
+          }
+          break;
+        case 'offset': {
+          const limit = pagination.defaultLimit ?? 20;
+          if (Array.isArray(results) && results.length >= limit) { offset += limit; hasNext = true; }
+          break;
+        }
+        case 'link-header': {
+          const linkHeader = response.headers?.link || response.headers?.Link;
+          if (linkHeader) {
+            const m = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+            if (m) { nextUrl = m[1]; hasNext = true; }
+          }
+          break;
+        }
+      }
+
+      if (!hasNext) break;
+    }
+
+    return allResults;
   }
 
   private async validateParameters(

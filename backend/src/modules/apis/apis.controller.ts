@@ -12,6 +12,8 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -60,6 +62,24 @@ export class ApisController {
     });
 
     return { success: true, data: result, message: 'APIs retrieved successfully' };
+  }
+
+  @Post('http')
+  @Roles('member', 'admin', 'owner')
+  async createHttpApi(@Body() body: any, @Request() req: any) {
+    try {
+      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      if (!organizationId) {
+        throw new HttpException({ success: false, message: 'No organization found' }, HttpStatus.BAD_REQUEST);
+      }
+      const api = await this.apisService.createHttpApi(body, organizationId);
+      return { success: true, data: api, message: 'Custom HTTP API created' };
+    } catch (error) {
+      throw new HttpException(
+        { success: false, message: error.message, error: 'HTTP_API_CREATE_FAILED' },
+        error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   @Get(':id')

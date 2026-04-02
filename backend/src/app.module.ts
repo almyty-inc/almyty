@@ -39,6 +39,7 @@ import { Memory } from './entities/memory.entity';
 import { AgentInterface } from './entities/interface.entity';
 import { AgentFile } from './entities/file.entity';
 import { AuditLog } from './entities/audit-log.entity';
+import { ToolTemplate } from './entities/tool-template.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -62,6 +63,7 @@ import { MemoryModule } from './modules/memory/memory.module';
 import { FilesModule } from './modules/files/files.module';
 import { InterfacesModule } from './modules/interfaces/interfaces.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
+import { ToolHubModule } from './modules/tool-hub/tool-hub.module';
 import { UnifiedEndpointModule } from './modules/gateways/unified-endpoint.module';
 import { MailModule } from './modules/mail/mail.module';
 import { VersionsModule } from './modules/versions/versions.module';
@@ -138,6 +140,7 @@ import { databaseConfig } from './config/database.config';
       AgentInterface,
       AgentFile,
       AuditLog,
+      ToolTemplate,
     ]),
 
     // Rate limiting
@@ -201,6 +204,7 @@ import { databaseConfig } from './config/database.config';
     InterfacesModule,
     AuditLogModule,
     VersionsModule,
+    ToolHubModule,
     // MUST be last — wildcard /:orgSlug/:resourceSlug catches everything
     UnifiedEndpointModule,
   ],

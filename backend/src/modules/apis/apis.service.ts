@@ -164,6 +164,67 @@ export class ApisService {
     return { apis, total };
   }
 
+  async createHttpApi(data: {
+    name: string;
+    baseUrl: string;
+    description?: string;
+    headers?: Record<string, string>;
+    authentication?: any;
+    rateLimits?: any;
+    timeoutMs?: number;
+    retryAttempts?: number;
+  }, organizationId: string): Promise<Api> {
+    // Check if organization exists
+    const organization = await this.organizationRepository.findOne({
+      where: { id: organizationId },
+    });
+
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    // Check API limit
+    const apiCount = await this.apiRepository.count({
+      where: { organizationId },
+    });
+
+    const maxApis = organization.settings?.maxApis;
+    if (maxApis && apiCount >= maxApis) {
+      throw new BadRequestException('API limit exceeded for organization');
+    }
+
+    // Check for duplicate name
+    const existingApi = await this.apiRepository.findOne({
+      where: { name: data.name, organizationId },
+    });
+
+    if (existingApi) {
+      throw new BadRequestException('API with this name already exists in the organization');
+    }
+
+    const api = this.apiRepository.create({
+      name: data.name,
+      baseUrl: data.baseUrl,
+      description: data.description || null,
+      type: ApiType.HTTP,
+      status: ApiStatus.ACTIVE,
+      organizationId,
+      headers: data.headers || {},
+      authentication: data.authentication || null,
+      rateLimits: data.rateLimits || null,
+      timeoutMs: data.timeoutMs || 30000,
+      retryAttempts: data.retryAttempts || 3,
+      version: '1.0.0',
+    });
+
+    const saved = await this.apiRepository.save(api);
+
+    // Audit log (fire-and-forget)
+    this.auditLogService.logCreate(organizationId, undefined, AuditResource.API, saved.id, saved.name, { type: 'http' });
+
+    return saved;
+  }
+
   async update(id: string, updateApiData: UpdateApiData): Promise<Api> {
     const api = await this.findOne(id);
 
