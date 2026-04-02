@@ -9,6 +9,8 @@ import { Operation } from '../../entities/operation.entity';
 import { User } from '../../entities/user.entity';
 import { Credential } from '../../entities/credential.entity';
 import { CustomCodeExecutorService } from './custom-code-executor.service';
+import { NodeSandboxService } from './node-sandbox/node-sandbox.service';
+import { SdkCodeAssemblerService } from './node-sandbox/sdk-code-assembler.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import axios from 'axios';
 
@@ -96,6 +98,18 @@ describe('ToolExecutorService', () => {
           useValue: {
             executeCode: jest.fn().mockResolvedValue({ success: true, data: null, executionTime: 0 }),
             validateCode: jest.fn().mockReturnValue({ valid: true }),
+          },
+        },
+        {
+          provide: NodeSandboxService,
+          useValue: {
+            execute: jest.fn().mockResolvedValue({ success: true, data: null, executionTimeMs: 0 }),
+          },
+        },
+        {
+          provide: SdkCodeAssemblerService,
+          useValue: {
+            assemble: jest.fn().mockReturnValue('return null;'),
           },
         },
         {

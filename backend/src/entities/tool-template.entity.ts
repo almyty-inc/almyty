@@ -63,6 +63,12 @@ export class ToolTemplate {
     };
   } | null;
 
+  @Column({ type: 'jsonb', nullable: true })
+  sdkConfig: any | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  sdkMap: any | null;
+
   @Column({ default: false })
   isBuiltIn: boolean;
 

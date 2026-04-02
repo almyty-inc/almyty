@@ -22,6 +22,7 @@ export enum ApiType {
   SOAP = 'soap',
   GRPC = 'grpc',
   HTTP = 'http',
+  SDK = 'sdk',
   OTHER = 'other',
 }
 
@@ -122,6 +123,15 @@ export class Api {
     cascade: true,
   })
   credentials: Credential[];
+
+  @Column({ type: 'jsonb', nullable: true })
+  dependencies: Record<string, string> | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  npmRegistry: any | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  sdkMaps: Record<string, any> | null;
 
   // Methods
   getLatestSchema(): ApiSchema | undefined {
