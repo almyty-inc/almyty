@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -56,6 +56,8 @@ import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { CreateToolDialog } from '@/components/tools/create-tool-dialog'
 import { ToolExecutionDialog } from '@/components/tools/tool-execution-dialog'
+import { ToolHubPage } from '@/pages/tool-hub'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 import CodeMirror from '@uiw/react-codemirror'
 import { javascript } from '@codemirror/lang-javascript'
@@ -111,6 +113,9 @@ interface Tool {
 }
 
 export function ToolsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = searchParams.get('tab') === 'hub' ? 'hub' : 'my-tools'
+
   useEffect(() => {
     document.title = 'Tools | almyty'
     return () => { document.title = 'almyty' }
@@ -510,11 +515,23 @@ return new Promise((resolve, reject) => {
             {toolsTotal} tool{toolsTotal !== 1 ? 's' : ''} total
           </p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!currentOrganization}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Tool
-        </Button>
+        {activeTab === 'my-tools' && (
+          <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!currentOrganization}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Tool
+          </Button>
+        )}
       </div>
+
+      <Tabs value={activeTab} onValueChange={(v) => setSearchParams(v === 'hub' ? { tab: 'hub' } : {})}>
+        <TabsList>
+          <TabsTrigger value="my-tools">My Tools</TabsTrigger>
+          <TabsTrigger value="hub">Tool Hub</TabsTrigger>
+        </TabsList>
+        <TabsContent value="hub">
+          <ToolHubPage />
+        </TabsContent>
+        <TabsContent value="my-tools">
 
       {/* Tools Table */}
       {tools.length === 0 ? (
@@ -604,6 +621,9 @@ return new Promise((resolve, reject) => {
           </CardContent>
         </Card>
       )}
+
+      </TabsContent>
+      </Tabs>
 
       {/* Tool Details Dialog */}
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
