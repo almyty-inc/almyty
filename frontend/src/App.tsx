@@ -91,11 +91,7 @@ function App() {
             <ToolDetailPage />
           </DashboardLayout>
         } />
-        <Route path="/tool-hub" element={
-          <DashboardLayout>
-            <ToolHubPage />
-          </DashboardLayout>
-        } />
+        <Route path="/tool-hub" element={<Navigate to="/tools?tab=hub" replace />} />
         <Route path="/agents" element={
           <DashboardLayout>
             <AgentsPage />

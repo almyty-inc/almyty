@@ -49,15 +49,17 @@ interface DashboardLayoutProps {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'APIs', href: '/apis', icon: Globe },
-  { name: 'Tools', href: '/tools', icon: Wrench },
-  { name: 'Tool Hub', href: '/tool-hub', icon: Store },
-  { name: 'Gateways', href: '/gateways', icon: Zap },
+  // Core workflow
   { name: 'Agents', href: '/agents', icon: Bot },
-  { name: 'Models', href: '/llm-providers', icon: Brain },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Gateways', href: '/gateways', icon: Zap },
+  { name: 'Tools', href: '/tools', icon: Wrench },
+  { name: 'APIs', href: '/apis', icon: Globe },
   { name: 'Credentials', href: '/credentials', icon: Key },
+  // Configuration
+  { name: 'divider', href: '', icon: null as any },
+  { name: 'Models', href: '/llm-providers', icon: Brain },
   { name: 'Memory', href: '/memories', icon: Database },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -196,6 +198,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           {/* Navigation */}
           <nav className={cn("flex-1 py-4 space-y-1 overflow-y-auto", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation">
             {navigation.map((item) => {
+              if (item.name === 'divider') {
+                return <div key="divider" className="my-2 mx-3 border-t border-border/40" />
+              }
               const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/')
               return (
                 <Link
