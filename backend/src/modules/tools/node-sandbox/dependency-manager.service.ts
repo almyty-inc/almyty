@@ -193,12 +193,33 @@ export class DependencyManagerService {
   private runNpmInstall(cwd: string): Promise<void> {
     const timeout = parseInt(process.env.SANDBOX_INSTALL_TIMEOUT || '', 10) || DEFAULT_INSTALL_TIMEOUT;
 
+    // CRITICAL: --ignore-scripts is REQUIRED here. The install runs in
+    // the HOST process (not the worker_threads sandbox), so any package's
+    // preinstall/install/postinstall hook would execute with full backend
+    // privileges — env vars, filesystem, network. A user creating a tool
+    // with a malicious `dependencies` field could exfiltrate secrets or
+    // RCE the backend process. --ignore-scripts disables that vector.
+    //
+    // --no-package-lock keeps the cache directory free of lock files
+    // that would otherwise need management.
     return new Promise<void>((resolve, reject) => {
-      const child = spawn('npm', ['install', '--production', '--no-audit', '--no-fund', '--prefer-offline'], {
-        cwd,
-        stdio: 'pipe',
-        env: { ...process.env, NODE_ENV: 'production' },
-      });
+      const child = spawn(
+        'npm',
+        [
+          'install',
+          '--production',
+          '--no-audit',
+          '--no-fund',
+          '--prefer-offline',
+          '--ignore-scripts',
+          '--no-package-lock',
+        ],
+        {
+          cwd,
+          stdio: 'pipe',
+          env: { ...process.env, NODE_ENV: 'production' },
+        },
+      );
 
       let stderr = '';
       child.stderr?.on('data', (chunk: Buffer) => {
@@ -255,12 +276,23 @@ export class DependencyManagerService {
 
     if (typesToInstall.length === 0) return;
 
-    // Best-effort install — don't fail if @types packages don't exist
+    // Best-effort install — don't fail if @types packages don't exist.
+    // Same --ignore-scripts requirement as runNpmInstall: this also runs
+    // in the host process and would otherwise execute arbitrary postinstall
+    // hooks from the @types/* packages.
     try {
       await new Promise<void>((resolve) => {
         const child = spawn(
           'npm',
-          ['install', '--save-dev', '--no-audit', '--no-fund', ...typesToInstall],
+          [
+            'install',
+            '--save-dev',
+            '--no-audit',
+            '--no-fund',
+            '--ignore-scripts',
+            '--no-package-lock',
+            ...typesToInstall,
+          ],
           { cwd: installDir, stdio: 'pipe' },
         );
         child.on('close', () => resolve());

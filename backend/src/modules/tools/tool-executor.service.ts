@@ -695,9 +695,14 @@ export class ToolExecutorService {
         }
       }
 
-      // Replace path parameters
+      // Replace path parameters. Use a regex with /g so that templates
+      // referencing the same parameter twice (e.g. `/orgs/{org}/repos/{org}-archive`)
+      // get all occurrences substituted, not just the first one. Escape
+      // the literal `{key}` so a key containing a regex meta-character
+      // can't break the substitution.
       for (const [key, value] of Object.entries(pathParams)) {
-        url = url.replace(`{${key}}`, encodeURIComponent(String(value)));
+        const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        url = url.replace(new RegExp(`\\{${escaped}\\}`, 'g'), encodeURIComponent(String(value)));
       }
 
       // Security: Validate fully-constructed URL
@@ -772,11 +777,29 @@ export class ToolExecutorService {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
         const errorData = error.response?.data;
-        
+
+        // Truncate the error message we surface to callers. Some upstreams
+        // return huge HTML error pages or megabyte JSON, and inlining that
+        // verbatim into our `error` field bloats logs / LLM context windows.
+        // The full body is still available on `data` for debugging.
+        const MAX_ERR_MESSAGE = 500;
+        let rawMsg: string;
+        if (typeof errorData === 'string') {
+          rawMsg = errorData;
+        } else if (errorData?.message) {
+          rawMsg = String(errorData.message);
+        } else {
+          rawMsg = error.message;
+        }
+        const truncated =
+          rawMsg.length > MAX_ERR_MESSAGE
+            ? rawMsg.slice(0, MAX_ERR_MESSAGE) + `… (truncated, ${rawMsg.length} bytes total)`
+            : rawMsg;
+
         return {
           success: false,
           data: errorData,
-          error: `HTTP ${status}: ${typeof errorData === 'string' ? errorData : errorData?.message || error.message}`,
+          error: `HTTP ${status}: ${truncated}`,
           executionTime: 0,
           cached: false,
           rateLimited: false,
@@ -788,7 +811,7 @@ export class ToolExecutorService {
           },
         };
       }
-      
+
       throw error;
     }
   }

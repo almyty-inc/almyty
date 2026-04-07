@@ -434,6 +434,88 @@ describe('Credential Entity', () => {
       expect(encrypted2).toMatch(/^encrypted:/);
       expect(encrypted1).not.toBe(encrypted2);
     });
+
+    it('encryptValue produces the new GCM format `encrypted:gcm:<iv>:<authTag>:<ct>`', () => {
+      const credential = new Credential();
+      const out = credential['encryptValue']('hello');
+
+      const parts = out.split(':');
+      expect(parts[0]).toBe('encrypted');
+      expect(parts[1]).toBe('gcm');
+      expect(parts).toHaveLength(5);
+      // 96-bit IV → 24 hex chars
+      expect(parts[2]).toMatch(/^[0-9a-f]{24}$/);
+      // GCM auth tag is 16 bytes → 32 hex chars
+      expect(parts[3]).toMatch(/^[0-9a-f]{32}$/);
+      // ciphertext is hex
+      expect(parts[4]).toMatch(/^[0-9a-f]+$/);
+    });
+
+    it('decryptValue still reads the LEGACY CBC format (`encrypted:<iv>:<ct>`)', () => {
+      // Build a legacy CBC payload manually so we can prove the
+      // backward-read path still works without committing the bytes
+      // to a fixture file.
+      const cryptoMod = require('crypto');
+      const credential = new Credential();
+      // Use the same key the entity uses (test/dev fallback).
+      const key = cryptoMod
+        .createHash('sha256')
+        .update(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-me!')
+        .digest();
+      const iv = cryptoMod.randomBytes(16);
+      const cipher = cryptoMod.createCipheriv('aes-256-cbc', key, iv);
+      const plain = 'legacy-secret-value';
+      let ct = cipher.update(plain, 'utf8', 'hex');
+      ct += cipher.final('hex');
+      const legacyPayload = `encrypted:${iv.toString('hex')}:${ct}`;
+
+      // The decrypt path must transparently understand the old shape.
+      expect(credential['decryptValue'](legacyPayload)).toBe(plain);
+    });
+
+    it('decryptValue rejects a tampered GCM payload (authenticated encryption)', () => {
+      const credential = new Credential();
+      const out = credential['encryptValue']('original');
+      // Flip a byte in the ciphertext segment.
+      const parts = out.split(':');
+      const tampered = parts[4].replace(/[0-9a-f]$/, (c) => (c === '0' ? '1' : '0'));
+      const corrupted = `${parts[0]}:${parts[1]}:${parts[2]}:${parts[3]}:${tampered}`;
+
+      // CBC would silently produce garbage plaintext (or pad-error). GCM
+      // verifies the auth tag and refuses to decrypt.
+      expect(() => credential['decryptValue'](corrupted)).toThrow();
+    });
+
+    it('encryptSensitiveData migrates legacy CBC fields to GCM on save', () => {
+      const cryptoMod = require('crypto');
+      const credential = new Credential();
+      const key = cryptoMod
+        .createHash('sha256')
+        .update(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-me!')
+        .digest();
+      const iv = cryptoMod.randomBytes(16);
+      const cipher = cryptoMod.createCipheriv('aes-256-cbc', key, iv);
+      let ct = cipher.update('migrate-me', 'utf8', 'hex');
+      ct += cipher.final('hex');
+      const legacyPayload = `encrypted:${iv.toString('hex')}:${ct}`;
+
+      credential.config = {
+        apiKey: legacyPayload,
+        username: 'plain-username', // non-sensitive: untouched
+        token: 'plain-token',       // sensitive plain → encrypt fresh
+      };
+
+      credential.encryptSensitiveData();
+
+      // The legacy CBC field is now GCM.
+      expect(credential.config.apiKey.startsWith('encrypted:gcm:')).toBe(true);
+      // Round-trip decryption still yields the original plaintext.
+      expect(credential['decryptValue'](credential.config.apiKey)).toBe('migrate-me');
+      // The freshly-encrypted token is also GCM.
+      expect(credential.config.token.startsWith('encrypted:gcm:')).toBe(true);
+      // Non-sensitive fields untouched.
+      expect(credential.config.username).toBe('plain-username');
+    });
   });
 
   describe('getEncryptionKey (production safety)', () => {

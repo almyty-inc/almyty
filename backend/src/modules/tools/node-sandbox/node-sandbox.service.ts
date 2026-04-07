@@ -13,6 +13,12 @@ import { DependencyManagerService } from './dependency-manager.service';
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MEMORY_LIMIT_MB = 128;
 const DEFAULT_MAX_WORKERS = 4;
+/**
+ * Hard cap on the queued-but-not-yet-running execution backlog. Without
+ * a cap, a flood of requests would grow the in-memory queue indefinitely
+ * and eventually OOM the backend process.
+ */
+const DEFAULT_MAX_QUEUE_SIZE = 100;
 
 @Injectable()
 export class NodeSandboxService {
@@ -38,9 +44,20 @@ export class NodeSandboxService {
    */
   async execute(request: SandboxExecutionRequest): Promise<SandboxExecutionResult> {
     const maxWorkers = parseInt(process.env.SANDBOX_MAX_WORKERS || '', 10) || DEFAULT_MAX_WORKERS;
+    const maxQueueSize =
+      parseInt(process.env.SANDBOX_MAX_QUEUE_SIZE || '', 10) || DEFAULT_MAX_QUEUE_SIZE;
 
-    // If we're at capacity, wait in the queue
+    // If we're at capacity, wait in the queue — but reject immediately
+    // when the queue is already full so a flood of requests doesn't
+    // OOM the backend.
     if (this.activeWorkers >= maxWorkers) {
+      if (this.queue.length >= maxQueueSize) {
+        return {
+          success: false,
+          error: `Sandbox queue full (${maxQueueSize} pending). Try again shortly.`,
+          executionTimeMs: 0,
+        };
+      }
       return new Promise<SandboxExecutionResult>((resolve) => {
         this.queue.push({ resolve, request });
       });
@@ -175,7 +192,16 @@ export class NodeSandboxService {
 
     while (this.queue.length > 0 && this.activeWorkers < maxWorkers) {
       const next = this.queue.shift()!;
-      this.runWorker(next.request).then(next.resolve);
+      // runWorker has its own try/catch and should always resolve, but
+      // attach a .catch as a safety net so a queued caller never hangs
+      // forever if a future refactor introduces a rejection path.
+      this.runWorker(next.request).then(next.resolve, (err: any) => {
+        next.resolve({
+          success: false,
+          error: err?.message ?? String(err),
+          executionTimeMs: 0,
+        });
+      });
     }
   }
 }

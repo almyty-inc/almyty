@@ -114,18 +114,36 @@ export class AgentRuntimeService {
       throw new BadRequestException('Agent is not in autonomous mode. Use /invoke for workflow agents.');
     }
 
-    // Enforce maxChainDepth: if this is a child run, count depth by following parentRunIds
+    // Enforce maxChainDepth: count how many ancestors the new run will have
+    // by walking the parentRunId chain. The new run's nesting level equals
+    // (ancestor count) + 1, so we reject when ancestor count >= maxChainDepth.
+    //
+    // The previous version only checked AFTER finding another grandparent,
+    // so a maxChainDepth of 1 ("only roots") never fired even when creating
+    // a child of a root run. Now the check fires from the start (depth=1
+    // means "the new run already has 1 ancestor — its parent"), and again
+    // after each step up the chain.
+    //
+    // Also added a hard iteration cap (MAX_PARENT_WALK) so a corrupted
+    // parent chain with a cycle can't loop forever.
     if (options?.parentRunId && agent.collaboration?.rules?.maxChainDepth) {
+      const maxChainDepth = agent.collaboration.rules.maxChainDepth;
+      const MAX_PARENT_WALK = 1000;
       let depth = 1;
-      let currentParentId = options.parentRunId;
+      let currentParentId: string | null = options.parentRunId;
+      let walks = 0;
       while (currentParentId) {
+        if (depth >= maxChainDepth) {
+          throw new BadRequestException(`Chain depth limit exceeded (max: ${maxChainDepth})`);
+        }
+        if (++walks > MAX_PARENT_WALK) {
+          this.logger.warn(`Parent chain walk exceeded ${MAX_PARENT_WALK} hops for run ${currentParentId} — possible cycle, aborting walk`);
+          break;
+        }
         const parentRun = await this.runRepository.findOne({ where: { id: currentParentId }, select: ['id', 'parentRunId'] });
         if (!parentRun || !parentRun.parentRunId) break;
         depth++;
         currentParentId = parentRun.parentRunId;
-        if (depth >= agent.collaboration.rules.maxChainDepth) {
-          throw new BadRequestException(`Chain depth limit exceeded (max: ${agent.collaboration.rules.maxChainDepth})`);
-        }
       }
     }
 
@@ -987,7 +1005,11 @@ export class AgentRuntimeService {
       subRuns.map(sr => this.waitForRun(sr.id, 300000)),
     );
 
-    // Cancel the rest
+    // Cancel the rest. Soft-cancel only: setting status=CANCELLED makes
+    // the next processStep tick bail out early (it checks isDone()), so
+    // damage is limited to whatever LLM call is currently in flight on
+    // each loser. Cancelling an in-flight HTTP request would require
+    // AbortSignal plumbing through llm-providers and is out of scope.
     for (const sr of subRuns) {
       try {
         const currentRun = await this.runRepository.findOne({ where: { id: sr.id } });
@@ -998,10 +1020,27 @@ export class AgentRuntimeService {
       } catch (_) { /* best effort */ }
     }
 
+    // CRITICAL: aggregate the cost of EVERY racer (winner and losers)
+    // into the parent. The previous version only added the winner's
+    // cost — losing runs that already burned LLM tokens before being
+    // cancelled were invisible to the parent's budget accounting,
+    // letting maxCostCents be silently bypassed by N× the racer count.
+    let raceTotalCost = 0;
+    let raceTotalTokens = 0;
+    for (const sr of subRuns) {
+      try {
+        const finalRun = await this.runRepository.findOne({ where: { id: sr.id } });
+        if (finalRun) {
+          raceTotalCost += finalRun.totalCost || 0;
+          raceTotalTokens += finalRun.totalTokens || 0;
+        }
+      } catch (_) { /* best effort */ }
+    }
+
     run.output = winnerResult?.output || 'No output from winning agent';
     run.status = AgentRunStatus.COMPLETED;
-    run.totalCost += winnerResult?.totalCost || 0;
-    run.totalTokens += winnerResult?.totalTokens || 0;
+    run.totalCost += raceTotalCost;
+    run.totalTokens += raceTotalTokens;
 
     const stepDuration = Date.now() - stepStart;
     run.steps.push({
@@ -1029,35 +1068,52 @@ export class AgentRuntimeService {
 
     const allResponses: Array<{ round: number; agentId: string; role?: string; output: string }> = [];
 
+    // Each round, every debater sees ONLY responses from prior rounds (not
+    // their peers' answers from the same round). Previously the agents ran
+    // sequentially within a round and later agents saw earlier ones'
+    // responses, which gave the last agent in each round an unfair info
+    // advantage. Now all agents in a round run in parallel, each starting
+    // from the same context (the prior rounds).
     for (let round = 1; round <= maxRounds; round++) {
-      for (const agentDef of collab.agents) {
-        // Build input with previous responses
-        let debateInput = `Original question: "${inputText}"\n\n`;
-        if (allResponses.length > 0) {
-          debateInput += 'Previous responses in this debate:\n\n';
-          for (const resp of allResponses) {
-            debateInput += `[Round ${resp.round}${resp.role ? ` - ${resp.role}` : ''}]: ${resp.output}\n\n`;
-          }
-          debateInput += `\nThis is round ${round}. Please provide your response, taking into account the previous arguments.`;
-        } else {
-          debateInput += 'This is round 1 of a multi-agent debate. Please provide your initial response.';
-        }
+      const priorRoundsContext = allResponses.length > 0
+        ? 'Previous responses in this debate:\n\n' +
+          allResponses
+            .map(r => `[Round ${r.round}${r.role ? ` - ${r.role}` : ''}]: ${r.output}`)
+            .join('\n\n') +
+          `\n\nThis is round ${round}. Please provide your response, taking into account the previous arguments.`
+        : 'This is round 1 of a multi-agent debate. Please provide your initial response.';
 
-        const subRun = await this.startRun(
+      const debateInput = `Original question: "${inputText}"\n\n${priorRoundsContext}`;
+
+      // Start every debater for this round in parallel.
+      const subRunPromises = collab.agents.map((agentDef) =>
+        this.startRun(
           agentDef.agentId,
           run.organizationId,
           run.userId,
           debateInput,
           { parentRunId: run.id, maxSteps: 10, maxCostCents: 25 },
-        );
+        ),
+      );
+      const subRuns = await Promise.all(subRunPromises);
 
-        const result = await this.waitForRun(subRun.id, 120000);
+      // Wait for all of this round's debaters to finish before recording.
+      const results = await Promise.all(
+        subRuns.map((sr) => this.waitForRun(sr.id, 120000)),
+      );
+
+      results.forEach((result, i) => {
+        const agentDef = collab.agents[i];
         const output = result?.output || 'No response';
-        allResponses.push({ round, agentId: agentDef.agentId, role: agentDef.role, output: String(output) });
-
+        allResponses.push({
+          round,
+          agentId: agentDef.agentId,
+          role: agentDef.role,
+          output: String(output),
+        });
         run.totalCost += result?.totalCost || 0;
         run.totalTokens += result?.totalTokens || 0;
-      }
+      });
     }
 
     // Judge summarizes the debate
