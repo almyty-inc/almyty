@@ -311,6 +311,22 @@ export class OrganizationsService {
   }
 
   async acceptInvite(token: string, userId: string): Promise<{ organizationId: string; organizationName: string }> {
+    // Defense-in-depth: reject empty/null tokens before hitting the DB.
+    // Without this, a null token would `WHERE inviteToken IS NULL` and
+    // potentially match any stale never-invited membership — same class
+    // of bug as the confirmPasswordReset empty-token issue we fixed in
+    // auth.service.ts.
+    if (!token || typeof token !== 'string') {
+      throw new NotFoundException('Invalid or expired invitation');
+    }
+
+    // Resolve the caller. We need their email so we can verify that
+    // the pending-invite path creates a membership for the right person.
+    const caller = await this.userRepository.findOne({ where: { id: userId } });
+    if (!caller) {
+      throw new NotFoundException('User not found');
+    }
+
     // Check membership-based invites (existing users)
     const membership = await this.userOrganizationRepository.findOne({
       where: { inviteToken: token },
@@ -324,6 +340,12 @@ export class OrganizationsService {
       if (membership.inviteAccepted) {
         throw new ConflictException('Invitation has already been accepted');
       }
+      // The membership row was created by inviteUser() with the invited
+      // user's id already filled in. If the CALLER isn't that user, they
+      // must not be allowed to accept on someone else's behalf.
+      if (membership.userId !== userId) {
+        throw new NotFoundException('Invalid or expired invitation');
+      }
 
       membership.inviteAccepted = true;
       membership.inviteToken = null;
@@ -335,7 +357,11 @@ export class OrganizationsService {
       };
     }
 
-    // Check pending invites in org metadata (new users)
+    // Check pending invites in org metadata (new users).
+    //
+    // FOLLOW-UP: this loops every organization in the database, which is
+    // O(orgs) per accept. A JSON-path index on `settings.pendingInvites`
+    // or a dedicated `pending_invites` table would make this O(log n).
     const orgs = await this.organizationRepository.find();
     for (const org of orgs) {
       const pendingInvites = (org.settings as any)?.pendingInvites || [];
@@ -343,6 +369,16 @@ export class OrganizationsService {
       if (invite) {
         if (new Date(invite.inviteExpiresAt) < new Date()) {
           throw new BadRequestException('Invitation has expired');
+        }
+
+        // CRITICAL: verify the caller's email matches the invite's email.
+        // Without this, anyone with the token (intercepted email, leaked
+        // link) could accept the invite as THEMSELVES and silently gain
+        // membership in someone else's organization.
+        const callerEmail = (caller.email || '').toLowerCase();
+        const inviteEmail = (invite.email || '').toLowerCase();
+        if (!callerEmail || !inviteEmail || callerEmail !== inviteEmail) {
+          throw new NotFoundException('Invalid or expired invitation');
         }
 
         // Create the real membership

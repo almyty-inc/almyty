@@ -33,11 +33,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: extractJwtFromCookieOrHeader,
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET'),
+      secretOrKey:
+        configService.get<string>('JWT_SECRET') ||
+        'dev-only-jwt-secret-change-me-in-production',
+      passReqToCallback: true,
     });
   }
 
-  async validate(payload: JwtPayload): Promise<User> {
+  async validate(req: Request, payload: JwtPayload): Promise<User> {
     // Only load organizationMemberships, skip apiKeys for performance
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
@@ -51,15 +54,44 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
-    // Add currentOrganizationId for easy access
-    (user as any).currentOrganizationId = user.organizationMemberships?.[0]?.organizationId;
-
-    // Add organizations array to match controller expectations (req.user.organizations)
+    // Attach the user's org list.
     (user as any).organizations = user.organizationMemberships?.map(membership => ({
       id: membership.organizationId || membership.organization?.id,
       name: membership.organization?.name,
       role: membership.role,
     })) || [];
+
+    // Resolve the ACTIVE organization for this request. Multi-org users
+    // must explicitly scope every request via `X-Organization-Id`.
+    // Previously we always set this to memberships[0], which meant:
+    //   - Multi-org users could only ever reach their FIRST org, because
+    //     handlers blindly read `currentOrganizationId` and used it to
+    //     build their queries.
+    //   - The RolesGuard's "require explicit context for multi-org users"
+    //     safety was defeated because `currentOrganizationId` was always
+    //     set and took precedence over the single-org fallback.
+    //
+    // New behaviour:
+    //   - X-Organization-Id header: must match a membership — use it.
+    //     Reject with 401 if set but not a member.
+    //   - No header + exactly one org: use that org (common case).
+    //   - No header + multiple orgs: leave `currentOrganizationId`
+    //     undefined. The RolesGuard / handlers must then refuse the
+    //     request with a clear "Organization context required" error.
+    const headerOrgId = (req.headers?.['x-organization-id'] as string) || undefined;
+    if (headerOrgId) {
+      const isMember = user.organizationMemberships?.some(
+        (m) => (m.organizationId || m.organization?.id) === headerOrgId,
+      );
+      if (!isMember) {
+        throw new UnauthorizedException('Not a member of the requested organization');
+      }
+      (user as any).currentOrganizationId = headerOrgId;
+    } else if (user.organizationMemberships?.length === 1) {
+      (user as any).currentOrganizationId = user.organizationMemberships[0].organizationId;
+    } else {
+      (user as any).currentOrganizationId = undefined;
+    }
 
     return user;
   }

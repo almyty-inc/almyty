@@ -65,10 +65,98 @@ describe('JwtStrategy', () => {
 
       userRepository.findOne.mockResolvedValue(mockUser);
 
-      const result = await strategy.validate(payload);
+      const result = await strategy.validate({ headers: {} } as any, payload);
 
       expect(result).toBe(mockUser);
+      // Single-org user → currentOrganizationId is that one org, no header needed.
       expect((result as any).currentOrganizationId).toBe('org-1');
+    });
+
+    it('should honor X-Organization-Id header for multi-org users', async () => {
+      const payload = {
+        sub: 'user-1',
+        email: 'multi@example.com',
+        firstName: 'Multi',
+        lastName: 'User',
+        organizations: [
+          { id: 'org-a', name: 'A', role: 'admin' as any },
+          { id: 'org-b', name: 'B', role: 'member' as any },
+        ],
+      };
+      const mockUser = {
+        id: 'user-1',
+        email: 'multi@example.com',
+        isActive: true,
+        organizationMemberships: [
+          { organizationId: 'org-a', role: 'admin', organization: { id: 'org-a', name: 'A' } },
+          { organizationId: 'org-b', role: 'member', organization: { id: 'org-b', name: 'B' } },
+        ],
+      } as any;
+      userRepository.findOne.mockResolvedValue(mockUser);
+
+      const result = await strategy.validate(
+        { headers: { 'x-organization-id': 'org-b' } } as any,
+        payload,
+      );
+
+      expect((result as any).currentOrganizationId).toBe('org-b');
+    });
+
+    it('should leave currentOrganizationId undefined for multi-org users without a header', async () => {
+      // Regression: previously defaulted to memberships[0] which silently
+      // scoped every request to the user's FIRST org. The role guard's
+      // "require explicit org context" safety was defeated because the
+      // field was always set.
+      const payload = {
+        sub: 'user-1',
+        email: 'multi@example.com',
+        firstName: 'Multi',
+        lastName: 'User',
+        organizations: [
+          { id: 'org-a', name: 'A', role: 'admin' as any },
+          { id: 'org-b', name: 'B', role: 'member' as any },
+        ],
+      };
+      const mockUser = {
+        id: 'user-1',
+        email: 'multi@example.com',
+        isActive: true,
+        organizationMemberships: [
+          { organizationId: 'org-a', role: 'admin', organization: { id: 'org-a', name: 'A' } },
+          { organizationId: 'org-b', role: 'member', organization: { id: 'org-b', name: 'B' } },
+        ],
+      } as any;
+      userRepository.findOne.mockResolvedValue(mockUser);
+
+      const result = await strategy.validate({ headers: {} } as any, payload);
+
+      expect((result as any).currentOrganizationId).toBeUndefined();
+    });
+
+    it('should reject X-Organization-Id the user is not a member of', async () => {
+      const payload = {
+        sub: 'user-1',
+        email: 'multi@example.com',
+        firstName: 'Multi',
+        lastName: 'User',
+        organizations: [{ id: 'org-a', name: 'A', role: 'admin' as any }],
+      };
+      const mockUser = {
+        id: 'user-1',
+        email: 'multi@example.com',
+        isActive: true,
+        organizationMemberships: [
+          { organizationId: 'org-a', role: 'admin', organization: { id: 'org-a', name: 'A' } },
+        ],
+      } as any;
+      userRepository.findOne.mockResolvedValue(mockUser);
+
+      await expect(
+        strategy.validate(
+          { headers: { 'x-organization-id': 'org-other' } } as any,
+          payload,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'user-1' },
         relations: [
@@ -89,7 +177,7 @@ describe('JwtStrategy', () => {
 
       userRepository.findOne.mockResolvedValue(null);
 
-      await expect(strategy.validate(payload))
+      await expect(strategy.validate({ headers: {} } as any, payload))
         .rejects
         .toThrow(UnauthorizedException);
     });
@@ -111,7 +199,7 @@ describe('JwtStrategy', () => {
 
       userRepository.findOne.mockResolvedValue(inactiveUser);
 
-      await expect(strategy.validate(payload))
+      await expect(strategy.validate({ headers: {} } as any, payload))
         .rejects
         .toThrow(UnauthorizedException);
     });
@@ -135,7 +223,7 @@ describe('JwtStrategy', () => {
 
       userRepository.findOne.mockResolvedValue(mockUser);
 
-      const result = await strategy.validate(payload);
+      const result = await strategy.validate({ headers: {} } as any, payload);
 
       expect(result).toBe(mockUser);
       expect((result as any).currentOrganizationId).toBeUndefined();
