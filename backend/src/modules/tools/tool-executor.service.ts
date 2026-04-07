@@ -801,9 +801,22 @@ export class ToolExecutorService {
         return { success: false, error: `Blocked: ${urlCheck.error}`, executionTime: 0, cached: false, rateLimited: false, retryCount: 0 };
       }
 
+      // Build the variables payload. If the caller passed an explicit
+      // `variables` object, use it as-is. Otherwise, treat the remaining
+      // parameters as variables — but strip the meta keys (query,
+      // operationName, variables) so they don't leak into the GraphQL
+      // variables payload alongside the operation they describe.
+      let graphqlVariables: Record<string, any> | undefined;
+      if (parameters.variables !== undefined) {
+        graphqlVariables = parameters.variables;
+      } else {
+        const { query: _q, variables: _v, operationName: _o, ...rest } = parameters;
+        graphqlVariables = rest;
+      }
+
       const graphqlRequest: GraphQLRequest = {
         query: parameters.query || operation.metadata?.query,
-        variables: parameters.variables || parameters,
+        variables: graphqlVariables,
         operationName: parameters.operationName,
       };
 

@@ -136,11 +136,17 @@ export class AgentExecutionEngine {
       let totalCost = 0;
       let totalTokens = 0;
       let finalOutput: any = null;
+      // Track whether an `output` node actually ran. Distinguishes
+      // "no output node was reached" (failure) from "output node ran and
+      // legitimately produced null" (success).
+      let outputCaptured = false;
       const skippedNodes = new Set<string>();
 
       // Timeout and budget settings
       const maxExecutionTime = agent.settings?.maxExecutionTime || 300000; // 5 minutes default
-      const budgetLimit = agent.settings?.budgetLimit || Infinity;
+      // Use ?? not || so a user-supplied budgetLimit of 0 ("don't spend
+      // anything") is honoured instead of being silently replaced with Infinity.
+      const budgetLimit = agent.settings?.budgetLimit ?? Infinity;
 
       // 5. Process each layer
       for (const layer of layers) {
@@ -253,13 +259,36 @@ export class AgentExecutionEngine {
           }
         });
 
-        // Wrap layer execution in timeout
+        // Wrap layer execution in timeout. If we hit the layer-level timeout,
+        // surface it as TIMEOUT (not generic FAILED) so callers can distinguish
+        // a slow run from a logic failure.
         const remainingTime = maxExecutionTime - (Date.now() - startTime);
-        const layerResults = await this.withTimeout(
-          Promise.all(layerPromises),
-          remainingTime,
-          `Layer execution timed out`,
-        );
+        let layerResults;
+        try {
+          layerResults = await this.withTimeout(
+            Promise.all(layerPromises),
+            remainingTime,
+            `Layer execution timed out`,
+          );
+        } catch (timeoutErr: any) {
+          execution.status = AgentExecutionStatus.TIMEOUT;
+          execution.error = `Execution timed out after ${maxExecutionTime}ms`;
+          execution.executionTime = Date.now() - startTime;
+          execution.totalCost = totalCost;
+          execution.totalTokens = totalTokens;
+          execution.nodeResults = nodeResults;
+          await this.agentExecutionRepository.save(execution);
+          agent.incrementExecution(false, Date.now() - startTime, totalCost);
+          await this.agentRepository.save(agent);
+
+          this.emitEvent(onEvent, {
+            type: 'execution.failed',
+            data: { error: execution.error, errorType: ExecutionErrorType.TIMEOUT, executionId: execution.id },
+            timestamp: Date.now(),
+          });
+
+          return execution;
+        }
 
         // Track whether any node in this layer failed
         let layerHasFailure = false;
@@ -351,6 +380,7 @@ export class AgentExecutionEngine {
           // Capture output node
           if (node.type === 'output') {
             finalOutput = result.output;
+            outputCaptured = true;
           }
         }
 
@@ -373,10 +403,12 @@ export class AgentExecutionEngine {
 
       const executionTime = Date.now() - startTime;
 
-      // Check if any node failed — if the output node was never reached, mark as failed
+      // Check if any node failed — if the output node was never reached, mark as failed.
+      // Use the explicit `outputCaptured` flag instead of `finalOutput === null` so an
+      // output node that legitimately produced `null` isn't treated as "no output ran".
       const hasNodeFailures = Object.values(nodeResults).some((r: any) => r.error);
 
-      if (hasNodeFailures && finalOutput === null) {
+      if (hasNodeFailures && !outputCaptured) {
         const failedNodes = Object.entries(nodeResults)
           .filter(([, r]: [string, any]) => r.error)
           .map(([id, r]: [string, any]) => `${id}: ${r.error}`)
@@ -487,8 +519,16 @@ export class AgentExecutionEngine {
       );
     }
 
-    // Size check
-    const serialized = JSON.stringify(input);
+    // Size check — catch circular references explicitly so they surface as a
+    // BadRequestException instead of bubbling up as an unhandled TypeError.
+    let serialized: string;
+    try {
+      serialized = JSON.stringify(input);
+    } catch (err: any) {
+      throw new BadRequestException(
+        `Execution input could not be serialized: ${err.message}`,
+      );
+    }
     if (serialized.length > MAX_INPUT_SIZE_BYTES) {
       throw new BadRequestException(
         `Execution input size (${serialized.length} bytes) exceeds maximum allowed (${MAX_INPUT_SIZE_BYTES} bytes)`,

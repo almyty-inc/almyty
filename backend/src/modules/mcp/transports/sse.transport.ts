@@ -13,7 +13,16 @@ export interface SseConnection {
   organizationId: string;
   userId?: string;
   isAlive: boolean;
-  lastPing: Date;
+  /**
+   * Time of the last CLIENT-initiated activity (a JSON-RPC POST against
+   * `handleSseMessage`). Used by the ping loop to decide whether to send
+   * a keep-alive ping and whether the connection has gone stale.
+   *
+   * Server-side `sendEvent` calls (pings, notifications, message replies)
+   * deliberately do NOT update this field — otherwise the server's own
+   * pings would refresh the timer and the stale check could never fire.
+   */
+  lastClientActivity: Date;
 }
 
 @Injectable()
@@ -57,7 +66,7 @@ export class SseTransport extends EventEmitter {
       organizationId,
       userId,
       isAlive: true,
-      lastPing: new Date(),
+      lastClientActivity: new Date(),
     };
 
     this.connections.set(connectionId, connection);
@@ -134,8 +143,8 @@ export class SseTransport extends EventEmitter {
       };
     }
 
-    // Update last activity
-    connection.lastPing = new Date();
+    // Client just sent a JSON-RPC message — refresh liveness timer.
+    connection.lastClientActivity = new Date();
 
     // Process the JSON-RPC request
     try {
@@ -175,7 +184,7 @@ export class SseTransport extends EventEmitter {
     try {
       const eventData = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
       connection.response.write(eventData);
-      connection.lastPing = new Date();
+      // Intentionally NOT updating lastClientActivity — see field doc.
     } catch (error) {
       this.logger.error(`Failed to send SSE event: ${error.message}`);
       this.closeConnection(connectionId);
@@ -216,16 +225,22 @@ export class SseTransport extends EventEmitter {
         const connection = this.connections.get(connectionId);
         if (!connection) continue;
 
-        // Check if connection is stale (no activity for 2 minutes)
-        const timeSinceLastPing = now.getTime() - connection.lastPing.getTime();
-        if (timeSinceLastPing > 120000) {
+        // Both checks measure silence from the CLIENT side. Server-initiated
+        // pings/notifications no longer touch this timer, so the stale check
+        // is now actually reachable.
+        const timeSinceClientActivity = now.getTime() - connection.lastClientActivity.getTime();
+
+        // Stale: no client activity for 2 minutes -> tear down.
+        if (timeSinceClientActivity > 120000) {
           this.logger.warn(`Closing stale SSE connection: ${connectionId}`);
           this.closeConnection(connectionId);
           continue;
         }
 
-        // Send ping every 30 seconds
-        if (timeSinceLastPing > 30000) {
+        // Keep-alive: send a ping if the client has been silent for >30s.
+        // Pings double as a write-failure liveness probe — if the underlying
+        // socket is dead, sendEvent will throw and closeConnection runs.
+        if (timeSinceClientActivity > 30000) {
           this.sendEvent(connectionId, 'ping', { timestamp: now.toISOString() });
         }
       }
@@ -258,7 +273,7 @@ export class SseTransport extends EventEmitter {
     for (const connection of this.connections.values()) {
       if (connection.isAlive) {
         byOrganization[connection.organizationId] = (byOrganization[connection.organizationId] || 0) + 1;
-        totalAge += now.getTime() - connection.lastPing.getTime();
+        totalAge += now.getTime() - connection.lastClientActivity.getTime();
       }
     }
 

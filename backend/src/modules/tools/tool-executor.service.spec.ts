@@ -1147,6 +1147,72 @@ describe('ToolExecutorService', () => {
       expect(result.metadata.httpStatus).toBe(200);
     });
 
+    it('should NOT leak query/operationName into variables when no explicit variables object is passed', async () => {
+      // Regression: previously `variables: parameters.variables || parameters`
+      // fell back to the entire parameters object, so a caller passing
+      // `{ id: 'x', query: '...' }` ended up sending the GraphQL query string
+      // as a `query` GraphQL variable.
+      const mockTool = {
+        configuration: { timeout: 5000 },
+        operation: {
+          metadata: {},
+          api: { type: 'graphql', baseUrl: 'https://api.example.com/graphql', authentication: null },
+        },
+      } as any;
+
+      mockedAxios.mockResolvedValue({
+        status: 200,
+        headers: {},
+        data: { data: { ok: true } },
+      } as any);
+
+      await service['executeGraphQLOperation'](
+        mockTool,
+        mockTool.operation,
+        mockTool.operation.api,
+        {
+          query: 'query GetUser($id: ID!) { user(id: $id) { name } }',
+          operationName: 'GetUser',
+          id: 'abc',
+        },
+        { userId: 'user-1', organizationId: 'org-1' },
+      );
+
+      const callConfig = mockedAxios.mock.calls[0][0] as any;
+      expect(callConfig.data.variables).toEqual({ id: 'abc' });
+      expect(callConfig.data.variables.query).toBeUndefined();
+      expect(callConfig.data.variables.operationName).toBeUndefined();
+      expect(callConfig.data.query).toContain('query GetUser');
+      expect(callConfig.data.operationName).toBe('GetUser');
+    });
+
+    it('should pass an explicit variables object through verbatim', async () => {
+      const mockTool = {
+        configuration: { timeout: 5000 },
+        operation: {
+          metadata: { query: 'query GetUser($id: ID!) { user(id: $id) { name } }' },
+          api: { type: 'graphql', baseUrl: 'https://api.example.com/graphql', authentication: null },
+        },
+      } as any;
+
+      mockedAxios.mockResolvedValue({
+        status: 200,
+        headers: {},
+        data: { data: { ok: true } },
+      } as any);
+
+      await service['executeGraphQLOperation'](
+        mockTool,
+        mockTool.operation,
+        mockTool.operation.api,
+        { variables: { id: 'xyz' } },
+        { userId: 'user-1', organizationId: 'org-1' },
+      );
+
+      const callConfig = mockedAxios.mock.calls[0][0] as any;
+      expect(callConfig.data.variables).toEqual({ id: 'xyz' });
+    });
+
     it('should handle GraphQL errors in response', async () => {
       const mockTool = {
         configuration: { timeout: 5000 },
