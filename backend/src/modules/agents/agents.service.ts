@@ -573,9 +573,18 @@ export class AgentsService {
    */
   async estimateCost(agentId: string, organizationId: string): Promise<any> {
     const agent = await this.getAgent(agentId, organizationId);
-    const llmNodes = agent.pipeline.nodes.filter(
-      (n: any) => n.type === 'llm_call' || n.type === 'merge',
-    );
+    // Only merge strategies that actually call an LLM count toward the cost
+    // estimate. `first_response` and `concatenate` are pure bookkeeping and
+    // don't touch the LLM — counting them as LLM calls over-estimated cost.
+    const LLM_MERGE_STRATEGIES = new Set(['best_of_n', 'consensus']);
+    const llmNodes = agent.pipeline.nodes.filter((n: any) => {
+      if (n.type === 'llm_call') return true;
+      if (n.type === 'merge') {
+        const strategy = n.data?.strategy || n.config?.strategy;
+        return LLM_MERGE_STRATEGIES.has(strategy);
+      }
+      return false;
+    });
     const toolCallNodes = agent.pipeline.nodes.filter(
       (n: any) => n.type === 'tool_call',
     );
@@ -820,6 +829,41 @@ export class AgentsService {
 
     // Check for cycles via topological sort
     this.checkForCycles(pipeline);
+
+    // Check that at least one output node is reachable from the input node.
+    // Without this, a disconnected output silently survives validation and
+    // the engine completes "successfully" with no output captured.
+    this.checkOutputReachable(pipeline, inputNodes[0].id, outputNodes);
+  }
+
+  private checkOutputReachable(
+    pipeline: AgentPipeline,
+    inputNodeId: string,
+    outputNodes: AgentPipelineNode[],
+  ): void {
+    const adjacency = new Map<string, string[]>();
+    for (const node of pipeline.nodes) adjacency.set(node.id, []);
+    for (const edge of pipeline.edges) {
+      adjacency.get(edge.source)?.push(edge.target);
+    }
+
+    const visited = new Set<string>();
+    const stack = [inputNodeId];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      for (const neighbor of adjacency.get(id) || []) {
+        stack.push(neighbor);
+      }
+    }
+
+    const reachableOutput = outputNodes.some(o => visited.has(o.id));
+    if (!reachableOutput) {
+      throw new BadRequestException(
+        'Pipeline output node(s) are not reachable from the input node — check your edges',
+      );
+    }
   }
 
   private checkForCycles(pipeline: AgentPipeline): void {
