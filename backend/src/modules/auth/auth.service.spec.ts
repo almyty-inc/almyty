@@ -698,6 +698,18 @@ describe('AuthService', () => {
 
       await expect(service.confirmPasswordReset('invalid-token', 'newPassword')).rejects.toThrow(BadRequestException);
     });
+
+    it('should reject empty/null tokens BEFORE hitting the DB (defense in depth)', async () => {
+      // Regression: an empty token would `WHERE resetPasswordToken IS NULL`,
+      // matching any user without a reset in flight. Today the null-expires
+      // check catches this by accident — but the invariant is brittle, so
+      // we now reject empty tokens up front.
+      await expect(service.confirmPasswordReset('', 'newPassword')).rejects.toThrow(BadRequestException);
+      await expect(service.confirmPasswordReset(null as any, 'newPassword')).rejects.toThrow(BadRequestException);
+      await expect(service.confirmPasswordReset(undefined as any, 'newPassword')).rejects.toThrow(BadRequestException);
+      // Critically: the DB should NOT be queried for these.
+      expect(userRepository.findOne).not.toHaveBeenCalled();
+    });
   });
 
   describe('changePassword', () => {

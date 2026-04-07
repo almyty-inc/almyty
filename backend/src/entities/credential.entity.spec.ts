@@ -119,6 +119,32 @@ describe('Credential Entity', () => {
       expect(headers.Authorization).toBe('Bearer jwt-token-abc');
     });
 
+    it('should send raw JWT in custom (non-Authorization) header without Bearer prefix', () => {
+      const credential = new Credential();
+      credential.type = CredentialType.JWT;
+      credential.isActive = true;
+      credential.config = { token: 'jwt-token-abc', headerName: 'X-Auth-Token' };
+
+      const headers = credential.getAuthHeaders();
+
+      expect(headers['X-Auth-Token']).toBe('jwt-token-abc');
+      expect(headers.Authorization).toBeUndefined();
+    });
+
+    it('should still apply Bearer prefix when JWT headerName is explicitly Authorization', () => {
+      // Regression: the old branch was on whether headerName was set at
+      // ALL, so explicitly setting it to 'Authorization' silently
+      // dropped the `Bearer ` prefix and broke real APIs.
+      const credential = new Credential();
+      credential.type = CredentialType.JWT;
+      credential.isActive = true;
+      credential.config = { token: 'jwt-token-abc', headerName: 'Authorization' };
+
+      const headers = credential.getAuthHeaders();
+
+      expect(headers.Authorization).toBe('Bearer jwt-token-abc');
+    });
+
     it('should return empty object if credential is not valid', () => {
       const credential = new Credential();
       credential.type = CredentialType.BEARER_TOKEN;
@@ -378,6 +404,16 @@ describe('Credential Entity', () => {
       expect(result).toBe(plainValue);
     });
 
+    it('should THROW (not silently return) on a malformed encrypted value', () => {
+      // Regression: a payload like `encrypted:foo` (missing IV or
+      // ciphertext) used to be returned as the literal string and then
+      // sent over the wire as the actual auth value. Fail loudly so the
+      // bad value is never used in a request.
+      const credential = new Credential();
+      expect(() => credential['decryptValue']('encrypted:foo')).toThrow(/Malformed/);
+      expect(() => credential['decryptValue']('encrypted:')).toThrow(/Malformed/);
+    });
+
     it('should handle empty string', () => {
       const credential = new Credential();
       const encrypted = credential['encryptValue']('');
@@ -397,6 +433,48 @@ describe('Credential Entity', () => {
       expect(encrypted1).toMatch(/^encrypted:/);
       expect(encrypted2).toMatch(/^encrypted:/);
       expect(encrypted1).not.toBe(encrypted2);
+    });
+  });
+
+  describe('getEncryptionKey (production safety)', () => {
+    const ORIGINAL_ENV = process.env.NODE_ENV;
+    const ORIGINAL_KEY = process.env.ENCRYPTION_KEY;
+
+    afterEach(() => {
+      if (ORIGINAL_ENV === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = ORIGINAL_ENV;
+      if (ORIGINAL_KEY === undefined) delete process.env.ENCRYPTION_KEY;
+      else process.env.ENCRYPTION_KEY = ORIGINAL_KEY;
+    });
+
+    it('should HARD-FAIL if NODE_ENV=production and ENCRYPTION_KEY is missing', () => {
+      // Regression: previously fell back to a hardcoded default key, so
+      // anyone with read access to the source could decrypt every stored
+      // credential in any production deployment that forgot to set the
+      // env var.
+      process.env.NODE_ENV = 'production';
+      delete process.env.ENCRYPTION_KEY;
+
+      const credential = new Credential();
+      expect(() => credential['encryptValue']('secret')).toThrow(/ENCRYPTION_KEY/);
+    });
+
+    it('should still allow encryption in dev/test when ENCRYPTION_KEY is missing', () => {
+      process.env.NODE_ENV = 'test';
+      delete process.env.ENCRYPTION_KEY;
+
+      const credential = new Credential();
+      expect(() => credential['encryptValue']('secret')).not.toThrow();
+    });
+
+    it('should accept an explicit ENCRYPTION_KEY in production', () => {
+      process.env.NODE_ENV = 'production';
+      process.env.ENCRYPTION_KEY = 'explicit-test-key-not-the-default';
+
+      const credential = new Credential();
+      const encrypted = credential['encryptValue']('secret');
+      expect(encrypted).toMatch(/^encrypted:/);
+      expect(credential['decryptValue'](encrypted)).toBe('secret');
     });
   });
 

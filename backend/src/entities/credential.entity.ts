@@ -34,9 +34,17 @@ export class Credential {
   private static getEncryptionKey(): Buffer {
     const key = process.env.ENCRYPTION_KEY;
     if (!key) {
-      // Only warn once
+      // Hard-fail in production: a hardcoded fallback would let anyone
+      // with read access to the source code decrypt every credential.
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          'ENCRYPTION_KEY environment variable is required in production. ' +
+            'Refusing to fall back to a default key — this would compromise every stored credential.',
+        );
+      }
+      // Dev/test only: warn once and use a deterministic key.
       if (!Credential._encryptionWarned) {
-        console.warn('[SECURITY WARNING] ENCRYPTION_KEY environment variable not set. Using default key. Set ENCRYPTION_KEY in production!');
+        console.warn('[SECURITY WARNING] ENCRYPTION_KEY environment variable not set. Using default key (dev/test only). Set ENCRYPTION_KEY in production!');
         Credential._encryptionWarned = true;
       }
     }
@@ -143,7 +151,13 @@ export class Credential {
     }
 
     const parts = encryptedValue.split(':');
-    if (parts.length < 3) return encryptedValue;
+    // A malformed `encrypted:` payload (missing IV or ciphertext) used to
+    // be silently returned as-is, which then got handed downstream as a
+    // literal string ("encrypted:foo") and sent over the wire as the
+    // actual auth value. Fail loudly instead.
+    if (parts.length < 3) {
+      throw new Error('Malformed encrypted credential value: expected `encrypted:<iv>:<ciphertext>`');
+    }
 
     const ivHex = parts[1];
     const encrypted = parts.slice(2).join(':');
@@ -191,12 +205,20 @@ export class Credential {
           Authorization: `Basic ${auth}`,
         };
 
-      case CredentialType.JWT:
+      case CredentialType.JWT: {
+        // Default: send `Authorization: Bearer <token>`. If a non-Authorization
+        // custom header is configured (e.g. `X-Auth-Token`), send the raw token
+        // as that header's value. Previously the branch was on whether
+        // headerName was set at all — so explicitly setting headerName to
+        // 'Authorization' silently dropped the `Bearer ` prefix.
+        const headerName = decryptedConfig.headerName || 'Authorization';
+        const useBearerPrefix = headerName === 'Authorization';
         return {
-          [decryptedConfig.headerName || 'Authorization']: decryptedConfig.headerName
-            ? decryptedConfig.token
-            : `Bearer ${decryptedConfig.token}`,
+          [headerName]: useBearerPrefix
+            ? `Bearer ${decryptedConfig.token}`
+            : decryptedConfig.token,
         };
+      }
 
       case CredentialType.OAUTH2: {
         const tokenType = decryptedConfig.tokenType || 'Bearer';

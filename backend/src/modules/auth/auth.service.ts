@@ -310,6 +310,16 @@ export class AuthService {
   }
 
   async confirmPasswordReset(token: string, newPassword: string): Promise<void> {
+    // Defense-in-depth: an empty/null token would `WHERE resetPasswordToken IS NULL`
+    // and match any user that doesn't currently have a reset in flight. That
+    // attack only works if such a user ALSO has a non-null resetPasswordExpires
+    // (which today is guarded by the null-expires check below) — but the
+    // invariant is brittle and easy to violate later. Reject empty tokens up
+    // front so the brittle invariant is never the only thing protecting us.
+    if (!token || typeof token !== 'string') {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
     const user = await this.userRepository.findOne({
       where: {
         resetPasswordToken: token,
