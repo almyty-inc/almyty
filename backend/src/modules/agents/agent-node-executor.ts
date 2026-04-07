@@ -361,7 +361,18 @@ export class AgentNodeExecutor {
       throw new Error(`Loop node '${node.id}' is missing 'iterableExpression' in config`);
     }
 
-    const resolved = this.templateResolver.resolve(config.iterableExpression, context);
+    // If the expression is a single {{path}} reference, resolve it to its raw
+    // value (which may be an array). Otherwise, run it through the template
+    // resolver, which produces a string. Without this, arrays passed via
+    // {{input.items}} were JSON-stringified and the loop would only iterate
+    // a single-element array of the JSON string.
+    const expression: string = config.iterableExpression;
+    const singleRefMatch =
+      typeof expression === 'string' &&
+      expression.match(/^\s*\{\{\s*([^}]+?)\s*\}\}\s*$/);
+    const resolved = singleRefMatch
+      ? this.templateResolver.resolveValue(singleRefMatch[1], context)
+      : this.templateResolver.resolve(expression, context);
     const items = Array.isArray(resolved) ? resolved : [resolved];
     const limitedItems = items.slice(0, maxIterations);
 
