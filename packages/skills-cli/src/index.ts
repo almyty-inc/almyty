@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { login, logout, resolveAuth } from './auth.js';
+import { resolveAuth } from './auth.js';
 import { AlmytyClient, parseRef } from './client.js';
 import { detectAgents, getDefaultTargets, getAllTargets } from './agents.js';
 import { installSkills, removeSkills, listInstalledSkills } from './installer.js';
@@ -17,8 +17,6 @@ Usage:
   npx @almyty/skills <command> [options]
 
 Commands:
-  login                          Authenticate with almyty
-  logout                         Remove stored credentials
   daemon                         Start skill daemon (syncs all skills)
   install <ref>                  Install skills
   list [ref]                     List available skills
@@ -27,6 +25,10 @@ Commands:
   installed                      Show locally installed skills
   remove                         Remove all installed skills
   gateways                       List your gateways
+
+Authentication:
+  Run \`npx @almyty/auth login\` once. Credentials at ~/.almyty/credentials.json
+  are shared across every almyty CLI.
 
 References:
   @org/gateway                   All skills from a gateway
@@ -150,15 +152,15 @@ async function main(): Promise<void> {
   const urlOverride = (args.flags.url as string) || config.url;
 
   switch (command) {
-    case 'login': {
-      const url = urlOverride || process.env.ALMYTY_URL || 'https://api.almyty.com';
-      await login(url);
-      break;
-    }
-
-    case 'logout': {
-      logout();
-      break;
+    case 'login':
+    case 'logout':
+    case 'whoami': {
+      // Auth has moved to its own dedicated package. Redirect rather
+      // than silently doing nothing — users typing the old commands
+      // should see the new entry point.
+      console.error(`Authentication moved to @almyty/auth.`);
+      console.error(`  npx @almyty/auth ${command}`);
+      process.exit(1);
     }
 
     case 'gateways': {

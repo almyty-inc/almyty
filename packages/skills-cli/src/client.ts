@@ -58,7 +58,7 @@ export class AlmytyClient {
 
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('Authentication failed. Run: npx @almyty/skills login');
+        throw new Error('Authentication failed. Run: npx @almyty/auth login');
       }
       const text = await response.text();
       throw new Error(`API error (${response.status}): ${text}`);

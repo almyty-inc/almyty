@@ -1,68 +1,41 @@
 /**
- * Authentication helpers for the almyty skills CLI.
+ * Credential resolver for @almyty/skills.
  *
- * Shares credentials with @almyty/mcp-server via ~/.almyty/credentials.json.
+ * Authentication itself lives in the dedicated @almyty/auth package
+ * (`npx @almyty/auth login`). This module just READS the shared
+ * credentials store and surfaces them to the rest of the skills CLI.
  *
- * Supports:
- * 1. Environment variable (ALMYTY_TOKEN) — for CI/scripts
- * 2. Stored credentials (~/.almyty/credentials.json) — for interactive use
- * 3. Interactive login (npx @almyty/skills login) — stores credentials
+ * Lookup order:
+ *   1. ALMYTY_TOKEN environment variable      (CI / scripts)
+ *   2. ~/.almyty/credentials.json              (interactive use, written
+ *                                               by `npx @almyty/auth login`)
  */
 
-import { readFileSync, writeFileSync, mkdirSync, unlinkSync, existsSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import { createInterface } from 'readline';
 
-const CREDENTIALS_DIR = join(homedir(), '.almyty');
-const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.json');
+const CREDENTIALS_FILE = join(homedir(), '.almyty', 'credentials.json');
 
 interface StoredCredentials {
   url: string;
   token: string;
   email?: string;
-  expiresAt?: string;
+  frontendUrl?: string;
 }
 
-/**
- * Load stored credentials from ~/.almyty/credentials.json
- */
-export function loadCredentials(): StoredCredentials | null {
+function loadCredentials(): StoredCredentials | null {
   try {
     if (!existsSync(CREDENTIALS_FILE)) return null;
-    const data = readFileSync(CREDENTIALS_FILE, 'utf-8');
-    return JSON.parse(data);
+    return JSON.parse(readFileSync(CREDENTIALS_FILE, 'utf-8')) as StoredCredentials;
   } catch {
     return null;
   }
 }
 
 /**
- * Save credentials to ~/.almyty/credentials.json
- */
-export function saveCredentials(creds: StoredCredentials): void {
-  mkdirSync(CREDENTIALS_DIR, { recursive: true });
-  writeFileSync(CREDENTIALS_FILE, JSON.stringify(creds, null, 2), { mode: 0o600 });
-}
-
-/**
- * Remove stored credentials
- */
-export function logout(): void {
-  try {
-    if (existsSync(CREDENTIALS_FILE)) {
-      unlinkSync(CREDENTIALS_FILE);
-      console.log('Logged out. Credentials removed.');
-    } else {
-      console.log('No stored credentials found.');
-    }
-  } catch {
-    console.error('Failed to remove credentials.');
-  }
-}
-
-/**
- * Resolve token: env var > stored credentials
+ * Resolve token: env var > stored credentials. Exits with a clear hint
+ * if no credentials are available.
  */
 export function resolveAuth(): { url: string; token: string } {
   const envToken = process.env.ALMYTY_TOKEN;
@@ -78,63 +51,7 @@ export function resolveAuth(): { url: string; token: string } {
   }
 
   console.error('Not authenticated. Run one of:');
-  console.error('  npx @almyty/skills login');
-  console.error('  export ALMYTY_TOKEN=<your-token>');
+  console.error('  npx @almyty/auth login        # browser-based login');
+  console.error('  export ALMYTY_TOKEN=<token>   # for CI');
   process.exit(1);
-}
-
-/**
- * Interactive login: prompts for email/password, authenticates against
- * the almyty backend, and stores the JWT token.
- */
-export async function login(baseUrl: string): Promise<void> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stderr,
-  });
-
-  const ask = (question: string): Promise<string> =>
-    new Promise((resolve) => rl.question(question, resolve));
-
-  try {
-    console.error(`Logging in to ${baseUrl}...\n`);
-
-    const email = await ask('Email: ');
-    const password = await ask('Password: ');
-
-    console.error('\nAuthenticating...');
-
-    const response = await fetch(`${baseUrl}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!response.ok) {
-      const errBody: any = await response.json().catch(() => ({ message: 'Authentication failed' }));
-      console.error(`Error: ${errBody.message || 'Authentication failed'}`);
-      process.exit(1);
-    }
-
-    const data: any = await response.json();
-    const token = data.accessToken || data.token;
-
-    if (!token) {
-      console.error('Error: No token received from server');
-      process.exit(1);
-    }
-
-    saveCredentials({
-      url: baseUrl,
-      token,
-      email,
-    });
-
-    console.error(`\n✓ Logged in as ${email}`);
-    console.error(`  Credentials saved to ${CREDENTIALS_FILE}`);
-    console.error('\nYou can now install skills:');
-    console.error('  npx @almyty/skills install --gateway <id>');
-  } finally {
-    rl.close();
-  }
 }
