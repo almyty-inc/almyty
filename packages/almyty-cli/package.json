@@ -1,0 +1,43 @@
+{
+  "name": "@almyty/cli",
+  "version": "0.1.0",
+  "description": "Single installable almyty CLI — login, agents, chat, skills, mcp under one binary",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "almyty": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "almyty",
+    "cli",
+    "agents",
+    "chat",
+    "skills",
+    "mcp"
+  ],
+  "author": "almyty",
+  "license": "BSL-1.1",
+  "dependencies": {
+    "@almyty/auth": "^0.1.0",
+    "@almyty/agents": "^0.1.0",
+    "@almyty/chat": "^0.1.0",
+    "@almyty/skills": "^1.0.2",
+    "@almyty/mcp-server": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^4.1.0"
+  }
+}
