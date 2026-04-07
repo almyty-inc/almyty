@@ -332,10 +332,31 @@ export class McpOAuthService {
     }
 
     if (authCode.isUsed) {
-      // Possible replay attack — revoke all tokens for this code
+      // OAuth 2.1 §4.1.3: detect replay and limit blast radius. The
+      // previous version logged a warning but did NOT actually revoke
+      // anything despite the comment promising it. We don't currently
+      // store a code-id on issued tokens (would need a schema change),
+      // so we conservatively revoke EVERY non-revoked token issued to
+      // the same (clientId, userId, gatewayId) triple — that bounds the
+      // blast radius of a stolen authorization code without requiring
+      // schema migration.
       this.logger.warn(
-        `Authorization code replay detected for client ${clientId}`,
+        `Authorization code replay detected for client ${clientId} — revoking issued tokens for this user+gateway`,
       );
+      try {
+        await this.oauthTokenRepository.update(
+          {
+            clientId: authCode.clientId,
+            userId: authCode.userId,
+            gatewayId: authCode.gatewayId,
+            isRevoked: false,
+          },
+          { isRevoked: true },
+        );
+      } catch (err) {
+        // Best-effort: a failure here shouldn't mask the rejection.
+        this.logger.error(`Failed to revoke tokens on replay detection: ${err.message}`);
+      }
       throw new UnauthorizedException(
         'Authorization code has already been used',
       );

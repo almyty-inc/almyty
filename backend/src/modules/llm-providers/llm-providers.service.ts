@@ -624,15 +624,20 @@ export class LlmProvidersService {
       return [];
     }
 
-    // Find tools by name in the organization
+    // Find tools by name SCOPED to the caller's organization. Previously
+    // the query had no organizationId filter and only filtered by name on
+    // the single-tool path — when more than one tool was requested, the
+    // `where` resolved to `{ name: undefined }` (no filter) and fetched
+    // EVERY tool in the database, then narrowed by name in JS. Both shapes
+    // could surface tools from other organizations to the caller.
     const toolNames = requestTools.map(t => t.name);
     const tools = await this.toolRepository.find({
-      where: {
-        name: requestTools.length === 1 ? requestTools[0].name : undefined,
-      },
+      where: toolNames.map(name => ({ name, organizationId })),
     });
 
-    return tools.filter(tool => toolNames.includes(tool.name));
+    // Defense in depth: even though the query is now scoped, double-check
+    // every returned tool's organization before handing it to the LLM.
+    return tools.filter(tool => tool.organizationId === organizationId && toolNames.includes(tool.name));
   }
 
   private async executeToolCalls(
@@ -642,9 +647,16 @@ export class LlmProvidersService {
   ): Promise<void> {
     for (const toolCall of toolCalls) {
       try {
-        // Find the tool
+        // CRITICAL: scope the lookup to the caller's organization. The
+        // previous query was `{ name: toolCall.name }` with NO org filter,
+        // so an LLM in org A asking for a tool named e.g. `send_email`
+        // could resolve and execute org B's `send_email` tool. The
+        // downstream tool-executor permission check (`use_tools` in
+        // organizationId) was satisfied trivially because the user does
+        // have that permission in their OWN org — not in the org that
+        // owns the tool.
         const tool = await this.toolRepository.findOne({
-          where: { name: toolCall.name },
+          where: { name: toolCall.name, organizationId },
         });
 
         if (!tool) {

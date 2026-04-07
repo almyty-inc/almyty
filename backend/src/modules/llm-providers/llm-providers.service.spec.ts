@@ -1097,6 +1097,7 @@ describe('LlmProvidersService', () => {
             name: 'get_weather',
             description: 'Get weather information',
             parameters: { type: 'object' },
+            organizationId: 'org-1',
           },
         ];
 
@@ -1110,14 +1111,8 @@ describe('LlmProvidersService', () => {
           },
         ], 'org-1');
 
-        expect(result).toEqual([
-          {
-            id: 'tool-1',
-            name: 'get_weather',
-            description: 'Get weather information',
-            parameters: { type: 'object' },
-          },
-        ]);
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('tool-1');
       });
 
       it('should return empty array when no tools provided', async () => {
@@ -1128,6 +1123,70 @@ describe('LlmProvidersService', () => {
       it('should return empty array when tools is undefined', async () => {
         const result = await service['prepareTools'](undefined, 'org-1');
         expect(result).toEqual([]);
+      });
+
+      it('should query tools scoped to organizationId (cross-org leak regression)', async () => {
+        // Regression: previously the query was either `{ name: undefined }`
+        // (multi-tool case → fetched ALL tools in the DB) or
+        // `{ name: requestTools[0].name }` (single-tool case → matched
+        // any tool with that name across orgs). Both shapes leaked tools
+        // from other organizations.
+        toolRepository.find.mockResolvedValue([]);
+
+        await service['prepareTools'](
+          [
+            { name: 'a', description: '', parameters: {} },
+            { name: 'b', description: '', parameters: {} },
+          ],
+          'org-1',
+        );
+
+        expect(toolRepository.find).toHaveBeenCalledWith({
+          where: [
+            { name: 'a', organizationId: 'org-1' },
+            { name: 'b', organizationId: 'org-1' },
+          ],
+        });
+      });
+
+      it('should defensively drop tools whose organizationId does not match', async () => {
+        // Defense in depth: even if some future change weakens the query,
+        // the in-memory filter must still strip cross-org tools.
+        toolRepository.find.mockResolvedValue([
+          { id: 'tool-mine', name: 'shared_name', organizationId: 'org-1' },
+          { id: 'tool-theirs', name: 'shared_name', organizationId: 'other-org' },
+        ]);
+
+        const result = await service['prepareTools'](
+          [{ name: 'shared_name', description: '', parameters: {} }],
+          'org-1',
+        );
+
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('tool-mine');
+      });
+    });
+
+    describe('executeToolCalls (cross-org isolation regression)', () => {
+      it('should look up tools scoped to the calling organization', async () => {
+        // Regression: the lookup was `{ name: toolCall.name }` with NO
+        // org filter — an LLM in org A could resolve and execute a tool
+        // named e.g. `send_email` from org B.
+        toolRepository.findOne.mockResolvedValue(null);
+
+        const toolCalls: any[] = [
+          { id: 'call-1', name: 'send_email', parameters: {} },
+        ];
+        const session = { id: 's-1', organizationId: 'org-1', userId: 'user-1' };
+
+        await service['executeToolCalls'](toolCalls, session as any, 'org-1');
+
+        expect(toolRepository.findOne).toHaveBeenCalledWith({
+          where: { name: 'send_email', organizationId: 'org-1' },
+        });
+        // Tool was not found in our org → mark as error, do NOT execute.
+        expect(toolCalls[0].error).toContain('not found');
+        expect(toolExecutorService.executeTool).not.toHaveBeenCalled();
       });
     });
 
