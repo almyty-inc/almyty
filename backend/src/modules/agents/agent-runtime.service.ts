@@ -1323,7 +1323,15 @@ export class AgentRuntimeService {
   }
 
   /**
-   * Check resource limits
+   * Check resource limits.
+   *
+   * Unit note: `run.totalCost` accumulates values from `llmResponse.cost`, which
+   * `LlmProvidersService.calculateProviderCost` returns in **dollars** (see
+   * "in dollars per 1K tokens" in llm-providers.service.ts). The `maxCostCents`
+   * limit is, per its name, in **cents**. We therefore multiply totalCost by 100
+   * when comparing — previously the comparison was dollars-vs-cents, which
+   * silently allowed a 100x cost overrun (a `maxCostCents: 100` cap let a run
+   * spend $100 before tripping).
    */
   private checkLimits(run: AgentRun): string | null {
     const limits = run.limits || {};
@@ -1331,7 +1339,7 @@ export class AgentRuntimeService {
     if (run.currentStep >= (limits.maxSteps || run.maxSteps)) {
       return 'MAX_STEPS_EXCEEDED';
     }
-    if (limits.maxCostCents && run.totalCost >= limits.maxCostCents) {
+    if (limits.maxCostCents && (run.totalCost * 100) >= limits.maxCostCents) {
       return 'BUDGET_EXCEEDED';
     }
     if (limits.maxDurationMs && (Date.now() - run.createdAt.getTime()) > limits.maxDurationMs) {
