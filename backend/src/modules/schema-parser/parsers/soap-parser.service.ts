@@ -5,26 +5,52 @@ import { Operation, OperationType, HttpMethod } from '../../../entities/operatio
 import { Resource, ResourceType } from '../../../entities/resource.entity';
 import { SchemaParser, ParsedSchema, ParsedOperation, ParsedResource } from '../interfaces/parser.interface';
 
+/** Hard cap on WSDL schema size — protects against memory DoS. */
+const MAX_WSDL_BYTES = 5 * 1024 * 1024; // 5 MB
+
+/**
+ * Reject WSDL documents that contain a DOCTYPE declaration. xml2js uses
+ * sax-js under the hood, which is a non-validating parser and does NOT
+ * resolve external DTD entities by default — but it WILL process a
+ * locally-defined recursive entity declaration (the "billion laughs" /
+ * entity-expansion DoS). We don't need DTDs for WSDL parsing, so the
+ * simplest defense is to reject any input that declares one.
+ */
+function assertNoDoctype(xml: string): void {
+  // Match `<!DOCTYPE` with any leading whitespace, case-insensitive.
+  if (/<!DOCTYPE/i.test(xml)) {
+    throw new Error('WSDL must not contain a DOCTYPE declaration');
+  }
+}
+
 @Injectable()
 export class SOAPParserService implements SchemaParser {
   private readonly logger = new Logger(SOAPParserService.name);
 
   async parseSchema(rawSchema: string, fileName?: string): Promise<ParsedSchema> {
     try {
+      if (typeof rawSchema === 'string' && rawSchema.length > MAX_WSDL_BYTES) {
+        throw new Error(`WSDL exceeds max size of ${MAX_WSDL_BYTES} bytes`);
+      }
+      assertNoDoctype(rawSchema);
+
       const parser = new xml2js.Parser();
       const wsdl = await parser.parseStringPromise(rawSchema);
-      
+
       const operations = await this.extractOperationsFromWSDL(wsdl);
       const resources = await this.extractResourcesFromWSDL(wsdl);
 
-      // Extract basic info from WSDL
+      // Extract basic info from WSDL. Use defensive access — a WSDL
+      // without a top-level `definitions.$` attribute bag would
+      // previously crash with "Cannot read properties of undefined".
       const definitions = wsdl.definitions || wsdl['wsdl:definitions'] || {};
-      const targetNamespace = definitions.$ ? definitions.$.targetNamespace : '';
+      const definitionsAttrs = definitions.$ || {};
+      const targetNamespace = definitionsAttrs.targetNamespace || '';
 
       return {
         version: '1.0',
         info: {
-          title: definitions.$.name || 'SOAP Service',
+          title: definitionsAttrs.name || 'SOAP Service',
           description: `SOAP Web Service (${targetNamespace})`,
           version: '1.0',
         },
@@ -45,9 +71,14 @@ export class SOAPParserService implements SchemaParser {
 
   async validateSchema(schema: string): Promise<{ isValid: boolean; errors: string[] }> {
     try {
+      if (typeof schema === 'string' && schema.length > MAX_WSDL_BYTES) {
+        return { isValid: false, errors: [`WSDL exceeds max size of ${MAX_WSDL_BYTES} bytes`] };
+      }
+      assertNoDoctype(schema);
+
       const parser = new xml2js.Parser();
       const parsed = await parser.parseStringPromise(schema);
-      
+
       // Basic WSDL validation - check for required elements
       if (!parsed.definitions && !parsed['wsdl:definitions']) {
         return {

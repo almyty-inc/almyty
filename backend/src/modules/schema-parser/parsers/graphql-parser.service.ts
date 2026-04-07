@@ -5,14 +5,20 @@ import { Operation, OperationType, HttpMethod } from '../../../entities/operatio
 import { Resource, ResourceType } from '../../../entities/resource.entity';
 import { SchemaParser, ParsedSchema, ParsedOperation, ParsedResource } from '../interfaces/parser.interface';
 
+/** Hard cap on GraphQL SDL input size — memory DoS protection. */
+const MAX_SDL_BYTES = 5 * 1024 * 1024; // 5 MB
+
 @Injectable()
 export class GraphQLParserService implements SchemaParser {
   private readonly logger = new Logger(GraphQLParserService.name);
 
   async parseSchema(rawSchema: string, fileName?: string): Promise<ParsedSchema> {
     try {
+      if (typeof rawSchema === 'string' && rawSchema.length > MAX_SDL_BYTES) {
+        throw new Error(`GraphQL schema exceeds max size of ${MAX_SDL_BYTES} bytes`);
+      }
       const schema = buildSchema(rawSchema);
-      
+
       const operations = await this.extractOperationsFromGraphQL(schema);
       const resources = await this.extractResourcesFromGraphQL(schema);
 
@@ -39,6 +45,12 @@ export class GraphQLParserService implements SchemaParser {
 
   async validateSchema(schema: string): Promise<{ isValid: boolean; errors: string[] }> {
     try {
+      if (typeof schema === 'string' && schema.length > MAX_SDL_BYTES) {
+        return {
+          isValid: false,
+          errors: [`GraphQL schema exceeds max size of ${MAX_SDL_BYTES} bytes`],
+        };
+      }
       buildSchema(schema);
       return { isValid: true, errors: [] };
     } catch (error) {
