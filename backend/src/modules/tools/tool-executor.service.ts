@@ -1,7 +1,7 @@
 import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, MoreThanOrEqual } from 'typeorm';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import * as Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -465,7 +465,14 @@ export class ToolExecutorService {
           const api = tool.api ?? tool.operation?.api ?? null;
           const endpoint = tool.soapConfig.endpoint || (api?.baseUrl ?? '');
           let soapBody = tool.soapConfig.bodyTemplate || '';
-          soapBody = soapBody.replace(/\{(\w+)\}/g, (_, n) => n in parameters ? String(parameters[n]) : `{${n}}`);
+          // XML-escape substituted parameter values. Previously raw
+          // user input was interpolated directly, so a parameter containing
+          // `</soap:Body>` (or anything with `<`, `>`, `&`) could break out
+          // of the element and inject arbitrary XML into the outbound SOAP
+          // request.
+          soapBody = soapBody.replace(/\{(\w+)\}/g, (_, n) =>
+            n in parameters ? this.escapeXml(String(parameters[n])) : `{${n}}`,
+          );
           const envelope = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="${tool.soapConfig.namespace}"><soap:Body>${soapBody}</soap:Body></soap:Envelope>`;
           const headers: Record<string, string> = { 'Content-Type': 'text/xml;charset=UTF-8', ...(api?.headers || {}), ...(tool.soapConfig.headers || {}) };
           if (tool.soapConfig.soapAction) headers['SOAPAction'] = tool.soapConfig.soapAction;
@@ -1395,6 +1402,20 @@ export class ToolExecutorService {
     }, obj);
   }
 
+  /**
+   * Escape the five XML predefined entities so user-supplied values
+   * interpolated into SOAP body templates cannot break out of their
+   * element or inject additional XML.
+   */
+  private escapeXml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
   private evaluateHttpSuccessCondition(condition: string, status: number, data: any): boolean {
     const trimmed = condition.trim();
 
@@ -1645,7 +1666,24 @@ export class ToolExecutorService {
 
   private hashObject(obj: any): string {
     const crypto = require('crypto');
-    const str = JSON.stringify(obj, Object.keys(obj).sort());
+    // Deterministic stringify with sorted keys at EVERY level of nesting.
+    //
+    // The previous implementation used JSON.stringify's second-parameter
+    // array form `JSON.stringify(obj, Object.keys(obj).sort())`, but that
+    // array is a KEY FILTER applied at every nesting level — not a sort
+    // order. Any key not present at the top level was dropped from nested
+    // values, so `{filter: {name: 'foo'}}` and `{filter: {name: 'bar'}}`
+    // produced IDENTICAL hashes (both serialized to `{"filter":{}}`),
+    // causing catastrophic cache collisions.
+    const stable = (value: any): any => {
+      if (value === null || typeof value !== 'object') return value;
+      if (Array.isArray(value)) return value.map(stable);
+      const sortedKeys = Object.keys(value).sort();
+      const out: Record<string, any> = {};
+      for (const key of sortedKeys) out[key] = stable(value[key]);
+      return out;
+    };
+    const str = JSON.stringify(stable(obj));
     return crypto.createHash('md5').update(str).digest('hex');
   }
 
@@ -1732,11 +1770,15 @@ export class ToolExecutorService {
 
     const since = new Date(Date.now() - timeframeDurations[timeframe]);
 
+    // Previously this used the MongoDB-style `{ $gte: since }` operator,
+    // which TypeORM treats as a literal object comparison — so the query
+    // silently matched zero rows and the whole stats endpoint returned
+    // zeros regardless of timeframe. Use TypeORM's MoreThanOrEqual instead.
     const executions = await this.toolExecutionRepository.find({
       where: {
         toolId,
         organizationId,
-        createdAt: { $gte: since } as any,
+        createdAt: MoreThanOrEqual(since),
       },
     });
 
