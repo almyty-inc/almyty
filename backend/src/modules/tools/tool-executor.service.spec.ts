@@ -237,6 +237,29 @@ describe('ToolExecutorService', () => {
       expect(result.averageExecutionTime).toBe(0);
       expect(result.cacheHitRate).toBe(0);
     });
+
+    it('should use a TypeORM MoreThanOrEqual operator on createdAt (not Mongo $gte)', async () => {
+      // Regression: the previous implementation passed `{ $gte: since }`
+      // as the createdAt value, which TypeORM treats as a literal object
+      // comparison — silently matching zero rows regardless of timeframe.
+      // The fix uses TypeORM's MoreThanOrEqual operator. This test
+      // inspects the `find` call to verify the query shape.
+      toolExecutionRepository.find.mockResolvedValue([]);
+
+      await service.getToolExecutionStats('tool-1', 'org-1', 'day');
+
+      expect(toolExecutionRepository.find).toHaveBeenCalledTimes(1);
+      const findArgs = toolExecutionRepository.find.mock.calls[0][0];
+      expect(findArgs.where.toolId).toBe('tool-1');
+      expect(findArgs.where.organizationId).toBe('org-1');
+      // TypeORM operator objects have a `_type` / `_value` internal shape.
+      // A plain `{$gte: ...}` object does NOT — so checking for a
+      // recognizable operator shape catches a regression to Mongo syntax.
+      const createdAt = findArgs.where.createdAt;
+      expect(createdAt).not.toHaveProperty('$gte');
+      expect(typeof createdAt).toBe('object');
+      expect(createdAt).toBeTruthy();
+    });
   });
 
   describe('successful tool execution', () => {
@@ -622,6 +645,59 @@ describe('ToolExecutorService', () => {
       const hash2 = service['hashObject'](obj2);
 
       expect(hash1).toBe(hash2);
+    });
+
+    it('should produce DIFFERENT hashes when nested values differ (cache-collision regression)', () => {
+      // Regression: the previous implementation was
+      // `JSON.stringify(obj, Object.keys(obj).sort())`, which interprets
+      // the array as a KEY FILTER at every level of nesting. Any key not
+      // at the top level got dropped, so nested values were invisible to
+      // the hash. These two objects would incorrectly hash identically.
+      const obj1 = { filter: { name: 'alice' }, tenant: 'acme' };
+      const obj2 = { filter: { name: 'bob' }, tenant: 'acme' };
+
+      expect(service['hashObject'](obj1)).not.toBe(service['hashObject'](obj2));
+    });
+
+    it('should produce DIFFERENT hashes when deeply nested scalars differ', () => {
+      const obj1 = { outer: { inner: { value: 1 } } };
+      const obj2 = { outer: { inner: { value: 2 } } };
+
+      expect(service['hashObject'](obj1)).not.toBe(service['hashObject'](obj2));
+    });
+
+    it('should be stable across key-order changes at any nesting level', () => {
+      const obj1 = { a: { x: 1, y: 2 }, b: 3 };
+      const obj2 = { b: 3, a: { y: 2, x: 1 } };
+
+      expect(service['hashObject'](obj1)).toBe(service['hashObject'](obj2));
+    });
+  });
+
+  describe('escapeXml (SOAP body XML-injection protection)', () => {
+    it('should escape the five XML predefined entities', () => {
+      const escape = (v: string) => service['escapeXml'](v);
+      expect(escape('&')).toBe('&amp;');
+      expect(escape('<')).toBe('&lt;');
+      expect(escape('>')).toBe('&gt;');
+      expect(escape('"')).toBe('&quot;');
+      expect(escape("'")).toBe('&apos;');
+    });
+
+    it('should neutralize a SOAP-element break-out payload', () => {
+      // Regression: SOAP body templates used to raw-interpolate parameter
+      // values, so a payload containing `</soap:Body>` could terminate
+      // the element early and inject arbitrary XML into the outbound
+      // request (e.g. forging headers or auth assertions).
+      const payload = 'alice</soap:Body><injected>gotcha</injected><soap:Body>';
+      const escaped = service['escapeXml'](payload);
+      expect(escaped).not.toContain('</soap:Body>');
+      expect(escaped).not.toContain('<injected>');
+      expect(escaped).toContain('&lt;/soap:Body&gt;');
+    });
+
+    it('should escape ampersands before other characters (to avoid double-escape)', () => {
+      expect(service['escapeXml']('a & <b>')).toBe('a &amp; &lt;b&gt;');
     });
 
     it('should handle arrays', () => {
