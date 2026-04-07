@@ -114,6 +114,13 @@ describe('GatewayAuthService', () => {
     userRepository = module.get(getRepositoryToken(User));
     apiKeyRepository = module.get(getRepositoryToken(ApiKey));
     jwtService = module.get<JwtService>(JwtService);
+
+    // The validateApiKey / validateBearerToken / validateBasicAuth /
+    // validateJWT paths all do a `gatewayRepository.findOne(...)` to
+    // resolve the gateway's organizationId for the org-scoping checks
+    // we added. Default every test to return mockGateway; individual
+    // tests that need a different gateway can override.
+    jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(mockGateway as any);
   });
 
   describe('createGatewayAuth', () => {

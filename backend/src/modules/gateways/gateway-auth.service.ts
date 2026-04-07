@@ -360,9 +360,9 @@ export class GatewayAuthService {
   ): Promise<AuthenticationResult> {
     const keyHeader = authConfig.configuration.keyHeader || 'x-api-key';
     const keyQuery = authConfig.configuration.keyQuery || 'api_key';
-    
+
     const apiKey = headers[keyHeader.toLowerCase()] || query[keyQuery];
-    
+
     if (!apiKey) {
       return {
         isValid: false,
@@ -380,13 +380,27 @@ export class GatewayAuthService {
       };
     }
 
-    // Hash the provided API key and look it up in database
+    // Resolve the gateway's organizationId so we can enforce org scoping.
+    // CRITICAL: without this, an API key issued to a user in org A could
+    // authenticate against a gateway in org B — cross-org bypass. The
+    // query below now requires `organizationId` to match the gateway's
+    // org on both the gateway-specific and org-wide paths.
+    const gateway = await this.gatewayRepository.findOne({
+      where: { id: authConfig.gatewayId },
+      select: ['id', 'organizationId'],
+    });
+    if (!gateway) {
+      return { isValid: false, error: 'Gateway not found', errorCode: 'GATEWAY_NOT_FOUND' };
+    }
+
     const keyHash = this.hashKey(apiKey);
-    // Scope lookup: key must match gateway OR be an org-wide key (no gatewayId)
+    // A key counts as valid for this gateway if it's either explicitly
+    // scoped to the gateway OR is an org-wide key (no gatewayId). In both
+    // cases the key's organizationId MUST match the gateway's org.
     const apiKeyRecord = await this.apiKeyRepository.findOne({
       where: [
-        { keyHash, isActive: true, gatewayId: authConfig.gatewayId },
-        { keyHash, isActive: true, gatewayId: null as any },
+        { keyHash, isActive: true, gatewayId: authConfig.gatewayId, organizationId: gateway.organizationId },
+        { keyHash, isActive: true, gatewayId: null as any, organizationId: gateway.organizationId },
       ],
       relations: ['user', 'user.organizationMemberships'],
     });
@@ -440,7 +454,7 @@ export class GatewayAuthService {
     }
 
     const token = authHeader.substring(7);
-    
+
     if (!token) {
       return {
         isValid: false,
@@ -449,10 +463,20 @@ export class GatewayAuthService {
       };
     }
 
-    // Hash the provided token and look it up in database (assuming it's an API key)
+    // Scope the lookup to the gateway's organization. Without this, an
+    // API key from any other org could authenticate here as long as the
+    // hash matched. Same class of bug as the API_KEY path above.
+    const gateway = await this.gatewayRepository.findOne({
+      where: { id: authConfig.gatewayId },
+      select: ['id', 'organizationId'],
+    });
+    if (!gateway) {
+      return { isValid: false, error: 'Gateway not found', errorCode: 'GATEWAY_NOT_FOUND' };
+    }
+
     const tokenHash = this.hashKey(token);
     const apiKeyRecord = await this.apiKeyRepository.findOne({
-      where: { keyHash: tokenHash, isActive: true },
+      where: { keyHash: tokenHash, isActive: true, organizationId: gateway.organizationId },
       relations: ['user', 'user.organizationMemberships'],
     });
 
@@ -524,7 +548,7 @@ export class GatewayAuthService {
 
       // Verify password
       const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-      
+
       if (!isValidPassword) {
         return {
           isValid: false,
@@ -533,13 +557,35 @@ export class GatewayAuthService {
         };
       }
 
+      // Confirm the user actually belongs to the gateway's organization.
+      // Previously we returned organizationMemberships[0], which would
+      // grant access using the user's FIRST org regardless of which
+      // gateway was being accessed — a silent cross-org bypass.
+      const gateway = await this.gatewayRepository.findOne({
+        where: { id: authConfig.gatewayId },
+        select: ['id', 'organizationId'],
+      });
+      if (!gateway) {
+        return { isValid: false, error: 'Gateway not found', errorCode: 'GATEWAY_NOT_FOUND' };
+      }
+      const membership = user.organizationMemberships?.find(
+        (m) => m.organizationId === gateway.organizationId,
+      );
+      if (!membership) {
+        return {
+          isValid: false,
+          error: 'User is not a member of the gateway organization',
+          errorCode: 'BASIC_AUTH_CROSS_ORG',
+        };
+      }
+
       return {
         isValid: true,
         userId: user.id,
         user,
         scopes: authConfig.configuration.defaultScopes || [],
-        roles: user.organizationMemberships?.map(m => m.role) || [],
-        organizationId: user.organizationMemberships?.[0]?.organizationId,
+        roles: [membership.role],
+        organizationId: gateway.organizationId,
       };
 
     } catch (error) {
@@ -566,11 +612,26 @@ export class GatewayAuthService {
     }
 
     const token = authHeader.substring(7);
-    
+
     try {
-      const jwtSecret = authConfig.configuration.secret || process.env.JWT_SECRET;
+      // CRITICAL: do NOT fall back to process.env.JWT_SECRET. That would
+      // accept the backend's own login JWTs as gateway auth tokens,
+      // granting any authenticated backend user access to any gateway
+      // with JWT auth but no explicit secret configured — a cross-org
+      // bypass. The gateway owner MUST configure a distinct secret in
+      // authConfig.configuration.secret (or jwksUri / publicKey for
+      // asymmetric signing, future work).
+      const jwtSecret = authConfig.configuration.secret;
+      if (!jwtSecret) {
+        return {
+          isValid: false,
+          error: 'JWT auth not configured for this gateway (missing configuration.secret)',
+          errorCode: 'JWT_NOT_CONFIGURED',
+        };
+      }
+
       const payload = this.jwtService.verify(token, { secret: jwtSecret });
-      
+
       // Get user if userId is in payload
       let user: User | null = null;
       if (payload.sub || payload.userId) {
@@ -580,13 +641,37 @@ export class GatewayAuthService {
         });
       }
 
+      // Resolve the gateway's org so we can enforce that the token's
+      // subject actually belongs to it (when a user was found).
+      const gateway = await this.gatewayRepository.findOne({
+        where: { id: authConfig.gatewayId },
+        select: ['id', 'organizationId'],
+      });
+      const gatewayOrgId = gateway?.organizationId;
+
+      if (user && gatewayOrgId) {
+        const userInGatewayOrg = user.organizationMemberships?.some(
+          (m) => m.organizationId === gatewayOrgId,
+        );
+        if (!userInGatewayOrg) {
+          return {
+            isValid: false,
+            error: 'Token subject is not a member of the gateway organization',
+            errorCode: 'JWT_CROSS_ORG',
+          };
+        }
+      }
+
       return {
         isValid: true,
         userId: payload.sub || payload.userId,
         user,
         scopes: payload.scopes || payload.scope?.split(' ') || [],
         roles: payload.roles || user?.organizationMemberships?.map(m => m.role) || [],
-        organizationId: payload.org || user?.organizationMemberships?.[0]?.organizationId,
+        // Prefer the gateway's org (authoritative) over the first
+        // membership of the user (which was the "silently default to
+        // first org" bug we fixed in the backend JWT strategy).
+        organizationId: gatewayOrgId || payload.org,
         metadata: {
           jwtPayload: payload,
         },
@@ -700,10 +785,23 @@ export class GatewayAuthService {
       return false;
     }
 
-    // Check format
+    // Check format. The regex is supplied by the gateway owner and tested
+    // against the caller's key. Wrap both compilation AND execution in a
+    // try/catch so:
+    //   - an invalid regex pattern doesn't throw a SyntaxError out of the
+    //     auth pipeline and cause a 500
+    //   - a catastrophic-backtracking regex (ReDoS) at worst returns false
+    //     for this one request (no partial fix for ReDoS at this layer,
+    //     but at least we don't crash)
     if (validationRules.keyFormat) {
-      const regex = new RegExp(validationRules.keyFormat);
-      if (!regex.test(key)) {
+      try {
+        const regex = new RegExp(validationRules.keyFormat);
+        if (!regex.test(key)) {
+          return false;
+        }
+      } catch {
+        // Bad regex in the gateway's config → treat as "format invalid"
+        // rather than letting a SyntaxError escape.
         return false;
       }
     }
@@ -712,36 +810,61 @@ export class GatewayAuthService {
   }
 
   private isIpInRanges(ip: string, ranges: string[]): boolean {
-    // Simple IP range checking - in production you'd use a library like 'ip-range-check'
     return ranges.some(range => {
-      if (range.includes('/')) {
-        // CIDR notation
-        return this.isIpInCIDR(ip, range);
-      } else {
-        // Single IP or wildcard
-        return ip === range || range === '*';
-      }
+      if (range === '*') return true;
+      if (range.includes('/')) return this.isIpInCIDR(ip, range);
+      return ip === range;
     });
   }
 
+  /**
+   * IPv4 CIDR membership check. Returns false for malformed input or
+   * IPv6 addresses (unsupported — callers that need IPv6 should use a
+   * dedicated library like `ipaddr.js`).
+   */
   private isIpInCIDR(ip: string, cidr: string): boolean {
-    // Basic CIDR check - in production use a proper library
-    const [rangeIp, prefixLength] = cidr.split('/');
-    
-    if (!prefixLength) {
-      return ip === rangeIp;
+    // Strip IPv4-in-IPv6 notation that Express commonly hands you for
+    // loopback clients on dual-stack Node (e.g. `::ffff:127.0.0.1`).
+    const normalized = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+
+    // Only IPv4 is supported. Bail early if we see an IPv6 address —
+    // returning `false` is the safe default for an allowlist.
+    if (normalized.includes(':')) {
+      return false;
     }
 
-    // This is a simplified implementation
-    const ipParts = ip.split('.').map(Number);
-    const rangeIpParts = rangeIp.split('.').map(Number);
-    const prefix = parseInt(prefixLength);
+    const [rangeIp, prefixLengthRaw] = cidr.split('/');
+    if (prefixLengthRaw === undefined) {
+      return normalized === rangeIp;
+    }
 
-    const ipBinary = ((ipParts[0] << 24) | (ipParts[1] << 16) | (ipParts[2] << 8) | ipParts[3]) >>> 0;
-    const rangeIpBinary = ((rangeIpParts[0] << 24) | (rangeIpParts[1] << 16) | (rangeIpParts[2] << 8) | rangeIpParts[3]) >>> 0;
-    const mask = (-1 << (32 - prefix)) >>> 0;
+    const prefix = Number.parseInt(prefixLengthRaw, 10);
+    if (!Number.isFinite(prefix) || prefix < 0 || prefix > 32) {
+      return false;
+    }
 
-    return (ipBinary & mask) === (rangeIpBinary & mask);
+    const parseIp = (s: string): number | null => {
+      const parts = s.split('.');
+      if (parts.length !== 4) return null;
+      let acc = 0;
+      for (const p of parts) {
+        const n = Number(p);
+        if (!Number.isInteger(n) || n < 0 || n > 255) return null;
+        acc = (acc * 256) + n;
+      }
+      return acc >>> 0;
+    };
+
+    const ipBin = parseIp(normalized);
+    const rangeBin = parseIp(rangeIp);
+    if (ipBin === null || rangeBin === null) return false;
+
+    // `/0` must match everything — the previous version computed
+    // `(-1 << 32) >>> 0` which, because JS left-shift is mod 32,
+    // gave `0xFFFFFFFF` (matching only an exact IP). Explicitly
+    // handle prefix=0 with mask=0.
+    const mask = prefix === 0 ? 0 : ((0xFFFFFFFF << (32 - prefix)) >>> 0);
+    return ((ipBin & mask) >>> 0) === ((rangeBin & mask) >>> 0);
   }
 
   private validateAuthConfiguration(type: GatewayAuthType, configuration: Record<string, any>): void {
@@ -753,8 +876,14 @@ export class GatewayAuthService {
         break;
 
       case GatewayAuthType.JWT:
-        if (!configuration.secret && !process.env.JWT_SECRET) {
-          throw new BadRequestException('JWT auth requires secret configuration');
+        // Require an explicit secret. Previously we allowed falling
+        // back to process.env.JWT_SECRET, which matched validateJWT's
+        // pre-fix behaviour — but that silently accepted the backend's
+        // own login JWTs as gateway auth tokens (a cross-org bypass).
+        // Both save-time validation and request-time verification now
+        // require a gateway-specific secret.
+        if (!configuration.secret) {
+          throw new BadRequestException('JWT auth requires a gateway-specific secret in configuration.secret');
         }
         break;
 

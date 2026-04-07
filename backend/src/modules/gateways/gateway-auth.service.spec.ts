@@ -74,6 +74,16 @@ describe('GatewayAuthService - Real Business Logic', () => {
     userRepository = module.get(getRepositoryToken(User));
     apiKeyRepository = module.get(getRepositoryToken(ApiKey));
     jwtService = module.get<JwtService>(JwtService);
+
+    // Default: gatewayRepository.findOne returns a gateway in `org-1`.
+    // The validate* paths all resolve the gateway's organizationId for
+    // cross-org scoping checks; tests that need a different behaviour
+    // override this spy individually.
+    jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue({
+      id: 'gateway-1',
+      organizationId: 'org-1',
+      name: 'Test Gateway',
+    } as any);
   });
 
   describe('validateKeyFormat - Real validation logic', () => {
@@ -223,27 +233,28 @@ describe('GatewayAuthService - Real Business Logic', () => {
     });
 
     it('should require secret for JWT type', () => {
-      const originalEnv = process.env.JWT_SECRET;
-      delete process.env.JWT_SECRET;
-
       expect(() => {
         service['validateAuthConfiguration'](GatewayAuthType.JWT, {});
-      }).toThrow('JWT auth requires secret configuration');
+      }).toThrow('JWT auth requires a gateway-specific secret');
 
       expect(() => {
         service['validateAuthConfiguration'](GatewayAuthType.JWT, { secret: 'my-secret' });
       }).not.toThrow();
-
-      process.env.JWT_SECRET = originalEnv;
     });
 
-    it('should allow JWT when JWT_SECRET env is set', () => {
+    it('should REJECT JWT auth without explicit secret even if JWT_SECRET env is set (cross-org bypass regression)', () => {
+      // Regression: validateAuthConfiguration used to allow JWT auth
+      // without configuration.secret as long as process.env.JWT_SECRET
+      // was set. That matched the pre-fix validateJWT behavior, which
+      // accepted the backend's own login JWTs as gateway auth tokens —
+      // a silent cross-org bypass. Both paths now require an explicit
+      // gateway-specific secret.
       const originalEnv = process.env.JWT_SECRET;
       process.env.JWT_SECRET = 'env-secret';
 
       expect(() => {
         service['validateAuthConfiguration'](GatewayAuthType.JWT, {});
-      }).not.toThrow();
+      }).toThrow('JWT auth requires a gateway-specific secret');
 
       process.env.JWT_SECRET = originalEnv;
     });
@@ -611,7 +622,7 @@ describe('GatewayAuthService - Real Business Logic', () => {
 
       await expect(
         service.updateGatewayAuth('auth-1', { configuration: {} }, 'org-1')
-      ).rejects.toThrow('JWT auth requires secret configuration');
+      ).rejects.toThrow('JWT auth requires a gateway-specific secret');
 
       process.env.JWT_SECRET = originalEnv;
     });
