@@ -21,14 +21,59 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   private getOrgId(req: any): string {
-    const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+    // Prefer the JWT strategy's resolved org (set from X-Organization-Id
+    // header for multi-org users, or the single membership for
+    // single-org users). DO NOT fall back to `organizations[0]`: that
+    // silently scopes multi-org users to their first org and defeats
+    // the explicit-context safety we added in the JWT strategy.
+    const organizationId = req.user?.currentOrganizationId;
     if (!organizationId) {
       throw new HttpException(
-        { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+        {
+          success: false,
+          message:
+            'Organization context required. Multi-org users must send the X-Organization-Id header.',
+          error: 'NO_ORGANIZATION',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
     return organizationId;
+  }
+
+  /**
+   * Build a safe Content-Disposition header value. The filename lives
+   * in a quoted-string context and would otherwise let an attacker
+   * inject additional headers by uploading a file named
+   *   `foo.jpg"; Content-Type: text/html; x="`
+   * We escape `\`, `"` and newlines per RFC 6266, and additionally
+   * emit a UTF-8 `filename*` parameter for non-ASCII names.
+   */
+  private buildContentDisposition(name: string): string {
+    const fallback = (name || 'download')
+      .replace(/[\\"\r\n]/g, '_')
+      .replace(/[^\x20-\x7e]/g, '_'); // strip non-ASCII for the plain filename
+    const utf8 = encodeURIComponent(name || 'download').replace(/['()]/g, escape);
+    return `attachment; filename="${fallback}"; filename*=UTF-8''${utf8}`;
+  }
+
+  /**
+   * Override the Content-Type the client claimed on upload. We never
+   * want to echo back an attacker-chosen MIME on download: the stored
+   * file could be an HTML document claiming to be an image, and
+   * browsers would render it in the viewer's origin → stored XSS.
+   *
+   * We return `application/octet-stream` plus `X-Content-Type-Options:
+   * nosniff` so modern browsers refuse to guess the real type. The
+   * trade-off is that legitimate image previews require the caller
+   * to fetch via a separate, MIME-whitelisted endpoint (not built
+   * yet — flagged as follow-up).
+   */
+  private safeDownloadHeaders(res: Response, file: any, buffer: Buffer): void {
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', this.buildContentDisposition(file.name));
+    res.setHeader('Content-Length', buffer.length);
   }
 
   @Post('upload')
@@ -93,9 +138,7 @@ export class FilesController {
     try {
       const organizationId = this.getOrgId(req);
       const { buffer, file } = await this.filesService.download(id, organizationId);
-      res.setHeader('Content-Type', file.mimeType);
-      res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
-      res.setHeader('Content-Length', buffer.length);
+      this.safeDownloadHeaders(res, file, buffer);
       res.send(buffer);
     } catch (error) {
       res.status(error.status || HttpStatus.NOT_FOUND).json({ success: false, message: error.message, error: 'FILE_DOWNLOAD_FAILED' });

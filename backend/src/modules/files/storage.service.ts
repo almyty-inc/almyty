@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -11,19 +11,72 @@ export interface StorageProvider {
 }
 
 /**
- * Local filesystem storage provider (default, no external deps)
+ * Reject storage keys that contain path-traversal sequences, absolute
+ * paths, or NUL bytes. The caller (files.service) builds keys from
+ * user-controlled filenames, so an attacker could otherwise escape
+ * the uploads directory.
+ *
+ *   path.join(basePath, '../../etc/passwd')  →  '/etc/passwd'
+ *
+ * This guard runs before every local-filesystem operation AND before
+ * any S3 operation (S3 keys should also be well-formed to avoid
+ * weird object names that break bucket tooling).
+ */
+function assertSafeStorageKey(key: string): void {
+  if (!key || typeof key !== 'string') {
+    throw new BadRequestException('Invalid storage key');
+  }
+  if (key.includes('\0')) {
+    throw new BadRequestException('Storage key contains NUL byte');
+  }
+  if (path.isAbsolute(key)) {
+    throw new BadRequestException('Storage key must be relative');
+  }
+  // Reject any `..` segment after normalization. Normalize first to
+  // catch `foo/./../../etc/passwd` style tricks.
+  const normalized = path.posix.normalize(key);
+  if (normalized.startsWith('..') || normalized.includes('/../') || normalized.endsWith('/..')) {
+    throw new BadRequestException('Storage key contains path traversal');
+  }
+}
+
+/**
+ * Local filesystem storage provider (default, no external deps).
+ *
+ * Every filesystem operation goes through `resolveSafe()`, which:
+ *   1. Rejects keys with NUL bytes, absolute paths, or `..` segments.
+ *   2. Resolves the final filesystem path and asserts it's inside the
+ *      configured basePath (defense-in-depth — any future regression
+ *      in assertSafeStorageKey still can't escape the uploads dir).
  */
 class LocalStorageProvider implements StorageProvider {
   private readonly basePath: string;
   private readonly baseUrl: string;
+  private readonly resolvedBase: string;
 
   constructor(basePath: string, baseUrl: string) {
     this.basePath = basePath;
     this.baseUrl = baseUrl;
+    this.resolvedBase = path.resolve(basePath);
+  }
+
+  private resolveSafe(key: string): string {
+    assertSafeStorageKey(key);
+    const candidate = path.resolve(this.resolvedBase, key);
+    // Make absolutely sure the resolved path is inside basePath. The
+    // trailing `path.sep` prevents `/basePath` from matching
+    // `/basePathDifferent/…`.
+    const baseWithSep = this.resolvedBase.endsWith(path.sep)
+      ? this.resolvedBase
+      : this.resolvedBase + path.sep;
+    if (candidate !== this.resolvedBase && !candidate.startsWith(baseWithSep)) {
+      throw new BadRequestException('Storage key escapes base path');
+    }
+    return candidate;
   }
 
   async upload(key: string, data: Buffer, contentType: string): Promise<string> {
-    const filePath = path.join(this.basePath, key);
+    const filePath = this.resolveSafe(key);
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -33,18 +86,19 @@ class LocalStorageProvider implements StorageProvider {
   }
 
   async download(key: string): Promise<Buffer> {
-    const filePath = path.join(this.basePath, key);
+    const filePath = this.resolveSafe(key);
     return fs.readFileSync(filePath);
   }
 
   async delete(key: string): Promise<void> {
-    const filePath = path.join(this.basePath, key);
+    const filePath = this.resolveSafe(key);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
   }
 
   async getSignedUrl(key: string, expiresInSeconds?: number): Promise<string> {
+    assertSafeStorageKey(key);
     // Local doesn't have signed URLs, return direct path
     return `${this.baseUrl}/files/${key}/download`;
   }
