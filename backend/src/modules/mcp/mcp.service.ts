@@ -450,9 +450,13 @@ export class McpService {
       );
     }
 
-    // Find tool by sanitized name match
+    // Find tool by sanitized name match. CRITICAL: scope to the caller's
+    // organization. Previously this fetched ALL active tools across ALL
+    // orgs and matched by sanitized name — an MCP client in org A could
+    // request a tool from org B by name and receive its full schema,
+    // metadata, and stats.
     const allTools = await this.toolRepository.find({
-      where: { status: ToolStatus.ACTIVE },
+      where: { status: ToolStatus.ACTIVE, organizationId },
       relations: ['categories', 'operation'],
     });
 

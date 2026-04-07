@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import axios from 'axios';
 
 import { Gateway } from '../../entities/gateway.entity';
@@ -62,13 +62,19 @@ export class McpGatewayService {
       metadata?: Record<string, any>;
     }
   ): Promise<VirtualServer> {
-    // Verify tools belong to organization
-    const tools = await this.toolRepository.find({
-      where: {
-        id: { $in: serverData.toolIds } as any,
-        organizationId,
-      },
-    });
+    // Verify tools belong to organization. Previously this used Mongo's
+    // `{ $in: ... }` operator which TypeORM treats as a literal object
+    // comparison — so the query matched zero rows and the validation
+    // below ALWAYS threw "Some tools not found", making this method
+    // entirely non-functional (as long as toolIds was non-empty).
+    const tools = serverData.toolIds.length > 0
+      ? await this.toolRepository.find({
+          where: {
+            id: In(serverData.toolIds),
+            organizationId,
+          },
+        })
+      : [];
 
     if (tools.length !== serverData.toolIds.length) {
       throw new BadRequestException('Some tools not found or not accessible');
@@ -156,11 +162,17 @@ export class McpGatewayService {
       throw new NotFoundException('Virtual server not found');
     }
 
-    const tools = await this.toolRepository.find({
-      where: {
-        id: { $in: server.toolIds } as any,
-      },
-    });
+    // Same Mongo `$in` issue as createVirtualServer above. Also adding
+    // an explicit organizationId filter so cross-org tool exposure can't
+    // happen if a serverId leaks across orgs.
+    const tools = server.toolIds.length > 0
+      ? await this.toolRepository.find({
+          where: {
+            id: In(server.toolIds),
+            organizationId: server.organizationId,
+          },
+        })
+      : [];
 
     return tools.map(tool => ({
       name: tool.name,
