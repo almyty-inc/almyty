@@ -313,6 +313,30 @@ describe('CredentialService', () => {
       expect(cred.scopes).toEqual(['read', 'write']);
       expect(cred.isActive).toBe(false);
     });
+
+    it('should clear expiresAt when given an empty string (not persist Invalid Date)', async () => {
+      // Regression: `new Date('')` is Invalid Date. Previously the
+      // service stored that garbage value, breaking subsequent expiry
+      // checks. Now an empty string clears the field.
+      const cred = mockCredential();
+      cred.expiresAt = new Date('2027-01-01');
+      credentialRepository.findOne.mockResolvedValue(cred);
+      credentialRepository.save.mockResolvedValue(cred);
+
+      await service.updateCredential('cred-1', 'org-1', { expiresAt: '' });
+
+      expect(cred.expiresAt).toBeNull();
+    });
+
+    it('should set expiresAt when given a valid ISO timestamp', async () => {
+      const cred = mockCredential();
+      credentialRepository.findOne.mockResolvedValue(cred);
+      credentialRepository.save.mockResolvedValue(cred);
+
+      await service.updateCredential('cred-1', 'org-1', { expiresAt: '2030-06-15T12:00:00Z' });
+
+      expect(cred.expiresAt).toEqual(new Date('2030-06-15T12:00:00Z'));
+    });
   });
 
   describe('deleteCredential', () => {
@@ -603,6 +627,86 @@ describe('CredentialService', () => {
 
       // axios.post should only have been called once (the second call reuses the in-flight promise)
       expect(axios.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('should write the refreshed token to the FRESH credential, not the (potentially stale) input', async () => {
+      // Regression: refreshOAuthTokenInternal used to fetch a fresh copy
+      // for the early-exit check but then write the new tokens to the
+      // ORIGINAL `credential` parameter, which could be stale and would
+      // overwrite concurrent updates from other processes.
+      const stale = mockCredential() as any;
+      stale.id = 'cred-1';
+      stale.type = CredentialType.OAUTH2;
+      stale.expiresAt = new Date(Date.now() - 60000);
+      stale.name = 'STALE NAME'; // mutated locally — must NOT get persisted
+      stale.config = { stale: true };
+
+      const fresh = mockCredential() as any;
+      fresh.id = 'cred-1';
+      fresh.type = CredentialType.OAUTH2;
+      fresh.expiresAt = new Date(Date.now() - 60000); // still expired
+      fresh.name = 'FRESH NAME';
+      fresh.config = { fresh: true };
+      (fresh.getDecryptedConfig as jest.Mock).mockReturnValue({
+        refreshToken: 'rt',
+        tokenEndpoint: 'https://auth.example.com/token',
+        clientId: 'c',
+        clientSecret: 's',
+      });
+
+      credentialRepository.findOne.mockResolvedValue(fresh);
+      credentialRepository.save.mockImplementation((c: any) => Promise.resolve(c));
+
+      (axios.post as jest.Mock).mockResolvedValue({
+        data: { access_token: 'new', refresh_token: 'new-rt', expires_in: 3600 },
+      });
+
+      const result = await service.refreshOAuthToken(stale as Credential);
+
+      // Writes hit the fresh object, not the stale one.
+      expect(fresh.config).toEqual(expect.objectContaining({
+        accessToken: 'new',
+        refreshToken: 'new-rt',
+      }));
+      expect(stale.config).toEqual({ stale: true });
+      expect(stale.name).toBe('STALE NAME');
+      expect(fresh.encryptSensitiveData).toHaveBeenCalled();
+      expect(stale.encryptSensitiveData).not.toHaveBeenCalled();
+      // The save call must persist the fresh object, not the stale one.
+      const savedArg = (credentialRepository.save as jest.Mock).mock.calls[0][0];
+      expect(savedArg).toBe(fresh);
+      expect(result).toBe(fresh);
+    });
+
+    it('should mark the FRESH credential inactive (not the stale parameter) on refresh failure', async () => {
+      const stale = mockCredential() as any;
+      stale.id = 'cred-1';
+      stale.type = CredentialType.OAUTH2;
+      stale.expiresAt = new Date(Date.now() - 60000);
+      stale.isActive = true;
+
+      const fresh = mockCredential() as any;
+      fresh.id = 'cred-1';
+      fresh.type = CredentialType.OAUTH2;
+      fresh.expiresAt = new Date(Date.now() - 60000);
+      fresh.isActive = true;
+      (fresh.getDecryptedConfig as jest.Mock).mockReturnValue({
+        refreshToken: 'rt',
+        tokenEndpoint: 'https://auth.example.com/token',
+        clientId: 'c',
+        clientSecret: 's',
+      });
+
+      credentialRepository.findOne.mockResolvedValue(fresh);
+      credentialRepository.save.mockImplementation((c: any) => Promise.resolve(c));
+      (axios.post as jest.Mock).mockRejectedValue(new Error('invalid_grant'));
+
+      await expect(
+        service.refreshOAuthToken(stale as Credential),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(fresh.isActive).toBe(false);
+      expect(stale.isActive).toBe(true);
     });
   });
 
