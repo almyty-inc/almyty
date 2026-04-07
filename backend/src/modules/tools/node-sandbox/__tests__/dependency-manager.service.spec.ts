@@ -139,4 +139,43 @@ describe('DependencyManagerService', () => {
     }
     expect(service.listCached()).toEqual([]);
   }, 10_000);
+
+  // ─── Sandbox-escape regression tests ──────────────────────────────────────
+  describe('npm spawn arguments (sandbox-escape regression)', () => {
+    /**
+     * The `runNpmInstall` and `installMissingTypes` helpers run in the
+     * HOST process — NOT inside the worker_threads sandbox. If they ran
+     * `npm install` without `--ignore-scripts`, a malicious package's
+     * preinstall/install/postinstall hook would execute with full backend
+     * privileges, defeating the entire sandbox. These tests pin the
+     * `--ignore-scripts` flag so that protection can never silently
+     * regress.
+     *
+     * We pin against the source itself rather than mocking spawn (the
+     * service captures the spawn function reference at import time, so
+     * runtime monkey-patching wouldn't affect what it actually uses).
+     */
+    const SOURCE = fs.readFileSync(
+      path.join(__dirname, '..', 'dependency-manager.service.ts'),
+      'utf-8',
+    );
+
+    it('runNpmInstall must include --ignore-scripts', () => {
+      // Find the function DEFINITION (not the call site) and assert
+      // the spawn args. The definition is preceded by `private`.
+      const idx = SOURCE.indexOf('private runNpmInstall');
+      expect(idx).toBeGreaterThan(-1);
+      const slice = SOURCE.slice(idx, idx + 2000);
+      expect(slice).toContain("'--ignore-scripts'");
+      expect(slice).toContain("'--no-package-lock'");
+    });
+
+    it('installMissingTypes must include --ignore-scripts', () => {
+      const idx = SOURCE.indexOf('private async installMissingTypes');
+      expect(idx).toBeGreaterThan(-1);
+      const slice = SOURCE.slice(idx, idx + 3000);
+      expect(slice).toContain("'--ignore-scripts'");
+      expect(slice).toContain("'--no-package-lock'");
+    });
+  });
 });

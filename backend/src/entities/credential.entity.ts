@@ -120,6 +120,10 @@ export class Credential {
   /**
    * Encrypt sensitive fields in config before storing.
    * Call this explicitly from the service layer before saving.
+   *
+   * Legacy CBC payloads (`encrypted:<iv>:<ct>` with no `gcm` tag) are
+   * transparently decrypted and re-encrypted with GCM, so any save() call
+   * incrementally migrates the row off the unauthenticated cipher.
    */
   encryptSensitiveData(): void {
     if (this.config && typeof this.config === 'object') {
@@ -127,8 +131,28 @@ export class Credential {
       const encrypted = { ...this.config };
 
       for (const field of sensitiveFields) {
-        if (encrypted[field] && typeof encrypted[field] === 'string' && !encrypted[field].startsWith('encrypted:')) {
-          encrypted[field] = this.encryptValue(encrypted[field]);
+        const value = encrypted[field];
+        if (!value || typeof value !== 'string') continue;
+
+        if (!value.startsWith('encrypted:')) {
+          // Plain text → encrypt with GCM.
+          encrypted[field] = this.encryptValue(value);
+          continue;
+        }
+
+        if (value.startsWith('encrypted:gcm:')) {
+          // Already on the new format, leave it alone.
+          continue;
+        }
+
+        // Legacy CBC payload — decrypt and re-encrypt with GCM. If
+        // decryption fails (corrupt row, key changed), leave the field
+        // untouched rather than corrupting it further.
+        try {
+          const plain = this.decryptValue(value);
+          encrypted[field] = this.encryptValue(plain);
+        } catch {
+          // Best-effort migration; leave legacy value as-is.
         }
       }
 
@@ -136,13 +160,30 @@ export class Credential {
     }
   }
 
+  /**
+   * Encrypt a credential value with AES-256-GCM (authenticated).
+   *
+   * Format: `encrypted:gcm:<iv-hex>:<authTag-hex>:<ciphertext-hex>`
+   *
+   * History note: an earlier version used AES-256-CBC and stored values
+   * as `encrypted:<iv>:<ciphertext>`. CBC is unauthenticated — an attacker
+   * with write access to the DB column could bit-flip the ciphertext to
+   * produce arbitrary plaintext shifts (and rely on padding-oracle leaks
+   * if any error message differs). GCM provides authenticated encryption
+   * so any tampering causes decryption to throw.
+   *
+   * `decryptValue` still understands the legacy CBC format so existing
+   * rows keep working. New writes always use GCM. A future migration can
+   * re-encrypt the legacy rows once everyone has upgraded.
+   */
   private encryptValue(value: string): string {
     const key = Credential.getEncryptionKey();
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    const iv = crypto.randomBytes(12); // 96-bit IV is the GCM standard
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
     let encrypted = cipher.update(value, 'utf8', 'hex');
     encrypted += cipher.final('hex');
-    return `encrypted:${iv.toString('hex')}:${encrypted}`;
+    const authTag = cipher.getAuthTag();
+    return `encrypted:gcm:${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
   }
 
   private decryptValue(encryptedValue: string): string {
@@ -151,17 +192,39 @@ export class Credential {
     }
 
     const parts = encryptedValue.split(':');
-    // A malformed `encrypted:` payload (missing IV or ciphertext) used to
-    // be silently returned as-is, which then got handed downstream as a
+    // A malformed `encrypted:` payload (missing fields) used to be
+    // silently returned as-is, which then got handed downstream as a
     // literal string ("encrypted:foo") and sent over the wire as the
     // actual auth value. Fail loudly instead.
     if (parts.length < 3) {
-      throw new Error('Malformed encrypted credential value: expected `encrypted:<iv>:<ciphertext>`');
+      throw new Error('Malformed encrypted credential value: expected `encrypted:[gcm:]<iv>:<...>`');
     }
 
+    const key = Credential.getEncryptionKey();
+
+    // ── New format: encrypted:gcm:<iv>:<authTag>:<ciphertext> ──
+    if (parts[1] === 'gcm') {
+      if (parts.length !== 5) {
+        throw new Error(
+          'Malformed encrypted credential value: expected `encrypted:gcm:<iv>:<authTag>:<ciphertext>`',
+        );
+      }
+      const iv = Buffer.from(parts[2], 'hex');
+      const authTag = Buffer.from(parts[3], 'hex');
+      const ciphertext = parts[4];
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAuthTag(authTag);
+      let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    }
+
+    // ── Legacy format: encrypted:<iv>:<ciphertext> (AES-256-CBC) ──
+    // Read-only support so existing rows keep working until they're
+    // re-encrypted on next write. Do NOT add new code that produces
+    // this format — encryptValue() always emits GCM now.
     const ivHex = parts[1];
     const encrypted = parts.slice(2).join(':');
-    const key = Credential.getEncryptionKey();
     const iv = Buffer.from(ivHex, 'hex');
     const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');

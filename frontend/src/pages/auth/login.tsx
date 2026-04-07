@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -20,6 +20,7 @@ type LoginFormData = z.infer<typeof loginSchema>
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login, isLoading } = useAuthStore()
   const { success, error } = useNotifications()
   const [showPassword, setShowPassword] = React.useState(false)
@@ -33,12 +34,25 @@ export function LoginPage() {
     resolver: zodResolver(loginSchema),
   })
 
+  // Honour ?returnTo=… so flows like the CLI browser login (which sends
+  // the user through /auth/login?returnTo=/cli-login?…) come back to
+  // their original destination after a successful sign-in. Only allow
+  // SAME-ORIGIN paths to prevent open-redirect.
+  const returnTo = (() => {
+    const raw = new URLSearchParams(location.search).get('returnTo')
+    if (!raw) return null
+    // Must be a relative path starting with `/` and NOT `//` (which is a
+    // protocol-relative URL that would point off-origin).
+    if (!raw.startsWith('/') || raw.startsWith('//')) return null
+    return raw
+  })()
+
   const onSubmit = async (data: LoginFormData) => {
     setLoginError(null)
     try {
       await login(data.email, data.password)
       success('Login successful', 'Welcome back!')
-      navigate('/dashboard')
+      navigate(returnTo ?? '/dashboard')
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || 'Invalid credentials. Please check your email and password.'
       setLoginError(errorMessage)
