@@ -1,0 +1,35 @@
+{
+  "name": "@almyty/auth",
+  "version": "0.1.0",
+  "description": "Browser-based login for almyty CLIs (skills, agents, chat, mcp-server)",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "almyty-auth": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "almyty",
+    "auth",
+    "login",
+    "oauth",
+    "cli"
+  ],
+  "author": "almyty",
+  "license": "BSL-1.1",
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^4.1.0"
+  }
+}
