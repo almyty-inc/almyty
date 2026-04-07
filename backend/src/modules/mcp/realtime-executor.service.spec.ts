@@ -568,16 +568,16 @@ describe('RealtimeExecutorService', () => {
     });
 
     describe('ExecuteAndWait - Branch Coverage', () => {
-      it.skip('should timeout after 5 minutes', async () => {
-        jest.useRealTimers();
-
+      it('should timeout after 5 minutes', async () => {
         const promise = service['executeAndWait']('non-existent-exec');
+        // Attach a catch handler synchronously so the unhandled rejection
+        // doesn't fire while we advance fake timers.
+        const assertion = expect(promise).rejects.toThrow('Tool execution timeout');
 
-        // Should reject with timeout error
-        await expect(promise).rejects.toThrow('Tool execution timeout');
-
-        jest.useFakeTimers();
-      }, 310000); // 310 seconds - longer than the 5 minute timeout
+        // Fast-forward past the 5-minute timeout and let microtasks settle.
+        await jest.advanceTimersByTimeAsync(300001);
+        await assertion;
+      });
 
       it('should resolve when execution completes', async () => {
         jest.useRealTimers();
@@ -903,48 +903,42 @@ describe('RealtimeExecutorService', () => {
     });
 
     describe('Additional branch coverage', () => {
-      it.skip('should handle execution timeout in executeAndWait', async () => {
-        jest.useFakeTimers();
+      it('should handle execution timeout in executeAndWait', async () => {
         mockRedis.get.mockResolvedValue(null);
+        // Make tool execution hang forever so the 5-minute timeout is the
+        // only thing that can resolve the promise.
+        toolExecutorService.executeTool.mockReturnValue(new Promise(() => {}));
 
-        const options = {
+        const promise = service.executeToolRealtime('tool-1', {}, {
           userId: 'user-1',
           organizationId: 'org-1',
-          streaming: false, // Not streaming, will use executeAndWait
-        };
+          streaming: false, // not streaming -> uses executeAndWait
+        });
+        const assertion = expect(promise).rejects.toThrow('Tool execution timeout');
 
-        const promise = service.executeToolRealtime('tool-1', {}, options);
-
-        // Advance timers to trigger timeout (5 minutes)
-        jest.advanceTimersByTime(300000);
-
-        await expect(promise).rejects.toThrow('Tool execution timeout');
-
-        jest.useRealTimers();
+        await jest.advanceTimersByTimeAsync(300001);
+        await assertion;
       });
 
-      it.skip('should handle execution:failed event in executeAndWait', async () => {
+      it('should handle execution:failed event in executeAndWait', async () => {
         mockRedis.get.mockResolvedValue(null);
+        // Hang the underlying tool executor so the only thing that can
+        // settle the promise is the failed event we emit below.
+        toolExecutorService.executeTool.mockReturnValue(new Promise(() => {}));
 
-        const options = {
+        const promise = service.executeToolRealtime('tool-1', {}, {
           userId: 'user-1',
           organizationId: 'org-1',
           streaming: false,
-        };
+        });
+        const assertion = expect(promise).rejects.toThrow('Test error');
 
-        const promise = service.executeToolRealtime('tool-1', {}, options);
-
-        // Wait a bit for execution to start
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Get the execution ID
-        const executions = Array.from(service['activeExecutions'].keys());
-        const executionId = executions[executions.length - 1];
-
-        // Emit failed event
+        // Let the queue processor pick the item up so the executionId exists.
+        await jest.advanceTimersByTimeAsync(1100);
+        const executionId = Array.from(service['activeExecutions'].keys()).pop()!;
         service.emit(`execution:${executionId}:failed`, 'Test error');
 
-        await expect(promise).rejects.toThrow('Test error');
+        await assertion;
       });
 
       it('should handle empty queue in processQueue', async () => {
@@ -974,33 +968,30 @@ describe('RealtimeExecutorService', () => {
         expect(queued.length).toBeGreaterThan(0);
       });
 
-      it.skip('should handle progress update with running status', async () => {
-        jest.useFakeTimers();
+      it('should increment progress on each 2s tick while status is running', async () => {
         mockRedis.get.mockResolvedValue(null);
+        // Hang the underlying executor so the progress interval keeps ticking.
+        toolExecutorService.executeTool.mockReturnValue(new Promise(() => {}));
 
-        const options = {
+        const executionId = await service.executeToolRealtime('tool-1', {}, {
           userId: 'user-1',
           organizationId: 'org-1',
           streaming: true,
-        };
+        });
 
-        const executionId = await service.executeToolRealtime('tool-1', {}, options);
+        // Drain the 1s queue tick so startExecution arms the 2s progress
+        // interval, then mark the execution running with a known baseline.
+        await jest.advanceTimersByTimeAsync(1100);
+        const progress = service['activeExecutions'].get(executionId)!;
+        progress.status = 'running';
+        progress.progress = 50;
 
-        // Set status to running
-        const progress = service['activeExecutions'].get(executionId);
-        if (progress) {
-          progress.status = 'running';
-          progress.progress = 50;
-        }
+        // One progress tick: 50 -> 60. Two ticks: 60 -> 70.
+        await jest.advanceTimersByTimeAsync(2000);
+        expect(progress.progress).toBeGreaterThanOrEqual(60);
 
-        // Advance timers to trigger progress update
-        jest.advanceTimersByTime(2000);
-
-        await new Promise(resolve => setImmediate(resolve));
-
-        jest.useRealTimers();
-
-        expect(progress?.progress).toBeGreaterThanOrEqual(50);
+        await jest.advanceTimersByTimeAsync(2000);
+        expect(progress.progress).toBeGreaterThanOrEqual(70);
       });
     });
   });
