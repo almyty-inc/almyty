@@ -38,24 +38,31 @@
 
 ```
 backend/src/
-├── entities/          # 29 TypeORM entities
+├── entities/          # 35 TypeORM entities
 ├── modules/
-│   ├── agents/        # Agent CRUD, DAG execution engine, OpenAI-compat API
+│   ├── agents/        # Agent CRUD, DAG execution engine, scheduler, webhooks, OpenAI-compat API
 │   ├── apis/          # API CRUD, schema import
+│   ├── audit-log/     # Audit trail for sensitive actions
 │   ├── auth/          # JWT auth, registration, login, OAuth
-│   ├── gateway-tool/  # Gateway-tool assignment
-│   ├── gateways/      # Gateway CRUD, auth enforcement, protocol serving
+│   ├── credentials/   # Credential storage + OAuth2 client flow
+│   ├── files/         # File uploads / attachments
+│   ├── gateways/      # Gateway CRUD, auth enforcement, protocol serving, unified endpoint
 │   ├── health/        # /health, /health/live, /health/ready
+│   ├── interfaces/    # Interface definitions
 │   ├── jobs/          # BullMQ background jobs
 │   ├── json-schema-translator/ # JSON Schema conversion
 │   ├── llm-providers/ # OpenAI, Anthropic integration
-│   ├── mcp/           # MCP, UTCP, A2A controllers + MCP OAuth 2.1 server
+│   ├── mail/          # Outbound email
+│   ├── mcp/           # MCP, UTCP, A2A controllers + MCP OAuth 2.1 server + transports
+│   ├── memory/        # Agent memory + embedding service
 │   ├── monitoring/    # Metrics, usage tracking
 │   ├── organizations/ # Multi-tenancy, RBAC
 │   ├── plugins/       # Plugin system
 │   ├── schema-parser/ # 4 parsers: OpenAPI, GraphQL, SOAP, Protobuf
-│   ├── tools/         # Tool CRUD, generation, execution, skill export
-│   └── users/         # User management
+│   ├── tool-hub/      # Tool catalog / discovery
+│   ├── tools/         # Tool CRUD, generation, execution, skill export, JS sandbox
+│   ├── users/         # User management
+│   └── versions/      # Universal entity versioning (typeorm-versions)
 
 frontend/src/
 ├── pages/             # Dashboard, APIs, Tools, Gateways, Agents, Chat, etc.
@@ -75,10 +82,13 @@ packages/
 
 ## Key Facts
 
-- **Entities**: 29 (User, Organization, Team, Api, ApiSchema, Operation, Resource, Tool, ToolVersion, ToolCategory, ToolExecution, Gateway, GatewayTool, GatewayAuth, LlmProvider, LlmSession, LlmMessage, RequestLog, UsageMetric, JsonSchema, ApiKey, Credential, UserOrganization, UserTeam, Agent, AgentExecution, OAuthClient, OAuthAuthorizationCode, OAuthAccessToken)
+- **Entities**: 35 (User, Organization, Team, UserOrganization, UserTeam, Api, ApiSchema, Operation, Resource, Tool, ToolVersion, ToolCategory, ToolExecution, ToolTemplate, Gateway, GatewayTool, GatewayAuth, LlmProvider, LlmSession, LlmMessage, RequestLog, UsageMetric, JsonSchema, ApiKey, Credential, Agent, AgentExecution, AgentRun, Memory, File, Interface, AuditLog, OAuthClient, OAuthAuthorizationCode, OAuthAccessToken)
+- **Agent node types** (10): `input`, `output`, `llm_call`, `tool_call`, `condition`, `transform`, `loop`, `parallel`, `merge`, `sub_agent`
 - **Gateway types**: MCP, A2A, UTCP, Skills
-- **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed), GraphQL, LLM
-- **Backend tests**: 90 suites, 3,000+ tests
+- **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed via worker_threads), GraphQL, LLM
+- **Backend tests**: 120 spec files. Marketing number ("3,400+ tests") lives in README.md — keep the two in sync when it changes.
+- **Known skipped tests**: 22 `it.skip`/`describe.skip` markers, plus 2 fully `.skip`'d spec files (`schema-parser.service.spec.ts.skip`, `a2a.service.spec.ts.skip`). Most are fake-timer/ping-loop edge cases; the 2 fully-skipped files are the exceptions and should be prioritized.
+- **Duplicated specs**: `mcp/transports/{websocket,sse}.transport.spec.ts` exists both at the transport level and under `__tests__/`. Both run. Needs dedup.
 - **Agent Skills**: Compliant with https://agentskills.io spec
 
 ---
