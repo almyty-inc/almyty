@@ -305,10 +305,13 @@ describe('AgentRuntimeService (integration)', () => {
       expect(updatedRun!.error).toBe('MAX_STEPS_EXCEEDED');
     });
 
-    it('should fail run when budget exceeded', async () => {
+    it('should fail run when budget exceeded (totalCost is dollars, maxCostCents is cents)', async () => {
+      // run.totalCost accumulates dollars from llmResponse.cost.
+      // maxCostCents is, per its name, in cents.
+      // The limit is $1 (100 cents); totalCost of $1.50 should trip it.
       const run = await service.startRun('agent-1', 'org-1', 'user-1', 'test');
-      run.totalCost = 200;
-      run.limits = { maxCostCents: 100 };
+      run.totalCost = 1.5; // $1.50 in real dollars
+      run.limits = { maxCostCents: 100 }; // $1.00 cap
       await mockRunRepo.save(run);
 
       const result = await service.processStep(run.id);
@@ -316,6 +319,53 @@ describe('AgentRuntimeService (integration)', () => {
       expect(result).toBe('done');
       const updatedRun = runStore.find(r => r.id === run.id);
       expect(updatedRun!.status).toBe(AgentRunStatus.FAILED);
+      expect(updatedRun!.error).toBe('BUDGET_EXCEEDED');
+    });
+
+    it('should NOT trip budget when dollars are still under the cents cap', async () => {
+      // Regression: previously `totalCost >= maxCostCents` compared dollars
+      // to cents, so $0.50 (50 cents) triggered a 100-cent cap. The fix
+      // converts totalCost to cents before the comparison.
+      const run = await service.startRun('agent-1', 'org-1', 'user-1', 'test');
+      run.totalCost = 0.5; // $0.50 = 50 cents
+      run.limits = { maxCostCents: 100 }; // $1.00 cap
+      await mockRunRepo.save(run);
+
+      // With the buggy code (`0.5 >= 100` false) this test would also have
+      // passed, so the key assertion is the *opposite* one below: a
+      // previously-permitted value is still permitted, AND the next test
+      // verifies that a value that SHOULD trip the limit actually does.
+      const result = await service.processStep(run.id);
+
+      const updatedRun = runStore.find(r => r.id === run.id);
+      // Should NOT be BUDGET_EXCEEDED — $0.50 is under the $1.00 cap.
+      expect(updatedRun!.error).not.toBe('BUDGET_EXCEEDED');
+    });
+
+    it('should trip budget at the exact cent boundary', async () => {
+      // Regression: the pre-fix check `totalCost >= maxCostCents` only
+      // tripped when totalCost (dollars) exceeded the RAW cents number,
+      // e.g. needed totalCost ≥ 100 dollars to trip a 100-cent limit —
+      // a 100x overrun. The fix compares totalCost * 100 (now cents)
+      // against maxCostCents. This test pins the correct cent-based trip.
+      const run = await service.startRun('agent-1', 'org-1', 'user-1', 'test');
+      run.totalCost = 0.99; // 99 cents — under 100-cent cap
+      run.limits = { maxCostCents: 100 };
+      await mockRunRepo.save(run);
+
+      const result = await service.processStep(run.id);
+      let updatedRun = runStore.find(r => r.id === run.id);
+      expect(updatedRun!.error).not.toBe('BUDGET_EXCEEDED');
+
+      // Now bump to exactly the cap.
+      updatedRun!.totalCost = 1.0; // $1.00 = 100 cents
+      updatedRun!.currentStep = 0;
+      updatedRun!.status = AgentRunStatus.RUNNING;
+      updatedRun!.error = undefined as any;
+      await mockRunRepo.save(updatedRun!);
+
+      await service.processStep(run.id);
+      updatedRun = runStore.find(r => r.id === run.id);
       expect(updatedRun!.error).toBe('BUDGET_EXCEEDED');
     });
 

@@ -569,6 +569,45 @@ describe('AgentsService', () => {
         .toThrow(BadRequestException);
     });
 
+    it('should reject a pipeline where the output node is not reachable from the input', () => {
+      // Input connects to llm_1 -> dead_end (no path to output). output_1
+      // is a disconnected island. Previously this passed validation and the
+      // engine ran to "success" with no output captured.
+      const pipeline: AgentPipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          { id: 'llm_1', type: 'llm_call', config: {} },
+          { id: 'dead_end', type: 'transform', config: {}, data: { expression: 'x' } },
+          { id: 'output_1', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'llm_1' },
+          { id: 'e2', source: 'llm_1', target: 'dead_end' },
+          // output_1 has no incoming edges at all
+        ],
+      };
+
+      expect(() => service['validatePipeline'](pipeline)).toThrow(BadRequestException);
+      expect(() => service['validatePipeline'](pipeline)).toThrow(/not reachable/);
+    });
+
+    it('should accept a pipeline where at least one output is reachable', () => {
+      const pipeline: AgentPipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          { id: 'llm_1', type: 'llm_call', config: {} },
+          { id: 'output_1', type: 'output', config: {} },
+          { id: 'output_2', type: 'output', config: {} }, // unreachable, but OK
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'llm_1' },
+          { id: 'e2', source: 'llm_1', target: 'output_1' },
+        ],
+      };
+
+      expect(() => service['validatePipeline'](pipeline)).not.toThrow();
+    });
+
     it('should reject pipeline with duplicate node IDs', () => {
       const pipeline: AgentPipeline = {
         nodes: [
@@ -761,7 +800,11 @@ describe('AgentsService', () => {
   // ── estimateCost ──────────────────────────────────────────────────────────
 
   describe('estimateCost', () => {
-    it('should count LLM and tool nodes correctly with model-based pricing', async () => {
+    it('should count llm_call nodes and LLM-backed merge strategies only', async () => {
+      // A merge with strategy `best_of_n` uses a judge LLM call and should
+      // count. A merge without a strategy (defaults to first_response) is
+      // pure bookkeeping and should NOT count. Previously all merges were
+      // counted as LLM calls regardless of strategy.
       const agent = makeAgent({
         pipeline: {
           nodes: [
@@ -769,15 +812,15 @@ describe('AgentsService', () => {
             { id: 'llm_1', type: 'llm_call', config: {}, data: { model: 'claude-3-sonnet', providerType: 'anthropic' } },
             { id: 'llm_2', type: 'llm_call', config: {}, data: { model: 'gpt-4', providerType: 'openai' } },
             { id: 'tool_1', type: 'tool_call', config: {}, data: { toolId: 't-1' } },
-            { id: 'merge_1', type: 'merge', config: {} },
+            { id: 'merge_judge', type: 'merge', config: {}, data: { strategy: 'best_of_n' } },
             { id: 'output_1', type: 'output', config: {} },
           ],
           edges: [
             { id: 'e1', source: 'input_1', target: 'llm_1' },
             { id: 'e2', source: 'input_1', target: 'llm_2' },
-            { id: 'e3', source: 'llm_1', target: 'merge_1' },
-            { id: 'e4', source: 'llm_2', target: 'merge_1' },
-            { id: 'e5', source: 'merge_1', target: 'tool_1' },
+            { id: 'e3', source: 'llm_1', target: 'merge_judge' },
+            { id: 'e4', source: 'llm_2', target: 'merge_judge' },
+            { id: 'e5', source: 'merge_judge', target: 'tool_1' },
             { id: 'e6', source: 'tool_1', target: 'output_1' },
           ],
         },
@@ -786,7 +829,7 @@ describe('AgentsService', () => {
 
       const result = await service.estimateCost('agent-1', 'org-1');
 
-      // llm_call x2 + merge x1 = 3 LLM calls
+      // llm_call x2 + merge with best_of_n x1 = 3 LLM calls
       expect(result.estimatedLlmCalls).toBe(3);
       expect(result.estimatedToolCalls).toBe(1);
       expect(result.nodeCount).toBe(6);
@@ -795,6 +838,38 @@ describe('AgentsService', () => {
       // sonnet: 1-4, gpt-4: 3-8, merge (unknown): 1-5, tool: 0.1
       expect(result.estimatedCostRange.low).toBe(5.1);
       expect(result.estimatedCostRange.high).toBe(17.1);
+    });
+
+    it('should NOT count non-LLM merge strategies (first_response, concatenate) as LLM calls', async () => {
+      const agent = makeAgent({
+        pipeline: {
+          nodes: [
+            { id: 'input_1', type: 'input', config: {} },
+            { id: 'llm_1', type: 'llm_call', config: {}, data: { model: 'claude-3-sonnet' } },
+            { id: 'llm_2', type: 'llm_call', config: {}, data: { model: 'claude-3-sonnet' } },
+            { id: 'merge_first', type: 'merge', config: {}, data: { strategy: 'first_response' } },
+            { id: 'merge_concat', type: 'merge', config: {}, data: { strategy: 'concatenate' } },
+            { id: 'merge_default', type: 'merge', config: {} }, // no strategy
+            { id: 'output_1', type: 'output', config: {} },
+          ],
+          edges: [
+            { id: 'e1', source: 'input_1', target: 'llm_1' },
+            { id: 'e2', source: 'input_1', target: 'llm_2' },
+            { id: 'e3', source: 'llm_1', target: 'merge_first' },
+            { id: 'e4', source: 'llm_2', target: 'merge_first' },
+            { id: 'e5', source: 'merge_first', target: 'merge_concat' },
+            { id: 'e6', source: 'merge_first', target: 'merge_default' },
+            { id: 'e7', source: 'merge_concat', target: 'output_1' },
+            { id: 'e8', source: 'merge_default', target: 'output_1' },
+          ],
+        },
+      });
+      agentRepo.findOne.mockResolvedValue(agent);
+
+      const result = await service.estimateCost('agent-1', 'org-1');
+
+      // Only the 2 llm_call nodes count — 3 merges are all non-LLM strategies.
+      expect(result.estimatedLlmCalls).toBe(2);
     });
 
     it('should use provider-type fallback for nodes without model', async () => {
