@@ -1782,6 +1782,89 @@ describe('ToolExecutorService', () => {
     });
   });
 
+  describe('REST path parameter substitution (regression)', () => {
+    it('should replace EVERY occurrence of a repeated path parameter, not just the first', async () => {
+      // Regression: previous code used `url.replace(\`{${key}}\`, value)`
+      // which only replaces the first occurrence. A weird-but-valid path
+      // template like `/orgs/{org}/repos/{org}-archive` would leave the
+      // second `{org}` unsubstituted.
+      const mockTool = {
+        id: 'tool-1',
+        operation: {
+          id: 'op-1',
+          method: 'GET',
+          endpoint: '/orgs/{org}/repos/{org}-archive',
+          api: {
+            id: 'api-1',
+            type: ApiType.OPENAPI,
+            baseUrl: 'https://api.example.com',
+            authentication: { type: 'none', config: {} },
+          },
+          parameters: [],
+        },
+        configuration: {},
+      } as any;
+
+      mockedAxios.mockResolvedValue({ status: 200, data: {}, headers: {} });
+
+      await service['executeRestOperation'](
+        mockTool,
+        mockTool.operation,
+        mockTool.operation.api,
+        { path: { org: 'almyty' } },
+        { userId: 'user-1', organizationId: 'org-1' },
+      );
+
+      const callConfig = mockedAxios.mock.calls[0][0] as any;
+      expect(callConfig.url).toBe('https://api.example.com/orgs/almyty/repos/almyty-archive');
+      expect(callConfig.url).not.toContain('{org}');
+    });
+
+    it('should truncate huge upstream error bodies in the surfaced error message', async () => {
+      // Regression: a 500 with a 5MB JSON body used to inline the whole
+      // body into result.error, bloating logs and LLM context windows.
+      const mockTool = {
+        id: 'tool-1',
+        operation: {
+          id: 'op-1',
+          method: 'GET',
+          endpoint: '/users',
+          api: {
+            id: 'api-1',
+            type: ApiType.OPENAPI,
+            baseUrl: 'https://api.example.com',
+            authentication: { type: 'none', config: {} },
+          },
+          parameters: [],
+        },
+        configuration: {},
+      } as any;
+
+      const hugeBody = 'X'.repeat(50_000);
+      const axiosError = {
+        isAxiosError: true,
+        message: 'Request failed',
+        response: { status: 500, data: hugeBody, headers: {} },
+      };
+      mockedAxios.mockRejectedValue(axiosError);
+      ((axios.isAxiosError as any) as jest.Mock).mockReturnValue(true);
+
+      const result = await service['executeRestOperation'](
+        mockTool,
+        mockTool.operation,
+        mockTool.operation.api,
+        {},
+        { userId: 'user-1', organizationId: 'org-1' },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error!.length).toBeLessThan(700); // 500 chars + the suffix marker
+      expect(result.error).toContain('truncated');
+      // The full body is still preserved on `data`.
+      expect(result.data).toBe(hugeBody);
+    });
+  });
+
   describe('REST Operation with Body Data', () => {
     it('should include body data in POST requests', async () => {
       const mockTool = {

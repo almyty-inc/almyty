@@ -36,6 +36,7 @@ const MemoriesPage = lazy(() => import('@/pages/memories').then(m => ({ default:
 const DocsPage = lazy(() => import('@/pages/docs').then(m => ({ default: m.DocsPage })))
 const ToolHubPage = lazy(() => import('@/pages/tool-hub').then(m => ({ default: m.ToolHubPage })))
 const AcceptInvitePage = lazy(() => import('@/pages/accept-invite').then(m => ({ default: m.AcceptInvitePage })))
+const CliLoginPage = lazy(() => import('@/pages/cli-login').then(m => ({ default: m.CliLoginPage })))
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-96">
@@ -160,6 +161,9 @@ function App() {
 
         {/* Invite accept */}
         <Route path="/invite/accept" element={<AcceptInvitePage />} />
+
+        {/* CLI login (browser-based auth flow for @almyty/auth) */}
+        <Route path="/cli-login" element={<CliLoginPage />} />
 
         {/* Auth routes */}
         <Route path="/auth/*" element={
