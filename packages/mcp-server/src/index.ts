@@ -35,22 +35,29 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { loadCredentials } from './auth.js';
+import { resolveCredentials } from './auth.js';
 import { AlmytyProxy } from './proxy.js';
 
-const ALMYTY_URL = process.env.ALMYTY_URL || 'https://api.almyty.com';
 const ALMYTY_GATEWAY_ID = process.env.ALMYTY_GATEWAY_ID;
 const ALMYTY_MODE = (process.env.ALMYTY_MODE || 'skill-first') as 'skill-first' | 'full';
 
-async function main() {
-  // Resolve token: env var > stored credentials
-  let token = process.env.ALMYTY_TOKEN;
-  if (!token) {
-    const creds = loadCredentials();
-    token = creds?.token;
-  }
+/**
+ * Sanitize a skill name into a valid MCP prompt identifier.
+ * MCP prompt names should be safe identifiers — replace anything outside
+ * [a-zA-Z0-9_-] (e.g. slashes from `petstore/pets`) with underscores so
+ * the registration doesn't blow up on real-world skill names.
+ */
+function sanitizePromptName(name: string): string {
+  return name
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '') || 'skill';
+}
 
-  if (!token) {
+async function main() {
+  // Resolve token: env var > ~/.almyty/credentials.json
+  const creds = resolveCredentials();
+  if (!creds) {
     console.error(
       'Error: No authentication token found.\n' +
       'Set ALMYTY_TOKEN environment variable or run: npx @almyty/auth login'
@@ -58,7 +65,8 @@ async function main() {
     process.exit(1);
   }
 
-  const proxy = new AlmytyProxy(ALMYTY_URL, token, ALMYTY_GATEWAY_ID);
+  const ALMYTY_URL = creds.url;
+  const proxy = new AlmytyProxy(ALMYTY_URL, creds.token, ALMYTY_GATEWAY_ID);
 
   // Fetch tools + skills from backend
   const [tools, skills] = await Promise.all([
@@ -197,9 +205,21 @@ async function main() {
   // N tool schemas (~200 tokens each) always in context.
   // =====================================================
 
+  // Track sanitized prompt names to avoid collisions when two skills
+  // sanitize to the same identifier (e.g. `petstore/pets` and
+  // `petstore-pets` both become `petstore_pets`).
+  const usedPromptNames = new Set<string>();
   for (const skill of skills) {
+    let promptName = `skill-${sanitizePromptName(skill.name)}`;
+    if (usedPromptNames.has(promptName)) {
+      let suffix = 2;
+      while (usedPromptNames.has(`${promptName}-${suffix}`)) suffix++;
+      promptName = `${promptName}-${suffix}`;
+    }
+    usedPromptNames.add(promptName);
+
     server.prompt(
-      `skill-${skill.name}`,
+      promptName,
       `How to use: ${skill.name} (${skill.toolCount} tools)`,
       async () => ({
         messages: [{
