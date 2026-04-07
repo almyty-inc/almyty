@@ -8,9 +8,21 @@ import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/
 export class EmbeddingService {
   private readonly logger = new Logger(EmbeddingService.name);
 
-  /** Cache: orgId -> { provider, fetchedAt } */
+  /**
+   * Cache: orgId -> { provider, fetchedAt }.
+   *
+   * Bounded to `PROVIDER_CACHE_MAX_ORGS` entries. Previously the Map was
+   * unbounded — every org that called `generateEmbedding` got an entry
+   * and it never shrank, so a multi-tenant deployment with thousands of
+   * orgs would slowly leak ~1 KB of provider metadata per org.
+   *
+   * The eviction policy is trivial LRU: when the map hits the cap, we
+   * drop the oldest entry (Map preserves insertion order). For a
+   * production hot-path that wants better hit rates, swap in `lru-cache`.
+   */
   private providerCache = new Map<string, { provider: LlmProvider | null; fetchedAt: number }>();
   private static readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private static readonly PROVIDER_CACHE_MAX_ORGS = 1000;
 
   constructor(
     @InjectRepository(LlmProvider)
@@ -75,7 +87,7 @@ export class EmbeddingService {
   }
 
   /**
-   * Find an active OpenAI provider in the org (cached)
+   * Find an active OpenAI provider in the org (cached, size-bounded).
    */
   private async getOpenAIProvider(organizationId: string): Promise<LlmProvider | null> {
     const cached = this.providerCache.get(organizationId);
@@ -92,13 +104,25 @@ export class EmbeddingService {
         },
         order: { createdAt: 'ASC' },
       });
-      this.providerCache.set(organizationId, { provider, fetchedAt: Date.now() });
+      this.setCache(organizationId, provider);
       return provider;
     } catch (error) {
       this.logger.warn(`Failed to look up OpenAI provider: ${error.message}`);
-      this.providerCache.set(organizationId, { provider: null, fetchedAt: Date.now() });
+      this.setCache(organizationId, null);
       return null;
     }
+  }
+
+  private setCache(organizationId: string, provider: LlmProvider | null): void {
+    // If we're at capacity, evict the oldest entry (Map preserves
+    // insertion order, so the first key is the least recently inserted).
+    if (this.providerCache.size >= EmbeddingService.PROVIDER_CACHE_MAX_ORGS) {
+      const oldestKey = this.providerCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.providerCache.delete(oldestKey);
+      }
+    }
+    this.providerCache.set(organizationId, { provider, fetchedAt: Date.now() });
   }
 
   /**

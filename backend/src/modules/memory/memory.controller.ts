@@ -19,10 +19,18 @@ export class MemoryController {
   constructor(private readonly memoryService: MemoryService) {}
 
   private getOrgId(req: any): string {
-    const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+    // Use ONLY currentOrganizationId (set by JwtStrategy from the
+    // X-Organization-Id header for multi-org users). The old
+    // `|| organizations[0]` fallback silently scoped multi-org users
+    // to their first org — defeating the explicit-context safety.
+    const organizationId = req.user?.currentOrganizationId;
     if (!organizationId) {
       throw new HttpException(
-        { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+        {
+          success: false,
+          message: 'Organization context required. Multi-org users must send the X-Organization-Id header.',
+          error: 'NO_ORGANIZATION',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
