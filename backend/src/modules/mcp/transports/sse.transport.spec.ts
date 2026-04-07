@@ -350,20 +350,32 @@ describe('SseTransport', () => {
         expect(pingCall).toBeDefined();
       });
 
-      it('should close stale connections', async () => {
+      it('should close stale connections after 120s of client silence', async () => {
+        await transport.handleSseConnection(mockResponse, 'org-1', 'user-1');
+        (mcpSessionService.removeSession as jest.Mock).mockClear();
+
+        // No client POSTs for >120s. The 5th ping-loop tick (T=150000) crosses
+        // the stale threshold and closes the connection.
+        jest.advanceTimersByTime(150001);
+
+        expect(mcpSessionService.removeSession).toHaveBeenCalled();
+      });
+
+      it('should NOT close a connection that the client keeps poking via handleSseMessage', async () => {
         const connectionId = await transport.handleSseConnection(mockResponse, 'org-1', 'user-1');
         (mcpSessionService.removeSession as jest.Mock).mockClear();
 
-        // FOLLOW-UP — sse.transport.ts:178: `sendEvent` refreshes `lastPing`,
-        // so server-initiated pings keep the connection from going stale.
-        // Until that's fixed, simulate a silent client by manually backdating
-        // `lastPing` so the next 30s tick crosses the 120s stale threshold.
-        const connection = (transport as any).connections.get(connectionId);
-        connection.lastPing = new Date(Date.now() - 200000);
+        // Simulate a client that POSTs every 60s for 4 minutes.
+        for (let i = 0; i < 4; i++) {
+          await transport.handleSseMessage(connectionId, {
+            jsonrpc: '2.0',
+            method: 'tools/list',
+            id: i,
+          } as any);
+          jest.advanceTimersByTime(60000);
+        }
 
-        jest.advanceTimersByTime(35000);
-
-        expect(mcpSessionService.removeSession).toHaveBeenCalled();
+        expect(mcpSessionService.removeSession).not.toHaveBeenCalled();
       });
     });
 

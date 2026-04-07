@@ -483,7 +483,7 @@ describe('Agent Edge Cases', () => {
     });
 
     // ── Execution timeout at 1ms ──────────────────────────────────────────
-    it('should time out or fail when maxExecutionTime is 1ms and node is slow', async () => {
+    it('should classify slow-node timeouts as TIMEOUT (not FAILED) regardless of which check fires', async () => {
       const agent = makeAgent({
         settings: { maxExecutionTime: 1 },
       });
@@ -502,21 +502,29 @@ describe('Agent Edge Cases', () => {
 
       const result = await engine.execute(agent, 'org-1', 'user-1', { input: {} });
 
-      expect([AgentExecutionStatus.TIMEOUT, AgentExecutionStatus.FAILED]).toContain(result.status);
+      // Both the pre-layer check and the in-layer Promise.race timeout
+      // now route to TIMEOUT. Previously layer-level timeouts produced
+      // a generic FAILED status.
+      expect(result.status).toBe(AgentExecutionStatus.TIMEOUT);
     });
 
     // ── Budget limit of 0 ─────────────────────────────────────────────────
-    it('should use Infinity budget when budgetLimit is 0 (falsy fallback)', async () => {
-      // budgetLimit=0 is falsy, so `settings.budgetLimit || Infinity` resolves to Infinity
+    it('should treat budgetLimit=0 as a hard zero-spending cap (not as "no limit")', async () => {
+      // The engine uses `agent.settings?.budgetLimit ?? Infinity` so a user
+      // who explicitly sets 0 ("don't spend anything") gets a real cap of zero.
+      // Previously this used `||`, which silently turned 0 into Infinity and
+      // let the agent burn money — this test now pins the corrected behavior.
       const pipeline: AgentPipeline = {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
           { id: 'llm_1', type: 'llm_call', config: {}, data: { providerId: 'p-1', userPromptTemplate: 'hi' } },
-          { id: 'output_1', type: 'output', config: {}, data: { mapping: '{{nodes.llm_1.output}}' } },
+          { id: 'llm_2', type: 'llm_call', config: {}, data: { providerId: 'p-1', userPromptTemplate: 'hi' } },
+          { id: 'output_1', type: 'output', config: {}, data: { mapping: '{{nodes.llm_2.output}}' } },
         ],
         edges: [
           { id: 'e1', source: 'input_1', target: 'llm_1' },
-          { id: 'e2', source: 'llm_1', target: 'output_1' },
+          { id: 'e2', source: 'llm_1', target: 'llm_2' },
+          { id: 'e3', source: 'llm_2', target: 'output_1' },
         ],
       };
 
@@ -539,8 +547,9 @@ describe('Agent Edge Cases', () => {
 
       const result = await engine.execute(agent, 'org-1', 'user-1', { input: {} });
 
-      // 0 is falsy so default Infinity applies — should complete normally
-      expect(result.status).toBe(AgentExecutionStatus.COMPLETED);
+      // After llm_1 spends 0.01 (>0), the next layer's budget check trips.
+      expect(result.status).toBe(AgentExecutionStatus.FAILED);
+      expect(result.error).toContain('Budget limit');
     });
 
     // ── Budget limit of 0.001 ───────────────────────────────────────────────
