@@ -53,7 +53,7 @@ async function main() {
   if (!token) {
     console.error(
       'Error: No authentication token found.\n' +
-      'Set ALMYTY_TOKEN environment variable or run: npx @almyty/mcp-server login'
+      'Set ALMYTY_TOKEN environment variable or run: npx @almyty/auth login'
     );
     process.exit(1);
   }
@@ -286,13 +286,12 @@ async function main() {
 // Handle subcommands
 const subcommand = process.argv[2];
 
-if (subcommand === 'login') {
-  const { login } = await import('./auth.js');
-  await login(ALMYTY_URL);
-} else if (subcommand === 'logout') {
-  const { logout } = await import('./auth.js');
-  logout();
-  console.log('Logged out successfully.');
+if (subcommand === 'login' || subcommand === 'logout' || subcommand === 'whoami') {
+  // Auth lives in @almyty/auth. Redirect rather than silently doing
+  // nothing — users typing the old commands should see the new entry point.
+  console.error(`Authentication moved to @almyty/auth.`);
+  console.error(`  npx @almyty/auth ${subcommand}`);
+  process.exit(1);
 } else if (subcommand === '--help' || subcommand === '-h') {
   console.log(`
 @almyty/mcp-server — Skill-first API proxy for any LLM
@@ -307,8 +306,11 @@ Token overhead comparison:
 
 Usage:
   npx @almyty/mcp-server              Start server (skill-first mode)
-  npx @almyty/mcp-server login        Interactive login
-  npx @almyty/mcp-server logout       Clear credentials
+
+Authentication:
+  npx @almyty/auth login              Browser-based login (one-time setup)
+                                      Credentials at ~/.almyty/credentials.json
+                                      are shared across every almyty CLI.
 
 Environment:
   ALMYTY_URL         Base URL (default: https://api.almyty.com)
