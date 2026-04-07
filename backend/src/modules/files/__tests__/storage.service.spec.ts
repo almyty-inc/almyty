@@ -92,4 +92,44 @@ describe('StorageService (local provider)', () => {
       expect(url).toBe('http://localhost:3000/files/org-1/test.txt/download');
     });
   });
+
+  describe('path traversal hardening (sandbox-escape regression)', () => {
+    // Regression: previously `path.join(basePath, key)` was called
+    // without validating `key`, so a storage key containing `..` would
+    // escape basePath and write/read outside the uploads directory.
+    // Every provider method now goes through `resolveSafe()` which
+    // asserts both the key shape and the resolved filesystem path.
+
+    it.each([
+      '../escape.txt',
+      '../../etc/passwd',
+      'org-1/../../../secrets.env',
+      './././../outside.txt',
+    ])('upload must reject traversal key "%s"', async (bad) => {
+      await expect(service.upload(bad, Buffer.from('x'), 'text/plain')).rejects.toThrow();
+    });
+
+    it('upload must reject NUL bytes', async () => {
+      await expect(service.upload('org-1/foo\0bar.txt', Buffer.from('x'), 'text/plain')).rejects.toThrow();
+    });
+
+    it('upload must reject absolute paths', async () => {
+      await expect(service.upload('/etc/passwd', Buffer.from('x'), 'text/plain')).rejects.toThrow();
+    });
+
+    it('download must reject traversal keys', async () => {
+      await expect(service.download('../../../etc/passwd')).rejects.toThrow();
+    });
+
+    it('delete must reject traversal keys', async () => {
+      await expect(service.delete('../../escape.txt')).rejects.toThrow();
+    });
+
+    it('upload must write inside basePath for valid keys', async () => {
+      const url = await service.upload('org-1/valid/file.txt', Buffer.from('hello'), 'text/plain');
+      expect(url).toContain('org-1/valid/file.txt');
+      const written = fs.readFileSync(path.join(tmpDir, 'org-1/valid/file.txt'), 'utf-8');
+      expect(written).toBe('hello');
+    });
+  });
 });

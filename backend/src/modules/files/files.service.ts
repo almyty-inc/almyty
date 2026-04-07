@@ -26,7 +26,13 @@ export class FilesService {
     options?: { agentId?: string; runId?: string; uploadedBy?: string; extractText?: boolean },
   ): Promise<AgentFile> {
     const fileId = uuidv4();
-    const storageKey = `${organizationId}/${options?.agentId || 'general'}/${fileId}/${file.originalname}`;
+    // Sanitize the user-supplied filename before embedding it in the
+    // storage key. The key is used as a filesystem path by the local
+    // storage provider — an unsanitized `../../etc/passwd` would
+    // escape the uploads directory. We allow a conservative set of
+    // characters and collapse everything else to `_`.
+    const safeName = this.sanitizeStoredFilename(file.originalname);
+    const storageKey = `${organizationId}/${options?.agentId || 'general'}/${fileId}/${safeName}`;
 
     // Upload to storage
     const storageUrl = await this.storageService.upload(storageKey, file.buffer, file.mimetype);
@@ -111,5 +117,35 @@ export class FilesService {
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, action: AuditAction.FILE_DELETE, resourceType: AuditResource.FILE, resourceId: id, resourceName: file.name });
+  }
+
+  /**
+   * Sanitize a user-supplied filename for use as a filesystem path
+   * component.
+   *
+   * - Strips directory separators and NUL bytes.
+   * - Collapses unsafe characters to underscores.
+   * - Preserves a reasonable extension for the common case (matters
+   *   for humans browsing the uploads dir; the canonical name in the
+   *   DB is the original `file.originalname`, not this sanitized one).
+   * - Prevents the bare `.` and `..` segments.
+   * - Truncates to 200 chars to avoid path-length overflow on Windows
+   *   / some filesystems.
+   */
+  private sanitizeStoredFilename(raw: string): string {
+    if (!raw || typeof raw !== 'string') return 'upload.bin';
+    // Take only the basename — strips any leading directory component
+    // that a malicious client might have included via `../` or `\`.
+    // Handle both `/` and `\` since Windows clients may send either.
+    const basename = raw.replace(/\\/g, '/').split('/').pop() || 'upload.bin';
+    // Remove NULs and replace anything outside a conservative whitelist
+    // with `_`. The whitelist is alphanumerics + `.-_ ` (space is OK in
+    // filenames on every modern FS).
+    let cleaned = basename.replace(/\0/g, '').replace(/[^A-Za-z0-9._\- ]/g, '_');
+    // Collapse leading dots so we can't produce `.`, `..`, or hidden files.
+    cleaned = cleaned.replace(/^\.+/, '');
+    if (!cleaned) cleaned = 'upload.bin';
+    if (cleaned.length > 200) cleaned = cleaned.slice(0, 200);
+    return cleaned;
   }
 }
