@@ -5,12 +5,18 @@ import { Operation, OperationType, HttpMethod } from '../../../entities/operatio
 import { Resource, ResourceType } from '../../../entities/resource.entity';
 import { SchemaParser, ParsedSchema, ParsedOperation, ParsedResource } from '../interfaces/parser.interface';
 
+/** Hard cap on .proto input size — memory DoS protection. */
+const MAX_PROTO_BYTES = 5 * 1024 * 1024; // 5 MB
+
 @Injectable()
 export class ProtobufParserService implements SchemaParser {
   private readonly logger = new Logger(ProtobufParserService.name);
 
   async parseSchema(rawSchema: string, fileName?: string): Promise<ParsedSchema> {
     try {
+      if (typeof rawSchema === 'string' && rawSchema.length > MAX_PROTO_BYTES) {
+        throw new Error(`Protobuf schema exceeds max size of ${MAX_PROTO_BYTES} bytes`);
+      }
       const root = protobuf.parse(rawSchema).root;
       
       const operations = await this.extractOperationsFromProtobuf(root);
@@ -40,6 +46,12 @@ export class ProtobufParserService implements SchemaParser {
 
   async validateSchema(schema: string): Promise<{ isValid: boolean; errors: string[] }> {
     try {
+      if (typeof schema === 'string' && schema.length > MAX_PROTO_BYTES) {
+        return {
+          isValid: false,
+          errors: [`Protobuf schema exceeds max size of ${MAX_PROTO_BYTES} bytes`],
+        };
+      }
       protobuf.parse(schema);
       return { isValid: true, errors: [] };
     } catch (error) {
