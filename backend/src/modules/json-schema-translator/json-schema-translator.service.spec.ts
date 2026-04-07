@@ -1588,9 +1588,6 @@ describe('JsonSchemaTranslatorService', () => {
         expect(result.required).toBeUndefined();
       });
 
-      it.skip('should handle property with non-array required (line 472 - FALSE branch)', () => {
-        // Skipped: redundant with "should handle property with properties but no required" test
-      });
     });
 
     describe('validateJsonSchema - error branch coverage', () => {

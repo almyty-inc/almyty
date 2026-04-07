@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import axios from 'axios';
 
 import { ApisService, CreateApiData } from './apis.service';
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
@@ -14,7 +15,10 @@ import { ToolsService } from '../tools/tools.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { TestHelper, mockRepository } from '../../test/setup';
 
-jest.mock('axios');
+jest.mock('axios', () => ({
+  __esModule: true,
+  default: { get: jest.fn() },
+}));
 
 describe('ApisService', () => {
   let service: ApisService;
@@ -753,11 +757,15 @@ describe('ApisService', () => {
     });
   });
 
-  describe.skip('fetchSchemaFromUrl - branch coverage', () => {
-    // Skipping axios mocking tests - axios import in service is causing issues
+  describe('fetchSchemaFromUrl - branch coverage', () => {
+    const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+    beforeEach(() => {
+      mockedAxios.get.mockReset();
+    });
+
     it('should return string response as is', async () => {
-      const axios = require('axios');
-      axios.get = jest.fn().mockResolvedValue({ data: 'openapi: 3.0.0' });
+      mockedAxios.get.mockResolvedValue({ data: 'openapi: 3.0.0' } as any);
 
       const result = await service.fetchSchemaFromUrl('https://api.test.com/schema');
 
@@ -765,9 +773,8 @@ describe('ApisService', () => {
     });
 
     it('should stringify object response', async () => {
-      const axios = require('axios');
       const objectData = { openapi: '3.0.0', info: { title: 'Test' } };
-      axios.get = jest.fn().mockResolvedValue({ data: objectData });
+      mockedAxios.get.mockResolvedValue({ data: objectData } as any);
 
       const result = await service.fetchSchemaFromUrl('https://api.test.com/schema');
 
@@ -775,12 +782,18 @@ describe('ApisService', () => {
     });
 
     it('should convert other types to string', async () => {
-      const axios = require('axios');
-      axios.get = jest.fn().mockResolvedValue({ data: 12345 });
+      mockedAxios.get.mockResolvedValue({ data: 12345 } as any);
 
       const result = await service.fetchSchemaFromUrl('https://api.test.com/schema');
 
       expect(result).toBe('12345');
+    });
+
+    it('wraps network errors in BadRequestException', async () => {
+      mockedAxios.get.mockRejectedValue(new Error('ECONNREFUSED'));
+
+      await expect(service.fetchSchemaFromUrl('https://x')).rejects.toThrow(BadRequestException);
+      await expect(service.fetchSchemaFromUrl('https://x')).rejects.toThrow(/ECONNREFUSED/);
     });
   });
 

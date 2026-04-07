@@ -397,9 +397,20 @@ describe('WebSocketTransport', () => {
   });
 
   describe('heartbeat mechanism', () => {
-    it.skip('should send pings to connections', async () => {
+    // The transport's constructor schedules its heartbeat against real timers,
+    // so each heartbeat test tears down the existing interval, installs fake
+    // timers, and re-arms the heartbeat against the fakes.
+    beforeEach(async () => {
+      await transport.shutdown();
       jest.useFakeTimers();
+      (transport as any).startHeartbeat();
+    });
 
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should send pings to connections', async () => {
       const mockWs = new EventEmitter() as any;
       mockWs.send = jest.fn();
       mockWs.readyState = WebSocket.OPEN;
@@ -407,18 +418,13 @@ describe('WebSocketTransport', () => {
 
       await transport.handleWebSocketConnection(mockWs, 'org-1');
 
-      // Advance past the heartbeat interval
+      // Advance past the heartbeat interval (30s).
       jest.advanceTimersByTime(31000);
 
-      // The ping should have been called
       expect(mockWs.ping).toHaveBeenCalled();
-
-      jest.useRealTimers();
     });
 
-    it.skip('should close stale connections', async () => {
-      jest.useFakeTimers();
-
+    it('should close stale connections', async () => {
       const mockWs = new EventEmitter() as any;
       mockWs.send = jest.fn();
       mockWs.readyState = WebSocket.OPEN;
@@ -426,17 +432,13 @@ describe('WebSocketTransport', () => {
       mockWs.close = jest.fn();
 
       await transport.handleWebSocketConnection(mockWs, 'org-1');
-
-      // Clear previous calls
       (mcpSessionService.removeSession as jest.Mock).mockClear();
 
-      // Advance time beyond stale threshold without pong
-      jest.advanceTimersByTime(70000);
+      // Heartbeat interval is 30s; stale threshold is 65s. We need a heartbeat
+      // tick to fire AFTER 65s of silence, so advance well past 90s.
+      jest.advanceTimersByTime(100000);
 
-      // Should have attempted to close stale connection
       expect(mcpSessionService.removeSession).toHaveBeenCalled();
-
-      jest.useRealTimers();
     });
 
     it('should keep connection alive with pongs', async () => {

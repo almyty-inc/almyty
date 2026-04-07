@@ -300,8 +300,23 @@ export class PerformanceMonitorPlugin {
       insights.push('Memory usage significantly above average - check for memory leaks');
     }
 
-    if (recentMetrics.every(m => m.executionTime > averageExecutionTime)) {
-      insights.push('Consistent performance degradation detected - optimization recommended');
+    // Detect consistent performance degradation: compare the later half of
+    // recent metrics to the earlier half. The previous check
+    // (`every(m => m.executionTime > averageExecutionTime)`) was mathematically
+    // impossible — at least one value must be ≤ its own average — so the
+    // branch was never reached.
+    if (recentMetrics.length >= 4) {
+      const mid = Math.floor(recentMetrics.length / 2);
+      const earlier = recentMetrics.slice(0, mid);
+      const later = recentMetrics.slice(mid);
+      const earlierAvg =
+        earlier.reduce((sum, m) => sum + m.executionTime, 0) / earlier.length;
+      const laterAvg =
+        later.reduce((sum, m) => sum + m.executionTime, 0) / later.length;
+      // Trigger when the later window is at least 25 % slower than the earlier window.
+      if (earlierAvg > 0 && laterAvg > earlierAvg * 1.25) {
+        insights.push('Consistent performance degradation detected - optimization recommended');
+      }
     }
 
     // Optimization suggestions
