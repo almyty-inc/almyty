@@ -6,21 +6,51 @@ import { Operation, HttpMethod, OperationType } from '../../../entities/operatio
 import { Resource, ResourceType } from '../../../entities/resource.entity';
 import { SchemaParser, ParsedSchema, ParsedOperation, ParsedResource } from '../interfaces/parser.interface';
 
+/**
+ * Hard size cap on incoming raw schemas. Protects against memory DoS
+ * via oversized JSON/YAML inputs (JSON.parse on a 100MB string would
+ * allocate hundreds of MB of heap before we even start processing).
+ */
+const MAX_SCHEMA_BYTES = 5 * 1024 * 1024; // 5 MB
+
+/**
+ * Parser options that disable EXTERNAL $ref resolution. Without this,
+ * SwaggerParser.dereference() happily follows `$ref: "http://..."` or
+ * `$ref: "file:///etc/passwd"` — a classic SSRF + local-file-read
+ * vector via user-supplied schemas.
+ *
+ * Internal JSON-Pointer refs (`$ref: "#/components/schemas/..."`)
+ * still work because they don't touch the network or filesystem.
+ */
+const SAFE_PARSER_OPTIONS = {
+  resolve: {
+    external: false,
+    http: false as any,
+    file: false as any,
+  },
+} as const;
+
 @Injectable()
 export class OpenAPIParserService implements SchemaParser {
   private readonly logger = new Logger(OpenAPIParserService.name);
 
   async parseSchema(rawSchema: string, fileName?: string): Promise<ParsedSchema> {
     try {
+      if (typeof rawSchema === 'string' && rawSchema.length > MAX_SCHEMA_BYTES) {
+        throw new Error(`Schema exceeds max size of ${MAX_SCHEMA_BYTES} bytes`);
+      }
       let schemaObject: any;
       try {
         schemaObject = JSON.parse(rawSchema);
       } catch (jsonError) {
         schemaObject = rawSchema;
       }
-      // Use dereference() to resolve all $ref pointers inline
-      // This ensures parameters, requestBody, schemas are all resolved
-      const api = await SwaggerParser.dereference(schemaObject) as OpenAPIV3.Document;
+      // Dereference $refs but do NOT resolve external URLs/files.
+      // See SAFE_PARSER_OPTIONS comment above.
+      const api = (await SwaggerParser.dereference(
+        schemaObject,
+        SAFE_PARSER_OPTIONS as any,
+      )) as unknown as OpenAPIV3.Document;
 
       const operations = await this.extractOperationsFromOpenAPI(api);
       const resources = await this.extractResourcesFromOpenAPI(api);
@@ -50,13 +80,19 @@ export class OpenAPIParserService implements SchemaParser {
 
   async validateSchema(schema: string): Promise<{ isValid: boolean; errors: string[] }> {
     try {
+      if (typeof schema === 'string' && schema.length > MAX_SCHEMA_BYTES) {
+        return {
+          isValid: false,
+          errors: [`Schema exceeds max size of ${MAX_SCHEMA_BYTES} bytes`],
+        };
+      }
       let schemaObject: any;
       try {
         schemaObject = JSON.parse(schema);
       } catch (jsonError) {
         schemaObject = schema;
       }
-      await SwaggerParser.validate(schemaObject);
+      await SwaggerParser.validate(schemaObject, SAFE_PARSER_OPTIONS as any);
       return { isValid: true, errors: [] };
     } catch (error) {
       return {
