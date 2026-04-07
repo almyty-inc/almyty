@@ -136,7 +136,12 @@ export class CredentialService {
     if (dto.keyLocation !== undefined) credential.keyLocation = dto.keyLocation;
     if (dto.scopes !== undefined) credential.scopes = dto.scopes;
     if (dto.isActive !== undefined) credential.isActive = dto.isActive;
-    if (dto.expiresAt !== undefined) credential.expiresAt = new Date(dto.expiresAt);
+    // Treat empty string and falsy as "clear the expiry"; only construct
+    // a Date when there's an actual value. Previously `new Date('')`
+    // produced an Invalid Date that TypeORM persisted as garbage.
+    if (dto.expiresAt !== undefined) {
+      credential.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    }
 
     if (dto.config) {
       credential.config = dto.config;
@@ -224,7 +229,10 @@ export class CredentialService {
       throw new BadRequestException('Only OAuth2 credentials support token refresh');
     }
 
-    // Re-read from DB to check if another process already refreshed it
+    // Re-read from DB to check if another process already refreshed it.
+    // From this point on we operate exclusively on `freshCredential` —
+    // the parameter `credential` may be stale and any writes to it would
+    // overwrite concurrent updates from other processes.
     const freshCredential = await this.credentialRepository.findOne({ where: { id: credential.id } });
     if (!freshCredential) {
       throw new NotFoundException('Credential not found');
@@ -272,21 +280,21 @@ export class CredentialService {
         // The old refreshToken is now invalid
       }
 
-      credential.config = updatedConfig;
+      freshCredential.config = updatedConfig;
 
       if (expires_in) {
-        credential.expiresAt = new Date(Date.now() + expires_in * 1000);
+        freshCredential.expiresAt = new Date(Date.now() + expires_in * 1000);
       }
 
-      credential.encryptSensitiveData();
-      await this.credentialRepository.save(credential);
+      freshCredential.encryptSensitiveData();
+      await this.credentialRepository.save(freshCredential);
 
-      this.logger.log(`OAuth2 token refreshed for credential ${credential.id}`);
-      return credential;
+      this.logger.log(`OAuth2 token refreshed for credential ${freshCredential.id}`);
+      return freshCredential;
     } catch (error) {
-      this.logger.error(`OAuth2 token refresh failed for credential ${credential.id}: ${error.message}`);
-      credential.isActive = false;
-      await this.credentialRepository.save(credential);
+      this.logger.error(`OAuth2 token refresh failed for credential ${freshCredential.id}: ${error.message}`);
+      freshCredential.isActive = false;
+      await this.credentialRepository.save(freshCredential);
       throw new BadRequestException(`Token refresh failed: ${error.message}`);
     }
   }
