@@ -904,62 +904,30 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
       expect(stats?.insights.some(i => i.includes('Memory usage significantly above average'))).toBe(true);
     });
 
-    it.skip('should generate insight for consistent performance degradation (line 304)', () => {
-      // For the condition to be true: recentMetrics.every(m => m.executionTime > averageExecutionTime)
-      // We need the last 10 entries to all be above their own average
-      // This requires having one low value to bring down the average
-      const performanceDataDegrading = [];
-
-      // Add 9 slow executions
-      for (let i = 0; i < 9; i++) {
-        performanceDataDegrading.push({
-          timestamp: Date.now(),
-          executionTime: 6000, // Slow (6 seconds)
-          memoryUsage: 100000,
-          cpuUsage: 0,
-          networkCalls: 0,
-        });
-      }
-
-      // Add 1 fast execution to bring down average
-      performanceDataDegrading.push({
-        timestamp: Date.now(),
-        executionTime: 1000, // Fast (1 second)
-        memoryUsage: 100000,
-        cpuUsage: 0,
-        networkCalls: 0,
-      });
-
-      // Average = (6000*9 + 1000*1)/10 = 55000/10 = 5500
-      // All 10 entries: 9 with 6000 > 5500 (true), 1 with 1000 < 5500 (false)
-      // So .every() returns false
-
-      // Need ALL to be > average. Let me add another slow one at the end
-      performanceDataDegrading.push({
-        timestamp: Date.now(),
-        executionTime: 6000, // Slow
-        memoryUsage: 100000,
-        cpuUsage: 0,
-        networkCalls: 0,
-      });
-
-      // Now last 10 are: 8 with 6000, 1 with 1000, 1 with 6000
-      // Average = (6000*9 + 1000*1)/10 = 5500
-      // Last 10: all 9 are 6000 > 5500 (true), 1 is 1000 < 5500 (false)
-      // Still fails...
-
-      // The problem is that if one value is in the last 10 AND is below average, it fails
-      // So I need the low value to NOT be in the last 10!
-      // Let me restructure: add 1 fast, then 10 slow
+    it('should generate insight when recent half is consistently slower than earlier half', () => {
+      // Earlier half ~1000ms, later half ~6000ms — clearly degrading.
       (plugin as any).performanceData.set('tool-degrading', [
-        { timestamp: Date.now(), executionTime: 1000, memoryUsage: 100000, cpuUsage: 0, networkCalls: 0 },
-        ...Array(10).fill(null).map(() => ({
-          timestamp: Date.now(), executionTime: 6000, memoryUsage: 100000, cpuUsage: 0, networkCalls: 0
-        }))
+        ...Array(5).fill(null).map(() => ({
+          timestamp: Date.now(), executionTime: 1000, memoryUsage: 100000, cpuUsage: 0, networkCalls: 0,
+        })),
+        ...Array(5).fill(null).map(() => ({
+          timestamp: Date.now(), executionTime: 6000, memoryUsage: 100000, cpuUsage: 0, networkCalls: 0,
+        })),
       ]);
 
       const stats = plugin.getToolPerformanceStats('tool-degrading');
       expect(stats?.insights.some(i => i.includes('Consistent performance degradation'))).toBe(true);
+    });
+
+    it('should NOT generate degradation insight when execution times are stable', () => {
+      (plugin as any).performanceData.set('tool-stable', [
+        ...Array(10).fill(null).map(() => ({
+          timestamp: Date.now(), executionTime: 1000, memoryUsage: 100000, cpuUsage: 0, networkCalls: 0,
+        })),
+      ]);
+
+      const stats = plugin.getToolPerformanceStats('tool-stable');
+      expect(stats?.insights.some(i => i.includes('Consistent performance degradation'))).toBe(false);
     });
 
     it('should generate insight for multiple network calls (line 314)', () => {

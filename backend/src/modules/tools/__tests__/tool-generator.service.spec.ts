@@ -433,7 +433,20 @@ describe('ToolGeneratorService', () => {
       expect(result.parameters.required).toContain('X-Api-Key');
     });
 
-    it.skip('should create parameters from query parameters', async () => {
+    it('should create parameters from query parameters', async () => {
+      // Use a fresh operation without a body schema, otherwise the body
+      // schema clobbers query properties via Object.assign in
+      // createFallbackParameters().
+      const queryOnlyOp: Partial<Operation> = {
+        ...mockOperation,
+        parameters: {
+          query: {
+            include: { type: 'string', required: false, description: 'Include related data' },
+            page: { type: 'integer', required: true, description: 'Page number' },
+          },
+        },
+      };
+
       jest.spyOn(jsonSchemaTranslator, 'translateOperationToInputSchema').mockResolvedValue(null);
       jest.spyOn(jsonSchemaTranslator, 'translateOperationToOutputSchema').mockResolvedValue(null);
       jest.spyOn(jsonSchemaRepository, 'findOne').mockResolvedValue(null);
@@ -448,18 +461,31 @@ describe('ToolGeneratorService', () => {
       jest.spyOn(toolVersionRepository, 'create').mockReturnValue({} as any);
       jest.spyOn(toolVersionRepository, 'save').mockResolvedValue({} as any);
 
-      const result = await service.generateToolFromOperation(
-        mockOperation as Operation,
-        mockApi as Api
-      );
+      await service.generateToolFromOperation(queryOnlyOp as Operation, mockApi as Api);
 
-      expect(result).toBeDefined();
-      expect(result.parameters).toBeDefined();
-      expect(result.parameters.properties).toBeDefined();
-      expect(result.parameters.properties.include).toBeDefined();
+      expect(capturedTool.parameters.properties.include).toEqual({
+        type: 'string',
+        description: 'Include related data',
+      });
+      expect(capturedTool.parameters.properties.page).toEqual({
+        type: 'integer',
+        description: 'Page number',
+      });
+      expect(capturedTool.parameters.required).toContain('page');
+      expect(capturedTool.parameters.required).not.toContain('include');
     });
 
-    it.skip('should create parameters from header parameters', async () => {
+    it('should create parameters from header parameters', async () => {
+      const headerOnlyOp: Partial<Operation> = {
+        ...mockOperation,
+        parameters: {
+          header: {
+            'X-Api-Key': { type: 'string', required: true, description: 'API Key' },
+            'X-Trace-Id': { type: 'string', required: false },
+          },
+        },
+      };
+
       jest.spyOn(jsonSchemaTranslator, 'translateOperationToInputSchema').mockResolvedValue(null);
       jest.spyOn(jsonSchemaTranslator, 'translateOperationToOutputSchema').mockResolvedValue(null);
       jest.spyOn(jsonSchemaRepository, 'findOne').mockResolvedValue(null);
@@ -474,15 +500,16 @@ describe('ToolGeneratorService', () => {
       jest.spyOn(toolVersionRepository, 'create').mockReturnValue({} as any);
       jest.spyOn(toolVersionRepository, 'save').mockResolvedValue({} as any);
 
-      const result = await service.generateToolFromOperation(
-        mockOperation as Operation,
-        mockApi as Api
-      );
+      await service.generateToolFromOperation(headerOnlyOp as Operation, mockApi as Api);
 
-      expect(result).toBeDefined();
-      expect(result.parameters).toBeDefined();
-      expect(result.parameters.properties).toBeDefined();
-      expect(result.parameters.properties['X-Api-Key']).toBeDefined();
+      expect(capturedTool.parameters.properties['X-Api-Key']).toEqual({
+        type: 'string',
+        description: 'API Key',
+      });
+      expect(capturedTool.parameters.properties['X-Trace-Id']).toBeDefined();
+      expect(capturedTool.parameters.properties['X-Trace-Id'].description).toBe('Header parameter: X-Trace-Id');
+      expect(capturedTool.parameters.required).toContain('X-Api-Key');
+      expect(capturedTool.parameters.required).not.toContain('X-Trace-Id');
     });
 
     it('should handle body parameters with schema', async () => {
