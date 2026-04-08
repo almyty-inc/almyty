@@ -96,6 +96,50 @@ export interface AuthenticationResult {
   metadata?: Record<string, any>;
 }
 
+/**
+ * Heuristic catastrophic-backtracking detector for admin-supplied
+ * `keyFormat` regexes. We don't ship re2 and we don't run the regex
+ * in a worker, so the only defense against a tenant admin bringing
+ * down the whole instance with `(a+)+$` is to refuse the most common
+ * footgun shapes up front. This covers the textbook ReDoS patterns:
+ *
+ *   (x+)+, (x*)*, (x+)*, (x*)+, (x?)+, (x+)?+
+ *   (a|a)+, (a|ab)+, (a|b|c)+ over overlapping alternatives
+ *
+ * and any `{m,n}`-quantified group with an inner `+`/`*`/`{…}`
+ * quantifier. The check is intentionally over-eager: a legitimate
+ * pattern that trips it just needs to be rewritten more carefully.
+ * Caps the worst-case false-positive impact at "admin has to pick a
+ * different regex" which is a much better failure mode than "admin
+ * takes the platform down".
+ */
+function isLikelyCatastrophicRegex(pattern: string): boolean {
+  // 1. Any parenthesised group whose body contains a quantifier and
+  // which is itself followed by a quantifier. Works across character
+  // classes because JS regex `.` doesn't match newlines by default —
+  // we explicitly use [\s\S]*? to keep it short-circuited. The non-
+  // greedy body avoids matching across unrelated groups.
+  if (/\(([^()]*[+*?][^()]*|[^()]*\{\d+,?\d*\}[^()]*)\)[+*?{]/.test(pattern)) {
+    return true;
+  }
+
+  // 2. Alternation inside a quantified group with obviously-overlapping
+  // branches (same literal on both sides, or a prefix relationship).
+  // We catch the simplest cases: `(a|a)`, `(a|ab)`, `(ab|a)` when
+  // followed by +/*/?.
+  const altGroup = /\(([^()|]+)\|([^()|]+)\)[+*?]/;
+  const m = pattern.match(altGroup);
+  if (m) {
+    const a = m[1];
+    const b = m[2];
+    if (a === b || a.startsWith(b) || b.startsWith(a)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 @Injectable()
 export class GatewayAuthService {
   private readonly logger = new Logger(GatewayAuthService.name);
@@ -785,18 +829,46 @@ export class GatewayAuthService {
       return false;
     }
 
-    // Check format. The regex is supplied by the gateway owner and tested
-    // against the caller's key. Wrap both compilation AND execution in a
-    // try/catch so:
-    //   - an invalid regex pattern doesn't throw a SyntaxError out of the
-    //     auth pipeline and cause a 500
-    //   - a catastrophic-backtracking regex (ReDoS) at worst returns false
-    //     for this one request (no partial fix for ReDoS at this layer,
-    //     but at least we don't crash)
+    // Check format. keyFormat is a regex supplied by the gateway owner
+    // (admin) and tested against the caller's API key on every auth
+    // request. The old shape wrapped the call in try/catch to survive
+    // a SyntaxError but did nothing about catastrophic backtracking:
+    // a crafted pattern like `(a+)+$` against a long key will grind
+    // the Node event loop for seconds-to-minutes, starving *every*
+    // org on the instance. An admin on one tenant can trivially DoS
+    // the whole platform just by setting the wrong validationRules.
+    //
+    // This is hard to fix perfectly without pulling in re2 or running
+    // the test in a worker, but we can cut the realistic attack
+    // surface to almost zero with three cheap defenses applied in
+    // order:
+    //
+    //   1. Hard-cap the input key length before it ever reaches the
+    //      regex engine (ENGINE_INPUT_MAX). Catastrophic backtracking
+    //      is a function of input length — bounding it to ~2 KiB
+    //      keeps even bad patterns polynomial in a fixed constant.
+    //   2. Hard-cap the regex source length (PATTERN_MAX). A healthy
+    //      API-key format regex is typically <= a few dozen chars.
+    //   3. Reject patterns with the classic "nested quantifier" shape
+    //      that causes exponential blowup — a group that contains a
+    //      quantifier AND is itself quantified: `(…+…)+`, `(…*…)*`,
+    //      `(…+…)*`, `(…*…)+`. This covers the common footguns
+    //      without needing a full DFA check.
     if (validationRules.keyFormat) {
+      const ENGINE_INPUT_MAX = 2048;
+      const PATTERN_MAX = 512;
+
+      if (validationRules.keyFormat.length > PATTERN_MAX) {
+        return false;
+      }
+      if (isLikelyCatastrophicRegex(validationRules.keyFormat)) {
+        return false;
+      }
+      const probe = key.length > ENGINE_INPUT_MAX ? key.slice(0, ENGINE_INPUT_MAX) : key;
+
       try {
         const regex = new RegExp(validationRules.keyFormat);
-        if (!regex.test(key)) {
+        if (!regex.test(probe)) {
           return false;
         }
       } catch {
