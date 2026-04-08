@@ -80,10 +80,10 @@ describe('AgentRuntimeService (integration)', () => {
       }),
       findOne: jest.fn().mockImplementation(({ where, relations }: any) => {
         const found = runStore.find(r => {
-          if (where.id && where.organizationId) {
-            return r.id === where.id && r.organizationId === where.organizationId;
-          }
-          return r.id === where.id;
+          if (where.id && r.id !== where.id) return false;
+          if (where.organizationId && r.organizationId !== where.organizationId) return false;
+          if (where.agentId && r.agentId !== where.agentId) return false;
+          return true;
         });
         if (found && relations?.includes('agent')) {
           found.agent = agentStore.find(a => a.id === found.agentId) || null as any;
@@ -571,6 +571,38 @@ describe('AgentRuntimeService (integration)', () => {
       await expect(
         service.getRun('fake-id', 'org-1'),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    // Regression: the run-scoped controller endpoints live under
+    // /agents/:id/runs/:runId/... — but the previous getRun signature
+    // ignored `:id` and would resolve any runId in the caller's org
+    // regardless of which agent it was attached to. The optional
+    // `agentId` argument asserts the binding.
+    describe('agent-id binding (regression)', () => {
+      beforeEach(() => {
+        // Seed a second agent in the same org so the mismatch case
+        // has something to compare against.
+        agentStore.push(makeAgent({ id: 'agent-2', name: 'Other Agent' }));
+      });
+
+      it('returns the run when agentId matches', async () => {
+        const created = await service.startRun('agent-1', 'org-1', 'user-1', 'hi');
+        const fetched = await service.getRun(created.id, 'org-1', 'agent-1');
+        expect(fetched.id).toBe(created.id);
+      });
+
+      it('throws NotFound when agentId does NOT match', async () => {
+        const created = await service.startRun('agent-1', 'org-1', 'user-1', 'hi');
+        await expect(
+          service.getRun(created.id, 'org-1', 'agent-2'),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('omitting agentId still works for unscoped lookups', async () => {
+        const created = await service.startRun('agent-1', 'org-1', 'user-1', 'hi');
+        const fetched = await service.getRun(created.id, 'org-1');
+        expect(fetched.id).toBe(created.id);
+      });
     });
   });
 
