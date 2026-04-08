@@ -61,7 +61,7 @@ cd frontend && npm run dev    # http://localhost:3002
 
 **Deploy** → One endpoint (`/{org}/{gateway}`), all protocols.
 
-**Run** → Scheduling, webhooks, versioning, analytics, RBAC. 3,400+ tests.
+**Run** → Scheduling, webhooks, versioning, analytics, RBAC. 3,800+ tests.
 
 ## Agent Skills CLI
 
@@ -74,7 +74,7 @@ Works with Claude Code, Cursor, Copilot, Windsurf, and [30+ more](https://agents
 ## Development
 
 ```bash
-cd backend && npm run test           # 3,400+ tests
+cd backend && npm run test           # 3,800+ tests
 cd frontend && npx playwright test   # E2E
 ```
 
