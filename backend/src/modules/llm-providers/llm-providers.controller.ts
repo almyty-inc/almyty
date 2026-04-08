@@ -625,7 +625,26 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const result = await this.llmProvidersService.performHealthCheck(providerId);
+      // Thread the caller's current org through so the service can
+      // refuse a cross-tenant test. Without this any member could
+      // POST /llm-providers/<foreign-provider-id>/test and spend
+      // another org's API credits on a probe call.
+      const organizationId = req.user?.currentOrganizationId;
+      if (!organizationId) {
+        throw new HttpException(
+          {
+            success: false,
+            message:
+              'Organization context required. Multi-org users must send the X-Organization-Id header.',
+            error: 'NO_ORGANIZATION',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const result = await this.llmProvidersService.performHealthCheck(
+        providerId,
+        organizationId,
+      );
 
       return {
         success: true,

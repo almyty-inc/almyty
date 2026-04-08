@@ -6,11 +6,16 @@ import { ApisService } from '../../apis/apis.service';
 
 export interface SchemaImportJob {
   apiId: string;
-  /** Set by the controller when the job is enqueued. Older jobs (created
-   *  before this field existed) will have it undefined; the worker treats
-   *  that case as "skip the cross-check" so we don't break in-flight imports
-   *  during the upgrade. */
-  organizationId?: string;
+  /**
+   * Required. Set by the controller when the job is enqueued. Any
+   * job payload missing this field is rejected by the processor
+   * rather than silently bypassing the cross-tenant check — during
+   * the original rollout this was optional to accommodate in-flight
+   * jobs that predated the field, but that grace window has long
+   * since closed and an optional org field is now a footgun (a
+   * crafted job payload with no org could bypass tenant validation).
+   */
+  organizationId: string;
   schemaContent: string;
   options: {
     fileName?: string;
@@ -32,17 +37,21 @@ export class SchemaImportProcessor {
     this.logger.log(`[JOB ${job.id}] Starting schema import for API ${apiId}`);
 
     try {
-      // Defence-in-depth: verify the api still exists and (if the job
-      // payload carries an org) still belongs to that org. If a job is
-      // somehow injected with a mismatched (apiId, organizationId) pair,
-      // refuse to run it instead of importing into the wrong tenant.
-      if (organizationId) {
-        const api = await this.apisService.findOne(apiId);
-        if (!api || api.organizationId !== organizationId) {
-          throw new NotFoundException(
-            `API ${apiId} not found in organization ${organizationId}`,
-          );
-        }
+      // Mandatory tenant check: refuse to run any job without a
+      // payload-carried organizationId, and refuse any job whose
+      // (apiId, organizationId) pair doesn't match the stored row.
+      // A crafted/injected job with a mismatched pair would
+      // otherwise import a schema into the wrong tenant.
+      if (!organizationId) {
+        throw new NotFoundException(
+          `Schema import job ${job.id} rejected: organizationId missing from payload`,
+        );
+      }
+      const api = await this.apisService.findOne(apiId);
+      if (!api || api.organizationId !== organizationId) {
+        throw new NotFoundException(
+          `API ${apiId} not found in organization ${organizationId}`,
+        );
       }
 
       // Update job progress
