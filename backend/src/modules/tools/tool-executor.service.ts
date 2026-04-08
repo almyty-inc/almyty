@@ -88,9 +88,22 @@ export class ToolExecutorService {
     let rateLimited = false;
 
     try {
-      // Get tool with relations
+      if (!options.organizationId) {
+        throw new Error('Tool not found');
+      }
+
+      // Get tool with relations. Previously this lookup had no org
+      // filter, so a user in org A with \`use_tools\` permission could
+      // execute any tool in org B just by passing toolId — running
+      // HTTP requests against that org's configured APIs, spending
+      // their credentials, and returning the response. Now scoped to
+      // { id, organizationId } so the tool can only be loaded from
+      // the caller's own org. The ambient \`options.organizationId\`
+      // is assumed to already be the authenticated caller's
+      // currentOrganizationId — callers must not forward a
+      // client-supplied value.
       const tool = await this.toolRepository.findOne({
-        where: { id: toolId },
+        where: { id: toolId, organizationId: options.organizationId },
         relations: ['operation', 'operation.api', 'api', 'inputSchema', 'outputSchema'],
       });
 

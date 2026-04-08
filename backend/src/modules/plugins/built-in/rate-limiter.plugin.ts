@@ -11,7 +11,13 @@ interface RateLimitWindow {
 }
 
 export class RateLimiterPlugin {
+  // Bounded in-memory store. NOTE: This plugin's counters are per-process,
+  // so a user can get N × limit concurrent requests on an N-replica
+  // deployment. Redis-backed sharing is the correct fix; for now we at
+  // least prevent the map from growing unbounded under key variation
+  // (e.g. one entry per tool×org×user combination).
   private readonly windows = new Map<string, RateLimitWindow>();
+  private static readonly MAX_WINDOWS = 10_000;
 
   getPluginDefinition(): Omit<Plugin, 'id' | 'metadata'> {
     return {
@@ -81,7 +87,26 @@ export class RateLimiterPlugin {
     const startTime = Date.now();
     const userId = context.userId || 'anonymous';
     const organizationId = context.organizationId;
-    
+
+    // Without an org, two different orgs' anonymous/system traffic
+    // would share the same \`ratelimit:user:anonymous:undefined\` bucket.
+    // Fail closed — the caller passed an unauthenticated context.
+    if (!organizationId) {
+      return {
+        success: false,
+        data: context.data,
+        error: {
+          code: 'RATE_LIMIT_NO_ORG',
+          message: 'Rate limiter requires an organization context',
+        },
+        metadata: {
+          executionTime: Date.now() - startTime,
+          modifications: [],
+        },
+        nextAction: 'stop',
+      };
+    }
+
     // Build rate limit key
     const key = `ratelimit:user:${userId}:${organizationId}`;
     
@@ -198,14 +223,25 @@ export class RateLimiterPlugin {
 
     // Check limit
     if (window.count >= limit) {
-      // Check if user should bypass (admin/owner roles)
-      // This would require checking user role from context
       return false;
     }
 
     // Increment counter
     window.count++;
     this.windows.set(key, window);
+
+    // Opportunistically prune expired windows whenever the map grows
+    // past the bounded cap. cleanupWindows() already handles the
+    // "expired" case; if the cap is still exceeded after cleanup we
+    // drop the oldest entry. Without this the map could grow
+    // unboundedly under key variation (per-user per-tool per-org).
+    if (this.windows.size > RateLimiterPlugin.MAX_WINDOWS) {
+      this.cleanupWindows();
+      if (this.windows.size > RateLimiterPlugin.MAX_WINDOWS) {
+        const firstKey = this.windows.keys().next().value;
+        if (firstKey) this.windows.delete(firstKey);
+      }
+    }
 
     return true;
   }
