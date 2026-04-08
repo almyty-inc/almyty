@@ -64,6 +64,7 @@ describe('McpOAuthService', () => {
             create: jest.fn().mockImplementation((data) => ({ ...data })),
             save: jest.fn().mockImplementation((data) => Promise.resolve(data)),
             findOne: jest.fn(),
+            update: jest.fn().mockResolvedValue({ affected: 1 }),
           },
         },
         {
@@ -89,6 +90,12 @@ describe('McpOAuthService', () => {
     oauthCodeRepository = module.get(getRepositoryToken(OAuthAuthorizationCode));
     oauthTokenRepository = module.get(getRepositoryToken(OAuthAccessToken));
     gatewayRepository = module.get(getRepositoryToken(Gateway));
+
+    // Default: the client lookup now runs at the top of exchangeCode /
+    // refreshToken / revokeToken so every test flow hits it. Return the
+    // public mockClient by default; individual tests override when they
+    // need a confidential client or a "not found" branch.
+    jest.spyOn(oauthClientRepository, 'findOne').mockResolvedValue(mockClient as OAuthClient);
   });
 
   // ---------------------------------------------------------------------------
@@ -375,6 +382,7 @@ describe('McpOAuthService', () => {
         ...validDto,
         redirect_uris: [
           'https://example.com/callback',
+          'gateway-1',
           'http://example.com/bad', // non-HTTPS, non-localhost
         ],
       };
@@ -636,6 +644,7 @@ describe('McpOAuthService', () => {
         'mcp_client_abc123',
         codeVerifier,
         'https://example.com/callback',
+          'gateway-1',
       );
 
       expect(result.access_token).toBeDefined();
@@ -647,7 +656,7 @@ describe('McpOAuthService', () => {
       expect(result.scope).toBe('tools:read tools:execute');
     });
 
-    it('should mark code as used after exchange', async () => {
+    it('should atomically mark code as used after exchange', async () => {
       const authCode = { ...mockAuthCode };
       jest.spyOn(oauthCodeRepository, 'findOne').mockResolvedValue(authCode as any);
 
@@ -656,12 +665,33 @@ describe('McpOAuthService', () => {
         'mcp_client_abc123',
         codeVerifier,
         'https://example.com/callback',
+        'gateway-1',
       );
 
-      expect(authCode.isUsed).toBe(true);
-      expect(oauthCodeRepository.save).toHaveBeenCalledWith(
+      // The claim is done via a conditional UPDATE with `isUsed: false`
+      // in the where clause so only one concurrent caller can consume
+      // a given code — a race the previous `save(authCode)` shape lost.
+      expect(oauthCodeRepository.update).toHaveBeenCalledWith(
+        expect.objectContaining({ id: authCode.id, isUsed: false }),
         expect.objectContaining({ isUsed: true }),
       );
+    });
+
+    it('rejects a second concurrent exchange that lost the race', async () => {
+      jest.spyOn(oauthCodeRepository, 'findOne').mockResolvedValue({ ...mockAuthCode } as any);
+      // Simulate the other racer having already consumed the code:
+      // the conditional UPDATE affects zero rows.
+      (oauthCodeRepository.update as jest.Mock).mockResolvedValueOnce({ affected: 0 });
+
+      await expect(
+        service.exchangeCode(
+          rawCode,
+          'mcp_client_abc123',
+          codeVerifier,
+          'https://example.com/callback',
+          'gateway-1',
+        ),
+      ).rejects.toThrow('already been used');
     });
 
     it('should reject already-used codes (replay detection)', async () => {
@@ -674,6 +704,7 @@ describe('McpOAuthService', () => {
           'mcp_client_abc123',
           codeVerifier,
           'https://example.com/callback',
+          'gateway-1',
         ),
       ).rejects.toThrow(UnauthorizedException);
       await expect(
@@ -682,6 +713,7 @@ describe('McpOAuthService', () => {
           'mcp_client_abc123',
           codeVerifier,
           'https://example.com/callback',
+          'gateway-1',
         ),
       ).rejects.toThrow('Authorization code has already been used');
     });
@@ -699,6 +731,7 @@ describe('McpOAuthService', () => {
           'mcp_client_abc123',
           codeVerifier,
           'https://example.com/callback',
+          'gateway-1',
         ),
       ).rejects.toThrow(UnauthorizedException);
       await expect(
@@ -707,6 +740,7 @@ describe('McpOAuthService', () => {
           'mcp_client_abc123',
           codeVerifier,
           'https://example.com/callback',
+          'gateway-1',
         ),
       ).rejects.toThrow('Authorization code has expired');
     });
@@ -720,6 +754,7 @@ describe('McpOAuthService', () => {
           'mcp_client_abc123',
           codeVerifier,
           'https://wrong.com/callback',
+          'gateway-1',
         ),
       ).rejects.toThrow(BadRequestException);
       await expect(
@@ -728,6 +763,7 @@ describe('McpOAuthService', () => {
           'mcp_client_abc123',
           codeVerifier,
           'https://wrong.com/callback',
+          'gateway-1',
         ),
       ).rejects.toThrow('redirect_uri mismatch');
     });
@@ -741,6 +777,7 @@ describe('McpOAuthService', () => {
           'mcp_client_abc123',
           'wrong-verifier',
           'https://example.com/callback',
+          'gateway-1',
         ),
       ).rejects.toThrow(UnauthorizedException);
       await expect(
@@ -749,6 +786,7 @@ describe('McpOAuthService', () => {
           'mcp_client_abc123',
           'wrong-verifier',
           'https://example.com/callback',
+          'gateway-1',
         ),
       ).rejects.toThrow('PKCE verification failed');
     });
@@ -762,6 +800,7 @@ describe('McpOAuthService', () => {
           'mcp_client_abc123',
           codeVerifier,
           'https://example.com/callback',
+          'gateway-1',
         ),
       ).rejects.toThrow(UnauthorizedException);
       await expect(
@@ -770,6 +809,7 @@ describe('McpOAuthService', () => {
           'mcp_client_abc123',
           codeVerifier,
           'https://example.com/callback',
+          'gateway-1',
         ),
       ).rejects.toThrow('Invalid authorization code');
     });
@@ -782,6 +822,7 @@ describe('McpOAuthService', () => {
         'mcp_client_abc123',
         codeVerifier,
         'https://example.com/callback',
+          'gateway-1',
       );
 
       // create should be called twice: once for access token, once for refresh token
@@ -793,7 +834,7 @@ describe('McpOAuthService', () => {
       expect(tokenTypes).toContain('refresh');
     });
 
-    it('should look up code by its SHA-256 hash', async () => {
+    it('should look up code by its SHA-256 hash, scoped to the gateway', async () => {
       jest.spyOn(oauthCodeRepository, 'findOne').mockResolvedValue({ ...mockAuthCode } as any);
 
       await service.exchangeCode(
@@ -801,10 +842,13 @@ describe('McpOAuthService', () => {
         'mcp_client_abc123',
         codeVerifier,
         'https://example.com/callback',
+        'gateway-1',
       );
 
+      // gatewayId MUST be part of the where clause — without it a code
+      // issued at /mcp/orgA/gwA could be redeemed at /mcp/orgB/gwB.
       expect(oauthCodeRepository.findOne).toHaveBeenCalledWith({
-        where: { codeHash, clientId: 'mcp_client_abc123' },
+        where: { codeHash, clientId: 'mcp_client_abc123', gatewayId: 'gateway-1' },
       });
     });
   });
@@ -831,16 +875,18 @@ describe('McpOAuthService', () => {
       isRevoked: false,
     };
 
-    it('should revoke old refresh token (rotation) and generate new token pair', async () => {
+    it('should atomically rotate the old refresh token and generate a new token pair', async () => {
       const existingToken = { ...mockRefreshToken };
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(existingToken as any);
 
-      const result = await service.refreshToken(rawRefreshToken, 'mcp_client_abc123');
+      const result = await service.refreshToken(rawRefreshToken, 'mcp_client_abc123', 'gateway-1');
 
-      // Old token should be revoked
-      expect(existingToken.isRevoked).toBe(true);
-      expect(oauthTokenRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({ isRevoked: true, tokenType: 'refresh' }),
+      // Rotation is now a conditional UPDATE rather than a read-modify-
+      // save, so we can't race ourselves into two valid rotations from
+      // a single stolen refresh token.
+      expect(oauthTokenRepository.update).toHaveBeenCalledWith(
+        expect.objectContaining({ id: existingToken.id, isRevoked: false }),
+        expect.objectContaining({ isRevoked: true }),
       );
 
       // New tokens should be generated
@@ -857,10 +903,10 @@ describe('McpOAuthService', () => {
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(revokedToken as any);
 
       await expect(
-        service.refreshToken(rawRefreshToken, 'mcp_client_abc123'),
+        service.refreshToken(rawRefreshToken, 'mcp_client_abc123', 'gateway-1'),
       ).rejects.toThrow(UnauthorizedException);
       await expect(
-        service.refreshToken(rawRefreshToken, 'mcp_client_abc123'),
+        service.refreshToken(rawRefreshToken, 'mcp_client_abc123', 'gateway-1'),
       ).rejects.toThrow('Refresh token has been revoked');
     });
 
@@ -872,10 +918,10 @@ describe('McpOAuthService', () => {
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(expiredToken as any);
 
       await expect(
-        service.refreshToken(rawRefreshToken, 'mcp_client_abc123'),
+        service.refreshToken(rawRefreshToken, 'mcp_client_abc123', 'gateway-1'),
       ).rejects.toThrow(UnauthorizedException);
       await expect(
-        service.refreshToken(rawRefreshToken, 'mcp_client_abc123'),
+        service.refreshToken(rawRefreshToken, 'mcp_client_abc123', 'gateway-1'),
       ).rejects.toThrow('Refresh token has expired');
     });
 
@@ -883,22 +929,23 @@ describe('McpOAuthService', () => {
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(null);
 
       await expect(
-        service.refreshToken('nonexistent-token', 'mcp_client_abc123'),
+        service.refreshToken('nonexistent-token', 'mcp_client_abc123', 'gateway-1'),
       ).rejects.toThrow(UnauthorizedException);
       await expect(
-        service.refreshToken('nonexistent-token', 'mcp_client_abc123'),
+        service.refreshToken('nonexistent-token', 'mcp_client_abc123', 'gateway-1'),
       ).rejects.toThrow('Invalid refresh token');
     });
 
-    it('should look up refresh token by hash and clientId', async () => {
+    it('should look up refresh token by hash, clientId, gatewayId, and type', async () => {
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue({ ...mockRefreshToken } as any);
 
-      await service.refreshToken(rawRefreshToken, 'mcp_client_abc123');
+      await service.refreshToken(rawRefreshToken, 'mcp_client_abc123', 'gateway-1');
 
       expect(oauthTokenRepository.findOne).toHaveBeenCalledWith({
         where: {
           tokenHash,
           clientId: 'mcp_client_abc123',
+          gatewayId: 'gateway-1',
           tokenType: 'refresh',
         },
       });
@@ -907,7 +954,7 @@ describe('McpOAuthService', () => {
     it('should preserve scope and resource from old token in new pair', async () => {
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue({ ...mockRefreshToken } as any);
 
-      const result = await service.refreshToken(rawRefreshToken, 'mcp_client_abc123');
+      const result = await service.refreshToken(rawRefreshToken, 'mcp_client_abc123', 'gateway-1');
 
       expect(result.scope).toBe('tools:read tools:execute');
     });
@@ -1012,7 +1059,7 @@ describe('McpOAuthService', () => {
       const token = { ...mockAccessTokenForRevoke };
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(token as any);
 
-      await service.revokeToken(rawToken, 'mcp_client_abc123');
+      await service.revokeToken(rawToken, 'mcp_client_abc123', 'gateway-1');
 
       expect(token.isRevoked).toBe(true);
       expect(oauthTokenRepository.save).toHaveBeenCalledWith(
@@ -1027,7 +1074,7 @@ describe('McpOAuthService', () => {
       };
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(refreshToken as any);
 
-      await service.revokeToken(rawToken, 'mcp_client_abc123');
+      await service.revokeToken(rawToken, 'mcp_client_abc123', 'gateway-1');
 
       // The refresh token itself should be revoked
       expect(refreshToken.isRevoked).toBe(true);
@@ -1052,7 +1099,7 @@ describe('McpOAuthService', () => {
       const accessToken = { ...mockAccessTokenForRevoke, tokenType: 'access' as const };
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(accessToken as any);
 
-      await service.revokeToken(rawToken, 'mcp_client_abc123');
+      await service.revokeToken(rawToken, 'mcp_client_abc123', 'gateway-1');
 
       expect(oauthTokenRepository.update).not.toHaveBeenCalled();
     });
@@ -1062,32 +1109,45 @@ describe('McpOAuthService', () => {
 
       // Should not throw
       await expect(
-        service.revokeToken('nonexistent-token', 'mcp_client_abc123'),
+        service.revokeToken('nonexistent-token', 'mcp_client_abc123', 'gateway-1'),
       ).resolves.toBeUndefined();
 
       // save should not be called
       expect(oauthTokenRepository.save).not.toHaveBeenCalled();
     });
 
-    it('should reject token belonging to different client', async () => {
+    it("silently ignores tokens that don't belong to the presented client (via findOne where clause)", async () => {
+      // The old shape did `findOne({ where: { tokenHash } })` and then
+      // threw BadRequest when the loaded token's clientId didn't match.
+      // That leaked a cross-client existence oracle: a caller could tell
+      // whether a random token hash belonged to client X by checking
+      // whether they got 400 ("wrong client") vs 200 (no-op). Now the
+      // clientId is part of the where clause, so a token belonging to a
+      // different client simply isn't found and the handler returns 200
+      // per RFC 7009.
       const token = { ...mockAccessTokenForRevoke, clientId: 'mcp_client_other' };
-      jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(token as any);
-
-      await expect(
-        service.revokeToken(rawToken, 'mcp_client_abc123'),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.revokeToken(rawToken, 'mcp_client_abc123'),
-      ).rejects.toThrow('Token does not belong to this client');
-    });
-
-    it('should look up token by hash without filtering by clientId', async () => {
+      // Since the where clause now scopes to clientId+gatewayId, the
+      // service.findOne call wouldn't actually match this token in real
+      // DB. Simulate that by returning null.
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(null);
 
-      await service.revokeToken(rawToken, 'mcp_client_abc123');
+      await expect(
+        service.revokeToken(rawToken, 'mcp_client_abc123', 'gateway-1'),
+      ).resolves.toBeUndefined();
+      expect(oauthTokenRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('scopes the token lookup by hash + clientId + gatewayId', async () => {
+      jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(null);
+
+      await service.revokeToken(rawToken, 'mcp_client_abc123', 'gateway-1');
 
       expect(oauthTokenRepository.findOne).toHaveBeenCalledWith({
-        where: { tokenHash },
+        where: {
+          tokenHash,
+          clientId: 'mcp_client_abc123',
+          gatewayId: 'gateway-1',
+        },
       });
     });
   });
@@ -1217,6 +1277,200 @@ describe('McpOAuthService', () => {
       const createCalls = (oauthTokenRepository.create as jest.Mock).mock.calls;
       for (const call of createCalls) {
         expect(call[0].resource).toBeNull();
+      }
+    });
+  });
+
+  // ─── Regression: confidential client secret enforcement ───────────
+  describe('confidential client secret enforcement (regression)', () => {
+    // Helper: a confidential client with a known secret + its hash.
+    const knownSecret = 'super-secret-value';
+    const secretHash = crypto.createHash('sha256').update(knownSecret).digest('hex');
+    const confidentialClient: Partial<OAuthClient> = {
+      ...mockClient,
+      tokenEndpointAuthMethod: 'client_secret_post',
+      clientSecretHash: secretHash,
+    };
+
+    const rawCode = 'auth-code-confidential';
+    const codeVerifier = 'verifier-for-confidential';
+    const codeChallenge = crypto
+      .createHash('sha256')
+      .update(codeVerifier)
+      .digest('base64url');
+    const mockAuthCode: Partial<OAuthAuthorizationCode> = {
+      id: 'code-uuid-confidential',
+      codeHash: sha256(rawCode),
+      clientId: 'mcp_client_abc123',
+      userId: 'user-1',
+      gatewayId: 'gateway-1',
+      organizationId: 'org-1',
+      redirectUri: 'https://example.com/callback',
+      scope: 'tools:read',
+      codeChallenge,
+      codeChallengeMethod: 'S256',
+      expiresAt: new Date(Date.now() + 600_000),
+      isUsed: false,
+    };
+
+    beforeEach(() => {
+      // Override the default public client for this describe block.
+      (oauthClientRepository.findOne as jest.Mock).mockResolvedValue(
+        confidentialClient as any,
+      );
+      (oauthCodeRepository.findOne as jest.Mock).mockResolvedValue({ ...mockAuthCode } as any);
+    });
+
+    it('rejects exchangeCode when no client_secret is presented', async () => {
+      await expect(
+        service.exchangeCode(
+          rawCode,
+          'mcp_client_abc123',
+          codeVerifier,
+          'https://example.com/callback',
+          'gateway-1',
+          /* clientSecret */ undefined,
+        ),
+      ).rejects.toThrow('client_secret is required');
+    });
+
+    it('rejects exchangeCode when the presented secret is wrong', async () => {
+      await expect(
+        service.exchangeCode(
+          rawCode,
+          'mcp_client_abc123',
+          codeVerifier,
+          'https://example.com/callback',
+          'gateway-1',
+          'wrong-secret',
+        ),
+      ).rejects.toThrow('Invalid client_secret');
+    });
+
+    it('accepts exchangeCode when the presented secret matches', async () => {
+      const result = await service.exchangeCode(
+        rawCode,
+        'mcp_client_abc123',
+        codeVerifier,
+        'https://example.com/callback',
+        'gateway-1',
+        knownSecret,
+      );
+      expect(result.access_token).toMatch(/^almyty_at_/);
+    });
+
+    it('rejects a public-client call that includes a client_secret', async () => {
+      // Flip back to the public client for this test.
+      (oauthClientRepository.findOne as jest.Mock).mockResolvedValueOnce(
+        mockClient as any,
+      );
+
+      await expect(
+        service.exchangeCode(
+          rawCode,
+          'mcp_client_abc123',
+          codeVerifier,
+          'https://example.com/callback',
+          'gateway-1',
+          'some-secret',
+        ),
+      ).rejects.toThrow('must not be presented');
+    });
+  });
+
+  // ─── Regression: cross-gateway replay ─────────────────────────────
+  describe('cross-gateway scoping (regression)', () => {
+    it('refuses to load a code with a findOne call that omits gatewayId', async () => {
+      // Set findOne to return a code bound to gateway-1 regardless of
+      // query. The service is responsible for passing gatewayId in the
+      // where clause — if it does, we can assert on the call.
+      const rawCode = 'cross-gateway-code';
+      (oauthCodeRepository.findOne as jest.Mock).mockResolvedValue({
+        id: 'code-cg',
+        codeHash: sha256(rawCode),
+        clientId: 'mcp_client_abc123',
+        userId: 'user-1',
+        gatewayId: 'gateway-1',
+        organizationId: 'org-1',
+        redirectUri: 'https://example.com/callback',
+        scope: 'tools:read',
+        codeChallenge: crypto.createHash('sha256').update('verifier').digest('base64url'),
+        codeChallengeMethod: 'S256',
+        expiresAt: new Date(Date.now() + 600_000),
+        isUsed: false,
+      });
+
+      await service.exchangeCode(
+        rawCode,
+        'mcp_client_abc123',
+        'verifier',
+        'https://example.com/callback',
+        'gateway-1',
+      );
+
+      expect(oauthCodeRepository.findOne).toHaveBeenCalledWith({
+        where: expect.objectContaining({ gatewayId: 'gateway-1' }),
+      });
+    });
+  });
+
+  // ─── Regression: refresh token lineage revocation ────────────────
+  describe('refresh token lineage (regression)', () => {
+    it('revokes the entire token lineage when a rotated refresh token is reused', async () => {
+      const rawRt = 'almyty_rt_rotated';
+      const revokedExisting = {
+        id: 'token-rotated',
+        tokenHash: sha256(rawRt),
+        tokenType: 'refresh',
+        clientId: 'mcp_client_abc123',
+        userId: 'user-1',
+        gatewayId: 'gateway-1',
+        organizationId: 'org-1',
+        scope: 'tools:read',
+        expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+        isRevoked: true,
+      };
+      (oauthTokenRepository.findOne as jest.Mock).mockResolvedValue(revokedExisting);
+
+      await expect(
+        service.refreshToken(rawRt, 'mcp_client_abc123', 'gateway-1'),
+      ).rejects.toThrow('has been revoked');
+
+      // The critical bit: the whole chain for this (client, user, gateway)
+      // must be revoked, not just the one presented token.
+      expect(oauthTokenRepository.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clientId: 'mcp_client_abc123',
+          userId: 'user-1',
+          gatewayId: 'gateway-1',
+          isRevoked: false,
+        }),
+        { isRevoked: true },
+      );
+    });
+
+    it('links the new refresh token to the old one via parentTokenId', async () => {
+      const rawRt = 'almyty_rt_current';
+      const existing = {
+        id: 'token-current',
+        tokenHash: sha256(rawRt),
+        tokenType: 'refresh',
+        clientId: 'mcp_client_abc123',
+        userId: 'user-1',
+        gatewayId: 'gateway-1',
+        organizationId: 'org-1',
+        scope: 'tools:read',
+        expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+        isRevoked: false,
+      };
+      (oauthTokenRepository.findOne as jest.Mock).mockResolvedValue(existing);
+
+      await service.refreshToken(rawRt, 'mcp_client_abc123', 'gateway-1');
+
+      const createCalls = (oauthTokenRepository.create as jest.Mock).mock.calls;
+      // Both the new access + refresh should carry the old token's id.
+      for (const call of createCalls) {
+        expect(call[0].parentTokenId).toBe('token-current');
       }
     });
   });

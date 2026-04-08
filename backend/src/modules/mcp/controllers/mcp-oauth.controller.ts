@@ -49,8 +49,8 @@ export class McpOAuthController {
   // ---------------------------------------------------------------------------
 
   /**
-   * Resolve organization by slug, name-based slug, or UUID — without
-   * requiring authentication. This mirrors GatewayResolverService.resolveOrganization
+   * Resolve organization by slug or UUID — without requiring
+   * authentication. This mirrors GatewayResolverService.resolveOrganization
    * but lives here to avoid pulling in the auth pipeline.
    */
   private async resolveOrg(orgSlug: string): Promise<Organization> {
@@ -72,18 +72,21 @@ export class McpOAuthController {
       return org;
     }
 
-    // Try exact slug column first
-    let org = await this.organizationRepository.findOne({
-      where: { slug: orgSlug },
-    });
-
-    // Fallback: derive slug from name (lowercased, spaces → hyphens)
-    if (!org) {
-      const allOrgs = await this.organizationRepository.find();
-      org = allOrgs.find(
-        (o) => o.name?.toLowerCase().replace(/\s+/g, '-') === orgSlug,
-      );
-    }
+    // Try exact slug column first. Previously, on a miss, the handler
+    // fell back to `organizationRepository.find()` — an UNBOUNDED scan of
+    // every organization in the database — and then filtered in JS by a
+    // name->slug derivation. That's a DoS vector on a public endpoint:
+    // each request pulls the entire orgs table into the process heap.
+    //
+    // Fix: one targeted query that computes the slug-from-name comparison
+    // in SQL. It's still a table scan without an index, but only one
+    // round-trip and only the matching row(s) come back.
+    const org = await this.organizationRepository
+      .createQueryBuilder('org')
+      .where('org.slug = :slug', { slug: orgSlug })
+      .orWhere("LOWER(REPLACE(org.name, ' ', '-')) = :slug", { slug: orgSlug })
+      .limit(1)
+      .getOne();
 
     if (!org) {
       throw new HttpException(
@@ -433,7 +436,7 @@ export class McpOAuthController {
     }
 
     if (grantType === 'authorization_code') {
-      const { code, redirect_uri, code_verifier } = body;
+      const { code, redirect_uri, code_verifier, client_secret } = body;
 
       if (!code || !redirect_uri || !code_verifier || !clientId) {
         throw new HttpException(
@@ -452,11 +455,12 @@ export class McpOAuthController {
         redirectUri: redirect_uri,
         codeVerifier: code_verifier,
         clientId,
+        clientSecret: client_secret,
       });
     }
 
     if (grantType === 'refresh_token') {
-      const { refresh_token } = body;
+      const { refresh_token, client_secret } = body;
 
       if (!refresh_token || !clientId) {
         throw new HttpException(
@@ -473,6 +477,7 @@ export class McpOAuthController {
         gatewayId: gateway.id,
         refreshToken: refresh_token,
         clientId,
+        clientSecret: client_secret,
       });
     }
 
@@ -581,6 +586,7 @@ export class McpOAuthController {
       token: string;
       token_type_hint?: string;
       client_id: string;
+      client_secret?: string;
     },
     @Res() res: Response,
   ) {
@@ -601,6 +607,7 @@ export class McpOAuthController {
         token: body.token,
         tokenTypeHint: body.token_type_hint,
         clientId: body.client_id,
+        clientSecret: body.client_secret,
       });
     } catch {
       // RFC 7009: The authorization server responds with HTTP status code 200
@@ -644,12 +651,15 @@ export class McpOAuthController {
     redirectUri: string;
     codeVerifier: string;
     clientId: string;
+    clientSecret?: string;
   }) {
     return this.mcpOAuthService.exchangeCode(
       params.code,
       params.clientId,
       params.codeVerifier,
       params.redirectUri,
+      params.gatewayId,
+      params.clientSecret,
     );
   }
 
@@ -657,10 +667,13 @@ export class McpOAuthController {
     gatewayId: string;
     refreshToken: string;
     clientId: string;
+    clientSecret?: string;
   }) {
     return this.mcpOAuthService.refreshToken(
       params.refreshToken,
       params.clientId,
+      params.gatewayId,
+      params.clientSecret,
     );
   }
 
@@ -692,7 +705,13 @@ export class McpOAuthController {
     token: string;
     tokenTypeHint?: string;
     clientId: string;
+    clientSecret?: string;
   }): Promise<void> {
-    await this.mcpOAuthService.revokeToken(params.token, params.clientId);
+    await this.mcpOAuthService.revokeToken(
+      params.token,
+      params.clientId,
+      params.gatewayId,
+      params.clientSecret,
+    );
   }
 }
