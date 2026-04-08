@@ -534,17 +534,35 @@ export class ApisService {
 
   async testApiConnection(apiId: string): Promise<{ success: boolean; statusCode?: number; responseTime?: number; error?: string }> {
     const api = await this.findOne(apiId);
-    
+
     if (!api) {
       throw new NotFoundException('API not found');
     }
 
+    // SSRF guard. `api.baseUrl` is user-supplied at API creation /
+    // update time, and testApiConnection is a privileged operation
+    // — admins click "test connection" and the server makes an
+    // outbound HTTP request to whatever URL was stored. Without
+    // this, a user could create an API with baseUrl set to
+    // http://169.254.169.254/ / http://localhost:6379/ / etc., and
+    // the connectivity-check button would fetch it on their behalf.
+    const validation = validateUrl(api.baseUrl);
+    if (!validation.valid) {
+      return {
+        success: false,
+        error: `Refused to connect to API base URL: ${validation.error}`,
+      };
+    }
+
     try {
       const startTime = Date.now();
-      
+
       const config: any = {
         timeout: api.timeoutMs || 30000,
         validateStatus: () => true, // Accept any status code
+        maxContentLength: 256 * 1024,
+        maxBodyLength: 256 * 1024,
+        maxRedirects: 0,
       };
 
       // Add authentication if configured

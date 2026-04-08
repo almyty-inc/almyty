@@ -1,9 +1,10 @@
-import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { LlmProvider } from '../../../entities/llm-provider.entity';
 import { LlmSession } from '../../../entities/llm-session.entity';
 import { MessageRole, ToolCall } from '../../../entities/llm-message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse } from '../llm-providers.service';
+import { callLlmProviderHttp } from './safe-request';
 
 /**
  * Handles Anthropic Claude API calls.
@@ -58,7 +59,7 @@ export async function callAnthropic(
     timeout: provider.configuration.timeout || 30000,
   };
 
-  const response: AxiosResponse = await axios(config);
+  const response: AxiosResponse = await callLlmProviderHttp(config);
   const responseTime = Date.now() - startTime;
 
   const usage = response.data.usage;

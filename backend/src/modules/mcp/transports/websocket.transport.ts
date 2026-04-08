@@ -289,6 +289,9 @@ export class WebSocketTransport extends EventEmitter {
         }
       }
     }, 30000); // Ping every 30 seconds
+    // .unref() so the heartbeat interval doesn't keep the Node
+    // process alive through graceful shutdown.
+    this.heartbeatInterval.unref?.();
   }
 
   // Setup notification broadcasting

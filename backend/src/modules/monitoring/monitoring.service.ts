@@ -167,6 +167,9 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
         this.logger.error(`Failed to collect metrics: ${error.message}`);
       }
     }, 15000); // Every 15 seconds
+    // .unref() so the metrics poll doesn't keep the event loop
+    // alive during graceful shutdown or in test runs.
+    this.metricsInterval.unref?.();
   }
 
   private async collectSystemMetrics(): Promise<SystemMetrics> {
@@ -322,6 +325,7 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
         this.logger.error(`Failed to evaluate alerts: ${error.message}`);
       }
     }, 30000); // Every 30 seconds
+    this.alertsInterval.unref?.();
   }
 
   private async evaluateAlerts(): Promise<void> {

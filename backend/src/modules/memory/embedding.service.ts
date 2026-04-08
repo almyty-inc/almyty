@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
+import { validateUrl } from '../../common/security/url-validator';
 
 @Injectable()
 export class EmbeddingService {
@@ -64,8 +65,19 @@ export class EmbeddingService {
    */
   private async callOpenAIEmbedding(text: string, apiKey: string, apiUrl?: string): Promise<number[] | null> {
     const baseUrl = apiUrl || 'https://api.openai.com/v1';
+    const target = `${baseUrl}/embeddings`;
+    // SSRF guard. `apiUrl` comes from the LLM provider configuration
+    // saved by the user — a hostile "OpenAI-compat" provider pointed
+    // at http://169.254.169.254/... would otherwise have the server
+    // POST embedding requests (which include user input text) to an
+    // internal service.
+    const validation = validateUrl(target);
+    if (!validation.valid) {
+      this.logger.warn(`Refused to reach embedding URL: ${validation.error}`);
+      return null;
+    }
     const response = await axios.post(
-      `${baseUrl}/embeddings`,
+      target,
       {
         model: 'text-embedding-3-small',
         input: text.substring(0, 8000), // Cap input length
@@ -76,6 +88,9 @@ export class EmbeddingService {
           'Content-Type': 'application/json',
         },
         timeout: 10000,
+        maxContentLength: 2 * 1024 * 1024,
+        maxBodyLength: 2 * 1024 * 1024,
+        maxRedirects: 0,
       },
     );
 
