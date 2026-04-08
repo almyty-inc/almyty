@@ -125,6 +125,80 @@ describe('GatewayAuthService - Real Business Logic', () => {
       expect(service['validateKeyFormat']('short', rules)).toBe(false);
       expect(service['validateKeyFormat']('invalid-format-without-prefix', rules)).toBe(false);
     });
+
+    describe('ReDoS defence for admin-supplied keyFormat', () => {
+      // Bound the test at 200ms so a regression that re-introduces
+      // catastrophic backtracking fails loud rather than hanging the
+      // jest worker. The classic `(a+)+$` pattern against 30 'a's
+      // with a trailing 'b' takes ~10s on V8 without these guards.
+      const assertBounded = (label: string, fn: () => boolean) => {
+        const start = Date.now();
+        const result = fn();
+        const elapsed = Date.now() - start;
+        expect(elapsed).toBeLessThan(200);
+        return result;
+      };
+
+      it('refuses the classic nested-quantifier ReDoS pattern (a+)+', () => {
+        const rules = { keyFormat: '^(a+)+$' };
+        const payload = 'a'.repeat(30) + 'b';
+        const result = assertBounded('(a+)+', () =>
+          service['validateKeyFormat'](payload, rules),
+        );
+        expect(result).toBe(false);
+      });
+
+      it('refuses (a*)* nested quantifier', () => {
+        const rules = { keyFormat: '^(a*)*$' };
+        expect(service['validateKeyFormat']('a'.repeat(30) + 'b', rules)).toBe(false);
+      });
+
+      it('refuses mixed (a+)* / (a*)+ nested quantifiers', () => {
+        expect(
+          service['validateKeyFormat']('x'.repeat(30), { keyFormat: '(a+)*' }),
+        ).toBe(false);
+        expect(
+          service['validateKeyFormat']('x'.repeat(30), { keyFormat: '(a*)+' }),
+        ).toBe(false);
+      });
+
+      it('refuses overlapping alternation like (a|ab)+', () => {
+        const rules = { keyFormat: '^(a|ab)+$' };
+        expect(service['validateKeyFormat']('abababab', rules)).toBe(false);
+      });
+
+      it('refuses bounded-quantifier ReDoS like (a{1,2})+', () => {
+        const rules = { keyFormat: '^(a{1,2})+$' };
+        expect(service['validateKeyFormat']('aaaaaaaa', rules)).toBe(false);
+      });
+
+      it('refuses a pattern that exceeds the source-length cap', () => {
+        const rules = { keyFormat: 'a'.repeat(513) };
+        expect(service['validateKeyFormat']('anything', rules)).toBe(false);
+      });
+
+      it('truncates the probed key to the input-length cap', () => {
+        // Safe linear pattern. With a ~10KB input and no cap this
+        // would test the full 10KB; with the cap it's bounded at 2KiB.
+        // The assertion we care about is just that the call completes
+        // fast and doesn't explode — the match still returns true
+        // because the truncated prefix is still all 'a'.
+        const rules = { keyFormat: '^a+$' };
+        const longKey = 'a'.repeat(10_000);
+        const result = assertBounded('linear large input', () =>
+          service['validateKeyFormat'](longKey, rules),
+        );
+        expect(result).toBe(true);
+      });
+
+      it('still accepts legitimate patterns that look scary but are safe', () => {
+        // Anchored character class + fixed quantifier, no nesting.
+        const rules = { keyFormat: '^sk-[a-zA-Z0-9]{32}$' };
+        expect(
+          service['validateKeyFormat']('sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ012345', rules),
+        ).toBe(true);
+      });
+    });
   });
 
   describe('isIpInRanges - Real IP checking logic', () => {
