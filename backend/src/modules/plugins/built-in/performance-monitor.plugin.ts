@@ -12,8 +12,35 @@ interface PerformanceMetrics {
   networkCalls: number;
 }
 
+/** Cap on how many distinct (org, tool) buckets we keep in memory. */
+const MAX_TRACKED_BUCKETS = 1000;
+
+/** Max samples retained per bucket. */
+const MAX_SAMPLES_PER_BUCKET = 100;
+
 export class PerformanceMonitorPlugin {
+  /**
+   * Per-(organizationId, toolId) metric buckets. Previously the map
+   * was keyed by toolId alone, which meant (a) metrics from every
+   * tenant ended up in the same bucket, and (b) the process-wide
+   * `getToolPerformanceStats(toolId)` accessor would return data
+   * from any org that had ever called a tool with the given id. The
+   * composite key fixes both.
+   *
+   * The Map is also bounded — previously it grew one bucket per
+   * unique toolId ever seen with no eviction.
+   */
   private readonly performanceData = new Map<string, PerformanceMetrics[]>();
+
+  private bucketKey(organizationId: string | undefined, toolId: string): string {
+    return `${organizationId || '__global__'}::${toolId}`;
+  }
+
+  private evictIfFull(): void {
+    if (this.performanceData.size < MAX_TRACKED_BUCKETS) return;
+    const oldest = this.performanceData.keys().next().value;
+    if (oldest !== undefined) this.performanceData.delete(oldest);
+  }
 
   getPluginDefinition(): Omit<Plugin, 'id' | 'metadata'> {
     return {
@@ -86,23 +113,27 @@ export class PerformanceMonitorPlugin {
         networkCalls: 0, // Will be incremented during execution
       };
 
-      // Store in context for later retrieval
-      const enhancedContext = {
-        ...context,
-        data: context.data,
-        metadata: {
-          ...context.metadata,
-          performanceTracking: {
-            startTime: Date.now(),
-            initialMetrics,
-            trackingEnabled: true,
-          },
-        },
+      // Mutate the context's metadata IN PLACE so the tracking state
+      // is visible to the POST_TOOL_EXECUTION hook. The previous shape
+      // built an `enhancedContext` with `{ ...context, metadata: {...} }`
+      // but then returned only `enhancedContext.data` — the new metadata
+      // was discarded the instant the function returned, so
+      // `endPerformanceTracking` never saw `performanceTracking`
+      // populated on the context and the entire plugin was a no-op.
+      //
+      // The plugin manager applies `pluginResult.data` to the shared
+      // context but leaves the metadata alone, so the in-place mutation
+      // is the only way tracking state propagates across hook phases.
+      context.metadata = context.metadata || ({} as any);
+      (context.metadata as any).performanceTracking = {
+        startTime: Date.now(),
+        initialMetrics,
+        trackingEnabled: true,
       };
 
       return {
         success: true,
-        data: enhancedContext.data,
+        data: context.data,
         metadata: {
           executionTime: Date.now() - startTime,
           modifications: ['Performance tracking started'],
@@ -156,17 +187,20 @@ export class PerformanceMonitorPlugin {
         networkCalls: performanceData.networkCalls || 0,
       };
 
-      // Store metrics
+      // Store metrics in a per-(org, tool) bucket so stats don't
+      // bleed across tenants.
       const toolId = context.metadata.tool?.id || 'unknown';
-      if (!this.performanceData.has(toolId)) {
-        this.performanceData.set(toolId, []);
+      const key = this.bucketKey(context.organizationId, toolId);
+      if (!this.performanceData.has(key)) {
+        this.evictIfFull();
+        this.performanceData.set(key, []);
       }
-      this.performanceData.get(toolId)!.push(metrics);
+      this.performanceData.get(key)!.push(metrics);
 
-      // Keep only last 100 measurements per tool
-      const toolMetrics = this.performanceData.get(toolId)!;
-      if (toolMetrics.length > 100) {
-        toolMetrics.splice(0, toolMetrics.length - 100);
+      // Keep only the last MAX_SAMPLES_PER_BUCKET measurements per bucket
+      const toolMetrics = this.performanceData.get(key)!;
+      if (toolMetrics.length > MAX_SAMPLES_PER_BUCKET) {
+        toolMetrics.splice(0, toolMetrics.length - MAX_SAMPLES_PER_BUCKET);
       }
 
       // Check performance thresholds
@@ -181,7 +215,7 @@ export class PerformanceMonitorPlugin {
       }
 
       // Generate performance insights
-      const insights = await this.generatePerformanceInsights(toolId, metrics, settings);
+      const insights = await this.generatePerformanceInsights(key, metrics, settings);
       if (insights.length > 0) {
         modifications.push(`Generated ${insights.length} performance insights`);
       }
@@ -275,12 +309,14 @@ export class PerformanceMonitorPlugin {
   }
 
   private generatePerformanceInsights(
-    toolId: string,
+    /** Full bucket key (`<orgId>::<toolId>`) — not a bare toolId,
+     *  after the per-tenant bucketing fix. */
+    bucketKey: string,
     currentMetrics: PerformanceMetrics,
     settings: any,
   ): string[] {
     const insights: string[] = [];
-    const toolMetrics = this.performanceData.get(toolId) || [];
+    const toolMetrics = this.performanceData.get(bucketKey) || [];
 
     if (toolMetrics.length < 2) {
       return insights; // Need more data
@@ -333,15 +369,23 @@ export class PerformanceMonitorPlugin {
     return insights;
   }
 
-  // Get performance statistics for a tool
-  getToolPerformanceStats(toolId: string): {
+  // Get performance statistics for a tool in a given organization.
+  // Takes an organizationId so the per-tenant bucket stays tenant-scoped
+  // — the previous accessor took only a toolId, which would've returned
+  // blended stats across every org that ever called the tool, once we
+  // also remove the old single-keyed bucket.
+  getToolPerformanceStats(
+    organizationId: string,
+    toolId: string,
+  ): {
     totalExecutions: number;
     averageExecutionTime: number;
     averageMemoryUsage: number;
     trend: 'improving' | 'stable' | 'degrading';
     insights: string[];
   } | null {
-    const metrics = this.performanceData.get(toolId);
+    const key = this.bucketKey(organizationId, toolId);
+    const metrics = this.performanceData.get(key);
     if (!metrics || metrics.length === 0) {
       return null;
     }
@@ -370,7 +414,7 @@ export class PerformanceMonitorPlugin {
     let insights: string[] = [];
     if (metrics.length >= 10) {
       const currentMetrics = metrics[metrics.length - 1];
-      insights = this.generatePerformanceInsights(toolId, currentMetrics, {
+      insights = this.generatePerformanceInsights(key, currentMetrics, {
         enableOptimization: true,
         trackingEnabled: true,
         alertThresholds: { executionTime: 5000, memoryUsage: 100000000 }
