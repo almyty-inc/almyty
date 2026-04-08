@@ -599,9 +599,9 @@ export class AgentRuntimeService {
         run.currentStep++;
         run.executionTime += stepDuration;
 
-        // Update agent stats
-        agent.incrementExecution(true, run.executionTime, run.totalCost);
-        await this.agentRepository.save(agent);
+        // Update agent stats atomically (see bumpAgentStats
+        // rationale — same race as the engine used to have).
+        await this.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost);
 
         await this.runRepository.save(run);
 
@@ -627,11 +627,9 @@ export class AgentRuntimeService {
       run.error = error.message;
       run.executionTime += stepDuration;
 
-      // Update agent stats (failure)
-      try {
-        agent.incrementExecution(false, run.executionTime, run.totalCost);
-        await this.agentRepository.save(agent);
-      } catch (_) { /* best effort */ }
+      // Update agent stats (failure). bumpAgentStats already
+      // swallows DB errors internally so no outer try/catch needed.
+      await this.bumpAgentStats(agent.id, false, run.executionTime, run.totalCost);
 
       await this.runRepository.save(run);
       this.emitEvent(runId, 'run.failed', { error: error.message });
@@ -1418,6 +1416,41 @@ export class AgentRuntimeService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Atomically update an agent's running stats. Mirrors the helper
+   * in AgentExecutionEngine — both paths used to do a load-modify-
+   * save pair which lost increments under concurrency. See the
+   * engine's `bumpAgentStats` for the full rationale + the Welford
+   * rolling-average formula.
+   */
+  private async bumpAgentStats(
+    agentId: string,
+    success: boolean,
+    executionTime: number,
+    cost: number,
+  ): Promise<void> {
+    try {
+      await this.agentRepository
+        .createQueryBuilder()
+        .update(Agent)
+        .set({
+          totalExecutions: () => '"totalExecutions" + 1',
+          successfulExecutions: success
+            ? () => '"successfulExecutions" + 1'
+            : () => '"successfulExecutions"',
+          totalCost: () => `"totalCost" + ${Number(cost) || 0}`,
+          averageExecutionTime: () =>
+            `ROUND("averageExecutionTime" + (${Number(executionTime) || 0} - "averageExecutionTime") / ("totalExecutions" + 1))`,
+          lastExecutedAt: new Date(),
+        })
+        .where('id = :id', { id: agentId })
+        .execute();
+    } catch (err: any) {
+      // Best-effort — never mask the run result on a stats failure.
+      this.logger.error(`Failed to update agent stats: ${err.message}`);
+    }
   }
 
   // ---------------------------------------------------------------------------
