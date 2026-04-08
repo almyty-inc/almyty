@@ -99,6 +99,11 @@ export const useAuthStore = create<AuthState>()(
 
         localStorage.removeItem('token')
         localStorage.removeItem('user')
+        // Also clear the Zustand persist key. Without this, `token`
+        // and `user` survived a local logout inside the persisted
+        // store (`auth-storage`) and re-hydrated on the next page
+        // load — a stale session would appear to be logged back in.
+        localStorage.removeItem('auth-storage')
 
         set({
           user: null,
