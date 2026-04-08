@@ -220,15 +220,24 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
 
       // Execute plugin based on type
       const result = await this.executePluginHandler(plugin, pluginHook.handler, context);
-      
+
       // Update plugin usage metrics
       await this.updatePluginMetrics(plugin.id, Date.now() - startTime, result.success);
-      
+
       return result;
 
     } finally {
-      // Decrement execution counter
-      this.executionSemaphore.set(plugin.id, Math.max(0, currentExecutions - 1));
+      // Decrement from the CURRENT value, not from the captured
+      // pre-increment one. The previous shape wrote back
+      // `currentExecutions - 1`, which under concurrent execution let the
+      // counter drift arbitrarily: N overlapping runs captured the same
+      // pre-value, each set "+1" on entry, and on exit each set "-1" from
+      // that same captured value, so the counter ended up N below its
+      // true state (clamped to 0). Net effect: the
+      // maxConcurrentExecutions ceiling became unenforceable whenever
+      // the plugin was actually under load.
+      const running = this.executionSemaphore.get(plugin.id) || 0;
+      this.executionSemaphore.set(plugin.id, Math.max(0, running - 1));
     }
   }
 
@@ -240,21 +249,38 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     const startTime = Date.now();
 
     try {
+      // Reject handler names that could resolve to prototype builtins
+      // (`__proto__`, `toString`, …) or that contain non-identifier
+      // characters. Without this, an external plugin manifest could
+      // nominate `toString` as its handler and we'd happily call the
+      // Object builtin with `(context, settings)`. Built-in plugin
+      // methods (filterPiiFromRequest etc.) live on the prototype, so
+      // we still do a normal `pluginModule[name]` lookup after the
+      // safelist check — the safelist is what blocks the escape, not
+      // own-property enforcement.
+      if (!this.isSafeHandlerName(handlerName)) {
+        throw new Error(`Unsafe or invalid handler name: ${handlerName}`);
+      }
+
       // Load plugin module
       const pluginModule = await this.loadPluginModule(plugin);
-      
+
       // Get handler function
       const handlerFunction = pluginModule[handlerName];
       if (!handlerFunction || typeof handlerFunction !== 'function') {
         throw new Error(`Handler function ${handlerName} not found in plugin ${plugin.id}`);
       }
 
-      // Execute with timeout
+      // Execute with timeout. Wrap the race in a pair that clears the
+      // timer on either resolution — without that, a handler finishing
+      // before the timeout still held a setTimeout reference alive for
+      // up to `defaultTimeout` (30s) ms afterwards. At high throughput
+      // that was a steady leak of unref'd timer handles.
       const timeoutMs = plugin.configuration.settings.timeout || this.config.defaultTimeout;
-      const result = await Promise.race([
+      const result: any = await this.runWithTimeout<any>(
         handlerFunction(context, plugin.configuration.settings),
-        this.createTimeout(timeoutMs),
-      ]);
+        timeoutMs,
+      );
 
       return {
         success: true,
@@ -323,22 +349,32 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
 
     // Register plugin
     this.registry.plugins.set(pluginId, plugin);
-    
-    // Update hook registry
+
+    // Update hook registry. Guard against duplicate registration — without
+    // the includes() check, calling registerPlugin twice for the same id
+    // (e.g. a hot reload, or a test that re-runs initialisation) would
+    // push the same pluginId onto the per-hook array multiple times, and
+    // executeHook would then run that plugin N times in a single chain.
     for (const hook of plugin.hooks) {
       if (!this.registry.byHook.has(hook.type)) {
         this.registry.byHook.set(hook.type, []);
       }
-      this.registry.byHook.get(hook.type)!.push(pluginId);
+      const hookList = this.registry.byHook.get(hook.type)!;
+      if (!hookList.includes(pluginId)) {
+        hookList.push(pluginId);
+      }
     }
 
-    // Update organization registry
+    // Update organization registry (same dedup rationale).
     if (organizationId) {
       if (!this.registry.byOrganization.has(organizationId)) {
         this.registry.byOrganization.set(organizationId, []);
       }
-      this.registry.byOrganization.get(organizationId)!.push(pluginId);
-    } else {
+      const orgList = this.registry.byOrganization.get(organizationId)!;
+      if (!orgList.includes(pluginId)) {
+        orgList.push(pluginId);
+      }
+    } else if (!this.registry.globalPlugins.includes(pluginId)) {
       this.registry.globalPlugins.push(pluginId);
     }
 
@@ -445,21 +481,63 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
   }
 
   private async loadExternalPlugin(pluginPath: string): Promise<void> {
+    // Resolve the plugin root up front so we can assert that every path
+    // we derive from the manifest stays inside it.
+    const resolvedPluginRoot = path.resolve(pluginPath);
+
     // Load plugin manifest
-    const manifestPath = path.join(pluginPath, 'plugin.json');
+    const manifestPath = path.join(resolvedPluginRoot, 'plugin.json');
     const manifestContent = await fs.readFile(manifestPath, 'utf-8');
     const manifest = JSON.parse(manifestContent);
 
+    // Resolve + confine manifest.main. Previously this was a raw
+    // `path.join(pluginPath, manifest.main || 'index.js')` and `main`
+    // is user-controlled — a manifest with
+    // `"main": "../../node_modules/whatever/index.js"` would happily
+    // `import()` code from outside the plugin directory.
+    const requestedMain = typeof manifest.main === 'string' && manifest.main.length > 0
+      ? manifest.main
+      : 'index.js';
+    const mainPath = path.resolve(resolvedPluginRoot, requestedMain);
+    if (!mainPath.startsWith(resolvedPluginRoot + path.sep) && mainPath !== resolvedPluginRoot) {
+      throw new Error(
+        `Plugin manifest.main escapes the plugin directory: ${requestedMain}`,
+      );
+    }
+
     // Load plugin code
-    const pluginModule = await import(path.join(pluginPath, manifest.main || 'index.js'));
-    
+    const pluginModule = await import(mainPath);
+
     // Register plugin
     const pluginId = await this.registerPlugin(manifest);
-    
+
     // Store module reference
     this.pluginModules.set(pluginId, pluginModule);
-    
-    this.logger.log(`External plugin loaded: ${manifest.name} from ${pluginPath}`);
+
+    this.logger.log(`External plugin loaded: ${manifest.name} from ${resolvedPluginRoot}`);
+  }
+
+  /**
+   * Handler names for external plugins are strings pulled from the plugin
+   * manifest (pluginHook.handler). Without a safelist, `pluginModule[name]`
+   * could resolve to prototype builtins (`__proto__`, `constructor`,
+   * `toString`, …) and we'd happily call them with `(context, settings)`.
+   */
+  private isSafeHandlerName(name: string): boolean {
+    if (typeof name !== 'string' || name.length === 0 || name.length > 128) return false;
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) return false;
+    const BLOCKED = new Set([
+      '__proto__',
+      'constructor',
+      'prototype',
+      'hasOwnProperty',
+      'isPrototypeOf',
+      'propertyIsEnumerable',
+      'toLocaleString',
+      'toString',
+      'valueOf',
+    ]);
+    return !BLOCKED.has(name);
   }
 
   private readonly pluginModules = new Map<string, any>();
@@ -619,14 +697,27 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     return true; // For now, always execute
   }
 
-  private createTimeout(ms: number): Promise<never> {
-    return new Promise((_, reject) => {
-      setTimeout(() => {
+  /**
+   * Race a promise against a timeout, clearing the timer on either path
+   * so the timeout callback doesn't keep the event loop alive. The old
+   * `createTimeout` helper returned a standalone promise whose setTimeout
+   * fired unconditionally after N ms even after the real handler had
+   * already resolved — the race "finished", but the timer handle was
+   * leaked until it fired.
+   */
+  private runWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
         const error = new Error('Plugin execution timeout');
         (error as any).name = 'TimeoutError';
         reject(error);
       }, ms);
     });
+
+    return Promise.race([promise, timeout]).finally(() => {
+      if (timer) clearTimeout(timer);
+    }) as Promise<T>;
   }
 
   private async emitPluginEvent(
