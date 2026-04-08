@@ -29,10 +29,31 @@ const EXPRESSION_BLOCKLIST = [
   'eval',
 ];
 
-/** Compiled regex: matches any blocklisted word as a full segment or substring. */
-const BLOCKLIST_REGEX = new RegExp(
-  EXPRESSION_BLOCKLIST.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
-);
+/**
+ * Blocklisted segment matcher. Previously this was a bare
+ * `EXPRESSION_BLOCKLIST.join('|')` without word boundaries, so ANY
+ * path whose segment happened to contain a blocked word as a substring
+ * got rejected. Real false-positive examples from production configs:
+ *
+ *   nodes.processor.output   → blocked (because 'process' is a
+ *                              substring of 'processor')
+ *   input.importItems        → blocked (contains 'import')
+ *   variables.globalConfig   → blocked (contains 'global')
+ *   input.constructorName    → blocked (contains 'constructor')
+ *
+ * The blocklist is there to stop someone sneaking sandbox-escape
+ * expressions through — but only for whole dot-separated segments
+ * (e.g. `{{constructor.name}}`), not for any identifier that happens
+ * to share letters with one. Check each segment individually.
+ */
+const BLOCKED_SEGMENTS = new Set(EXPRESSION_BLOCKLIST);
+
+function containsBlockedSegment(expression: string): boolean {
+  for (const segment of expression.split('.')) {
+    if (BLOCKED_SEGMENTS.has(segment)) return true;
+  }
+  return false;
+}
 
 /** Allowed expression pattern: only alphanumeric, underscores, hyphens, and dots. */
 const SAFE_PATH_REGEX = /^[a-zA-Z0-9_\-]+(\.[a-zA-Z0-9_\-]+)*$/;
@@ -107,17 +128,24 @@ export class AgentTemplateResolver {
       );
     }
 
-    // Blocklist check
-    if (BLOCKLIST_REGEX.test(expression)) {
-      throw new Error(
-        `Template expression contains a blocked keyword: '${expression}'`,
-      );
-    }
-
-    // Whitelist check: only dot-notation property access
+    // Whitelist check FIRST: only dot-notation property access. We
+    // need this in place before we try to split the expression on
+    // dots for the blocklist check, otherwise garbage like
+    // `constructor()` could slip past the segment matcher.
     if (!SAFE_PATH_REGEX.test(expression)) {
       throw new Error(
         `Template expression contains invalid characters: '${expression}'`,
+      );
+    }
+
+    // Blocklist check: reject if ANY whole dot-separated segment
+    // matches a blocked keyword. See containsBlockedSegment for the
+    // rationale — previously this was a naive substring match that
+    // false-positived on legitimate identifiers like `processor`
+    // or `importItems`.
+    if (containsBlockedSegment(expression)) {
+      throw new Error(
+        `Template expression contains a blocked keyword: '${expression}'`,
       );
     }
   }

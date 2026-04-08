@@ -190,16 +190,16 @@ export class InterfacesController {
   ): Observable<MessageEvent> {
     const subject = new Subject<MessageEvent>();
 
-    // Validate interface exists and is active, then subscribe to run events
+    // Validate interface exists and is active, then verify the run
+    // belongs to it before streaming. Previously the handler only
+    // checked that BOTH ids resolved in isolation — so a caller who
+    // knew any valid public interface id and had leaked (or guessed)
+    // a foreign runId could stream events from that run, even if it
+    // belonged to a different interface in a different org. The
+    // interfaceId in the URL was effectively a fig leaf.
     this.interfacesService
-      .findByIdPublic(interfaceId)
-      .then((iface) => {
-        if (!iface || !iface.isActive()) {
-          subject.next({ data: { error: 'Interface not found or inactive' } } as MessageEvent);
-          subject.complete();
-          return;
-        }
-
+      .assertRunBelongsToInterface(interfaceId, runId)
+      .then(() => {
         const emitter = this.agentRuntimeService.getRunEmitter(runId);
         if (!emitter) {
           subject.next({ data: { error: 'Run not found or already completed' } } as MessageEvent);
@@ -223,8 +223,8 @@ export class InterfacesController {
         emitter.on('done', onDone);
       })
       .catch((err) => {
-        this.logger.error(`Widget stream error: ${err.message}`);
-        subject.next({ data: { error: 'Stream setup failed' } } as MessageEvent);
+        this.logger.warn(`Widget stream rejected: ${err.message}`);
+        subject.next({ data: { error: 'Stream not available' } } as MessageEvent);
         subject.complete();
       });
 
