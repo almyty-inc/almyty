@@ -204,6 +204,50 @@ describe('ToolExecutorService', () => {
       expect(result.error).toContain('permission');
     });
 
+    it('scopes tool lookup to the caller organizationId', async () => {
+      // Regression: the previous version loaded tools via
+      // `findOne({ where: { id: toolId } })` with NO org scoping, so a
+      // user with `use_tools` in their own org could execute any tool
+      // in any other org just by knowing its id. The fix adds
+      // `organizationId` to the where clause so the lookup returns
+      // null for cross-org ids. This test verifies the literal query
+      // shape so a regression can't sneak back in.
+      toolRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.executeTool('tool-in-other-org', {}, {
+        userId: 'user-1',
+        organizationId: 'org-1',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/not found/i);
+      expect(toolRepository.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'tool-in-other-org',
+            organizationId: 'org-1',
+          }),
+        }),
+      );
+    });
+
+    it('rejects execution when organizationId is missing', async () => {
+      // Belt-and-suspenders: even if a caller constructs options with
+      // an empty orgId, the executor should treat the tool as not
+      // found rather than falling back to an unscoped query.
+      toolRepository.findOne.mockClear();
+
+      const result = await service.executeTool('tool-1', {}, {
+        userId: 'user-1',
+        organizationId: '',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/not found/i);
+      // Should not have even attempted the lookup
+      expect(toolRepository.findOne).not.toHaveBeenCalled();
+    });
+
   });
 
   describe('getToolExecutionStats', () => {

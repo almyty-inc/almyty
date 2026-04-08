@@ -133,10 +133,18 @@ function IntegrationsSection({ gatewayId, gateway, orgSlug }: { gatewayId: strin
       await navigator.clipboard.writeText(text)
       setCopiedField(field)
       setTimeout(() => setCopiedField(null), 2000)
-    } catch {}
+    } catch (err) {
+      // Previously this catch was silent, so users clicking "Copy"
+      // would see no feedback whatsoever when the browser blocked the
+      // clipboard API (missing permission, insecure context, etc.).
+      // Surface it as a copy-failure state and log once for debugging.
+      console.warn('Clipboard copy failed:', err)
+      setCopiedField(`${field}:error`)
+      setTimeout(() => setCopiedField(null), 2500)
+    }
   }
 
-  const backendUrl = window.location.origin.replace(':3002', ':4000').replace(':8080', ':3000').replace('app.', 'api.')
+  const backendUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin
   const gatewayType = (gateway.type || 'mcp').toLowerCase()
   const skillsContent = skillsData || ''
 
@@ -1173,7 +1181,7 @@ export function GatewayDetailPage() {
               <div className="flex gap-2">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">
                   {(() => {
-                    const backendUrl = window.location.origin.replace(':3002', ':4000').replace('app.', 'api.')
+                    const backendUrl = (import.meta.env.VITE_API_BASE_URL || window.location.origin)
                     const orgSlug = currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
                     const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
                     if (gateway.type === 'mcp') return `${backendUrl}/${orgSlug}/${gwSlug}`
@@ -1190,7 +1198,7 @@ export function GatewayDetailPage() {
                   size="sm"
                   variant="outline"
                   onClick={async () => {
-                    const backendUrl = window.location.origin.replace(':3002', ':4000').replace('app.', 'api.')
+                    const backendUrl = (import.meta.env.VITE_API_BASE_URL || window.location.origin)
                     const orgSlug = currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
                     const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
                     let fullEndpoint = gateway.endpoint
