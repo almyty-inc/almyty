@@ -792,8 +792,42 @@ describe('ApisService', () => {
     it('wraps network errors in BadRequestException', async () => {
       mockedAxios.get.mockRejectedValue(new Error('ECONNREFUSED'));
 
-      await expect(service.fetchSchemaFromUrl('https://x')).rejects.toThrow(BadRequestException);
-      await expect(service.fetchSchemaFromUrl('https://x')).rejects.toThrow(/ECONNREFUSED/);
+      await expect(service.fetchSchemaFromUrl('https://api.example.com/schema'))
+        .rejects.toThrow(BadRequestException);
+      await expect(service.fetchSchemaFromUrl('https://api.example.com/schema'))
+        .rejects.toThrow(/ECONNREFUSED/);
+    });
+
+    // SSRF: prior to the validateUrl gate the user could ask the server to
+    // fetch any URL and we'd run the request and return the body.
+    describe('SSRF protection', () => {
+      it.each([
+        ['localhost',         'http://localhost/schema.json'],
+        ['127.0.0.1',         'http://127.0.0.1:6379/schema.json'],
+        ['private 10.x',      'http://10.0.0.1/schema.json'],
+        ['link-local',        'http://169.254.169.254/latest/meta-data/'],
+        ['IPv6 loopback',     'http://[::1]/schema.json'],
+        ['file://',           'file:///etc/passwd'],
+        ['embedded creds',    'http://user:pass@example.com/schema'],
+      ])('refuses to fetch %s', async (_label, url) => {
+        await expect(service.fetchSchemaFromUrl(url)).rejects.toThrow(BadRequestException);
+        // The request must NEVER reach axios.
+        expect(mockedAxios.get).not.toHaveBeenCalled();
+      });
+
+      it('passes maxContentLength + maxRedirects: 0 to axios', async () => {
+        mockedAxios.get.mockResolvedValue({ data: '{}' } as any);
+
+        await service.fetchSchemaFromUrl('https://api.example.com/schema');
+
+        const opts = mockedAxios.get.mock.calls[0][1] as any;
+        expect(opts).toMatchObject({
+          maxRedirects: 0,
+          maxContentLength: expect.any(Number),
+          maxBodyLength: expect.any(Number),
+        });
+        expect(opts.maxContentLength).toBeLessThanOrEqual(20 * 1024 * 1024);
+      });
     });
   });
 
