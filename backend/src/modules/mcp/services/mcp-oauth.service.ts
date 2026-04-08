@@ -320,11 +320,31 @@ export class McpOAuthService {
     clientId: string,
     codeVerifier: string,
     redirectUri: string,
+    /** Gateway id from the URL path. Required — the service used to
+     *  look up codes by (hash, clientId) with no gateway filter, which
+     *  let a code issued at `/mcp/orgA/gwA/...` be redeemed at
+     *  `/mcp/orgB/gwB/token`. Cross-gateway code replay. */
+    gatewayId: string,
+    /** Only required for clients registered with `client_secret_post`.
+     *  Previously the service ignored client secrets entirely — every
+     *  "confidential" client was effectively public. */
+    clientSecret?: string,
   ): Promise<TokenResponse> {
+    // Load the client first so we can enforce the auth method. Missing
+    // client => invalid_client; presented-without-needed secret =>
+    // invalid_client; bad secret => invalid_client.
+    const client = await this.oauthClientRepository.findOne({
+      where: { clientId, gatewayId, isActive: true },
+    });
+    if (!client) {
+      throw new UnauthorizedException('Invalid client');
+    }
+    this.verifyClientAuth(client, clientSecret);
+
     const codeHash = this.hashValue(codeValue);
 
     const authCode = await this.oauthCodeRepository.findOne({
-      where: { codeHash, clientId },
+      where: { codeHash, clientId, gatewayId },
     });
 
     if (!authCode) {
@@ -332,14 +352,10 @@ export class McpOAuthService {
     }
 
     if (authCode.isUsed) {
-      // OAuth 2.1 §4.1.3: detect replay and limit blast radius. The
-      // previous version logged a warning but did NOT actually revoke
-      // anything despite the comment promising it. We don't currently
-      // store a code-id on issued tokens (would need a schema change),
-      // so we conservatively revoke EVERY non-revoked token issued to
-      // the same (clientId, userId, gatewayId) triple — that bounds the
-      // blast radius of a stolen authorization code without requiring
-      // schema migration.
+      // OAuth 2.1 §4.1.3: detect replay and limit blast radius. We
+      // conservatively revoke EVERY non-revoked token issued to the
+      // same (clientId, userId, gatewayId) triple — the stolen code
+      // could have been used to produce any of them.
       this.logger.warn(
         `Authorization code replay detected for client ${clientId} — revoking issued tokens for this user+gateway`,
       );
@@ -380,9 +396,28 @@ export class McpOAuthService {
       throw new UnauthorizedException('PKCE verification failed');
     }
 
-    // Mark code as used
-    authCode.isUsed = true;
-    await this.oauthCodeRepository.save(authCode);
+    // Atomically mark the code as used. Previously this was a plain
+    // `save(authCode)` which reads-then-writes — two concurrent
+    // exchanges with the same stolen code both saw isUsed=false, both
+    // passed, and both generated a valid token pair. The conditional
+    // UPDATE + `affected` check is the whole race guard: exactly one
+    // caller observes affected=1.
+    const claim = await this.oauthCodeRepository.update(
+      { id: authCode.id, isUsed: false },
+      { isUsed: true },
+    );
+    if (claim.affected !== 1) {
+      // Another caller raced us and consumed the code first. Treat as
+      // a replay — the other caller has already generated tokens, and
+      // honouring this exchange would produce a second (duplicate)
+      // token pair bound to the same code.
+      this.logger.warn(
+        `Lost race on authorization code consumption for client ${clientId}`,
+      );
+      throw new UnauthorizedException(
+        'Authorization code has already been used',
+      );
+    }
 
     // Generate token pair
     const tokens = await this.generateTokenPair(
@@ -406,11 +441,21 @@ export class McpOAuthService {
   async refreshToken(
     refreshTokenValue: string,
     clientId: string,
+    gatewayId: string,
+    clientSecret?: string,
   ): Promise<TokenResponse> {
+    const client = await this.oauthClientRepository.findOne({
+      where: { clientId, gatewayId, isActive: true },
+    });
+    if (!client) {
+      throw new UnauthorizedException('Invalid client');
+    }
+    this.verifyClientAuth(client, clientSecret);
+
     const tokenHash = this.hashValue(refreshTokenValue);
 
     const existingToken = await this.oauthTokenRepository.findOne({
-      where: { tokenHash, clientId, tokenType: 'refresh' },
+      where: { tokenHash, clientId, gatewayId, tokenType: 'refresh' },
     });
 
     if (!existingToken) {
@@ -418,9 +463,30 @@ export class McpOAuthService {
     }
 
     if (existingToken.isRevoked) {
+      // OAuth 2.1 §6.1 / RFC 6749bis: reuse of a rotated (revoked)
+      // refresh token is a strong indicator of token theft. Revoke
+      // the ENTIRE lineage — every access and refresh token issued to
+      // the same (clientId, userId, gatewayId) triple — so an attacker
+      // who stole an intermediate token can't keep rolling the chain
+      // forward while the legitimate user is unaware.
       this.logger.warn(
-        `Revoked refresh token reuse detected for client ${clientId}`,
+        `Revoked refresh token reuse detected for client ${clientId} — revoking entire token lineage for this user+gateway`,
       );
+      try {
+        await this.oauthTokenRepository.update(
+          {
+            clientId: existingToken.clientId,
+            userId: existingToken.userId,
+            gatewayId: existingToken.gatewayId,
+            isRevoked: false,
+          },
+          { isRevoked: true },
+        );
+      } catch (err) {
+        this.logger.error(
+          `Failed to revoke lineage on reuse detection: ${err.message}`,
+        );
+      }
       throw new UnauthorizedException('Refresh token has been revoked');
     }
 
@@ -428,18 +494,33 @@ export class McpOAuthService {
       throw new UnauthorizedException('Refresh token has expired');
     }
 
-    // Revoke the old refresh token (rotation)
-    existingToken.isRevoked = true;
-    await this.oauthTokenRepository.save(existingToken);
+    // Atomic rotation: only THIS caller should get to rotate the token.
+    // Two concurrent refreshes with the same stolen refresh token would
+    // previously both see isRevoked=false, both save `true`, and both
+    // produce a fresh token pair — one of which would then look
+    // legitimate to the lineage check above. Conditional UPDATE + affected
+    // check closes the race.
+    const claim = await this.oauthTokenRepository.update(
+      { id: existingToken.id, isRevoked: false },
+      { isRevoked: true },
+    );
+    if (claim.affected !== 1) {
+      this.logger.warn(
+        `Lost race on refresh token rotation for client ${clientId}`,
+      );
+      throw new UnauthorizedException('Refresh token has been revoked');
+    }
 
-    // Generate a new token pair
+    // Generate a new token pair, linking the new refresh token's
+    // parentTokenId back to the old one so the lineage is walkable.
     const tokens = await this.generateTokenPair(
       existingToken.clientId,
       existingToken.gatewayId,
       existingToken.organizationId,
       existingToken.userId,
       existingToken.scope,
-      existingToken.resource,
+      existingToken.resource ?? undefined,
+      existingToken.id,
     );
 
     this.logger.log(`Token refreshed for client ${clientId}`);
@@ -486,20 +567,33 @@ export class McpOAuthService {
   // 8. Revoke Token (RFC 7009)
   // -----------------------------------------------------------------------
 
-  async revokeToken(tokenValue: string, clientId: string): Promise<void> {
+  async revokeToken(
+    tokenValue: string,
+    clientId: string,
+    gatewayId: string,
+    clientSecret?: string,
+  ): Promise<void> {
+    // Load the client to enforce the auth method. If the client doesn't
+    // exist in this gateway we silently return (RFC 7009 says the
+    // server should still respond 200 for invalid requests), but an
+    // EXISTING confidential client with a bad secret fails hard.
+    const client = await this.oauthClientRepository.findOne({
+      where: { clientId, gatewayId, isActive: true },
+    });
+    if (!client) {
+      return;
+    }
+    this.verifyClientAuth(client, clientSecret);
+
     const tokenHash = this.hashValue(tokenValue);
 
     const token = await this.oauthTokenRepository.findOne({
-      where: { tokenHash },
+      where: { tokenHash, clientId, gatewayId },
     });
 
     if (!token) {
       // RFC 7009: the server responds with HTTP 200 even if the token is invalid
       return;
-    }
-
-    if (token.clientId !== clientId) {
-      throw new BadRequestException('Token does not belong to this client');
     }
 
     // Revoke the token
@@ -538,6 +632,10 @@ export class McpOAuthService {
     userId: string,
     scope: string,
     resource?: string,
+    /** id of the refresh token this pair is rotated from, if any. Links
+     *  the new refresh token to its predecessor via parentTokenId so the
+     *  lineage is walkable and reuse-detection can revoke downstream. */
+    parentRefreshTokenId?: string,
   ): Promise<TokenResponse> {
     const rawAccessToken = `almyty_at_${crypto.randomBytes(48).toString('base64url')}`;
     const rawRefreshToken = `almyty_rt_${crypto.randomBytes(48).toString('base64url')}`;
@@ -564,6 +662,7 @@ export class McpOAuthService {
       resource: resource ?? null,
       expiresAt: accessExpiresAt,
       isRevoked: false,
+      parentTokenId: parentRefreshTokenId ?? null,
     });
 
     const refreshTokenEntity = this.oauthTokenRepository.create({
@@ -577,6 +676,7 @@ export class McpOAuthService {
       resource: resource ?? null,
       expiresAt: refreshExpiresAt,
       isRevoked: false,
+      parentTokenId: parentRefreshTokenId ?? null,
     });
 
     await this.oauthTokenRepository.save([accessTokenEntity, refreshTokenEntity]);
@@ -596,6 +696,66 @@ export class McpOAuthService {
 
   private hashValue(value: string): string {
     return crypto.createHash('sha256').update(value).digest('hex');
+  }
+
+  /**
+   * Enforce the client's registered token-endpoint authentication method.
+   * Previously the /token, /revoke, and refresh paths NEVER checked the
+   * presented client_secret — even a client registered with
+   * `client_secret_post` was effectively public, because the service
+   * never took a clientSecret parameter. Any caller who knew the
+   * clientId could exchange codes, refresh tokens, and revoke anything
+   * on their behalf.
+   *
+   * Rules:
+   * - Public client (`tokenEndpointAuthMethod === 'none'`): secret MUST
+   *   NOT be presented. Presenting one is an error — prevents confusing
+   *   "worked because we ignored it" behaviour during migration.
+   * - Confidential client (`client_secret_post`): secret MUST be
+   *   presented and MUST match the stored hash via a timing-safe
+   *   comparison of the SHA-256 digests.
+   */
+  private verifyClientAuth(client: OAuthClient, presented?: string): void {
+    const method = client.tokenEndpointAuthMethod || 'none';
+
+    if (method === 'none') {
+      if (presented !== undefined && presented !== '') {
+        throw new UnauthorizedException(
+          'Client is registered as public — client_secret must not be presented',
+        );
+      }
+      return;
+    }
+
+    if (method === 'client_secret_post') {
+      if (!client.clientSecretHash) {
+        // Shouldn't happen — the registration path sets the hash when
+        // the method is client_secret_post. If it's missing, refuse
+        // rather than falling open.
+        throw new UnauthorizedException('Client configuration is invalid');
+      }
+      if (!presented) {
+        throw new UnauthorizedException(
+          'client_secret is required for this client',
+        );
+      }
+
+      const expected = Buffer.from(client.clientSecretHash, 'hex');
+      const actual = Buffer.from(this.hashValue(presented), 'hex');
+      if (
+        expected.length !== actual.length ||
+        !crypto.timingSafeEqual(expected, actual)
+      ) {
+        throw new UnauthorizedException('Invalid client_secret');
+      }
+      return;
+    }
+
+    // Any other method (client_secret_basic, private_key_jwt, etc.) is
+    // not supported by this server and must be rejected.
+    throw new UnauthorizedException(
+      `Unsupported token_endpoint_auth_method: ${method}`,
+    );
   }
 
   private validateRedirectUri(uri: string): void {

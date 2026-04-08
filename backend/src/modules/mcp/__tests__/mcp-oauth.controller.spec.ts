@@ -45,10 +45,30 @@ describe('McpOAuthController', () => {
         },
         {
           provide: getRepositoryToken(Organization),
-          useValue: {
-            findOne: jest.fn(),
-            find: jest.fn(),
-          },
+          useValue: (() => {
+            const repo: any = {
+              findOne: jest.fn(),
+              find: jest.fn(),
+            };
+            // resolveOrg's non-UUID path now uses a query builder for the
+            // slug-from-name lookup; the previous `.find()` + JS filter
+            // was O(all orgs) per request on a public endpoint. Make the
+            // query-builder mock delegate to whatever findOne was set up
+            // to return in a given test — that way existing tests that
+            // spy on findOne keep working without individually mocking
+            // the query builder chain.
+            repo.createQueryBuilder = jest.fn(() => ({
+              where: jest.fn().mockReturnThis(),
+              orWhere: jest.fn().mockReturnThis(),
+              limit: jest.fn().mockReturnThis(),
+              getOne: jest.fn(async () =>
+                (repo.findOne as jest.Mock).getMockImplementation?.()
+                  ? (repo.findOne as jest.Mock)()
+                  : (repo.findOne as jest.Mock).mock.results[0]?.value ?? null,
+              ),
+            }));
+            return repo;
+          })(),
         },
         {
           provide: McpOAuthService,
@@ -109,18 +129,21 @@ describe('McpOAuthController', () => {
       expect(result).toBeDefined();
     });
 
-    it('should fall back to name-derived slug when exact slug not found', async () => {
-      jest
-        .spyOn(organizationRepository, 'findOne')
-        .mockResolvedValueOnce(null) // slug lookup returns null
-        .mockResolvedValue(mockGateway as any); // gateway lookup still works
-      jest
-        .spyOn(organizationRepository, 'find')
-        .mockResolvedValue([mockOrganization]);
+    it('should resolve via the slug-from-name query builder when the slug column misses', async () => {
+      // Previously this test covered the `.find()` + JS filter fallback
+      // path. That fallback was an unbounded O(all orgs) scan on a
+      // public endpoint, so it's been replaced with a single query
+      // builder statement that does the slug-from-name comparison in
+      // SQL. The query builder mock in beforeEach delegates to
+      // `organizationRepository.findOne`, so a test that sets findOne
+      // to return the mock org still exercises the resolve path.
+      jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(mockOrganization as any);
+      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(mockGateway as any);
 
       const result = await controller.getAuthorizationServerMetadata(orgSlug, gatewaySlug);
 
       expect(result).toBeDefined();
+      expect(organizationRepository.createQueryBuilder).toHaveBeenCalled();
     });
 
     it('should throw 404 when gateway not found', async () => {
@@ -1188,6 +1211,8 @@ describe('McpOAuthController', () => {
           'mcp_client_abc',
           'verifier',
           'https://example.com/callback',
+          mockGateway.id,
+          undefined, // no client_secret for this public client
         );
         expect(result).toEqual(tokenResponse);
       });
@@ -1269,6 +1294,8 @@ describe('McpOAuthController', () => {
         expect(mcpOAuthService.refreshToken).toHaveBeenCalledWith(
           'almyty_rt_abc123',
           'mcp_client_abc',
+          mockGateway.id,
+          undefined, // no client_secret for this public client
         );
         expect(result).toEqual(tokenResponse);
       });
@@ -1381,6 +1408,8 @@ describe('McpOAuthController', () => {
       expect(mcpOAuthService.revokeToken).toHaveBeenCalledWith(
         'almyty_at_abc123',
         'mcp_client_abc',
+        mockGateway.id,
+        undefined, // no client_secret for this public client
       );
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
     });
