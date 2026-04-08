@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
+import * as crypto from 'crypto';
 
 import { ToolExecutorService, ToolExecutionResult, ToolExecutionOptions } from '../tools/tool-executor.service';
 import { McpSessionService } from './mcp-session.service';
@@ -64,7 +65,14 @@ export class RealtimeExecutorService extends EventEmitter {
     parameters: Record<string, any>,
     options: StreamingExecutionOptions,
   ): Promise<string> {
-    const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Execution IDs are used as the ONLY authorisation key by
+    // getExecutionStatus / cancelExecution callers that hold one. The
+    // previous shape was `exec_${Date.now()}_${Math.random().toString(36).substr(2,9)}`
+    // — 9 base36 characters plus a guessable millisecond prefix, so an
+    // attacker who knew roughly when an execution started could brute-
+    // force the random tail (~46 bits) and impersonate it. Use
+    // crypto.randomBytes for unguessable ids.
+    const executionId = `exec_${crypto.randomBytes(16).toString('hex')}`;
     
     // Create execution progress tracking
     const progress: ExecutionProgress = {
@@ -114,9 +122,13 @@ export class RealtimeExecutorService extends EventEmitter {
   // Execute tool and wait for completion (non-streaming mode)
   private async executeAndWait(executionId: string): Promise<any> {
     return new Promise((resolve, reject) => {
+      // .unref() so the pending timeout doesn't keep the Node process
+      // alive past shutdown. Same class of timer leak as the other
+      // setTimeout fixes in this module.
       const timeout = setTimeout(() => {
         reject(new Error('Tool execution timeout'));
       }, 300000); // 5 minutes
+      timeout.unref?.();
 
       this.once(`execution:${executionId}:completed`, (result) => {
         clearTimeout(timeout);
@@ -171,7 +183,7 @@ export class RealtimeExecutorService extends EventEmitter {
 
   private async startExecution(queueItem: ExecutionQueue): Promise<void> {
     const { id: executionId, toolId, parameters, options } = queueItem;
-    
+
     // Update progress
     await this.updateProgress(executionId, {
       status: 'running',
@@ -179,9 +191,15 @@ export class RealtimeExecutorService extends EventEmitter {
       message: 'Tool execution started',
     });
 
+    // Hoist the progress interval so the `finally` block can always
+    // clear it. Previously it lived inside the `try` and was only
+    // cleared on the happy path — the catch branch leaked it, so a
+    // failed execution kept firing progress ticks every 2 seconds
+    // forever, accumulating setInterval handles across failures.
+    let progressInterval: NodeJS.Timeout | undefined;
+
     try {
-      // Update progress periodically during execution
-      const progressInterval = setInterval(async () => {
+      progressInterval = setInterval(async () => {
         const progress = this.activeExecutions.get(executionId);
         if (progress && progress.status === 'running') {
           const newProgress = Math.min(progress.progress + 10, 90);
@@ -191,6 +209,7 @@ export class RealtimeExecutorService extends EventEmitter {
           });
         }
       }, 2000);
+      progressInterval.unref?.();
 
       // Execute the tool
       const result: ToolExecutionResult = await this.toolExecutorService.executeTool(
@@ -199,8 +218,6 @@ export class RealtimeExecutorService extends EventEmitter {
         options,
       );
 
-      clearInterval(progressInterval);
-
       // Complete execution
       await this.completeExecution(executionId, result);
 
@@ -208,6 +225,7 @@ export class RealtimeExecutorService extends EventEmitter {
       // Fail execution
       await this.failExecution(executionId, error);
     } finally {
+      if (progressInterval) clearInterval(progressInterval);
       // Remove from queue
       this.executionQueue.delete(executionId);
     }
@@ -257,11 +275,13 @@ export class RealtimeExecutorService extends EventEmitter {
     });
 
     this.emit(`execution:${executionId}:completed`, result);
-    
-    // Clean up after delay
-    setTimeout(() => {
+
+    // Clean up after delay. .unref() so the pending handle doesn't
+    // keep the event loop alive through graceful shutdown.
+    const cleanup = setTimeout(() => {
       this.activeExecutions.delete(executionId);
     }, 60000); // Keep for 1 minute
+    cleanup.unref?.();
   }
 
   // Fail execution
@@ -275,11 +295,12 @@ export class RealtimeExecutorService extends EventEmitter {
     });
 
     this.emit(`execution:${executionId}:failed`, error.message);
-    
-    // Clean up after delay
-    setTimeout(() => {
+
+    // Clean up after delay. .unref() — same hygiene as completeExecution.
+    const cleanup = setTimeout(() => {
       this.activeExecutions.delete(executionId);
     }, 300000); // Keep failed executions longer for debugging
+    cleanup.unref?.();
   }
 
   // Broadcast progress to clients
@@ -351,18 +372,29 @@ export class RealtimeExecutorService extends EventEmitter {
     }
   }
 
-  // Get execution status
-  async getExecutionStatus(executionId: string): Promise<ExecutionProgress | null> {
+  // Get execution status. Scoped to the caller's organization — the
+  // previous shape returned the full ExecutionProgress (including
+  // result.data) for ANY executionId, so a caller who guessed or
+  // scraped an id from another org could read its full result. Now
+  // a cross-org read returns null, indistinguishable from an
+  // execution that never existed.
+  async getExecutionStatus(
+    executionId: string,
+    organizationId: string,
+  ): Promise<ExecutionProgress | null> {
+    if (!organizationId) return null;
+
     const progress = this.activeExecutions.get(executionId);
     if (progress) {
-      return progress;
+      return progress.metadata?.organizationId === organizationId ? progress : null;
     }
 
     // Check Redis for completed executions
     try {
       const cached = await this.redis.get(`execution:${executionId}`);
       if (cached) {
-        return JSON.parse(cached);
+        const parsed = JSON.parse(cached) as ExecutionProgress;
+        return parsed.metadata?.organizationId === organizationId ? parsed : null;
       }
     } catch (error) {
       this.logger.error(`Failed to get execution status from Redis: ${error.message}`);
@@ -371,10 +403,19 @@ export class RealtimeExecutorService extends EventEmitter {
     return null;
   }
 
-  // Cancel execution
-  async cancelExecution(executionId: string): Promise<boolean> {
+  // Cancel execution. Also scoped — the previous shape let any caller
+  // with a guessed or leaked executionId cancel foreign executions,
+  // which is both a cross-org DoS and a way to grief someone's
+  // in-flight tool calls.
+  async cancelExecution(executionId: string, organizationId: string): Promise<boolean> {
+    if (!organizationId) return false;
+
     const progress = this.activeExecutions.get(executionId);
     if (!progress || progress.status === 'completed' || progress.status === 'failed') {
+      return false;
+    }
+    if (progress.metadata?.organizationId !== organizationId) {
+      // Wrong org — indistinguishable from "doesn't exist".
       return false;
     }
 
@@ -388,6 +429,23 @@ export class RealtimeExecutorService extends EventEmitter {
     this.executionQueue.delete(executionId);
 
     this.logger.log(`Tool execution cancelled: ${executionId}`);
+    return true;
+  }
+
+  /** Internal variant for the service shutdown path, which needs to
+   *  cancel every in-flight execution regardless of org. NEVER expose
+   *  this via a controller — it's the admin / shutdown escape hatch. */
+  private async cancelExecutionInternal(executionId: string): Promise<boolean> {
+    const progress = this.activeExecutions.get(executionId);
+    if (!progress || progress.status === 'completed' || progress.status === 'failed') {
+      return false;
+    }
+    await this.updateProgress(executionId, {
+      status: 'cancelled',
+      message: 'Tool execution cancelled during shutdown',
+      completedAt: new Date(),
+    });
+    this.executionQueue.delete(executionId);
     return true;
   }
 
@@ -426,10 +484,11 @@ export class RealtimeExecutorService extends EventEmitter {
       clearInterval(this.processingInterval);
     }
 
-    // Cancel all running executions
+    // Cancel all running executions via the internal helper (skips
+    // the per-call org check — shutdown is inside the trust boundary).
     const executionIds = Array.from(this.activeExecutions.keys());
     for (const executionId of executionIds) {
-      await this.cancelExecution(executionId);
+      await this.cancelExecutionInternal(executionId);
     }
 
     this.logger.log('Real-time executor service shutdown complete');
