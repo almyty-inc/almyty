@@ -34,9 +34,24 @@ function makeRes(): any {
 }
 
 function makeReq(overrides: any = {}): any {
+  // Minimal EventEmitter-compatible surface so the streaming handler
+  // can attach req.on('close'/'aborted', ...) / req.off() disconnect
+  // listeners. In real express this is an inbound http.IncomingMessage
+  // which extends EventEmitter.
+  const listeners: Record<string, Function[]> = {};
   return {
     ip: '127.0.0.1',
     socket: { remoteAddress: '127.0.0.1' },
+    on: jest.fn((event: string, cb: Function) => {
+      (listeners[event] ||= []).push(cb);
+    }),
+    off: jest.fn((event: string, cb: Function) => {
+      if (!listeners[event]) return;
+      listeners[event] = listeners[event].filter(l => l !== cb);
+    }),
+    emit: (event: string, ...args: any[]) => {
+      (listeners[event] || []).forEach(cb => cb(...args));
+    },
     ...overrides,
   };
 }
@@ -345,6 +360,77 @@ describe('OpenAI Compatibility', () => {
       expect(errorChunk).toBeDefined();
 
       expect(res.end).toHaveBeenCalled();
+    });
+
+    it('stops pushing SSE chunks when the client disconnects mid-stream (regression)', async () => {
+      // Pin the disconnect handler on the SSE path. Pre-fix, a client
+      // hangup during a long stream would leave the engine running
+      // and every subsequent onEvent callback would try to res.write
+      // into a destroyed socket — no feedback loop, no cancellation,
+      // just noise in the logs and wasted CPU. Now: client-close sets
+      // a flag and the onEvent handler short-circuits.
+      const res = makeRes();
+      const req = makeReq();
+
+      apiKeyRepo.findOne.mockResolvedValue(makeApiKey());
+      agentsService.getAgent.mockResolvedValue(makeAgent());
+
+      let eventsEmittedAfterClose = 0;
+      executionEngine.execute.mockImplementation(
+        async (agent: any, orgId: string, userId: string | null, opts: any, onEvent?: any) => {
+          // Emit one chunk BEFORE the client disconnects.
+          onEvent?.({
+            type: 'node.output',
+            data: { chunk: 'before-close' },
+            timestamp: Date.now(),
+          });
+
+          // Simulate the client hanging up mid-stream.
+          req.emit('close');
+
+          // Emit more chunks AFTER the disconnect. The writeSSE path
+          // must not attempt to push these into the socket.
+          const beforeChunkCount = res._chunks.length;
+          onEvent?.({
+            type: 'node.output',
+            data: { chunk: 'should-not-appear' },
+            timestamp: Date.now(),
+          });
+          onEvent?.({
+            type: 'node.output',
+            data: { chunk: 'also-should-not-appear' },
+            timestamp: Date.now(),
+          });
+          eventsEmittedAfterClose = res._chunks.length - beforeChunkCount;
+
+          return {
+            id: 'exec-stream',
+            output: 'done',
+            status: AgentExecutionStatus.COMPLETED,
+            totalTokens: 10,
+          };
+        },
+      );
+
+      await controller.chatCompletions(
+        {
+          model: 'agent:agent-abc-123',
+          messages: [{ role: 'user', content: 'Hello' }],
+          stream: true,
+        },
+        `Bearer ${TEST_API_KEY}`,
+        req,
+        res,
+      );
+
+      // Zero chunks written after the close event — that's the whole
+      // contract we're pinning.
+      expect(eventsEmittedAfterClose).toBe(0);
+
+      // And no [DONE] sentinel gets pushed either, because the handler
+      // skips the final flush block when the client is already gone.
+      const chunks: string[] = res._chunks;
+      expect(chunks.some(c => c.includes('[DONE]'))).toBe(false);
     });
   });
 
