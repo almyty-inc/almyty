@@ -1,9 +1,10 @@
-import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { LlmProvider } from '../../../entities/llm-provider.entity';
 import { LlmSession } from '../../../entities/llm-session.entity';
 import { MessageRole } from '../../../entities/llm-message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse } from '../llm-providers.service';
+import { callLlmProviderHttp } from './safe-request';
 
 /**
  * Handles Google Gemini API calls.
@@ -33,9 +34,15 @@ export async function callGoogle(
     },
   };
 
+  // URL-encode the apiKey and the model id. Previously both were
+  // interpolated raw, so a model id like `../../v1beta/chat` or a key
+  // containing `&` / `#` would break URL parsing or inject extra
+  // query params.
+  const safeModel = encodeURIComponent(request.model || 'gemini-pro');
+  const safeKey = encodeURIComponent(apiKey || '');
   const config: AxiosRequestConfig = {
     method: 'POST',
-    url: `${apiUrl}/models/${request.model || 'gemini-pro'}:generateContent?key=${apiKey}`,
+    url: `${apiUrl}/models/${safeModel}:generateContent?key=${safeKey}`,
     headers: {
       'Content-Type': 'application/json',
     },
@@ -43,7 +50,7 @@ export async function callGoogle(
     timeout: provider.configuration.timeout || 30000,
   };
 
-  const response: AxiosResponse = await axios(config);
+  const response: AxiosResponse = await callLlmProviderHttp(config);
   const responseTime = Date.now() - startTime;
 
   const candidate = response.data.candidates?.[0];
@@ -113,7 +120,7 @@ export async function callCohere(
     timeout: provider.configuration.timeout || 30000,
   };
 
-  const response: AxiosResponse = await axios(config);
+  const response: AxiosResponse = await callLlmProviderHttp(config);
   const responseTime = Date.now() - startTime;
 
   const inputTokens = JSON.stringify(cohereRequest).length / 4;
@@ -175,7 +182,7 @@ export async function callHuggingFace(
     timeout: provider.configuration.timeout || 30000,
   };
 
-  const response: AxiosResponse = await axios(config);
+  const response: AxiosResponse = await callLlmProviderHttp(config);
   const responseTime = Date.now() - startTime;
 
   let content = '';
@@ -259,7 +266,7 @@ export async function callCustomProvider(
     timeout: provider.configuration.timeout || 30000,
   };
 
-  const response: AxiosResponse = await axios(config);
+  const response: AxiosResponse = await callLlmProviderHttp(config);
   const responseTime = Date.now() - startTime;
 
   // Try to parse response based on common formats

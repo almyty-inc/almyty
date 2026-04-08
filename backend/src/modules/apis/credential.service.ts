@@ -11,6 +11,7 @@ import axios from 'axios';
 
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { Api } from '../../entities/api.entity';
+import { validateUrl } from '../../common/security/url-validator';
 
 export interface CreateCredentialDto {
   name: string;
@@ -251,6 +252,19 @@ export class CredentialService {
       throw new BadRequestException('Missing refreshToken or tokenEndpoint in credential config');
     }
 
+    // SSRF guard. `tokenEndpoint` is user-supplied at credential
+    // creation time — an attacker who creates a credential with
+    // tokenEndpoint=http://169.254.169.254/... would otherwise have
+    // the backend POST the refresh token + client secret to that
+    // internal host on every refresh cycle, leaking the full
+    // credential material.
+    const validation = validateUrl(tokenEndpoint);
+    if (!validation.valid) {
+      throw new BadRequestException(
+        `Refused to refresh OAuth token against unsafe endpoint: ${validation.error}`,
+      );
+    }
+
     try {
       const response = await axios.post(tokenEndpoint, new URLSearchParams({
         grant_type: 'refresh_token',
@@ -260,6 +274,9 @@ export class CredentialService {
       }).toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         timeout: 15000,
+        maxContentLength: 256 * 1024,
+        maxBodyLength: 256 * 1024,
+        maxRedirects: 0,
       });
 
       const { access_token, refresh_token, expires_in } = response.data;

@@ -147,6 +147,10 @@ export class RealtimeExecutorService extends EventEmitter {
     this.processingInterval = setInterval(async () => {
       await this.processQueue();
     }, 1000); // Process every second
+    // .unref() so the poll timer doesn't keep the Node process alive
+    // during graceful shutdown or in test environments. shutdown()
+    // still clearInterval's the handle explicitly.
+    this.processingInterval.unref?.();
   }
 
   private async processQueue(): Promise<void> {
