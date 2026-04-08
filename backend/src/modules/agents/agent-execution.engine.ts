@@ -726,19 +726,31 @@ export class AgentExecutionEngine {
   }
 
   /**
-   * Wrap a promise with a timeout.
+   * Wrap a promise with a timeout. The setTimeout handle is explicitly
+   * cleared on either resolution so the timer callback never fires
+   * once the underlying promise has settled — the previous shape
+   * left the handle alive for up to `maxExecutionTime` (5 minutes
+   * default) after every layer finished, which meant every completed
+   * layer held a live Node timer handle for minutes afterwards. That's
+   * a real event-loop pressure issue on busy deployments and the
+   * source of the "worker process has failed to exit gracefully"
+   * warnings from test runs.
    */
   private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
     if (timeoutMs <= 0) {
       throw new Error(message);
     }
 
-    return Promise.race([
-      promise,
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(message)), timeoutMs),
-      ),
-    ]);
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    });
+
+    try {
+      return (await Promise.race([promise, timeout])) as T;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   /**
