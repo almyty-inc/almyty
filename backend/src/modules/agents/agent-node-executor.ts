@@ -539,8 +539,20 @@ export class AgentNodeExecutor {
       Object.assign(subInput, context.input);
     }
 
-    // Load sub-agent
-    const subAgent = await this.agentRepository.findOne({ where: { id: agentId } });
+    // Load sub-agent. CRITICAL: scope to the caller's organizationId.
+    // The previous shape was `findOne({ where: { id: agentId } })` with no
+    // org filter, which meant a user in org A could craft a pipeline with
+    // a sub_agent node pointing at ANY agentId in the system and have
+    // this engine load and execute the referenced pipeline under org A's
+    // identity. The effect: org A runs org B's private pipeline logic —
+    // prompts, tool-call configurations, judge prompts, LLM provider
+    // choices — against org A's inputs, silently exfiltrating the shape
+    // of org B's agent definitions. The sub-agent execution itself uses
+    // org A's tools and credentials so there's no privilege escalation,
+    // but the IP theft is still severe.
+    const subAgent = await this.agentRepository.findOne({
+      where: { id: agentId, organizationId: options.organizationId },
+    });
     if (!subAgent) {
       throw new Error(`Sub-agent '${agentId}' not found`);
     }

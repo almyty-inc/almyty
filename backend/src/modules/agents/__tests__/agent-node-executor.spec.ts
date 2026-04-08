@@ -763,5 +763,53 @@ describe('AgentNodeExecutor', () => {
         ),
       ).rejects.toThrow(/sub crashed/);
     });
+
+    // Regression: the sub-agent lookup used to be
+    // `findOne({ where: { id: agentId } })` with no org filter, which
+    // let a user in org A reference any agentId in the system and have
+    // the engine load + run the referenced pipeline under their own
+    // credentials. We now scope the lookup to { id, organizationId } —
+    // a sub_agent node referencing a foreign agent has to look exactly
+    // like "agent not found".
+    describe('cross-org sub-agent lookup (regression)', () => {
+      it('scopes the findOne by both id AND organizationId', async () => {
+        agentRepo.findOne.mockResolvedValue({ id: 'a-2' } as Agent);
+        executionEngine.execute.mockResolvedValue({
+          status: 'completed',
+          output: 'ok',
+        } as any);
+
+        await executor.execute(
+          node('sub_agent', { agentId: 'a-2' }),
+          buildContext(),
+          'org-1',
+          'user-1',
+          { organizationId: 'org-1' },
+        );
+
+        expect(agentRepo.findOne).toHaveBeenCalledWith({
+          where: { id: 'a-2', organizationId: 'org-1' },
+        });
+      });
+
+      it('surfaces a cross-org reference as "sub-agent not found"', async () => {
+        // Simulates the DB response when the requested agentId exists
+        // in another org: the scoped where clause finds nothing.
+        agentRepo.findOne.mockResolvedValue(null);
+
+        await expect(
+          executor.execute(
+            node('sub_agent', { agentId: 'foreign-agent-id' }),
+            buildContext(),
+            'org-1',
+            'user-1',
+            { organizationId: 'org-1' },
+          ),
+        ).rejects.toThrow(/Sub-agent 'foreign-agent-id' not found/);
+
+        // The engine must NEVER be invoked for a cross-org reference.
+        expect(executionEngine.execute).not.toHaveBeenCalled();
+      });
+    });
   });
 });
