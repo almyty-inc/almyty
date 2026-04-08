@@ -300,7 +300,7 @@ export function GatewaysPage() {
         {
           label: 'Copy Full URL',
           onClick: async (gateway) => {
-            const backendUrl = window.location.origin.replace(':3002', ':4000')
+            const backendUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin
             const simpleSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
             const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
             const fullEndpoint = `${backendUrl}/${simpleSlug}/${gwSlug}`

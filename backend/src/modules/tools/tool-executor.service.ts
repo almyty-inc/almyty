@@ -609,13 +609,21 @@ export class ToolExecutorService {
       };
 
       try {
-        const tool = await this.toolRepository.findOne({ where: { id: toolId } });
-        if (tool) {
-          await this.recordExecution(tool, parameters, errorResult, options, {
-            cached: false,
-            executionTime: Date.now() - startTime,
-            retryCount,
+        // Scope to the caller's org here too — otherwise the error
+        // path would load a cross-org tool just to write an audit
+        // record against it, confirming the tool's existence and
+        // polluting its execution stats.
+        if (options.organizationId) {
+          const tool = await this.toolRepository.findOne({
+            where: { id: toolId, organizationId: options.organizationId },
           });
+          if (tool) {
+            await this.recordExecution(tool, parameters, errorResult, options, {
+              cached: false,
+              executionTime: Date.now() - startTime,
+              retryCount,
+            });
+          }
         }
       } catch (recordError) {
         this.logger.error(`Failed to record failed execution: ${recordError.message}`);

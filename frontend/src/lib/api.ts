@@ -361,19 +361,18 @@ export const toolsApi = {
   },
   
   update: (id: string, data: any, organizationId?: string) => {
-    if (organizationId) {
-      return apiPut(`/organizations/${organizationId}/tools/${id}`, data)
+    const orgId = organizationId || readCurrentOrgId()
+    if (!orgId) {
+      return Promise.reject(new Error('No organization context. Pick an org before updating tools.'))
     }
-    // Fallback: get org from store
-    const orgId = JSON.parse(localStorage.getItem('auth-storage') || '{}')?.state?.user?.organizationMemberships?.[0]?.organization?.id
     return apiPut(`/organizations/${orgId}/tools/${id}`, data)
   },
 
   delete: (id: string, organizationId?: string) => {
-    if (organizationId) {
-      return apiDel(`/organizations/${organizationId}/tools/${id}`)
+    const orgId = organizationId || readCurrentOrgId()
+    if (!orgId) {
+      return Promise.reject(new Error('No organization context. Pick an org before deleting tools.'))
     }
-    const orgId = JSON.parse(localStorage.getItem('auth-storage') || '{}')?.state?.user?.organizationMemberships?.[0]?.organization?.id
     return apiDel(`/organizations/${orgId}/tools/${id}`)
   },
   

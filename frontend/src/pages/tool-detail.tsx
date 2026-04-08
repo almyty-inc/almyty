@@ -541,7 +541,7 @@ function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolNa
   const skillsGateway = gateways.find(g => g.gateway?.type === 'skills')?.gateway
   const firstGateway = gateways[0]?.gateway
 
-  const apiBase = window.location.origin.replace('app.', 'api.')
+  const apiBase = import.meta.env.VITE_API_BASE_URL || window.location.origin
 
   const { data: skillData, isLoading: skillLoading } = useQuery({
     queryKey: ['tool-skill', toolId],
@@ -549,10 +549,16 @@ function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolNa
     enabled: !!orgId,
   })
 
-  const copyToClipboard = (text: string, field: string) => {
-    navigator.clipboard.writeText(text)
-    setCopiedField(field)
-    setTimeout(() => setCopiedField(null), 2000)
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedField(field)
+      setTimeout(() => setCopiedField(null), 2000)
+    } catch (err) {
+      console.warn('Clipboard copy failed:', err)
+      setCopiedField(`${field}:error`)
+      setTimeout(() => setCopiedField(null), 2500)
+    }
   }
 
   const skill = skillData

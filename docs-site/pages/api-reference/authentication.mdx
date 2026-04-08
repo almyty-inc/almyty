@@ -128,17 +128,34 @@ curl -X PATCH https://api.almyty.com/auth/change-password \
 
 ## Organization Context
 
-Most API endpoints are scoped to an organization. The backend determines
-the current organization from the JWT token's associated user.
+Most API endpoints are scoped to an organization. How the backend picks
+the current organization depends on how many memberships the caller has:
 
-For operations that require explicit organization context, pass the
-organization ID as a path parameter or header:
+- **Single-org users**: the backend auto-selects your one membership.
+  No extra header is required.
+- **Multi-org users**: you **must** send the `X-Organization-Id` header
+  on every request. Without it the API returns `400 NO_ORGANIZATION`.
+  This is a deliberate choice so that multi-org users never silently
+  operate on the wrong org's data.
 
 ```bash
-# Organization-scoped endpoints
-curl https://api.almyty.com/organizations/{orgId}/tools \
-  -H "Authorization: Bearer $TOKEN"
+# Multi-org user: pick which org to operate on
+curl https://api.almyty.com/gateways \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Organization-Id: 9c0e2f3a-..."
 ```
+
+Some endpoints also accept the org id as a path parameter (e.g.
+`/organizations/{orgId}/tools`). In that case the path wins and the
+header is ignored — so the path must match a membership you actually
+have.
+
+### Switching orgs from a multi-org account
+
+If your account belongs to more than one org, just change the
+`X-Organization-Id` header on your next request. The backend validates
+that the requested org matches one of your memberships; otherwise the
+request is rejected with `400 NO_ORGANIZATION`.
 
 ## Logout
 
