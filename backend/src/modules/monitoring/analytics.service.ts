@@ -241,15 +241,23 @@ export class AnalyticsService {
   }
 
   async getGatewayUsage(organizationId: string, timeframe: string) {
+    if (!organizationId) {
+      throw new Error('getGatewayUsage requires organizationId');
+    }
     const since = this.getTimeframeDate(timeframe);
 
+    // CRITICAL: previously this method took organizationId as a
+    // parameter and never used it. Every authenticated user got every
+    // org's per-gateway usage counts back. Scope by metric.organizationId
+    // (which is indexed on (organizationId, timestamp)).
     const results = await this.usageMetricRepository
       .createQueryBuilder('metric')
       .select('metric.gatewayId', 'gatewayId')
       .addSelect('COUNT(*)', 'totalRequests')
       .addSelect("SUM(CASE WHEN metric.status = 'success' THEN 1 ELSE 0 END)", 'successCount')
       .addSelect("SUM(CASE WHEN metric.status = 'error' THEN 1 ELSE 0 END)", 'errorCount')
-      .where('metric.type = :type', { type: MetricType.REQUEST_COUNT })
+      .where('metric.organizationId = :orgId', { orgId: organizationId })
+      .andWhere('metric.type = :type', { type: MetricType.REQUEST_COUNT })
       .andWhere('metric.gatewayId IS NOT NULL')
       .andWhere('metric.timestamp >= :since', { since })
       .groupBy('metric.gatewayId')
