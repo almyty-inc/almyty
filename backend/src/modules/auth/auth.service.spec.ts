@@ -26,11 +26,36 @@ describe('AuthService', () => {
   let jwtService: jest.Mocked<JwtService>;
 
   beforeEach(async () => {
+    // register() now wraps user + org + membership in a DB transaction,
+    // so we need a `manager.transaction` that runs the callback with a
+    // transactional manager whose .create/.save delegate straight to the
+    // repository mocks. That keeps every existing repository assertion
+    // (e.g. expect(userRepository.save).toHaveBeenCalled()) working
+    // without rewriting every call site.
+    const transactionalManager = {
+      create: (entityClass: any, data: any) => {
+        if (entityClass === User) return mockUserRepository.create(data);
+        if (entityClass === Organization) return mockOrganizationRepository.create(data);
+        if (entityClass === UserOrganization) return mockUserOrganizationRepository.create(data);
+        return data;
+      },
+      save: (entityClass: any, entity: any) => {
+        if (entityClass === User) return mockUserRepository.save(entity);
+        if (entityClass === Organization) return mockOrganizationRepository.save(entity);
+        if (entityClass === UserOrganization) return mockUserOrganizationRepository.save(entity);
+        return entity;
+      },
+    };
+    const mockManager = {
+      transaction: jest.fn(async (cb: any) => cb(transactionalManager)),
+    };
+
     const mockUserRepository = {
       findOne: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
       find: jest.fn(),
+      manager: mockManager,
     };
 
     const mockApiKeyRepository = {
