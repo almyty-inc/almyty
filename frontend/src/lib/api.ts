@@ -7,6 +7,70 @@ const MAX_RETRIES = 3
 const RETRY_DELAY = 1000
 const RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504]
 const RETRYABLE_ERROR_CODES = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ENETUNREACH']
+// Only retry methods that are safe to replay. A POST / PATCH / DELETE
+// that returns a transient 500 might still have executed the
+// state-changing work on the server — retrying blindly would turn a
+// single user action into a double-charge / double-create / double-
+// delete. Confined to HTTP methods that RFC 9110 declares idempotent.
+const IDEMPOTENT_METHODS = new Set(['get', 'head', 'options', 'put', 'delete'])
+// Cap an honoured Retry-After header so a broken backend can't stall the UI.
+const MAX_RETRY_AFTER_MS = 30_000
+
+/**
+ * Pure retry-decision helper — extracted so unit tests can exercise
+ * it without having to unmock axios (which is globally mocked in the
+ * frontend test setup for component isolation).
+ *
+ * Decides whether a failed request should be retried given its
+ * method, error code, HTTP status, and error message. The rules:
+ *
+ * - The HTTP method must be idempotent (RFC 9110): GET / HEAD /
+ *   OPTIONS / PUT / DELETE. POST and PATCH are NEVER retried, even
+ *   on transient 5xx — the state-changing work may have partially
+ *   run on the server.
+ * - The error must look transient: one of the retryable Node error
+ *   codes, a retryable HTTP status, or the specific "socket hang up"
+ *   message.
+ */
+export function shouldRetryRequest(params: {
+  method: string | undefined
+  errorCode: string | undefined
+  statusCode: number | undefined
+  message: string | undefined
+}): boolean {
+  const method = (params.method || 'get').toLowerCase()
+  if (!IDEMPOTENT_METHODS.has(method)) return false
+
+  if (params.errorCode && RETRYABLE_ERROR_CODES.includes(params.errorCode)) return true
+  if (params.statusCode && RETRYABLE_STATUS_CODES.includes(params.statusCode)) return true
+  if (params.message && params.message.includes('socket hang up')) return true
+
+  return false
+}
+
+/**
+ * Pure delay-computation helper for the retry interceptor. Honours
+ * Retry-After (seconds or HTTP-date) with a hard cap so a buggy or
+ * hostile upstream can't freeze the UI; falls back to exponential
+ * backoff when no header is present.
+ */
+export function computeRetryDelay(
+  retryAfterHeader: string | undefined,
+  attempt: number,
+  now: number = Date.now(),
+): number {
+  if (retryAfterHeader) {
+    const asNumber = Number(retryAfterHeader)
+    if (!Number.isNaN(asNumber) && asNumber > 0) {
+      return Math.min(asNumber * 1000, MAX_RETRY_AFTER_MS)
+    }
+    const whenMs = Date.parse(String(retryAfterHeader))
+    if (!Number.isNaN(whenMs)) {
+      return Math.min(Math.max(0, whenMs - now), MAX_RETRY_AFTER_MS)
+    }
+  }
+  return RETRY_DELAY * Math.pow(2, attempt)
+}
 
 // Guard against multiple concurrent 401 redirects
 let isRedirectingToLogin = false
@@ -109,19 +173,24 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    // Determine if error is retryable
-    const isRetryable =
-      RETRYABLE_ERROR_CODES.includes((error as any).code) ||
-      (error.response?.status && RETRYABLE_STATUS_CODES.includes(error.response.status)) ||
-      error.message?.includes('socket hang up')
+    // Determine if error is retryable — idempotent method + transient
+    // error. Delegates to the pure helper that the unit tests exercise.
+    const isRetryable = shouldRetryRequest({
+      method: config?.method,
+      errorCode: (error as any).code,
+      statusCode: error.response?.status,
+      message: error.message,
+    })
 
     // Retry logic
     const retryCount = config?.headers?.['X-Retry-Count'] || 0
     if (config && isRetryable && retryCount < MAX_RETRIES) {
       config.headers['X-Retry-Count'] = retryCount + 1
 
-      // Exponential backoff
-      const delay = RETRY_DELAY * Math.pow(2, retryCount)
+      const retryAfterHeader =
+        (error.response?.headers as any)?.['retry-after'] ??
+        (error.response?.headers as any)?.['Retry-After']
+      const delay = computeRetryDelay(retryAfterHeader, retryCount)
       await new Promise(resolve => setTimeout(resolve, delay))
 
       console.warn(`Retrying request (attempt ${retryCount + 1}/${MAX_RETRIES}):`, config.url)
