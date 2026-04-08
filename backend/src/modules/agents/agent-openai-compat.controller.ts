@@ -458,14 +458,32 @@ export class AgentOpenAICompatController {
     const completionId = `chatcmpl-${Date.now()}`;
     const created = Math.floor(Date.now() / 1000);
 
+    // Track client disconnect so we stop pushing chunks into a closed
+    // socket the moment the caller hangs up. Without this, every
+    // subsequent writeSSE() throws on a destroyed socket and the
+    // executionEngine keeps running in the background with each
+    // onEvent callback swallowing the write error. We can't abort
+    // the execution itself from here (the engine doesn't take an
+    // AbortSignal yet — tracked as a follow-up), but we can short-
+    // circuit the SSE fan-out so the process isn't burning CPU
+    // serialising events into /dev/null for a ghost client.
+    let clientAlive = true;
+    const markClosed = () => {
+      clientAlive = false;
+    };
+    logCtx.req.on('close', markClosed);
+    logCtx.req.on('aborted', markClosed);
+
     // Send initial chunk with role
-    this.writeSSE(res, {
-      id: completionId,
-      object: 'chat.completion.chunk',
-      created,
-      model: `agent:${agent.id}`,
-      choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
-    });
+    if (clientAlive) {
+      this.writeSSE(res, {
+        id: completionId,
+        object: 'chat.completion.chunk',
+        created,
+        model: `agent:${agent.id}`,
+        choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
+      });
+    }
 
     try {
       await this.executionEngine.execute(
@@ -474,6 +492,10 @@ export class AgentOpenAICompatController {
         apiKey.userId || null,
         { input },
         (event: StreamEvent) => {
+          // Client has hung up — drop the event on the floor rather
+          // than attempting to write to a closed socket.
+          if (!clientAlive) return;
+
           if (event.type === 'node.output' || event.type === 'node.completed') {
             const content = typeof event.data?.output === 'string'
               ? event.data.output
@@ -494,35 +516,46 @@ export class AgentOpenAICompatController {
         },
       );
 
-      // Send final chunk
-      this.writeSSE(res, {
-        id: completionId,
-        object: 'chat.completion.chunk',
-        created,
-        model: `agent:${agent.id}`,
-        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-      });
+      if (clientAlive) {
+        // Send final chunk
+        this.writeSSE(res, {
+          id: completionId,
+          object: 'chat.completion.chunk',
+          created,
+          model: `agent:${agent.id}`,
+          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+        });
 
-      res.write('data: [DONE]\n\n');
-      res.end();
-      this.logRequest(logCtx.req, logCtx.apiKeyLast4, agent.id, logCtx.requestStartTime, 200, 'stream');
+        res.write('data: [DONE]\n\n');
+        res.end();
+        this.logRequest(logCtx.req, logCtx.apiKeyLast4, agent.id, logCtx.requestStartTime, 200, 'stream');
+      } else {
+        // Execution finished normally but the client is gone.
+        // Surface this in logs so we can spot patterns of disconnects.
+        this.logRequest(logCtx.req, logCtx.apiKeyLast4, agent.id, logCtx.requestStartTime, 200, 'stream-client-closed');
+      }
     } catch (error) {
       this.logger.error(`[STREAMING] Error during agent execution: ${error.message}`, error.stack);
 
-      // Send error chunk and terminate
-      this.writeSSE(res, {
-        id: completionId,
-        object: 'chat.completion.chunk',
-        created,
-        model: `agent:${agent.id}`,
-        choices: [{ index: 0, delta: {}, finish_reason: 'error' }],
-      });
+      if (clientAlive) {
+        // Send error chunk and terminate
+        this.writeSSE(res, {
+          id: completionId,
+          object: 'chat.completion.chunk',
+          created,
+          model: `agent:${agent.id}`,
+          choices: [{ index: 0, delta: {}, finish_reason: 'error' }],
+        });
 
-      res.write('data: [DONE]\n\n');
-      res.end();
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
       // Failed streams used to vanish from access logs because the controller-
       // level catch is unreachable once headers are sent. Log here instead.
       this.logRequest(logCtx.req, logCtx.apiKeyLast4, agent.id, logCtx.requestStartTime, 500, 'stream-error');
+    } finally {
+      logCtx.req.off('close', markClosed);
+      logCtx.req.off('aborted', markClosed);
     }
   }
 
