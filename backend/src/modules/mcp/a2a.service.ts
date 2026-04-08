@@ -3,9 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
+import * as crypto from 'crypto';
 import axios, { AxiosRequestConfig } from 'axios';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
+
+import { validateUrl } from '../../common/security/url-validator';
 
 import {
   A2AAgent,
@@ -73,11 +76,24 @@ export class A2AService extends EventEmitter {
       throw new NotFoundException('Organization not found');
     }
 
+    // SSRF guard on the registered endpoint. Without this, a caller
+    // could register an "agent" whose endpoint is
+    // http://169.254.169.254/, http://localhost:6379/, etc., and the
+    // server would happily make outbound requests to those URLs on
+    // every testAgentConnection / pingAgent / deliverMessage call.
+    const validation = validateUrl(agentData.endpoint);
+    if (!validation.valid) {
+      throw new BadRequestException(`Refused to register agent endpoint: ${validation.error}`);
+    }
+
     // Test agent connectivity
     await this.testAgentConnection(agentData.endpoint, agentData.authentication);
 
     const agent: A2AAgent = {
-      id: `a2a_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      // Use crypto.randomBytes — the previous `a2a_${Date.now()}_${Math.random().toString(36).substr(2,9)}`
+      // shape was guessable (~46 bits of entropy), and agent ids are
+      // the lookup key for updateAgent / deregisterAgent / sendMessage.
+      id: `a2a_${crypto.randomBytes(16).toString('hex')}`,
       name: agentData.name,
       description: agentData.description,
       type: agentData.type,
@@ -116,7 +132,25 @@ export class A2AService extends EventEmitter {
     return agent;
   }
 
-  async getAgent(agentId: string): Promise<A2AAgent | null> {
+  /**
+   * Org-scoped agent lookup. Public API. Previously the public
+   * `getAgent(agentId)` had no org filter and would return the
+   * agent for ANY caller that knew its id — cross-tenant leak of
+   * endpoint / authentication / capabilities / metadata.
+   */
+  async getAgent(agentId: string, organizationId: string): Promise<A2AAgent | null> {
+    const agent = await this.getAgentInternal(agentId);
+    if (!agent || agent.organizationId !== organizationId) return null;
+    return agent;
+  }
+
+  /**
+   * Unscoped lookup used ONLY from trusted internal paths (the
+   * delivery loop, the discovery sweep, the sendMessage service
+   * which does its OWN explicit peer-org check). Never expose this
+   * via a controller.
+   */
+  private async getAgentInternal(agentId: string): Promise<A2AAgent | null> {
     const agent = this.agents.get(agentId);
     if (agent) {
       return agent;
@@ -126,9 +160,9 @@ export class A2AService extends EventEmitter {
     try {
       const cached = await this.redis.get(`agent:${agentId}`);
       if (cached) {
-        const agent = JSON.parse(cached);
-        this.agents.set(agentId, agent);
-        return agent;
+        const parsed = JSON.parse(cached) as A2AAgent;
+        this.agents.set(agentId, parsed);
+        return parsed;
       }
     } catch (error) {
       this.logger.error(`Failed to get agent from Redis: ${error.message}`);
@@ -143,13 +177,22 @@ export class A2AService extends EventEmitter {
     );
   }
 
-  async updateAgent(agentId: string, updates: Partial<A2AAgent>): Promise<A2AAgent | null> {
-    const agent = await this.getAgent(agentId);
+  async updateAgent(
+    agentId: string,
+    organizationId: string,
+    updates: Partial<A2AAgent>,
+  ): Promise<A2AAgent | null> {
+    const agent = await this.getAgent(agentId, organizationId);
     if (!agent) {
       return null;
     }
 
-    Object.assign(agent, updates, { lastSeen: new Date() });
+    // Never let callers flip the organizationId through the updates
+    // bag — that'd let a cross-org write laundering path punch
+    // through any future caller that missed the scope check.
+    const { organizationId: _forbidden, id: _forbiddenId, ...safeUpdates } = updates as any;
+
+    Object.assign(agent, safeUpdates, { lastSeen: new Date() });
     this.agents.set(agentId, agent);
 
     // Update Redis
@@ -159,8 +202,24 @@ export class A2AService extends EventEmitter {
     return agent;
   }
 
-  async deregisterAgent(agentId: string): Promise<boolean> {
-    const agent = await this.getAgent(agentId);
+  /** Internal-only variant for the delivery/discovery paths that
+   *  already know the agent belongs to the relevant org. */
+  private async updateAgentInternal(
+    agentId: string,
+    updates: Partial<A2AAgent>,
+  ): Promise<A2AAgent | null> {
+    const agent = await this.getAgentInternal(agentId);
+    if (!agent) return null;
+
+    const { organizationId: _f, id: _f2, ...safeUpdates } = updates as any;
+    Object.assign(agent, safeUpdates, { lastSeen: new Date() });
+    this.agents.set(agentId, agent);
+    await this.redis.setex(`agent:${agentId}`, 86400, JSON.stringify(agent));
+    return agent;
+  }
+
+  async deregisterAgent(agentId: string, organizationId: string): Promise<boolean> {
+    const agent = await this.getAgent(agentId, organizationId);
     if (!agent) {
       return false;
     }
@@ -188,12 +247,16 @@ export class A2AService extends EventEmitter {
     fromAgentId: string,
     toAgentId: string,
     content: any,
+    callerOrganizationId: string,
     type: A2AMessageType = A2AMessageType.REQUEST,
     context?: any,
-    callerOrganizationId?: string,
   ): Promise<A2AMessage> {
-    const fromAgent = await this.getAgent(fromAgentId);
-    const toAgent = await this.getAgent(toAgentId);
+    // Internal lookup because we check the caller's org membership
+    // explicitly right below — sendMessage is allowed to see agents
+    // from other orgs briefly during the peer/caller validation, but
+    // the downstream delivery is gated by the explicit comparisons.
+    const fromAgent = await this.getAgentInternal(fromAgentId);
+    const toAgent = await this.getAgentInternal(toAgentId);
 
     if (!fromAgent || !toAgent) {
       throw new NotFoundException('Agent not found');
@@ -204,11 +267,11 @@ export class A2AService extends EventEmitter {
       throw new ForbiddenException('Cross-organization communication not allowed');
     }
 
-    // Previously we only verified the two peers were in the same org,
-    // but not that the CALLER was a member of that org. A user in org A
-    // who learned a (fromAgentId, toAgentId) pair in org B could send a
-    // message on behalf of an org-B agent they never had access to.
-    if (callerOrganizationId && fromAgent.organizationId !== callerOrganizationId) {
+    // Verify the CALLER is a member of the peers' organization. The
+    // `callerOrganizationId` parameter is now REQUIRED — the previous
+    // optional shape silently accepted calls from services that
+    // forgot to thread the id, leaving the scope check off.
+    if (!callerOrganizationId || fromAgent.organizationId !== callerOrganizationId) {
       throw new ForbiddenException('You cannot send messages as an agent in another organization');
     }
 
@@ -249,7 +312,7 @@ export class A2AService extends EventEmitter {
   }
 
   private async deliverMessage(message: A2AMessage): Promise<void> {
-    const toAgent = await this.getAgent(message.toAgentId);
+    const toAgent = await this.getAgentInternal(message.toAgentId);
     if (!toAgent) {
       this.logger.error(`Cannot deliver message: agent ${message.toAgentId} not found`);
       return;
@@ -258,12 +321,12 @@ export class A2AService extends EventEmitter {
     try {
       // Build request based on agent type
       const requestConfig = await this.buildAgentRequest(toAgent, message);
-      
+
       // Send message to agent
       const response = await axios(requestConfig);
-      
+
       // Update agent last seen
-      await this.updateAgent(toAgent.id, { lastSeen: new Date() });
+      await this.updateAgentInternal(toAgent.id, { lastSeen: new Date() });
 
       this.logger.debug(`Message delivered to agent ${toAgent.id}: ${message.id}`);
 
@@ -274,10 +337,10 @@ export class A2AService extends EventEmitter {
 
     } catch (error) {
       this.logger.error(`Failed to deliver message to agent ${toAgent.id}: ${error.message}`);
-      
+
       // Mark agent as potentially inactive
       if (error.code === 'ECONNREFUSED' || error.response?.status >= 500) {
-        await this.updateAgent(toAgent.id, { isActive: false });
+        await this.updateAgentInternal(toAgent.id, { isActive: false });
       }
     }
   }
@@ -398,7 +461,7 @@ export class A2AService extends EventEmitter {
 
   // Handle agent responses — including LLM tool call loops
   private async handleAgentResponse(originalMessage: A2AMessage, responseData: any): Promise<void> {
-    const toAgent = await this.getAgent(originalMessage.toAgentId);
+    const toAgent = await this.getAgentInternal(originalMessage.toAgentId);
 
     // For LLM agents, process tool call loop before delivering final response
     let finalData = responseData;
@@ -685,8 +748,11 @@ export class A2AService extends EventEmitter {
   ): Promise<A2ASession> {
     // Verify all agents exist and belong to organization
     for (const agentId of participantAgentIds) {
-      const agent = await this.getAgent(agentId);
-      if (!agent || agent.organizationId !== organizationId) {
+      // Already org-scoped via the new `getAgent(id, orgId)` signature;
+      // the follow-up organizationId check is redundant but kept as
+      // a belt-and-braces read for clarity.
+      const agent = await this.getAgent(agentId, organizationId);
+      if (!agent) {
         throw new BadRequestException(`Agent ${agentId} not found or not accessible`);
       }
     }
@@ -744,12 +810,17 @@ export class A2AService extends EventEmitter {
     return null;
   }
 
-  // Tool Registration for Agents
+  // Tool Registration for Agents. Org-scoped — the previous shape
+  // took only an agentId and would register a tool into whatever
+  // org the agent happened to belong to. A caller in org A could
+  // create a tool row bound to org B just by knowing an org-B
+  // agentId.
   async registerAgentTool(
     agentId: string,
+    organizationId: string,
     toolRegistration: A2AToolRegistration,
   ): Promise<Tool> {
-    const agent = await this.getAgent(agentId);
+    const agent = await this.getAgent(agentId, organizationId);
     if (!agent) {
       throw new NotFoundException('Agent not found');
     }
@@ -799,7 +870,10 @@ export class A2AService extends EventEmitter {
         healthyAgents.push(agent);
       } catch (error) {
         this.logger.warn(`Agent ${agent.id} not responding: ${error.message}`);
-        await this.updateAgent(agent.id, { isActive: false });
+        // Internal variant — discoverAgents has already filtered by
+        // the requested org via listAgents, so the per-agent update
+        // is trusted.
+        await this.updateAgentInternal(agent.id, { isActive: false });
       }
     }
 
@@ -807,10 +881,24 @@ export class A2AService extends EventEmitter {
   }
 
   private async pingAgent(agent: A2AAgent): Promise<void> {
+    const pingUrl = `${agent.endpoint}/health`;
+
+    // Re-validate the URL on every ping. registerAgent already runs
+    // validateUrl at registration time, but an in-memory agent whose
+    // endpoint has been mutated (or restored from an untrusted
+    // source) would otherwise bypass the SSRF gate.
+    const validation = validateUrl(pingUrl);
+    if (!validation.valid) {
+      throw new Error(`Refused to ping agent endpoint: ${validation.error}`);
+    }
+
     const pingConfig: AxiosRequestConfig = {
-      url: `${agent.endpoint}/health`,
+      url: pingUrl,
       method: 'GET',
       timeout: 5000,
+      maxContentLength: 64 * 1024,
+      maxBodyLength: 64 * 1024,
+      maxRedirects: 0,
     };
 
     if (agent.authentication) {
@@ -821,10 +909,23 @@ export class A2AService extends EventEmitter {
   }
 
   private async testAgentConnection(endpoint: string, auth?: any): Promise<void> {
+    // Validate the endpoint before any outbound request. Previously
+    // `testAgentConnection` was a textbook SSRF — a caller could
+    // register an "agent" whose endpoint was http://169.254.169.254/
+    // (AWS IMDS), http://localhost:6379/ (local Redis), etc., and
+    // the connectivity check would happily fetch it.
+    const validation = validateUrl(endpoint);
+    if (!validation.valid) {
+      throw new BadRequestException(`Refused to reach agent endpoint: ${validation.error}`);
+    }
+
     const testConfig: AxiosRequestConfig = {
       url: endpoint,
       method: 'GET',
       timeout: 10000,
+      maxContentLength: 64 * 1024,
+      maxBodyLength: 64 * 1024,
+      maxRedirects: 0,
     };
 
     if (auth) {
@@ -1134,10 +1235,17 @@ export class A2AService extends EventEmitter {
   }
 
   async shutdown(): Promise<void> {
-    // Deregister all agents
+    // Deregister all agents via an internal helper (shutdown is
+    // inside the trust boundary and shouldn't take an org id).
     const agentIds = Array.from(this.agents.keys());
     for (const agentId of agentIds) {
-      await this.deregisterAgent(agentId);
+      const agent = this.agents.get(agentId);
+      if (!agent) continue;
+      agent.isActive = false;
+      this.agents.set(agentId, agent);
+      try {
+        await this.redis.del(`agent:${agentId}`);
+      } catch { /* best-effort */ }
     }
 
     this.logger.log('A2A service shutdown complete');
