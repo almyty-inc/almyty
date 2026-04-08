@@ -171,6 +171,20 @@ describe('RateLimiterPlugin - Real Business Logic', () => {
       expect(result.error?.code).toBe('RATE_LIMIT_ERROR');
       expect(result.data).toEqual(mockContext.data);
     });
+
+    it('fails closed when organizationId is missing', async () => {
+      // Regression: previously, an undefined organizationId produced
+      // the key `ratelimit:user:${userId}:undefined`, which silently
+      // shared a single bucket across EVERY unauthenticated request
+      // from every org. The fix rejects the request outright.
+      const noOrgContext = { ...mockContext, organizationId: undefined as any };
+
+      const result = await plugin.enforceRateLimit(noOrgContext, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('RATE_LIMIT_NO_ORG');
+      expect(result.nextAction).toBe('stop');
+    });
   });
 
   describe('enforceToolRateLimit - Tool-specific rate limiting', () => {

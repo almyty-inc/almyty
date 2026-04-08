@@ -87,8 +87,6 @@ packages/
 - **Gateway types**: MCP, A2A, UTCP, Skills
 - **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed via worker_threads), GraphQL, LLM
 - **Backend tests**: 119 spec files, 3,895 passing. Marketing number ("3,800+ tests") lives in README.md — keep the two in sync when it changes.
-- **Known skipped tests**: 22 `it.skip`/`describe.skip` markers, plus 2 fully `.skip`'d spec files (`schema-parser.service.spec.ts.skip`, `a2a.service.spec.ts.skip`). Most are fake-timer/ping-loop edge cases; the 2 fully-skipped files are the exceptions and should be prioritized.
-- **Duplicated specs**: `mcp/transports/{websocket,sse}.transport.spec.ts` exists both at the transport level and under `__tests__/`. Both run. Needs dedup.
 - **Agent Skills**: Compliant with https://agentskills.io spec
 
 ---
