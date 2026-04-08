@@ -10,6 +10,15 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { validateUrl } from '../../common/security/url-validator';
 
+/** Per-agent message queue cap. Older messages are dropped (FIFO). */
+const A2A_MESSAGE_QUEUE_MAX = 500;
+
+/** Hard ceilings on the in-memory maps so unbounded growth can't
+ *  OOM the process under adversarial load. Oldest-insertion
+ *  eviction when full. */
+const A2A_SESSIONS_MAX = 10_000;
+const A2A_WORKFLOWS_MAX = 1_000;
+
 import {
   A2AAgent,
   A2AAgentType,
@@ -292,11 +301,19 @@ export class A2AService extends EventEmitter {
       },
     };
 
-    // Add to message queue
+    // Add to message queue, capped per agent. Without this the queue
+    // grew one entry per message forever and the memory footprint
+    // was proportional to the history of every message ever sent
+    // through the service — unbounded leak on any long-running
+    // deployment.
     if (!this.messageQueue.has(toAgentId)) {
       this.messageQueue.set(toAgentId, []);
     }
-    this.messageQueue.get(toAgentId)!.push(message);
+    const queue = this.messageQueue.get(toAgentId)!;
+    queue.push(message);
+    if (queue.length > A2A_MESSAGE_QUEUE_MAX) {
+      queue.splice(0, queue.length - A2A_MESSAGE_QUEUE_MAX);
+    }
 
     // Deliver message to target agent
     await this.deliverMessage(message);
@@ -485,11 +502,15 @@ export class A2AService extends EventEmitter {
       },
     };
 
-    // Queue response message
+    // Queue response message (same FIFO cap as sendMessage).
     if (!this.messageQueue.has(originalMessage.fromAgentId)) {
       this.messageQueue.set(originalMessage.fromAgentId, []);
     }
-    this.messageQueue.get(originalMessage.fromAgentId)!.push(responseMessage);
+    const responseQueue = this.messageQueue.get(originalMessage.fromAgentId)!;
+    responseQueue.push(responseMessage);
+    if (responseQueue.length > A2A_MESSAGE_QUEUE_MAX) {
+      responseQueue.splice(0, responseQueue.length - A2A_MESSAGE_QUEUE_MAX);
+    }
 
     this.emit('messageReceived', responseMessage);
   }
@@ -768,6 +789,14 @@ export class A2AService extends EventEmitter {
       metadata,
     };
 
+    // Evict oldest session before insertion if we're at the cap.
+    // Map iteration order is insertion order in JS, so the first
+    // key is the oldest.
+    if (this.sessions.size >= A2A_SESSIONS_MAX) {
+      const oldest = this.sessions.keys().next().value;
+      if (oldest !== undefined) this.sessions.delete(oldest);
+    }
+
     this.sessions.set(session.id, session);
 
     // Store in Redis
@@ -982,6 +1011,12 @@ export class A2AService extends EventEmitter {
         totalSteps: workflow.steps.length,
       },
     };
+
+    // Same oldest-insertion eviction as sessions.
+    if (this.workflows.size >= A2A_WORKFLOWS_MAX) {
+      const oldest = this.workflows.keys().next().value;
+      if (oldest !== undefined) this.workflows.delete(oldest);
+    }
 
     this.workflows.set(workflowId, a2aWorkflow);
 
