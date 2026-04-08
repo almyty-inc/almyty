@@ -14,6 +14,7 @@ import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ToolExecutorService, ToolExecutionOptions } from '../tools/tool-executor.service';
+import { callLlmProviderHttp } from './providers/safe-request';
 
 export interface CreateLlmProviderDto {
   name: string;
@@ -822,7 +823,11 @@ export class LlmProvidersService {
     owned_by?: string;
   }>> {
     const apiUrl = provider.configuration.apiUrl || 'https://api.openai.com/v1';
-    const response = await axios.get(`${apiUrl}/models`, {
+    // callLlmProviderHttp runs the SSRF gate and applies the shared
+    // content / redirect hygiene defaults before delegating to axios.
+    const response = await callLlmProviderHttp({
+      method: 'GET',
+      url: `${apiUrl}/models`,
       headers: {
         'Authorization': `Bearer ${provider.configuration.apiKey}`,
       },
@@ -866,7 +871,9 @@ export class LlmProvidersService {
     owned_by?: string;
   }>> {
     const apiUrl = provider.configuration.apiUrl || 'https://api.anthropic.com/v1';
-    const response = await axios.get(`${apiUrl}/models`, {
+    const response = await callLlmProviderHttp({
+      method: 'GET',
+      url: `${apiUrl}/models`,
       headers: {
         'x-api-key': provider.configuration.apiKey,
         'anthropic-version': provider.configuration.apiVersion || '2023-06-01',
@@ -898,10 +905,16 @@ export class LlmProvidersService {
     owned_by?: string;
   }>> {
     const apiKey = provider.configuration.apiKey;
-    const response = await axios.get(
-      `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`,
-      { timeout: 10000 }
-    );
+    // URL-encode the apiKey. The previous shape interpolated it raw,
+    // so a key containing `&`, `#`, or a newline would have broken
+    // URL parsing or injected extra query params. Google keys are
+    // normally `[A-Za-z0-9_-]` only, but defence in depth.
+    const target = `https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(apiKey || '')}`;
+    const response = await callLlmProviderHttp({
+      method: 'GET',
+      url: target,
+      timeout: 10000,
+    });
 
     const models = response.data?.models || [];
 

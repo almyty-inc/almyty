@@ -245,6 +245,9 @@ export class SseTransport extends EventEmitter {
         }
       }
     }, 30000);
+    // .unref() so the ping loop doesn't keep the event loop alive
+    // through graceful shutdown or test runs.
+    this.pingInterval.unref?.();
   }
 
   // Setup notification handler
