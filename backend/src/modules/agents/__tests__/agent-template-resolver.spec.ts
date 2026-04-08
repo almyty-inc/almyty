@@ -368,6 +368,50 @@ describe('AgentTemplateResolver', () => {
     it('should reject blocklisted words in resolveValue', () => {
       expect(() => resolver.resolveValue('__proto__.polluted', context)).toThrow(/blocked keyword/);
     });
+
+    // Regression: the blocklist used to be a bare
+    // EXPRESSION_BLOCKLIST.join('|') with no word boundaries, so any
+    // segment containing a blocked word as a SUBSTRING (processor,
+    // importItems, globalConfig, …) was rejected. Segment matching
+    // now compares whole dot-separated segments.
+    describe('blocklist segment matching (regression)', () => {
+      const ctx: ExecutionContext = {
+        input: {
+          importItems: ['a', 'b'],
+          constructorName: 'Foo',
+          globalConfig: { x: 1 },
+          processData: { y: 2 },
+          requireHelper: 'ok',
+          windowWidth: 1920,
+          FunctionArgs: { count: 3 },
+          evaluated: true,
+        },
+        nodes: {
+          processor: { output: 'processor result' },
+          data_importer: { output: 'imported' },
+        },
+        variables: {
+          globalCount: 42,
+        },
+      };
+
+      it.each([
+        ['input.importItems',          '["a","b"]'],         // substring 'import' used to trip
+        ['input.constructorName',      'Foo'],               // substring 'constructor' used to trip
+        ['input.globalConfig',         '{"x":1}'],           // substring 'global' used to trip
+        ['input.processData',          '{"y":2}'],           // substring 'process' used to trip
+        ['input.requireHelper',        'ok'],                // substring 'require' used to trip
+        ['input.windowWidth',          '1920'],              // substring 'window' used to trip
+        ['input.FunctionArgs',         '{"count":3}'],       // substring 'Function' used to trip
+        ['input.evaluated',            'true'],              // substring 'eval' used to trip
+        ['nodes.processor.output',     'processor result'],  // segment 'processor' ≠ 'process'
+        ['nodes.data_importer.output', 'imported'],
+        ['variables.globalCount',      '42'],
+      ])('accepts legitimate path {{%s}} that used to be blocked', (path, expected) => {
+        const result = resolver.resolve(`{{${path}}}`, ctx);
+        expect(result).toBe(expected);
+      });
+    });
   });
 
   describe('security: expression character validation', () => {

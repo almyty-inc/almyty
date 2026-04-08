@@ -127,6 +127,40 @@ export class InterfacesService {
     return this.interfaceRepository.findOne({ where: { id } });
   }
 
+  /**
+   * Verify that a given run id actually belongs to the given interface
+   * (same agent, same org, and — for runs started via this service —
+   * tagged with the interface id in run metadata). Throws
+   * NotFoundException on any mismatch so the caller can't use the
+   * endpoint as a cross-interface stream oracle. The NotFound (not
+   * Forbidden) response keeps the error shape indistinguishable
+   * whether the interface, the run, or the linkage is wrong.
+   */
+  async assertRunBelongsToInterface(interfaceId: string, runId: string): Promise<void> {
+    const iface = await this.findByIdPublic(interfaceId);
+    if (!iface || !iface.isActive()) {
+      throw new NotFoundException('Interface not found or inactive');
+    }
+
+    const run = await this.runRepository.findOne({ where: { id: runId } });
+    if (!run) {
+      throw new NotFoundException('Run not found');
+    }
+
+    // Defence in depth: agentId must match and metadata must carry the
+    // same interface id. A run from a different interface on the same
+    // agent also fails here, which is the point — the widget stream
+    // endpoint is per-interface.
+    const metaInterfaceId = (run.metadata as any)?.interfaceId;
+    if (
+      run.agentId !== iface.agentId ||
+      run.organizationId !== iface.organizationId ||
+      metaInterfaceId !== interfaceId
+    ) {
+      throw new NotFoundException('Run not found');
+    }
+  }
+
   async update(id: string, organizationId: string, data: Partial<{
     name: string;
     status: InterfaceStatus;
@@ -321,8 +355,12 @@ export class InterfacesService {
     emitter.on('event', onEvent);
     emitter.on('done', onDone);
 
-    // Safety timeout: clean up listener after 5 minutes if no completion
-    setTimeout(() => cleanup(), 5 * 60 * 1000);
+    // Safety timeout: clean up listener after 5 minutes if no completion.
+    // .unref() so the pending handle doesn't keep the Node process
+    // alive in tests or during graceful shutdown — the handler
+    // doesn't need to fire if we're already exiting.
+    const safety = setTimeout(() => cleanup(), 5 * 60 * 1000);
+    safety.unref?.();
   }
 
   // ---------------------------------------------------------------------------
