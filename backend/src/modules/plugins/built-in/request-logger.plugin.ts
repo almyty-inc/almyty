@@ -204,34 +204,105 @@ export class RequestLoggerPlugin {
     }
   }
 
+  /**
+   * Redaction works on the parsed object (walks the graph and replaces
+   * sensitive values in place on a CLONE) rather than on the serialised
+   * JSON string. The previous string-regex approach had three real bugs:
+   *
+   *  - Only string-VALUED fields were redacted. A numeric
+   *    `"token": 12345`, object `"secret": {...}`, or null credential
+   *    passed through unchanged.
+   *  - The field name had to match exactly. `"passwordHash"`,
+   *    `"accessToken"`, `"refreshToken"`, `"x-api-key"`,
+   *    `"authorization"`, etc. were all missed.
+   *  - The sanitized output was a STRING (the regex-replaced bodyStr)
+   *    even when the input was a structured object, so the logged
+   *    `body` field had an inconsistent shape.
+   */
   private sanitizeBody(body: any, settings: any): any {
     if (!settings.logBody) {
       return '[BODY LOGGING DISABLED]';
     }
 
-    if (!body) {
+    if (body == null) {
       return body;
     }
 
-    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
-    
+    // Clone + redact first, THEN serialise for size check. That way the
+    // redaction runs against the real structure, not a stringified view.
+    let value: any = body;
+    if (settings.redactSensitiveData && typeof body === 'object') {
+      value = this.redactObject(body, new WeakSet());
+    }
+
+    let bodyStr: string;
+    try {
+      bodyStr = typeof value === 'string' ? value : JSON.stringify(value);
+    } catch {
+      // Circular reference or a value that can't be stringified. Log a
+      // placeholder rather than failing the whole plugin chain — this
+      // is a logging plugin, it must never break the main request.
+      bodyStr = '[unserialisable body]';
+    }
+
     if (bodyStr.length > settings.maxBodySize) {
       return bodyStr.substring(0, settings.maxBodySize) + '...[TRUNCATED]';
     }
 
-    if (settings.redactSensitiveData) {
-      // Redact sensitive fields
-      const sensitiveFields = ['password', 'token', 'key', 'secret', 'auth'];
-      let sanitized = bodyStr;
-      
-      for (const field of sensitiveFields) {
-        const regex = new RegExp(`"${field}"\\s*:\\s*"[^"]*"`, 'gi');
-        sanitized = sanitized.replace(regex, `"${field}": "[REDACTED]"`);
-      }
-      
-      return sanitized;
+    // When redaction is enabled we return the REDACTED value (not the
+    // serialised form) so structured loggers can preserve the shape.
+    return settings.redactSensitiveData ? value : body;
+  }
+
+  /**
+   * Recursively walk an object and redact any value whose key looks
+   * sensitive. Operates on a clone (never mutates the caller's object
+   * — that's important because this plugin runs as `postResponse` and
+   * the same data is flowing through the real response pipeline).
+   */
+  private redactObject(input: any, seen: WeakSet<object>): any {
+    if (input == null || typeof input !== 'object') return input;
+    if (seen.has(input)) return '[Circular]';
+    seen.add(input);
+
+    if (Array.isArray(input)) {
+      return input.map((v) => this.redactObject(v, seen));
     }
 
-    return body;
+    const out: Record<string, any> = {};
+    for (const [key, value] of Object.entries(input)) {
+      if (this.isSensitiveKey(key)) {
+        out[key] = '[REDACTED]';
+        continue;
+      }
+      // `Authorization` headers carry `Bearer <token>` — redact the
+      // bearer portion while keeping the scheme visible for debugging.
+      if (typeof value === 'string' && /^bearer\s+/i.test(value)) {
+        out[key] = 'Bearer [REDACTED]';
+        continue;
+      }
+      out[key] = this.redactObject(value, seen);
+    }
+    return out;
+  }
+
+  private isSensitiveKey(key: string): boolean {
+    const lower = key.toLowerCase();
+    // Substring match catches password, passwordHash, user_password,
+    // accessToken, refreshToken, apiKey, api-key, x-api-key,
+    // client_secret, authorization, etc.
+    return (
+      lower.includes('password') ||
+      lower.includes('token') ||
+      lower.includes('secret') ||
+      lower.includes('apikey') ||
+      lower.includes('api_key') ||
+      lower.includes('api-key') ||
+      lower === 'authorization' ||
+      lower === 'x-api-key' ||
+      lower === 'cookie' ||
+      lower === 'set-cookie' ||
+      lower.includes('credential')
+    );
   }
 }

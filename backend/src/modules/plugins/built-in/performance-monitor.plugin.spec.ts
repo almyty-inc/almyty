@@ -298,7 +298,7 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
 
       await plugin.endPerformanceTracking(contextWithTracking, mockSettings);
 
-      const stats = plugin.getToolPerformanceStats('tool-1');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-1');
       expect(stats).not.toBeNull();
       expect(stats?.totalExecutions).toBe(1);
     });
@@ -326,7 +326,7 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
         await plugin.endPerformanceTracking(contextWithTracking, mockSettings);
       }
 
-      const stats = plugin.getToolPerformanceStats('tool-1');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-1');
       expect(stats?.totalExecutions).toBe(100); // Should be capped at 100
     });
 
@@ -431,7 +431,7 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
 
   describe('getToolPerformanceStats - Statistics retrieval', () => {
     it('should return null for tools with no data', () => {
-      const stats = plugin.getToolPerformanceStats('nonexistent-tool');
+      const stats = plugin.getToolPerformanceStats('org-1', 'nonexistent-tool');
 
       expect(stats).toBeNull();
     });
@@ -459,7 +459,7 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
       await plugin.endPerformanceTracking(contextWithTracking, mockSettings);
       await plugin.endPerformanceTracking(contextWithTracking, mockSettings);
 
-      const stats = plugin.getToolPerformanceStats('tool-1');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-1');
 
       expect(stats).not.toBeNull();
       expect(stats?.totalExecutions).toBe(3);
@@ -490,7 +490,7 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
         await plugin.endPerformanceTracking(contextWithTracking, mockSettings);
       }
 
-      const stats = plugin.getToolPerformanceStats('tool-1');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-1');
 
       expect(stats?.trend).toBeDefined();
       expect(['improving', 'stable', 'degrading']).toContain(stats?.trend);
@@ -541,7 +541,7 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
         await plugin.endPerformanceTracking(contextFast, mockSettings);
       }
 
-      const stats = plugin.getToolPerformanceStats('tool-1');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-1');
 
       expect(stats?.trend).toBe('improving');
     });
@@ -591,7 +591,7 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
         await plugin.endPerformanceTracking(contextSlow, mockSettings);
       }
 
-      const stats = plugin.getToolPerformanceStats('tool-1');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-1');
 
       expect(stats?.trend).toBe('degrading');
     });
@@ -619,7 +619,7 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
         await plugin.endPerformanceTracking(contextWithTracking, mockSettings);
       }
 
-      const stats = plugin.getToolPerformanceStats('tool-1');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-1');
 
       expect(stats?.trend).toBe('stable'); // Not enough data for trend
     });
@@ -793,7 +793,7 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
       }
 
       // Last execution should detect degradation
-      const stats = plugin.getToolPerformanceStats('tool-1');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-1');
       expect(stats).not.toBeNull();
     });
 
@@ -822,7 +822,7 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
       }
 
       // Should generate caching suggestion
-      const stats = plugin.getToolPerformanceStats('tool-1');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-1');
       expect(stats?.averageExecutionTime).toBeGreaterThan(10000);
     });
 
@@ -842,10 +842,12 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
         });
       }
 
-      // Access private property for testing
-      (plugin2 as any).performanceData.set('tool-network', performanceDataWithNetworkCalls);
+      // Access private property for testing. Seed under the
+      // composite bucket key so the new tenant-scoped getter finds
+      // the data.
+      (plugin2 as any).performanceData.set('org-1::tool-network', performanceDataWithNetworkCalls);
 
-      const stats = plugin2.getToolPerformanceStats('tool-network');
+      const stats = plugin2.getToolPerformanceStats('org-1', 'tool-network');
       expect(stats?.totalExecutions).toBe(12);
     });
 
@@ -874,7 +876,7 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
         await plugin.endPerformanceTracking(slowContext, settingsNoOptimization);
       }
 
-      expect(plugin.getToolPerformanceStats('tool-1')).not.toBeNull();
+      expect(plugin.getToolPerformanceStats('org-1', 'tool-1')).not.toBeNull();
     });
 
     it('should generate insight for memory usage significantly above average (line 300)', () => {
@@ -898,15 +900,15 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
         networkCalls: 0,
       });
 
-      (plugin as any).performanceData.set('tool-memory', performanceDataWithHighMemory);
+      (plugin as any).performanceData.set('org-1::tool-memory', performanceDataWithHighMemory);
 
-      const stats = plugin.getToolPerformanceStats('tool-memory');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-memory');
       expect(stats?.insights.some(i => i.includes('Memory usage significantly above average'))).toBe(true);
     });
 
     it('should generate insight when recent half is consistently slower than earlier half', () => {
       // Earlier half ~1000ms, later half ~6000ms — clearly degrading.
-      (plugin as any).performanceData.set('tool-degrading', [
+      (plugin as any).performanceData.set('org-1::tool-degrading', [
         ...Array(5).fill(null).map(() => ({
           timestamp: Date.now(), executionTime: 1000, memoryUsage: 100000, cpuUsage: 0, networkCalls: 0,
         })),
@@ -915,18 +917,18 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
         })),
       ]);
 
-      const stats = plugin.getToolPerformanceStats('tool-degrading');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-degrading');
       expect(stats?.insights.some(i => i.includes('Consistent performance degradation'))).toBe(true);
     });
 
     it('should NOT generate degradation insight when execution times are stable', () => {
-      (plugin as any).performanceData.set('tool-stable', [
+      (plugin as any).performanceData.set('org-1::tool-stable', [
         ...Array(10).fill(null).map(() => ({
           timestamp: Date.now(), executionTime: 1000, memoryUsage: 100000, cpuUsage: 0, networkCalls: 0,
         })),
       ]);
 
-      const stats = plugin.getToolPerformanceStats('tool-stable');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-stable');
       expect(stats?.insights.some(i => i.includes('Consistent performance degradation'))).toBe(false);
     });
 
@@ -943,9 +945,9 @@ describe('PerformanceMonitorPlugin - Real Business Logic', () => {
         });
       }
 
-      (plugin as any).performanceData.set('tool-network-heavy', performanceDataWithNetworkCalls);
+      (plugin as any).performanceData.set('org-1::tool-network-heavy', performanceDataWithNetworkCalls);
 
-      const stats = plugin.getToolPerformanceStats('tool-network-heavy');
+      const stats = plugin.getToolPerformanceStats('org-1', 'tool-network-heavy');
       expect(stats?.insights.some(i => i.includes('Multiple network calls detected'))).toBe(true);
     });
   });
