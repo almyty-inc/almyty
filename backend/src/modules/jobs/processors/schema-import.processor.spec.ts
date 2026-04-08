@@ -38,6 +38,12 @@ describe('SchemaImportProcessor', () => {
 
     processor = module.get<SchemaImportProcessor>(SchemaImportProcessor);
     apisService = module.get(ApisService);
+
+    // Default the tenant-check findOne to a matching row so the
+    // happy-path tests below don't each have to re-mock it. Tests
+    // that need a cross-tenant mismatch, a missing api, or a
+    // rejected payload override this per-case.
+    apisService.findOne.mockResolvedValue({ id: 'api-1', organizationId: 'org-1' } as Api);
   });
 
   afterEach(() => {
@@ -62,6 +68,7 @@ describe('SchemaImportProcessor', () => {
     it('should successfully import a schema and return a result summary', async () => {
       const jobData: SchemaImportJob = {
         apiId: 'api-1',
+        organizationId: 'org-1',
         schemaContent: '{"openapi":"3.0.0"}',
         options: { generateTools: true },
       };
@@ -89,6 +96,7 @@ describe('SchemaImportProcessor', () => {
     it('should call apisService.importSchema with correct arguments', async () => {
       const jobData: SchemaImportJob = {
         apiId: 'api-42',
+        organizationId: 'org-1',
         schemaContent: '{"swagger":"2.0"}',
         options: { fileName: 'petstore.json', description: 'Petstore API', generateTools: false },
       };
@@ -113,6 +121,7 @@ describe('SchemaImportProcessor', () => {
     it('should update job progress to 10 before import and 100 after', async () => {
       const jobData: SchemaImportJob = {
         apiId: 'api-1',
+        organizationId: 'org-1',
         schemaContent: '{}',
         options: {},
       };
@@ -134,6 +143,7 @@ describe('SchemaImportProcessor', () => {
     it('should set toolCount to 0 when tools array is undefined', async () => {
       const jobData: SchemaImportJob = {
         apiId: 'api-1',
+        organizationId: 'org-1',
         schemaContent: '{}',
         options: { generateTools: false },
       };
@@ -155,6 +165,7 @@ describe('SchemaImportProcessor', () => {
     it('should set toolCount to 0 when tools array is empty', async () => {
       const jobData: SchemaImportJob = {
         apiId: 'api-1',
+        organizationId: 'org-1',
         schemaContent: '{}',
         options: { generateTools: true },
       };
@@ -181,6 +192,7 @@ describe('SchemaImportProcessor', () => {
 
       const jobData: SchemaImportJob = {
         apiId: 'api-1',
+        organizationId: 'org-1',
         schemaContent: '{}',
         options: {},
       };
@@ -201,6 +213,7 @@ describe('SchemaImportProcessor', () => {
     it('should throw the error from apisService.importSchema', async () => {
       const jobData: SchemaImportJob = {
         apiId: 'api-missing',
+        organizationId: 'org-1',
         schemaContent: '{}',
         options: {},
       };
@@ -215,6 +228,7 @@ describe('SchemaImportProcessor', () => {
     it('should not update progress to 100 when import fails', async () => {
       const jobData: SchemaImportJob = {
         apiId: 'api-1',
+        organizationId: 'org-1',
         schemaContent: '{}',
         options: {},
       };
@@ -232,6 +246,7 @@ describe('SchemaImportProcessor', () => {
     it('should handle a job with empty options object', async () => {
       const jobData: SchemaImportJob = {
         apiId: 'api-1',
+        organizationId: 'org-1',
         schemaContent: '{"info": {"title": "Test API"}}',
         options: {},
       };
@@ -257,6 +272,7 @@ describe('SchemaImportProcessor', () => {
 
       const jobData: SchemaImportJob = {
         apiId: 'api-99',
+        organizationId: 'org-1',
         schemaContent: '{}',
         options: {},
       };
@@ -336,26 +352,29 @@ describe('SchemaImportProcessor', () => {
         expect(apisService.importSchema).toHaveBeenCalled();
       });
 
-      it('skips the cross-check for legacy jobs without an organizationId', async () => {
-        // Backwards compatibility: jobs already in Redis from before this
-        // change have no organizationId in the payload. The worker should
-        // still process them rather than failing every in-flight job.
-        apisService.importSchema.mockResolvedValue({
-          api: mockApi,
-          schema: mockSchema,
-          operations: [],
-          resources: [],
-        });
-
+      it('rejects a job payload with no organizationId (regression)', async () => {
+        // The old contract was "skip the cross-check for legacy
+        // jobs without an organizationId" so in-flight jobs
+        // predating the field would still run. That grace window
+        // has long since closed and an optional org field became a
+        // footgun: a crafted/injected job with no org would bypass
+        // tenant validation entirely. The new contract is: no
+        // organizationId → NotFoundException, no importSchema call.
+        // Cast to any here — we're deliberately testing the
+        // runtime rejection of a payload that violates the
+        // TypeScript contract. Without the cast, TS would refuse
+        // to let us construct the invalid job at all.
         const job = createMockJob({
           apiId: 'api-1',
           schemaContent: '{}',
           options: {},
-        });
+        } as any);
 
-        const result = await processor.handleSchemaImport(job);
-        expect(result.success).toBe(true);
+        await expect(processor.handleSchemaImport(job)).rejects.toThrow(
+          /organizationId missing/,
+        );
         expect(apisService.findOne).not.toHaveBeenCalled();
+        expect(apisService.importSchema).not.toHaveBeenCalled();
       });
     });
   });

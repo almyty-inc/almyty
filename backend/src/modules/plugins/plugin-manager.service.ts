@@ -425,6 +425,17 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     // Remove from Redis
     await this.redis.del(`plugin:${pluginId}`);
 
+    // Drop the cached module reference AND the per-plugin
+    // concurrency counter. Pre-fix, unregisterPlugin cleared the
+    // registry maps but left both pluginModules and executionSemaphore
+    // entries in memory forever — a slow leak, and worse, a stale
+    // executionSemaphore entry would be inherited by a newly
+    // registered plugin that happened to reuse the same id (which
+    // was guessable until we swapped to crypto.randomBytes, and can
+    // still collide during tests).
+    this.pluginModules.delete(pluginId);
+    this.executionSemaphore.delete(pluginId);
+
     // Emit plugin event
     await this.emitPluginEvent(pluginId, 'uninstalled', 'Plugin unregistered', plugin.organizationId);
 
