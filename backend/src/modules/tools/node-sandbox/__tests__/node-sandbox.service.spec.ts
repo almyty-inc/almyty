@@ -82,6 +82,66 @@ describe('NodeSandboxService', () => {
     expect(result.error).toContain('not allowed');
   }, 10_000);
 
+  // ── Regression: expanded module denylist ─────────────────────────────
+  describe('expanded module denylist (regression)', () => {
+    it.each([
+      ['fs'],
+      ['fs/promises'],
+      ['node:fs'],
+      ['node:fs/promises'],
+      ['http'],
+      ['https'],
+      ['http2'],
+      ['node:http'],
+      ['node:https'],
+      ['net'],
+      ['tls'],
+      ['dgram'],
+      ['dns'],
+      ['os'],
+      ['module'],
+      ['node:module'],
+    ])('refuses require(%s)', async (mod) => {
+      const result = await exec(`require(${JSON.stringify(mod)})`);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('not allowed');
+    }, 10_000);
+  });
+
+  // ── Regression: process.env scrub ────────────────────────────────────
+  describe('process.env scrub (regression)', () => {
+    it('strips all env vars before user code runs', async () => {
+      // Seed a sentinel in the parent's env so we can prove the
+      // worker did NOT see it. Cleanup immediately after.
+      const sentinelKey = 'SANDBOX_TEST_SENTINEL';
+      const sentinelValue = 'supposed-to-be-invisible-to-sandbox';
+      process.env[sentinelKey] = sentinelValue;
+      try {
+        const result = await exec(
+          // Return both the sentinel we planted and the overall env
+          // key count. Both must be absent from the worker's view.
+          'return { sentinel: process.env.SANDBOX_TEST_SENTINEL ?? null, envSize: Object.keys(process.env).length };',
+        );
+        expect(result.success).toBe(true);
+        expect(result.data.sentinel).toBeNull();
+        expect(result.data.envSize).toBe(0);
+      } finally {
+        delete process.env[sentinelKey];
+      }
+    }, 10_000);
+
+    it('still allows legitimate parameters and credentials to flow through', async () => {
+      // Sanity check that scrubbing env doesn't accidentally break
+      // the documented parameter / credential channels.
+      const result = await exec(
+        'return { p: parameters.x, c: credentials.token }',
+        { parameters: { x: 42 }, credentials: { token: 'abc' } },
+      );
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ p: 42, c: 'abc' });
+    }, 10_000);
+  });
+
   it('should enforce timeout on infinite loops', async () => {
     const result = await exec('while(true){}', { timeoutMs: 1000 });
 
