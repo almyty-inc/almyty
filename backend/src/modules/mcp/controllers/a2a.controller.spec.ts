@@ -188,7 +188,11 @@ describe('A2AController - Real Business Logic', () => {
         const result = await controller.getAgent('agent-1', req);
 
         expect(result).toEqual(mockAgent);
-        expect(a2aService.getAgent).toHaveBeenCalledWith('agent-1');
+        // Service getAgent now takes (agentId, organizationId) —
+        // cross-org reads are filtered at the service layer and
+        // return null, so the controller no longer needs its own
+        // explicit organizationId comparison.
+        expect(a2aService.getAgent).toHaveBeenCalledWith('agent-1', 'org-1');
       });
 
       it('should throw when agent not found', async () => {
@@ -201,26 +205,18 @@ describe('A2AController - Real Business Logic', () => {
         );
       });
 
-      it('should throw when accessing agent from different organization', async () => {
-        const mockAgent = {
-          id: 'agent-1',
-          name: 'Test Agent',
-          type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8000',
-          organizationId: 'org-2',
-          isActive: true,
-          lastSeen: new Date(),
-          capabilities: {} as any,
-          configuration: {} as any,
-          metadata: {},
-        };
-
-        a2aService.getAgent.mockResolvedValue(mockAgent);
+      it('returns NotFound for an agent in a different org (no cross-org oracle)', async () => {
+        // The service-layer scope check returns null for a cross-org
+        // lookup, so the controller returns "Agent not found" — NOT
+        // "Access denied". The NotFound shape is deliberate: it
+        // makes the endpoint indistinguishable from "no such id"
+        // so a caller can't use it to probe for foreign agent ids.
+        a2aService.getAgent.mockResolvedValue(null);
 
         const req = createMockRequest('org-1');
 
         await expect(controller.getAgent('agent-1', req)).rejects.toThrow(
-          new HttpException('Access denied', HttpStatus.FORBIDDEN)
+          new HttpException('Agent not found', HttpStatus.NOT_FOUND)
         );
       });
     });
@@ -229,114 +225,62 @@ describe('A2AController - Real Business Logic', () => {
       it('should update agent successfully', async () => {
         const updates = { isActive: false };
 
-        const mockAgent = {
+        const mockUpdatedAgent = {
           id: 'agent-1',
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
           endpoint: 'http://localhost:8000',
           organizationId: 'org-1',
-          isActive: true,
+          isActive: false,
           lastSeen: new Date(),
           capabilities: {} as any,
           configuration: {} as any,
           metadata: {},
         };
 
-        const mockUpdatedAgent = {
-          ...mockAgent,
-          isActive: false,
-        };
-
-        a2aService.getAgent.mockResolvedValue(mockAgent);
         a2aService.updateAgent.mockResolvedValue(mockUpdatedAgent);
 
         const req = createMockRequest();
         const result = await controller.updateAgent('agent-1', updates, req);
 
         expect(result).toEqual(mockUpdatedAgent);
-        expect(a2aService.updateAgent).toHaveBeenCalledWith('agent-1', updates);
+        expect(a2aService.updateAgent).toHaveBeenCalledWith('agent-1', 'org-1', updates);
       });
 
-      it('should throw when agent not found', async () => {
-        a2aService.getAgent.mockResolvedValue(null);
-
-        const req = createMockRequest();
-
-        await expect(controller.updateAgent('nonexistent', {}, req)).rejects.toThrow(
-          new HttpException('Agent not found', HttpStatus.NOT_FOUND)
-        );
-      });
-
-      it('should throw when update fails', async () => {
-        const mockAgent = {
-          id: 'agent-1',
-          name: 'Test Agent',
-          type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8000',
-          organizationId: 'org-1',
-          isActive: true,
-          lastSeen: new Date(),
-          capabilities: {} as any,
-          configuration: {} as any,
-          metadata: {},
-        };
-
-        a2aService.getAgent.mockResolvedValue(mockAgent);
+      it('should throw NotFound when the service layer rejects (cross-org or missing)', async () => {
+        // Previously this split into two error shapes — the controller
+        // did its own getAgent first and threw "Access denied" for
+        // cross-org, and the service then threw "Failed to update"
+        // when it came back null. The service layer now returns null
+        // for both the missing AND cross-org cases, and the controller
+        // normalises them to a single 404.
         a2aService.updateAgent.mockResolvedValue(null);
 
         const req = createMockRequest();
 
         await expect(controller.updateAgent('agent-1', {}, req)).rejects.toThrow(
-          new HttpException('Failed to update agent', HttpStatus.INTERNAL_SERVER_ERROR)
+          new HttpException('Agent not found', HttpStatus.NOT_FOUND)
         );
       });
     });
 
     describe('deregisterAgent', () => {
       it('should deregister agent successfully', async () => {
-        const mockAgent = {
-          id: 'agent-1',
-          name: 'Test Agent',
-          type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8000',
-          organizationId: 'org-1',
-          isActive: true,
-          lastSeen: new Date(),
-          capabilities: {} as any,
-          configuration: {} as any,
-          metadata: {},
-        };
-
-        a2aService.getAgent.mockResolvedValue(mockAgent);
         a2aService.deregisterAgent.mockResolvedValue(true);
 
         const req = createMockRequest();
         await controller.deregisterAgent('agent-1', req);
 
-        expect(a2aService.deregisterAgent).toHaveBeenCalledWith('agent-1');
+        expect(a2aService.deregisterAgent).toHaveBeenCalledWith('agent-1', 'org-1');
       });
 
-      it('should throw when deregister fails', async () => {
-        const mockAgent = {
-          id: 'agent-1',
-          name: 'Test Agent',
-          type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8000',
-          organizationId: 'org-1',
-          isActive: true,
-          lastSeen: new Date(),
-          capabilities: {} as any,
-          configuration: {} as any,
-          metadata: {},
-        };
-
-        a2aService.getAgent.mockResolvedValue(mockAgent);
+      it('throws NotFound when the service reports the agent missing (missing or cross-org)', async () => {
         a2aService.deregisterAgent.mockResolvedValue(false);
 
         const req = createMockRequest();
 
         await expect(controller.deregisterAgent('agent-1', req)).rejects.toThrow(
-          new HttpException('Failed to deregister agent', HttpStatus.INTERNAL_SERVER_ERROR)
+          new HttpException('Agent not found', HttpStatus.NOT_FOUND)
         );
       });
     });
@@ -356,13 +300,18 @@ describe('A2AController - Real Business Logic', () => {
         const req = createMockRequest();
         await controller.sendMessage(req, messageData);
 
+        // organizationId is now the 4th positional arg (was optional
+        // 6th). The parameter move is deliberate — making the arg
+        // required closes the footgun where a caller could omit it
+        // and silently skip the caller-scope check inside
+        // sendMessage.
         expect(a2aService.sendMessage).toHaveBeenCalledWith(
           'agent-1',
           'agent-2',
           { text: 'Hello' },
-          undefined,
-          undefined,
           'org-1',
+          undefined,
+          undefined,
         );
       });
 
@@ -529,7 +478,7 @@ describe('A2AController - Real Business Logic', () => {
         const req = createMockRequest();
         await controller.registerAgentTool('agent-1', toolData, req);
 
-        expect(a2aService.registerAgentTool).toHaveBeenCalledWith('agent-1', toolData);
+        expect(a2aService.registerAgentTool).toHaveBeenCalledWith('agent-1', 'org-1', toolData);
       });
     });
 

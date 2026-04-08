@@ -104,15 +104,17 @@ export class A2AController {
 
   @Get('/agents/:agentId')
   async getAgent(@Param('agentId') agentId: string, @Request() req): Promise<A2AAgent> {
-    const agent = await this.a2aService.getAgent(agentId);
-    
-    if (!agent) {
-      throw new HttpException('Agent not found', HttpStatus.NOT_FOUND);
+    const organizationId = req.user?.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
 
-    // Verify access
-    if (agent.organizationId !== req.user?.currentOrganizationId) {
-      throw new HttpException('Access denied', HttpStatus.FORBIDDEN);
+    // getAgent is now org-scoped at the service layer — a cross-org
+    // read returns null, indistinguishable from "does not exist".
+    const agent = await this.a2aService.getAgent(agentId, organizationId);
+
+    if (!agent) {
+      throw new HttpException('Agent not found', HttpStatus.NOT_FOUND);
     }
 
     return agent;
@@ -124,11 +126,14 @@ export class A2AController {
     @Body() updates: Partial<A2AAgent>,
     @Request() req,
   ): Promise<A2AAgent> {
-    const agent = await this.getAgent(agentId, req);
-    
-    const updatedAgent = await this.a2aService.updateAgent(agentId, updates);
+    const organizationId = req.user?.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
+    }
+
+    const updatedAgent = await this.a2aService.updateAgent(agentId, organizationId, updates);
     if (!updatedAgent) {
-      throw new HttpException('Failed to update agent', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException('Agent not found', HttpStatus.NOT_FOUND);
     }
 
     return updatedAgent;
@@ -136,11 +141,14 @@ export class A2AController {
 
   @Delete('/agents/:agentId')
   async deregisterAgent(@Param('agentId') agentId: string, @Request() req): Promise<void> {
-    const agent = await this.getAgent(agentId, req);
-    
-    const success = await this.a2aService.deregisterAgent(agentId);
+    const organizationId = req.user?.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
+    }
+
+    const success = await this.a2aService.deregisterAgent(agentId, organizationId);
     if (!success) {
-      throw new HttpException('Failed to deregister agent', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException('Agent not found', HttpStatus.NOT_FOUND);
     }
   }
 
@@ -161,13 +169,17 @@ export class A2AController {
 
     const fromAgentId = messageData.fromAgentId || 'user_agent';
 
+    // organizationId is now the 4th positional arg (was optional 6th).
+    // The parameter move closes the previous footgun where a caller
+    // could forget to thread the org id and silently skip the scope
+    // check.
     return this.a2aService.sendMessage(
       fromAgentId,
       messageData.toAgentId,
       messageData.content,
+      organizationId,
       messageData.type,
       messageData.context,
-      organizationId,
     );
   }
 
@@ -226,10 +238,12 @@ export class A2AController {
     @Body() toolRegistration: A2AToolRegistration,
     @Request() req,
   ) {
-    // Verify agent access
-    await this.getAgent(agentId, req);
+    const organizationId = req.user?.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
+    }
 
-    return this.a2aService.registerAgentTool(agentId, toolRegistration);
+    return this.a2aService.registerAgentTool(agentId, organizationId, toolRegistration);
   }
 
   // Workflow Orchestration
