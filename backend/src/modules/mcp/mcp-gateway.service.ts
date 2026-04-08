@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import axios from 'axios';
 
+import { validateUrl } from '../../common/security/url-validator';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Tool } from '../../entities/tool.entity';
@@ -193,10 +194,21 @@ export class McpGatewayService {
       capabilities?: McpCapabilities;
     }
   ): Promise<GatewayPeer> {
+    // SSRF guard: the peer endpoint comes from the caller. Without
+    // this, a user could register "http://169.254.169.254/" (AWS IMDS),
+    // "http://localhost:6379" (internal Redis), or any internal host
+    // and our server would happily fetch it.
+    const validation = validateUrl(`${peerData.endpoint}/.well-known/mcp`);
+    if (!validation.valid) {
+      throw new BadRequestException(`Invalid peer endpoint: ${validation.error}`);
+    }
+
     // Test connection to peer
     try {
       const response = await axios.get(`${peerData.endpoint}/.well-known/mcp`, {
         timeout: 5000,
+        maxContentLength: 1 * 1024 * 1024,
+        maxBodyLength: 1 * 1024 * 1024,
       });
       
       if (!response.data.protocol || response.data.protocol !== 'mcp') {
@@ -258,6 +270,8 @@ export class McpGatewayService {
         params,
       }, {
         timeout: 30000,
+        maxContentLength: 10 * 1024 * 1024,
+        maxBodyLength: 10 * 1024 * 1024,
         headers: {
           'Content-Type': 'application/json',
         },

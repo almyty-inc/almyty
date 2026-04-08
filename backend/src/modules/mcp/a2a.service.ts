@@ -190,6 +190,7 @@ export class A2AService extends EventEmitter {
     content: any,
     type: A2AMessageType = A2AMessageType.REQUEST,
     context?: any,
+    callerOrganizationId?: string,
   ): Promise<A2AMessage> {
     const fromAgent = await this.getAgent(fromAgentId);
     const toAgent = await this.getAgent(toAgentId);
@@ -201,6 +202,14 @@ export class A2AService extends EventEmitter {
     // Verify agents are in same organization or authorized
     if (fromAgent.organizationId !== toAgent.organizationId) {
       throw new ForbiddenException('Cross-organization communication not allowed');
+    }
+
+    // Previously we only verified the two peers were in the same org,
+    // but not that the CALLER was a member of that org. A user in org A
+    // who learned a (fromAgentId, toAgentId) pair in org B could send a
+    // message on behalf of an org-B agent they never had access to.
+    if (callerOrganizationId && fromAgent.organizationId !== callerOrganizationId) {
+      throw new ForbiddenException('You cannot send messages as an agent in another organization');
     }
 
     const message: A2AMessage = {

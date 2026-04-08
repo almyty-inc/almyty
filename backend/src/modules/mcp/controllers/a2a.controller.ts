@@ -167,6 +167,7 @@ export class A2AController {
       messageData.content,
       messageData.type,
       messageData.context,
+      organizationId,
     );
   }
 

@@ -361,7 +361,8 @@ describe('A2AController - Real Business Logic', () => {
           'agent-2',
           { text: 'Hello' },
           undefined,
-          undefined
+          undefined,
+          'org-1',
         );
       });
 
