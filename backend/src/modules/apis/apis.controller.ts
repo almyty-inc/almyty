@@ -217,16 +217,45 @@ export class ApisController {
       throw new BadRequestException('Schema content, file, or URL is required');
     }
 
-    // Queue the import job instead of processing synchronously
-    const job = await this.schemaImportQueue.add('import', {
-      apiId: id,
-      schemaContent,
-      options: {
-        fileName: file?.originalname,
-        description: importSchemaDto.description,
-        generateTools: importSchemaDto.generateTools ?? true,
+    // Validate size BEFORE queueing. Previously the 10 MB cap was enforced
+    // by apisService.importSchema, which runs inside the worker — meaning
+    // an oversized payload had already been written into Redis as the job
+    // body and would only be rejected after pickup. Reject up front so we
+    // don't bloat the queue.
+    const schemaSizeBytes = Buffer.byteLength(schemaContent, 'utf8');
+    const MAX_SCHEMA_BYTES = 10 * 1024 * 1024;
+    if (schemaSizeBytes > MAX_SCHEMA_BYTES) {
+      throw new BadRequestException(
+        `Schema too large: ${(schemaSizeBytes / 1024 / 1024).toFixed(2)}MB ` +
+          `(max ${MAX_SCHEMA_BYTES / 1024 / 1024}MB)`,
+      );
+    }
+
+    // Queue the import job. The organizationId is included so the worker
+    // can fail closed if the job is somehow picked up against an api in
+    // another org (defence in depth — the api was already org-checked
+    // above).
+    const job = await this.schemaImportQueue.add(
+      'import',
+      {
+        apiId: id,
+        organizationId: api.organizationId,
+        schemaContent,
+        options: {
+          fileName: file?.originalname,
+          description: importSchemaDto.description,
+          generateTools: importSchemaDto.generateTools ?? true,
+        },
       },
-    });
+      {
+        // Bound a runaway parse / generation: the parsers cap input size
+        // and have their own internal guards, but a hung downstream tool
+        // generation could otherwise hold a worker forever.
+        timeout: 5 * 60 * 1000, // 5 minutes
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
+    );
 
     // Return immediately with job ID
     return {
@@ -241,10 +270,35 @@ export class ApisController {
 
   @Get(':id/import-status/:jobId')
   @Roles('member', 'admin', 'owner')
-  async getImportStatus(@Param('id') id: string, @Param('jobId') jobId: string) {
+  async getImportStatus(
+    @Request() req,
+    @Param('id') id: string,
+    @Param('jobId') jobId: string,
+  ) {
+    // Verify the api belongs to the caller's org BEFORE looking up the
+    // job. Without this any authenticated user could poll any job by id
+    // (state, error message, completed result with full api/schema body)
+    // simply by guessing.
+    const api = await this.apisService.findOne(id);
+    if (!api) {
+      throw new NotFoundException('API not found');
+    }
+    if (api.organizationId !== req.user?.currentOrganizationId) {
+      // NotFound (not Forbidden) so the endpoint can't be used as a
+      // cross-org existence oracle for api ids.
+      throw new NotFoundException('API not found');
+    }
+
     const job = await this.schemaImportQueue.getJob(jobId);
 
     if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    // The job's apiId in its payload must match the path param. A user
+    // could otherwise poll a job for a totally different (in-org or
+    // cross-org) api by passing their own api id and someone else's job id.
+    if (job.data?.apiId !== id) {
       throw new NotFoundException('Job not found');
     }
 
