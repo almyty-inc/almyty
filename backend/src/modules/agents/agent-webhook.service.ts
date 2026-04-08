@@ -51,6 +51,15 @@ export class AgentWebhookService {
           timeout: 5000,
           maxContentLength: MAX_RESPONSE_BYTES,
           maxBodyLength: MAX_REQUEST_BYTES,
+          // maxRedirects: 0 so the webhook target can't 3xx us into an
+          // internal host we would otherwise have refused at
+          // validateUrl time. axios defaults to 5 redirects, which
+          // silently defeats the SSRF gate above — the initial URL
+          // passes the check, then the server redirects us to
+          // 169.254.169.254/… and axios follows. Disable redirect
+          // chasing entirely; an honest webhook endpoint responds 2xx
+          // directly.
+          maxRedirects: 0,
           headers: {
             'Content-Type': 'application/json',
             'User-Agent': 'almyty-webhook/1.0',
