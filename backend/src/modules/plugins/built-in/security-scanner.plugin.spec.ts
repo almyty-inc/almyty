@@ -682,14 +682,17 @@ describe('SecurityScannerPlugin - Real Business Logic', () => {
   });
 
   // ── Regression: custom pattern ReDoS budget ────────────────────────
-  describe('Custom pattern ReDoS budget (regression)', () => {
-    it('abandons the remaining custom patterns after one overruns the budget', async () => {
-      // Structural assertion: after a slow pattern, the next one in
-      // the list must NOT run. We prove it by making the second pattern
-      // something that would turn the scan result from success to
-      // blocked (critical severity) — if the budget bail didn't
-      // happen, the second pattern would be applied and the scan
-      // would fail.
+  describe('Custom pattern ReDoS defence (regression)', () => {
+    it('refuses catastrophic-backtracking shapes up front and still runs the rest of the list', async () => {
+      // The contract used to be "first slow pattern eats the budget,
+      // second pattern is skipped". That was weak: a single unlucky
+      // request could still hang the scanner for the duration of the
+      // first match, and a clever attacker could use the bail to
+      // suppress later (legitimate) patterns.
+      //
+      // The new contract is stronger: compileSafeRegex rejects the
+      // evil pattern synchronously (zero CPU) and the loop continues
+      // with the legitimate pattern that follows. Pin both halves.
       const input = 'a'.repeat(22) + '!trigger-the-second-one';
       const settings = {
         ...mockSettings,
@@ -700,17 +703,48 @@ describe('SecurityScannerPlugin - Real Business Logic', () => {
       };
       const ctx = { ...mockContext, data: input };
 
+      const start = Date.now();
       const result = await plugin.scanRequest(ctx, settings);
+      const elapsed = Date.now() - start;
 
-      // Pre-fix, the second pattern (critical) would have fired and
-      // the scan would be blocked. With the budget bail, the second
-      // pattern never runs — the scan is not blocked on critical.
-      const wasBlockedOnCritical =
-        !result.success &&
-        (result.error?.details as any)?.threats?.some(
+      // Finishes fast — the evil pattern never reaches the engine.
+      expect(elapsed).toBeLessThan(200);
+
+      // And the legitimate second pattern still fires, so the
+      // critical threat is detected and the scan is blocked.
+      expect(result.success).toBe(false);
+      const threats = (result.error?.details as any)?.threats || [];
+      expect(
+        threats.some(
           (t: any) => t.type === 'suspicious_pattern' && t.severity === 'critical',
-        );
-      expect(wasBlockedOnCritical).toBe(false);
+        ),
+      ).toBe(true);
+    });
+
+    it('drops whitelist entries that are themselves catastrophic-backtracking shapes', async () => {
+      // Whitelist patterns are compiled and then matched against every
+      // candidate threat value — a pathological whitelist is just as
+      // dangerous as a pathological scan pattern. compileSafeRegex
+      // refuses them, so a poisoned whitelist becomes a no-op (the
+      // scanner continues to flag real threats as before) rather than
+      // hanging the request.
+      const settings = {
+        ...mockSettings,
+        whitelistPatterns: ['(a+)+$', 'legitimate-allowlist-entry'],
+      };
+      // A classic SQL-injection payload that the built-in patterns
+      // will pick up as high severity — the evil whitelist entry
+      // must NOT suppress it (nor hang us).
+      const ctx = { ...mockContext, data: "' OR 1=1 --" };
+
+      const start = Date.now();
+      const result = await plugin.scanRequest(ctx, settings);
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(200);
+      // Built-in SQL-injection pattern still fires — the poisoned
+      // whitelist is a no-op, not a wildcard bypass.
+      expect(result.success).toBe(false);
     });
   });
 });
