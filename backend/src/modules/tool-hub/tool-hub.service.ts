@@ -76,9 +76,18 @@ export class ToolHubService {
     return { templates, total };
   }
 
-  async getTemplate(id: string): Promise<ToolTemplate> {
+  async getTemplate(id: string, orgId?: string): Promise<ToolTemplate> {
     const template = await this.templateRepository.findOne({ where: { id } });
     if (!template) {
+      throw new NotFoundException('Template not found');
+    }
+    // A template is visible when it's global (organizationId IS NULL)
+    // or when it belongs to the caller's org. Without this check, any
+    // authenticated user could install another org's private template
+    // — potentially exposing the template's apiConfig and configuration.
+    // Returns "not found" rather than "forbidden" so the endpoint can't
+    // be used to probe for private template ids.
+    if (template.organizationId && template.organizationId !== orgId) {
       throw new NotFoundException('Template not found');
     }
     return template;
@@ -122,7 +131,8 @@ export class ToolHubService {
     userId: string,
     options: InstallTemplateOptions = {},
   ): Promise<{ tool: Tool; api?: Api }> {
-    const template = await this.getTemplate(templateId);
+    // Pass orgId so cross-org templates are rejected up front.
+    const template = await this.getTemplate(templateId, orgId);
     let api: Api | undefined;
 
     // If template has apiConfig, resolve or create an Api
@@ -210,10 +220,15 @@ export class ToolHubService {
     userId: string,
     options: InstallTemplateOptions = {},
   ): Promise<{ tools: Tool[]; api?: Api }> {
-    // Find all templates for this provider
-    const templates = await this.templateRepository.find({
-      where: { provider },
-    });
+    // Find all templates for this provider that are visible to the
+    // caller — global templates (organizationId IS NULL) OR templates
+    // owned by the caller's org. Previously this fetched every
+    // matching template regardless of ownership.
+    const templates = await this.templateRepository
+      .createQueryBuilder('t')
+      .where('t.provider = :provider', { provider })
+      .andWhere('(t.organizationId IS NULL OR t.organizationId = :orgId)', { orgId })
+      .getMany();
 
     if (templates.length === 0) {
       throw new NotFoundException(`No templates found for provider '${provider}'`);
