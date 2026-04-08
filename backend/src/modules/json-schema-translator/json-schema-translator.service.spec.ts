@@ -585,6 +585,56 @@ describe('JsonSchemaTranslatorService', () => {
       expect(result.format).toBe('uuid');
       expect(result.enum).toEqual(['VALUE1', 'VALUE2']);
     });
+
+    it('bails on cyclic references without blowing the stack', () => {
+      // Pin the WeakSet cycle guard. A recursive protobuf message
+      // (Message A with a field of type A) or an OpenAPI schema that
+      // the parser failed to fully dereference can round-trip into
+      // this normalizer with an `items` or `properties.X` that
+      // points back at itself. Without the guard this used to
+      // infinite-recurse and crash the worker.
+      const cyclic: any = { properties: {} };
+      cyclic.properties.self = cyclic;
+      cyclic.items = cyclic;
+
+      // Must not throw.
+      const result = service['normalizePropertyToJsonSchema'](cyclic);
+      expect(result).toBeDefined();
+      // The self-reference gets a marker rather than infinite recursion.
+      const selfNormalized = (result as any).properties?.self;
+      expect(selfNormalized).toMatchObject({
+        type: 'object',
+        description: expect.stringContaining('cyclic'),
+      });
+    });
+
+    it('bails out at MAX_NORMALIZE_DEPTH on pathologically nested input', () => {
+      // Build a legitimately-nested but very deep schema. The old
+      // walker would happily recurse all the way down, which on a
+      // truly pathological input (depth in the thousands) would hit
+      // the v8 stack limit. The fix returns a "truncated" marker at
+      // the 50-deep boundary instead.
+      let deep: any = { type: 'string' };
+      for (let i = 0; i < 100; i++) {
+        deep = { properties: { next: deep } };
+      }
+
+      // Must not throw.
+      const result = service['normalizePropertyToJsonSchema'](deep);
+      expect(result).toBeDefined();
+
+      // Walk into `result.properties.next.properties.next...` until we
+      // hit the truncation marker. It must appear at or before depth 55.
+      let cursor: any = result;
+      let steps = 0;
+      while (cursor?.properties?.next && steps < 200) {
+        cursor = cursor.properties.next;
+        steps++;
+        if (cursor.description?.includes('truncated')) break;
+      }
+      expect(cursor.description).toContain('truncated');
+      expect(steps).toBeLessThanOrEqual(55);
+    });
   });
 
   describe('Additional Branch Coverage Tests', () => {
