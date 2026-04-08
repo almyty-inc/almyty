@@ -93,7 +93,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -134,7 +134,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -194,7 +194,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -233,7 +233,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -274,7 +274,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -314,7 +314,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -353,7 +353,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -392,7 +392,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -430,7 +430,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -485,7 +485,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -550,7 +550,7 @@ export class AgentsController {
     @Res() res: Response,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         res.status(HttpStatus.BAD_REQUEST).json({
           success: false,
@@ -628,7 +628,7 @@ export class AgentsController {
     @Request() req?: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -678,7 +678,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -722,7 +722,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -760,7 +760,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -800,7 +800,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -849,7 +849,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -888,7 +888,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -930,7 +930,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -994,7 +994,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1044,7 +1044,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1087,7 +1087,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1151,7 +1151,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1190,7 +1190,7 @@ export class AgentsController {
     @Request() req?: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1227,7 +1227,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1255,7 +1255,7 @@ export class AgentsController {
     @Res() res: Response,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: 'No organization found' });
         return;
@@ -1313,7 +1313,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1340,7 +1340,7 @@ export class AgentsController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },

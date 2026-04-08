@@ -68,7 +68,7 @@ export class ApisController {
   @Roles('member', 'admin', 'owner')
   async createHttpApi(@Body() body: any, @Request() req: any) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException({ success: false, message: 'No organization found' }, HttpStatus.BAD_REQUEST);
       }
@@ -86,7 +86,7 @@ export class ApisController {
   @Roles('member', 'admin', 'owner')
   async createSdkApi(@Body() body: any, @Request() req: any) {
     try {
-      const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException({ success: false, message: 'No organization found' }, HttpStatus.BAD_REQUEST);
       }

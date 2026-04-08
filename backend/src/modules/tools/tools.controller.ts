@@ -713,7 +713,7 @@ export class ToolsController {
     @Request() req: any,
   ) {
     try {
-      const skill = await this.skillGeneratorService.generateToolSkill(toolId);
+      const skill = await this.skillGeneratorService.generateToolSkill(toolId, organizationId);
 
       return {
         success: true,
@@ -744,7 +744,7 @@ export class ToolsController {
     @Request() req: any,
   ) {
     try {
-      const cli = await this.cliGeneratorService.generateToolCli(toolId, format);
+      const cli = await this.cliGeneratorService.generateToolCli(toolId, format, organizationId);
 
       return {
         success: true,
@@ -773,7 +773,7 @@ export class ToolsController {
     @Request() req: any,
   ) {
     try {
-      const sdk = await this.codegenService.generateToolSdk(toolId);
+      const sdk = await this.codegenService.generateToolSdk(toolId, organizationId);
 
       return {
         success: true,

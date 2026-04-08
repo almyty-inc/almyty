@@ -42,7 +42,7 @@ describe('LlmProvidersController', () => {
 
   describe('createProvider', () => {
     it('should create provider successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const createDto = {
         name: 'OpenAI GPT-4',
         type: 'openai' as any,
@@ -70,7 +70,7 @@ describe('LlmProvidersController', () => {
 
   describe('getProviders', () => {
     it('should return paginated providers', async () => {
-      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockResult = {
         providers: [],
         total: 0,
@@ -90,7 +90,7 @@ describe('LlmProvidersController', () => {
 
   describe('getProvider', () => {
     it('should return provider by id', async () => {
-      const mockRequest = { user: { organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockProvider = {
         id: 'provider-1',
         name: 'OpenAI GPT-4',
@@ -111,7 +111,7 @@ describe('LlmProvidersController', () => {
 
   describe('updateProvider', () => {
     it('should update provider successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const updateDto = { name: 'Updated Provider' };
       const mockProvider = {
         id: 'provider-1',
@@ -132,7 +132,7 @@ describe('LlmProvidersController', () => {
 
   describe('deleteProvider', () => {
     it('should delete provider successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
 
       llmProvidersService.deleteProvider.mockResolvedValue();
 
@@ -145,7 +145,7 @@ describe('LlmProvidersController', () => {
 
   describe('chat', () => {
     it('should handle chat request successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const chatDto = {
         messages: [{ role: 'user' as any, content: 'Hello' }],
         model: 'gpt-4',
@@ -171,7 +171,7 @@ describe('LlmProvidersController', () => {
 
   describe('performHealthCheck', () => {
     it('should perform health check successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockResult = {
         isHealthy: true,
         responseTime: 150,
@@ -197,7 +197,7 @@ describe('LlmProvidersController', () => {
 
   describe('getProvider - with secrets', () => {
     it('should return provider with secrets for admin', async () => {
-      const mockRequest = { user: { organizations: [{ id: 'org-1' }], roles: ['admin'] } };
+      const mockRequest = { user: { currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }], roles: ['admin'] } };
       const mockProvider = {
         id: 'provider-1',
         name: 'OpenAI GPT-4',
@@ -214,7 +214,7 @@ describe('LlmProvidersController', () => {
     });
 
     it('should return provider without secrets for member', async () => {
-      const mockRequest = { user: { organizations: [{ id: 'org-1' }], roles: ['member'] } };
+      const mockRequest = { user: { currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }], roles: ['member'] } };
       const mockProvider = {
         id: 'provider-1',
         name: 'OpenAI GPT-4',
@@ -232,7 +232,7 @@ describe('LlmProvidersController', () => {
 
   describe('createSession', () => {
     it('should create session successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const createDto = { type: 'chat' as any, title: 'Test Session' };
       const mockSession = { id: 'session-1', ...createDto };
 
@@ -247,7 +247,7 @@ describe('LlmProvidersController', () => {
 
   describe('getSessions', () => {
     it('should return provider sessions', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockResult = { sessions: [], total: 0, page: 1, limit: 20 };
 
       (llmProvidersService as any).getSessions = jest.fn().mockResolvedValue(mockResult);
@@ -259,7 +259,7 @@ describe('LlmProvidersController', () => {
     });
 
     it('should limit results to 100', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockResult = { sessions: [], total: 0, page: 1, limit: 100 };
 
       (llmProvidersService as any).getSessions = jest.fn().mockResolvedValue(mockResult);
@@ -272,7 +272,7 @@ describe('LlmProvidersController', () => {
 
   describe('getSession', () => {
     it('should return session by id', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockSession = { id: 'session-1', title: 'Test Session' };
 
       (llmProvidersService as any).getSession = jest.fn().mockResolvedValue(mockSession);
@@ -286,7 +286,7 @@ describe('LlmProvidersController', () => {
 
   describe('updateSession', () => {
     it('should update session successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const updateDto = { title: 'Updated Session' };
       const mockSession = { id: 'session-1', title: 'Updated Session' };
 
@@ -301,7 +301,7 @@ describe('LlmProvidersController', () => {
 
   describe('deleteSession', () => {
     it('should delete session successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
 
       (llmProvidersService as any).deleteSession = jest.fn().mockResolvedValue(undefined);
 
@@ -314,7 +314,7 @@ describe('LlmProvidersController', () => {
 
   describe('getProviderModels', () => {
     it('should return available models for provider (fetched dynamically)', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockProvider = { id: 'provider-1', type: 'openai' } as any;
       const mockModels = [
         { id: 'gpt-4', name: 'gpt-4' },
@@ -391,7 +391,7 @@ describe('LlmProvidersController', () => {
 
   describe('chat - error handling', () => {
     it('should handle chat error', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const chatDto = { messages: [{ role: 'user' as any, content: 'Hello' }] };
 
       llmProvidersService.chat.mockRejectedValue(new Error('Chat failed'));
@@ -414,7 +414,7 @@ describe('LlmProvidersController', () => {
 
   describe('createSession - error handling', () => {
     it('should handle session creation error', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).createSession = jest.fn().mockRejectedValue(new Error('Session creation failed'));
 
       await expect(controller.createSession('provider-1', {} as any, mockRequest))
@@ -424,7 +424,7 @@ describe('LlmProvidersController', () => {
 
   describe('getSessions - error handling', () => {
     it('should handle sessions retrieval error', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).getSessions = jest.fn().mockRejectedValue(new Error('Sessions failed'));
 
       await expect(controller.getSessions('provider-1', undefined, undefined, 1, 20, mockRequest))
@@ -434,7 +434,7 @@ describe('LlmProvidersController', () => {
 
   describe('getSession - error handling', () => {
     it('should handle session not found error', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).getSession = jest.fn().mockRejectedValue(new Error('Session not found'));
 
       await expect(controller.getSession('session-1', mockRequest))
@@ -444,7 +444,7 @@ describe('LlmProvidersController', () => {
 
   describe('updateSession - error handling', () => {
     it('should handle session update error', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).updateSession = jest.fn().mockRejectedValue(new Error('Update failed'));
 
       await expect(controller.updateSession('session-1', {} as any, mockRequest))
@@ -454,7 +454,7 @@ describe('LlmProvidersController', () => {
 
   describe('deleteSession - error handling', () => {
     it('should handle session deletion error', async () => {
-      const mockRequest = { user: { id: 'user-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).deleteSession = jest.fn().mockRejectedValue(new Error('Deletion failed'));
 
       await expect(controller.deleteSession('session-1', mockRequest))

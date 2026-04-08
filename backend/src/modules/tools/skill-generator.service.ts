@@ -33,10 +33,16 @@ export class SkillGeneratorService {
 
   /**
    * Generate a SKILL.md file for a single tool (Agent Skills standard).
+   *
+   * @param organizationId Required. Without this any authenticated user
+   *   could request another org's tool skill just by guessing a UUID.
    */
-  async generateToolSkill(toolId: string): Promise<SkillOutput> {
+  async generateToolSkill(toolId: string, organizationId: string): Promise<SkillOutput> {
+    if (!organizationId) {
+      throw new NotFoundException(`Tool not found: ${toolId}`);
+    }
     const tool = await this.toolRepository.findOne({
-      where: { id: toolId },
+      where: { id: toolId, organizationId },
       relations: ['categories', 'operation', 'operation.api'],
     });
 
@@ -54,10 +60,15 @@ export class SkillGeneratorService {
 
   /**
    * Generate a combined skill bundle for a gateway (single markdown file).
+   *
+   * @param organizationId Required (see generateToolSkill).
    */
-  async generateGatewaySkills(gatewayId: string): Promise<SkillOutput> {
+  async generateGatewaySkills(gatewayId: string, organizationId: string): Promise<SkillOutput> {
+    if (!organizationId) {
+      throw new NotFoundException(`Gateway not found: ${gatewayId}`);
+    }
     const gateway = await this.gatewayRepository.findOne({
-      where: { id: gatewayId },
+      where: { id: gatewayId, organizationId },
     });
 
     if (!gateway) {
@@ -89,9 +100,16 @@ export class SkillGeneratorService {
    * Per Agent Skills spec: frontmatter `name` must match parent directory name.
    * Directory = `almyty-{slug}`, so name = `almyty-{slug}`.
    */
-  async generateIndividualSkills(gatewayId: string, context?: { orgSlug?: string; gatewaySlug?: string }): Promise<IndividualSkill[]> {
+  async generateIndividualSkills(
+    gatewayId: string,
+    organizationId: string,
+    context?: { orgSlug?: string; gatewaySlug?: string },
+  ): Promise<IndividualSkill[]> {
+    if (!organizationId) {
+      throw new NotFoundException(`Gateway not found: ${gatewayId}`);
+    }
     const gateway = await this.gatewayRepository.findOne({
-      where: { id: gatewayId },
+      where: { id: gatewayId, organizationId },
     });
 
     if (!gateway) {

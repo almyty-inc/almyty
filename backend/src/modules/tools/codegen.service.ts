@@ -32,10 +32,18 @@ export class CodegenService {
 
   /**
    * Generate a TypeScript SDK for a single tool.
+   *
+   * @param organizationId Required for org scoping. Previously omitted,
+   *   which let any authenticated user download any tool's SDK (and
+   *   therefore its parameter schema + endpoint slug) just by guessing
+   *   a UUID, regardless of which org the tool belonged to.
    */
-  async generateToolSdk(toolId: string): Promise<SdkOutput> {
+  async generateToolSdk(toolId: string, organizationId: string): Promise<SdkOutput> {
+    if (!organizationId) {
+      throw new NotFoundException(`Tool not found: ${toolId}`);
+    }
     const tool = await this.toolRepository.findOne({
-      where: { id: toolId },
+      where: { id: toolId, organizationId },
       relations: ['operation'],
     });
 
@@ -53,10 +61,15 @@ export class CodegenService {
 
   /**
    * Generate a complete TypeScript SDK package for a gateway.
+   *
+   * @param organizationId Required for org scoping (see generateToolSdk).
    */
-  async generateGatewaySdk(gatewayId: string): Promise<SdkOutput> {
+  async generateGatewaySdk(gatewayId: string, organizationId: string): Promise<SdkOutput> {
+    if (!organizationId) {
+      throw new NotFoundException(`Gateway not found: ${gatewayId}`);
+    }
     const gateway = await this.gatewayRepository.findOne({
-      where: { id: gatewayId },
+      where: { id: gatewayId, organizationId },
     });
 
     if (!gateway) {

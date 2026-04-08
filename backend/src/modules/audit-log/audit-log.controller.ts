@@ -19,10 +19,15 @@ export class AuditLogController {
   constructor(private readonly auditLogService: AuditLogService) {}
 
   private getOrgId(req: any): string {
-    const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+    const organizationId = req.user.currentOrganizationId;
     if (!organizationId) {
       throw new HttpException(
-        { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+        {
+          success: false,
+          message:
+            'Organization context required. Multi-org users must send the X-Organization-Id header.',
+          error: 'NO_ORGANIZATION',
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
