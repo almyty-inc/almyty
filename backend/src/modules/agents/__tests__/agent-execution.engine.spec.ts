@@ -78,9 +78,22 @@ describe('AgentExecutionEngine', () => {
   let nodeExecutor: jest.Mocked<AgentNodeExecutor>;
 
   beforeEach(async () => {
+    // bumpAgentStats now uses a queryBuilder chain for an atomic
+    // SQL UPDATE rather than the old load-modify-save pair. The
+    // mock chains execute() at the end, which the tests can spy on.
+    const updateExecute = jest.fn().mockResolvedValue({ affected: 1 });
+    const qbUpdateChain = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      execute: updateExecute,
+    };
     agentRepo = {
       save: jest.fn(),
       findOne: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnValue(qbUpdateChain),
+      __updateExecute: updateExecute,
+      __qbUpdateChain: qbUpdateChain,
     };
 
     agentExecutionRepo = {
@@ -182,44 +195,55 @@ describe('AgentExecutionEngine', () => {
   // ── Agent stats update ────────────────────────────────────────────────────
 
   describe('execute: updates agent stats after execution', () => {
-    it('should call incrementExecution with success=true on successful execution', async () => {
+    // After the race-fix, stats updates go through an atomic SQL
+    // UPDATE rather than `entity.incrementExecution() + save()`.
+    // The assertions now check that the queryBuilder was invoked
+    // with the right `successfulExecutions` branch (increment vs
+    // pass-through) and the right agent id.
+
+    it('issues an atomic UPDATE with the successful branch on a successful execution', async () => {
       const agent = makeAgent();
       const execution = makeExecution();
 
       agentExecutionRepo.create.mockReturnValue(execution);
       agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
-      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
 
       nodeExecutor.execute.mockResolvedValue({ output: 'ok', cost: 0.01, tokens: 50 });
 
       await engine.execute(agent, 'org-1', 'user-1', { input: { message: 'hi' } });
 
-      expect(agent.incrementExecution).toHaveBeenCalledWith(
-        true,
-        expect.any(Number),
-        expect.any(Number),
-      );
-      expect(agentRepo.save).toHaveBeenCalledWith(agent);
+      expect(agentRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(agentRepo.__updateExecute).toHaveBeenCalled();
+      expect(agentRepo.__qbUpdateChain.where).toHaveBeenCalledWith('id = :id', { id: agent.id });
+
+      // `.set()` was called with functions for the counter columns;
+      // the `successfulExecutions` branch must increment on success.
+      const setArgs = agentRepo.__qbUpdateChain.set.mock.calls[0][0];
+      expect(typeof setArgs.totalExecutions).toBe('function');
+      expect(setArgs.totalExecutions()).toContain('totalExecutions');
+      expect(typeof setArgs.successfulExecutions).toBe('function');
+      expect(setArgs.successfulExecutions()).toContain('+ 1');
     });
 
-    it('should call incrementExecution with success=false on failed execution', async () => {
+    it('issues an atomic UPDATE with the pass-through branch on a failed execution', async () => {
       const agent = makeAgent();
       const execution = makeExecution();
 
       agentExecutionRepo.create.mockReturnValue(execution);
       agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
-      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
 
       nodeExecutor.execute.mockRejectedValue(new Error('LLM call failed'));
 
       const result = await engine.execute(agent, 'org-1', 'user-1');
 
       expect(result.status).toBe(AgentExecutionStatus.FAILED);
-      expect(agent.incrementExecution).toHaveBeenCalledWith(
-        false,
-        expect.any(Number),
-        0,
-      );
+      expect(agentRepo.__updateExecute).toHaveBeenCalled();
+
+      // On failure the successfulExecutions branch must NOT
+      // increment — it returns the bare column name to leave
+      // the counter untouched.
+      const setArgs = agentRepo.__qbUpdateChain.set.mock.calls[0][0];
+      expect(setArgs.successfulExecutions()).not.toContain('+ 1');
     });
   });
 

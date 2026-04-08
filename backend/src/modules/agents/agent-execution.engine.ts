@@ -157,8 +157,7 @@ export class AgentExecutionEngine {
           execution.executionTime = Date.now() - startTime;
           execution.nodeResults = nodeResults;
           await this.agentExecutionRepository.save(execution);
-          agent.incrementExecution(false, Date.now() - startTime, totalCost);
-          await this.agentRepository.save(agent);
+          await this.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
 
           this.emitEvent(onEvent, {
             type: 'execution.failed',
@@ -178,8 +177,7 @@ export class AgentExecutionEngine {
           execution.totalTokens = totalTokens;
           execution.nodeResults = nodeResults;
           await this.agentExecutionRepository.save(execution);
-          agent.incrementExecution(false, Date.now() - startTime, totalCost);
-          await this.agentRepository.save(agent);
+          await this.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
 
           this.emitEvent(onEvent, {
             type: 'execution.failed',
@@ -278,8 +276,7 @@ export class AgentExecutionEngine {
           execution.totalTokens = totalTokens;
           execution.nodeResults = nodeResults;
           await this.agentExecutionRepository.save(execution);
-          agent.incrementExecution(false, Date.now() - startTime, totalCost);
-          await this.agentRepository.save(agent);
+          await this.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
 
           this.emitEvent(onEvent, {
             type: 'execution.failed',
@@ -423,8 +420,7 @@ export class AgentExecutionEngine {
         execution.totalTokens = totalTokens;
         await this.agentExecutionRepository.save(execution);
 
-        agent.incrementExecution(false, executionTime, totalCost);
-        await this.agentRepository.save(agent);
+        await this.bumpAgentStats(agent.id, false, executionTime, totalCost);
 
         this.emitEvent(onEvent, {
           type: 'execution.failed',
@@ -444,9 +440,8 @@ export class AgentExecutionEngine {
       execution.totalTokens = totalTokens;
       await this.agentExecutionRepository.save(execution);
 
-      // 9. Update agent stats
-      agent.incrementExecution(true, executionTime, totalCost);
-      await this.agentRepository.save(agent);
+      // 9. Update agent stats atomically via SQL UPDATE.
+      await this.bumpAgentStats(agent.id, true, executionTime, totalCost);
 
       this.logger.log(`[EXECUTE] Agent ${agent.id} execution completed in ${executionTime}ms, cost=${totalCost}`);
 
@@ -477,8 +472,7 @@ export class AgentExecutionEngine {
         await this.agentExecutionRepository.save(execution);
 
         // Update agent stats (failed)
-        agent.incrementExecution(false, executionTime, 0);
-        await this.agentRepository.save(agent);
+        await this.bumpAgentStats(agent.id, false, executionTime, 0);
       } catch (saveError) {
         this.logger.error(`[EXECUTE] Failed to persist execution record on crash: ${saveError.message}`);
       }
@@ -499,6 +493,67 @@ export class AgentExecutionEngine {
   }
 
   // ── Input validation ─────────────────────────────────────────────────
+
+  /**
+   * Atomically update an agent's running stats (totalExecutions,
+   * successfulExecutions, totalCost, averageExecutionTime,
+   * lastExecutedAt) via a single SQL UPDATE.
+   *
+   * Previously every call site did the read-modify-write pair:
+   *
+   *   agent.incrementExecution(success, executionTime, cost);
+   *   await this.agentRepository.save(agent);
+   *
+   * Two concurrent executions of the same agent both loaded
+   * `totalExecutions=N`, both mutated in memory to `N+1`, and both
+   * wrote back. One increment was silently lost, and the rolling
+   * `averageExecutionTime` was computed twice from the same stale
+   * snapshot — so both the counts and the average drifted under
+   * heavy concurrency.
+   *
+   * The rolling average uses the Welford-style formula
+   *
+   *   new_avg = old_avg + (x - old_avg) / new_count
+   *
+   * which is mathematically equivalent to
+   * `(old_avg * old_count + x) / new_count` but can be expressed in
+   * one SQL statement using the pre-update column values. Postgres
+   * evaluates the whole UPDATE atomically, so under MVCC two
+   * concurrent updates see each other's committed state and both
+   * increments land correctly.
+   */
+  private async bumpAgentStats(
+    agentId: string,
+    success: boolean,
+    executionTime: number,
+    cost: number,
+  ): Promise<void> {
+    try {
+      await this.agentRepository
+        .createQueryBuilder()
+        .update(Agent)
+        .set({
+          totalExecutions: () => '"totalExecutions" + 1',
+          successfulExecutions: success
+            ? () => '"successfulExecutions" + 1'
+            : () => '"successfulExecutions"',
+          totalCost: () => `"totalCost" + ${Number(cost) || 0}`,
+          // Welford running average. Uses the PRE-update value of
+          // totalExecutions (so the divisor is the new count) and
+          // averageExecutionTime (the old rolling mean). ROUND to
+          // stay integer-compatible with the existing column type.
+          averageExecutionTime: () =>
+            `ROUND("averageExecutionTime" + (${Number(executionTime) || 0} - "averageExecutionTime") / ("totalExecutions" + 1))`,
+          lastExecutedAt: new Date(),
+        })
+        .where('id = :id', { id: agentId })
+        .execute();
+    } catch (err: any) {
+      // Stats updates are best-effort — a DB hiccup here must never
+      // mask the execution result we're about to return.
+      this.logger.error(`Failed to update agent stats: ${err.message}`);
+    }
+  }
 
   private validateInput(input: any, internalOptions?: EngineInternalOptions): void {
     // Validate nesting depth (checked regardless of input)
