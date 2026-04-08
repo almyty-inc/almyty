@@ -270,7 +270,7 @@ describe('MonitoringService', () => {
   });
 
   describe('resolveAlert', () => {
-    it('should resolve existing alert and update properties', async () => {
+    it('should resolve existing org-scoped alert when caller is in the same org', async () => {
       const alert: Alert = {
         id: 'alert-1',
         ruleId: 'rule-1',
@@ -278,13 +278,14 @@ describe('MonitoringService', () => {
         title: 'Test Alert',
         message: 'Test alert message',
         data: {},
+        organizationId: 'org-a',
         isResolved: false,
         triggeredAt: '2024-01-01T00:00:00.000Z',
       };
 
       service['activeAlerts'].set('alert-1', alert);
 
-      const result = await service.resolveAlert('alert-1', 'user-123');
+      const result = await service.resolveAlert('alert-1', 'user-123', 'org-a');
 
       expect(result).toBe(true);
       expect(alert.isResolved).toBe(true);
@@ -293,8 +294,60 @@ describe('MonitoringService', () => {
       expect(mockRedis.setex).toHaveBeenCalled();
     });
 
+    it('should refuse cross-tenant resolve attempts (org-B caller on org-A alert)', async () => {
+      // Pin the cross-tenant guard added for the guessable-alertId +
+      // unauthenticated-resolve combo. Previously resolveAlert took
+      // only (alertId, resolvedBy) and did not consult the alert's
+      // organizationId, so any authenticated user — combined with a
+      // predictable alertId — could silently clear another org's
+      // alerts. The fix returns false (not Forbidden, to avoid being
+      // a cross-tenant existence oracle) when the orgs don't match.
+      const alert: Alert = {
+        id: 'alert-a',
+        ruleId: 'rule-1',
+        severity: 'critical',
+        title: 'Foreign Alert',
+        message: 'belongs to org-a',
+        data: {},
+        organizationId: 'org-a',
+        isResolved: false,
+        triggeredAt: '2024-01-01T00:00:00.000Z',
+      };
+      service['activeAlerts'].set('alert-a', alert);
+
+      const result = await service.resolveAlert('alert-a', 'attacker', 'org-b');
+
+      expect(result).toBe(false);
+      expect(alert.isResolved).toBe(false);
+      expect(mockRedis.setex).not.toHaveBeenCalled();
+    });
+
+    it('should allow platform-global alert (no organizationId) to be resolved from any context', async () => {
+      // System alerts that don't belong to any tenant (e.g. node
+      // health). Resolving them is still an authenticated action —
+      // the controller calls this with callerOrganizationId = null
+      // and the service accepts because alert.organizationId is
+      // falsy.
+      const alert: Alert = {
+        id: 'alert-sys',
+        ruleId: 'rule-sys',
+        severity: 'warning',
+        title: 'System Alert',
+        message: 'platform-global',
+        data: {},
+        isResolved: false,
+        triggeredAt: '2024-01-01T00:00:00.000Z',
+      };
+      service['activeAlerts'].set('alert-sys', alert);
+
+      const result = await service.resolveAlert('alert-sys', 'user-123', null);
+
+      expect(result).toBe(true);
+      expect(alert.isResolved).toBe(true);
+    });
+
     it('should return false for non-existent alert', async () => {
-      const result = await service.resolveAlert('non-existent-alert', 'user-123');
+      const result = await service.resolveAlert('non-existent-alert', 'user-123', 'org-a');
 
       expect(result).toBe(false);
       expect(mockRedis.setex).not.toHaveBeenCalled();
