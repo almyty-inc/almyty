@@ -576,6 +576,28 @@ describe('GatewaysService', () => {
         requestTrend: expect.any(Array),
       });
     });
+
+    it('uses TypeORM MoreThanOrEqual on createdAt (regression for dead $gte)', async () => {
+      // Pre-fix this used the MongoDB-style `{ $gte: since }`
+      // operator, which TypeORM ignored — the where clause matched
+      // zero rows and the stats were silently empty. Pin the new
+      // operator shape so a regression to `$gte` trips here.
+      const mockGateway = {
+        id: 'gateway-1',
+        organizationId: 'org-1',
+        tools: [],
+        getActiveTools: jest.fn().mockReturnValue([]),
+      } as any;
+
+      gatewayRepository.findOne.mockResolvedValue(mockGateway);
+      usageMetricRepository.find.mockResolvedValue([]);
+
+      await service.getGatewayStats('gateway-1', 'org-1', 'day');
+
+      const whereArg = (usageMetricRepository.find.mock.calls[0][0] as any).where;
+      expect(whereArg.createdAt).not.toHaveProperty('$gte');
+      expect(whereArg.createdAt).toHaveProperty('_type', 'moreThanOrEqual');
+    });
   });
 
   describe('getOrganizationGatewayStats', () => {

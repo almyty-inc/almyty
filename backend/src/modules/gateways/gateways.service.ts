@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Like } from 'typeorm';
+import { Repository, FindManyOptions, Like, MoreThanOrEqual } from 'typeorm';
 
 import { Gateway, GatewayType, GatewayStatus } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
@@ -491,11 +491,16 @@ export class GatewaysService {
 
     const since = new Date(Date.now() - timeframeDurations[timeframe]);
 
-    // Get usage metrics
+    // Get usage metrics. Previously this used the MongoDB-style
+    // `{ $gte: since }` operator, which TypeORM treats as a literal
+    // object comparison and matches zero rows — so this method was
+    // silently returning empty metrics for its entire life.
+    // Same class of dead code as the `{$in: ...}` fix in
+    // users.service.bulkUpdate and tool-executor.service.
     const metrics = await this.usageMetricRepository.find({
       where: {
         gatewayId: gateway.id,
-        createdAt: { $gte: since } as any,
+        createdAt: MoreThanOrEqual(since),
       },
     });
 

@@ -111,77 +111,12 @@ describe('ToolExecution Entity', () => {
     });
   });
 
-  describe('Static Query Helpers', () => {
-    describe('getSuccessfulExecutionsQuery', () => {
-      it('should return query for successful executions', () => {
-        const query = ToolExecution.getSuccessfulExecutionsQuery();
-        expect(query).toEqual({ success: true });
-      });
-    });
-
-    describe('getFailedExecutionsQuery', () => {
-      it('should return query for failed executions', () => {
-        const query = ToolExecution.getFailedExecutionsQuery();
-        expect(query).toEqual({ success: false });
-      });
-    });
-
-    describe('getCachedExecutionsQuery', () => {
-      it('should return query for cached executions', () => {
-        const query = ToolExecution.getCachedExecutionsQuery();
-        expect(query).toEqual({ cached: true });
-      });
-    });
-
-    describe('getRateLimitedExecutionsQuery', () => {
-      it('should return query for rate limited executions', () => {
-        const query = ToolExecution.getRateLimitedExecutionsQuery();
-        expect(query).toEqual({ 'metadata.rateLimited': true });
-      });
-    });
-
-    describe('getExecutionsInTimeframeQuery', () => {
-      it('should return query for executions within timeframe with since date', () => {
-        const since = new Date('2024-01-01');
-        const query = ToolExecution.getExecutionsInTimeframeQuery(since);
-
-        expect(query).toEqual({
-          createdAt: { $gte: since },
-        });
-      });
-
-      it('should return query for executions within timeframe with since and until dates', () => {
-        const since = new Date('2024-01-01');
-        const until = new Date('2024-01-31');
-        const query = ToolExecution.getExecutionsInTimeframeQuery(since, until);
-
-        expect(query).toEqual({
-          createdAt: { $gte: since, $lte: until },
-        });
-      });
-    });
-
-    describe('getExecutionsByToolQuery', () => {
-      it('should return query for executions by tool', () => {
-        const query = ToolExecution.getExecutionsByToolQuery('tool-1');
-        expect(query).toEqual({ toolId: 'tool-1' });
-      });
-    });
-
-    describe('getExecutionsByUserQuery', () => {
-      it('should return query for executions by user', () => {
-        const query = ToolExecution.getExecutionsByUserQuery('user-1');
-        expect(query).toEqual({ userId: 'user-1' });
-      });
-    });
-
-    describe('getExecutionsByOrganizationQuery', () => {
-      it('should return query for executions by organization', () => {
-        const query = ToolExecution.getExecutionsByOrganizationQuery('org-1');
-        expect(query).toEqual({ organizationId: 'org-1' });
-      });
-    });
-  });
+  // Static query helpers were removed — they returned Mongo-style
+  // query objects (`{ $gte: since }`, `'metadata.rateLimited': true`)
+  // that TypeORM doesn't understand, so any caller that used them
+  // would have matched zero rows. No production code referenced them;
+  // only this spec did, and it pinned the broken shape. The helpers
+  // + their tests are gone.
 
   describe('toAnalyticsData', () => {
     it('should convert execution to analytics format', () => {
