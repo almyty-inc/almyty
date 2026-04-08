@@ -971,7 +971,7 @@ describe('A2AService - Real Business Logic', () => {
           fallback: true,
         });
 
-        expect(clusterId).toMatch(/^cluster_\d+_[a-z0-9]+$/);
+        expect(clusterId).toMatch(/^cluster_[a-f0-9]{32}$/);
         expect(redis.setex).toHaveBeenCalledWith(
           `cluster:${clusterId}`,
           86400,

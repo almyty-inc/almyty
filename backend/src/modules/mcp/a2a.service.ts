@@ -1078,7 +1078,12 @@ export class A2AService extends EventEmitter {
       fallback: boolean;
     }
   ): Promise<string> {
-    const clusterId = `cluster_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Unguessable cluster id. Same crypto.randomBytes pattern as the
+    // other ids on this service — createAgentCluster is HTTP-exposed
+    // and the id is returned to the caller as a handle; if we ever
+    // grow a getCluster / updateCluster endpoint the id needs to not
+    // be enumerable across tenants.
+    const clusterId = `cluster_${crypto.randomBytes(16).toString('hex')}`;
     
     // Store cluster configuration in Redis
     await this.redis.setex(
