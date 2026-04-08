@@ -86,7 +86,7 @@ packages/
 - **Agent node types** (10): `input`, `output`, `llm_call`, `tool_call`, `condition`, `transform`, `loop`, `parallel`, `merge`, `sub_agent`
 - **Gateway types**: MCP, A2A, UTCP, Skills
 - **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed via worker_threads), GraphQL, LLM
-- **Backend tests**: 121 spec files, 3,988 passing. Marketing number ("3,800+ tests") lives in README.md — keep the two in sync when it changes.
+- **Backend tests**: 121 spec files, 3,996 passing. Marketing number ("3,800+ tests") lives in README.md — keep the two in sync when it changes.
 - **Agent Skills**: Compliant with https://agentskills.io spec
 
 ---
