@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { NotFoundException } from '@nestjs/common';
 import { AgentOpenAICompatController } from '../agent-openai-compat.controller';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
@@ -53,6 +54,7 @@ describe('AgentOpenAICompatController', () => {
     apiKeyRepo = {
       findOne: jest.fn(),
       save: jest.fn().mockImplementation(k => Promise.resolve(k)),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -281,7 +283,7 @@ describe('AgentOpenAICompatController', () => {
       const req = makeReq();
 
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey());
-      agentsService.getAgent.mockRejectedValue(new Error('Not found'));
+      agentsService.getAgent.mockRejectedValue(new NotFoundException('Not found'));
       agentsService.findByName.mockResolvedValue(null);
 
       await controller.chatCompletions(
@@ -308,6 +310,123 @@ describe('AgentOpenAICompatController', () => {
       );
 
       expect(res.status).toHaveBeenCalledWith(400);
+    });
+  });
+
+  // ── lastUsedAt throttling + partial update ─────────────────────────
+
+  describe('lastUsedAt throttling', () => {
+    function setupHappyPath() {
+      agentsService.getAgent.mockResolvedValue({ id: 'agent-1', name: 'Test', status: 'active' });
+      executionEngine.execute.mockResolvedValue({
+        id: 'exec-1',
+        output: 'Hello!',
+        status: 'completed',
+        totalTokens: 50,
+      });
+    }
+
+    it('uses partial update() instead of full save() for lastUsedAt', async () => {
+      setupHappyPath();
+      apiKeyRepo.findOne.mockResolvedValue(makeApiKey({ lastUsedAt: null }));
+
+      await controller.chatCompletions(
+        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        'Bearer test-key-123',
+        makeReq(),
+        makeRes(),
+      );
+
+      expect(apiKeyRepo.update).toHaveBeenCalledWith(
+        { id: 'key-1' },
+        expect.objectContaining({ lastUsedAt: expect.any(Date) }),
+      );
+      expect(apiKeyRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('skips the update when lastUsedAt is within the throttle window', async () => {
+      setupHappyPath();
+      const recent = new Date(Date.now() - 5_000); // 5s ago
+      apiKeyRepo.findOne.mockResolvedValue(makeApiKey({ lastUsedAt: recent }));
+
+      await controller.chatCompletions(
+        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        'Bearer test-key-123',
+        makeReq(),
+        makeRes(),
+      );
+
+      expect(apiKeyRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('does the update once the throttle window has passed', async () => {
+      setupHappyPath();
+      const old = new Date(Date.now() - 90_000); // 90s ago
+      apiKeyRepo.findOne.mockResolvedValue(makeApiKey({ lastUsedAt: old }));
+
+      await controller.chatCompletions(
+        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        'Bearer test-key-123',
+        makeReq(),
+        makeRes(),
+      );
+
+      expect(apiKeyRepo.update).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── resolveAgent error narrowing ───────────────────────────────────
+
+  describe('resolveAgent error narrowing', () => {
+    it('rethrows non-NotFoundException errors instead of falling through to findByName', async () => {
+      apiKeyRepo.findOne.mockResolvedValue(makeApiKey());
+      const dbErr = new Error('connection refused');
+      agentsService.getAgent.mockRejectedValue(dbErr);
+
+      const res = makeRes();
+      await controller.chatCompletions(
+        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        'Bearer test-key-123',
+        makeReq(),
+        res,
+      );
+
+      // Real DB errors must NOT be misreported as 404
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(agentsService.findByName).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Rate-limit map bound ───────────────────────────────────────────
+
+  describe('requestCounts map cap', () => {
+    it('does not grow past MAX_TRACKED_KEYS even with key churn', async () => {
+      // Reach into the private map and pre-populate it past the cap. Then
+      // hit the controller with a fresh key id and assert eviction kicked in.
+      const map: Map<string, { count: number; resetAt: number }> = (controller as any).requestCounts;
+      map.clear();
+
+      // Fill with already-expired entries — these should be cleared on next call
+      for (let i = 0; i < 10_001; i++) {
+        map.set(`old-${i}`, { count: 1, resetAt: Date.now() - 1000 });
+      }
+      expect(map.size).toBe(10_001);
+
+      apiKeyRepo.findOne.mockResolvedValue(makeApiKey({ id: 'fresh-key' }));
+      agentsService.getAgent.mockResolvedValue({ id: 'agent-1', name: 'Test', status: 'active' });
+      executionEngine.execute.mockResolvedValue({
+        id: 'exec-1', output: 'hi', status: 'completed', totalTokens: 1,
+      });
+
+      await controller.chatCompletions(
+        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        'Bearer test-key-123',
+        makeReq(),
+        makeRes(),
+      );
+
+      expect(map.size).toBeLessThanOrEqual(10_000);
+      expect(map.has('fresh-key')).toBe(true);
     });
   });
 });

@@ -34,6 +34,16 @@ const MAX_MESSAGE_CONTENT_LENGTH = 100 * 1024;
 /** Placeholder rate limits (per-key enforcement is done externally; these are informational headers). */
 const RATE_LIMIT_RPM = 60;
 
+/** Cap on the in-memory request-count map. Prevents unbounded growth from key churn. */
+const MAX_TRACKED_KEYS = 10_000;
+
+/**
+ * Throttle window for `lastUsedAt` writes, in milliseconds. Without this we issue
+ * one UPDATE per chat-completion request, which is wasteful and races with any
+ * concurrent mutation of the api-key row (revocation, scope change).
+ */
+const LAST_USED_THROTTLE_MS = 60_000;
+
 @Controller('v1')
 @ApiTags('OpenAI Compatible')
 export class AgentOpenAICompatController {
@@ -100,14 +110,17 @@ export class AgentOpenAICompatController {
       // 4. Map OpenAI messages to agent input
       const input = this.mapOpenAIToAgentInput(body);
 
-      // 5. Update API key last used
-      apiKey.lastUsedAt = new Date();
-      await this.apiKeyRepository.save(apiKey);
+      // 5. Touch lastUsedAt (throttled, partial UPDATE — see notes on
+      //    LAST_USED_THROTTLE_MS for the race we're avoiding)
+      await this.touchApiKeyLastUsed(apiKey);
 
       // 6. Execute (streaming or sync)
       if (body.stream) {
-        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 200, 'stream');
-        return this.handleStreaming(agent, input, apiKey, res);
+        return this.handleStreaming(agent, input, apiKey, res, {
+          req,
+          apiKeyLast4,
+          requestStartTime,
+        });
       } else {
         const result = await this.handleSync(agent, input, apiKey, res);
         this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 200);
@@ -144,9 +157,8 @@ export class AgentOpenAICompatController {
     try {
       const apiKey = await this.authenticateApiKey(auth);
 
-      // Update API key last used
-      apiKey.lastUsedAt = new Date();
-      await this.apiKeyRepository.save(apiKey);
+      // Touch lastUsedAt (throttled partial update)
+      await this.touchApiKeyLastUsed(apiKey);
 
       const agents = await this.agentsService.findAllActive(apiKey.organizationId);
 
@@ -227,7 +239,7 @@ export class AgentOpenAICompatController {
     const existing = this.requestCounts.get(apiKeyId);
 
     if (!existing || now >= existing.resetAt) {
-      // New window
+      this.evictIfFull(now);
       const resetAt = now + 60_000; // 1 minute window
       this.requestCounts.set(apiKeyId, { count: 1, resetAt });
       return { remaining: RATE_LIMIT_RPM - 1, limit: RATE_LIMIT_RPM, resetAt };
@@ -236,6 +248,26 @@ export class AgentOpenAICompatController {
     existing.count++;
     const remaining = Math.max(0, RATE_LIMIT_RPM - existing.count);
     return { remaining, limit: RATE_LIMIT_RPM, resetAt: existing.resetAt };
+  }
+
+  /**
+   * Bound the request-count map. Without this it grows one entry per unique
+   * api-key id seen, with no eviction — a slow memory leak that's bad in any
+   * deployment that rotates keys, and easy to weaponise on a public endpoint.
+   *
+   * Strategy: drop expired entries first; if we're still at capacity, drop
+   * the oldest insertion (Map iteration order is insertion order in JS).
+   */
+  private evictIfFull(now: number): void {
+    if (this.requestCounts.size < MAX_TRACKED_KEYS) return;
+
+    for (const [k, v] of this.requestCounts) {
+      if (now >= v.resetAt) this.requestCounts.delete(k);
+    }
+    if (this.requestCounts.size < MAX_TRACKED_KEYS) return;
+
+    const oldest = this.requestCounts.keys().next().value;
+    if (oldest !== undefined) this.requestCounts.delete(oldest);
   }
 
   private setRateLimitHeaders(
@@ -268,6 +300,24 @@ export class AgentOpenAICompatController {
     if (!authHeader) return '????';
     const token = authHeader.replace('Bearer ', '');
     return token.length >= 4 ? token.slice(-4) : token;
+  }
+
+  // ─── API key bookkeeping ─────────────────────────────────────────────
+
+  /**
+   * Touch the api-key's `lastUsedAt`. Throttled to avoid one UPDATE per
+   * request, and uses a partial UPDATE rather than `save(entity)` so we
+   * don't race with concurrent writes (revocation, scope change, etc.) by
+   * round-tripping the whole entity through a stale in-memory copy.
+   */
+  private async touchApiKeyLastUsed(apiKey: ApiKey): Promise<void> {
+    const now = Date.now();
+    const last = apiKey.lastUsedAt ? apiKey.lastUsedAt.getTime() : 0;
+    if (now - last < LAST_USED_THROTTLE_MS) return;
+
+    const nowDate = new Date(now);
+    await this.apiKeyRepository.update({ id: apiKey.id }, { lastUsedAt: nowDate });
+    apiKey.lastUsedAt = nowDate;
   }
 
   // ─── Authentication ──────────────────────────────────────────────────
@@ -307,12 +357,14 @@ export class AgentOpenAICompatController {
     // model format: "agent:uuid" or "agent:agent-name" or plain "uuid"/"name"
     const agentRef = model.replace(/^agent:/, '');
 
-    // Try by ID first, then by name
+    // Try by ID first, then by name. Only swallow NotFoundException — a real
+    // DB error must propagate, otherwise outages look like "agent not found"
+    // to the caller and we lose the actual signal.
     let agent: Agent | null = null;
     try {
       agent = await this.agentsService.getAgent(agentRef, organizationId);
-    } catch {
-      // getAgent throws NotFoundException — try by name
+    } catch (err) {
+      if (!(err instanceof NotFoundException)) throw err;
     }
 
     if (!agent) {
@@ -396,6 +448,7 @@ export class AgentOpenAICompatController {
     input: Record<string, any>,
     apiKey: ApiKey,
     res: Response,
+    logCtx: { req: Request; apiKeyLast4: string; requestStartTime: number },
   ) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -452,6 +505,7 @@ export class AgentOpenAICompatController {
 
       res.write('data: [DONE]\n\n');
       res.end();
+      this.logRequest(logCtx.req, logCtx.apiKeyLast4, agent.id, logCtx.requestStartTime, 200, 'stream');
     } catch (error) {
       this.logger.error(`[STREAMING] Error during agent execution: ${error.message}`, error.stack);
 
@@ -466,6 +520,9 @@ export class AgentOpenAICompatController {
 
       res.write('data: [DONE]\n\n');
       res.end();
+      // Failed streams used to vanish from access logs because the controller-
+      // level catch is unreachable once headers are sent. Log here instead.
+      this.logRequest(logCtx.req, logCtx.apiKeyLast4, agent.id, logCtx.requestStartTime, 500, 'stream-error');
     }
   }
 
