@@ -421,7 +421,39 @@ export class JsonSchemaTranslatorService {
     return schema;
   }
 
-  private normalizePropertyToJsonSchema(property: any): JSONSchema7 {
+  /**
+   * Maximum recursion depth for normalizePropertyToJsonSchema. Real
+   * schemas nest a few levels (object-of-object-of-array-of-object);
+   * 50 is well beyond any legitimate shape and cheaply prevents a
+   * stack overflow on malformed / adversarial input.
+   */
+  private static readonly MAX_NORMALIZE_DEPTH = 50;
+
+  private normalizePropertyToJsonSchema(
+    property: any,
+    depth = 0,
+    seen: WeakSet<object> = new WeakSet(),
+  ): JSONSchema7 {
+    // Depth / cycle guards. The walker recurses into `items` and every
+    // entry in `properties`, neither of which were previously bounded.
+    // A schema with a cycle (e.g. a protobuf message whose `items`
+    // points back to itself, or an OpenAPI schema that the parser
+    // failed to fully dereference) used to infinite-recurse and blow
+    // the V8 stack. A malformed deeply-nested schema did the same.
+    // Bail with the current state rather than throwing — this runs
+    // during tool generation, and a bad source schema should degrade
+    // to "tool has a shallow input type" rather than "tool generation
+    // crashed the worker".
+    if (depth >= JsonSchemaTranslatorService.MAX_NORMALIZE_DEPTH) {
+      return { type: 'object', description: 'truncated: max normalize depth' };
+    }
+    if (property && typeof property === 'object') {
+      if (seen.has(property)) {
+        return { type: 'object', description: 'truncated: cyclic reference' };
+      }
+      seen.add(property);
+    }
+
     if (typeof property === 'object' && property.type) {
       return property as JSONSchema7;
     }
@@ -472,13 +504,13 @@ export class JsonSchemaTranslatorService {
     }
 
     if (property.items) {
-      normalized.items = this.normalizePropertyToJsonSchema(property.items);
+      normalized.items = this.normalizePropertyToJsonSchema(property.items, depth + 1, seen);
     }
 
     if (property.properties) {
       normalized.properties = {};
       for (const [name, prop] of Object.entries(property.properties)) {
-        normalized.properties[name] = this.normalizePropertyToJsonSchema(prop);
+        normalized.properties[name] = this.normalizePropertyToJsonSchema(prop, depth + 1, seen);
       }
     }
 
