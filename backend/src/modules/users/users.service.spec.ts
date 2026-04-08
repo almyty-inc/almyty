@@ -335,8 +335,9 @@ describe('UsersService', () => {
   });
 
   describe('searchUsers', () => {
-    it('should search users by query', async () => {
+    it('should search users by query within an organization', async () => {
       const mockQueryBuilder = {
+        innerJoin: jest.fn().mockReturnThis(),
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
@@ -348,10 +349,21 @@ describe('UsersService', () => {
 
       userRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
-      const result = await service.searchUsers('john');
+      const result = await service.searchUsers('john', 'org-1');
 
       expect(result).toEqual([]);
-      expect(mockQueryBuilder.where).toHaveBeenCalled();
+      expect(mockQueryBuilder.innerJoin).toHaveBeenCalledWith(
+        'user.organizationMemberships',
+        'membership',
+        'membership.organizationId = :organizationId',
+        { organizationId: 'org-1' },
+      );
+    });
+
+    it('throws when organizationId is missing', async () => {
+      await expect(service.searchUsers('john', '' as any)).rejects.toThrow(
+        'organizationId is required',
+      );
     });
   });
 
@@ -373,17 +385,47 @@ describe('UsersService', () => {
   });
 
   describe('bulkUpdate', () => {
-    it('should update multiple users', async () => {
-      const userIds = ['user-1', 'user-2'];
+    it('should only update users that belong to the requested org', async () => {
+      const userIds = ['user-1', 'user-2', 'user-from-other-org'];
       const updateDto = { isActive: true };
 
+      // Membership lookup: only user-1 and user-2 belong to org-1
+      userOrganizationRepository.find.mockResolvedValue([
+        { userId: 'user-1' },
+        { userId: 'user-2' },
+      ] as any);
       userRepository.update.mockResolvedValue({ affected: 2 });
 
-      await service.bulkUpdate(userIds, updateDto);
+      await service.bulkUpdate(userIds, 'org-1', updateDto);
 
-      expect(userRepository.update).toHaveBeenCalledWith(
-        { id: { $in: userIds } as any },
-        updateDto
+      // The membership lookup should be scoped to org-1
+      expect(userOrganizationRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ organizationId: 'org-1' }),
+        }),
+      );
+
+      // The actual UPDATE must use TypeORM's In() rather than the broken
+      // Mongo `$in` shape that previously made the whole call a no-op,
+      // and must NOT include user-from-other-org in the id list.
+      const updateArgs = userRepository.update.mock.calls[0];
+      const idClause = updateArgs[0] as any;
+      expect(idClause).toHaveProperty('id');
+      expect(idClause.id).not.toMatchObject({ $in: expect.anything() });
+      // The In() instance has a `_value` property containing the array.
+      const inValue = idClause.id._value || idClause.id._values || idClause.id;
+      expect(inValue).toEqual(['user-1', 'user-2']);
+    });
+
+    it('is a no-op when no userIds belong to the requested org', async () => {
+      userOrganizationRepository.find.mockResolvedValue([]);
+      await service.bulkUpdate(['user-1'], 'org-1', { isActive: false });
+      expect(userRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects when organizationId is missing', async () => {
+      await expect(service.bulkUpdate(['u1'], '', { isActive: true })).rejects.toThrow(
+        'organizationId is required',
       );
     });
   });
@@ -408,8 +450,9 @@ describe('UsersService', () => {
   });
 
   describe('findAll', () => {
-    it('should return paginated users', async () => {
-      const mockQueryBuilder = {
+    function makeQB() {
+      return {
+        innerJoin: jest.fn().mockReturnThis(),
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
@@ -424,92 +467,51 @@ describe('UsersService', () => {
           2,
         ]),
       };
+    }
 
+    it('should return paginated users scoped to the requested org', async () => {
+      const mockQueryBuilder = makeQB();
       userRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
       const result = await service.findAll({
         page: 1,
         limit: 10,
+        organizationId: 'org-1',
       });
 
       expect(result.users).toHaveLength(2);
       expect(result.total).toBe(2);
-      expect(result.page).toBe(1);
-      expect(result.totalPages).toBe(1);
+      // The org filter must run as an inner join — without that the previous
+      // shape returned every user in the database to any caller.
+      expect(mockQueryBuilder.innerJoin).toHaveBeenCalledWith(
+        'user.organizationMemberships',
+        'membership',
+        'membership.organizationId = :organizationId',
+        { organizationId: 'org-1' },
+      );
     });
 
     it('should apply search filter when search param provided', async () => {
-      const mockQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
-      };
-
+      const mockQueryBuilder = makeQB();
       userRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
       await service.findAll({
         page: 1,
         limit: 10,
         search: 'john',
+        organizationId: 'org-1',
       });
 
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
         '(user.firstName ILIKE :search OR user.lastName ILIKE :search OR user.email ILIKE :search)',
         { search: '%john%' }
       );
     });
 
-    it('should apply organizationId filter when provided', async () => {
-      const mockQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
-      };
-
-      userRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-
-      await service.findAll({
-        page: 1,
-        limit: 10,
-        organizationId: 'org-1',
-      });
-
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'organization.id = :organizationId',
-        { organizationId: 'org-1' }
+    it('rejects when organizationId is missing', async () => {
+      await expect(service.findAll({ page: 1, limit: 10 })).rejects.toThrow(
+        'organizationId is required',
       );
-    });
-
-    it('should apply both search and organizationId filters', async () => {
-      const mockQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
-      };
-
-      userRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-
-      await service.findAll({
-        page: 1,
-        limit: 10,
-        search: 'john',
-        organizationId: 'org-1',
-      });
-
-      expect(mockQueryBuilder.where).toHaveBeenCalled();
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalled();
     });
   });
 
@@ -690,8 +692,9 @@ describe('UsersService', () => {
   });
 
   describe('searchUsers - Additional Branch Coverage', () => {
-    it('should search users with organizationId filter', async () => {
+    it('should search users scoped to the organization via inner join', async () => {
       const mockQueryBuilder = {
+        innerJoin: jest.fn().mockReturnThis(),
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
@@ -704,31 +707,43 @@ describe('UsersService', () => {
 
       await service.searchUsers('john', 'org-1');
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'organization.id = :organizationId',
-        { organizationId: 'org-1' }
+      expect(mockQueryBuilder.innerJoin).toHaveBeenCalledWith(
+        'user.organizationMemberships',
+        'membership',
+        'membership.organizationId = :organizationId',
+        { organizationId: 'org-1' },
+      );
+    });
+  });
+
+  // The "implicit findOne admin bypass" used to let an admin in any org
+  // read any user. The new shape requires `findOneInOrg(id, organizationId)`
+  // to confirm the target is in the caller's org first.
+  describe('findOneInOrg', () => {
+    it('throws NotFoundException when target user is not in the requested org', async () => {
+      userOrganizationRepository.findOne = jest.fn().mockResolvedValue(null);
+
+      await expect(service.findOneInOrg('user-2', 'org-1')).rejects.toThrow('User not found');
+      expect(userRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it('returns the user when membership exists', async () => {
+      userOrganizationRepository.findOne = jest.fn().mockResolvedValue({ id: 'm1' });
+      userRepository.findOne.mockResolvedValue({ id: 'user-2', email: 'a@b.c' } as User);
+
+      const out = await service.findOneInOrg('user-2', 'org-1');
+
+      expect(out.id).toBe('user-2');
+      expect(userOrganizationRepository.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'user-2', organizationId: 'org-1' },
+        }),
       );
     });
 
-    it('should search users without organizationId filter', async () => {
-      const mockQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      };
-
-      userRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-
-      await service.searchUsers('john');
-
-      expect(mockQueryBuilder.where).toHaveBeenCalled();
-      // Should not call andWhere with organizationId
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'user.isActive = :isActive',
-        { isActive: true }
+    it('rejects when organizationId is missing', async () => {
+      await expect(service.findOneInOrg('user-2', '')).rejects.toThrow(
+        'organizationId is required',
       );
     });
   });

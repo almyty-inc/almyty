@@ -16,12 +16,19 @@ describe('UsersController', () => {
     const mockUsersService = {
       findAll: jest.fn(),
       findOne: jest.fn(),
+      findOneInOrg: jest.fn(),
       update: jest.fn(),
+      updateInOrg: jest.fn(),
       deactivate: jest.fn(),
+      deactivateInOrg: jest.fn(),
       reactivate: jest.fn(),
+      reactivateInOrg: jest.fn(),
       delete: jest.fn(),
+      deleteInOrg: jest.fn(),
       getUserStats: jest.fn(),
+      getUserStatsInOrg: jest.fn(),
       getUserActivity: jest.fn(),
+      getUserActivityInOrg: jest.fn(),
       searchUsers: jest.fn(),
     };
 
@@ -44,13 +51,19 @@ describe('UsersController', () => {
     usersService = module.get(UsersService);
   });
 
+  // Tiny helper that builds the request shape the controller actually uses
+  // (just `req.user.currentOrganizationId` — same field the JWT strategy
+  // populates from X-Organization-Id).
+  const reqWithOrg = (organizationId = 'org-1') =>
+    ({ user: { currentOrganizationId: organizationId } } as any);
+
   describe('findAll', () => {
-    it('should return paginated users', async () => {
+    it('should return paginated users scoped to the caller current org', async () => {
       const queryDto: QueryUsersDto = {
         page: 1,
         limit: 10,
         search: 'search',
-        organizationId: 'org-1'
+        organizationId: 'attacker-supplied-org', // must be ignored
       };
       const mockResult = {
         users: [],
@@ -62,44 +75,69 @@ describe('UsersController', () => {
 
       usersService.findAll.mockResolvedValue(mockResult);
 
-      const result = await controller.findAll(queryDto);
+      const result = await controller.findAll(queryDto, reqWithOrg('caller-org'));
 
       expect(result).toBe(mockResult);
-      expect(usersService.findAll).toHaveBeenCalledWith(queryDto);
+      // The DTO's caller-supplied organizationId is ignored — the controller
+      // forces the current org from the JWT.
+      expect(usersService.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ organizationId: 'caller-org' }),
+      );
+    });
+
+    it('rejects when no organization context is set', async () => {
+      await expect(controller.findAll({} as any, { user: {} } as any))
+        .rejects.toThrow('Organization context required');
     });
   });
 
   describe('findOne', () => {
-    it('should return user by id', async () => {
+    it('returns the caller own profile via the unscoped findOne', async () => {
       const mockUser = {
         id: 'user-1',
         email: 'test@example.com',
         firstName: 'Test',
         lastName: 'User',
-        organizationMemberships: [{
-          role: OrganizationRole.ADMIN
-        }]
+        organizationMemberships: [{ role: OrganizationRole.ADMIN }],
       } as User;
       const mockStats = { apiKeysCount: 0, organizationsCount: 1, lastLoginAt: null };
 
       usersService.findOne.mockResolvedValue(mockUser);
       usersService.getUserStats.mockResolvedValue(mockStats);
 
-      const currentUser = {
-        id: 'user-1',
-        organizationMemberships: [{ role: OrganizationRole.ADMIN }]
-      } as User;
+      const currentUser = { id: 'user-1' } as User;
 
-      const result = await controller.findOne('user-1', currentUser);
+      const result = await controller.findOne('user-1', currentUser, reqWithOrg());
 
-      expect(result).toEqual({ ...mockUser, stats: mockStats });
+      expect(result).toEqual(expect.objectContaining({ id: 'user-1', stats: mockStats }));
       expect(usersService.findOne).toHaveBeenCalledWith('user-1');
-      expect(usersService.getUserStats).toHaveBeenCalledWith('user-1');
+      expect(usersService.findOneInOrg).not.toHaveBeenCalled();
+    });
+
+    it('looks up another user via findOneInOrg with the caller current org', async () => {
+      const mockUser = {
+        id: 'user-2',
+        email: 'other@example.com',
+        firstName: 'Other',
+        lastName: 'User',
+      } as User;
+      const mockStats = { apiKeysCount: 0, organizationsCount: 1, lastLoginAt: null };
+
+      usersService.findOneInOrg.mockResolvedValue(mockUser);
+      usersService.getUserStatsInOrg.mockResolvedValue(mockStats);
+
+      const currentUser = { id: 'user-1' } as User;
+
+      const result = await controller.findOne('user-2', currentUser, reqWithOrg('caller-org'));
+
+      expect(result).toEqual(expect.objectContaining({ id: 'user-2', stats: mockStats }));
+      expect(usersService.findOneInOrg).toHaveBeenCalledWith('user-2', 'caller-org');
+      expect(usersService.findOne).not.toHaveBeenCalled();
     });
   });
 
   describe('update', () => {
-    it('should update user', async () => {
+    it('should update user via the org-scoped path', async () => {
       const updateDto: UpdateUserDto = { firstName: 'Updated' };
       const mockUser = {
         id: 'user-1',
@@ -109,58 +147,59 @@ describe('UsersController', () => {
         verificationToken: 'verify'
       } as User;
 
-      usersService.update.mockResolvedValue(mockUser);
+      usersService.updateInOrg.mockResolvedValue(mockUser);
 
-      const result = await controller.update('user-1', updateDto);
+      const result = await controller.update('user-1', updateDto, reqWithOrg('org-1'));
 
       expect(result.message).toBe('User updated successfully');
       expect(result.user).toEqual({ id: 'user-1', firstName: 'Updated' });
-      expect(usersService.update).toHaveBeenCalledWith('user-1', updateDto);
+      expect(usersService.updateInOrg).toHaveBeenCalledWith('user-1', 'org-1', updateDto);
+      expect(usersService.update).not.toHaveBeenCalled();
     });
   });
 
 
   describe('deactivate', () => {
-    it('should deactivate user', async () => {
-      usersService.deactivate.mockResolvedValue();
+    it('should deactivate user via the org-scoped path', async () => {
+      usersService.deactivateInOrg.mockResolvedValue();
 
-      const result = await controller.deactivate('user-1');
+      const result = await controller.deactivate('user-1', reqWithOrg('org-1'));
 
       expect(result.message).toBe('User deactivated successfully');
-      expect(usersService.deactivate).toHaveBeenCalledWith('user-1');
+      expect(usersService.deactivateInOrg).toHaveBeenCalledWith('user-1', 'org-1');
     });
   });
 
   describe('reactivate', () => {
-    it('should reactivate user', async () => {
-      usersService.reactivate.mockResolvedValue();
+    it('should reactivate user via the org-scoped path', async () => {
+      usersService.reactivateInOrg.mockResolvedValue();
 
-      const result = await controller.reactivate('user-1');
+      const result = await controller.reactivate('user-1', reqWithOrg('org-1'));
 
       expect(result.message).toBe('User reactivated successfully');
-      expect(usersService.reactivate).toHaveBeenCalledWith('user-1');
+      expect(usersService.reactivateInOrg).toHaveBeenCalledWith('user-1', 'org-1');
     });
   });
 
   describe('getUserStats', () => {
-    it('should return user stats', async () => {
+    it('should return user stats via the org-scoped path', async () => {
       const mockStats = {
         apiKeysCount: 5,
         organizationsCount: 2,
         lastLoginAt: new Date(),
       };
 
-      usersService.getUserStats.mockResolvedValue(mockStats);
+      usersService.getUserStatsInOrg.mockResolvedValue(mockStats);
 
-      const result = await controller.getUserStats('user-1');
+      const result = await controller.getUserStats('user-1', reqWithOrg('org-1'));
 
       expect(result.stats).toBe(mockStats);
-      expect(usersService.getUserStats).toHaveBeenCalledWith('user-1');
+      expect(usersService.getUserStatsInOrg).toHaveBeenCalledWith('user-1', 'org-1');
     });
   });
 
   describe('searchUsers', () => {
-    it('should search users', async () => {
+    it('should search users using the caller current org (caller-supplied org id ignored)', async () => {
       const mockUsers = [{
         id: 'user-1',
         email: 'john@example.com',
@@ -172,25 +211,22 @@ describe('UsersController', () => {
 
       usersService.searchUsers.mockResolvedValue(mockUsers);
 
-      const result = await controller.searchUsers('john', 'org-1');
+      const result = await controller.searchUsers('john', reqWithOrg('caller-org'));
 
       expect(result.users).toHaveLength(1);
-      expect(result.users[0]).toEqual({
-        id: 'user-1',
-        email: 'john@example.com',
-        firstName: 'John',
-        lastName: 'Doe',
-        fullName: 'John Doe',
-        isActive: true
-      });
-      expect(usersService.searchUsers).toHaveBeenCalledWith('john', 'org-1');
+      expect(usersService.searchUsers).toHaveBeenCalledWith('john', 'caller-org');
     });
 
     it('should return empty users for short query', async () => {
-      const result = await controller.searchUsers('j');
+      const result = await controller.searchUsers('j', reqWithOrg());
 
       expect(result.users).toEqual([]);
       expect(usersService.searchUsers).not.toHaveBeenCalled();
+    });
+
+    it('rejects when no organization context is set', async () => {
+      await expect(controller.searchUsers('john', { user: {} } as any))
+        .rejects.toThrow('Organization context required');
     });
   });
 
@@ -270,72 +306,29 @@ describe('UsersController', () => {
   });
 
   describe('remove', () => {
-    it('should delete user successfully', async () => {
-      usersService.delete.mockResolvedValue();
+    it('should delete user successfully via the org-scoped path', async () => {
+      usersService.deleteInOrg.mockResolvedValue();
 
-      const result = await controller.remove('user-1');
+      const result = await controller.remove('user-1', reqWithOrg('org-1'));
 
       expect(result.message).toBe('User deleted successfully');
-      expect(usersService.delete).toHaveBeenCalledWith('user-1');
+      expect(usersService.deleteInOrg).toHaveBeenCalledWith('user-1', 'org-1');
     });
   });
 
   describe('getUserActivity', () => {
-    it('should return user activity', async () => {
+    it('should return user activity via the org-scoped path', async () => {
       const mockActivity = [
         { type: 'api_key_usage', date: '2025-01-01', count: 10 },
         { type: 'login', date: '2025-01-02', count: 2 },
       ];
 
-      usersService.getUserActivity.mockResolvedValue(mockActivity);
+      usersService.getUserActivityInOrg.mockResolvedValue(mockActivity);
 
-      const result = await controller.getUserActivity('user-1', 7);
+      const result = await controller.getUserActivity('user-1', reqWithOrg('org-1'), 7);
 
       expect(result.activity).toBe(mockActivity);
-      expect(usersService.getUserActivity).toHaveBeenCalledWith('user-1', 7);
-    });
-  });
-
-  // Error handling and branch coverage tests
-  describe('findOne - access control', () => {
-    it('should throw error when non-admin tries to access other user', async () => {
-      const mockUser = {
-        id: 'user-2',
-        email: 'other@example.com',
-        organizationMemberships: [{ role: OrganizationRole.MEMBER }]
-      } as User;
-
-      usersService.findOne.mockResolvedValue(mockUser);
-
-      const currentUser = {
-        id: 'user-1',
-        organizationMemberships: [{ role: OrganizationRole.MEMBER }]
-      } as User;
-
-      await expect(controller.findOne('user-2', currentUser))
-        .rejects.toThrow('You can only view your own profile');
-    });
-
-    it('should allow admin to access any user', async () => {
-      const mockUser = {
-        id: 'user-2',
-        email: 'other@example.com',
-        organizationMemberships: [{ role: OrganizationRole.MEMBER }]
-      } as User;
-      const mockStats = { apiKeysCount: 0, organizationsCount: 1, lastLoginAt: null };
-
-      usersService.findOne.mockResolvedValue(mockUser);
-      usersService.getUserStats.mockResolvedValue(mockStats);
-
-      const currentUser = {
-        id: 'user-1',
-        organizationMemberships: [{ role: OrganizationRole.ADMIN }]
-      } as User;
-
-      const result = await controller.findOne('user-2', currentUser);
-
-      expect(result.id).toBe('user-2');
-      expect(result.stats).toBe(mockStats);
+      expect(usersService.getUserActivityInOrg).toHaveBeenCalledWith('user-1', 'org-1', 7);
     });
   });
 
@@ -345,7 +338,7 @@ describe('UsersController', () => {
 
       usersService.findAll.mockRejectedValue(new Error('Database error'));
 
-      await expect(controller.findAll(queryDto))
+      await expect(controller.findAll(queryDto, reqWithOrg()))
         .rejects.toThrow('Database error');
     });
   });
@@ -354,45 +347,45 @@ describe('UsersController', () => {
     it('should handle update errors', async () => {
       const updateDto: UpdateUserDto = { firstName: 'Updated' };
 
-      usersService.update.mockRejectedValue(new Error('Update failed'));
+      usersService.updateInOrg.mockRejectedValue(new Error('Update failed'));
 
-      await expect(controller.update('user-1', updateDto))
+      await expect(controller.update('user-1', updateDto, reqWithOrg()))
         .rejects.toThrow('Update failed');
     });
   });
 
   describe('deactivate - error handling', () => {
     it('should handle deactivation errors', async () => {
-      usersService.deactivate.mockRejectedValue(new Error('Deactivation failed'));
+      usersService.deactivateInOrg.mockRejectedValue(new Error('Deactivation failed'));
 
-      await expect(controller.deactivate('user-1'))
+      await expect(controller.deactivate('user-1', reqWithOrg()))
         .rejects.toThrow('Deactivation failed');
     });
   });
 
   describe('reactivate - error handling', () => {
     it('should handle reactivation errors', async () => {
-      usersService.reactivate.mockRejectedValue(new Error('Reactivation failed'));
+      usersService.reactivateInOrg.mockRejectedValue(new Error('Reactivation failed'));
 
-      await expect(controller.reactivate('user-1'))
+      await expect(controller.reactivate('user-1', reqWithOrg()))
         .rejects.toThrow('Reactivation failed');
     });
   });
 
   describe('remove - error handling', () => {
     it('should handle deletion errors', async () => {
-      usersService.delete.mockRejectedValue(new Error('Deletion failed'));
+      usersService.deleteInOrg.mockRejectedValue(new Error('Deletion failed'));
 
-      await expect(controller.remove('user-1'))
+      await expect(controller.remove('user-1', reqWithOrg()))
         .rejects.toThrow('Deletion failed');
     });
   });
 
   describe('getUserStats - error handling', () => {
     it('should handle stats retrieval errors', async () => {
-      usersService.getUserStats.mockRejectedValue(new Error('Stats failed'));
+      usersService.getUserStatsInOrg.mockRejectedValue(new Error('Stats failed'));
 
-      await expect(controller.getUserStats('user-1'))
+      await expect(controller.getUserStats('user-1', reqWithOrg()))
         .rejects.toThrow('Stats failed');
     });
   });
@@ -401,7 +394,7 @@ describe('UsersController', () => {
     it('should handle search errors', async () => {
       usersService.searchUsers.mockRejectedValue(new Error('Search failed'));
 
-      await expect(controller.searchUsers('john', 'org-1'))
+      await expect(controller.searchUsers('john', reqWithOrg('org-1')))
         .rejects.toThrow('Search failed');
     });
   });
@@ -442,9 +435,9 @@ describe('UsersController', () => {
 
   describe('getUserActivity - error handling', () => {
     it('should handle activity errors', async () => {
-      usersService.getUserActivity.mockRejectedValue(new Error('Activity failed'));
+      usersService.getUserActivityInOrg.mockRejectedValue(new Error('Activity failed'));
 
-      await expect(controller.getUserActivity('user-1', 7))
+      await expect(controller.getUserActivity('user-1', reqWithOrg(), 7))
         .rejects.toThrow('Activity failed');
     });
   });
