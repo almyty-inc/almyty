@@ -213,6 +213,9 @@ export class AnalyticsService {
   }
 
   async getToolUsage(organizationId: string, timeframe: string) {
+    if (!organizationId) {
+      throw new Error('getToolUsage requires organizationId');
+    }
     const since = this.getTimeframeDate(timeframe);
 
     const results = await this.toolExecutionRepository
@@ -276,6 +279,9 @@ export class AnalyticsService {
   }
 
   async getLlmUsage(organizationId: string, timeframe: string) {
+    if (!organizationId) {
+      throw new Error('getLlmUsage requires organizationId');
+    }
     const since = this.getTimeframeDate(timeframe);
 
     const sessions = await this.llmSessionRepository
@@ -335,6 +341,9 @@ export class AnalyticsService {
   }
 
   async getAuditSummary(organizationId: string) {
+    if (!organizationId) {
+      throw new Error('getAuditSummary requires organizationId');
+    }
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -432,6 +441,9 @@ export class AnalyticsService {
   }
 
   async getAgentRunsSummary(organizationId: string) {
+    if (!organizationId) {
+      throw new Error('getAgentRunsSummary requires organizationId');
+    }
     const now = new Date();
     const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
