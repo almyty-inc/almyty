@@ -71,44 +71,58 @@ export class AuthService {
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(createUserDto.password, saltRounds);
 
-    // Create user
-    const user = this.userRepository.create({
-      email: createUserDto.email,
-      passwordHash,
-      firstName: createUserDto.firstName,
-      lastName: createUserDto.lastName,
-      isVerified: false,
-    });
+    // Wrap user + organization + membership creation in a single DB
+    // transaction. The previous shape saved the user FIRST, then tried
+    // to save the org and membership separately, and on failure
+    // compensated via `userRepository.remove(savedUser)`. Two ways
+    // that went wrong:
+    //
+    //   1. If the organization row saved but the membership row
+    //      failed, the compensation removed the user but left the
+    //      organization orphaned. A subsequent re-register with the
+    //      same org name would fail with "Organization name is
+    //      already taken" even though the caller never successfully
+    //      registered.
+    //   2. If the process crashed (OOM, redeploy) between any of the
+    //      three saves, whatever was persisted stayed behind with no
+    //      compensation at all.
+    //
+    // A transaction makes the three writes atomic: either all three
+    // commit, or the DB rolls them all back.
+    const savedUser = await this.userRepository.manager.transaction(async (tx) => {
+      // Create user inside the transaction
+      const user = tx.create(User, {
+        email: createUserDto.email,
+        passwordHash,
+        firstName: createUserDto.firstName,
+        lastName: createUserDto.lastName,
+        isVerified: false,
+      });
+      const saved = await tx.save(User, user);
 
-    const savedUser = await this.userRepository.save(user);
-
-    try {
       // Create organization with user-provided name
-      const organization = this.organizationRepository.create({
+      const organization = tx.create(Organization, {
         name: createUserDto.organizationName,
         description: `Organization managed by ${createUserDto.firstName} ${createUserDto.lastName}`,
         plan: 'free',
         isActive: true,
       });
-      const savedOrganization = await this.organizationRepository.save(organization);
+      const savedOrganization = await tx.save(Organization, organization);
 
       // Create organization membership (user as owner)
-      const userOrganization = this.userOrganizationRepository.create({
-        userId: savedUser.id,
+      const userOrganization = tx.create(UserOrganization, {
+        userId: saved.id,
         organizationId: savedOrganization.id,
         role: OrganizationRole.OWNER,
         isActive: true,
         inviteAccepted: true,
       });
+      await tx.save(UserOrganization, userOrganization);
 
-      await this.userOrganizationRepository.save(userOrganization);
-    } catch (error) {
-      // If org creation fails, remove the orphaned user
-      await this.userRepository.remove(savedUser);
-      throw error;
-    }
+      return saved;
+    });
 
-    // Generate tokens
+    // Generate tokens (outside the transaction — purely read-side)
     return this.generateTokens(savedUser);
   }
 
@@ -357,6 +371,19 @@ export class AuthService {
   }
 
   async verifyEmail(token: string): Promise<void> {
+    // Same defense-in-depth as confirmPasswordReset: an empty/null
+    // token would `WHERE verificationToken IS NULL` under TypeORM
+    // and match any user who has already verified (i.e. had their
+    // token cleared to null). That would let an unauthenticated
+    // caller with no token silently "verify" an arbitrary already-
+    // verified account's verification state — harmless today but
+    // exactly the kind of brittle invariant that bites later when a
+    // verification flow is added that depends on re-entering the
+    // unverified state. Reject empty tokens up front.
+    if (!token || typeof token !== 'string') {
+      throw new BadRequestException('Invalid verification token');
+    }
+
     const user = await this.userRepository.findOne({
       where: { verificationToken: token },
     });
