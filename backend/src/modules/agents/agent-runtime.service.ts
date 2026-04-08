@@ -1416,11 +1416,19 @@ export class AgentRuntimeService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Get a run by ID
+   * Get a run by ID. Optionally also asserts that the run belongs to
+   * a specific agent — the run-scoped controller endpoints
+   * `/agents/:id/runs/:runId/...` use this to enforce routing
+   * correctness. Previously the `:id` path segment was decorative:
+   * any runId in the caller's org would resolve through the endpoint
+   * regardless of which agent it was attached to, which meant the
+   * URL path wasn't actually a hierarchical constraint.
    */
-  async getRun(runId: string, organizationId: string): Promise<AgentRun> {
+  async getRun(runId: string, organizationId: string, agentId?: string): Promise<AgentRun> {
     const run = await this.runRepository.findOne({
-      where: { id: runId, organizationId },
+      where: agentId
+        ? { id: runId, organizationId, agentId }
+        : { id: runId, organizationId },
       relations: ['agent'],
     });
     if (!run) throw new NotFoundException('Run not found');
@@ -1442,10 +1450,11 @@ export class AgentRuntimeService {
   }
 
   /**
-   * Cancel a run
+   * Cancel a run. Optional agentId argument asserts the run belongs
+   * to that agent (for the /agents/:id/runs/:runId/cancel route).
    */
-  async cancelRun(runId: string, organizationId: string): Promise<AgentRun> {
-    const run = await this.getRun(runId, organizationId);
+  async cancelRun(runId: string, organizationId: string, agentId?: string): Promise<AgentRun> {
+    const run = await this.getRun(runId, organizationId, agentId);
     if (run.isDone()) {
       throw new BadRequestException('Run is already completed');
     }
@@ -1456,10 +1465,11 @@ export class AgentRuntimeService {
   }
 
   /**
-   * Send input to a waiting run (human-in-the-loop)
+   * Send input to a waiting run (human-in-the-loop). Same optional
+   * agentId assertion as cancelRun.
    */
-  async sendInput(runId: string, organizationId: string, input: string): Promise<AgentRun> {
-    const run = await this.getRun(runId, organizationId);
+  async sendInput(runId: string, organizationId: string, input: string, agentId?: string): Promise<AgentRun> {
+    const run = await this.getRun(runId, organizationId, agentId);
     if (run.status !== AgentRunStatus.WAITING_INPUT) {
       throw new BadRequestException('Run is not waiting for input');
     }

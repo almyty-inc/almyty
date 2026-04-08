@@ -578,9 +578,26 @@ export class AgentsController {
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders();
 
+      // Track whether the client has already gone away. If they have,
+      // subsequent `res.write` calls from onEvent will silently no-op
+      // rather than triggering EPIPE errors that bubble into the
+      // execution engine's error path. Previously the stream had no
+      // disconnect tracking at all — a client closing their browser
+      // mid-run would leave the handler writing into a dead socket,
+      // and the engine kept running the pipeline to completion anyway.
+      let clientClosed = false;
+      req.on('close', () => {
+        clientClosed = true;
+      });
+
       const onEvent = (event: StreamEvent) => {
+        if (clientClosed) return;
         const data = JSON.stringify(event);
-        res.write(`event: ${event.type}\ndata: ${data}\n\n`);
+        try {
+          res.write(`event: ${event.type}\ndata: ${data}\n\n`);
+        } catch {
+          clientClosed = true;
+        }
       };
 
       const execution = await this.executionEngine.execute(
@@ -595,9 +612,11 @@ export class AgentsController {
         onEvent,
       );
 
-      // Send final result
-      res.write(`event: done\ndata: ${JSON.stringify({ executionId: execution.id, status: execution.status })}\n\n`);
-      res.end();
+      // Send final result (only if the client is still listening)
+      if (!clientClosed) {
+        res.write(`event: done\ndata: ${JSON.stringify({ executionId: execution.id, status: execution.status })}\n\n`);
+        res.end();
+      }
     } catch (error) {
       this.logger.error(`[STREAM] Agent stream failed: ${error.message}`, error.stack);
       // If headers haven't been sent yet, send error as JSON
@@ -609,8 +628,12 @@ export class AgentsController {
         });
       } else {
         // Headers already sent (SSE started), send error as SSE event
-        res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
-        res.end();
+        try {
+          res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
+          res.end();
+        } catch {
+          // Client already gone — nothing to do.
+        }
       }
     }
   }
@@ -1235,7 +1258,11 @@ export class AgentsController {
         );
       }
 
-      const run = await this.runtimeService.getRun(runId, organizationId);
+      // Pass the :id path segment so the service asserts the run
+      // actually belongs to this agent. Previously the :id was
+      // decorative — any runId in the caller's org resolved through
+      // any /agents/:id/runs/:runId URL.
+      const run = await this.runtimeService.getRun(runId, organizationId, id);
       return { success: true, data: run };
     } catch (error) {
       throw new HttpException(
@@ -1261,8 +1288,8 @@ export class AgentsController {
         return;
       }
 
-      // Verify run exists
-      await this.runtimeService.getRun(runId, organizationId);
+      // Verify run exists AND belongs to this agent path segment.
+      await this.runtimeService.getRun(runId, organizationId, id);
 
       // Set SSE headers
       res.setHeader('Content-Type', 'text/event-stream');
@@ -1273,7 +1300,7 @@ export class AgentsController {
       const emitter = this.runtimeService.getRunEmitter(runId);
       if (!emitter) {
         // Run already completed, send current state
-        const run = await this.runtimeService.getRun(runId, organizationId);
+        const run = await this.runtimeService.getRun(runId, organizationId, id);
         res.write(`event: state\ndata: ${JSON.stringify({ status: run.status, output: run.output })}\n\n`);
         res.write(`event: done\ndata: {}\n\n`);
         res.end();
@@ -1321,7 +1348,7 @@ export class AgentsController {
         );
       }
 
-      const run = await this.runtimeService.sendInput(runId, organizationId, body.input);
+      const run = await this.runtimeService.sendInput(runId, organizationId, body.input, id);
       return { success: true, data: run, message: 'Input sent to run' };
     } catch (error) {
       throw new HttpException(
@@ -1348,7 +1375,7 @@ export class AgentsController {
         );
       }
 
-      const run = await this.runtimeService.cancelRun(runId, organizationId);
+      const run = await this.runtimeService.cancelRun(runId, organizationId, id);
       return { success: true, data: run, message: 'Run cancelled' };
     } catch (error) {
       throw new HttpException(
