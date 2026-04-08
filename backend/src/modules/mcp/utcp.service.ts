@@ -337,7 +337,17 @@ export class UtcpService {
         location: auth.config.location || 'header',
         parameter: auth.config.parameter || this.getDefaultAuthParameter(auth.type),
         scheme: auth.config.scheme || this.getDefaultAuthScheme(auth.type),
-        custom: auth.config,
+        // Do NOT spread auth.config under a `custom` key here.
+        // auth.config can contain the real secret for the API —
+        // apiKey, token, password, clientSecret — and the UTCP
+        // manual is returned verbatim to any org member who hits
+        // GET /utcp/:orgId/manual (and gets cached in Redis for
+        // 5 min). Leaking full credentials to every member is a
+        // privilege-escalation path. The other fields on
+        // configuration (location/parameter/scheme) describe HOW
+        // to authenticate, which is what UTCP consumers need; the
+        // secret value itself should only be surfaced through the
+        // credentials endpoints (which mask it).
       },
       examples: [
         {

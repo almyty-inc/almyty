@@ -572,6 +572,69 @@ describe('UtcpService', () => {
       expect(result.authentication[0].type).toBe('api_key');
       expect(result.authentication[0].configuration.parameter).toBe('X-API-Key');
     });
+
+    it('must not leak raw API secrets through the auth scheme config', async () => {
+      // Pin the fact that extractAuthenticationScheme only emits
+      // safe fields (location/parameter/scheme) from auth.config.
+      // Previously it also spread `custom: auth.config`, which meant
+      // any member of the org could GET /utcp/:orgId/manual and read
+      // the raw apiKey/token/password/clientSecret back out. The
+      // UTCP manual is returned verbatim to org members and cached
+      // in Redis, so anything on the object is effectively public
+      // within the tenant.
+      const mockOrganization = {
+        id: 'org-1',
+        name: 'Test Organization',
+        apis: [],
+      };
+      const mockOperation = {
+        id: 'op-1',
+        name: 'getData',
+        method: 'GET',
+        endpoint: '/data',
+        parameters: {},
+        api: {
+          id: 'api-1',
+          name: 'Test API',
+          baseUrl: 'https://api.test.com',
+          authentication: {
+            type: 'api_key',
+            config: {
+              location: 'header',
+              parameter: 'X-API-Key',
+              apiKey: 'super-secret-key-value',
+            },
+          },
+        },
+      };
+      const mockTools = [
+        {
+          id: 'tool-1',
+          name: 'getData',
+          type: 'api',
+          status: 'active',
+          operationId: 'op-1',
+          parameters: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      ];
+
+      organizationRepository.findOne.mockResolvedValue(mockOrganization);
+      toolsService.getTools.mockResolvedValue({ tools: mockTools, total: 1 });
+      operationRepository.findOne.mockResolvedValue(mockOperation);
+
+      const result = await service.generateManual('org-1');
+
+      // Safe fields pass through.
+      expect(result.authentication[0].configuration.parameter).toBe('X-API-Key');
+      // The raw secret must NOT appear anywhere in the manual.
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('super-secret-key-value');
+      // And specifically no `custom` blob on the configuration.
+      expect((result.authentication[0].configuration as any).custom).toBeUndefined();
+    });
   });
 
   describe('validateManual - additional cases', () => {
