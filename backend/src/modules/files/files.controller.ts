@@ -53,7 +53,22 @@ export class FilesController {
     const fallback = (name || 'download')
       .replace(/[\\"\r\n]/g, '_')
       .replace(/[^\x20-\x7e]/g, '_'); // strip non-ASCII for the plain filename
-    const utf8 = encodeURIComponent(name || 'download').replace(/['()]/g, escape);
+    // Encode the UTF-8 name for the RFC 5987 `filename*` parameter.
+    // encodeURIComponent handles almost everything; RFC 5987 requires
+    // the three extra characters ' ( ) to be percent-encoded as well.
+    // The old code piped through the deprecated global `escape()` as
+    // a shortcut — correct in practice but relying on a legacy API
+    // that behaves differently from encodeURIComponent for non-ASCII.
+    // Replace it with an explicit lookup so the intent is obvious.
+    const extraEncode: Record<string, string> = {
+      "'": '%27',
+      '(': '%28',
+      ')': '%29',
+    };
+    const utf8 = encodeURIComponent(name || 'download').replace(
+      /['()]/g,
+      (c) => extraEncode[c],
+    );
     return `attachment; filename="${fallback}"; filename*=UTF-8''${utf8}`;
   }
 

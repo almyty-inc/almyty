@@ -43,7 +43,16 @@ export class MailService {
       });
 
       if (error) {
-        this.logger.error(`Failed to send email to ${options.to}: ${JSON.stringify(error)}`);
+        // Log only the shape we actually need (name + message). The
+        // previous `JSON.stringify(error)` dumped the full Resend
+        // error object including headers, request metadata, and any
+        // fields a future SDK version decides to include. A future
+        // error shape that echoes back a hint of the API key (e.g.
+        // "auth failed for key re_xxxxxxxx...") would then land in
+        // the logs verbatim.
+        const name = (error as any)?.name ?? 'EmailError';
+        const message = (error as any)?.message ?? 'Unknown error';
+        this.logger.error(`Failed to send email to ${options.to}: ${name} — ${message}`);
         return false;
       }
 
