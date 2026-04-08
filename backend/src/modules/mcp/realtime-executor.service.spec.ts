@@ -89,14 +89,14 @@ describe('RealtimeExecutorService', () => {
 
   describe('getExecutionStatus', () => {
     it('should return null for non-existent execution', async () => {
-      const result = await service.getExecutionStatus('non-existent');
+      const result = await service.getExecutionStatus('non-existent', 'org-1');
       expect(result).toBeNull();
     });
   });
 
   describe('cancelExecution', () => {
     it('should return false for non-existent execution', async () => {
-      const result = await service.cancelExecution('non-existent');
+      const result = await service.cancelExecution('non-existent', 'org-1');
       expect(result).toBe(false);
     });
   });
@@ -126,7 +126,9 @@ describe('RealtimeExecutorService', () => {
 
         const executionId = await service.executeToolRealtime('tool-1', { param: 'value' }, options);
 
-        expect(executionId).toMatch(/^exec_\d+_[a-z0-9]+$/);
+        // Execution ids are now 32-character hex strings (16 random
+        // bytes) instead of the old Date.now-based prefix.
+        expect(executionId).toMatch(/^exec_[a-f0-9]{32}$/);
       });
 
       it('should create execution with correct initial status', async () => {
@@ -140,7 +142,7 @@ describe('RealtimeExecutorService', () => {
         mockRedis.get.mockResolvedValue(null);
 
         const executionId = await service.executeToolRealtime('tool-1', { test: true }, options);
-        const status = await service.getExecutionStatus(executionId);
+        const status = await service.getExecutionStatus(executionId, 'org-1');
 
         expect(status).toBeDefined();
         expect(status.status).toBe('queued');
@@ -199,11 +201,11 @@ describe('RealtimeExecutorService', () => {
         };
 
         const executionId = await service.executeToolRealtime('tool-1', {}, options);
-        const cancelled = await service.cancelExecution(executionId);
+        const cancelled = await service.cancelExecution(executionId, 'org-1');
 
         expect(cancelled).toBe(true);
 
-        const status = await service.getExecutionStatus(executionId);
+        const status = await service.getExecutionStatus(executionId, 'org-1');
         expect(status.status).toBe('cancelled');
       });
 
@@ -222,7 +224,7 @@ describe('RealtimeExecutorService', () => {
         const progress = service['activeExecutions'].get(executionId);
         progress.status = 'completed';
 
-        const cancelled = await service.cancelExecution(executionId);
+        const cancelled = await service.cancelExecution(executionId, 'org-1');
         expect(cancelled).toBe(false);
       });
     });
@@ -246,7 +248,7 @@ describe('RealtimeExecutorService', () => {
           message: '25% complete',
         });
 
-        let status = await service.getExecutionStatus(executionId);
+        let status = await service.getExecutionStatus(executionId, 'org-1');
         expect(status.progress).toBe(25);
         expect(status.status).toBe('running');
 
@@ -255,7 +257,7 @@ describe('RealtimeExecutorService', () => {
           message: '75% complete',
         });
 
-        status = await service.getExecutionStatus(executionId);
+        status = await service.getExecutionStatus(executionId, 'org-1');
         expect(status.progress).toBe(75);
       });
     });
@@ -419,17 +421,21 @@ describe('RealtimeExecutorService', () => {
 
     describe('Execution status retrieval - Branch Coverage', () => {
       it('should retrieve status from Redis when not in active executions', async () => {
+        // Must include metadata.organizationId now that the getter
+        // filters cached entries by org. Previously this wasn't
+        // required — cross-org reads of the Redis cache were allowed.
         const cachedProgress = {
           executionId: 'exec-cached',
           toolId: 'tool-1',
           status: 'completed',
           progress: 100,
           startedAt: new Date(),
+          metadata: { organizationId: 'org-1' },
         };
 
         mockRedis.get.mockResolvedValue(JSON.stringify(cachedProgress));
 
-        const result = await service.getExecutionStatus('exec-cached');
+        const result = await service.getExecutionStatus('exec-cached', 'org-1');
 
         expect(result).toBeDefined();
         expect(result?.executionId).toBe('exec-cached');
@@ -439,7 +445,7 @@ describe('RealtimeExecutorService', () => {
       it('should handle Redis errors gracefully', async () => {
         mockRedis.get.mockRejectedValue(new Error('Redis error'));
 
-        const result = await service.getExecutionStatus('non-existent');
+        const result = await service.getExecutionStatus('non-existent', 'org-1');
 
         expect(result).toBeNull();
       });
@@ -463,7 +469,7 @@ describe('RealtimeExecutorService', () => {
           progress.status = 'completed';
         }
 
-        const cancelled = await service.cancelExecution(executionId);
+        const cancelled = await service.cancelExecution(executionId, 'org-1');
 
         expect(cancelled).toBe(false);
       });
@@ -485,7 +491,7 @@ describe('RealtimeExecutorService', () => {
           progress.status = 'failed';
         }
 
-        const cancelled = await service.cancelExecution(executionId);
+        const cancelled = await service.cancelExecution(executionId, 'org-1');
 
         expect(cancelled).toBe(false);
       });
@@ -992,6 +998,84 @@ describe('RealtimeExecutorService', () => {
 
         await jest.advanceTimersByTimeAsync(2000);
         expect(progress.progress).toBeGreaterThanOrEqual(70);
+      });
+    });
+
+    // ── Regression: cross-org execution status + cancel guards ─────
+    describe('cross-org execution scoping (regression)', () => {
+      // Pre-fix, any caller with a valid executionId could read the
+      // full progress (including result data) of executions in any
+      // org, and could cancel them too. Executions were also keyed
+      // by a guessable Date.now + Math.random id that leaked enough
+      // entropy to brute force under load.
+
+      function seedActive(executionId: string, orgId: string, status: any = 'running') {
+        (service as any).activeExecutions.set(executionId, {
+          executionId,
+          toolId: 'tool-1',
+          status,
+          progress: 50,
+          startedAt: new Date(),
+          metadata: { organizationId: orgId },
+        });
+      }
+
+      beforeEach(() => {
+        (service as any).activeExecutions.clear();
+      });
+
+      it('getExecutionStatus returns null for a cross-org executionId', async () => {
+        seedActive('exec-victim', 'victim-org');
+
+        const asAttacker = await service.getExecutionStatus('exec-victim', 'attacker-org');
+        expect(asAttacker).toBeNull();
+
+        const asOwner = await service.getExecutionStatus('exec-victim', 'victim-org');
+        expect(asOwner).not.toBeNull();
+        expect(asOwner?.executionId).toBe('exec-victim');
+      });
+
+      it('getExecutionStatus returns null when Redis cache hit belongs to another org', async () => {
+        mockRedis.get.mockResolvedValue(
+          JSON.stringify({
+            executionId: 'exec-cached',
+            toolId: 'tool-1',
+            status: 'completed',
+            progress: 100,
+            startedAt: new Date(),
+            metadata: { organizationId: 'victim-org' },
+          }),
+        );
+
+        const result = await service.getExecutionStatus('exec-cached', 'attacker-org');
+        expect(result).toBeNull();
+      });
+
+      it('cancelExecution returns false for a cross-org executionId', async () => {
+        seedActive('exec-victim', 'victim-org');
+
+        const cancelled = await service.cancelExecution('exec-victim', 'attacker-org');
+        expect(cancelled).toBe(false);
+
+        // The victim's execution must still be running — no collateral damage.
+        const still = (service as any).activeExecutions.get('exec-victim');
+        expect(still?.status).toBe('running');
+      });
+
+      it('cancelExecution succeeds for the owning org', async () => {
+        seedActive('exec-mine', 'my-org');
+
+        const cancelled = await service.cancelExecution('exec-mine', 'my-org');
+        expect(cancelled).toBe(true);
+
+        const after = (service as any).activeExecutions.get('exec-mine');
+        expect(after?.status).toBe('cancelled');
+      });
+
+      it('getExecutionStatus rejects an empty organizationId (no implicit "all")', async () => {
+        seedActive('exec-any', 'some-org');
+        const result = await service.getExecutionStatus('exec-any', '');
+        expect(result).toBeNull();
       });
     });
   });
