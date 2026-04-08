@@ -11,6 +11,7 @@ import * as Redis from 'ioredis';
 import { randomBytes, createHash } from 'crypto';
 
 import { Credential, CredentialType } from '../../entities/credential.entity';
+import { validateUrl } from '../../common/security/url-validator';
 
 export interface OAuth2Preset {
   name: string;
@@ -50,6 +51,42 @@ function generatePKCE() {
     .update(codeVerifier)
     .digest('base64url');
   return { codeVerifier, codeChallenge };
+}
+
+/**
+ * Both `authorizationUrl` and `tokenUrl` come from caller-controlled
+ * request bodies on the OAuth2 authorize / client-credentials
+ * endpoints. Authorization URL is returned to the browser for a
+ * redirect; token URL is fetched server-side during callback and
+ * client_credentials grant. Without validation:
+ *
+ *  - tokenUrl is a straight server-side SSRF — an authenticated
+ *    caller can point it at 169.254.169.254, localhost, link-local,
+ *    or any internal service and the server will POST to it
+ *    (leaking IMDS creds, hitting Redis/Postgres, etc).
+ *
+ *  - authorizationUrl accepts any scheme from `new URL(...)`. That
+ *    includes `javascript:` / `data:` / `file:` — the frontend will
+ *    happily navigate to the returned string, which becomes a
+ *    reflected XSS or a phishing landing page.
+ *
+ * Both must be http(s) and pass the SSRF guard that already exists
+ * for the other external call-sites in this codebase.
+ */
+function assertSafeOAuthUrl(kind: 'authorizationUrl' | 'tokenUrl', value: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new BadRequestException(`Invalid ${kind}: not a valid URL`);
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new BadRequestException(`${kind} must use http(s), got ${parsed.protocol}`);
+  }
+  const check = validateUrl(value);
+  if (!check.valid) {
+    throw new BadRequestException(`Refused ${kind}: ${check.error}`);
+  }
 }
 
 @Injectable()
@@ -164,6 +201,14 @@ export class OAuth2Service {
       );
     }
 
+    // Both URLs are user-controlled when no preset is selected (and
+    // even with a preset, tokenUrl/authorizationUrl can be overridden
+    // via params). Reject anything that isn't a public http(s)
+    // endpoint before we store it in Redis or hand it back to the
+    // browser. Presets are hardcoded public URLs and will pass.
+    assertSafeOAuthUrl('authorizationUrl', authorizationUrl);
+    assertSafeOAuthUrl('tokenUrl', tokenUrl);
+
     // Generate PKCE pair
     const { codeVerifier, codeChallenge } = generatePKCE();
 
@@ -256,6 +301,13 @@ export class OAuth2Service {
       credentialName,
     } = statePayload;
 
+    // Defence in depth: the state blob came from Redis, so under
+    // normal flow tokenUrl was already validated in
+    // generateAuthorizationUrl. Re-validate here in case the guard
+    // there is ever relaxed or a state payload is crafted by another
+    // code path — we must never fetch an internal URL on callback.
+    assertSafeOAuthUrl('tokenUrl', tokenUrl);
+
     // Exchange authorization code for tokens
     const tokenParams = new URLSearchParams();
     tokenParams.set('grant_type', 'authorization_code');
@@ -341,6 +393,12 @@ export class OAuth2Service {
         'clientId, clientSecret, and tokenUrl are required',
       );
     }
+
+    // tokenUrl is fetched server-side with the client secret attached.
+    // An authenticated org admin could otherwise target the metadata
+    // service or any internal endpoint — refuse anything that isn't
+    // a public http(s) URL.
+    assertSafeOAuthUrl('tokenUrl', tokenUrl);
 
     const tokenParams = new URLSearchParams();
     tokenParams.set('grant_type', 'client_credentials');
