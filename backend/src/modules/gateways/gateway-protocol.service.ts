@@ -178,10 +178,24 @@ export class GatewayProtocolService {
           };
       }
 
-      // Update gateway request metrics
+      // Update gateway request metrics via an atomic SQL UPDATE
+      // rather than the previous read-modify-write (load the entity,
+      // call incrementRequest, save). Concurrent requests against
+      // the same gateway used to lose increments under the race.
       try {
-        gateway.incrementRequest(response.success);
-        await this.gatewayRepository.save(gateway);
+        const success = response.success;
+        await this.gatewayRepository
+          .createQueryBuilder()
+          .update(Gateway)
+          .set({
+            totalRequests: () => '"totalRequests" + 1',
+            successfulRequests: success
+              ? () => '"successfulRequests" + 1'
+              : () => '"successfulRequests"',
+            lastRequestAt: new Date(),
+          })
+          .where('id = :id', { id: gateway.id })
+          .execute();
       } catch (metricsError) {
         this.logger.error(`Failed to update gateway metrics: ${metricsError.message}`);
       }

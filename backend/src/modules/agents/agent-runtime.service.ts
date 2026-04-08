@@ -140,7 +140,16 @@ export class AgentRuntimeService {
           this.logger.warn(`Parent chain walk exceeded ${MAX_PARENT_WALK} hops for run ${currentParentId} — possible cycle, aborting walk`);
           break;
         }
-        const parentRun = await this.runRepository.findOne({ where: { id: currentParentId }, select: ['id', 'parentRunId'] });
+        // Scope the parent-chain walk to the caller's org. Without
+        // this, a caller in org A could pass a parent run id from
+        // org B and the walker would traverse org B's chain to
+        // calculate depth — a cross-org probe vector (the walker's
+        // depth outcome observably affects whether the new run is
+        // accepted or rejected).
+        const parentRun = await this.runRepository.findOne({
+          where: { id: currentParentId, organizationId },
+          select: ['id', 'parentRunId'],
+        });
         if (!parentRun || !parentRun.parentRunId) break;
         depth++;
         currentParentId = parentRun.parentRunId;

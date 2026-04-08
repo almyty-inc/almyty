@@ -60,9 +60,16 @@ export class CredentialService {
     organizationId: string,
     dto: CreateCredentialDto,
   ): Promise<Credential> {
-    const api = await this.apiRepository.findOne({ where: { id: apiId } });
+    // Scope the lookup directly rather than loading unscoped and
+    // then checking — it's the same number of SQL statements and
+    // removes the possibility of forgetting the post-load check.
+    // A cross-org lookup surfaces as NotFound (not Forbidden) so
+    // the endpoint can't be used as a cross-tenant existence
+    // oracle for api ids.
+    const api = await this.apiRepository.findOne({
+      where: { id: apiId, organizationId },
+    });
     if (!api) throw new NotFoundException('API not found');
-    if (api.organizationId !== organizationId) throw new ForbiddenException('Access denied');
 
     // Build config from DTO fields if not provided directly
     const config = dto.config || {
