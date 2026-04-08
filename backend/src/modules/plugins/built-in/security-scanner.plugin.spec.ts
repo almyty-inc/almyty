@@ -533,8 +533,13 @@ describe('SecurityScannerPlugin - Real Business Logic', () => {
   });
 
   describe('Error Handling', () => {
-    it('should handle scan errors gracefully', async () => {
-      // Create circular reference to trigger JSON.stringify error
+    it('should safely scan data with a circular reference instead of crashing', async () => {
+      // Previously this test pinned the OLD broken behaviour: the scanner
+      // called `JSON.stringify(data)` directly, which throws on any cycle,
+      // and the whole scan errored out. That was a trivial bypass — an
+      // attacker could defeat the scanner by embedding a self-reference
+      // in their payload. safeStringify now replaces the cycle with
+      // "[Circular]" so the scan runs to completion.
       const circularData: any = { name: 'test' };
       circularData.self = circularData;
 
@@ -545,9 +550,7 @@ describe('SecurityScannerPlugin - Real Business Logic', () => {
 
       const result = await plugin.scanRequest(contextWithCircular, mockSettings);
 
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe('SECURITY_SCAN_ERROR');
-      expect(result.data).toBe(circularData);
+      expect(result.success).toBe(true);
     });
   });
 
@@ -568,6 +571,146 @@ describe('SecurityScannerPlugin - Real Business Logic', () => {
 
       expect(result.success).toBe(false);
       expect(result.metadata.executionTime).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  // ── Regression: severityThreshold logic ────────────────────────────
+  describe('severityThreshold (regression)', () => {
+    it('threshold=low blocks medium+ threats (was previously only critical)', async () => {
+      // Pre-fix: `severityThreshold: 'low'` only matched the critical
+      // fallback branch because there was no `'low'` comparison in the
+      // shouldBlock expression, so a user who set the threshold lower
+      // to be MORE strict ended up STRICTER only on critical.
+      const ctx = {
+        ...mockContext,
+        data: { path: '../../etc/passwd' }, // medium (path traversal)
+      };
+      const settings = { ...mockSettings, severityThreshold: 'low' };
+
+      const result = await plugin.scanRequest(ctx, settings);
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('SECURITY_THREAT_DETECTED');
+    });
+
+    it('threshold=critical does NOT block a high threat', async () => {
+      const ctx = {
+        ...mockContext,
+        data: { query: "' OR '1'='1" }, // high severity sql injection
+      };
+      const settings = { ...mockSettings, severityThreshold: 'critical' };
+
+      const result = await plugin.scanRequest(ctx, settings);
+      expect(result.success).toBe(true);
+      expect(result.metadata.warnings).toEqual(
+        expect.arrayContaining([expect.stringContaining('detected but not blocked')]),
+      );
+    });
+
+    it('threshold=critical DOES block a critical threat', async () => {
+      const ctx = {
+        ...mockContext,
+        data: 'user; rm -rf /',
+      };
+      const settings = { ...mockSettings, severityThreshold: 'critical' };
+
+      const result = await plugin.scanRequest(ctx, settings);
+      expect(result.success).toBe(false);
+    });
+
+    it('invalid threshold value falls back to medium', async () => {
+      const ctx = {
+        ...mockContext,
+        data: { path: '../../etc/passwd' },
+      };
+      const settings = { ...mockSettings, severityThreshold: 'nonsense' };
+
+      const result = await plugin.scanRequest(ctx, settings);
+      expect(result.success).toBe(false); // medium path traversal still blocked
+    });
+  });
+
+  // ── Regression: whitelistPatterns was dead code ────────────────────
+  describe('whitelistPatterns (regression)', () => {
+    it('suppresses a threat when every match text is whitelisted', async () => {
+      // Path-traversal regex /\.\.[\/\\]/g matches the literal 3-char
+      // substring `../`. If every match can be reproduced by a
+      // whitelist regex, the threat is skipped.
+      const ctx = {
+        ...mockContext,
+        data: { path: '../../etc/passwd' },
+      };
+      const settings = {
+        ...mockSettings,
+        whitelistPatterns: ['^\\.\\./$'], // accepts the exact match text
+      };
+
+      const result = await plugin.scanRequest(ctx, settings);
+      expect(result.success).toBe(true);
+      expect(result.metadata.warnings || []).toEqual([]);
+    });
+
+    it('still raises a threat if ANY match is not whitelisted', async () => {
+      // `../` is whitelisted but the SQL-injection pattern's match text
+      // isn't, so the SQL threat must still surface.
+      const ctx = {
+        ...mockContext,
+        data: "../../etc and ' OR '1'='1",
+      };
+      const settings = {
+        ...mockSettings,
+        whitelistPatterns: ['^\\.\\./$'],
+      };
+
+      const result = await plugin.scanRequest(ctx, settings);
+      expect(result.success).toBe(false);
+    });
+
+    it('ignores invalid whitelist entries instead of crashing', async () => {
+      const ctx = {
+        ...mockContext,
+        data: { path: '../../etc/passwd' },
+      };
+      const settings = {
+        ...mockSettings,
+        whitelistPatterns: ['(unclosed', { pattern: 42 }, null],
+      };
+
+      const result = await plugin.scanRequest(ctx, settings);
+      // Scan still runs; threat still detected because nothing whitelisted it.
+      expect(result.success).toBe(false);
+    });
+  });
+
+  // ── Regression: custom pattern ReDoS budget ────────────────────────
+  describe('Custom pattern ReDoS budget (regression)', () => {
+    it('abandons the remaining custom patterns after one overruns the budget', async () => {
+      // Structural assertion: after a slow pattern, the next one in
+      // the list must NOT run. We prove it by making the second pattern
+      // something that would turn the scan result from success to
+      // blocked (critical severity) — if the budget bail didn't
+      // happen, the second pattern would be applied and the scan
+      // would fail.
+      const input = 'a'.repeat(22) + '!trigger-the-second-one';
+      const settings = {
+        ...mockSettings,
+        customPatterns: [
+          { pattern: '(a+)+$', severity: 'medium' },
+          { pattern: 'trigger-the-second-one', severity: 'critical' },
+        ],
+      };
+      const ctx = { ...mockContext, data: input };
+
+      const result = await plugin.scanRequest(ctx, settings);
+
+      // Pre-fix, the second pattern (critical) would have fired and
+      // the scan would be blocked. With the budget bail, the second
+      // pattern never runs — the scan is not blocked on critical.
+      const wasBlockedOnCritical =
+        !result.success &&
+        (result.error?.details as any)?.threats?.some(
+          (t: any) => t.type === 'suspicious_pattern' && t.severity === 'critical',
+        );
+      expect(wasBlockedOnCritical).toBe(false);
     });
   });
 });
