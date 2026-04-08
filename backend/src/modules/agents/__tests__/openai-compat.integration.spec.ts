@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { NotFoundException } from '@nestjs/common';
 import { AgentOpenAICompatController } from '../agent-openai-compat.controller';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
@@ -76,6 +77,7 @@ describe('OpenAI Compatibility', () => {
     apiKeyRepo = {
       findOne: jest.fn(),
       save: jest.fn().mockImplementation(k => Promise.resolve(k)),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -481,7 +483,7 @@ describe('OpenAI Compatibility', () => {
       const req = makeReq();
 
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey());
-      agentsService.getAgent.mockRejectedValue(new Error('Not found'));
+      agentsService.getAgent.mockRejectedValue(new NotFoundException('Not found'));
       agentsService.findByName.mockResolvedValue(null);
 
       await controller.chatCompletions(
@@ -714,7 +716,7 @@ describe('OpenAI Compatibility', () => {
       const req = makeReq();
 
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey());
-      agentsService.getAgent.mockRejectedValue(new Error('Not found'));
+      agentsService.getAgent.mockRejectedValue(new NotFoundException('Not found'));
       agentsService.findByName.mockResolvedValue(makeAgent({ name: 'my-agent' }));
       executionEngine.execute.mockResolvedValue({
         id: 'exec-1',
@@ -786,7 +788,12 @@ describe('OpenAI Compatibility', () => {
         res,
       );
 
-      expect(apiKeyRepo.save).toHaveBeenCalled();
+      // Switched from full save() to a partial update() to avoid the
+      // load+overwrite race against concurrent api-key mutations.
+      expect(apiKeyRepo.update).toHaveBeenCalledWith(
+        { id: apiKey.id },
+        expect.objectContaining({ lastUsedAt: expect.any(Date) }),
+      );
       expect(apiKey.lastUsedAt).toBeInstanceOf(Date);
     });
 
@@ -799,7 +806,10 @@ describe('OpenAI Compatibility', () => {
 
       await controller.listModels(`Bearer ${TEST_API_KEY}`, res);
 
-      expect(apiKeyRepo.save).toHaveBeenCalled();
+      expect(apiKeyRepo.update).toHaveBeenCalledWith(
+        { id: apiKey.id },
+        expect.objectContaining({ lastUsedAt: expect.any(Date) }),
+      );
       expect(apiKey.lastUsedAt).toBeInstanceOf(Date);
     });
   });
