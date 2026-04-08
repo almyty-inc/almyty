@@ -18,6 +18,10 @@ import { Credential } from '../../entities/credential.entity';
 import { ToolsService } from './tools.service';
 import { ToolGeneratorService } from './tool-generator.service';
 import { ToolExecutorService } from './tool-executor.service';
+import { ToolHttpExecutor } from './executors/tool-http.executor';
+import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
+import { ToolScriptExecutor } from './executors/tool-script.executor';
+import { ToolAuthService } from './services/tool-auth.service';
 import { CustomCodeExecutorService } from './custom-code-executor.service';
 import { SkillGeneratorService } from './skill-generator.service';
 import { CliGeneratorService } from './cli-generator.service';
@@ -47,8 +51,28 @@ import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
     JsonSchemaTranslatorModule,
     NodeSandboxModule,
   ],
-  providers: [ToolsService, ToolGeneratorService, ToolExecutorService, CustomCodeExecutorService, SkillGeneratorService, CliGeneratorService, CodegenService],
+  providers: [
+    ToolsService,
+    ToolGeneratorService,
+    ToolExecutorService,
+    ToolHttpExecutor,
+    ToolProtocolExecutor,
+    ToolScriptExecutor,
+    ToolAuthService,
+    CustomCodeExecutorService,
+    SkillGeneratorService,
+    CliGeneratorService,
+    CodegenService,
+  ],
   controllers: [ToolsController],
-  exports: [ToolsService, ToolGeneratorService, ToolExecutorService, CustomCodeExecutorService, SkillGeneratorService, CliGeneratorService, CodegenService],
+  exports: [
+    ToolsService,
+    ToolGeneratorService,
+    ToolExecutorService,
+    CustomCodeExecutorService,
+    SkillGeneratorService,
+    CliGeneratorService,
+    CodegenService,
+  ],
 })
 export class ToolsModule {}
