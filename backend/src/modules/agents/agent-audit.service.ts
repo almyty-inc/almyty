@@ -71,9 +71,24 @@ export class AgentAuditService {
       // Keep only the last MAX_AUDIT_ENTRIES
       const trimmedLog = auditLog.slice(-MAX_AUDIT_ENTRIES);
 
-      await this.agentRepository.update(event.agentId, {
-        metadata: { ...agent.metadata, auditLog: trimmedLog },
-      });
+      // Defence in depth: scope the UPDATE by both id AND
+      // organizationId. The findOne above is already scoped, but the
+      // previous `update(event.agentId, ...)` shape took only the id
+      // — if event.organizationId ever gets weakened upstream, or if
+      // the caller races itself against a delete-then-recreate with
+      // the same uuid, the unscoped update would silently cross org
+      // boundaries. Belt + braces.
+      //
+      // NOTE: there's still a read-modify-write race on concurrent
+      // audit writes to the same agent — two overlapping callers
+      // both see the same current log, both append, and one append
+      // is silently lost. That's a correctness issue (not a
+      // security one) and fixing it properly needs optimistic
+      // concurrency at the schema level. Tracked as a follow-up.
+      await this.agentRepository.update(
+        { id: event.agentId, organizationId: event.organizationId },
+        { metadata: { ...agent.metadata, auditLog: trimmedLog } },
+      );
 
       this.logger.debug(
         `[AUDIT] ${event.action} on agent=${event.agentId} by user=${event.userId}`,
