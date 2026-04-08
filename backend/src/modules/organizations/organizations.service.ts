@@ -514,14 +514,31 @@ export class OrganizationsService {
     return this.teamRepository.save(team);
   }
 
-  async updateTeam(teamId: string, updateData: { name?: string; description?: string }): Promise<Team> {
+  /**
+   * Ensure `teamId` actually belongs to `organizationId`. Every team
+   * mutation endpoint on this service used to look teams up by id
+   * only — so an admin of org A could call any team endpoint with a
+   * team id that belongs to org B (and the RolesGuard, which before
+   * this rename was scoped to the caller's own org, would let them
+   * through). Throw NotFound (not Forbidden) so we don't expose the
+   * existence of teams outside the caller's org.
+   */
+  private async assertTeamInOrg(teamId: string, organizationId: string): Promise<Team> {
     const team = await this.teamRepository.findOne({
-      where: { id: teamId },
+      where: { id: teamId, organizationId },
     });
-
     if (!team) {
       throw new NotFoundException('Team not found');
     }
+    return team;
+  }
+
+  async updateTeam(
+    organizationId: string,
+    teamId: string,
+    updateData: { name?: string; description?: string },
+  ): Promise<Team> {
+    const team = await this.assertTeamInOrg(teamId, organizationId);
 
     if (updateData.name) {
       team.name = updateData.name;
@@ -542,7 +559,14 @@ export class OrganizationsService {
     });
   }
 
-  async addTeamMember(teamId: string, userId: string, role: TeamRole = TeamRole.MEMBER): Promise<void> {
+  async addTeamMember(
+    organizationId: string,
+    teamId: string,
+    userId: string,
+    role: TeamRole = TeamRole.MEMBER,
+  ): Promise<void> {
+    await this.assertTeamInOrg(teamId, organizationId);
+
     // Check if user is already a team member
     const existingMembership = await this.userTeamRepository.findOne({
       where: { teamId, userId },
@@ -561,7 +585,14 @@ export class OrganizationsService {
     await this.userTeamRepository.save(membership);
   }
 
-  async updateTeamMemberRole(teamId: string, userId: string, newRole: string): Promise<void> {
+  async updateTeamMemberRole(
+    organizationId: string,
+    teamId: string,
+    userId: string,
+    newRole: string,
+  ): Promise<void> {
+    await this.assertTeamInOrg(teamId, organizationId);
+
     const teamMembership = await this.userTeamRepository.findOne({
       where: { teamId, userId },
     });
@@ -579,7 +610,13 @@ export class OrganizationsService {
     await this.userTeamRepository.save(teamMembership);
   }
 
-  async removeTeamMember(teamId: string, userId: string): Promise<void> {
+  async removeTeamMember(
+    organizationId: string,
+    teamId: string,
+    userId: string,
+  ): Promise<void> {
+    await this.assertTeamInOrg(teamId, organizationId);
+
     const membership = await this.userTeamRepository.findOne({
       where: { teamId, userId },
     });
