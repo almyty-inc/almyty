@@ -4,6 +4,7 @@ import {
   PluginContext,
   PluginResult,
 } from '../types/plugin.types';
+import { compileSafeRegex, boundRegexInput } from '../../../common/security/regex-safety';
 
 type ThreatSeverity = 'low' | 'medium' | 'high' | 'critical';
 
@@ -223,28 +224,33 @@ export class SecurityScannerPlugin {
       scan(this.securityPatterns.commandInjection, 'command_injection', 'critical', 'Potential command injection detected');
       scan(this.securityPatterns.pathTraversal,   'path_traversal',    'medium',   'Potential path traversal detected');
 
-      // Custom patterns, with a wall-clock budget per pattern. The previous
-      // shape let a user-supplied pathological regex (`(a+)+b`, etc.) hang
-      // the scanner on every request with no upper bound.
+      // Custom patterns, routed through the shared regex-safety helper.
+      // compileSafeRegex rejects catastrophic-backtracking shapes
+      // BEFORE the engine runs (the previous shape only had a post-match
+      // wall-clock budget, which meant the first slow pattern could
+      // still hang the scanner for the duration of its match). The
+      // input is also bounded by boundRegexInput so even a pattern
+      // that slips through the heuristic has a fixed-size haystack.
+      // The post-match budget stays as a final belt-and-braces guard.
+      const boundedScan = boundRegexInput(dataToScan);
       for (const customPattern of settings.customPatterns || []) {
-        let regex: RegExp;
-        try {
-          regex = new RegExp(customPattern.pattern, customPattern.flags || 'gi');
-        } catch {
+        const compiled = compileSafeRegex(customPattern.pattern, {
+          flags: customPattern.flags || 'gi',
+        });
+        if (!compiled.regex) {
           continue;
         }
 
         const started = Date.now();
         let matches: RegExpMatchArray | null = null;
         try {
-          matches = dataToScan.match(regex);
+          matches = boundedScan.match(compiled.regex);
         } catch {
           continue;
         }
         if (Date.now() - started > CUSTOM_PATTERN_BUDGET_MS) {
-          // Abandon the rest of the custom patterns. Better to fail open
-          // on custom detection than keep burning CPU — the built-in
-          // categories have already run.
+          // Final fallback: something slow got through anyway. Bail
+          // on the rest of the loop.
           break;
         }
         if (!matches) continue;
@@ -371,20 +377,26 @@ export class SecurityScannerPlugin {
    * drops entries that can't be parsed as a regex. Each entry may be a
    * literal string (matched case-insensitively as-is) or a `{pattern,
    * flags}` object for full regex control.
+   *
+   * These whitelist patterns are matched against every candidate threat
+   * value, so a catastrophic-backtracking whitelist is exactly as bad
+   * as a catastrophic-backtracking scan pattern: either one hangs the
+   * request. Route both shapes through compileSafeRegex, which refuses
+   * the known ReDoS shapes and enforces the shared source-length cap.
    */
   private compileWhitelist(settings: any): RegExp[] {
     const raw = settings?.whitelistPatterns;
     if (!Array.isArray(raw) || raw.length === 0) return [];
     const out: RegExp[] = [];
     for (const entry of raw) {
-      try {
-        if (typeof entry === 'string') {
-          out.push(new RegExp(entry, 'i'));
-        } else if (entry && typeof entry.pattern === 'string') {
-          out.push(new RegExp(entry.pattern, entry.flags || 'i'));
-        }
-      } catch {
-        // Skip invalid entry
+      if (typeof entry === 'string') {
+        const { regex } = compileSafeRegex(entry, { flags: 'i' });
+        if (regex) out.push(regex);
+      } else if (entry && typeof entry.pattern === 'string') {
+        const { regex } = compileSafeRegex(entry.pattern, {
+          flags: entry.flags || 'i',
+        });
+        if (regex) out.push(regex);
       }
     }
     return out;

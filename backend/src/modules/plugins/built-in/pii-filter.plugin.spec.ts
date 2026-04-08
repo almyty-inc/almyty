@@ -623,36 +623,52 @@ describe('PiiFilterPlugin - Real Business Logic', () => {
     });
   });
 
-  // ── Regression: custom pattern ReDoS budget ─────────────────────────
-  describe('Custom pattern ReDoS budget (regression)', () => {
-    it('abandons the remaining custom patterns after one overruns the budget', async () => {
-      // Structural check rather than a timing check — asserting on
-      // wall-clock elapsed is flaky under load. The invariant we care
-      // about is: if the FIRST custom pattern overruns the per-pattern
-      // budget, the SECOND one never runs. We prove that by giving the
-      // second pattern a distinctive target substring and confirming
-      // it survives the scan unmasked.
-      //
-      // The evil regex is classic catastrophic backtracking on ~20
-      // `a`s. One match takes tens-to-hundreds of milliseconds —
-      // enough to trip the 50ms budget but bounded enough to finish.
+  // ── Regression: custom pattern ReDoS defence ───────────────────────
+  describe('Custom pattern ReDoS defence (regression)', () => {
+    it('refuses known catastrophic-backtracking shapes up front without running them', async () => {
+      // The evil regex used to be allowed through; it ran, overran the
+      // 50ms per-pattern budget, and the loop bailed. That was the old
+      // contract. The new contract is stronger: compileSafeRegex
+      // rejects this shape synchronously BEFORE the engine ever sees
+      // it, so the first pattern burns zero cycles and the remaining
+      // (legitimate) patterns still get a chance to run. Prove both
+      // halves in one go.
       const input = 'a'.repeat(22) + '!SECOND_PATTERN_TARGET';
       const settings = {
         ...mockSettings,
         customPatterns: [
-          '(a+)+$',                // evil, runs first, overruns budget
-          'SECOND_PATTERN_TARGET', // normal, would mask the target
+          '(a+)+$',                 // refused synchronously
+          'SECOND_PATTERN_TARGET',  // still runs, still masks the target
         ],
       };
       const ctx = { ...mockContext, data: input };
 
+      const start = Date.now();
+      const result = await plugin.filterPiiFromRequest(ctx, settings);
+      const elapsed = Date.now() - start;
+
+      expect(result.success).toBe(true);
+      // Pin the "refused without running" half — finishes in well
+      // under the 50ms per-pattern budget even on a loaded box.
+      expect(elapsed).toBeLessThan(200);
+      // And the "second pattern still runs" half — SECOND_PATTERN_TARGET
+      // is fully masked by the legitimate pattern.
+      expect(result.data).not.toContain('SECOND_PATTERN_TARGET');
+    });
+
+    it('rejects oversized pattern sources without compiling them', async () => {
+      const longPattern = 'a'.repeat(600); // > compileSafeRegex default cap (512)
+      const settings = {
+        ...mockSettings,
+        customPatterns: [longPattern, 'KEEP_ME'],
+      };
+      const ctx = { ...mockContext, data: 'this string contains KEEP_ME verbatim' };
+
       const result = await plugin.filterPiiFromRequest(ctx, settings);
 
       expect(result.success).toBe(true);
-      // If the budget bail worked, the second custom pattern was never
-      // applied and its target is still intact in the output. Pre-fix
-      // both patterns ran regardless of cumulative cost.
-      expect(result.data).toContain('SECOND_PATTERN_TARGET');
+      // Oversized pattern is a no-op, the legitimate one still runs.
+      expect(result.data).not.toContain('KEEP_ME');
     });
   });
 

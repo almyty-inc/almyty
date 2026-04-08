@@ -4,6 +4,7 @@ import {
   PluginContext,
   PluginResult,
 } from '../types/plugin.types';
+import { compileSafeRegex, boundRegexInput } from '../../../common/security/regex-safety';
 
 /**
  * Categorised PII patterns. Each entry is matched against string values only
@@ -253,32 +254,45 @@ export class PiiFilterPlugin {
       }
     }
 
-    // Custom patterns with a wall-clock budget per pattern. A user-supplied
-    // pathological regex like `(a+)+b` on a long input would previously hang
-    // the plugin worker indefinitely. String.match() can't be interrupted
-    // from JS, so the best we can do is measure and bail AFTER a match that
-    // exceeds the budget — which at least caps the bleed to one slow match
-    // per request rather than compounding across every pattern in the list.
+    // Custom patterns with layered ReDoS defenses. Previously this had
+    // only a wall-clock budget that measured AFTER the match, so a
+    // single pathological `(a+)+b` against a long input could still
+    // hang the plugin worker for the duration of that first match —
+    // the bail just prevented the *next* patterns from making it
+    // worse. That's not good enough.
+    //
+    // We now route every custom pattern through the shared regex-safety
+    // helper (same one gateway-auth uses) which does three things
+    // synchronously before the engine ever runs:
+    //
+    //  1) caps the pattern source length
+    //  2) rejects known catastrophic-backtracking shapes (nested
+    //     quantifiers, overlapping alternations in a quantified group)
+    //  3) bounds the probed input length
+    //
+    // The post-match wall-clock budget stays as a final belt-and-braces
+    // guard in case a pattern that slipped past the heuristic is still
+    // slow — bail out of the rest of the custom-patterns loop rather
+    // than keep burning CPU.
     if (settings?.customPatterns && Array.isArray(settings.customPatterns)) {
+      const probe = boundRegexInput(filteredText);
       for (const customPattern of settings.customPatterns) {
-        let regex: RegExp;
-        try {
-          regex = new RegExp(customPattern, 'g');
-        } catch {
-          continue; // invalid pattern
+        const compiled = compileSafeRegex(customPattern, { flags: 'g' });
+        if (!compiled.regex) {
+          continue; // refused up front — keep going with the next pattern
         }
 
         const started = Date.now();
         let matches: RegExpMatchArray | null = null;
         try {
-          matches = filteredText.match(regex);
+          matches = probe.match(compiled.regex);
         } catch {
           continue;
         }
         if (Date.now() - started > CUSTOM_PATTERN_BUDGET_MS) {
-          // Skip the rest of the custom patterns; a single slow one is a
-          // red flag and we'd rather fail open (no further custom masking)
-          // than keep burning CPU.
+          // Final fallback: something slow got through anyway. Bail
+          // from the rest of the loop and fail open on the remaining
+          // custom patterns for this request.
           break;
         }
         if (!matches) continue;
