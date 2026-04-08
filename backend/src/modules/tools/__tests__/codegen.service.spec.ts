@@ -83,7 +83,7 @@ describe('CodegenService', () => {
     it('should generate a TypeScript module for a tool', async () => {
       toolRepository.findOne.mockResolvedValue(mockTool);
 
-      const result = await service.generateToolSdk('tool-1');
+      const result = await service.generateToolSdk('tool-1', 'org-1');
 
       expect(result.name).toBe('getpetbyid');
       expect(result.toolCount).toBe(1);
@@ -102,13 +102,13 @@ describe('CodegenService', () => {
     it('should throw NotFoundException for missing tool', async () => {
       toolRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.generateToolSdk('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.generateToolSdk('nonexistent', 'org-1')).rejects.toThrow(NotFoundException);
     });
 
     it('should handle enum types', async () => {
       toolRepository.findOne.mockResolvedValue(mockMutationTool);
 
-      const result = await service.generateToolSdk('tool-2');
+      const result = await service.generateToolSdk('tool-2', 'org-1');
       const content = result.files[0].content;
 
       expect(content).toContain("'available' | 'pending' | 'sold'");
@@ -117,7 +117,7 @@ describe('CodegenService', () => {
     it('should handle array types', async () => {
       toolRepository.findOne.mockResolvedValue(mockMutationTool);
 
-      const result = await service.generateToolSdk('tool-2');
+      const result = await service.generateToolSdk('tool-2', 'org-1');
       const content = result.files[0].content;
 
       expect(content).toContain('string[]');
@@ -132,7 +132,7 @@ describe('CodegenService', () => {
         { tool: mockMutationTool, isActive: true },
       ]);
 
-      const result = await service.generateGatewaySdk('gw-1');
+      const result = await service.generateGatewaySdk('gw-1', 'org-1');
 
       expect(result.name).toBe('petstore-gateway');
       expect(result.toolCount).toBe(2);
@@ -151,7 +151,7 @@ describe('CodegenService', () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([{ tool: mockTool, isActive: true }]);
 
-      const result = await service.generateGatewaySdk('gw-1');
+      const result = await service.generateGatewaySdk('gw-1', 'org-1');
       const pkgFile = result.files.find(f => f.path === 'package.json');
       const pkg = JSON.parse(pkgFile!.content);
 
@@ -167,7 +167,7 @@ describe('CodegenService', () => {
         { tool: mockMutationTool, isActive: true },
       ]);
 
-      const result = await service.generateGatewaySdk('gw-1');
+      const result = await service.generateGatewaySdk('gw-1', 'org-1');
       const indexFile = result.files.find(f => f.path === 'src/index.ts');
 
       expect(indexFile!.content).toContain("export { getPetById }");
@@ -179,7 +179,7 @@ describe('CodegenService', () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([{ tool: mockTool, isActive: true }]);
 
-      const result = await service.generateGatewaySdk('gw-1');
+      const result = await service.generateGatewaySdk('gw-1', 'org-1');
       const clientFile = result.files.find(f => f.path === 'src/client.ts');
 
       expect(clientFile!.content).toContain('class AlmytyClient');
@@ -195,7 +195,7 @@ describe('CodegenService', () => {
         { tool: mockMutationTool, isActive: true },
       ]);
 
-      const result = await service.generateGatewaySdk('gw-1');
+      const result = await service.generateGatewaySdk('gw-1', 'org-1');
       const typesFile = result.files.find(f => f.path === 'src/types.ts');
 
       expect(typesFile!.content).toContain('interface GetPetByIdParams');
@@ -205,14 +205,14 @@ describe('CodegenService', () => {
     it('should throw NotFoundException for missing gateway', async () => {
       gatewayRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.generateGatewaySdk('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.generateGatewaySdk('nonexistent', 'org-1')).rejects.toThrow(NotFoundException);
     });
 
     it('should handle gateway with no tools', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([]);
 
-      const result = await service.generateGatewaySdk('gw-1');
+      const result = await service.generateGatewaySdk('gw-1', 'org-1');
 
       expect(result.toolCount).toBe(0);
       // Still generates base files

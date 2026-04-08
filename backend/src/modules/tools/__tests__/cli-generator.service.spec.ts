@@ -61,7 +61,7 @@ describe('CliGeneratorService', () => {
     it('should generate a bash script for a tool', async () => {
       toolRepository.findOne.mockResolvedValue(mockTool);
 
-      const result = await service.generateToolCli('tool-1', 'bash');
+      const result = await service.generateToolCli('tool-1', 'bash', 'org-1');
 
       expect(result.name).toBe('getpetbyid');
       expect(result.format).toBe('bash');
@@ -78,7 +78,7 @@ describe('CliGeneratorService', () => {
     it('should throw NotFoundException for missing tool', async () => {
       toolRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.generateToolCli('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.generateToolCli('nonexistent', 'bash', 'org-1')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -86,7 +86,7 @@ describe('CliGeneratorService', () => {
     it('should generate a node script for a tool', async () => {
       toolRepository.findOne.mockResolvedValue(mockTool);
 
-      const result = await service.generateToolCli('tool-1', 'node');
+      const result = await service.generateToolCli('tool-1', 'node', 'org-1');
 
       expect(result.format).toBe('node');
       expect(result.content).toContain('#!/usr/bin/env node');
@@ -104,7 +104,7 @@ describe('CliGeneratorService', () => {
         { tool: mockTool, isActive: true },
       ]);
 
-      const result = await service.generateGatewayCliBunde('gw-1', 'bash');
+      const result = await service.generateGatewayCliBunde('gw-1', 'bash', 'org-1');
 
       expect(result.name).toBe('petstore-gateway');
       expect(result.format).toBe('bash');
@@ -120,7 +120,7 @@ describe('CliGeneratorService', () => {
         { tool: mockTool, isActive: true },
       ]);
 
-      const result = await service.generateGatewayCliBunde('gw-1', 'node');
+      const result = await service.generateGatewayCliBunde('gw-1', 'node', 'org-1');
 
       expect(result.format).toBe('node');
       expect(result.content).toContain('#!/usr/bin/env node');
@@ -130,14 +130,14 @@ describe('CliGeneratorService', () => {
     it('should throw NotFoundException for missing gateway', async () => {
       gatewayRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.generateGatewayCliBunde('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.generateGatewayCliBunde('nonexistent', 'bash', 'org-1')).rejects.toThrow(NotFoundException);
     });
 
     it('should handle gateway with no tools', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([]);
 
-      const result = await service.generateGatewayCliBunde('gw-1', 'bash');
+      const result = await service.generateGatewayCliBunde('gw-1', 'bash', 'org-1');
 
       expect(result.toolCount).toBe(0);
     });

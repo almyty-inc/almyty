@@ -31,7 +31,7 @@ export class ToolHubController {
     @Query('limit') limit = 20,
   ) {
     try {
-      const orgId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const orgId = req.user.currentOrganizationId;
       const result = await this.toolHubService.listTemplates(
         {
           category,
@@ -55,7 +55,7 @@ export class ToolHubController {
   @Roles('member', 'admin', 'owner')
   async getProviders(@Request() req) {
     try {
-      const orgId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const orgId = req.user.currentOrganizationId;
       const providers = await this.toolHubService.getProviders(orgId);
       return { success: true, data: providers, message: 'Providers retrieved successfully' };
     } catch (error) {
@@ -82,9 +82,10 @@ export class ToolHubController {
 
   @Get('templates/:id')
   @Roles('member', 'admin', 'owner')
-  async getTemplate(@Param('id') id: string) {
+  async getTemplate(@Param('id') id: string, @Request() req) {
     try {
-      const template = await this.toolHubService.getTemplate(id);
+      const orgId = req.user.currentOrganizationId;
+      const template = await this.toolHubService.getTemplate(id, orgId);
       return { success: true, data: template, message: 'Template retrieved successfully' };
     } catch (error) {
       throw new HttpException(
@@ -102,7 +103,7 @@ export class ToolHubController {
     @Request() req,
   ) {
     try {
-      const orgId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const orgId = req.user.currentOrganizationId;
       if (!orgId) {
         throw new HttpException(
           { success: false, message: 'No organization found' },
@@ -128,7 +129,7 @@ export class ToolHubController {
     @Request() req,
   ) {
     try {
-      const orgId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const orgId = req.user.currentOrganizationId;
       if (!orgId) {
         throw new HttpException(
           { success: false, message: 'No organization found' },

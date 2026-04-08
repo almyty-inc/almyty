@@ -867,7 +867,7 @@ export class McpService {
   private async handleSkillsList(params: any, organizationId: string, gatewayId?: string): Promise<any> {
     // If gatewayId is provided, generate a gateway skill bundle
     if (gatewayId) {
-      const skill = await this.skillGeneratorService.generateGatewaySkills(gatewayId);
+      const skill = await this.skillGeneratorService.generateGatewaySkills(gatewayId, organizationId);
       return {
         skills: [skill],
       };
@@ -879,7 +879,7 @@ export class McpService {
     const skills = await Promise.all(
       tools.slice(0, params?.limit || 50).map(async (tool) => {
         try {
-          return await this.skillGeneratorService.generateToolSkill(tool.id);
+          return await this.skillGeneratorService.generateToolSkill(tool.id, organizationId);
         } catch {
           return null;
         }
@@ -895,11 +895,11 @@ export class McpService {
     const { toolId, gatewayId } = params || {};
 
     if (gatewayId) {
-      return this.skillGeneratorService.generateGatewaySkills(gatewayId);
+      return this.skillGeneratorService.generateGatewaySkills(gatewayId, organizationId);
     }
 
     if (toolId) {
-      return this.skillGeneratorService.generateToolSkill(toolId);
+      return this.skillGeneratorService.generateToolSkill(toolId, organizationId);
     }
 
     throw this.createJsonRpcError(
