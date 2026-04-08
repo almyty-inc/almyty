@@ -1,5 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { buildSchema, GraphQLSchema, isObjectType, isScalarType, isEnumType, GraphQLObjectType, GraphQLField, GraphQLArgument } from 'graphql';
+import {
+  buildSchema,
+  GraphQLSchema,
+  isObjectType,
+  isScalarType,
+  isEnumType,
+  isListType,
+  isNonNullType,
+  GraphQLObjectType,
+  GraphQLField,
+  GraphQLArgument,
+} from 'graphql';
 
 import { Operation, OperationType, HttpMethod } from '../../../entities/operation.entity';
 import { Resource, ResourceType } from '../../../entities/resource.entity';
@@ -246,13 +257,22 @@ export class GraphQLParserService implements SchemaParser {
   }
 
   private convertGraphQLTypeToJsonSchema(graphqlType: any): Record<string, any> {
-    // Handle NonNull types
-    if (graphqlType.ofType) {
+    // Handle NonNull types: unwrap and recurse on the inner type.
+    // Use isNonNullType explicitly — the previous shape branched on
+    // the presence of `.ofType`, which ALSO exists on List types,
+    // so `[String]` got caught by this branch and recursed straight
+    // to its element type. That silently turned every list field
+    // into its scalar/object element, losing the array-ness entirely,
+    // and the resulting JSON schema (used as tool argument metadata
+    // handed to LLMs) told models to send a single object where the
+    // GraphQL API actually expected an array. Handle NonNull and
+    // List as distinct shapes, in the right order.
+    if (isNonNullType(graphqlType)) {
       return this.convertGraphQLTypeToJsonSchema(graphqlType.ofType);
     }
 
     // Handle List types
-    if (graphqlType.toString().startsWith('[')) {
+    if (isListType(graphqlType)) {
       return {
         type: 'array',
         items: this.convertGraphQLTypeToJsonSchema(graphqlType.ofType),

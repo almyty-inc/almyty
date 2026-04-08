@@ -107,6 +107,47 @@ describe('GraphQLParserService', () => {
       expect(result.operations).toEqual(expect.any(Array));
     });
 
+    it('emits array-typed JSON schemas for GraphQL List fields (regression)', async () => {
+      // Pin the ordering fix in convertGraphQLTypeToJsonSchema. The
+      // old shape branched on `.ofType` first, which silently caught
+      // BOTH NonNull and List wrappers and recursed straight to the
+      // element type — so `[String]` came out as `{type: 'string'}`
+      // and `[User]!` came out as `{type: 'object'}`. The fix uses
+      // isNonNullType / isListType explicitly and must now produce
+      // `{type: 'array', items: ...}` for every list field.
+      const graphqlSchema = `
+        type User {
+          id: ID!
+          tags: [String]
+          scores: [Int!]!
+          friends: [User]
+        }
+
+        type Query {
+          getUsers: [User]!
+          search(terms: [String!]!): [User]
+        }
+      `;
+
+      const result = await service.parseSchema(graphqlSchema);
+      const userResource = result.resources.find(r => r.name === 'User');
+      expect(userResource).toBeDefined();
+
+      const props = userResource!.properties;
+      expect(props.tags).toMatchObject({ type: 'array', items: { type: 'string' } });
+      expect(props.scores).toMatchObject({ type: 'array', items: { type: 'number' } });
+      expect(props.friends).toMatchObject({ type: 'array', items: { type: 'object' } });
+
+      // The Query.search argument `terms: [String!]!` (list of
+      // non-null strings, non-null list) must also land as an array
+      // of strings — nested wrappers are the most common regression
+      // source for this family of bug.
+      const searchOp = result.operations.find(o => o.name === 'search');
+      expect(searchOp).toBeDefined();
+      const termsSchema = (searchOp!.parameters as any).body.variables.properties.terms;
+      expect(termsSchema).toMatchObject({ type: 'array', items: { type: 'string' } });
+    });
+
     it('should parse schema with custom scalar types', async () => {
       const graphqlSchema = `
         scalar DateTime
