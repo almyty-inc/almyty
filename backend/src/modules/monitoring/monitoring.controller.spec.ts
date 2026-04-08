@@ -131,8 +131,8 @@ describe('MonitoringController', () => {
   });
 
   describe('resolveAlert', () => {
-    it('should resolve an alert', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+    it('should resolve an alert and thread currentOrganizationId into the service', async () => {
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-a' } };
 
       monitoringService.resolveAlert.mockResolvedValue(true);
 
@@ -143,11 +143,23 @@ describe('MonitoringController', () => {
         data: null,
         message: 'Alert resolved successfully',
       });
-      expect(monitoringService.resolveAlert).toHaveBeenCalledWith('alert-1', 'user-1');
+      // Controller must pass the caller's current org so the service
+      // can refuse cross-tenant resolves.
+      expect(monitoringService.resolveAlert).toHaveBeenCalledWith('alert-1', 'user-1', 'org-a');
+    });
+
+    it('should pass null org for callers with no current org (system users)', async () => {
+      const mockRequest = { user: { id: 'user-1' } };
+
+      monitoringService.resolveAlert.mockResolvedValue(true);
+
+      await controller.resolveAlert('alert-1', mockRequest as any);
+
+      expect(monitoringService.resolveAlert).toHaveBeenCalledWith('alert-1', 'user-1', null);
     });
 
     it('should throw error if alert not found', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-a' } };
 
       monitoringService.resolveAlert.mockResolvedValue(false);
 
