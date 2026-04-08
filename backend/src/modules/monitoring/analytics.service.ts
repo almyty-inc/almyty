@@ -51,10 +51,18 @@ export class AnalyticsService {
   ) {}
 
   async getOverview(organizationId: string) {
+    if (!organizationId) {
+      throw new Error('getOverview requires organizationId');
+    }
+
     const now = new Date();
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
+    // RequestLog has no direct organizationId column — scope via the
+    // gateway join, same pattern as getRequestLogs(). Before this the
+    // dashboard's overview tiles (request count, avg response time,
+    // error count) were GLOBAL across every org.
     const [
       totalRequests24h,
       totalRequests7d,
@@ -68,13 +76,17 @@ export class AnalyticsService {
       // Only count protocol requests (MCP, UTCP, A2A, Skills), not internal management API calls
       this.requestLogRepository
         .createQueryBuilder('log')
-        .where('log.timestamp >= :since', { since: last24h })
+        .innerJoin('log.gateway', 'gw')
+        .where('gw.organizationId = :orgId', { orgId: organizationId })
+        .andWhere('log.timestamp >= :since', { since: last24h })
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getCount()
         .catch(() => 0),
       this.requestLogRepository
         .createQueryBuilder('log')
-        .where('log.timestamp >= :since', { since: last7d })
+        .innerJoin('log.gateway', 'gw')
+        .where('gw.organizationId = :orgId', { orgId: organizationId })
+        .andWhere('log.timestamp >= :since', { since: last7d })
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getCount()
         .catch(() => 0),
@@ -86,15 +98,19 @@ export class AnalyticsService {
       }).catch(() => 0),
       this.requestLogRepository
         .createQueryBuilder('log')
+        .innerJoin('log.gateway', 'gw')
         .select('AVG(log.responseTime)', 'avg')
-        .where('log.timestamp >= :since', { since: last24h })
+        .where('gw.organizationId = :orgId', { orgId: organizationId })
+        .andWhere('log.timestamp >= :since', { since: last24h })
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getRawOne()
         .then(r => Math.round(r?.avg || 0))
         .catch(() => 0),
       this.requestLogRepository
         .createQueryBuilder('log')
-        .where('log.timestamp >= :since', { since: last24h })
+        .innerJoin('log.gateway', 'gw')
+        .where('gw.organizationId = :orgId', { orgId: organizationId })
+        .andWhere('log.timestamp >= :since', { since: last24h })
         .andWhere('log.statusCode >= 500')
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getCount()
@@ -280,6 +296,9 @@ export class AnalyticsService {
   }
 
   async getTimeline(organizationId: string, timeframe: string, granularity: string) {
+    if (!organizationId) {
+      throw new Error('getTimeline requires organizationId');
+    }
     const since = this.getTimeframeDate(timeframe);
     const truncInterval = granularity === 'minute' ? 'minute' :
                           granularity === 'hour' ? 'hour' :
@@ -287,11 +306,13 @@ export class AnalyticsService {
 
     const results = await this.requestLogRepository
       .createQueryBuilder('log')
+      .innerJoin('log.gateway', 'gw')
       .select(`date_trunc('${truncInterval}', log.timestamp)`, 'bucket')
       .addSelect('COUNT(*)', 'requests')
       .addSelect('SUM(CASE WHEN log.statusCode >= 400 THEN 1 ELSE 0 END)', 'errors')
       .addSelect('AVG(log.responseTime)', 'avgResponseTime')
-      .where('log.timestamp >= :since', { since })
+      .where('gw.organizationId = :orgId', { orgId: organizationId })
+      .andWhere('log.timestamp >= :since', { since })
       .andWhere("log.metadata->>'protocol' IS NOT NULL")
       .groupBy('bucket')
       .orderBy('bucket', 'ASC')

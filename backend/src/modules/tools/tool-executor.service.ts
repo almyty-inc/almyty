@@ -836,12 +836,13 @@ export class ToolExecutorService {
     parameters: Record<string, any>,
     options: ToolExecutionOptions
   ): Promise<ToolExecutionResult> {
+    const startTime = Date.now();
     try {
       // Security: Validate GraphQL endpoint URL
       const urlCheck = validateUrl(api.baseUrl);
       if (!urlCheck.valid) {
         this.logger.warn(`SSRF blocked for GraphQL tool ${tool.name}: ${urlCheck.error}`);
-        return { success: false, error: `Blocked: ${urlCheck.error}`, executionTime: 0, cached: false, rateLimited: false, retryCount: 0 };
+        return { success: false, error: `Blocked: ${urlCheck.error}`, executionTime: Date.now() - startTime, cached: false, rateLimited: false, retryCount: 0 };
       }
 
       // Build the variables payload. If the caller passed an explicit
@@ -867,6 +868,10 @@ export class ToolExecutorService {
         method: 'POST',
         url: api.baseUrl,
         timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
+        // Cap response size so a malicious upstream can't exhaust
+        // memory by sending a multi-GB GraphQL response.
+        maxContentLength: 10 * 1024 * 1024,
+        maxBodyLength: 5 * 1024 * 1024,
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'LLM-Tool-Gateway/1.0',
@@ -884,7 +889,7 @@ export class ToolExecutorService {
           success: false,
           error: `GraphQL errors: ${response.data.errors.map(e => e.message).join(', ')}`,
           data: response.data,
-          executionTime: 0,
+          executionTime: Date.now() - startTime,
           cached: false,
           rateLimited: false,
           retryCount: 0,
@@ -899,7 +904,7 @@ export class ToolExecutorService {
       return {
         success: true,
         data: response.data.data,
-        executionTime: 0,
+        executionTime: Date.now() - startTime,
         cached: false,
         rateLimited: false,
         retryCount: 0,
@@ -915,7 +920,7 @@ export class ToolExecutorService {
         return {
           success: false,
           error: `GraphQL request failed: ${error.response?.data?.message || error.message}`,
-          executionTime: 0,
+          executionTime: Date.now() - startTime,
           cached: false,
           rateLimited: false,
           retryCount: 0,
@@ -926,7 +931,7 @@ export class ToolExecutorService {
           },
         };
       }
-      
+
       throw error;
     }
   }
@@ -938,12 +943,13 @@ export class ToolExecutorService {
     parameters: Record<string, any>,
     options: ToolExecutionOptions
   ): Promise<ToolExecutionResult> {
+    const startTime = Date.now();
     try {
       // Security: Validate SOAP endpoint URL
       const urlCheck = validateUrl(api.baseUrl);
       if (!urlCheck.valid) {
         this.logger.warn(`SSRF blocked for SOAP tool ${tool.name}: ${urlCheck.error}`);
-        return { success: false, error: `Blocked: ${urlCheck.error}`, executionTime: 0, cached: false, rateLimited: false, retryCount: 0 };
+        return { success: false, error: `Blocked: ${urlCheck.error}`, executionTime: Date.now() - startTime, cached: false, rateLimited: false, retryCount: 0 };
       }
 
       const soapRequest: SOAPRequest = parameters as SOAPRequest;
@@ -955,6 +961,8 @@ export class ToolExecutorService {
         method: 'POST',
         url: api.baseUrl,
         timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
+        maxContentLength: 10 * 1024 * 1024,
+        maxBodyLength: 5 * 1024 * 1024,
         headers: {
           'Content-Type': 'text/xml; charset=utf-8',
           'SOAPAction': soapRequest.action || `"${operation.name}"`,
@@ -970,11 +978,11 @@ export class ToolExecutorService {
 
       // Parse SOAP response (basic parsing)
       const responseData = response.data;
-      
+
       return {
         success: true,
         data: responseData,
-        executionTime: 0,
+        executionTime: Date.now() - startTime,
         cached: false,
         rateLimited: false,
         retryCount: 0,
@@ -987,10 +995,16 @@ export class ToolExecutorService {
 
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        // Stringify the raw upstream body to avoid accidentally
+        // echoing undefined/object into the error string, and cap
+        // length so large HTML error pages don't bloat logs.
+        const bodyText = typeof error.response?.data === 'string'
+          ? error.response.data.slice(0, 500)
+          : error.message;
         return {
           success: false,
-          error: `SOAP request failed: ${error.response?.data || error.message}`,
-          executionTime: 0,
+          error: `SOAP request failed: ${bodyText}`,
+          executionTime: Date.now() - startTime,
           cached: false,
           rateLimited: false,
           retryCount: 0,
@@ -1001,7 +1015,7 @@ export class ToolExecutorService {
           },
         };
       }
-      
+
       throw error;
     }
   }
@@ -1013,13 +1027,14 @@ export class ToolExecutorService {
     parameters: Record<string, any>,
     options: ToolExecutionOptions
   ): Promise<ToolExecutionResult> {
+    const startTime = Date.now();
     try {
       // Security: Validate gRPC endpoint URL
       const grpcUrl = `${api.baseUrl}${operation.endpoint}`;
       const urlCheck = validateUrl(grpcUrl);
       if (!urlCheck.valid) {
         this.logger.warn(`SSRF blocked for gRPC tool ${tool.name}: ${urlCheck.error}`);
-        return { success: false, error: `Blocked: ${urlCheck.error}`, executionTime: 0, cached: false, rateLimited: false, retryCount: 0 };
+        return { success: false, error: `Blocked: ${urlCheck.error}`, executionTime: Date.now() - startTime, cached: false, rateLimited: false, retryCount: 0 };
       }
 
       // For gRPC calls, we'd need grpc library, but for now simulate with HTTP/2
@@ -1027,6 +1042,8 @@ export class ToolExecutorService {
         method: 'POST',
         url: grpcUrl,
         timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
+        maxContentLength: 10 * 1024 * 1024,
+        maxBodyLength: 5 * 1024 * 1024,
         headers: {
           'Content-Type': 'application/grpc+proto',
           'User-Agent': 'LLM-Tool-Gateway/1.0',
@@ -1041,7 +1058,7 @@ export class ToolExecutorService {
       return {
         success: true,
         data: response.data,
-        executionTime: 0,
+        executionTime: Date.now() - startTime,
         cached: false,
         rateLimited: false,
         retryCount: 0,
@@ -1054,10 +1071,13 @@ export class ToolExecutorService {
 
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        const bodyText = typeof error.response?.data === 'string'
+          ? error.response.data.slice(0, 500)
+          : error.message;
         return {
           success: false,
-          error: `gRPC request failed: ${error.response?.data || error.message}`,
-          executionTime: 0,
+          error: `gRPC request failed: ${bodyText}`,
+          executionTime: Date.now() - startTime,
           cached: false,
           rateLimited: false,
           retryCount: 0,
@@ -1068,7 +1088,7 @@ export class ToolExecutorService {
           },
         };
       }
-      
+
       throw error;
     }
   }
