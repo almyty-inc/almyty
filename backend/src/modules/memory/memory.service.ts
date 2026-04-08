@@ -127,12 +127,30 @@ export class MemoryService {
   }>): Promise<Memory> {
     const memory = await this.findById(id, organizationId);
 
+    // Whitelist the fields that may be updated via this endpoint.
+    // The controller uses an inline `Partial<{...}>` type on @Body(),
+    // which is erased at runtime — nest's ValidationPipe(whitelist)
+    // only strips fields on decorated DTO classes, so inline types
+    // pass every property through. Without picking here, a caller
+    // could PATCH `{organizationId, createdBy, accessCount, embedding,
+    // createdAt}` and Object.assign would happily persist them:
+    // effectively re-homing the memory to another org, resetting
+    // audit fields, or poisoning the vector.
+    const patch: Partial<Memory> = {};
+    if (data.content !== undefined) patch.content = data.content;
+    if (data.type !== undefined) patch.type = data.type;
+    if (data.scope !== undefined) patch.scope = data.scope;
+    if (data.agentIds !== undefined) patch.agentIds = data.agentIds;
+    if (data.tags !== undefined) patch.tags = data.tags;
+    if (data.isActive !== undefined) patch.isActive = data.isActive;
+    if (data.metadata !== undefined) patch.metadata = data.metadata;
+
     // Re-generate embedding if content changed
-    if (data.content && data.content !== memory.content) {
-      const embedding = await this.embeddingService.generateEmbedding(data.content, organizationId);
-      Object.assign(memory, data, { embedding });
+    if (patch.content && patch.content !== memory.content) {
+      const embedding = await this.embeddingService.generateEmbedding(patch.content, organizationId);
+      Object.assign(memory, patch, { embedding });
     } else {
-      Object.assign(memory, data);
+      Object.assign(memory, patch);
     }
 
     const saved = await this.memoryRepository.save(memory);
@@ -151,6 +169,11 @@ export class MemoryService {
     this.auditLogService.log({ organizationId, action: AuditAction.MEMORY_DELETE, resourceType: AuditResource.MEMORY, resourceId: id, resourceName: memory.type });
   }
 
+  // Keep this in lock-step with the controller's admin-only gate —
+  // even trusted callers shouldn't be able to kick off thousands of
+  // sequential embedding HTTP calls in a single request.
+  private static readonly BULK_CREATE_MAX_ITEMS = 100;
+
   async bulkCreate(
     organizationId: string,
     items: Array<{
@@ -162,6 +185,14 @@ export class MemoryService {
     }>,
     createdBy?: string,
   ): Promise<Memory[]> {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new BadRequestException('bulkCreate requires a non-empty items array');
+    }
+    if (items.length > MemoryService.BULK_CREATE_MAX_ITEMS) {
+      throw new BadRequestException(
+        `bulkCreate accepts at most ${MemoryService.BULK_CREATE_MAX_ITEMS} items per request (received ${items.length})`,
+      );
+    }
     const memories: Memory[] = [];
     for (const item of items) {
       const memory = await this.create(organizationId, item, createdBy);
