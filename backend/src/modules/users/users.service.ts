@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 
 import { User } from '../../entities/user.entity';
@@ -39,26 +39,27 @@ export class UsersService {
     organizationId?: string;
   }): Promise<PaginatedUsers> {
     const { page = 1, limit = 10, search, organizationId } = options;
+
+    // Required. Without it the join silently devolves into "every user in
+    // every org", which is exactly the leak this method used to have.
+    if (!organizationId) {
+      throw new BadRequestException('organizationId is required');
+    }
+
     const skip = (page - 1) * limit;
 
     let queryBuilder = this.userRepository
       .createQueryBuilder('user')
-      .leftJoinAndSelect('user.organizationMemberships', 'membership')
-      .leftJoinAndSelect('membership.organization', 'organization');
+      .innerJoin('user.organizationMemberships', 'membership', 'membership.organizationId = :organizationId', { organizationId })
+      .leftJoinAndSelect('user.organizationMemberships', 'allMemberships')
+      .leftJoinAndSelect('allMemberships.organization', 'allOrganization');
 
     // Apply search filter
     if (search) {
-      queryBuilder = queryBuilder.where(
+      queryBuilder = queryBuilder.andWhere(
         '(user.firstName ILIKE :search OR user.lastName ILIKE :search OR user.email ILIKE :search)',
         { search: `%${search}%` }
       );
-    }
-
-    // Apply organization filter
-    if (organizationId) {
-      queryBuilder = queryBuilder.andWhere('organization.id = :organizationId', {
-        organizationId,
-      });
     }
 
     const [users, total] = await queryBuilder
@@ -74,6 +75,30 @@ export class UsersService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  /**
+   * Look up a user, but only if the caller and target share the given org.
+   * Returns NotFoundException (not Forbidden) on a miss so the endpoint
+   * can't be used to probe for user ids that exist in other orgs.
+   */
+  async findOneInOrg(id: string, organizationId: string): Promise<User> {
+    if (!organizationId) {
+      throw new BadRequestException('organizationId is required');
+    }
+
+    await this.assertUserInOrg(id, organizationId);
+    return this.findOne(id);
+  }
+
+  private async assertUserInOrg(userId: string, organizationId: string): Promise<void> {
+    const exists = await this.userOrganizationRepository.findOne({
+      where: { userId, organizationId },
+      select: ['id'],
+    });
+    if (!exists) {
+      throw new NotFoundException('User not found');
+    }
   }
 
   async findOne(id: string): Promise<User> {
@@ -131,6 +156,12 @@ export class UsersService {
     return this.userRepository.save(user);
   }
 
+  /** Org-scoped variant for admin endpoints. */
+  async updateInOrg(id: string, organizationId: string, updateUserDto: UpdateUserDto): Promise<User> {
+    await this.assertUserInOrg(id, organizationId);
+    return this.update(id, updateUserDto);
+  }
+
   async updatePassword(id: string, currentPassword: string, newPassword: string): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id } });
     
@@ -153,7 +184,7 @@ export class UsersService {
 
   async deactivate(id: string): Promise<void> {
     const user = await this.findOne(id);
-    
+
     user.isActive = false;
     await this.userRepository.save(user);
 
@@ -164,11 +195,26 @@ export class UsersService {
     );
   }
 
+  async deactivateInOrg(id: string, organizationId: string): Promise<void> {
+    await this.assertUserInOrg(id, organizationId);
+    return this.deactivate(id);
+  }
+
   async reactivate(id: string): Promise<void> {
     const user = await this.findOne(id);
-    
+
     user.isActive = true;
     await this.userRepository.save(user);
+  }
+
+  async reactivateInOrg(id: string, organizationId: string): Promise<void> {
+    await this.assertUserInOrg(id, organizationId);
+    return this.reactivate(id);
+  }
+
+  async deleteInOrg(id: string, organizationId: string): Promise<void> {
+    await this.assertUserInOrg(id, organizationId);
+    return this.delete(id);
   }
 
   async delete(id: string): Promise<void> {
@@ -216,6 +262,15 @@ export class UsersService {
     };
   }
 
+  async getUserStatsInOrg(id: string, organizationId: string): Promise<{
+    apiKeysCount: number;
+    organizationsCount: number;
+    lastLoginAt: Date | null;
+  }> {
+    await this.assertUserInOrg(id, organizationId);
+    return this.getUserStats(id);
+  }
+
   async getUserActivity(id: string, days: number = 30): Promise<any[]> {
     // This would typically query activity logs or metrics
     // For now, return basic API key usage data
@@ -233,39 +288,57 @@ export class UsersService {
     }));
   }
 
+  async getUserActivityInOrg(id: string, organizationId: string, days: number = 30): Promise<any[]> {
+    await this.assertUserInOrg(id, organizationId);
+    return this.getUserActivity(id, days);
+  }
+
   async bulkUpdate(
     userIds: string[],
+    organizationId: string,
     updates: {
       isActive?: boolean;
       preferences?: Record<string, any>;
     }
   ): Promise<void> {
-    await this.userRepository.update(
-      { id: { $in: userIds } as any },
-      updates
-    );
+    if (!organizationId) {
+      throw new BadRequestException('organizationId is required');
+    }
+    if (userIds.length === 0) return;
+
+    // Filter to userIds that are members of the requested org. Caller-supplied
+    // ids must NOT be trusted: a buggy frontend could pass cross-org ids and
+    // we'd silently mass-mutate users in another org.
+    const memberships = await this.userOrganizationRepository.find({
+      where: { organizationId, userId: In(userIds) },
+      select: ['userId'],
+    });
+    const allowedIds = memberships.map(m => m.userId);
+    if (allowedIds.length === 0) return;
+
+    // The previous shape used the Mongo `$in` syntax (`{ id: { $in: ids } as any }`)
+    // which TypeORM treats as a literal-object comparison and matches zero
+    // rows. The whole bulk operation has been silently a no-op for the
+    // entirety of this method's life.
+    await this.userRepository.update({ id: In(allowedIds) }, updates);
   }
 
-  async searchUsers(query: string, organizationId?: string): Promise<User[]> {
-    let queryBuilder = this.userRepository
+  async searchUsers(query: string, organizationId: string): Promise<User[]> {
+    if (!organizationId) {
+      throw new BadRequestException('organizationId is required');
+    }
+
+    return this.userRepository
       .createQueryBuilder('user')
-      .leftJoinAndSelect('user.organizationMemberships', 'membership')
-      .leftJoinAndSelect('membership.organization', 'organization')
+      .innerJoin('user.organizationMemberships', 'membership',
+        'membership.organizationId = :organizationId', { organizationId })
       .where(
         '(user.firstName ILIKE :query OR user.lastName ILIKE :query OR user.email ILIKE :query)',
         { query: `%${query}%` }
       )
-      .andWhere('user.isActive = :isActive', { isActive: true });
-
-    if (organizationId) {
-      queryBuilder = queryBuilder.andWhere('organization.id = :organizationId', {
-        organizationId,
-      });
-    }
-
-    return queryBuilder
+      .andWhere('user.isActive = :isActive', { isActive: true })
       .orderBy('user.firstName', 'ASC')
-      .limit(50) // Limit search results
+      .limit(50)
       .getMany();
   }
 }

@@ -1,14 +1,15 @@
 import {
-  Controller,
-  Get,
-  Post,
+  BadRequestException,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
   Query,
+  Req,
   UseGuards,
-  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -36,10 +37,24 @@ import { OrganizationRole } from '../../entities/user-organization.entity';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  /**
+   * Pull the caller's resolved current org out of the JWT strategy. This is
+   * the same field RolesGuard uses, set from X-Organization-Id (or the
+   * caller's single membership when unambiguous). Throws if missing rather
+   * than passing `undefined` down to the service layer.
+   */
+  private requireOrg(req: any): string {
+    const orgId = req?.user?.currentOrganizationId;
+    if (!orgId) {
+      throw new BadRequestException('Organization context required. Send X-Organization-Id.');
+    }
+    return orgId;
+  }
+
   @Get()
   @UseGuards(RolesGuard)
   @Roles(OrganizationRole.ADMIN, OrganizationRole.OWNER)
-  @ApiOperation({ summary: 'Get all users (admin only)' })
+  @ApiOperation({ summary: 'Get users in the current organization (admin only)' })
   @ApiResponse({
     status: 200,
     description: 'Users retrieved successfully',
@@ -54,25 +69,32 @@ export class UsersController {
       },
     },
   })
-  async findAll(@Query() queryDto: QueryUsersDto) {
-    return this.usersService.findAll(queryDto);
+  async findAll(@Query() queryDto: QueryUsersDto, @Req() req: any) {
+    // The DTO's organizationId field is ignored. Without this an admin in
+    // org A could pass `?organizationId=ORG_B` (or omit it entirely) and
+    // page through every user in ORG_B / the whole DB.
+    const organizationId = this.requireOrg(req);
+    return this.usersService.findAll({ ...queryDto, organizationId });
   }
 
   @Get('search')
-  @ApiOperation({ summary: 'Search users by name or email' })
+  @ApiOperation({ summary: 'Search users in the current organization' })
   @ApiQuery({ name: 'q', description: 'Search query' })
-  @ApiQuery({ name: 'organizationId', description: 'Organization ID', required: false })
   @ApiResponse({ status: 200, description: 'Search results' })
   async searchUsers(
     @Query('q') query: string,
-    @Query('organizationId') organizationId?: string,
+    @Req() req: any,
   ) {
     if (!query || query.length < 2) {
       return { users: [] };
     }
 
+    // Same fix as findAll: ignore any caller-supplied org id and force the
+    // search to the caller's current org. The previous shape accepted an
+    // arbitrary organizationId query param.
+    const organizationId = this.requireOrg(req);
     const users = await this.usersService.searchUsers(query, organizationId);
-    
+
     return {
       users: users.map(user => ({
         id: user.id,
@@ -128,29 +150,30 @@ export class UsersController {
   @Get(':id')
   @UseGuards(RolesGuard)
   @RequirePermissions('read')
-  @ApiOperation({ summary: 'Get user by ID' })
+  @ApiOperation({ summary: 'Get user by ID (must share the current organization)' })
   @ApiResponse({ status: 200, description: 'User found' })
   @ApiResponse({ status: 404, description: 'User not found' })
   async findOne(
     @Param('id') id: string,
     @CurrentUser() currentUser: User,
+    @Req() req: any,
   ) {
-    // Users can only view their own profile unless they have admin permissions
-    if (id !== currentUser.id) {
-      const hasAdminRole = currentUser.organizationMemberships?.some(
-        m => [OrganizationRole.ADMIN, OrganizationRole.OWNER].includes(m.role)
-      );
-      
-      if (!hasAdminRole) {
-        throw new ForbiddenException('You can only view your own profile');
-      }
+    // Self-lookup short-circuit so users can always read their own profile.
+    if (id === currentUser.id) {
+      const self = await this.usersService.findOne(id);
+      const stats = await this.usersService.getUserStats(id);
+      const { passwordHash, resetPasswordToken, verificationToken, apiKeys, ...profile } = self as any;
+      return { ...profile, stats };
     }
 
-    const user = await this.usersService.findOne(id);
-    const stats = await this.usersService.getUserStats(id);
-    
-    const { passwordHash, resetPasswordToken, verificationToken, ...profile } = user;
-    
+    // For everyone else, the lookup is gated on shared org membership in
+    // the caller's CURRENT org — not "the caller has admin role somewhere",
+    // which used to let an admin of org A read any user in any other org.
+    const organizationId = this.requireOrg(req);
+    const user = await this.usersService.findOneInOrg(id, organizationId);
+    const stats = await this.usersService.getUserStatsInOrg(id, organizationId);
+
+    const { passwordHash, resetPasswordToken, verificationToken, apiKeys, ...profile } = user as any;
     return { ...profile, stats };
   }
 
@@ -174,17 +197,19 @@ export class UsersController {
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles(OrganizationRole.ADMIN, OrganizationRole.OWNER)
-  @ApiOperation({ summary: 'Update user by ID (admin only)' })
+  @ApiOperation({ summary: 'Update user by ID (admin only, current org)' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
   async update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
+    @Req() req: any,
   ) {
-    const updatedUser = await this.usersService.update(id, updateUserDto);
-    
+    const organizationId = this.requireOrg(req);
+    const updatedUser = await this.usersService.updateInOrg(id, organizationId, updateUserDto);
+
     const { passwordHash, resetPasswordToken, verificationToken, ...profile } = updatedUser;
-    
+
     return {
       message: 'User updated successfully',
       user: profile,
@@ -194,12 +219,13 @@ export class UsersController {
   @Post(':id/deactivate')
   @UseGuards(RolesGuard)
   @Roles(OrganizationRole.ADMIN, OrganizationRole.OWNER)
-  @ApiOperation({ summary: 'Deactivate user (admin only)' })
+  @ApiOperation({ summary: 'Deactivate user (admin only, current org)' })
   @ApiResponse({ status: 200, description: 'User deactivated successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async deactivate(@Param('id') id: string) {
-    await this.usersService.deactivate(id);
-    
+  async deactivate(@Param('id') id: string, @Req() req: any) {
+    const organizationId = this.requireOrg(req);
+    await this.usersService.deactivateInOrg(id, organizationId);
+
     return {
       message: 'User deactivated successfully',
     };
@@ -208,12 +234,13 @@ export class UsersController {
   @Post(':id/reactivate')
   @UseGuards(RolesGuard)
   @Roles(OrganizationRole.ADMIN, OrganizationRole.OWNER)
-  @ApiOperation({ summary: 'Reactivate user (admin only)' })
+  @ApiOperation({ summary: 'Reactivate user (admin only, current org)' })
   @ApiResponse({ status: 200, description: 'User reactivated successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async reactivate(@Param('id') id: string) {
-    await this.usersService.reactivate(id);
-    
+  async reactivate(@Param('id') id: string, @Req() req: any) {
+    const organizationId = this.requireOrg(req);
+    await this.usersService.reactivateInOrg(id, organizationId);
+
     return {
       message: 'User reactivated successfully',
     };
@@ -222,13 +249,14 @@ export class UsersController {
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles(OrganizationRole.OWNER)
-  @ApiOperation({ summary: 'Delete user (owner only)' })
+  @ApiOperation({ summary: 'Delete user (owner only, current org)' })
   @ApiResponse({ status: 200, description: 'User deleted successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
   @ApiResponse({ status: 403, description: 'Cannot delete user - they are sole owner of organization(s)' })
-  async remove(@Param('id') id: string) {
-    await this.usersService.delete(id);
-    
+  async remove(@Param('id') id: string, @Req() req: any) {
+    const organizationId = this.requireOrg(req);
+    await this.usersService.deleteInOrg(id, organizationId);
+
     return {
       message: 'User deleted successfully',
     };
@@ -237,26 +265,29 @@ export class UsersController {
   @Get(':id/stats')
   @UseGuards(RolesGuard)
   @RequirePermissions('read')
-  @ApiOperation({ summary: 'Get user statistics' })
+  @ApiOperation({ summary: 'Get user statistics (current org)' })
   @ApiResponse({ status: 200, description: 'User statistics retrieved' })
-  async getUserStats(@Param('id') id: string) {
-    const stats = await this.usersService.getUserStats(id);
-    
+  async getUserStats(@Param('id') id: string, @Req() req: any) {
+    const organizationId = this.requireOrg(req);
+    const stats = await this.usersService.getUserStatsInOrg(id, organizationId);
+
     return { stats };
   }
 
   @Get(':id/activity')
   @UseGuards(RolesGuard)
   @RequirePermissions('read')
-  @ApiOperation({ summary: 'Get user activity' })
+  @ApiOperation({ summary: 'Get user activity (current org)' })
   @ApiQuery({ name: 'days', description: 'Number of days to look back', required: false })
   @ApiResponse({ status: 200, description: 'User activity retrieved' })
   async getUserActivity(
     @Param('id') id: string,
+    @Req() req: any,
     @Query('days') days?: number,
   ) {
-    const activity = await this.usersService.getUserActivity(id, days);
-    
+    const organizationId = this.requireOrg(req);
+    const activity = await this.usersService.getUserActivityInOrg(id, organizationId, days);
+
     return { activity };
   }
 }
