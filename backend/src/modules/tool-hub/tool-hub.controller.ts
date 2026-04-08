@@ -68,9 +68,14 @@ export class ToolHubController {
 
   @Get('categories')
   @Roles('member', 'admin', 'owner')
-  async getCategories() {
+  async getCategories(@Request() req) {
     try {
-      const categories = await this.toolHubService.getCategories();
+      // Thread the caller's current org through so the service can
+      // apply the same public-or-own-org visibility rule getProviders
+      // already uses. Without it, private templates from other
+      // tenants would leak their category distribution.
+      const orgId = req.user?.currentOrganizationId;
+      const categories = await this.toolHubService.getCategories(orgId);
       return { success: true, data: categories, message: 'Categories retrieved successfully' };
     } catch (error) {
       throw new HttpException(
