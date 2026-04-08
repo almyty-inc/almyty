@@ -117,43 +117,66 @@ export class SchemaParserService {
     const api = apiSchema.api;
     const parser = this.getParserForApiType(api.type);
 
+    // Parse BEFORE touching the database. If parsing fails, we want
+    // the caller to get a BadRequest and walk away — not a half-wiped
+    // API with zero operations/resources because we deleted
+    // everything *before* attempting the parse and then the parse
+    // threw. Do the work that can fail cheaply first.
+    let parsedSchema: ParsedSchema;
+    let operations: Operation[];
+    let resources: Resource[];
     try {
-      const parsedSchema = await parser.parseSchema(apiSchema.rawSchema);
+      parsedSchema = await parser.parseSchema(apiSchema.rawSchema);
+      operations = await parser.extractOperations(parsedSchema);
+      resources = await parser.extractResources(parsedSchema);
+    } catch (error) {
+      this.logger.error(`Failed to reparse schema: ${error.message}`, error.stack);
+      throw new BadRequestException(`Failed to reparse schema: ${error.message}`);
+    }
 
-      // Delete existing operations and resources
-      await this.operationRepository.delete({ apiId: api.id });
-      await this.resourceRepository.delete({ apiId: api.id });
+    for (const operation of operations) {
+      operation.apiId = api.id;
+    }
+    for (const resource of resources) {
+      resource.apiId = api.id;
+    }
 
-      // Extract and save new operations and resources
-      const operations = await parser.extractOperations(parsedSchema);
-      for (const operation of operations) {
-        operation.apiId = api.id;
-      }
-      const savedOperations = await this.operationRepository.save(operations);
+    // Delete-then-insert needs to be one atomic unit. Previously the
+    // delete ran outside any transaction boundary, so a partial insert
+    // failure (unique constraint violation on an extracted operation,
+    // DB disconnect, OOM) would leave the API with its old operations
+    // and resources gone and the new ones partially applied. Wrap the
+    // three writes in a single transaction so the API row either sees
+    // the new state completely or the old state untouched.
+    try {
+      const [savedOperations, savedResources] = await this.apiSchemaRepository.manager.transaction(
+        async (tx) => {
+          await tx.delete(Operation, { apiId: api.id });
+          await tx.delete(Resource, { apiId: api.id });
 
-      const resources = await parser.extractResources(parsedSchema);
-      for (const resource of resources) {
-        resource.apiId = api.id;
-      }
-      const savedResources = await this.resourceRepository.save(resources);
+          const savedOps = await tx.save(Operation, operations);
+          const savedRes = await tx.save(Resource, resources);
 
-      // Update schema statistics
-      apiSchema.statistics = {
-        operationCount: savedOperations.length,
-        resourceCount: savedResources.length,
-        endpointCount: savedOperations.length,
-        methodCounts: this.countMethods(parsedSchema.operations),
-      };
-      await this.apiSchemaRepository.save(apiSchema);
+          // Update schema statistics inside the same transaction.
+          apiSchema.statistics = {
+            operationCount: savedOps.length,
+            resourceCount: savedRes.length,
+            endpointCount: savedOps.length,
+            methodCounts: this.countMethods(parsedSchema.operations),
+          };
+          await tx.save(ApiSchema, apiSchema);
+
+          return [savedOps, savedRes] as const;
+        },
+      );
 
       return {
         operations: savedOperations,
         resources: savedResources,
       };
-
     } catch (error) {
-      this.logger.error(`Failed to reparse schema: ${error.message}`, error.stack);
-      throw new BadRequestException(`Failed to reparse schema: ${error.message}`);
+      this.logger.error(`Failed to persist reparsed schema: ${error.message}`, error.stack);
+      throw new BadRequestException(`Failed to persist reparsed schema: ${error.message}`);
     }
   }
 
