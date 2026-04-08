@@ -25,6 +25,17 @@ describe('LlmProvidersService', () => {
   let toolExecutorService: any;
 
   beforeEach(async () => {
+    // The atomic stats bumps added for the counter-race fix call
+    // createQueryBuilder().update().set().where().execute() on the
+    // session and provider repositories. Return a noop chain that
+    // resolves on execute() so recordExecution / chat() finish.
+    const qbUpdateChain: any = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LlmProvidersService,
@@ -35,8 +46,9 @@ describe('LlmProvidersService', () => {
             find: jest.fn(),
             create: jest.fn(),
             save: jest.fn(),
+            update: jest.fn().mockResolvedValue({ affected: 1 }),
             remove: jest.fn(),
-            createQueryBuilder: jest.fn(),
+            createQueryBuilder: jest.fn().mockReturnValue(qbUpdateChain),
           },
         },
         {
@@ -46,8 +58,9 @@ describe('LlmProvidersService', () => {
             find: jest.fn(),
             create: jest.fn(),
             save: jest.fn(),
+            update: jest.fn().mockResolvedValue({ affected: 1 }),
             remove: jest.fn(),
-            createQueryBuilder: jest.fn(),
+            createQueryBuilder: jest.fn().mockReturnValue(qbUpdateChain),
           },
         },
         {
@@ -684,7 +697,16 @@ describe('LlmProvidersService', () => {
         .rejects
         .toThrow('API Error');
 
-      expect(mockProvider.incrementUsage).toHaveBeenCalledWith(0, 0, false);
+      // The old shape called provider.incrementUsage(0, 0, false)
+      // on the in-memory entity followed by save(provider) — a
+      // read-modify-write race. The new shape issues an atomic
+      // bumpProviderStats (single SQL UPDATE via createQueryBuilder)
+      // plus a scoped partial update to set lastError. Pin both.
+      expect(llmProviderRepository.createQueryBuilder).toHaveBeenCalled();
+      expect(llmProviderRepository.update).toHaveBeenCalledWith(
+        { id: 'provider-1', organizationId: 'org-1' },
+        expect.objectContaining({ lastError: expect.any(String) }),
+      );
     });
   });
 
@@ -708,12 +730,18 @@ describe('LlmProvidersService', () => {
         cost: 0.001,
         responseTime: 800,
       });
-      llmProviderRepository.save.mockResolvedValue(mockProvider);
-      const result = await service.performHealthCheck('provider-1');
+      // performHealthCheck now writes via a partial `update()` so
+      // the row state doesn't race with concurrent writers. Mock it
+      // instead of save().
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      const result = await service.performHealthCheck('provider-1', 'org-1');
 
       expect(result.isHealthy).toBe(true);
       expect(result.responseTime).toBeGreaterThanOrEqual(0);
-      expect(mockProvider.updateHealthStatus).toHaveBeenCalledWith(true);
+      expect(llmProviderRepository.update).toHaveBeenCalledWith(
+        { id: 'provider-1' },
+        expect.objectContaining({ isHealthy: true }),
+      );
     });
 
     it('should handle health check failure', async () => {
@@ -723,44 +751,54 @@ describe('LlmProvidersService', () => {
         type: LlmProviderType.OPENAI,
         configuration: { apiKey: 'invalid-key' },
         status: LlmProviderStatus.ACTIVE,
+        organizationId: 'org-1',
         updateHealthStatus: jest.fn(),
       };
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       jest.spyOn(service as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
-      llmProviderRepository.save.mockResolvedValue(mockProvider);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
 
-      const result = await service.performHealthCheck('provider-1');
+      const result = await service.performHealthCheck('provider-1', 'org-1');
 
       expect(result.isHealthy).toBe(false);
       expect(result.error).toContain('API Error');
-      expect(mockProvider.updateHealthStatus).toHaveBeenCalledWith(false, 'API Error');
+      // Error path records the failure via a scoped partial UPDATE.
+      expect(llmProviderRepository.update).toHaveBeenCalledWith(
+        { id: 'provider-1', organizationId: 'org-1' },
+        expect.objectContaining({ isHealthy: false, lastError: 'API Error' }),
+      );
     });
 
-    it('should return error when provider not found', async () => {
+    it('should return error when provider not found (or belongs to a different org)', async () => {
       llmProviderRepository.findOne.mockResolvedValue(null);
 
-      const result = await service.performHealthCheck('invalid-provider');
+      const result = await service.performHealthCheck('invalid-provider', 'org-1');
 
       expect(result.isHealthy).toBe(false);
       expect(result.error).toBe('Provider not found');
+      // Also pin that the lookup was org-scoped — this is the whole
+      // point of the cross-tenant fix.
+      expect(llmProviderRepository.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ organizationId: 'org-1' }),
+        }),
+      );
     });
 
-    it('should handle error updating provider health status', async () => {
+    it('should tolerate a DB error on the health status write', async () => {
       const mockProvider = {
         id: 'provider-1',
         type: LlmProviderType.OPENAI,
         configuration: { apiKey: 'invalid-key' },
-        updateHealthStatus: jest.fn(),
+        organizationId: 'org-1',
       };
 
-      llmProviderRepository.findOne
-        .mockResolvedValueOnce(mockProvider)
-        .mockResolvedValueOnce(mockProvider);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       jest.spyOn(service as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
-      llmProviderRepository.save.mockRejectedValue(new Error('Database error'));
+      llmProviderRepository.update.mockRejectedValue(new Error('Database error'));
 
-      const result = await service.performHealthCheck('provider-1');
+      const result = await service.performHealthCheck('provider-1', 'org-1');
 
       expect(result.isHealthy).toBe(false);
       expect(result.error).toContain('API Error');
@@ -2303,7 +2341,15 @@ describe('LlmProvidersService', () => {
       expect(callCount).toBe(3); // Initial + 2 retries
     });
 
-    it('should update provider health metrics on failure', async () => {
+    it('does not try to persist in-memory provider mutations inside the retry loop (regression)', async () => {
+      // Pre-fix, the retry loop called provider.incrementUsage(0, 0,
+      // false) on the in-memory entity — but never saved it. The
+      // mutation was lost on function return and the telemetry was
+      // effectively broken. The fix moves the single persistent
+      // counter bump out to chat()'s catch block so there's exactly
+      // one SQL write per chat() call regardless of how many
+      // attempts the retry loop ran. Here we just pin that the
+      // retry loop does NOT touch provider.incrementUsage anymore.
       const provider = {
         type: LlmProviderType.OPENAI,
         configuration: { model: 'gpt-4o', timeout: 5000 },
@@ -2327,9 +2373,9 @@ describe('LlmProvidersService', () => {
         service['callLlmProvider'](provider, request, session, []),
       ).rejects.toThrow('Timeout');
 
-      // incrementUsage should be called for each failed attempt (3 times: initial + 2 retries)
-      expect(provider.incrementUsage).toHaveBeenCalledWith(0, 0, false);
-      expect(provider.incrementUsage).toHaveBeenCalledTimes(3);
+      // The retry loop must not touch the in-memory increment at
+      // all — persistence happens in chat()'s catch handler.
+      expect(provider.incrementUsage).not.toHaveBeenCalled();
     });
   });
 

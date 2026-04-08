@@ -200,8 +200,13 @@ export class LlmProvidersService {
 
       const savedProvider = await this.llmProviderRepository.save(provider);
 
-      // Perform initial health check
-      setTimeout(() => this.performHealthCheck(savedProvider.id), 1000);
+      // Perform initial health check. Pass the org we just created
+      // under so the scoped lookup inside performHealthCheck finds
+      // the row.
+      setTimeout(
+        () => this.performHealthCheck(savedProvider.id, organizationId),
+        1000,
+      );
 
       this.logger.log(`LLM provider '${savedProvider.name}' created for organization ${organizationId}`);
 
@@ -259,8 +264,12 @@ export class LlmProvidersService {
 
       const updatedProvider = await this.llmProviderRepository.save(provider);
 
-      // Perform health check after update
-      setTimeout(() => this.performHealthCheck(provider.id), 1000);
+      // Perform health check after update, scoped to the same org
+      // we just validated membership in.
+      setTimeout(
+        () => this.performHealthCheck(provider.id, organizationId),
+        1000,
+      );
 
       this.logger.log(`LLM provider '${updatedProvider.name}' updated`);
 
@@ -504,16 +513,30 @@ export class LlmProvidersService {
 
       const savedMessage = await this.llmMessageRepository.save(message);
 
-      // Update session stats
-      session.addMessage(response.usage.inputTokens, response.usage.outputTokens, response.cost * 100);
-      if (response.message.toolCalls?.length > 0) {
-        session.addToolCall(true);
-      }
-      await this.llmSessionRepository.save(session);
+      // Update session stats atomically. The old path was
+      // `session.addMessage(...) + session.addToolCall(...) +
+      // llmSessionRepository.save(session)` — a classic
+      // read-modify-write race. Two concurrent chats against the
+      // same session would both read the old counters, both
+      // compute `+1` / `+ cost`, both save, and one increment
+      // would be silently lost. Replaced with a single atomic
+      // SQL UPDATE via bumpSessionStats.
+      const hasToolCalls = (response.message.toolCalls?.length || 0) > 0;
+      await this.bumpSessionStats(session.id, {
+        inputTokens: response.usage.inputTokens,
+        outputTokens: response.usage.outputTokens,
+        cost: response.cost * 100,
+        toolCall: hasToolCalls,
+        toolCallSuccess: hasToolCalls,
+      });
 
-      // Update provider stats
-      provider.incrementUsage(response.usage.totalTokens, response.cost * 100, true);
-      await this.llmProviderRepository.save(provider);
+      // Same race existed on provider stats — replace with atomic
+      // SQL UPDATE via bumpProviderStats.
+      await this.bumpProviderStats(provider.id, {
+        tokens: response.usage.totalTokens,
+        cost: response.cost * 100,
+        success: true,
+      });
 
       return {
         ...response,
@@ -530,18 +553,93 @@ export class LlmProvidersService {
         error.stack,
       );
 
-      // Update provider error stats and health
+      // Update provider error stats + lastError atomically. The
+      // old path loaded the provider, mutated it, and called
+      // save(provider) — racing with any concurrent writer on the
+      // same row. Use a scoped partial UPDATE instead.
       try {
-        const provider = await this.getProvider(providerId, organizationId, true);
-        provider.incrementUsage(0, 0, false);
-        provider.lastError = safeMsg;
-        await this.llmProviderRepository.save(provider);
-      } catch (updateError) {
+        await this.bumpProviderStats(providerId, {
+          tokens: 0,
+          cost: 0,
+          success: false,
+        });
+        await this.llmProviderRepository.update(
+          { id: providerId, organizationId },
+          { lastError: safeMsg },
+        );
+      } catch (updateError: any) {
         this.logger.warn(`Failed to update provider error stats: ${updateError.message}`);
       }
 
       throw error;
     }
+  }
+
+  /**
+   * Atomic session counter bump. Single UPDATE with column
+   * expressions so two concurrent chat calls on the same session
+   * can never lose an increment. Mirrors the pattern we use on
+   * agent-execution and tool-executor stats.
+   */
+  private async bumpSessionStats(
+    sessionId: string,
+    delta: {
+      inputTokens: number;
+      outputTokens: number;
+      cost: number;
+      toolCall: boolean;
+      toolCallSuccess: boolean;
+    },
+  ): Promise<void> {
+    const input = Number(delta.inputTokens) || 0;
+    const output = Number(delta.outputTokens) || 0;
+    const cost = Number(delta.cost) || 0;
+    await this.llmSessionRepository
+      .createQueryBuilder()
+      .update(LlmSession)
+      .set({
+        messageCount: () => '"messageCount" + 1',
+        totalInputTokens: () => `"totalInputTokens" + ${input}`,
+        totalOutputTokens: () => `"totalOutputTokens" + ${output}`,
+        totalCost: () => `"totalCost" + ${cost}`,
+        toolCalls: delta.toolCall
+          ? () => '"toolCalls" + 1'
+          : () => '"toolCalls"',
+        successfulToolCalls: delta.toolCall && delta.toolCallSuccess
+          ? () => '"successfulToolCalls" + 1'
+          : () => '"successfulToolCalls"',
+        lastActivityAt: new Date(),
+      })
+      .where('id = :id', { id: sessionId })
+      .execute();
+  }
+
+  /**
+   * Atomic provider counter bump. Same shape as bumpSessionStats —
+   * single UPDATE with column expressions so concurrent chat calls
+   * don't lose increments on totalRequests / totalTokensUsed /
+   * totalCost / successfulRequests.
+   */
+  private async bumpProviderStats(
+    providerId: string,
+    delta: { tokens: number; cost: number; success: boolean },
+  ): Promise<void> {
+    const tokens = Number(delta.tokens) || 0;
+    const cost = Number(delta.cost) || 0;
+    await this.llmProviderRepository
+      .createQueryBuilder()
+      .update(LlmProvider)
+      .set({
+        totalRequests: () => '"totalRequests" + 1',
+        successfulRequests: delta.success
+          ? () => '"successfulRequests" + 1'
+          : () => '"successfulRequests"',
+        totalTokensUsed: () => `"totalTokensUsed" + ${tokens}`,
+        totalCost: () => `"totalCost" + ${cost}`,
+        lastRequestAt: new Date(),
+      })
+      .where('id = :id', { id: providerId })
+      .execute();
   }
 
   private async callLlmProvider(
@@ -584,13 +682,13 @@ export class LlmProvidersService {
           (safeBody ? ` body=${safeBody}` : ''),
         );
 
-        // Update provider health metrics on failure
-        try {
-          provider.incrementUsage(0, 0, false);
-          if (statusCode >= 500) {
-            provider.lastError = `${safeMsg} (status ${statusCode})`;
-          }
-        } catch (_) { /* best effort */ }
+        // The old shape tried to update provider health metrics on
+        // every failed attempt, but only mutated the in-memory
+        // `provider` object and never saved it — so the counters
+        // were lost the moment this function returned. The outer
+        // catch in chat() now issues a single atomic failure bump
+        // via bumpProviderStats, which is the right place for the
+        // persistent record. Keep the per-attempt log above.
 
         // Retry only on retryable status codes (429, 500, 502, 503)
         const isRetryable = [429, 500, 502, 503].includes(statusCode) ||
@@ -1092,7 +1190,24 @@ export class LlmProvidersService {
   }
 
 
-  async performHealthCheck(providerId: string): Promise<{
+  async performHealthCheck(
+    providerId: string,
+    /**
+     * The caller's current organization. REQUIRED for any invocation
+     * that came from an HTTP request — the controller endpoint used
+     * to pass providerId through with no org check, which let any
+     * authenticated member POST /llm-providers/<foreign-provider-id>/test
+     * and force an outbound LLM call spending another tenant's API
+     * credits (and probing the provider's configured baseURL for
+     * SSRF-worthy responses). Scope the lookup to `{id, organizationId}`
+     * so a cross-tenant provider id simply returns 'Provider not found'.
+     *
+     * The two internal callers in createProvider/updateProvider pass
+     * the org they just saved into, so the normal post-create
+     * kick-off still works.
+     */
+    organizationId: string,
+  ): Promise<{
     isHealthy: boolean;
     responseTime?: number;
     error?: string;
@@ -1100,7 +1215,7 @@ export class LlmProvidersService {
   }> {
     try {
       const provider = await this.llmProviderRepository.findOne({
-        where: { id: providerId },
+        where: { id: providerId, organizationId },
       });
 
       if (!provider) {
@@ -1126,9 +1241,13 @@ export class LlmProvidersService {
       const response = await this.callLlmProvider(provider, testRequest, session, []);
       const responseTime = Date.now() - startTime;
 
-      // Update provider health status
-      provider.updateHealthStatus(true);
-      await this.llmProviderRepository.save(provider);
+      // Update provider health status. Partial UPDATE so we don't
+      // race with concurrent writers who might also be touching
+      // totalRequests / lastError via the save() path.
+      await this.llmProviderRepository.update(
+        { id: provider.id },
+        { isHealthy: true, lastHealthCheckAt: new Date(), lastError: null },
+      );
 
       return {
         isHealthy: true,
@@ -1139,26 +1258,30 @@ export class LlmProvidersService {
           cost: response.cost,
         },
       };
-
-    } catch (error) {
-      const responseTime = Date.now() - Date.now();
-
-      // Update provider health status
+    } catch (error: any) {
+      // Record a failed health check on the provider row (still
+      // org-scoped so we don't touch a foreign provider on errors
+      // either). Partial UPDATE for the same race reason.
       try {
-        const provider = await this.llmProviderRepository.findOne({
-          where: { id: providerId },
-        });
-        if (provider) {
-          provider.updateHealthStatus(false, error.message);
-          await this.llmProviderRepository.save(provider);
-        }
-      } catch (updateError) {
+        await this.llmProviderRepository.update(
+          { id: providerId, organizationId },
+          {
+            isHealthy: false,
+            lastHealthCheckAt: new Date(),
+            lastError: error.message,
+          },
+        );
+      } catch (updateError: any) {
         this.logger.warn(`Failed to update provider health status: ${updateError.message}`);
       }
 
       return {
         isHealthy: false,
-        responseTime,
+        // The old shape had `Date.now() - Date.now()` which always
+        // resolved to 0 — it was computing the diff against itself.
+        // The caller only gets a response time when the request
+        // actually started, so leave it undefined on the error path.
+        responseTime: undefined,
         error: error.message,
       };
     }
