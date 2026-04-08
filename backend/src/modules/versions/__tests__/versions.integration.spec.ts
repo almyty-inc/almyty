@@ -79,9 +79,15 @@ describe('VersionsService', () => {
         timestamp: new Date('2026-01-02'),
         event: VersionEvent.UPDATE,
       });
+      // assertEntityBelongsToOrg runs findOne against the entity repo first,
+      // then find() fetches the versions.
+      (mockRepo.findOne as jest.Mock).mockResolvedValueOnce({
+        id: 'agent-1',
+        organizationId: 'org-1',
+      });
       (mockRepo.find as jest.Mock).mockResolvedValue([v2, v1]);
 
-      const result = await service.getVersions('Agent', 'agent-1');
+      const result = await service.getVersions('Agent', 'agent-1', 'org-1');
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe(2);
       expect(result[1].id).toBe(1);
@@ -92,46 +98,91 @@ describe('VersionsService', () => {
     });
 
     it('returns empty array when no versions exist', async () => {
+      (mockRepo.findOne as jest.Mock).mockResolvedValueOnce({
+        id: 'nonexistent',
+        organizationId: 'org-1',
+      });
       (mockRepo.find as jest.Mock).mockResolvedValue([]);
-      const result = await service.getVersions('Agent', 'nonexistent');
+      const result = await service.getVersions('Agent', 'nonexistent', 'org-1');
       expect(result).toEqual([]);
+    });
+
+    it('throws NotFoundException when the entity is in a different org', async () => {
+      (mockRepo.findOne as jest.Mock).mockResolvedValueOnce({
+        id: 'agent-1',
+        organizationId: 'other-org',
+      });
+      await expect(
+        service.getVersions('Agent', 'agent-1', 'org-1'),
+      ).rejects.toThrow(/not found/i);
+    });
+
+    it('throws BadRequestException for an unsupported entity type', async () => {
+      await expect(
+        service.getVersions('Widget', 'w-1', 'org-1'),
+      ).rejects.toThrow(/Unsupported entity type/);
     });
   });
 
   describe('getVersion', () => {
-    it('returns a single version by id', async () => {
+    it('returns a single version by id after verifying org', async () => {
       const v = makeVersion({ id: 42 });
-      (mockRepo.findOne as jest.Mock).mockResolvedValue(v);
+      // First findOne = the Version lookup, second = the Agent org check.
+      (mockRepo.findOne as jest.Mock)
+        .mockResolvedValueOnce(v)
+        .mockResolvedValueOnce({ id: 'agent-1', organizationId: 'org-1' });
 
-      const result = await service.getVersion(42);
+      const result = await service.getVersion(42, 'org-1');
       expect(result).toBe(v);
-      expect(mockRepo.findOne).toHaveBeenCalledWith({ where: { id: 42 } });
     });
 
-    it('returns null when version not found', async () => {
-      (mockRepo.findOne as jest.Mock).mockResolvedValue(null);
-      const result = await service.getVersion(999);
+    it('returns null when version not found (no org check needed)', async () => {
+      (mockRepo.findOne as jest.Mock).mockResolvedValueOnce(null);
+      const result = await service.getVersion(999, 'org-1');
       expect(result).toBeNull();
+    });
+
+    it('throws NotFoundException when the version belongs to a different org', async () => {
+      const v = makeVersion({ id: 43 });
+      (mockRepo.findOne as jest.Mock)
+        .mockResolvedValueOnce(v)
+        .mockResolvedValueOnce({ id: 'agent-1', organizationId: 'other-org' });
+      await expect(service.getVersion(43, 'org-1')).rejects.toThrow(/not found/i);
     });
   });
 
   describe('rollback', () => {
-    it('returns the object snapshot from the specified version', async () => {
+    it('returns the object snapshot from the specified version after verifying org', async () => {
       const v = makeVersion({
         id: 5,
         object: { name: 'Old Name', description: 'Old desc' },
       });
-      (mockRepo.findOne as jest.Mock).mockResolvedValue(v);
+      // assertEntityBelongsToOrg first, then the version lookup.
+      (mockRepo.findOne as jest.Mock)
+        .mockResolvedValueOnce({ id: 'agent-1', organizationId: 'org-1' })
+        .mockResolvedValueOnce(v);
 
-      const result = await service.rollback('Agent', 'agent-1', 5);
+      const result = await service.rollback('Agent', 'agent-1', 5, 'org-1');
       expect(result).toEqual({ name: 'Old Name', description: 'Old desc' });
     });
 
     it('throws when version not found', async () => {
-      (mockRepo.findOne as jest.Mock).mockResolvedValue(null);
+      (mockRepo.findOne as jest.Mock)
+        .mockResolvedValueOnce({ id: 'agent-1', organizationId: 'org-1' })
+        .mockResolvedValueOnce(null);
       await expect(
-        service.rollback('Agent', 'agent-1', 999),
-      ).rejects.toThrow('Version not found');
+        service.rollback('Agent', 'agent-1', 999, 'org-1'),
+      ).rejects.toThrow(/Version not found/);
+    });
+
+    it('refuses rollback when caller is in a different org', async () => {
+      (mockRepo.findOne as jest.Mock).mockResolvedValueOnce({
+        id: 'agent-1',
+        organizationId: 'other-org',
+      });
+      await expect(
+        service.rollback('Agent', 'agent-1', 5, 'org-1'),
+      ).rejects.toThrow(/not found/i);
     });
   });
 
