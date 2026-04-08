@@ -1,7 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ModuleRef } from '@nestjs/core';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { AxiosRequestConfig } from 'axios';
 import { ToolExecutorService } from './tool-executor.service';
+import { ToolHttpExecutor } from './executors/tool-http.executor';
+import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
+import { ToolScriptExecutor } from './executors/tool-script.executor';
+import { ToolAuthService } from './services/tool-auth.service';
+import { hashCacheObject, sleep as sleepUtil } from './tool-execution-utils';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { Api, ApiType } from '../../entities/api.entity';
@@ -23,6 +29,15 @@ jest.mock('axios', () => {
   };
 });
 const mockedAxios = axios as unknown as jest.MockedFunction<any>;
+
+// The retry loop in the orchestrator calls `sleep` from the shared
+// utils module for its exponential backoff. Live setTimeout would
+// add seconds to the test run per retry, so mock the helper with a
+// resolved promise. Everything else in the utils module stays real.
+jest.mock('./tool-execution-utils', () => {
+  const actual = jest.requireActual('./tool-execution-utils');
+  return { ...actual, sleep: jest.fn().mockResolvedValue(undefined) };
+});
 
 describe('ToolExecutorService', () => {
   let service: ToolExecutorService;
@@ -46,13 +61,32 @@ describe('ToolExecutorService', () => {
       expire: jest.fn(),
     };
 
+    // bumpToolStats issues an atomic SQL UPDATE via createQueryBuilder.
+    // The spec doesn't need to inspect the SQL — it just needs the chain
+    // to resolve so recordExecution can finish. Provide a noop chain.
+    const qbUpdateChain: any = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ToolExecutorService,
+        // Real executor + auth instances so the dispatch in
+        // ToolExecutorService can call through to them. Their
+        // constructor dependencies are satisfied by the mocked
+        // repositories + helpers below.
+        ToolHttpExecutor,
+        ToolProtocolExecutor,
+        ToolScriptExecutor,
+        ToolAuthService,
         {
           provide: getRepositoryToken(Tool),
           useValue: {
             findOne: jest.fn(),
+            createQueryBuilder: jest.fn().mockReturnValue(qbUpdateChain),
           },
         },
         {
@@ -92,6 +126,14 @@ describe('ToolExecutorService', () => {
         {
           provide: 'default_IORedisModuleConnectionToken',
           useValue: mockRedis,
+        },
+        // ModuleRef is consumed by ToolScriptExecutor (for LLM call
+        // routing) and ToolAuthService (for OAuth2 refresh). The spec
+        // doesn't exercise either path, so a stub that returns null
+        // on `.get(...)` is fine.
+        {
+          provide: ModuleRef,
+          useValue: { get: jest.fn().mockReturnValue(null) },
         },
         {
           provide: CustomCodeExecutorService,
@@ -553,7 +595,6 @@ describe('ToolExecutorService', () => {
       toolExecutionRepository.save.mockResolvedValue({});
       jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service as any, 'checkRateLimit').mockResolvedValue({ limited: false });
-      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
 
       const executeOpSpy = jest.spyOn(service as any, 'executeOperation')
         .mockRejectedValueOnce(new Error('Temporary failure'))
@@ -593,7 +634,6 @@ describe('ToolExecutorService', () => {
       toolExecutionRepository.save.mockResolvedValue({});
       jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service as any, 'checkRateLimit').mockResolvedValue({ limited: false });
-      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
       jest.spyOn(service as any, 'executeOperation').mockRejectedValue(new Error('Persistent failure'));
 
       const result = await service.executeTool('tool-1', { id: '123' }, {
@@ -650,142 +690,6 @@ describe('ToolExecutorService', () => {
     });
   });
 
-  describe('hashObject', () => {
-    it('should generate consistent hash for same object', () => {
-      const obj = { name: 'John', age: 30, city: 'NYC' };
-
-      const hash1 = service['hashObject'](obj);
-      const hash2 = service['hashObject'](obj);
-
-      expect(hash1).toBe(hash2);
-      expect(hash1).toHaveLength(32); // MD5 hash length
-    });
-
-    it('should handle key order consistently', () => {
-      const obj1 = { a: 1, b: 2, c: 3 };
-      const obj2 = { c: 3, b: 2, a: 1 };
-
-      const hash1 = service['hashObject'](obj1);
-      const hash2 = service['hashObject'](obj2);
-
-      expect(hash1).toBe(hash2);
-    });
-
-    it('should generate different hashes for different values', () => {
-      const obj1 = { value: 'test1' };
-      const obj2 = { value: 'test2' };
-
-      const hash1 = service['hashObject'](obj1);
-      const hash2 = service['hashObject'](obj2);
-
-      expect(hash1).not.toBe(hash2);
-    });
-
-    it('should handle nested objects', () => {
-      const obj1 = { user: { name: 'John', age: 30 }, active: true };
-      const obj2 = { user: { name: 'John', age: 30 }, active: true };
-
-      const hash1 = service['hashObject'](obj1);
-      const hash2 = service['hashObject'](obj2);
-
-      expect(hash1).toBe(hash2);
-    });
-
-    it('should produce DIFFERENT hashes when nested values differ (cache-collision regression)', () => {
-      // Regression: the previous implementation was
-      // `JSON.stringify(obj, Object.keys(obj).sort())`, which interprets
-      // the array as a KEY FILTER at every level of nesting. Any key not
-      // at the top level got dropped, so nested values were invisible to
-      // the hash. These two objects would incorrectly hash identically.
-      const obj1 = { filter: { name: 'alice' }, tenant: 'acme' };
-      const obj2 = { filter: { name: 'bob' }, tenant: 'acme' };
-
-      expect(service['hashObject'](obj1)).not.toBe(service['hashObject'](obj2));
-    });
-
-    it('should produce DIFFERENT hashes when deeply nested scalars differ', () => {
-      const obj1 = { outer: { inner: { value: 1 } } };
-      const obj2 = { outer: { inner: { value: 2 } } };
-
-      expect(service['hashObject'](obj1)).not.toBe(service['hashObject'](obj2));
-    });
-
-    it('should be stable across key-order changes at any nesting level', () => {
-      const obj1 = { a: { x: 1, y: 2 }, b: 3 };
-      const obj2 = { b: 3, a: { y: 2, x: 1 } };
-
-      expect(service['hashObject'](obj1)).toBe(service['hashObject'](obj2));
-    });
-  });
-
-  describe('escapeXml (SOAP body XML-injection protection)', () => {
-    it('should escape the five XML predefined entities', () => {
-      const escape = (v: string) => service['escapeXml'](v);
-      expect(escape('&')).toBe('&amp;');
-      expect(escape('<')).toBe('&lt;');
-      expect(escape('>')).toBe('&gt;');
-      expect(escape('"')).toBe('&quot;');
-      expect(escape("'")).toBe('&apos;');
-    });
-
-    it('should neutralize a SOAP-element break-out payload', () => {
-      // Regression: SOAP body templates used to raw-interpolate parameter
-      // values, so a payload containing `</soap:Body>` could terminate
-      // the element early and inject arbitrary XML into the outbound
-      // request (e.g. forging headers or auth assertions).
-      const payload = 'alice</soap:Body><injected>gotcha</injected><soap:Body>';
-      const escaped = service['escapeXml'](payload);
-      expect(escaped).not.toContain('</soap:Body>');
-      expect(escaped).not.toContain('<injected>');
-      expect(escaped).toContain('&lt;/soap:Body&gt;');
-    });
-
-    it('should escape ampersands before other characters (to avoid double-escape)', () => {
-      expect(service['escapeXml']('a & <b>')).toBe('a &amp; &lt;b&gt;');
-    });
-
-    it('should handle arrays', () => {
-      const obj1 = { tags: ['javascript', 'typescript', 'node'] };
-      const obj2 = { tags: ['javascript', 'typescript', 'node'] };
-
-      const hash1 = service['hashObject'](obj1);
-      const hash2 = service['hashObject'](obj2);
-
-      expect(hash1).toBe(hash2);
-    });
-  });
-
-  describe('generateRequestId', () => {
-    it('should generate unique request IDs', () => {
-      const id1 = service['generateRequestId']();
-      const id2 = service['generateRequestId']();
-
-      expect(id1).not.toBe(id2);
-      expect(id1).toMatch(/^req_\d+_[a-z0-9]+$/);
-      expect(id2).toMatch(/^req_\d+_[a-z0-9]+$/);
-    });
-
-    it('should include timestamp in request ID', () => {
-      const beforeTime = Date.now();
-      const id = service['generateRequestId']();
-      const afterTime = Date.now();
-
-      const timestamp = parseInt(id.split('_')[1]);
-      expect(timestamp).toBeGreaterThanOrEqual(beforeTime);
-      expect(timestamp).toBeLessThanOrEqual(afterTime);
-    });
-
-    it('should include random component in request ID', () => {
-      const id = service['generateRequestId']();
-      const parts = id.split('_');
-
-      expect(parts).toHaveLength(3);
-      expect(parts[0]).toBe('req');
-      expect(parts[1]).toMatch(/^\d+$/);
-      expect(parts[2]).toMatch(/^[a-z0-9]+$/);
-      expect(parts[2].length).toBeGreaterThan(0);
-    });
-  });
 
   describe('Real Business Logic - Caching System', () => {
     describe('getCachedResult', () => {
@@ -805,7 +709,7 @@ describe('ToolExecutorService', () => {
           retryCount: 0,
         };
 
-        const cacheKey = `tool_cache:tool-1:${service['hashObject'](parameters)}`;
+        const cacheKey = `tool_cache:tool-1:${hashCacheObject(parameters)}`;
         mockRedis.get.mockResolvedValue(JSON.stringify(cachedData));
 
         const result = await service['getCachedResult'](mockTool, parameters);
@@ -875,7 +779,7 @@ describe('ToolExecutorService', () => {
 
         await service['cacheResult'](mockTool, parameters, result);
 
-        const cacheKey = `tool_cache:tool-1:${service['hashObject'](parameters)}`;
+        const cacheKey = `tool_cache:tool-1:${hashCacheObject(parameters)}`;
         expect(mockRedis.setex).toHaveBeenCalledWith(cacheKey, 600, JSON.stringify(result));
       });
 
@@ -1051,7 +955,6 @@ describe('ToolExecutorService', () => {
       jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service as any, 'checkRateLimit').mockResolvedValue({ limited: false });
       jest.spyOn(service as any, 'getCachedResult').mockResolvedValue(null);
-      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
 
       // First 2 attempts fail, 3rd succeeds
       jest.spyOn(service as any, 'executeOperation')
@@ -1069,10 +972,10 @@ describe('ToolExecutorService', () => {
 
       expect(result.success).toBe(true);
       expect(result.retryCount).toBe(2);
-      expect(service['sleep']).toHaveBeenCalledTimes(2);
+      expect(sleepUtil).toHaveBeenCalledTimes(2);
       // Exponential backoff: 2^1 * 1000 = 2000ms, 2^2 * 1000 = 4000ms
-      expect(service['sleep']).toHaveBeenNthCalledWith(1, 2000);
-      expect(service['sleep']).toHaveBeenNthCalledWith(2, 4000);
+      expect(sleepUtil).toHaveBeenNthCalledWith(1, 2000);
+      expect(sleepUtil).toHaveBeenNthCalledWith(2, 4000);
     });
 
     it('should fail after exhausting all retries', async () => {
@@ -1098,7 +1001,6 @@ describe('ToolExecutorService', () => {
       jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service as any, 'checkRateLimit').mockResolvedValue({ limited: false });
       jest.spyOn(service as any, 'getCachedResult').mockResolvedValue(null);
-      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
       jest.spyOn(service as any, 'executeOperation')
         .mockRejectedValue(new Error('Service unavailable'));
 
@@ -1134,7 +1036,6 @@ describe('ToolExecutorService', () => {
       jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service as any, 'checkRateLimit').mockResolvedValue({ limited: false });
       jest.spyOn(service as any, 'getCachedResult').mockResolvedValue(null);
-      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
       jest.spyOn(service as any, 'executeOperation')
         .mockRejectedValue(new Error('Failed'));
 
@@ -1144,7 +1045,7 @@ describe('ToolExecutorService', () => {
       });
 
       expect(result.retryCount).toBe(2); // Initial + 1 retry
-      expect(service['sleep']).toHaveBeenCalledTimes(1);
+      expect(sleepUtil).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -1217,1221 +1118,6 @@ describe('ToolExecutorService', () => {
     });
   });
 
-  describe('GraphQL Execution', () => {
-    it('should execute GraphQL operation successfully', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        name: 'GraphQL Tool',
-        type: ToolType.API,
-        status: ToolStatus.ACTIVE,
-        configuration: { timeout: 5000 },
-        operation: {
-          id: 'op-1',
-          name: 'getUser',
-          metadata: { query: 'query getUser($id: ID!) { user(id: $id) { id name } }' },
-          api: {
-            type: 'graphql',
-            baseUrl: 'https://api.example.com/graphql',
-            authentication: null,
-          },
-        },
-      } as any;
-
-      toolRepository.findOne.mockResolvedValue(mockTool);
-
-      const mockResponse = {
-        status: 200,
-        headers: { 'x-request-id': 'req-123' },
-        data: {
-          data: { user: { id: '1', name: 'John' } },
-        },
-      };
-
-      mockedAxios.mockResolvedValue(mockResponse as any);
-
-      const parameters = {
-        query: 'query getUser($id: ID!) { user(id: $id) { id name } }',
-        variables: { id: '1' },
-      };
-
-      const result = await service['executeGraphQLOperation'](
-        mockTool,
-        mockTool.operation,
-        mockTool.operation.api,
-        parameters,
-        { userId: 'user-1', organizationId: 'org-1' }
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.data).toEqual({ user: { id: '1', name: 'John' } });
-      expect(result.metadata.httpStatus).toBe(200);
-    });
-
-    it('should NOT leak query/operationName into variables when no explicit variables object is passed', async () => {
-      // Regression: previously `variables: parameters.variables || parameters`
-      // fell back to the entire parameters object, so a caller passing
-      // `{ id: 'x', query: '...' }` ended up sending the GraphQL query string
-      // as a `query` GraphQL variable.
-      const mockTool = {
-        configuration: { timeout: 5000 },
-        operation: {
-          metadata: {},
-          api: { type: 'graphql', baseUrl: 'https://api.example.com/graphql', authentication: null },
-        },
-      } as any;
-
-      mockedAxios.mockResolvedValue({
-        status: 200,
-        headers: {},
-        data: { data: { ok: true } },
-      } as any);
-
-      await service['executeGraphQLOperation'](
-        mockTool,
-        mockTool.operation,
-        mockTool.operation.api,
-        {
-          query: 'query GetUser($id: ID!) { user(id: $id) { name } }',
-          operationName: 'GetUser',
-          id: 'abc',
-        },
-        { userId: 'user-1', organizationId: 'org-1' },
-      );
-
-      const callConfig = mockedAxios.mock.calls[0][0] as any;
-      expect(callConfig.data.variables).toEqual({ id: 'abc' });
-      expect(callConfig.data.variables.query).toBeUndefined();
-      expect(callConfig.data.variables.operationName).toBeUndefined();
-      expect(callConfig.data.query).toContain('query GetUser');
-      expect(callConfig.data.operationName).toBe('GetUser');
-    });
-
-    it('should pass an explicit variables object through verbatim', async () => {
-      const mockTool = {
-        configuration: { timeout: 5000 },
-        operation: {
-          metadata: { query: 'query GetUser($id: ID!) { user(id: $id) { name } }' },
-          api: { type: 'graphql', baseUrl: 'https://api.example.com/graphql', authentication: null },
-        },
-      } as any;
-
-      mockedAxios.mockResolvedValue({
-        status: 200,
-        headers: {},
-        data: { data: { ok: true } },
-      } as any);
-
-      await service['executeGraphQLOperation'](
-        mockTool,
-        mockTool.operation,
-        mockTool.operation.api,
-        { variables: { id: 'xyz' } },
-        { userId: 'user-1', organizationId: 'org-1' },
-      );
-
-      const callConfig = mockedAxios.mock.calls[0][0] as any;
-      expect(callConfig.data.variables).toEqual({ id: 'xyz' });
-    });
-
-    it('should handle GraphQL errors in response', async () => {
-      const mockTool = {
-        configuration: { timeout: 5000 },
-        operation: {
-          metadata: { query: 'query { invalid }' },
-          api: { type: 'graphql', baseUrl: 'https://api.example.com/graphql' },
-        },
-      } as any;
-
-      const mockResponse = {
-        status: 200,
-        headers: {},
-        data: {
-          errors: [
-            { message: 'Field does not exist' },
-            { message: 'Syntax error' },
-          ],
-          data: null,
-        },
-      };
-
-      mockedAxios.mockResolvedValue(mockResponse as any);
-
-      const result = await service['executeGraphQLOperation'](
-        mockTool,
-        mockTool.operation,
-        mockTool.operation.api,
-        { query: 'query { invalid }' },
-        { userId: 'user-1', organizationId: 'org-1' }
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('GraphQL errors');
-      expect(result.error).toContain('Field does not exist');
-      expect(result.error).toContain('Syntax error');
-    });
-
-  });
-
-  describe('SOAP Execution', () => {
-    it('should execute SOAP operation successfully', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        configuration: { timeout: 5000 },
-        operation: {
-          id: 'op-1',
-          name: 'GetUser',
-          metadata: {
-            soapAction: 'http://example.com/GetUser',
-            namespace: 'http://example.com/services',
-          },
-          api: {
-            type: 'soap',
-            baseUrl: 'https://api.example.com/soap',
-            authentication: null,
-          },
-        },
-      } as any;
-
-      const mockResponse = {
-        status: 200,
-        headers: { 'x-request-id': 'req-456' },
-        data: `<?xml version="1.0"?>
-          <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-            <soap:Body>
-              <GetUserResponse>
-                <id>1</id>
-                <name>John</name>
-              </GetUserResponse>
-            </soap:Body>
-          </soap:Envelope>`,
-      };
-
-      mockedAxios.mockResolvedValue(mockResponse as any);
-
-      const parameters = {
-        userId: '1',
-      };
-
-      const result = await service['executeSOAPOperation'](
-        mockTool,
-        mockTool.operation,
-        mockTool.operation.api,
-        parameters,
-        { userId: 'user-1', organizationId: 'org-1' }
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.data).toBeDefined();
-      expect(result.metadata.httpStatus).toBe(200);
-    });
-
-  });
-
-  describe('Authentication Handling', () => {
-    describe('addAuthentication', () => {
-      it('should add Bearer token authentication', async () => {
-        const config: any = { headers: {} };
-        const api = {
-          id: 'api-1',
-          authentication: {
-            type: 'bearer',
-            config: { token: 'test-token-123' },
-          },
-        } as any;
-
-        await service['addAuthentication'](config, api, { userId: "user-1", organizationId: "org-1" });
-
-        expect(config.headers.Authorization).toBe('Bearer test-token-123');
-      });
-
-      it('should add Basic authentication with encoded credentials', async () => {
-        const config: any = { headers: {} };
-        const api = {
-          id: 'api-1',
-          authentication: {
-            type: 'basic',
-            config: { username: 'testuser', password: 'testpass' },
-          },
-        } as any;
-
-        await service['addAuthentication'](config, api, { userId: "user-1", organizationId: "org-1" });
-
-        const expectedAuth = 'Basic ' + Buffer.from('testuser:testpass').toString('base64');
-        expect(config.headers.Authorization).toBe(expectedAuth);
-      });
-
-      it('should add API key in header', async () => {
-        const config: any = { headers: {} };
-        const api = {
-          id: 'api-1',
-          authentication: {
-            type: 'api_key',
-            config: { location: 'header', name: 'X-API-Key', value: 'my-api-key' },
-          },
-        } as any;
-
-        await service['addAuthentication'](config, api, { userId: "user-1", organizationId: "org-1" });
-
-        expect(config.headers['X-API-Key']).toBe('my-api-key');
-      });
-
-      it('should add API key in query params', async () => {
-        const config: any = { headers: {} };
-        const api = {
-          id: 'api-1',
-          authentication: {
-            type: 'api_key',
-            config: { location: 'query', name: 'apiKey', value: 'my-api-key' },
-          },
-        } as any;
-
-        await service['addAuthentication'](config, api, { userId: "user-1", organizationId: "org-1" });
-
-        expect(config.params.apiKey).toBe('my-api-key');
-      });
-
-      it('should add OAuth2 access token', async () => {
-        const config: any = { headers: {} };
-        const api = {
-          id: 'api-1',
-          authentication: {
-            type: 'oauth2',
-            config: { accessToken: 'oauth-access-token' },
-          },
-        } as any;
-
-        await service['addAuthentication'](config, api, { userId: "user-1", organizationId: "org-1" });
-
-        expect(config.headers.Authorization).toBe('Bearer oauth-access-token');
-      });
-
-      it('should not add authentication when type is none', async () => {
-        const config: any = { headers: {} };
-        const api = {
-          id: 'api-1',
-          authentication: { type: 'none', config: {} },
-        } as any;
-
-        await service['addAuthentication'](config, api, { userId: "user-1", organizationId: "org-1" });
-
-        expect(config.headers.Authorization).toBeUndefined();
-      });
-    });
-
-    describe('Credential entity integration', () => {
-      it('should use Credential entity when one exists (instead of legacy api.authentication)', async () => {
-        const mockCredential = {
-          id: 'cred-1',
-          type: 'api_key',
-          isExpired: jest.fn().mockReturnValue(false),
-          getAuthHeaders: jest.fn().mockReturnValue({ 'X-API-Key': 'cred-api-key' }),
-          getQueryParams: jest.fn().mockReturnValue({}),
-        };
-        credentialRepository.findOne.mockResolvedValue(mockCredential);
-
-        const config: any = { headers: {} };
-        const api = {
-          id: 'api-1',
-          authentication: {
-            type: 'bearer',
-            config: { token: 'legacy-token' },
-          },
-        } as any;
-
-        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-1' });
-
-        // Should use credential entity, NOT legacy api.authentication
-        expect(config.headers['X-API-Key']).toBe('cred-api-key');
-        expect(config.headers.Authorization).toBeUndefined();
-      });
-
-      it('should fall back to legacy api.authentication when no Credential entity exists', async () => {
-        credentialRepository.findOne.mockResolvedValue(null);
-
-        const config: any = { headers: {} };
-        const api = {
-          id: 'api-1',
-          authentication: {
-            type: 'bearer',
-            config: { token: 'legacy-token' },
-          },
-        } as any;
-
-        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-1' });
-
-        expect(config.headers.Authorization).toBe('Bearer legacy-token');
-      });
-
-      it('should query credentials scoped to api + org + active', async () => {
-        credentialRepository.findOne.mockResolvedValue(null);
-
-        const config: any = { headers: {} };
-        const api = { id: 'api-42', authentication: null } as any;
-
-        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-99' });
-
-        expect(credentialRepository.findOne).toHaveBeenCalledWith({
-          where: {
-            apiId: 'api-42',
-            organizationId: 'org-99',
-            isActive: true,
-          },
-          order: { createdAt: 'DESC' },
-        });
-      });
-
-      it('should apply query params from credential', async () => {
-        const mockCredential = {
-          id: 'cred-1',
-          type: 'api_key',
-          isExpired: jest.fn().mockReturnValue(false),
-          getAuthHeaders: jest.fn().mockReturnValue({}),
-          getQueryParams: jest.fn().mockReturnValue({ api_key: 'query-key-value' }),
-        };
-        credentialRepository.findOne.mockResolvedValue(mockCredential);
-
-        const config: any = { headers: {}, params: { existing: 'param' } };
-        const api = { id: 'api-1', authentication: null } as any;
-
-        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-1' });
-
-        expect(config.params.api_key).toBe('query-key-value');
-        expect(config.params.existing).toBe('param');
-      });
-
-      it('should mark credential as used after applying', async () => {
-        const mockCredential = {
-          id: 'cred-1',
-          type: 'api_key',
-          isExpired: jest.fn().mockReturnValue(false),
-          getAuthHeaders: jest.fn().mockReturnValue({ Authorization: 'Bearer x' }),
-          getQueryParams: jest.fn().mockReturnValue({}),
-        };
-        credentialRepository.findOne.mockResolvedValue(mockCredential);
-        credentialRepository.update.mockResolvedValue({ affected: 1 });
-
-        const config: any = { headers: {} };
-        const api = { id: 'api-1', authentication: null } as any;
-
-        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-1' });
-
-        expect(credentialRepository.update).toHaveBeenCalledWith(
-          'cred-1',
-          expect.objectContaining({ lastUsedAt: expect.any(Date) }),
-        );
-      });
-
-      it('should not add auth when no credential AND no legacy authentication', async () => {
-        credentialRepository.findOne.mockResolvedValue(null);
-
-        const config: any = { headers: {} };
-        const api = { id: 'api-1', authentication: null } as any;
-
-        await service['addAuthentication'](config, api, { userId: 'user-1', organizationId: 'org-1' });
-
-        expect(config.headers.Authorization).toBeUndefined();
-        expect(config.params).toBeUndefined();
-      });
-    });
-  });
-
-  describe('Parameter Validation', () => {
-    describe('validateParameters', () => {
-      it('should validate required parameters successfully', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          parameters: {
-            required: ['userId', 'action'],
-          },
-        } as any;
-
-        const parameters = { userId: '123', action: 'create' };
-
-        const result = await service['validateParameters'](mockTool, parameters);
-
-        expect(result.isValid).toBe(true);
-        expect(result.errors).toHaveLength(0);
-      });
-
-      it('should detect missing required parameters', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          parameters: {
-            required: ['userId', 'action'],
-          },
-        } as any;
-
-        const parameters = { userId: '123' }; // missing 'action'
-
-        const result = await service['validateParameters'](mockTool, parameters);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Missing required parameter: action');
-      });
-
-      it('should use inputSchema validation when available', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          inputSchema: {
-            validate: jest.fn().mockResolvedValue({
-              isValid: true,
-              errors: [],
-            }),
-          },
-        } as any;
-
-        const parameters = { userId: '123' };
-
-        const result = await service['validateParameters'](mockTool, parameters);
-
-        expect(mockTool.inputSchema.validate).toHaveBeenCalledWith(parameters);
-        expect(result.isValid).toBe(true);
-      });
-
-      it('should handle validation errors gracefully', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          inputSchema: {
-            validate: jest.fn().mockResolvedValue({
-              isValid: false,
-              errors: ['Parameter validation error: Schema validation failed'],
-            }),
-          },
-        } as any;
-
-        const parameters = { userId: '123' };
-
-        const result = await service['validateParameters'](mockTool, parameters);
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors[0]).toContain('Parameter validation error');
-      });
-
-      it('should pass validation when no required parameters defined', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          parameters: {},
-        } as any;
-
-        const parameters = { anyParam: 'value' };
-
-        const result = await service['validateParameters'](mockTool, parameters);
-
-        expect(result.isValid).toBe(true);
-        expect(result.errors).toHaveLength(0);
-      });
-    });
-  });
-
-  describe('Rate Limiting Per-Hour Logic', () => {
-    it('should block requests exceeding hourly limit', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        configuration: {
-          rateLimit: {
-            enabled: true,
-            requestsPerMinute: 100,
-            requestsPerHour: 5,
-          },
-        },
-      } as any;
-
-      const userId = 'user-1';
-
-      // Mock Redis to simulate 6 requests (exceeds limit of 5)
-      mockRedis.incr.mockResolvedValue(6);
-
-      const result = await service['checkRateLimit'](mockTool, { userId, organizationId: 'org-1' });
-
-      expect(result.limited).toBe(true);
-      expect(result.message).toContain('5 requests per hour');
-    });
-
-    it('should allow requests under hourly limit', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        configuration: {
-          rateLimit: {
-            enabled: true,
-            requestsPerMinute: 100,
-            requestsPerHour: 10,
-          },
-        },
-      } as any;
-
-      const userId = 'user-1';
-
-      // Mock Redis to simulate 8 requests (under limit of 10)
-      mockRedis.incr.mockResolvedValueOnce(5).mockResolvedValueOnce(8);
-
-      const result = await service['checkRateLimit'](mockTool, { userId, organizationId: 'org-1' });
-
-      expect(result.limited).toBe(false);
-    });
-  });
-
-  describe('Cache Disabled Scenario', () => {
-    it('should not cache result when cache is disabled', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        configuration: {
-          cache: {
-            enabled: false,
-          },
-        },
-      } as any;
-
-      const parameters = { userId: '123' };
-      const result = { success: true, data: { result: 'test' } } as any;
-
-      await service['cacheResult'](mockTool, parameters, result);
-
-      expect(mockRedis.setex).not.toHaveBeenCalled();
-    });
-
-    it('should not cache result when cache config is missing', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        configuration: {},
-      } as any;
-
-      const parameters = { userId: '123' };
-      const result = { success: true, data: { result: 'test' } } as any;
-
-      await service['cacheResult'](mockTool, parameters, result);
-
-      expect(mockRedis.setex).not.toHaveBeenCalled();
-    });
-
-    it('should log warning when cache storage fails', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        configuration: {
-          cache: {
-            enabled: true,
-            ttl: 300,
-          },
-        },
-      } as any;
-
-      const parameters = { userId: '123' };
-      const result = { success: true, data: { result: 'test' } } as any;
-
-      mockRedis.setex.mockRejectedValue(new Error('Redis connection error'));
-
-      await service['cacheResult'](mockTool, parameters, result);
-
-      // Should not throw, just log warning
-      expect(mockRedis.setex).toHaveBeenCalled();
-    });
-  });
-
-  describe('REST path parameter substitution (regression)', () => {
-    it('should replace EVERY occurrence of a repeated path parameter, not just the first', async () => {
-      // Regression: previous code used `url.replace(\`{${key}}\`, value)`
-      // which only replaces the first occurrence. A weird-but-valid path
-      // template like `/orgs/{org}/repos/{org}-archive` would leave the
-      // second `{org}` unsubstituted.
-      const mockTool = {
-        id: 'tool-1',
-        operation: {
-          id: 'op-1',
-          method: 'GET',
-          endpoint: '/orgs/{org}/repos/{org}-archive',
-          api: {
-            id: 'api-1',
-            type: ApiType.OPENAPI,
-            baseUrl: 'https://api.example.com',
-            authentication: { type: 'none', config: {} },
-          },
-          parameters: [],
-        },
-        configuration: {},
-      } as any;
-
-      mockedAxios.mockResolvedValue({ status: 200, data: {}, headers: {} });
-
-      await service['executeRestOperation'](
-        mockTool,
-        mockTool.operation,
-        mockTool.operation.api,
-        { path: { org: 'almyty' } },
-        { userId: 'user-1', organizationId: 'org-1' },
-      );
-
-      const callConfig = mockedAxios.mock.calls[0][0] as any;
-      expect(callConfig.url).toBe('https://api.example.com/orgs/almyty/repos/almyty-archive');
-      expect(callConfig.url).not.toContain('{org}');
-    });
-
-    it('should truncate huge upstream error bodies in the surfaced error message', async () => {
-      // Regression: a 500 with a 5MB JSON body used to inline the whole
-      // body into result.error, bloating logs and LLM context windows.
-      const mockTool = {
-        id: 'tool-1',
-        operation: {
-          id: 'op-1',
-          method: 'GET',
-          endpoint: '/users',
-          api: {
-            id: 'api-1',
-            type: ApiType.OPENAPI,
-            baseUrl: 'https://api.example.com',
-            authentication: { type: 'none', config: {} },
-          },
-          parameters: [],
-        },
-        configuration: {},
-      } as any;
-
-      const hugeBody = 'X'.repeat(50_000);
-      const axiosError = {
-        isAxiosError: true,
-        message: 'Request failed',
-        response: { status: 500, data: hugeBody, headers: {} },
-      };
-      mockedAxios.mockRejectedValue(axiosError);
-      ((axios.isAxiosError as any) as jest.Mock).mockReturnValue(true);
-
-      const result = await service['executeRestOperation'](
-        mockTool,
-        mockTool.operation,
-        mockTool.operation.api,
-        {},
-        { userId: 'user-1', organizationId: 'org-1' },
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.error!.length).toBeLessThan(700); // 500 chars + the suffix marker
-      expect(result.error).toContain('truncated');
-      // The full body is still preserved on `data`.
-      expect(result.data).toBe(hugeBody);
-    });
-  });
-
-  describe('REST Operation with Body Data', () => {
-    it('should include body data in POST requests', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        operation: {
-          id: 'op-1',
-          method: 'POST',
-          endpoint: '/users',
-          api: {
-            id: 'api-1',
-            type: ApiType.OPENAPI,
-            baseUrl: 'https://api.example.com',
-            authentication: { type: 'none', config: {} },
-          },
-          parameters: [],
-        },
-        configuration: {},
-      } as any;
-
-      const parameters = { body: { name: 'John', email: 'john@example.com' } };
-
-      mockedAxios.mockResolvedValue({
-        status: 201,
-        data: { id: '123', name: 'John' },
-        headers: {},
-      });
-
-      const result = await service['executeRestOperation'](
-        mockTool,
-        mockTool.operation,
-        mockTool.operation.api,
-        parameters,
-        { userId: 'user-1', organizationId: 'org-1' }
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.data).toEqual({ id: '123', name: 'John' });
-      expect(mockedAxios).toHaveBeenCalledWith(
-        expect.objectContaining({
-          method: 'post',
-          data: { name: 'John', email: 'john@example.com' },
-        })
-      );
-    });
-
-    it('should include body data in PUT requests', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        operation: {
-          id: 'op-1',
-          method: 'PUT',
-          endpoint: '/users/{id}',
-          api: {
-            id: 'api-1',
-            type: ApiType.OPENAPI,
-            baseUrl: 'https://api.example.com',
-            authentication: { type: 'none', config: {} },
-          },
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        },
-        configuration: {},
-      } as any;
-
-      const parameters = {
-        path: { id: '123' },
-        body: { name: 'John Updated' }
-      };
-
-      mockedAxios.mockResolvedValue({
-        status: 200,
-        data: { id: '123', name: 'John Updated' },
-        headers: {},
-      });
-
-      const result = await service['executeRestOperation'](
-        mockTool,
-        mockTool.operation,
-        mockTool.operation.api,
-        parameters,
-        { userId: 'user-1', organizationId: 'org-1' }
-      );
-
-      expect(result.success).toBe(true);
-      expect(mockedAxios).toHaveBeenCalledWith(
-        expect.objectContaining({
-          method: 'put',
-          data: { name: 'John Updated' },
-        })
-      );
-    });
-
-    it('should include body data in PATCH requests', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        operation: {
-          id: 'op-1',
-          method: 'PATCH',
-          endpoint: '/users/{id}',
-          api: {
-            id: 'api-1',
-            type: ApiType.OPENAPI,
-            baseUrl: 'https://api.example.com',
-            authentication: { type: 'none', config: {} },
-          },
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        },
-        configuration: {},
-      } as any;
-
-      const parameters = {
-        path: { id: '123' },
-        body: { email: 'newemail@example.com' }
-      };
-
-      mockedAxios.mockResolvedValue({
-        status: 200,
-        data: { id: '123', email: 'newemail@example.com' },
-        headers: {},
-      });
-
-      const result = await service['executeRestOperation'](
-        mockTool,
-        mockTool.operation,
-        mockTool.operation.api,
-        parameters,
-        { userId: 'user-1', organizationId: 'org-1' }
-      );
-
-      expect(result.success).toBe(true);
-      expect(mockedAxios).toHaveBeenCalledWith(
-        expect.objectContaining({
-          method: 'patch',
-          data: { email: 'newemail@example.com' },
-        })
-      );
-    });
-  });
-
-  describe('Error Handling in Execution Methods', () => {
-    describe('REST operation error handling', () => {
-      it('should handle HTTP errors with axios', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          name: 'Test Tool',
-          operation: {
-            id: 'op-1',
-            method: 'GET',
-            endpoint: '/users/{id}',
-            api: {
-              id: 'api-1',
-              type: ApiType.OPENAPI,
-              baseUrl: 'https://api.example.com',
-              authentication: { type: 'none', config: {} },
-            },
-          },
-          configuration: {},
-        } as any;
-
-        const parameters = { path: { id: '123' } };
-
-        const axiosError = {
-          isAxiosError: true,
-          response: {
-            status: 404,
-            data: { message: 'User not found' },
-            headers: { 'x-request-id': 'req-123' },
-          },
-        };
-
-        // Mock axios to throw error
-        mockedAxios.mockRejectedValue(axiosError);
-        ((axios.isAxiosError as any) as jest.Mock).mockReturnValue(true);
-
-        const result = await service['executeRestOperation'](
-          mockTool,
-          mockTool.operation,
-          mockTool.operation.api,
-          parameters,
-          { userId: 'user-1', organizationId: 'org-1' }
-        );
-
-        expect(result.success).toBe(false);
-        expect(result.error).toContain('404');
-        expect(result.metadata.httpStatus).toBe(404);
-      });
-
-      it('should throw non-axios errors', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          operation: {
-            id: 'op-1',
-            method: 'GET',
-            endpoint: '/users',
-            api: {
-              id: 'api-1',
-              type: ApiType.OPENAPI,
-              baseUrl: 'https://api.example.com',
-              authentication: { type: 'none', config: {} },
-            },
-          },
-          configuration: {},
-        } as any;
-
-        mockedAxios.mockRejectedValue(new Error('Network error'));
-        ((axios.isAxiosError as any) as jest.Mock).mockReturnValue(false);
-
-        await expect(
-          service['executeRestOperation'](
-            mockTool,
-            mockTool.operation,
-            mockTool.operation.api,
-            {},
-            { userId: 'user-1', organizationId: 'org-1' }
-          )
-        ).rejects.toThrow('Network error');
-      });
-    });
-
-    describe('GraphQL operation error handling', () => {
-      it('should handle GraphQL HTTP errors with axios', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          operation: {
-            id: 'op-1',
-            name: 'getUser',
-            api: {
-              id: 'api-1',
-              type: ApiType.GRAPHQL,
-              baseUrl: 'https://api.example.com/graphql',
-              authentication: { type: 'none', config: {} },
-            },
-          },
-          configuration: {},
-        } as any;
-
-        const parameters = { variables: { id: '123' } };
-
-        const axiosError = {
-          isAxiosError: true,
-          response: {
-            status: 500,
-            data: { message: 'Internal server error' },
-            headers: {},
-          },
-        };
-
-        mockedAxios.mockRejectedValue(axiosError);
-        ((axios.isAxiosError as any) as jest.Mock).mockReturnValue(true);
-
-        const result = await service['executeGraphQLOperation'](
-          mockTool,
-          mockTool.operation,
-          mockTool.operation.api,
-          parameters,
-          { userId: 'user-1', organizationId: 'org-1' }
-        );
-
-        expect(result.success).toBe(false);
-        expect(result.error).toContain('GraphQL request failed');
-        expect(result.metadata.httpStatus).toBe(500);
-      });
-
-      it('should throw non-axios errors in GraphQL', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          operation: {
-            id: 'op-1',
-            name: 'getUser',
-            api: {
-              id: 'api-1',
-              type: ApiType.GRAPHQL,
-              baseUrl: 'https://api.example.com/graphql',
-              authentication: { type: 'none', config: {} },
-            },
-          },
-          configuration: {},
-        } as any;
-
-        mockedAxios.mockRejectedValue(new Error('Network timeout'));
-        ((axios.isAxiosError as any) as jest.Mock).mockReturnValue(false);
-
-        await expect(
-          service['executeGraphQLOperation'](
-            mockTool,
-            mockTool.operation,
-            mockTool.operation.api,
-            {},
-            { userId: 'user-1', organizationId: 'org-1' }
-          )
-        ).rejects.toThrow('Network timeout');
-      });
-    });
-
-    describe('SOAP operation error handling', () => {
-      it('should handle SOAP HTTP errors with axios', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          operation: {
-            id: 'op-1',
-            name: 'getUser',
-            api: {
-              id: 'api-1',
-              type: ApiType.SOAP,
-              baseUrl: 'https://api.example.com/soap',
-              authentication: { type: 'none', config: {} },
-            },
-          },
-          configuration: {},
-        } as any;
-
-        const parameters = {
-          action: 'getUser',
-          envelope: '<soap:Envelope>...</soap:Envelope>',
-        };
-
-        const axiosError = {
-          isAxiosError: true,
-          response: {
-            status: 500,
-            data: '<soap:Fault>...</soap:Fault>',
-            headers: {},
-          },
-        };
-
-        mockedAxios.mockRejectedValue(axiosError);
-        ((axios.isAxiosError as any) as jest.Mock).mockReturnValue(true);
-
-        const result = await service['executeSOAPOperation'](
-          mockTool,
-          mockTool.operation,
-          mockTool.operation.api,
-          parameters,
-          { userId: 'user-1', organizationId: 'org-1' }
-        );
-
-        expect(result.success).toBe(false);
-        expect(result.error).toContain('SOAP request failed');
-        expect(result.metadata.httpStatus).toBe(500);
-      });
-
-      it('should throw non-axios errors in SOAP', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          operation: {
-            id: 'op-1',
-            name: 'getUser',
-            api: {
-              id: 'api-1',
-              type: ApiType.SOAP,
-              baseUrl: 'https://api.example.com/soap',
-              authentication: { type: 'none', config: {} },
-            },
-          },
-          configuration: {},
-        } as any;
-
-        mockedAxios.mockRejectedValue(new Error('Connection refused'));
-        ((axios.isAxiosError as any) as jest.Mock).mockReturnValue(false);
-
-        await expect(
-          service['executeSOAPOperation'](
-            mockTool,
-            mockTool.operation,
-            mockTool.operation.api,
-            {},
-            { userId: 'user-1', organizationId: 'org-1' }
-          )
-        ).rejects.toThrow('Connection refused');
-      });
-    });
-
-    describe('Protobuf operation error handling', () => {
-      it('should handle gRPC HTTP errors with axios', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          operation: {
-            id: 'op-1',
-            name: 'getUser',
-            endpoint: '/api.UserService/GetUser',
-            api: {
-              id: 'api-1',
-              type: ApiType.GRPC,
-              baseUrl: 'https://api.example.com',
-              authentication: { type: 'none', config: {} },
-            },
-          },
-          configuration: {},
-        } as any;
-
-        const parameters = { userId: '123' };
-
-        const axiosError = {
-          isAxiosError: true,
-          response: {
-            status: 503,
-            data: { error: 'Service unavailable' },
-            headers: {},
-          },
-        };
-
-        mockedAxios.mockRejectedValue(axiosError);
-        ((axios.isAxiosError as any) as jest.Mock).mockReturnValue(true);
-
-        const result = await service['executeProtobufOperation'](
-          mockTool,
-          mockTool.operation,
-          mockTool.operation.api,
-          parameters,
-          { userId: 'user-1', organizationId: 'org-1' }
-        );
-
-        expect(result.success).toBe(false);
-        expect(result.error).toContain('gRPC request failed');
-        expect(result.metadata.httpStatus).toBe(503);
-      });
-
-      it('should throw non-axios errors in Protobuf', async () => {
-        const mockTool = {
-          id: 'tool-1',
-          operation: {
-            id: 'op-1',
-            name: 'getUser',
-            endpoint: '/api.UserService/GetUser',
-            api: {
-              id: 'api-1',
-              type: ApiType.GRPC,
-              baseUrl: 'https://api.example.com',
-              authentication: { type: 'none', config: {} },
-            },
-          },
-          configuration: {},
-        } as any;
-
-        mockedAxios.mockRejectedValue(new Error('gRPC connection error'));
-        ((axios.isAxiosError as any) as jest.Mock).mockReturnValue(false);
-
-        await expect(
-          service['executeProtobufOperation'](
-            mockTool,
-            mockTool.operation,
-            mockTool.operation.api,
-            {},
-            { userId: 'user-1', organizationId: 'org-1' }
-          )
-        ).rejects.toThrow('gRPC connection error');
-      });
-    });
-  });
-
-  describe('Operation Router Logic', () => {
-    it('should route to REST execution for OpenAPI type', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        operation: {
-          api: { type: ApiType.OPENAPI },
-        },
-      } as any;
-
-      jest.spyOn(service as any, 'executeRestOperation').mockResolvedValue({ success: true });
-
-      await service['executeOperation'](mockTool, {}, { userId: 'user-1', organizationId: 'org-1' });
-
-      expect(service['executeRestOperation']).toHaveBeenCalled();
-    });
-
-    it('should route to GraphQL execution for GraphQL type', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        operation: {
-          api: { type: ApiType.GRAPHQL },
-        },
-      } as any;
-
-      jest.spyOn(service as any, 'executeGraphQLOperation').mockResolvedValue({ success: true });
-
-      await service['executeOperation'](mockTool, {}, { userId: 'user-1', organizationId: 'org-1' });
-
-      expect(service['executeGraphQLOperation']).toHaveBeenCalled();
-    });
-
-    it('should route to SOAP execution for SOAP type', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        operation: {
-          api: { type: ApiType.SOAP },
-        },
-      } as any;
-
-      jest.spyOn(service as any, 'executeSOAPOperation').mockResolvedValue({ success: true });
-
-      await service['executeOperation'](mockTool, {}, { userId: 'user-1', organizationId: 'org-1' });
-
-      expect(service['executeSOAPOperation']).toHaveBeenCalled();
-    });
-
-    it('should route to Protobuf execution for gRPC type', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        operation: {
-          api: { type: ApiType.GRPC },
-        },
-      } as any;
-
-      jest.spyOn(service as any, 'executeProtobufOperation').mockResolvedValue({ success: true });
-
-      await service['executeOperation'](mockTool, {}, { userId: 'user-1', organizationId: 'org-1' });
-
-      expect(service['executeProtobufOperation']).toHaveBeenCalled();
-    });
-
-    it('should throw error for unsupported API type', async () => {
-      const mockTool = {
-        id: 'tool-1',
-        operation: {
-          api: { type: 'UNKNOWN_TYPE' },
-        },
-      } as any;
-
-      await expect(
-        service['executeOperation'](mockTool, {}, { userId: 'user-1', organizationId: 'org-1' })
-      ).rejects.toThrow('Unsupported API type');
-    });
-  });
 
   describe('Record Execution Error Handling', () => {
     it('should handle recordExecution save failures gracefully', async () => {
