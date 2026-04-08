@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
+import * as crypto from 'crypto';
 import { EventEmitter } from 'events';
 
 import { UsageMetric } from '../../entities/usage-metric.entity';
@@ -396,7 +397,13 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
   }
 
   private async triggerAlert(rule: AlertRule, metrics: SystemMetrics): Promise<void> {
-    const alertId = `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Unguessable alert id. The previous shape was
+    // `alert_${Date.now()}_${Math.random()...}` — enumerable because
+    // the timestamp prefix is predictable and the random suffix is
+    // non-cryptographic. alertId is exposed via
+    // POST /monitoring/alerts/:alertId/resolve (see controller) so a
+    // weak id directly feeds cross-tenant resolve attacks.
+    const alertId = `alert_${crypto.randomBytes(16).toString('hex')}`;
     
     const alert: Alert = {
       id: alertId,
@@ -485,7 +492,7 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     ];
 
     for (const ruleData of defaultRules) {
-      const ruleId = `rule_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const ruleId = `rule_${crypto.randomBytes(16).toString('hex')}`;
       const rule: AlertRule = { ...ruleData, id: ruleId };
       this.alertRules.set(ruleId, rule);
     }
@@ -544,9 +551,33 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     return alerts;
   }
 
-  async resolveAlert(alertId: string, resolvedBy: string): Promise<boolean> {
+  async resolveAlert(
+    alertId: string,
+    resolvedBy: string,
+    /**
+     * The caller's current organization id. REQUIRED whenever the
+     * alert being resolved is scoped to a specific org — every
+     * tenant-scoped alert must only be resolvable from within that
+     * tenant. Pass `null` only from system/internal callers that
+     * operate on platform-global alerts (alerts with no
+     * organizationId set, e.g. system health rules).
+     */
+    callerOrganizationId: string | null,
+  ): Promise<boolean> {
     const alert = this.activeAlerts.get(alertId);
     if (!alert) {
+      return false;
+    }
+
+    // Cross-tenant guard: if the alert belongs to an org, the caller
+    // must be acting in that same org. Previously this check didn't
+    // exist and resolveAlert took only (alertId, resolvedBy), so any
+    // authenticated user — combined with a guessable/leaked alertId
+    // (which we also just hardened) — could mark any other org's
+    // alerts as resolved. Respond with "not found" instead of
+    // Forbidden to avoid turning this into a cross-tenant existence
+    // oracle.
+    if (alert.organizationId && alert.organizationId !== callerOrganizationId) {
       return false;
     }
 

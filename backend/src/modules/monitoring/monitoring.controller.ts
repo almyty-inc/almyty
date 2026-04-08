@@ -57,12 +57,17 @@ export class MonitoringController {
   @Post('/alerts/:alertId/resolve')
   @UseGuards(JwtAuthGuard)
   async resolveAlert(@Param('alertId') alertId: string, @Request() req) {
-    const success = await this.monitoringService.resolveAlert(alertId, req.user.id);
-    
+    // Thread the caller's current org through so the service can
+    // refuse cross-tenant resolves. Without it, any authenticated
+    // user could POST this endpoint with another org's alertId and
+    // silently clear their alerts.
+    const callerOrgId = req.user?.currentOrganizationId || null;
+    const success = await this.monitoringService.resolveAlert(alertId, req.user.id, callerOrgId);
+
     if (!success) {
       throw new HttpException('Alert not found', HttpStatus.NOT_FOUND);
     }
-    
+
     return { success: true, data: null, message: 'Alert resolved successfully' };
   }
 
