@@ -655,22 +655,22 @@ describe('OrganizationsService', () => {
 
   describe('updateTeam', () => {
     it('should update team name', async () => {
-      const mockTeam = { id: 'team-1', name: 'Old Name', description: 'Desc' };
+      const mockTeam = { id: 'team-1', name: 'Old Name', description: 'Desc', organizationId: 'org-1' };
       teamRepository.findOne.mockResolvedValue(mockTeam);
       teamRepository.save.mockResolvedValue({ ...mockTeam, name: 'New Name' });
 
-      await service.updateTeam('team-1', { name: 'New Name' });
+      await service.updateTeam('org-1', 'team-1', { name: 'New Name' });
 
       expect(mockTeam.name).toBe('New Name');
       expect(teamRepository.save).toHaveBeenCalled();
     });
 
     it('should update team description', async () => {
-      const mockTeam = { id: 'team-1', name: 'Team', description: 'Old' };
+      const mockTeam = { id: 'team-1', name: 'Team', description: 'Old', organizationId: 'org-1' };
       teamRepository.findOne.mockResolvedValue(mockTeam);
       teamRepository.save.mockResolvedValue({ ...mockTeam, description: 'New' });
 
-      await service.updateTeam('team-1', { description: 'New' });
+      await service.updateTeam('org-1', 'team-1', { description: 'New' });
 
       expect(mockTeam.description).toBe('New');
     });
@@ -678,14 +678,35 @@ describe('OrganizationsService', () => {
     it('should throw NotFoundException when team not found', async () => {
       teamRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.updateTeam('team-1', { name: 'Test' }))
+      await expect(service.updateTeam('org-1', 'team-1', { name: 'Test' }))
         .rejects
         .toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException when team belongs to a different org', async () => {
+      // assertTeamInOrg scopes by { id, organizationId }. When the
+      // caller passes a different org id than the team actually
+      // belongs to, the repository's findOne returns null and the
+      // service throws NotFoundException — never revealing whether
+      // the id exists in another tenant.
+      teamRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.updateTeam('other-org', 'team-1', { name: 'X' }))
+        .rejects
+        .toThrow(NotFoundException);
+
+      expect(teamRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'team-1', organizationId: 'other-org' },
+      });
     });
   });
 
   describe('addTeamMember', () => {
     it('should throw ConflictException when user is already a team member', async () => {
+      // assertTeamInOrg runs first and must see a team that belongs
+      // to the requested org before the conflict check fires.
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
+
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           OrganizationsService,
@@ -711,7 +732,7 @@ describe('OrganizationsService', () => {
 
       const localService = module.get<OrganizationsService>(OrganizationsService);
 
-      await expect(localService.addTeamMember('team-1', 'user-1'))
+      await expect(localService.addTeamMember('org-1', 'team-1', 'user-1'))
         .rejects
         .toThrow(ConflictException);
     });
@@ -719,6 +740,8 @@ describe('OrganizationsService', () => {
 
   describe('updateTeamMemberRole', () => {
     it('should throw BadRequestException for invalid role', async () => {
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
+
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           OrganizationsService,
@@ -742,7 +765,7 @@ describe('OrganizationsService', () => {
 
       const localService = module.get<OrganizationsService>(OrganizationsService);
 
-      await expect(localService.updateTeamMemberRole('team-1', 'user-1', 'invalid'))
+      await expect(localService.updateTeamMemberRole('org-1', 'team-1', 'user-1', 'invalid'))
         .rejects
         .toThrow(BadRequestException);
     });
@@ -750,6 +773,8 @@ describe('OrganizationsService', () => {
 
   describe('removeTeamMember', () => {
     it('should throw NotFoundException when user is not a team member', async () => {
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
+
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           OrganizationsService,
@@ -773,7 +798,7 @@ describe('OrganizationsService', () => {
 
       const localService = module.get<OrganizationsService>(OrganizationsService);
 
-      await expect(localService.removeTeamMember('team-1', 'user-1'))
+      await expect(localService.removeTeamMember('org-1', 'team-1', 'user-1'))
         .rejects
         .toThrow(NotFoundException);
     });
@@ -808,6 +833,8 @@ describe('OrganizationsService', () => {
 
   describe('addTeamMember - Branch Coverage for existing member', () => {
     it('should throw ConflictException when user is already a team member', async () => {
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
+
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           OrganizationsService,
@@ -832,7 +859,7 @@ describe('OrganizationsService', () => {
 
       const localService = module.get<OrganizationsService>(OrganizationsService);
 
-      await expect(localService.addTeamMember('team-1', 'user-1'))
+      await expect(localService.addTeamMember('org-1', 'team-1', 'user-1'))
         .rejects
         .toThrow();
     });
@@ -840,27 +867,30 @@ describe('OrganizationsService', () => {
 
   describe('updateTeamMemberRole - Branch Coverage', () => {
     it('should throw when team member not found', async () => {
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
       userTeamRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.updateTeamMemberRole('team-1', 'user-1', 'lead'))
+      await expect(service.updateTeamMemberRole('org-1', 'team-1', 'user-1', 'lead'))
         .rejects
         .toThrow(NotFoundException);
     });
 
     it('should throw when invalid role provided', async () => {
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
       userTeamRepository.findOne.mockResolvedValue({ id: 'membership-1' } as any);
 
-      await expect(service.updateTeamMemberRole('team-1', 'user-1', 'invalid-role'))
+      await expect(service.updateTeamMemberRole('org-1', 'team-1', 'user-1', 'invalid-role'))
         .rejects
         .toThrow(BadRequestException);
     });
 
     it('should update role successfully', async () => {
       const mockMembership = { id: 'membership-1', role: 'member' };
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
       userTeamRepository.findOne.mockResolvedValue(mockMembership as any);
       userTeamRepository.save.mockResolvedValue(mockMembership as any);
 
-      await service.updateTeamMemberRole('team-1', 'user-1', 'lead');
+      await service.updateTeamMemberRole('org-1', 'team-1', 'user-1', 'lead');
 
       expect(mockMembership.role).toBe('lead');
       expect(userTeamRepository.save).toHaveBeenCalledWith(mockMembership);
@@ -869,19 +899,21 @@ describe('OrganizationsService', () => {
 
   describe('removeTeamMember - Branch Coverage', () => {
     it('should throw when team member not found', async () => {
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
       userTeamRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.removeTeamMember('team-1', 'user-1'))
+      await expect(service.removeTeamMember('org-1', 'team-1', 'user-1'))
         .rejects
         .toThrow(NotFoundException);
     });
 
     it('should remove team member successfully', async () => {
       const mockMembership = { id: 'membership-1' };
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
       userTeamRepository.findOne.mockResolvedValue(mockMembership as any);
       userTeamRepository.remove.mockResolvedValue(mockMembership as any);
 
-      await service.removeTeamMember('team-1', 'user-1');
+      await service.removeTeamMember('org-1', 'team-1', 'user-1');
 
       expect(userTeamRepository.remove).toHaveBeenCalledWith(mockMembership);
     });
