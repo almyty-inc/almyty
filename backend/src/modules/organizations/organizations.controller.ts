@@ -49,154 +49,166 @@ export class OrganizationsController {
     return { success: true, data, message: 'Organization created successfully' };
   }
 
-  @Get(':id')
+  // NOTE: every org-scoped route below takes `:organizationId` rather
+  // than `:id` so the global RolesGuard can extract it via
+  // `request.params.organizationId` and verify that the caller is a
+  // member of *that specific org* with the required role. Before this
+  // rename the guard fell back to `currentOrganizationId` from the
+  // JWT, which is the caller's own current org — meaning an admin of
+  // org A could PATCH/DELETE org B, invite themselves as owner into
+  // org B, or mutate any team in org B just by sending a different
+  // URL path. The URL shape is unchanged (`/organizations/<uuid>/...`),
+  // only the server-side param name changes, so no frontend callers
+  // are affected.
+
+  @Get(':organizationId')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get organization by ID' })
   @ApiResponse({ status: 200, description: 'Organization retrieved successfully' })
-  async getOrganization(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    const data = await this.organizationsService.findOne(id);
+  async getOrganization(@Param('organizationId', ParseUUIDPipe) organizationId: string, @Request() req: any) {
+    const data = await this.organizationsService.findOne(organizationId);
     return { success: true, data, message: 'Organization retrieved successfully' };
   }
 
-  @Patch(':id')
+  @Patch(':organizationId')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update organization' })
   @ApiResponse({ status: 200, description: 'Organization updated successfully' })
   async updateOrganization(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Body() updateOrgDto: any,
     @Request() req: any,
   ) {
-    const data = await this.organizationsService.update(id, updateOrgDto);
+    const data = await this.organizationsService.update(organizationId, updateOrgDto);
     return { success: true, data, message: 'Organization updated successfully' };
   }
 
-  @Delete(':id')
+  @Delete(':organizationId')
   @Roles('owner')
   @ApiOperation({ summary: 'Delete organization' })
   @ApiResponse({ status: 200, description: 'Organization deleted successfully' })
-  async deleteOrganization(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    const data = await this.organizationsService.delete(id);
+  async deleteOrganization(@Param('organizationId', ParseUUIDPipe) organizationId: string, @Request() req: any) {
+    const data = await this.organizationsService.delete(organizationId);
     return { success: true, data, message: 'Organization deleted successfully' };
   }
 
   // Member Management
-  @Get(':id/members')
+  @Get(':organizationId/members')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get organization members' })
-  async getOrganizationMembers(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    const data = await this.organizationsService.getMembers(id, req.user.id);
+  async getOrganizationMembers(@Param('organizationId', ParseUUIDPipe) organizationId: string, @Request() req: any) {
+    const data = await this.organizationsService.getMembers(organizationId, req.user.id);
     return { success: true, data, message: 'Members retrieved successfully' };
   }
 
-  @Post(':id/members')
+  @Post(':organizationId/members')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Invite user to organization' })
   async inviteUserToOrganization(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Body() inviteData: InviteUserDto,
     @Request() req: any
   ) {
-    const data = await this.organizationsService.inviteUser(id, inviteData, req.user.id);
+    const data = await this.organizationsService.inviteUser(organizationId, inviteData, req.user.id);
     return { success: true, data, message: 'User invited successfully' };
   }
 
-  @Put(':id/members/:userId')
+  @Put(':organizationId/members/:userId')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update member role' })
   async updateMemberRole(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() roleData: { role: OrganizationRole },
     @Request() req: any
   ) {
-    const data = await this.organizationsService.updateMemberRole(id, userId, roleData.role, req.user.id);
+    const data = await this.organizationsService.updateMemberRole(organizationId, userId, roleData.role, req.user.id);
     return { success: true, data, message: 'Member role updated successfully' };
   }
 
-  @Delete(':id/members/:userId')
+  @Delete(':organizationId/members/:userId')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Remove member from organization' })
   async removeMember(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('userId', ParseUUIDPipe) userId: string,
     @Request() req: any
   ) {
-    const data = await this.organizationsService.removeMember(id, userId);
+    const data = await this.organizationsService.removeMember(organizationId, userId);
     return { success: true, data, message: 'Member removed successfully' };
   }
 
   // Team Management
-  @Get(':id/teams')
+  @Get(':organizationId/teams')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get organization teams' })
-  async getOrganizationTeams(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    const data = await this.organizationsService.getTeams(id);
+  async getOrganizationTeams(@Param('organizationId', ParseUUIDPipe) organizationId: string, @Request() req: any) {
+    const data = await this.organizationsService.getTeams(organizationId);
     return { success: true, data, message: 'Teams retrieved successfully' };
   }
 
-  @Post(':id/teams')
+  @Post(':organizationId/teams')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Create team in organization' })
   async createTeam(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Body() teamData: CreateTeamDto,
     @Request() req: any
   ) {
-    const data = await this.organizationsService.createTeam(id, teamData);
+    const data = await this.organizationsService.createTeam(organizationId, teamData);
     return { success: true, data, message: 'Team created successfully' };
   }
 
-  @Put(':id/teams/:teamId')
+  @Put(':organizationId/teams/:teamId')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update team' })
   async updateTeam(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('teamId', ParseUUIDPipe) teamId: string,
     @Body() teamData: { name: string; description?: string },
     @Request() req: any
   ) {
-    const data = await this.organizationsService.updateTeam(teamId, teamData);
+    const data = await this.organizationsService.updateTeam(organizationId, teamId, teamData);
     return { success: true, data, message: 'Team updated successfully' };
   }
 
-  @Post(':id/teams/:teamId/members')
+  @Post(':organizationId/teams/:teamId/members')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Add member to team' })
   async addMemberToTeam(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('teamId', ParseUUIDPipe) teamId: string,
     @Body() memberData: { userId: string; role?: string },
     @Request() req: any
   ) {
-    const data = await this.organizationsService.addTeamMember(teamId, memberData.userId);
+    const data = await this.organizationsService.addTeamMember(organizationId, teamId, memberData.userId);
     return { success: true, data, message: 'Member added to team successfully' };
   }
 
-  @Put(':id/teams/:teamId/members/:userId')
+  @Put(':organizationId/teams/:teamId/members/:userId')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update team member role' })
   async updateTeamMemberRole(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('teamId', ParseUUIDPipe) teamId: string,
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() roleData: { role: string },
     @Request() req: any
   ) {
-    const data = await this.organizationsService.updateTeamMemberRole(teamId, userId, roleData.role);
+    const data = await this.organizationsService.updateTeamMemberRole(organizationId, teamId, userId, roleData.role);
     return { success: true, data, message: 'Team member role updated successfully' };
   }
 
-  @Delete(':id/teams/:teamId/members/:userId')
+  @Delete(':organizationId/teams/:teamId/members/:userId')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Remove member from team' })
   async removeMemberFromTeam(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('teamId', ParseUUIDPipe) teamId: string,
     @Param('userId', ParseUUIDPipe) userId: string,
     @Request() req: any
   ) {
-    const data = await this.organizationsService.removeTeamMember(teamId, userId);
+    const data = await this.organizationsService.removeTeamMember(organizationId, teamId, userId);
     return { success: true, data, message: 'Member removed from team successfully' };
   }
 }

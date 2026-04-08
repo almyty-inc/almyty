@@ -224,7 +224,7 @@ describe('OrganizationsController', () => {
       const result = await controller.updateTeam('org-1', 'team-1', updateDto, mockRequest);
 
       expect(result).toEqual({ success: true, data: mockTeam, message: 'Team updated successfully' });
-      expect(organizationsService.updateTeam).toHaveBeenCalledWith('team-1', updateDto);
+      expect(organizationsService.updateTeam).toHaveBeenCalledWith('org-1', 'team-1', updateDto);
     });
   });
 
@@ -239,7 +239,7 @@ describe('OrganizationsController', () => {
       const result = await controller.addMemberToTeam('org-1', 'team-1', memberData, mockRequest);
 
       expect(result).toEqual({ success: true, data: mockTeamMember, message: 'Member added to team successfully' });
-      expect(organizationsService.addTeamMember).toHaveBeenCalledWith('team-1', 'user-2');
+      expect(organizationsService.addTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'user-2');
     });
   });
 
@@ -254,7 +254,7 @@ describe('OrganizationsController', () => {
       const result = await controller.updateTeamMemberRole('org-1', 'team-1', 'user-2', roleData, mockRequest);
 
       expect(result).toEqual({ success: true, data: mockTeamMember, message: 'Team member role updated successfully' });
-      expect(organizationsService.updateTeamMemberRole).toHaveBeenCalledWith('team-1', 'user-2', 'admin');
+      expect(organizationsService.updateTeamMemberRole).toHaveBeenCalledWith('org-1', 'team-1', 'user-2', 'admin');
     });
   });
 
@@ -267,7 +267,7 @@ describe('OrganizationsController', () => {
       const result = await controller.removeMemberFromTeam('org-1', 'team-1', 'user-2', mockRequest);
 
       expect(result).toEqual({ success: true, data: undefined, message: 'Member removed from team successfully' });
-      expect(organizationsService.removeTeamMember).toHaveBeenCalledWith('team-1', 'user-2');
+      expect(organizationsService.removeTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'user-2');
     });
   });
 });
