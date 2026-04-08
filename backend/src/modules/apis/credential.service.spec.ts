@@ -100,7 +100,11 @@ describe('CredentialService', () => {
 
       const result = await service.createCredential('api-1', 'org-1', dto);
 
-      expect(apiRepository.findOne).toHaveBeenCalledWith({ where: { id: 'api-1' } });
+      // The API lookup is now scoped by organizationId directly
+      // rather than loading unscoped and then checking.
+      expect(apiRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'api-1', organizationId: 'org-1' },
+      });
       expect(credentialRepository.create).toHaveBeenCalledWith(expect.objectContaining({
         name: 'My API Key',
         type: CredentialType.API_KEY,
@@ -120,12 +124,17 @@ describe('CredentialService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw ForbiddenException when org mismatch', async () => {
-      apiRepository.findOne.mockResolvedValue({ ...mockApi, organizationId: 'other-org' });
+    it('returns NotFound when the API belongs to a different org (no cross-org oracle)', async () => {
+      // The createCredential flow now scopes the API lookup directly
+      // by organizationId rather than loading unscoped and throwing
+      // Forbidden on mismatch. A cross-org API id now surfaces as
+      // "API not found" — indistinguishable from a genuine unknown
+      // id, which removes the existence oracle.
+      apiRepository.findOne.mockResolvedValue(null);
 
       await expect(
         service.createCredential('api-1', 'org-1', dto),
-      ).rejects.toThrow(ForbiddenException);
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should mask sensitive fields in returned credential', async () => {

@@ -148,17 +148,7 @@ export class McpService {
       // an attacker in org A can't use a leaked gatewayId from org B to
       // pollute another org's request counters.
       if (gatewayId) {
-        try {
-          const gateway = await this.gatewayRepository.findOne({
-            where: { id: gatewayId, organizationId },
-          });
-          if (gateway) {
-            gateway.incrementRequest(true);
-            await this.gatewayRepository.save(gateway);
-          }
-        } catch (metricsError) {
-          this.logger.error(`Failed to update gateway metrics: ${metricsError.message}`);
-        }
+        await this.bumpGatewayMetrics(gatewayId, organizationId, true);
       }
 
       return response;
@@ -166,17 +156,7 @@ export class McpService {
     } catch (error) {
       // Update gateway metrics for failed requests (same org scoping).
       if (gatewayId) {
-        try {
-          const gateway = await this.gatewayRepository.findOne({
-            where: { id: gatewayId, organizationId },
-          });
-          if (gateway) {
-            gateway.incrementRequest(false);
-            await this.gatewayRepository.save(gateway);
-          }
-        } catch (metricsError) {
-          this.logger.error(`Failed to update gateway metrics: ${metricsError.message}`);
-        }
+        await this.bumpGatewayMetrics(gatewayId, organizationId, false);
       }
 
       if (error && typeof error === 'object' && 'code' in error && 'message' in error) {
@@ -200,6 +180,43 @@ export class McpService {
           message: 'Internal server error',
         },
       };
+    }
+  }
+
+  /**
+   * Atomically bump the gateway's request counters. Previously this
+   * was a read-modify-write (`findOne` + `entity.incrementRequest()`
+   * + `save`), which races under concurrent load — two overlapping
+   * callers both read `totalRequests=N`, both increment to N+1,
+   * both save, and one increment is lost. A SQL UPDATE with
+   * server-side arithmetic is safe under any amount of concurrency.
+   *
+   * Scoped to organizationId so a leaked gatewayId from another org
+   * can't be used to pollute a different tenant's counters.
+   */
+  private async bumpGatewayMetrics(
+    gatewayId: string,
+    organizationId: string,
+    success: boolean,
+  ): Promise<void> {
+    try {
+      await this.gatewayRepository
+        .createQueryBuilder()
+        .update(Gateway)
+        .set({
+          totalRequests: () => '"totalRequests" + 1',
+          successfulRequests: success
+            ? () => '"successfulRequests" + 1'
+            : () => '"successfulRequests"',
+          lastRequestAt: new Date(),
+        })
+        .where('id = :gatewayId', { gatewayId })
+        .andWhere('organizationId = :organizationId', { organizationId })
+        .execute();
+    } catch (metricsError: any) {
+      // Metrics updates are best-effort; a DB hiccup here shouldn't
+      // take down the actual JSON-RPC response we're building.
+      this.logger.error(`Failed to update gateway metrics: ${metricsError.message}`);
     }
   }
 
