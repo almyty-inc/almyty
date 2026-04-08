@@ -25,7 +25,7 @@ export class InterfacesController {
   ) {}
 
   private getOrgId(req: any): string {
-    const organizationId = req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+    const organizationId = req.user.currentOrganizationId;
     if (!organizationId) {
       throw new HttpException(
         { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },

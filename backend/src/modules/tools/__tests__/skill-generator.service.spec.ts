@@ -94,7 +94,7 @@ describe('SkillGeneratorService', () => {
     it('should generate a SKILL.md with Agent Skills standard format', async () => {
       toolRepository.findOne.mockResolvedValue(mockTool);
 
-      const result = await service.generateToolSkill('tool-1');
+      const result = await service.generateToolSkill('tool-1', 'org-1');
 
       expect(result.name).toBe('getpetbyid');
       expect(result.toolCount).toBe(1);
@@ -129,7 +129,7 @@ describe('SkillGeneratorService', () => {
     it('should generate a skill for a mutation tool with POST curl', async () => {
       toolRepository.findOne.mockResolvedValue(mockMutationTool);
 
-      const result = await service.generateToolSkill('tool-2');
+      const result = await service.generateToolSkill('tool-2', 'org-1');
 
       expect(result.content).toContain('create, update, or modify data');
       expect(result.content).toContain('curl -X POST');
@@ -142,7 +142,7 @@ describe('SkillGeneratorService', () => {
         type: ToolType.ACTION,
       });
 
-      const result = await service.generateToolSkill('tool-1');
+      const result = await service.generateToolSkill('tool-1', 'org-1');
 
       expect(result.content).toContain('perform an action');
     });
@@ -153,7 +153,7 @@ describe('SkillGeneratorService', () => {
         parameters: {},
       });
 
-      const result = await service.generateToolSkill('tool-1');
+      const result = await service.generateToolSkill('tool-1', 'org-1');
 
       // Should not have parameters section
       expect(result.content).not.toContain('## Parameters');
@@ -162,7 +162,7 @@ describe('SkillGeneratorService', () => {
     it('should throw NotFoundException for missing tool', async () => {
       toolRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.generateToolSkill('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.generateToolSkill('nonexistent', 'org-1')).rejects.toThrow(NotFoundException);
     });
 
     it('should escape YAML special characters in description', async () => {
@@ -171,7 +171,7 @@ describe('SkillGeneratorService', () => {
         description: 'Find pet: by "ID"',
       });
 
-      const result = await service.generateToolSkill('tool-1');
+      const result = await service.generateToolSkill('tool-1', 'org-1');
 
       // Description should be YAML-escaped (quoted)
       expect(result.content).toMatch(/description: ".*Find pet.*"/);
@@ -180,7 +180,7 @@ describe('SkillGeneratorService', () => {
     it('should include trigger phrase in description', async () => {
       toolRepository.findOne.mockResolvedValue(mockTool);
 
-      const result = await service.generateToolSkill('tool-1');
+      const result = await service.generateToolSkill('tool-1', 'org-1');
 
       // Description should include "Use when" trigger phrase
       expect(result.content).toContain('Use when you need to retrieve this data.');
@@ -199,7 +199,7 @@ describe('SkillGeneratorService', () => {
         },
       });
 
-      const result = await service.generateToolSkill('tool-1');
+      const result = await service.generateToolSkill('tool-1', 'org-1');
 
       // No HTTP endpoint section
       expect(result.content).not.toContain('## HTTP endpoint');
@@ -218,7 +218,7 @@ describe('SkillGeneratorService', () => {
         { tool: mockMutationTool, isActive: true },
       ]);
 
-      const result = await service.generateGatewaySkills('gw-1');
+      const result = await service.generateGatewaySkills('gw-1', 'org-1');
 
       expect(result.name).toBe('petstore-gateway');
       expect(result.toolCount).toBe(2);
@@ -241,7 +241,7 @@ describe('SkillGeneratorService', () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([]);
 
-      const result = await service.generateGatewaySkills('gw-1');
+      const result = await service.generateGatewaySkills('gw-1', 'org-1');
 
       expect(result.toolCount).toBe(0);
       expect(result.content).toContain('No tools are currently assigned');
@@ -251,7 +251,7 @@ describe('SkillGeneratorService', () => {
     it('should throw NotFoundException for missing gateway', async () => {
       gatewayRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.generateGatewaySkills('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.generateGatewaySkills('nonexistent', 'org-1')).rejects.toThrow(NotFoundException);
     });
 
     it('should filter out null tools from gateway tools', async () => {
@@ -261,7 +261,7 @@ describe('SkillGeneratorService', () => {
         { tool: null, isActive: true },
       ]);
 
-      const result = await service.generateGatewaySkills('gw-1');
+      const result = await service.generateGatewaySkills('gw-1', 'org-1');
 
       expect(result.toolCount).toBe(1);
     });
@@ -272,7 +272,7 @@ describe('SkillGeneratorService', () => {
         { tool: mockTool, isActive: true },
       ]);
 
-      const result = await service.generateGatewaySkills('gw-1');
+      const result = await service.generateGatewaySkills('gw-1', 'org-1');
 
       expect(result.content).toContain('**Parameters:**');
       expect(result.content).toContain('`petId` (integer, required)');
@@ -288,7 +288,7 @@ describe('SkillGeneratorService', () => {
         { tool: mockMutationTool, isActive: true },
       ]);
 
-      const result = await service.generateIndividualSkills('gw-1');
+      const result = await service.generateIndividualSkills('gw-1', 'org-1');
 
       expect(result).toHaveLength(2);
       expect(result[0].name).toBe('getpetbyid');
@@ -304,14 +304,14 @@ describe('SkillGeneratorService', () => {
     it('should throw NotFoundException for missing gateway', async () => {
       gatewayRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.generateIndividualSkills('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.generateIndividualSkills('nonexistent', 'org-1')).rejects.toThrow(NotFoundException);
     });
 
     it('should return empty array for gateway with no tools', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([]);
 
-      const result = await service.generateIndividualSkills('gw-1');
+      const result = await service.generateIndividualSkills('gw-1', 'org-1');
 
       expect(result).toHaveLength(0);
     });

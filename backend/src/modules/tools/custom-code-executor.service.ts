@@ -30,9 +30,14 @@ export class CustomCodeExecutorService {
     const timeout = options?.timeout || this.DEFAULT_TIMEOUT;
     const memoryLimit = options?.memoryLimit || this.MEMORY_LIMIT;
 
+    // Declared outside try so the finally block can always dispose. Without
+    // this, every tool execution leaked an isolated-vm Isolate — the native
+    // V8 heap was never reclaimed until the process restarted.
+    let isolate: ivm.Isolate | null = null;
+
     try {
       // Create isolated VM instance
-      const isolate = new ivm.Isolate({ memoryLimit });
+      isolate = new ivm.Isolate({ memoryLimit });
       const context = await isolate.createContext();
 
       // Inject parameters as individual variables AND as parameters object
@@ -146,6 +151,14 @@ export class CustomCodeExecutorService {
         error: error.message || 'Code execution failed',
         executionTime,
       };
+    } finally {
+      if (isolate && !isolate.isDisposed) {
+        try {
+          isolate.dispose();
+        } catch (disposeErr) {
+          this.logger.warn(`Isolate dispose failed: ${(disposeErr as Error).message}`);
+        }
+      }
     }
   }
 
@@ -175,18 +188,27 @@ export class CustomCodeExecutorService {
       }
     }
 
-    // Try to compile the code to check for syntax errors
+    // Try to compile the code to check for syntax errors.
+    // Previously the isolate leaked on compile failure because dispose()
+    // was only reached on the happy path.
+    let validateIsolate: ivm.Isolate | null = null;
     try {
-      const isolate = new ivm.Isolate({ memoryLimit: 8 });
-      await isolate.compileScript(code);
-      isolate.dispose();
-
+      validateIsolate = new ivm.Isolate({ memoryLimit: 8 });
+      await validateIsolate.compileScript(code);
       return { valid: true, warnings: warnings.length > 0 ? warnings : undefined };
     } catch (error) {
       return {
         valid: false,
         error: `Syntax error: ${error.message}`,
       };
+    } finally {
+      if (validateIsolate && !validateIsolate.isDisposed) {
+        try {
+          validateIsolate.dispose();
+        } catch {
+          // swallow — nothing useful we can do here
+        }
+      }
     }
   }
 

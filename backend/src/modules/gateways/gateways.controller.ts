@@ -415,7 +415,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -479,7 +479,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -523,7 +523,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -558,7 +558,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -572,7 +572,7 @@ export class GatewaysController {
         gateways.map(async (gateway) => {
           const orgSlug = gateway.organization?.slug || gateway.organization?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
           const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || gateway.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-          const skills = await this.skillGeneratorService.generateIndividualSkills(gateway.id, { orgSlug, gatewaySlug });
+          const skills = await this.skillGeneratorService.generateIndividualSkills(gateway.id, organizationId, { orgSlug, gatewaySlug });
           return {
             gatewayId: gateway.id,
             gatewayName: gateway.name,
@@ -610,7 +610,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -649,7 +649,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -692,7 +692,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -727,7 +727,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -763,7 +763,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -801,7 +801,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -837,7 +837,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -875,7 +875,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -915,7 +915,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -953,7 +953,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -990,7 +990,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       const userId = req.user.sub || req.user.id;
       if (!organizationId) {
         throw new HttpException(
@@ -1051,7 +1051,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1088,7 +1088,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1125,7 +1125,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1167,7 +1167,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1209,7 +1209,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1246,7 +1246,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1287,7 +1287,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1323,7 +1323,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1365,7 +1365,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1401,7 +1401,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1436,7 +1436,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1503,7 +1503,14 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const skills = await this.skillGeneratorService.generateGatewaySkills(gatewayId);
+      const organizationId = req.user.currentOrganizationId;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const skills = await this.skillGeneratorService.generateGatewaySkills(gatewayId, organizationId);
       return {
         success: true,
         data: skills,
@@ -1530,21 +1537,25 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
-      let context: { orgSlug?: string; gatewaySlug?: string } | undefined;
-
-      if (organizationId) {
-        const gateway = await this.gatewaysService.getGateway(gatewayId, organizationId, false);
-        const gateways = await this.gatewaysService.getAllUserGateways(organizationId);
-        const org = gateways[0]?.organization;
-        if (org && gateway) {
-          const orgSlug = org.slug || org.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
-          const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || gateway.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-          context = { orgSlug, gatewaySlug };
-        }
+      const organizationId = req.user.currentOrganizationId;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
-      const skills = await this.skillGeneratorService.generateIndividualSkills(gatewayId, context);
+      let context: { orgSlug?: string; gatewaySlug?: string } | undefined;
+      const gateway = await this.gatewaysService.getGateway(gatewayId, organizationId, false);
+      const gateways = await this.gatewaysService.getAllUserGateways(organizationId);
+      const org = gateways[0]?.organization;
+      if (org && gateway) {
+        const orgSlug = org.slug || org.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
+        const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || gateway.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        context = { orgSlug, gatewaySlug };
+      }
+
+      const skills = await this.skillGeneratorService.generateIndividualSkills(gatewayId, organizationId, context);
       return {
         success: true,
         data: { skills },
@@ -1576,7 +1587,7 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -1629,7 +1640,14 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const cli = await this.cliGeneratorService.generateGatewayCliBunde(gatewayId, format);
+      const organizationId = req.user.currentOrganizationId;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const cli = await this.cliGeneratorService.generateGatewayCliBunde(gatewayId, format, organizationId);
       return {
         success: true,
         data: cli,
@@ -1656,7 +1674,14 @@ export class GatewaysController {
     @Request() req: any,
   ) {
     try {
-      const sdk = await this.codegenService.generateGatewaySdk(gatewayId);
+      const organizationId = req.user.currentOrganizationId;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const sdk = await this.codegenService.generateGatewaySdk(gatewayId, organizationId);
       return {
         success: true,
         data: sdk,

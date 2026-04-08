@@ -36,8 +36,18 @@ export class OAuth2Controller {
   @Roles('member', 'admin', 'owner')
   async authorize(@Body() body: any, @Request() req: any) {
     try {
-      const organizationId =
-        req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
+      if (!organizationId) {
+        throw new HttpException(
+          {
+            success: false,
+            message:
+              'Organization context required. Multi-org users must send the X-Organization-Id header.',
+            error: 'NO_ORGANIZATION',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       const result = await this.oauth2Service.generateAuthorizationUrl({
         ...body,
         organizationId,
@@ -81,8 +91,18 @@ export class OAuth2Controller {
   @Roles('member', 'admin', 'owner')
   async clientCredentials(@Body() body: any, @Request() req: any) {
     try {
-      const organizationId =
-        req.user.currentOrganizationId || req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
+      if (!organizationId) {
+        throw new HttpException(
+          {
+            success: false,
+            message:
+              'Organization context required. Multi-org users must send the X-Organization-Id header.',
+            error: 'NO_ORGANIZATION',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       const result = await this.oauth2Service.clientCredentialsGrant({
         ...body,
         organizationId,

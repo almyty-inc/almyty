@@ -28,10 +28,21 @@ export class CliGeneratorService {
 
   /**
    * Generate a CLI script for a single tool.
+   *
+   * @param organizationId Required. Previously this lookup had no org
+   *   filter, letting any authenticated user download any org's tool
+   *   scripts by UUID.
    */
-  async generateToolCli(toolId: string, format: 'bash' | 'node' = 'bash'): Promise<CliOutput> {
+  async generateToolCli(
+    toolId: string,
+    format: 'bash' | 'node' = 'bash',
+    organizationId?: string,
+  ): Promise<CliOutput> {
+    if (!organizationId) {
+      throw new NotFoundException(`Tool not found: ${toolId}`);
+    }
     const tool = await this.toolRepository.findOne({
-      where: { id: toolId },
+      where: { id: toolId, organizationId },
       relations: ['operation'],
     });
 
@@ -53,10 +64,19 @@ export class CliGeneratorService {
 
   /**
    * Generate a CLI bundle for all tools in a gateway.
+   *
+   * @param organizationId Required (see generateToolCli).
    */
-  async generateGatewayCliBunde(gatewayId: string, format: 'bash' | 'node' = 'bash'): Promise<CliOutput> {
+  async generateGatewayCliBunde(
+    gatewayId: string,
+    format: 'bash' | 'node' = 'bash',
+    organizationId?: string,
+  ): Promise<CliOutput> {
+    if (!organizationId) {
+      throw new NotFoundException(`Gateway not found: ${gatewayId}`);
+    }
     const gateway = await this.gatewayRepository.findOne({
-      where: { id: gatewayId },
+      where: { id: gatewayId, organizationId },
     });
 
     if (!gateway) {

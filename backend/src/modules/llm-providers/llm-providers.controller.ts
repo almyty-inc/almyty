@@ -330,7 +330,7 @@ export class LlmProvidersController {
   ) {
     try {
       // Get organizationId from user's JWT token (first organization)
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           {
@@ -374,7 +374,7 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -417,7 +417,7 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -462,7 +462,18 @@ export class LlmProvidersController {
     @Param('providerId', ParseUUIDPipe) providerId: string,
     @Request() req: any,
   ) {
-    const organizationId = req.user.organizations?.[0]?.id;
+    const organizationId = req.user.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException(
+        {
+          success: false,
+          message:
+            'Organization context required. Multi-org users must send the X-Organization-Id header.',
+          error: 'NO_ORGANIZATION',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     const provider = await this.llmProvidersService.getProvider(providerId, organizationId);
     return {
       success: true,
@@ -493,7 +504,7 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -536,7 +547,7 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -573,7 +584,7 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -644,7 +655,7 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -689,7 +700,7 @@ export class LlmProvidersController {
     @Request() req?: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -733,7 +744,7 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -771,7 +782,7 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -812,7 +823,7 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -867,7 +878,7 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
@@ -913,7 +924,7 @@ export class LlmProvidersController {
     @Request() req: any,
   ) {
     try {
-      const organizationId = req.user.organizations?.[0]?.id;
+      const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException(
           { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
