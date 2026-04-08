@@ -188,6 +188,19 @@ export class CredentialService {
       return { success: false, message: 'Credential is inactive or expired' };
     }
 
+    // SSRF guard on the stored API base URL. api.baseUrl is
+    // @Matches(/^https?:\/\/.+/) at create time, which blocks
+    // non-http schemes but NOT internal IPs or the metadata service.
+    // Without this an admin could create an Api with baseUrl pointing
+    // at 169.254.169.254 / localhost / link-local, then invoke
+    // /credentials/:id/test and exfil the auth headers straight into
+    // the internal network. Same validator already protects the
+    // refresh path a few lines below.
+    const urlCheck = validateUrl(credential.api.baseUrl);
+    if (!urlCheck.valid) {
+      return { success: false, message: `Unsafe API base URL: ${urlCheck.error}` };
+    }
+
     try {
       const headers = credential.getAuthHeaders();
       const params = credential.getQueryParams();
@@ -198,6 +211,9 @@ export class CredentialService {
         headers: { ...headers, 'User-Agent': 'almyty-credential-test/1.0' },
         params,
         timeout: 10000,
+        maxContentLength: 5 * 1024 * 1024,
+        maxBodyLength: 5 * 1024 * 1024,
+        maxRedirects: 0,
         validateStatus: (status) => status < 500, // 4xx is OK (means API responded)
       });
 
