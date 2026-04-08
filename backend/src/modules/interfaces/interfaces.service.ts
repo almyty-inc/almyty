@@ -168,7 +168,22 @@ export class InterfacesService {
     metadata: Record<string, any>;
   }>): Promise<AgentInterface> {
     const iface = await this.findById(id, organizationId);
-    Object.assign(iface, data);
+
+    // Whitelist updatable fields. The controller types the body with
+    // an inline Partial<{...}> — TypeScript only. Nest's global
+    // ValidationPipe(whitelist) strips unknown keys for *decorated
+    // DTO classes*, not inline types, so otherwise a PATCH with
+    // {organizationId, agentId, createdBy, totalMessages, ...} would
+    // flow straight through Object.assign and save() would persist
+    // the change (including re-homing the interface to a different
+    // tenant).
+    const patch: Partial<AgentInterface> = {};
+    if (data.name !== undefined) patch.name = data.name;
+    if (data.status !== undefined) patch.status = data.status;
+    if (data.configuration !== undefined) patch.configuration = data.configuration;
+    if (data.metadata !== undefined) patch.metadata = data.metadata;
+
+    Object.assign(iface, patch);
     return this.interfaceRepository.save(iface);
   }
 
