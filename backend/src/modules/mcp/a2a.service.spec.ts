@@ -343,7 +343,7 @@ describe('A2AService - Real Business Logic', () => {
           service.registerAgent('org-1', {
             name: 'Test Agent',
             type: A2AAgentType.CUSTOM_LLM,
-            endpoint: 'http://localhost:8000',
+            endpoint: 'https://agents.example.com',
           })
         ).rejects.toThrow(NotFoundException);
       });
@@ -373,11 +373,12 @@ describe('A2AService - Real Business Logic', () => {
         const agent = await service.registerAgent('org-1', {
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8000',
+          endpoint: 'https://agents.example.com',
         });
 
-        // Verify ID format: a2a_{timestamp}_{random}
-        expect(agent.id).toMatch(/^a2a_\d+_[a-z0-9]+$/);
+        // Verify ID format: a2a_{32-hex} (crypto.randomBytes(16).hex).
+        // The old Date.now + Math.random shape was guessable.
+        expect(agent.id).toMatch(/^a2a_[a-f0-9]{32}$/);
       });
 
       it('should apply default capabilities based on agent type', async () => {
@@ -405,7 +406,7 @@ describe('A2AService - Real Business Logic', () => {
         const agent = await service.registerAgent('org-1', {
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8000',
+          endpoint: 'https://agents.example.com',
         });
 
         expect(redis.setex).toHaveBeenCalledWith(
@@ -424,7 +425,7 @@ describe('A2AService - Real Business Logic', () => {
         await service.registerAgent('org-1', {
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8000',
+          endpoint: 'https://agents.example.com',
           authentication: {
             type: 'bearer',
             config: { token: 'test-token' },
@@ -448,7 +449,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8000',
+          endpoint: 'https://agents.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -460,9 +461,9 @@ describe('A2AService - Real Business Logic', () => {
         redis.get.mockResolvedValue(JSON.stringify(agent));
         redis.setex.mockResolvedValue('OK');
 
-        await service.updateAgent('agent-1', { isActive: false });
+        await service.updateAgent('agent-1', 'org-1', { isActive: false });
 
-        const updatedAgent = await service.getAgent('agent-1');
+        const updatedAgent = await service.getAgent('agent-1', 'org-1');
         expect(updatedAgent?.isActive).toBe(false);
 
         // Verify Redis was updated
@@ -480,7 +481,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8000',
+          endpoint: 'https://agents.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -493,12 +494,12 @@ describe('A2AService - Real Business Logic', () => {
         service['agents'].set('agent-1', agent);
         redis.del.mockResolvedValue(1);
 
-        await service.deregisterAgent('agent-1');
+        await service.deregisterAgent('agent-1', 'org-1');
 
         expect(redis.del).toHaveBeenCalledWith('agent:agent-1');
 
         // Agent should still exist in memory but be inactive
-        const deregistered = await service.getAgent('agent-1');
+        const deregistered = await service.getAgent('agent-1', 'org-1');
         expect(deregistered).toBeDefined();
         expect(deregistered?.isActive).toBe(false);
       });
@@ -511,7 +512,7 @@ describe('A2AService - Real Business Logic', () => {
         redis.get.mockResolvedValue(null);
 
         await expect(
-          service.sendMessage('nonexistent', 'agent-2', { text: 'Hello' })
+          service.sendMessage('nonexistent', 'agent-2', { text: 'Hello' }, 'org-1')
         ).rejects.toThrow(NotFoundException);
       });
 
@@ -520,7 +521,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Agent 1',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -533,7 +534,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-2',
           name: 'Agent 2',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8002',
+          endpoint: 'https://agent-two.example.com',
           organizationId: 'org-2', // Different org!
           isActive: true,
           lastSeen: new Date(),
@@ -547,7 +548,7 @@ describe('A2AService - Real Business Logic', () => {
           .mockResolvedValueOnce(JSON.stringify(agent2));
 
         await expect(
-          service.sendMessage('agent-1', 'agent-2', { text: 'Hello' })
+          service.sendMessage('agent-1', 'agent-2', { text: 'Hello' }, 'org-1')
         ).rejects.toThrow();
       });
 
@@ -556,7 +557,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Agent 1',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -569,7 +570,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-2',
           name: 'Agent 2',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8002',
+          endpoint: 'https://agent-two.example.com',
           organizationId: 'org-1', // Same org
           isActive: true,
           lastSeen: new Date(),
@@ -585,12 +586,12 @@ describe('A2AService - Real Business Logic', () => {
         redis.ltrim.mockResolvedValue('OK');
         mockAxios.mockResolvedValue({ status: 200, data: { success: true } });
 
-        await service.sendMessage('agent-1', 'agent-2', { text: 'Hello' });
+        await service.sendMessage('agent-1', 'agent-2', { text: 'Hello' }, 'org-1');
 
         // Verify HTTP request was made to agent endpoint
         expect(mockAxios).toHaveBeenCalledWith(
           expect.objectContaining({
-            url: 'http://localhost:8002',
+            url: 'https://agent-two.example.com',
             method: 'POST',
           })
         );
@@ -613,7 +614,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Agent 1',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -626,7 +627,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-2',
           name: 'Agent 2',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8002',
+          endpoint: 'https://agent-two.example.com',
           organizationId: 'org-2', // Different org!
           isActive: true,
           lastSeen: new Date(),
@@ -649,7 +650,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Agent 1',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -662,7 +663,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-2',
           name: 'Agent 2',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8002',
+          endpoint: 'https://agent-two.example.com',
           organizationId: 'org-1', // Same org
           isActive: true,
           lastSeen: new Date(),
@@ -692,7 +693,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Agent 1',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -722,7 +723,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Agent 1',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -775,7 +776,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Healthy Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -831,7 +832,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Worker Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -862,7 +863,7 @@ describe('A2AService - Real Business Logic', () => {
         // Verify message was sent to agent
         expect(mockAxios).toHaveBeenCalledWith(
           expect.objectContaining({
-            url: 'http://localhost:8001',
+            url: 'https://agent-one.example.com',
             method: 'POST',
           })
         );
@@ -877,7 +878,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Agent 1',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -890,7 +891,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-2',
           name: 'Agent 2',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8002',
+          endpoint: 'https://agent-two.example.com',
           organizationId: 'org-1',
           isActive: false, // Inactive
           lastSeen: new Date(),
@@ -985,7 +986,7 @@ describe('A2AService - Real Business Logic', () => {
       it('should handle Redis error gracefully when getting agent', async () => {
         redis.get.mockRejectedValue(new Error('Redis connection failed'));
 
-        const result = await service.getAgent('agent-1');
+        const result = await service.getAgent('agent-1', 'org-1');
 
         expect(result).toBeNull();
       });
@@ -1005,7 +1006,7 @@ describe('A2AService - Real Business Logic', () => {
       it('should return null when agent does not exist', async () => {
         redis.get.mockResolvedValue(null);
 
-        const result = await service.updateAgent('nonexistent-agent', { isActive: false });
+        const result = await service.updateAgent('nonexistent-agent', 'org-1', { isActive: false });
 
         expect(result).toBeNull();
       });
@@ -1015,7 +1016,7 @@ describe('A2AService - Real Business Logic', () => {
       it('should return false when agent does not exist', async () => {
         redis.get.mockResolvedValue(null);
 
-        const result = await service.deregisterAgent('nonexistent-agent');
+        const result = await service.deregisterAgent('nonexistent-agent', 'org-1');
 
         expect(result).toBe(false);
       });
@@ -1027,7 +1028,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1055,7 +1056,7 @@ describe('A2AService - Real Business Logic', () => {
 
         await service['deliverMessage'](message);
 
-        const updatedAgent = await service.getAgent('agent-1');
+        const updatedAgent = await service.getAgent('agent-1', 'org-1');
         expect(updatedAgent?.isActive).toBe(false);
       });
 
@@ -1064,7 +1065,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1092,7 +1093,7 @@ describe('A2AService - Real Business Logic', () => {
 
         await service['deliverMessage'](message);
 
-        const updatedAgent = await service.getAgent('agent-1');
+        const updatedAgent = await service.getAgent('agent-1', 'org-1');
         expect(updatedAgent?.isActive).toBe(false);
       });
 
@@ -1101,7 +1102,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1128,7 +1129,7 @@ describe('A2AService - Real Business Logic', () => {
 
         await service['deliverMessage'](message);
 
-        const updatedAgent = await service.getAgent('agent-1');
+        const updatedAgent = await service.getAgent('agent-1', 'org-1');
         expect(updatedAgent?.isActive).toBe(true); // Still active
       });
     });
@@ -1139,7 +1140,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'OpenAI Agent',
           type: A2AAgentType.OPENAI,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1170,7 +1171,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Anthropic Agent',
           type: A2AAgentType.ANTHROPIC,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1202,7 +1203,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Custom Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1223,7 +1224,7 @@ describe('A2AService - Real Business Logic', () => {
 
         const config = await service['buildAgentRequest'](agent, message);
 
-        expect(config.url).toBe('http://localhost:8001');
+        expect(config.url).toBe('https://agent-one.example.com');
         expect(config.data).toEqual(message);
       });
 
@@ -1232,7 +1233,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Authenticated Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1299,7 +1300,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1314,7 +1315,7 @@ describe('A2AService - Real Business Logic', () => {
 
         expect(mockAxios).toHaveBeenCalledWith(
           expect.objectContaining({
-            url: 'http://localhost:8001/health',
+            url: 'https://agent-one.example.com/health',
             method: 'GET',
             timeout: 5000,
           })
@@ -1326,7 +1327,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1346,7 +1347,7 @@ describe('A2AService - Real Business Logic', () => {
 
         expect(mockAxios).toHaveBeenCalledWith(
           expect.objectContaining({
-            url: 'http://localhost:8001/health',
+            url: 'https://agent-one.example.com/health',
             headers: expect.objectContaining({
               Authorization: 'Bearer ping-token',
             }),
@@ -1360,13 +1361,13 @@ describe('A2AService - Real Business Logic', () => {
         redis.get.mockResolvedValue(null);
 
         await expect(
-          service.registerAgentTool('nonexistent-agent', {
+          service.registerAgentTool('nonexistent-agent', 'org-1', {
             agentId: 'nonexistent-agent',
             toolName: 'search',
             description: 'Search tool',
             inputSchema: { type: 'object', properties: {} },
             outputSchema: { type: 'object', properties: {} },
-            endpoint: 'http://localhost:8001/search',
+            endpoint: 'https://agent-one.example.com/search',
             method: 'POST',
           })
         ).rejects.toThrow(NotFoundException);
@@ -1377,7 +1378,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Test Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1391,13 +1392,13 @@ describe('A2AService - Real Business Logic', () => {
         toolRepository.create.mockReturnValue(mockTool);
         toolRepository.save.mockResolvedValue(mockTool);
 
-        const result = await service.registerAgentTool('agent-1', {
+        const result = await service.registerAgentTool('agent-1', 'org-1', {
           agentId: 'agent-1',
           toolName: 'search',
           description: 'Search tool',
           inputSchema: { type: 'object', properties: {} },
           outputSchema: { type: 'object', properties: {} },
-          endpoint: 'http://localhost:8001/search',
+          endpoint: 'https://agent-one.example.com/search',
           method: 'POST',
         });
 
@@ -1413,7 +1414,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Worker Agent',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1556,7 +1557,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Agent 1',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1581,7 +1582,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-1',
           name: 'Agent 1',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8001',
+          endpoint: 'https://agent-one.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1594,7 +1595,7 @@ describe('A2AService - Real Business Logic', () => {
           id: 'agent-2',
           name: 'Agent 2',
           type: A2AAgentType.CUSTOM_LLM,
-          endpoint: 'http://localhost:8002',
+          endpoint: 'https://agent-two.example.com',
           organizationId: 'org-1',
           isActive: true,
           lastSeen: new Date(),
@@ -1613,6 +1614,100 @@ describe('A2AService - Real Business Logic', () => {
 
         expect(redis.del).toHaveBeenCalledWith('agent:agent-1');
         expect(redis.del).toHaveBeenCalledWith('agent:agent-2');
+      });
+    });
+
+    // ── Regression: agent cross-org scoping + SSRF ────────────────
+    describe('Cross-org scoping + SSRF (regression)', () => {
+      beforeEach(() => {
+        redis.get.mockResolvedValue(null);
+      });
+
+      function seedAgent(overrides: Partial<A2AAgent> = {}): A2AAgent {
+        const agent: A2AAgent = {
+          id: overrides.id || 'agent-victim',
+          name: 'Victim',
+          type: A2AAgentType.CUSTOM_LLM,
+          organizationId: overrides.organizationId || 'victim-org',
+          endpoint: 'https://safe.example.com',
+          capabilities: {} as any,
+          configuration: {} as any,
+          isActive: true,
+          lastSeen: new Date(),
+          ...overrides,
+        };
+        (service as any).agents.set(agent.id, agent);
+        return agent;
+      }
+
+      it('getAgent returns null when called from a different org', async () => {
+        seedAgent({ id: 'a1', organizationId: 'victim-org' });
+
+        expect(await service.getAgent('a1', 'attacker-org')).toBeNull();
+        expect(await service.getAgent('a1', 'victim-org')).not.toBeNull();
+      });
+
+      it('updateAgent refuses a cross-org write', async () => {
+        seedAgent({ id: 'a1', organizationId: 'victim-org', name: 'Original' });
+
+        const result = await service.updateAgent('a1', 'attacker-org', { name: 'Hijacked' });
+        expect(result).toBeNull();
+
+        const intact = await service.getAgent('a1', 'victim-org');
+        expect(intact?.name).toBe('Original');
+      });
+
+      it('updateAgent strips organizationId and id from the updates bag', async () => {
+        seedAgent({ id: 'a1', organizationId: 'victim-org', name: 'Original' });
+
+        await service.updateAgent('a1', 'victim-org', {
+          organizationId: 'attacker-org',
+          id: 'totally-different',
+          name: 'Updated',
+        } as any);
+
+        const after = await service.getAgent('a1', 'victim-org');
+        expect(after?.organizationId).toBe('victim-org');
+        expect(after?.id).toBe('a1');
+        expect(after?.name).toBe('Updated');
+      });
+
+      it('deregisterAgent refuses a cross-org delete', async () => {
+        seedAgent({ id: 'a1', organizationId: 'victim-org' });
+
+        expect(await service.deregisterAgent('a1', 'attacker-org')).toBe(false);
+
+        // Still present.
+        const after = (service as any).agents.get('a1');
+        expect(after?.isActive).toBe(true);
+      });
+
+      it('sendMessage REQUIRES callerOrganizationId (regression — was optional)', async () => {
+        const sender = seedAgent({ id: 'a1', organizationId: 'org-1' });
+        const recipient = seedAgent({ id: 'a2', organizationId: 'org-1' });
+
+        // Calling with wrong org → rejects.
+        await expect(
+          service.sendMessage('a1', 'a2', { text: 'hello' }, 'wrong-org'),
+        ).rejects.toThrow('cannot send messages as an agent in another organization');
+      });
+
+      it.each([
+        ['localhost',       'http://localhost:4000'],
+        ['127.0.0.1',       'http://127.0.0.1:4000'],
+        ['AWS metadata',    'http://169.254.169.254/'],
+        ['file://',         'file:///etc/passwd'],
+      ])('registerAgent refuses SSRF via endpoint %s', async (_label, endpoint) => {
+        const org = { id: 'org-1', name: 'Test Org' } as Organization;
+        jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(org);
+
+        await expect(
+          service.registerAgent('org-1', {
+            name: 'Evil',
+            type: A2AAgentType.CUSTOM_LLM,
+            endpoint,
+          }),
+        ).rejects.toThrow(/Refused to (register|reach)/);
       });
     });
   });

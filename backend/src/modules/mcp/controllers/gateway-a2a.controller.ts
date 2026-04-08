@@ -228,7 +228,17 @@ export class GatewayA2AController {
     this.logger.log(`A2A gateway POST: org=${orgSlugOrId}, gateway=${gateway.name}, action=${action}`);
 
     if (action === 'messages' && body.fromAgentId && body.toAgentId) {
-      return this.a2aService.sendMessage(body.fromAgentId, body.toAgentId, body.content, body.messageType);
+      // Pass the resolved gateway's organizationId as the caller org
+      // so sendMessage's caller-scope check can enforce it. Previously
+      // this omitted the param, which (with the old optional shape)
+      // silently bypassed the scope check entirely.
+      return this.a2aService.sendMessage(
+        body.fromAgentId,
+        body.toAgentId,
+        body.content,
+        gateway.organizationId,
+        body.messageType,
+      );
     }
 
     if (action === 'agents' && body.name) {
