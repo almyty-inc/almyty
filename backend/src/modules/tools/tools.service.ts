@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Like, In } from 'typeorm';
+import { Repository, FindManyOptions, Like, In, MoreThanOrEqual } from 'typeorm';
 
 import { Tool, ToolStatus, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
 import { ToolVersion } from '../../entities/tool-version.entity';
@@ -583,12 +583,16 @@ export class ToolsService {
 
     const since = new Date(Date.now() - timeframeDurations[timeframe]);
 
-    // Get executions
+    // Get executions. Previously this used the MongoDB-style
+    // `{ $gte: since }` operator, which TypeORM doesn't recognise —
+    // the whole where clause was an object-literal comparison that
+    // matched zero rows, so `getToolUsageStats` silently returned
+    // all-zeros for every tool in every timeframe.
     const executions = await this.toolExecutionRepository.find({
       where: {
         toolId: tool.id,
         organizationId,
-        createdAt: { $gte: since } as any,
+        createdAt: MoreThanOrEqual(since),
       },
       relations: ['user'],
     });

@@ -494,4 +494,67 @@ describe('McpSessionService', () => {
       expect(service['shouldReceiveNotification'](session, notification)).toBe(true);
     });
   });
+
+  // ── Regression: session map bounds + org-scoped accessors ─────
+  describe('Session map bounds + scoping (regression)', () => {
+    it('caps the sessions Map at MAX_SESSIONS and evicts oldest on overflow', () => {
+      // The Map has a 10k session cap; reach in and poke the internal
+      // map to seed it close to the ceiling so the test doesn't take
+      // forever. This exercises the evictIfFull path that
+      // createSession runs when it hits the cap.
+      const map: Map<string, any> = (service as any).sessions;
+      for (let i = 0; i < 10_000; i++) {
+        map.set(`seed-${i}`, {
+          id: `seed-${i}`,
+          organizationId: 'org-seed',
+          transport: 'http',
+          isInitialized: false,
+          createdAt: new Date(),
+          lastActivity: new Date(),
+          capabilities: {},
+          clientInfo: { name: 'x', version: '1' },
+        });
+      }
+      expect(map.size).toBe(10_000);
+
+      // Next createSession should trigger eviction; size stays at 10_000.
+      service.createSession('org-new', 'http');
+      expect(map.size).toBeLessThanOrEqual(10_000);
+    });
+
+    it('getSessionForOrg returns null for a foreign org', () => {
+      const session = service.createSession('victim-org', 'http');
+
+      expect(service.getSessionForOrg(session.id, 'attacker-org')).toBeNull();
+      expect(service.getSessionForOrg(session.id, 'victim-org')).not.toBeNull();
+    });
+
+    it('updateSessionForOrg refuses a cross-org write', () => {
+      const session = service.createSession('victim-org', 'http');
+      const clientInfo = { ...session.clientInfo };
+
+      const ok = service.updateSessionForOrg(session.id, 'attacker-org', {
+        clientInfo: { name: 'hijacked', version: '9.9.9' },
+      });
+      expect(ok).toBe(false);
+
+      const after = service.getSession(session.id);
+      expect(after?.clientInfo).toEqual(clientInfo);
+    });
+
+    it('updateSession strips organizationId and id from the updates bag', () => {
+      const session = service.createSession('victim-org', 'http');
+
+      service.updateSession(session.id, {
+        organizationId: 'attacker-org',
+        id: 'totally-different',
+        isInitialized: true,
+      } as any);
+
+      const after = service.getSession(session.id)!;
+      expect(after.organizationId).toBe('victim-org');
+      expect(after.id).toBe(session.id);
+      expect(after.isInitialized).toBe(true);
+    });
+  });
 });
