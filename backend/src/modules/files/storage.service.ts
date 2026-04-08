@@ -142,6 +142,7 @@ class S3StorageProvider implements StorageProvider {
   }
 
   async upload(key: string, data: Buffer, contentType: string): Promise<string> {
+    assertSafeStorageKey(key);
     const { PutObjectCommand } = require('@aws-sdk/client-s3');
     await this.s3Client.send(new PutObjectCommand({
       Bucket: this.bucket,
@@ -154,6 +155,7 @@ class S3StorageProvider implements StorageProvider {
   }
 
   async download(key: string): Promise<Buffer> {
+    assertSafeStorageKey(key);
     const { GetObjectCommand } = require('@aws-sdk/client-s3');
     const response = await this.s3Client.send(new GetObjectCommand({
       Bucket: this.bucket,
@@ -167,6 +169,7 @@ class S3StorageProvider implements StorageProvider {
   }
 
   async delete(key: string): Promise<void> {
+    assertSafeStorageKey(key);
     const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
     await this.s3Client.send(new DeleteObjectCommand({
       Bucket: this.bucket,
@@ -175,6 +178,7 @@ class S3StorageProvider implements StorageProvider {
   }
 
   async getSignedUrl(key: string, expiresInSeconds = 3600): Promise<string> {
+    assertSafeStorageKey(key);
     try {
       const { GetObjectCommand } = require('@aws-sdk/client-s3');
       const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
