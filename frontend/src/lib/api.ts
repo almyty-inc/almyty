@@ -29,11 +29,43 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`
   }
 
+  // Send the user's selected org on every request so multi-org users
+  // don't get silently scoped to whichever membership happens to be
+  // first. Read the value out of the Zustand org store via its
+  // synchronous accessor to avoid a circular import of the React
+  // hook. The store persists currentOrganization to localStorage
+  // directly under key "almyty-org-store" so this also works on the
+  // first request after a hard refresh.
+  // Read lazily at request time (not module-load time) so we always
+  // reflect the user's latest selection.
+  if (!config.headers['X-Organization-Id']) {
+    const orgId = readCurrentOrgId()
+    if (orgId) {
+      config.headers['X-Organization-Id'] = orgId
+    }
+  }
+
   // Add retry counter
   config.headers['X-Retry-Count'] = (config.headers['X-Retry-Count'] as number || 0)
 
   return config
 })
+
+// Read currentOrganizationId from the persisted Zustand store. We
+// cannot import the store directly here because it imports this file
+// (to get the organizationsApi helper), which would be a cycle. Fall
+// back to parsing localStorage directly — that's where the persist
+// middleware writes it.
+function readCurrentOrgId(): string | null {
+  try {
+    const raw = localStorage.getItem('almyty-org-store')
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { state?: { currentOrganization?: { id?: string } } }
+    return parsed?.state?.currentOrganization?.id ?? null
+  } catch {
+    return null
+  }
+}
 
 // All backend controllers return { success: true, data: <payload>, message?: string }
 // This helper extracts the payload from any API response.
