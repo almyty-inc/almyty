@@ -133,8 +133,10 @@ describe('McpGatewayService - Real Business Logic', () => {
           toolIds: ['tool-1', 'tool-2'],
         });
 
-        // Verify ID format: vs_{timestamp}_{random}
-        expect(server.id).toMatch(/^vs_\d+_[a-z0-9]+$/);
+        // Verify ID format: vs_<32 hex chars> (crypto.randomBytes(16))
+        // The previous shape mixed a predictable Date.now() with
+        // Math.random and was trivially enumerable across tenants.
+        expect(server.id).toMatch(/^vs_[a-f0-9]{32}$/);
       });
 
       it('should apply default capabilities when not provided', async () => {
@@ -179,7 +181,7 @@ describe('McpGatewayService - Real Business Logic', () => {
           toolIds: ['tool-1'],
         });
 
-        expect(server.endpoint).toMatch(/^\/api\/mcp\/servers\/\d+_[a-z0-9]+$/);
+        expect(server.endpoint).toMatch(/^\/api\/mcp\/servers\/[a-f0-9]{32}$/);
       });
 
       it('should broadcast notification to organization', async () => {
@@ -445,7 +447,7 @@ describe('McpGatewayService - Real Business Logic', () => {
           endpoint: 'http://remote:4000',
         });
 
-        expect(peer.id).toMatch(/^peer_\d+_[a-z0-9]+$/);
+        expect(peer.id).toMatch(/^peer_[a-f0-9]{32}$/);
         expect(peer.name).toBe('Remote Gateway');
         expect(peer.endpoint).toBe('http://remote:4000');
         expect(peer.isActive).toBe(true);

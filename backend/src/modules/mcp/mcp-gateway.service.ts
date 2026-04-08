@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import axios from 'axios';
+import * as crypto from 'crypto';
 
 import { validateUrl } from '../../common/security/url-validator';
 import { Gateway } from '../../entities/gateway.entity';
@@ -32,6 +33,23 @@ export interface GatewayPeer {
   isActive: boolean;
   lastSeen: Date;
   organizationId: string;
+}
+
+/**
+ * Upper bounds on the in-memory Maps below. Both are populated purely
+ * from HTTP calls (createVirtualServer / registerGatewayPeer) — with
+ * no eviction there's a trivial memory growth path for an admin who
+ * creates servers or peers in a loop. Cap the Maps and drop the
+ * oldest entry on overflow (insertion order is stable in JS Maps).
+ */
+const MCP_VIRTUAL_SERVERS_MAX = 1_000;
+const MCP_GATEWAY_PEERS_MAX = 1_000;
+
+function evictOldestEntry<K, V>(map: Map<K, V>): void {
+  const firstKey = map.keys().next().value;
+  if (firstKey !== undefined) {
+    map.delete(firstKey);
+  }
 }
 
 @Injectable()
@@ -82,7 +100,13 @@ export class McpGatewayService {
     }
 
     const virtualServer: VirtualServer = {
-      id: `vs_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      // Unguessable id — the old `vs_${Date.now()}_${Math.random()...}`
+      // shape is both predictable (timestamp-seeded) and non-cryptographic,
+      // and this id is referenced from URL paths (endpoint) so a
+      // guessable value becomes a trivial enumeration vector against
+      // other tenants' servers. crypto.randomBytes gives 128 bits of
+      // entropy and is unique per process.
+      id: `vs_${crypto.randomBytes(16).toString('hex')}`,
       name: serverData.name,
       description: serverData.description,
       organizationId,
@@ -101,6 +125,11 @@ export class McpGatewayService {
       metadata: serverData.metadata,
     };
 
+    // Cap + FIFO eviction so a loop of createVirtualServer calls can't
+    // grow this Map without bound.
+    if (this.virtualServers.size >= MCP_VIRTUAL_SERVERS_MAX) {
+      evictOldestEntry(this.virtualServers);
+    }
     this.virtualServers.set(virtualServer.id, virtualServer);
 
     this.logger.log(`Virtual server created: ${virtualServer.id} with ${tools.length} tools`);
@@ -241,7 +270,8 @@ export class McpGatewayService {
     }
 
     const peer: GatewayPeer = {
-      id: `peer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      // Unguessable id — same reasoning as virtualServer above.
+      id: `peer_${crypto.randomBytes(16).toString('hex')}`,
       name: peerData.name,
       endpoint: peerData.endpoint,
       capabilities: peerData.capabilities || { tools: {}, resources: {}, prompts: {} },
@@ -250,6 +280,9 @@ export class McpGatewayService {
       organizationId,
     };
 
+    if (this.gatewayPeers.size >= MCP_GATEWAY_PEERS_MAX) {
+      evictOldestEntry(this.gatewayPeers);
+    }
     this.gatewayPeers.set(peer.id, peer);
 
     this.logger.log(`Gateway peer registered: ${peer.id} at ${peer.endpoint}`);
@@ -390,11 +423,25 @@ export class McpGatewayService {
       let responseTime: number | undefined;
 
       try {
-        await axios.get(`${peer.endpoint}/health`, { timeout: 5000 });
+        // Revalidate the endpoint on every probe — register already
+        // runs validateUrl but this Map is in-memory and the only
+        // defence against a stale / tampered entry is a check at
+        // use time. And set maxRedirects: 0 so a peer can't 302 us
+        // into 169.254.169.254 and bypass the gate.
+        const validation = validateUrl(`${peer.endpoint}/health`);
+        if (!validation.valid) {
+          throw new Error(`peer endpoint no longer safe: ${validation.error}`);
+        }
+        await axios.get(`${peer.endpoint}/health`, {
+          timeout: 5000,
+          maxContentLength: 1 * 1024 * 1024,
+          maxBodyLength: 1 * 1024 * 1024,
+          maxRedirects: 0,
+        });
         isHealthy = true;
         responseTime = Date.now() - startTime;
         healthyCount++;
-        
+
         // Update peer status
         peer.isActive = true;
         peer.lastSeen = new Date();
@@ -422,6 +469,9 @@ export class McpGatewayService {
   }
 
   private generateServerId(): string {
-    return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Used as a URL path segment — must be unguessable. The previous
+    // shape mixed a predictable timestamp with Math.random and was
+    // trivially enumerable.
+    return crypto.randomBytes(16).toString('hex');
   }
 }
