@@ -83,14 +83,28 @@ export async function callOpenAI(
 
   const cost = calculateProviderCost(provider, usage.prompt_tokens, usage.completion_tokens);
 
-  // Process tool calls
+  // Process tool calls. OpenAI occasionally emits malformed JSON for
+  // arguments (truncated outputs, unescaped quotes from the model); a
+  // raw JSON.parse would crash the entire request and leak a stack
+  // trace. Fall back to an empty object and surface the raw text so
+  // the caller can decide how to handle it.
   let toolCalls: ToolCall[] = [];
   if (choice.message.tool_calls) {
-    toolCalls = choice.message.tool_calls.map((tc: { id: string; function: { name: string; arguments: string } }) => ({
-      id: tc.id,
-      name: tc.function.name,
-      parameters: JSON.parse(tc.function.arguments),
-    }));
+    toolCalls = choice.message.tool_calls.map(
+      (tc: { id: string; function: { name: string; arguments: string } }) => {
+        let parameters: Record<string, any> = {};
+        try {
+          parameters = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
+        } catch {
+          parameters = { __rawArguments: tc.function.arguments, __parseError: true };
+        }
+        return {
+          id: tc.id,
+          name: tc.function.name,
+          parameters,
+        };
+      },
+    );
   }
 
   return {

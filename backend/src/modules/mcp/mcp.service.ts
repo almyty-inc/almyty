@@ -144,10 +144,14 @@ export class McpService {
         result,
       };
 
-      // Update gateway request metrics
+      // Update gateway request metrics. Scope to the caller's org so
+      // an attacker in org A can't use a leaked gatewayId from org B to
+      // pollute another org's request counters.
       if (gatewayId) {
         try {
-          const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId } });
+          const gateway = await this.gatewayRepository.findOne({
+            where: { id: gatewayId, organizationId },
+          });
           if (gateway) {
             gateway.incrementRequest(true);
             await this.gatewayRepository.save(gateway);
@@ -160,10 +164,12 @@ export class McpService {
       return response;
 
     } catch (error) {
-      // Update gateway metrics for failed requests
+      // Update gateway metrics for failed requests (same org scoping).
       if (gatewayId) {
         try {
-          const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId } });
+          const gateway = await this.gatewayRepository.findOne({
+            where: { id: gatewayId, organizationId },
+          });
           if (gateway) {
             gateway.incrementRequest(false);
             await this.gatewayRepository.save(gateway);
@@ -181,6 +187,10 @@ export class McpService {
         };
       }
 
+      // Log the full error server-side but don't echo stack traces /
+      // internal details to the caller — JSON-RPC error.data was
+      // leaking things like "Cannot read properties of undefined
+      // (reading 'apiKey')" which reveal schema internals.
       this.logger.error(`MCP JSON-RPC error: ${error.message}`, error.stack);
       return {
         jsonrpc: '2.0',
@@ -188,7 +198,6 @@ export class McpService {
         error: {
           code: JsonRpcErrorCode.INTERNAL_ERROR,
           message: 'Internal server error',
-          data: error.message,
         },
       };
     }

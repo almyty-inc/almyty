@@ -90,6 +90,52 @@ export interface LlmProviderSearchFilters {
   sortOrder?: 'ASC' | 'DESC';
 }
 
+// Strip values that look like API keys / secrets / tokens from anywhere
+// in a JSON-like object. LLM provider error bodies occasionally include
+// the request that was echoed back (so an unauthorized-key error can
+// include part of the Authorization header) — we never want that to
+// land in logs or in the provider's `lastError` column.
+const SECRET_KEY_PATTERNS = /(authorization|api[-_]?key|secret|token|password|bearer|x-api-key|proxy[-_]?authorization)/i;
+const SECRET_VALUE_PATTERN = /(sk-[a-zA-Z0-9_-]{20,}|ey[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._-]+)/g;
+
+function redactSecrets(value: any, depth = 0): any {
+  if (depth > 4) return '[truncated]';
+  if (value == null) return value;
+  if (typeof value === 'string') {
+    return value.replace(SECRET_VALUE_PATTERN, '[REDACTED]');
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((v) => redactSecrets(v, depth + 1));
+  }
+  if (typeof value === 'object') {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (SECRET_KEY_PATTERNS.test(k)) {
+        out[k] = '[REDACTED]';
+      } else {
+        out[k] = redactSecrets(v, depth + 1);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
+function safeErrorMessage(error: any): string {
+  const raw = typeof error?.message === 'string' ? error.message : 'Unknown error';
+  return raw.replace(SECRET_VALUE_PATTERN, '[REDACTED]').slice(0, 500);
+}
+
+function safeErrorBody(errorBody: any): string | null {
+  if (errorBody == null) return null;
+  try {
+    const redacted = redactSecrets(errorBody);
+    return JSON.stringify(redacted).slice(0, 2000);
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class LlmProvidersService {
   private readonly logger = new Logger(LlmProvidersService.name);
@@ -475,10 +521,11 @@ export class LlmProvidersService {
       };
 
     } catch (error) {
-      const errorBody = error.response?.data || null;
+      const safeBody = safeErrorBody(error.response?.data);
+      const safeMsg = safeErrorMessage(error);
       this.logger.error(
-        `Chat request failed: ${error.message}` +
-        (errorBody ? ` response_body=${JSON.stringify(errorBody)}` : ''),
+        `Chat request failed: ${safeMsg}` +
+        (safeBody ? ` response_body=${safeBody}` : ''),
         error.stack,
       );
 
@@ -486,7 +533,7 @@ export class LlmProvidersService {
       try {
         const provider = await this.getProvider(providerId, organizationId, true);
         provider.incrementUsage(0, 0, false);
-        provider.lastError = error.message;
+        provider.lastError = safeMsg;
         await this.llmProviderRepository.save(provider);
       } catch (updateError) {
         this.logger.warn(`Failed to update provider error stats: ${updateError.message}`);
@@ -525,20 +572,22 @@ export class LlmProvidersService {
         const responseTime = Date.now() - startTime;
         lastError = error;
 
-        // Log the full error response body from providers
-        const errorBody = error.response?.data || error.response?.body || null;
+        // Log a sanitized view of the provider error — the raw body
+        // can echo Authorization headers and other secrets.
         const statusCode = error.response?.status || error.status || 0;
+        const safeBody = safeErrorBody(error.response?.data || error.response?.body);
+        const safeMsg = safeErrorMessage(error);
         this.logger.error(
           `LLM provider call failed (attempt ${attempt + 1}/${maxRetries + 1}) after ${responseTime}ms: ` +
-          `status=${statusCode} message=${error.message}` +
-          (errorBody ? ` body=${JSON.stringify(errorBody)}` : ''),
+          `status=${statusCode} message=${safeMsg}` +
+          (safeBody ? ` body=${safeBody}` : ''),
         );
 
         // Update provider health metrics on failure
         try {
           provider.incrementUsage(0, 0, false);
           if (statusCode >= 500) {
-            provider.lastError = `${error.message} (status ${statusCode})`;
+            provider.lastError = `${safeMsg} (status ${statusCode})`;
           }
         } catch (_) { /* best effort */ }
 
