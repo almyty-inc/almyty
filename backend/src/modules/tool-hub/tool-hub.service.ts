@@ -113,16 +113,25 @@ export class ToolHubService {
     return queryBuilder.getRawMany();
   }
 
-  async getCategories(): Promise<Array<{ category: string; count: number }>> {
-    const results = await this.templateRepository
-      .createQueryBuilder('t')
+  async getCategories(orgId?: string): Promise<Array<{ category: string; count: number }>> {
+    // Same visibility rule as getProviders() above: public templates
+    // (organizationId IS NULL) are always visible; private templates
+    // are only visible to members of their owning org. Without this
+    // filter, the category name + count of every private template
+    // in every other tenant leaked to any authenticated caller.
+    const queryBuilder = this.templateRepository.createQueryBuilder('t');
+    if (orgId) {
+      queryBuilder.where('(t.organizationId IS NULL OR t.organizationId = :orgId)', { orgId });
+    } else {
+      queryBuilder.where('t.organizationId IS NULL');
+    }
+
+    return queryBuilder
       .select('t.category', 'category')
       .addSelect('COUNT(*)::int', 'count')
       .groupBy('t.category')
       .orderBy('count', 'DESC')
       .getRawMany();
-
-    return results;
   }
 
   async installTemplate(
