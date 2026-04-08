@@ -224,7 +224,7 @@ describe('McpGatewayService - Real Business Logic', () => {
           toolIds: ['tool-1'],
         });
 
-        const retrieved = await service.getVirtualServer(created.id);
+        const retrieved = await service.getVirtualServer(created.id, 'org-1');
 
         expect(retrieved).toBeDefined();
         expect(retrieved?.id).toBe(created.id);
@@ -232,7 +232,7 @@ describe('McpGatewayService - Real Business Logic', () => {
       });
 
       it('should return null for non-existent server', async () => {
-        const retrieved = await service.getVirtualServer('nonexistent');
+        const retrieved = await service.getVirtualServer('nonexistent', 'org-1');
 
         expect(retrieved).toBeNull();
       });
@@ -273,7 +273,7 @@ describe('McpGatewayService - Real Business Logic', () => {
         });
 
         // Mark as inactive
-        await service.updateVirtualServer(server.id, { isActive: false });
+        await service.updateVirtualServer(server.id, 'org-1', { isActive: false });
 
         const activeServers = await service.listVirtualServers('org-1');
 
@@ -291,7 +291,7 @@ describe('McpGatewayService - Real Business Logic', () => {
           toolIds: ['tool-1'],
         });
 
-        const updated = await service.updateVirtualServer(server.id, {
+        const updated = await service.updateVirtualServer(server.id, 'org-1', {
           name: 'Updated Name',
           description: 'New description',
         });
@@ -301,7 +301,7 @@ describe('McpGatewayService - Real Business Logic', () => {
       });
 
       it('should return null for non-existent server', async () => {
-        const updated = await service.updateVirtualServer('nonexistent', {
+        const updated = await service.updateVirtualServer('nonexistent', 'org-1', {
           name: 'Test',
         });
 
@@ -319,11 +319,11 @@ describe('McpGatewayService - Real Business Logic', () => {
           toolIds: ['tool-1'],
         });
 
-        const deleted = await service.deleteVirtualServer(server.id);
+        const deleted = await service.deleteVirtualServer(server.id, 'org-1');
 
         expect(deleted).toBe(true);
 
-        const retrieved = await service.getVirtualServer(server.id);
+        const retrieved = await service.getVirtualServer(server.id, 'org-1');
         expect(retrieved).toBeNull();
 
         // Verify broadcast was called (once for create, once for delete)
@@ -331,7 +331,7 @@ describe('McpGatewayService - Real Business Logic', () => {
       });
 
       it('should return false for non-existent server', async () => {
-        const deleted = await service.deleteVirtualServer('nonexistent');
+        const deleted = await service.deleteVirtualServer('nonexistent', 'org-1');
 
         expect(deleted).toBe(false);
       });
@@ -340,7 +340,7 @@ describe('McpGatewayService - Real Business Logic', () => {
     describe('getVirtualServerTools', () => {
       it('should throw when server not found', async () => {
         await expect(
-          service.getVirtualServerTools('nonexistent')
+          service.getVirtualServerTools('nonexistent', 'org-1')
         ).rejects.toThrow(NotFoundException);
       });
 
@@ -361,7 +361,7 @@ describe('McpGatewayService - Real Business Logic', () => {
           toolIds: ['tool-1'],
         });
 
-        const mcpTools = await service.getVirtualServerTools(server.id);
+        const mcpTools = await service.getVirtualServerTools(server.id, 'org-1');
 
         expect(mcpTools).toHaveLength(1);
         expect(mcpTools[0].name).toBe('search');
@@ -383,7 +383,7 @@ describe('McpGatewayService - Real Business Logic', () => {
           toolIds: ['tool-1'],
         });
 
-        const mcpTools = await service.getVirtualServerTools(server.id);
+        const mcpTools = await service.getVirtualServerTools(server.id, 'org-1');
 
         expect(mcpTools[0].description).toBe('Tool from virtual server My Server');
       });
@@ -399,7 +399,7 @@ describe('McpGatewayService - Real Business Logic', () => {
           toolIds: ['tool-1'],
         });
 
-        const mcpTools = await service.getVirtualServerTools(server.id);
+        const mcpTools = await service.getVirtualServerTools(server.id, 'org-1');
 
         expect(mcpTools[0].inputSchema).toEqual({
           type: 'object',
@@ -542,7 +542,7 @@ describe('McpGatewayService - Real Business Logic', () => {
           endpoint: 'http://peer1:4000',
         });
 
-        const removed = await service.removeGatewayPeer(peer.id);
+        const removed = await service.removeGatewayPeer(peer.id, 'org-1');
 
         expect(removed).toBe(true);
 
@@ -551,7 +551,7 @@ describe('McpGatewayService - Real Business Logic', () => {
       });
 
       it('should return false for non-existent peer', async () => {
-        const removed = await service.removeGatewayPeer('nonexistent');
+        const removed = await service.removeGatewayPeer('nonexistent', 'org-1');
 
         expect(removed).toBe(false);
       });
@@ -560,7 +560,7 @@ describe('McpGatewayService - Real Business Logic', () => {
     describe('forwardToPeer', () => {
       it('should throw when peer not found', async () => {
         await expect(
-          service.forwardToPeer('nonexistent', 'tools/list', {})
+          service.forwardToPeer('nonexistent', 'org-1', 'tools/list', {})
         ).rejects.toThrow(NotFoundException);
       });
 
@@ -582,7 +582,7 @@ describe('McpGatewayService - Real Business Logic', () => {
         // Wait a bit to ensure timestamp difference
         await new Promise(resolve => setTimeout(resolve, 10));
 
-        const result = await service.forwardToPeer(peer.id, 'tools/list', {});
+        const result = await service.forwardToPeer(peer.id, 'org-1', 'tools/list', {});
 
         expect(result).toEqual({ jsonrpc: '2.0', id: 1, result: { tools: [] } });
         expect((axios.post as jest.Mock)).toHaveBeenCalledWith(
@@ -614,7 +614,7 @@ describe('McpGatewayService - Real Business Logic', () => {
         (axios.post as jest.Mock).mockRejectedValue({ code: 'ECONNREFUSED', message: 'Connection refused' });
 
         await expect(
-          service.forwardToPeer(peer.id, 'tools/list', {})
+          service.forwardToPeer(peer.id, 'org-1', 'tools/list', {})
         ).rejects.toThrow('Peer gateway request failed');
 
         expect(peer.isActive).toBe(false);
@@ -636,7 +636,7 @@ describe('McpGatewayService - Real Business Logic', () => {
         });
 
         await expect(
-          service.forwardToPeer(peer.id, 'tools/list', {})
+          service.forwardToPeer(peer.id, 'org-1', 'tools/list', {})
         ).rejects.toThrow('Peer gateway request failed');
 
         expect(peer.isActive).toBe(false);
@@ -761,6 +761,108 @@ describe('McpGatewayService - Real Business Logic', () => {
         await service.checkPeerHealth();
 
         expect(peer.isActive).toBe(false);
+      });
+    });
+  });
+
+  // ─── Regression: virtual server + peer cross-org scoping ───────────
+  describe('Cross-org scoping regressions', () => {
+    beforeEach(() => {
+      toolRepository.find.mockResolvedValue([{ id: 'tool-1', organizationId: 'org-1' }]);
+    });
+
+    describe('virtual servers', () => {
+      it('getVirtualServer returns null when called from a different org', async () => {
+        const created = await service.createVirtualServer('org-1', {
+          name: 'Victim Server',
+          toolIds: ['tool-1'],
+        });
+
+        expect(await service.getVirtualServer(created.id, 'org-2')).toBeNull();
+        expect(await service.getVirtualServer(created.id, 'org-1')).not.toBeNull();
+      });
+
+      it('updateVirtualServer refuses a cross-org write', async () => {
+        const created = await service.createVirtualServer('org-1', {
+          name: 'Victim Server',
+          toolIds: ['tool-1'],
+        });
+
+        const updated = await service.updateVirtualServer(created.id, 'org-2', {
+          name: 'Hijacked',
+        });
+        expect(updated).toBeNull();
+
+        // The victim's server must still have its original name.
+        const intact = await service.getVirtualServer(created.id, 'org-1');
+        expect(intact?.name).toBe('Victim Server');
+      });
+
+      it('updateVirtualServer strips organizationId from the updates bag', async () => {
+        const created = await service.createVirtualServer('org-1', {
+          name: 'Server',
+          toolIds: ['tool-1'],
+        });
+
+        await service.updateVirtualServer(created.id, 'org-1', {
+          organizationId: 'attacker-org',
+          name: 'Still Mine',
+        } as any);
+
+        const after = await service.getVirtualServer(created.id, 'org-1');
+        expect(after?.organizationId).toBe('org-1');
+        expect(after?.name).toBe('Still Mine');
+      });
+
+      it('deleteVirtualServer refuses a cross-org delete', async () => {
+        const created = await service.createVirtualServer('org-1', {
+          name: 'Server',
+          toolIds: ['tool-1'],
+        });
+
+        expect(await service.deleteVirtualServer(created.id, 'org-2')).toBe(false);
+        // Still there for the owner.
+        expect(await service.getVirtualServer(created.id, 'org-1')).not.toBeNull();
+      });
+
+      it('getVirtualServerTools throws NotFound on a cross-org read', async () => {
+        const created = await service.createVirtualServer('org-1', {
+          name: 'Server',
+          toolIds: ['tool-1'],
+        });
+
+        await expect(
+          service.getVirtualServerTools(created.id, 'org-2'),
+        ).rejects.toThrow(NotFoundException);
+      });
+    });
+
+    describe('gateway peers', () => {
+      beforeEach(() => {
+        (axios.get as jest.Mock).mockResolvedValue({ data: { protocol: 'mcp' } });
+      });
+
+      it('removeGatewayPeer refuses a cross-org delete', async () => {
+        const peer = await service.registerGatewayPeer('org-1', {
+          name: 'Peer',
+          endpoint: 'http://remote:4000',
+        });
+
+        expect(await service.removeGatewayPeer(peer.id, 'org-2')).toBe(false);
+        // Still registered for its owner.
+        const peers = await service.listGatewayPeers('org-1');
+        expect(peers).toHaveLength(1);
+      });
+
+      it('forwardToPeer refuses a cross-org forward', async () => {
+        const peer = await service.registerGatewayPeer('org-1', {
+          name: 'Peer',
+          endpoint: 'http://remote:4000',
+        });
+
+        await expect(
+          service.forwardToPeer(peer.id, 'org-2', 'tools/list', {}),
+        ).rejects.toThrow(NotFoundException);
       });
     });
   });

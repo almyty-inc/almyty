@@ -113,8 +113,16 @@ export class McpGatewayService {
     return virtualServer;
   }
 
-  async getVirtualServer(serverId: string): Promise<VirtualServer | null> {
-    return this.virtualServers.get(serverId) || null;
+  async getVirtualServer(
+    serverId: string,
+    organizationId: string,
+  ): Promise<VirtualServer | null> {
+    // Org-scoped read. The previous shape returned the server for
+    // ANY caller that knew its id. Combine with listVirtualServers
+    // which already scoped by org — both are now consistent.
+    const server = this.virtualServers.get(serverId);
+    if (!server || server.organizationId !== organizationId) return null;
+    return server;
   }
 
   async listVirtualServers(organizationId: string): Promise<VirtualServer[]> {
@@ -125,28 +133,37 @@ export class McpGatewayService {
 
   async updateVirtualServer(
     serverId: string,
-    updates: Partial<VirtualServer>
+    organizationId: string,
+    updates: Partial<VirtualServer>,
   ): Promise<VirtualServer | null> {
     const server = this.virtualServers.get(serverId);
-    if (!server) {
+    if (!server || server.organizationId !== organizationId) {
+      // Cross-org update attempt — indistinguishable from not found.
       return null;
     }
 
-    Object.assign(server, updates);
+    // Never let a caller mutate the server's organizationId through
+    // the updates bag — that would allow laundering a server across
+    // tenants once a cross-org write slipped through.
+    const { organizationId: _forbidden, ...safeUpdates } = updates;
+    Object.assign(server, safeUpdates);
     this.virtualServers.set(serverId, server);
 
     this.logger.log(`Virtual server updated: ${serverId}`);
     return server;
   }
 
-  async deleteVirtualServer(serverId: string): Promise<boolean> {
+  async deleteVirtualServer(
+    serverId: string,
+    organizationId: string,
+  ): Promise<boolean> {
     const server = this.virtualServers.get(serverId);
-    if (!server) {
+    if (!server || server.organizationId !== organizationId) {
       return false;
     }
 
     this.virtualServers.delete(serverId);
-    
+
     // Broadcast notification
     await this.mcpSessionService.broadcastToOrganization(server.organizationId, {
       method: 'notifications/tools/list_changed',
@@ -157,15 +174,20 @@ export class McpGatewayService {
   }
 
   // Get tools for a specific virtual server
-  async getVirtualServerTools(serverId: string): Promise<McpTool[]> {
+  async getVirtualServerTools(
+    serverId: string,
+    organizationId: string,
+  ): Promise<McpTool[]> {
     const server = this.virtualServers.get(serverId);
-    if (!server) {
+    if (!server || server.organizationId !== organizationId) {
+      // Cross-org lookup — say "not found" so the endpoint can't be
+      // used as an existence oracle for foreign server ids.
       throw new NotFoundException('Virtual server not found');
     }
 
-    // Same Mongo `$in` issue as createVirtualServer above. Also adding
-    // an explicit organizationId filter so cross-org tool exposure can't
-    // happen if a serverId leaks across orgs.
+    // The tool query is already org-scoped (defence in depth even
+    // without the server check above), and uses TypeORM's `In()` —
+    // the Mongo `$in` shape this used to have was a no-op.
     const tools = server.toolIds.length > 0
       ? await this.toolRepository.find({
           where: {
@@ -240,9 +262,13 @@ export class McpGatewayService {
     );
   }
 
-  async removeGatewayPeer(peerId: string): Promise<boolean> {
+  async removeGatewayPeer(
+    peerId: string,
+    organizationId: string,
+  ): Promise<boolean> {
     const peer = this.gatewayPeers.get(peerId);
-    if (!peer) {
+    if (!peer || peer.organizationId !== organizationId) {
+      // Cross-org delete — indistinguishable from "peer doesn't exist".
       return false;
     }
 
@@ -254,12 +280,23 @@ export class McpGatewayService {
   // Federation - Forward requests to peers
   async forwardToPeer(
     peerId: string,
+    organizationId: string,
     method: string,
     params: any
   ): Promise<any> {
     const peer = this.gatewayPeers.get(peerId);
-    if (!peer) {
+    if (!peer || peer.organizationId !== organizationId) {
       throw new NotFoundException('Gateway peer not found');
+    }
+
+    // Revalidate the peer endpoint every forward. The register path
+    // already runs validateUrl but a future code path that mutates
+    // `peer.endpoint` without re-validating (via in-memory update,
+    // restore from storage, etc.) would otherwise bypass the SSRF
+    // gate.
+    const validation = validateUrl(`${peer.endpoint}/mcp`);
+    if (!validation.valid) {
+      throw new BadRequestException(`Peer endpoint is no longer safe to contact: ${validation.error}`);
     }
 
     try {
@@ -272,6 +309,8 @@ export class McpGatewayService {
         timeout: 30000,
         maxContentLength: 10 * 1024 * 1024,
         maxBodyLength: 10 * 1024 * 1024,
+        // Don't follow redirects across the SSRF gate.
+        maxRedirects: 0,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -302,7 +341,7 @@ export class McpGatewayService {
     // Add tools from virtual servers
     const virtualServers = await this.listVirtualServers(organizationId);
     for (const server of virtualServers) {
-      const serverTools = await this.getVirtualServerTools(server.id);
+      const serverTools = await this.getVirtualServerTools(server.id, organizationId);
       allTools.push(...serverTools);
     }
 
@@ -310,7 +349,7 @@ export class McpGatewayService {
     const peers = await this.listGatewayPeers(organizationId);
     for (const peer of peers) {
       try {
-        const response = await this.forwardToPeer(peer.id, 'tools/list', {});
+        const response = await this.forwardToPeer(peer.id, organizationId, 'tools/list', {});
         if (response.result?.tools) {
           // Prefix peer tools to avoid conflicts
           const peerTools = response.result.tools.map(tool => ({
