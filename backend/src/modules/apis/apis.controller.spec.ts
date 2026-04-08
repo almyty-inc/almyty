@@ -259,6 +259,110 @@ describe('ApisController', () => {
       expect(result.data).toHaveProperty('jobId');
       expect(result.data).toHaveProperty('status', 'processing');
     });
+
+    it('rejects an oversized schema BEFORE enqueueing the job', async () => {
+      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockApi = { id: 'api-1', organizationId: 'org-1' } as any;
+      apisService.findOne.mockResolvedValue(mockApi);
+
+      const queue: any = (controller as any).schemaImportQueue;
+      queue.add.mockClear();
+
+      const huge = { schemaContent: 'x'.repeat(11 * 1024 * 1024), generateTools: false };
+
+      await expect(controller.importSchema(mockRequest, 'api-1', huge as any))
+        .rejects.toThrow(/Schema too large/);
+
+      // Critical: the job must NOT have hit Redis. Previously the size
+      // check was inside the worker, so the oversized payload was already
+      // serialised into the queue body before being rejected.
+      expect(queue.add).not.toHaveBeenCalled();
+    });
+
+    it('includes organizationId in the queued job payload', async () => {
+      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      const mockApi = { id: 'api-1', organizationId: 'org-1' } as any;
+      apisService.findOne.mockResolvedValue(mockApi);
+
+      const queue: any = (controller as any).schemaImportQueue;
+      queue.add.mockClear();
+
+      await controller.importSchema(
+        mockRequest,
+        'api-1',
+        { schemaContent: '{}', generateTools: false } as any,
+      );
+
+      const queuedPayload = queue.add.mock.calls[0][1];
+      expect(queuedPayload).toEqual(
+        expect.objectContaining({
+          apiId: 'api-1',
+          organizationId: 'org-1',
+        }),
+      );
+    });
+  });
+
+  describe('getImportStatus', () => {
+    function setQueueJob(job: any) {
+      const queue: any = (controller as any).schemaImportQueue;
+      queue.getJob = jest.fn().mockResolvedValue(job);
+      return queue;
+    }
+
+    it('returns the job status when api + job ownership both check out', async () => {
+      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      apisService.findOne.mockResolvedValue({
+        id: 'api-1',
+        organizationId: 'org-1',
+      } as any);
+
+      setQueueJob({
+        data: { apiId: 'api-1' },
+        getState: jest.fn().mockResolvedValue('completed'),
+        progress: jest.fn().mockReturnValue(100),
+        returnvalue: { success: true },
+      });
+
+      const result = await controller.getImportStatus(mockRequest as any, 'api-1', 'job-1');
+      expect(result.data.status).toBe('completed');
+    });
+
+    it('returns NotFound when the api belongs to another org (no cross-org poll)', async () => {
+      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      apisService.findOne.mockResolvedValue({
+        id: 'api-1',
+        organizationId: 'other-org',
+      } as any);
+
+      // The queue should never be touched if the api ownership check fails.
+      const queue: any = (controller as any).schemaImportQueue;
+      queue.getJob = jest.fn();
+
+      await expect(
+        controller.getImportStatus(mockRequest as any, 'api-1', 'job-1'),
+      ).rejects.toThrow('API not found');
+      expect(queue.getJob).not.toHaveBeenCalled();
+    });
+
+    it('returns NotFound when the job exists but its apiId does not match the path', async () => {
+      const mockRequest = { user: { currentOrganizationId: 'org-1' } };
+      apisService.findOne.mockResolvedValue({
+        id: 'api-1',
+        organizationId: 'org-1',
+      } as any);
+
+      setQueueJob({
+        data: { apiId: 'someone-elses-api' },
+        getState: jest.fn().mockResolvedValue('completed'),
+        progress: jest.fn().mockReturnValue(100),
+        returnvalue: { success: true, secret: 'cross-org leak' },
+      });
+
+      await expect(
+        controller.getImportStatus(mockRequest as any, 'api-1', 'job-1'),
+      ).rejects.toThrow('Job not found');
+    });
   });
 
   describe('generateTools', () => {

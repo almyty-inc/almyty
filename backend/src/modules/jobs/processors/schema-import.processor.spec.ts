@@ -14,6 +14,7 @@ describe('SchemaImportProcessor', () => {
 
   const mockApisService: Partial<jest.Mocked<ApisService>> = {
     importSchema: jest.fn(),
+    findOne: jest.fn(),
   };
 
   function createMockJob(data: SchemaImportJob, id: string | number = 'job-1'): jest.Mocked<Job<SchemaImportJob>> {
@@ -272,6 +273,90 @@ describe('SchemaImportProcessor', () => {
 
       expect(result.api).toBe(specificApi);
       expect(result.schema).toBe(specificSchema);
+    });
+
+    // Defence in depth: the controller already org-checks, but the worker
+    // re-verifies the api still belongs to the org from the job payload.
+    // This guards against stale jobs and direct Redis manipulation.
+    describe('cross-org defence in depth', () => {
+      it('refuses to import when the api belongs to a different org', async () => {
+        apisService.findOne.mockResolvedValue({
+          id: 'api-1',
+          organizationId: 'attacker-org',
+        } as Api);
+
+        const job = createMockJob({
+          apiId: 'api-1',
+          organizationId: 'victim-org',
+          schemaContent: '{}',
+          options: {},
+        });
+
+        await expect(processor.handleSchemaImport(job)).rejects.toThrow(
+          /not found in organization/,
+        );
+        expect(apisService.importSchema).not.toHaveBeenCalled();
+      });
+
+      it('refuses to import when the api no longer exists', async () => {
+        apisService.findOne.mockResolvedValue(null as any);
+
+        const job = createMockJob({
+          apiId: 'api-deleted',
+          organizationId: 'org-1',
+          schemaContent: '{}',
+          options: {},
+        });
+
+        await expect(processor.handleSchemaImport(job)).rejects.toThrow(/not found/);
+        expect(apisService.importSchema).not.toHaveBeenCalled();
+      });
+
+      it('proceeds when the api belongs to the org from the payload', async () => {
+        apisService.findOne.mockResolvedValue({
+          id: 'api-1',
+          organizationId: 'org-1',
+        } as Api);
+        apisService.importSchema.mockResolvedValue({
+          api: mockApi,
+          schema: mockSchema,
+          operations: [],
+          resources: [],
+        });
+
+        const job = createMockJob({
+          apiId: 'api-1',
+          organizationId: 'org-1',
+          schemaContent: '{}',
+          options: {},
+        });
+
+        const result = await processor.handleSchemaImport(job);
+        expect(result.success).toBe(true);
+        expect(apisService.importSchema).toHaveBeenCalled();
+      });
+
+      it('skips the cross-check for legacy jobs without an organizationId', async () => {
+        // Backwards compatibility: jobs already in Redis from before this
+        // change have no organizationId in the payload. The worker should
+        // still process them rather than failing every in-flight job.
+        apisService.importSchema.mockResolvedValue({
+          api: mockApi,
+          schema: mockSchema,
+          operations: [],
+          resources: [],
+        });
+
+        const job = createMockJob({
+          apiId: 'api-1',
+          schemaContent: '{}',
+          options: {},
+        });
+
+        const result = await processor.handleSchemaImport(job);
+        expect(result.success).toBe(true);
+        expect(apisService.findOne).not.toHaveBeenCalled();
+      });
     });
   });
 });

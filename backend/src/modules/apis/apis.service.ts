@@ -14,6 +14,7 @@ import { SchemaParserService } from '../schema-parser/schema-parser.service';
 import { ToolsService } from '../tools/tools.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { validateUrl } from '../../common/security/url-validator';
 
 export interface CreateApiData {
   name: string;
@@ -391,9 +392,27 @@ export class ApisService {
   }
 
   async fetchSchemaFromUrl(url: string): Promise<string> {
+    // SSRF guard. Without this the user could ask the server to fetch
+    // http://169.254.169.254/, http://localhost:6379/, file:///etc/passwd,
+    // etc., and we'd dutifully run the request and hand back the body.
+    const validation = validateUrl(url);
+    if (!validation.valid) {
+      throw new BadRequestException(`Refused to fetch schema URL: ${validation.error}`);
+    }
+
     try {
       const response = await axios.get(url, {
         timeout: 30000,
+        // 15 MB inbound cap. The downstream importSchema enforces a 10 MB
+        // schema limit anyway; the slack here covers headers/transfer
+        // overhead and lets that error surface a clearer message.
+        maxContentLength: 15 * 1024 * 1024,
+        maxBodyLength: 15 * 1024 * 1024,
+        // Don't follow redirects — a public URL that 302s to an internal
+        // host would otherwise re-introduce SSRF after the validateUrl
+        // gate. Callers can still chase one-hop redirects themselves if
+        // they need to.
+        maxRedirects: 0,
         headers: {
           'Accept': 'application/json, application/yaml, text/yaml, text/plain, application/xml, text/xml',
         },
