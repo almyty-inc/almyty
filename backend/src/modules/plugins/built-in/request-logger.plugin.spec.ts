@@ -247,7 +247,7 @@ describe('RequestLoggerPlugin - Real Business Logic', () => {
 
       expect(result.success).toBe(true);
       const loggedData = JSON.parse(consoleLogSpy.mock.calls[0][0]);
-      expect(loggedData.body).toContain('[REDACTED]');
+      expect(JSON.stringify(loggedData.body)).toContain('[REDACTED]');
     });
 
     it('should include session and request IDs', async () => {
@@ -305,8 +305,8 @@ describe('RequestLoggerPlugin - Real Business Logic', () => {
 
       expect(result.success).toBe(true);
       const loggedData = JSON.parse(consoleLogSpy.mock.calls[0][0]);
-      expect(loggedData.parameters).toContain('[REDACTED]');
-      expect(loggedData.parameters).not.toContain('secret-pwd');
+      expect(JSON.stringify(loggedData.parameters)).toContain('[REDACTED]');
+      expect(JSON.stringify(loggedData.parameters)).not.toContain('secret-pwd');
     });
 
     it('should handle errors gracefully', async () => {
@@ -352,8 +352,11 @@ describe('RequestLoggerPlugin - Real Business Logic', () => {
 
       expect(result.success).toBe(true);
       const loggedData = JSON.parse(consoleLogSpy.mock.calls[0][0]);
-      expect(loggedData.body).toContain('[REDACTED]');
-      expect(loggedData.body).not.toContain('secret123');
+      // Redacted body is now returned as a STRUCTURED object, not a
+      // regex-replaced string. Serialise once for the substring
+      // assertions instead of relying on .toContain on a non-string.
+      expect(JSON.stringify(loggedData.body)).toContain('[REDACTED]');
+      expect(JSON.stringify(loggedData.body)).not.toContain('secret123');
     });
 
     it('should redact token fields', async () => {
@@ -366,23 +369,27 @@ describe('RequestLoggerPlugin - Real Business Logic', () => {
 
       expect(result.success).toBe(true);
       const loggedData = JSON.parse(consoleLogSpy.mock.calls[0][0]);
-      expect(loggedData.body).toContain('[REDACTED]');
-      expect(loggedData.body).not.toContain('jwt-token-123');
+      expect(JSON.stringify(loggedData.body)).toContain('[REDACTED]');
+      expect(JSON.stringify(loggedData.body)).not.toContain('jwt-token-123');
     });
 
     it('should redact secret fields', async () => {
       const contextWithSecret = {
         ...mockContext,
-        data: { secret: 'api-secret', key: 'api-key-123' },
+        // Note: `key` alone is NOT sensitive (too many legitimate uses
+        // — record id key, lookup key, etc.) — `apiKey`, `api_key`,
+        // `api-key`, `x-api-key` are. The test data used `key` which
+        // the old regex matched; the new substring matcher doesn't.
+        data: { secret: 'api-secret', apiKey: 'api-key-123' },
       };
 
       const result = await plugin.logRequest(contextWithSecret, mockSettings);
 
       expect(result.success).toBe(true);
       const loggedData = JSON.parse(consoleLogSpy.mock.calls[0][0]);
-      expect(loggedData.body).toContain('[REDACTED]');
-      expect(loggedData.body).not.toContain('api-secret');
-      expect(loggedData.body).not.toContain('api-key-123');
+      expect(JSON.stringify(loggedData.body)).toContain('[REDACTED]');
+      expect(JSON.stringify(loggedData.body)).not.toContain('api-secret');
+      expect(JSON.stringify(loggedData.body)).not.toContain('api-key-123');
     });
 
     it('should not redact when redactSensitiveData is false', async () => {
@@ -439,7 +446,10 @@ describe('RequestLoggerPlugin - Real Business Logic', () => {
       expect(loggedData.body).toBe('Simple string data');
     });
 
-    it('should JSON stringify object data', async () => {
+    it('should pass object data through as a structured body (preserving shape)', async () => {
+      // Previously sanitizeBody JSON-stringified everything when
+      // redaction was enabled. The new contract returns the redacted
+      // OBJECT so structured loggers can keep the field shape.
       const contextWithObject = {
         ...mockContext,
         data: { name: 'value', nested: { data: 'test' } },
@@ -449,9 +459,7 @@ describe('RequestLoggerPlugin - Real Business Logic', () => {
 
       expect(result.success).toBe(true);
       const loggedData = JSON.parse(consoleLogSpy.mock.calls[0][0]);
-      expect(typeof loggedData.body).toBe('string');
-      expect(loggedData.body).toContain('name');
-      expect(loggedData.body).toContain('value');
+      expect(loggedData.body).toEqual({ name: 'value', nested: { data: 'test' } });
     });
   });
 });
