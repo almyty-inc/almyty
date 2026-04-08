@@ -100,6 +100,15 @@ describe('AgentRuntimeService (integration)', () => {
       findByIds: jest.fn().mockResolvedValue([]),
     };
 
+    // bumpAgentStats uses a queryBuilder chain for an atomic
+    // UPDATE. The mock's chain resolves to {affected: 1} so the
+    // runtime's best-effort stats update succeeds silently.
+    const qbChain = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
     mockAgentRepo = {
       findOne: jest.fn().mockImplementation(({ where }: any) => {
         const found = agentStore.find(
@@ -109,6 +118,7 @@ describe('AgentRuntimeService (integration)', () => {
       }),
       find: jest.fn().mockResolvedValue([]),
       save: jest.fn().mockImplementation((agent: Agent) => Promise.resolve(agent)),
+      createQueryBuilder: jest.fn().mockReturnValue(qbChain),
     };
 
     mockToolRepo = {
