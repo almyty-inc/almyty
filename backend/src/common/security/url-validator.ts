@@ -69,7 +69,14 @@ export function validateUrl(urlString: string): UrlValidationResult {
     return { valid: false, error: 'URLs with embedded credentials are not allowed.' };
   }
 
-  const hostname = parsed.hostname.toLowerCase();
+  // Node's URL parser preserves the surrounding brackets for IPv6 hosts
+  // (e.g. `http://[::1]/`.hostname === '[::1]'). Strip them so the IP
+  // checks below see the bare address — otherwise [::1] sails past the
+  // /^::1$/ loopback pattern and we'd silently allow IPv6 SSRF.
+  const rawHostname = parsed.hostname.toLowerCase();
+  const hostname = rawHostname.startsWith('[') && rawHostname.endsWith(']')
+    ? rawHostname.slice(1, -1)
+    : rawHostname;
 
   // Block known dangerous hostnames
   for (const blocked of BLOCKED_HOSTNAMES) {

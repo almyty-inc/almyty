@@ -92,6 +92,27 @@ describe('URL Validator (SSRF Protection)', () => {
       const result = validateUrl('http://metadata.google.internal/computeMetadata/v1/');
       expect(result.valid).toBe(false);
     });
+
+    // IPv6 brackets — Node's URL parser preserves the [ ] in `hostname`,
+    // so any check that doesn't strip them silently lets [::1], [fc00::1],
+    // etc. through.
+    describe('IPv6 brackets', () => {
+      it('should block bracketed IPv6 loopback', () => {
+        const result = validateUrl('http://[::1]/admin');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('::1');
+      });
+
+      it('should block bracketed unique-local IPv6', () => {
+        const result = validateUrl('http://[fc00::1]/internal');
+        expect(result.valid).toBe(false);
+      });
+
+      it('should block bracketed link-local IPv6', () => {
+        const result = validateUrl('http://[fe80::1]/');
+        expect(result.valid).toBe(false);
+      });
+    });
   });
 
   describe('sanitizeHeaders', () => {
