@@ -23,7 +23,25 @@ describe('SchemaParserService', () => {
   let soapParser: SOAPParserService;
   let protobufParser: ProtobufParserService;
 
+  // Shared Operation + Resource repo mocks hoisted out of the provider
+  // factory so the transactional manager below can delegate into them.
+  let mockOperationRepo: any;
+  let mockResourceRepo: any;
+
   beforeEach(async () => {
+    mockOperationRepo = {
+      create: jest.fn((entity) => entity),
+      save: jest.fn((entities) => Promise.resolve(entities)),
+      findOne: jest.fn(),
+      delete: jest.fn().mockResolvedValue({ affected: 0 }),
+    };
+    mockResourceRepo = {
+      create: jest.fn((entity) => entity),
+      save: jest.fn((entities) => Promise.resolve(entities)),
+      findOne: jest.fn(),
+      delete: jest.fn().mockResolvedValue({ affected: 0 }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SchemaParserService,
@@ -31,29 +49,47 @@ describe('SchemaParserService', () => {
         GraphQLParserService,
         SOAPParserService,
         ProtobufParserService,
+        // reparse() now wraps delete+save in a single DB transaction via
+        // apiSchemaRepository.manager.transaction(). The transactional
+        // manager passed to the callback must delegate create/save/delete
+        // to the same repository mocks so existing per-repo assertions
+        // (operationRepository.save was called with …) still hold.
         {
           provide: getRepositoryToken(ApiSchema),
-          useValue: {
-            create: jest.fn((entity) => entity),
-            save: jest.fn((entity) => Promise.resolve({ ...entity, id: 'schema-1' })),
-            findOne: jest.fn(),
-          },
+          useValue: (() => {
+            const apiSchemaRepo: any = {
+              create: jest.fn((entity) => entity),
+              save: jest.fn((entity) => Promise.resolve({ ...entity, id: 'schema-1' })),
+              findOne: jest.fn(),
+              delete: jest.fn(),
+            };
+            const transactionalManager = {
+              save: (entityClass: any, entity: any) => {
+                if (entityClass === Operation) return mockOperationRepo.save(entity);
+                if (entityClass === Resource) return mockResourceRepo.save(entity);
+                if (entityClass === ApiSchema) return apiSchemaRepo.save(entity);
+                return entity;
+              },
+              delete: (entityClass: any, criteria: any) => {
+                if (entityClass === Operation) return mockOperationRepo.delete(criteria);
+                if (entityClass === Resource) return mockResourceRepo.delete(criteria);
+                if (entityClass === ApiSchema) return apiSchemaRepo.delete(criteria);
+                return { affected: 0 };
+              },
+            };
+            apiSchemaRepo.manager = {
+              transaction: jest.fn(async (cb: any) => cb(transactionalManager)),
+            };
+            return apiSchemaRepo;
+          })(),
         },
         {
           provide: getRepositoryToken(Operation),
-          useValue: {
-            create: jest.fn((entity) => entity),
-            save: jest.fn((entities) => Promise.resolve(entities)),
-            findOne: jest.fn(),
-          },
+          useValue: mockOperationRepo,
         },
         {
           provide: getRepositoryToken(Resource),
-          useValue: {
-            create: jest.fn((entity) => entity),
-            save: jest.fn((entities) => Promise.resolve(entities)),
-            findOne: jest.fn(),
-          },
+          useValue: mockResourceRepo,
         },
       ],
     }).compile();
