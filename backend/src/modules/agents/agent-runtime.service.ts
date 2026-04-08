@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
@@ -68,10 +68,36 @@ const BUILT_IN_TOOLS = {
   },
 };
 
+/** Interval between orphaned-emitter sweeps. */
+const RUNTIME_EMITTER_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 min
+
 @Injectable()
-export class AgentRuntimeService {
+export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AgentRuntimeService.name);
   private readonly runEmitters = new Map<string, EventEmitter>();
+  private emitterSweepTimer?: NodeJS.Timeout;
+
+  onModuleInit(): void {
+    // Orphaned emitter sweep — see sweepOrphanedRunEmitters below.
+    // Previously the runEmitters map had no cleanup path beyond the
+    // emitEvent() terminal branch, so any run that died without
+    // emitting completed/failed/cancelled (process crash mid-run,
+    // BullMQ worker exit, unhandled exception) left its emitter in
+    // the map forever. The sweep catches those orphans.
+    this.emitterSweepTimer = setInterval(() => {
+      this.sweepOrphanedRunEmitters().catch((err) => {
+        this.logger.warn(`Emitter sweep failed: ${err.message}`);
+      });
+    }, RUNTIME_EMITTER_SWEEP_INTERVAL_MS);
+    this.emitterSweepTimer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    if (this.emitterSweepTimer) {
+      clearInterval(this.emitterSweepTimer);
+      this.emitterSweepTimer = undefined;
+    }
+  }
 
   constructor(
     @InjectRepository(AgentRun)
@@ -1608,7 +1634,12 @@ export class AgentRuntimeService {
   }
 
   /**
-   * Emit an event for SSE subscribers
+   * Emit an event for SSE subscribers. The emitter is cleaned up
+   * on terminal event types (completed / failed / cancelled). If a
+   * run dies without ever emitting a terminal event — a process
+   * crash mid-run, a BullMQ worker timeout that doesn't get caught,
+   * an unhandled exception — the emitter would otherwise leak.
+   * The onModuleInit sweeper below handles that case.
    */
   private emitEvent(runId: string, type: string, data: any) {
     const emitter = this.runEmitters.get(runId);
@@ -1621,6 +1652,39 @@ export class AgentRuntimeService {
         this.runEmitters.delete(runId);
         // Clean up any temporary agents spawned by this run
         this.cleanupTemporaryAgents(runId).catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Best-effort periodic sweep of orphaned run emitters. Any
+   * emitter whose corresponding run has been in a terminal state
+   * in the DB for more than 15 minutes is evicted. The sweep is
+   * started in onModuleInit (see module lifecycle) and unref'd
+   * so it doesn't keep the event loop alive at shutdown.
+   */
+  async sweepOrphanedRunEmitters(): Promise<void> {
+    if (this.runEmitters.size === 0) return;
+    const cutoff = new Date(Date.now() - 15 * 60 * 1000);
+
+    for (const runId of Array.from(this.runEmitters.keys())) {
+      try {
+        const run = await this.runRepository.findOne({
+          where: { id: runId },
+          select: ['id', 'status', 'updatedAt'],
+        });
+        // Run gone → orphaned.
+        if (!run) {
+          this.runEmitters.delete(runId);
+          continue;
+        }
+        // Run in a terminal state for longer than the cutoff → orphaned.
+        const terminal = ['completed', 'failed', 'cancelled', 'timeout'];
+        if (terminal.includes(run.status as any) && run.updatedAt < cutoff) {
+          this.runEmitters.delete(runId);
+        }
+      } catch {
+        // Best-effort — swallow DB hiccups.
       }
     }
   }
