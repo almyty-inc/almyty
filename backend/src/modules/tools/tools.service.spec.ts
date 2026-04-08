@@ -911,6 +911,26 @@ describe('ToolsService', () => {
       expect(stats.executionTrend).toHaveLength(30); // 30 days
     });
 
+    it('uses a TypeORM MoreThanOrEqual operator on createdAt (regression for dead $gte)', async () => {
+      // The previous implementation passed `{ $gte: since } as any`,
+      // which TypeORM treats as a literal object comparison and
+      // matches zero rows — so getToolUsageStats was silently
+      // returning all-zeros for every tool in every timeframe.
+      // Pin the new shape: the `createdAt` clause must be a
+      // TypeORM operator instance (internally tagged with
+      // `_type: 'moreThanOrEqual'`), NOT a plain `$gte` object.
+      toolRepo.findOne.mockResolvedValue(makeTool());
+      toolExecutionRepo.find.mockResolvedValue([]);
+
+      await service.getToolUsageStats('tool-1', 'org-1', 'day');
+
+      const whereArg = (toolExecutionRepo.find.mock.calls[0][0] as any).where;
+      expect(whereArg.createdAt).not.toHaveProperty('$gte');
+      // TypeORM FindOperator has `_type` and `_value` fields.
+      expect(whereArg.createdAt).toHaveProperty('_type', 'moreThanOrEqual');
+      expect(whereArg.createdAt._value).toBeInstanceOf(Date);
+    });
+
     it('should compute stats correctly from executions', async () => {
       const tool = makeTool();
       const now = new Date();

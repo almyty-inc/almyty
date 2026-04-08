@@ -122,47 +122,6 @@ export class ToolExecution {
     return this.error;
   }
 
-  // Static query helpers
-  static getSuccessfulExecutionsQuery() {
-    return { success: true };
-  }
-
-  static getFailedExecutionsQuery() {
-    return { success: false };
-  }
-
-  static getCachedExecutionsQuery() {
-    return { cached: true };
-  }
-
-  static getRateLimitedExecutionsQuery() {
-    return { 'metadata.rateLimited': true };
-  }
-
-  static getExecutionsInTimeframeQuery(since: Date, until?: Date) {
-    const query: any = {
-      createdAt: { $gte: since },
-    };
-
-    if (until) {
-      query.createdAt.$lte = until;
-    }
-
-    return query;
-  }
-
-  static getExecutionsByToolQuery(toolId: string) {
-    return { toolId };
-  }
-
-  static getExecutionsByUserQuery(userId: string) {
-    return { userId };
-  }
-
-  static getExecutionsByOrganizationQuery(organizationId: string) {
-    return { organizationId };
-  }
-
   // Analytics helpers
   toAnalyticsData() {
     return {
