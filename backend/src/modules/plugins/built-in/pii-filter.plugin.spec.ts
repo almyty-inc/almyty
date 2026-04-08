@@ -461,9 +461,12 @@ describe('PiiFilterPlugin - Real Business Logic', () => {
   });
 
   describe('Error Handling', () => {
-    it('should handle errors gracefully', async () => {
-      // Create circular reference to trigger error
-      const circularData: any = { name: 'test' };
+    it('should not infinite-loop on a circular reference', async () => {
+      // Previously this test pinned the OLD broken behaviour (error out
+      // with PII_FILTER_ERROR on any self-referential graph). The walker
+      // now has a WeakSet-based cycle guard, so the scan succeeds and
+      // the same node is visited at most once.
+      const circularData: any = { name: 'jane@example.com' };
       circularData.self = circularData;
 
       const context = {
@@ -473,9 +476,12 @@ describe('PiiFilterPlugin - Real Business Logic', () => {
 
       const result = await plugin.filterPiiFromRequest(context, mockSettings);
 
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe('PII_FILTER_ERROR');
-      expect(result.data).toBe(circularData); // Original data preserved
+      expect(result.success).toBe(true);
+      // The email at the top level should still be masked
+      expect(result.data.name).not.toContain('jane@example.com');
+      // And the self-reference should still be present (pointing at the
+      // filtered parent, not the original).
+      expect(result.data.self).toBeDefined();
     });
 
     it('should preserve data on error', async () => {
@@ -541,6 +547,132 @@ describe('PiiFilterPlugin - Real Business Logic', () => {
       expect(result.data[0]).not.toBe('test@example.com');
       expect(result.data[1]).not.toBe('555-123-4567');
       expect(result.data[2]).toBe('normal text');
+    });
+  });
+
+  // ── Regression: feature toggles were documented but dead code ──────
+  describe('Feature toggles (regression)', () => {
+    it('detectEmails: false leaves emails untouched', async () => {
+      const settings = { ...mockSettings, detectEmails: false };
+      const ctx = { ...mockContext, data: 'contact jane@example.com please' };
+
+      const result = await plugin.filterPiiFromRequest(ctx, settings);
+      expect(result.success).toBe(true);
+      expect(result.data).toBe('contact jane@example.com please');
+    });
+
+    it('detectCreditCards: false leaves 16-digit numbers untouched', async () => {
+      const settings = { ...mockSettings, detectCreditCards: false };
+      const ctx = { ...mockContext, data: 'card: 4111 1111 1111 1111' };
+
+      const result = await plugin.filterPiiFromRequest(ctx, settings);
+      expect(result.data).toBe('card: 4111 1111 1111 1111');
+    });
+
+    it('detectSSN: false leaves SSN patterns untouched', async () => {
+      const settings = { ...mockSettings, detectSSN: false };
+      const ctx = { ...mockContext, data: 'id 123-45-6789' };
+
+      const result = await plugin.filterPiiFromRequest(ctx, settings);
+      expect(result.data).toBe('id 123-45-6789');
+    });
+
+    it('detectPhoneNumbers: false leaves phone patterns untouched', async () => {
+      const settings = { ...mockSettings, detectPhoneNumbers: false };
+      const ctx = { ...mockContext, data: 'call 555-123-4567' };
+
+      const result = await plugin.filterPiiFromRequest(ctx, settings);
+      expect(result.data).toBe('call 555-123-4567');
+    });
+
+    it('detectIPAddresses: false leaves IP patterns untouched', async () => {
+      const settings = { ...mockSettings, detectIPAddresses: false };
+      const ctx = { ...mockContext, data: 'host 10.20.30.40' };
+
+      const result = await plugin.filterPiiFromRequest(ctx, settings);
+      expect(result.data).toBe('host 10.20.30.40');
+    });
+
+    it('still masks categories that ARE enabled even when others are off', async () => {
+      const settings = {
+        ...mockSettings,
+        detectEmails: false,
+        detectCreditCards: true,
+      };
+      const ctx = {
+        ...mockContext,
+        data: 'email jane@example.com and card 4111 1111 1111 1111',
+      };
+
+      const result = await plugin.filterPiiFromRequest(ctx, settings);
+      expect(result.data).toContain('jane@example.com');        // email left alone
+      expect(result.data).not.toContain('4111 1111 1111 1111'); // card still masked
+    });
+
+    it('logDetections: false drops the per-match breadcrumbs', async () => {
+      const settings = { ...mockSettings, logDetections: false };
+      const ctx = { ...mockContext, data: 'email jane@example.com' };
+
+      const result = await plugin.filterPiiFromRequest(ctx, settings);
+      expect(result.success).toBe(true);
+      expect(result.metadata.modifications).toEqual([]);
+      expect(result.metadata.logs).toEqual([]);
+      // The actual masking still happens — logDetections only suppresses
+      // the reporting, not the filtering.
+      expect(result.data).not.toContain('jane@example.com');
+    });
+  });
+
+  // ── Regression: custom pattern ReDoS budget ─────────────────────────
+  describe('Custom pattern ReDoS budget (regression)', () => {
+    it('abandons the remaining custom patterns after one overruns the budget', async () => {
+      // Structural check rather than a timing check — asserting on
+      // wall-clock elapsed is flaky under load. The invariant we care
+      // about is: if the FIRST custom pattern overruns the per-pattern
+      // budget, the SECOND one never runs. We prove that by giving the
+      // second pattern a distinctive target substring and confirming
+      // it survives the scan unmasked.
+      //
+      // The evil regex is classic catastrophic backtracking on ~20
+      // `a`s. One match takes tens-to-hundreds of milliseconds —
+      // enough to trip the 50ms budget but bounded enough to finish.
+      const input = 'a'.repeat(22) + '!SECOND_PATTERN_TARGET';
+      const settings = {
+        ...mockSettings,
+        customPatterns: [
+          '(a+)+$',                // evil, runs first, overruns budget
+          'SECOND_PATTERN_TARGET', // normal, would mask the target
+        ],
+      };
+      const ctx = { ...mockContext, data: input };
+
+      const result = await plugin.filterPiiFromRequest(ctx, settings);
+
+      expect(result.success).toBe(true);
+      // If the budget bail worked, the second custom pattern was never
+      // applied and its target is still intact in the output. Pre-fix
+      // both patterns ran regardless of cumulative cost.
+      expect(result.data).toContain('SECOND_PATTERN_TARGET');
+    });
+  });
+
+  // ── Regression: bounded recursion + modifications array ────────────
+  describe('Walker bounds (regression)', () => {
+    it('bounds the modifications array to MAX_MODIFICATIONS entries', async () => {
+      // Build a wide object with more than MAX_MODIFICATIONS fields,
+      // each containing an email — and make sure the reporter doesn't
+      // grow unbounded.
+      const wide: any = {};
+      for (let i = 0; i < 700; i++) {
+        wide[`field_${i}`] = `user${i}@example.com`;
+      }
+      const ctx = { ...mockContext, data: wide };
+
+      const result = await plugin.filterPiiFromRequest(ctx, mockSettings);
+      expect(result.success).toBe(true);
+      // Modifications are capped; the exact cap is an implementation detail
+      // but it must be well below the field count.
+      expect(result.metadata.modifications.length).toBeLessThanOrEqual(500);
     });
   });
 });

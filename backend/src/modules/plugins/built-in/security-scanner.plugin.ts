@@ -5,13 +5,26 @@ import {
   PluginResult,
 } from '../types/plugin.types';
 
+type ThreatSeverity = 'low' | 'medium' | 'high' | 'critical';
+
 interface SecurityThreat {
   type: 'sql_injection' | 'xss' | 'command_injection' | 'path_traversal' | 'suspicious_pattern';
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: ThreatSeverity;
   description: string;
   location: string;
   pattern: string;
 }
+
+/** Numeric rank for severities — lets us compare against a threshold. */
+const SEVERITY_RANK: Record<ThreatSeverity, number> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4,
+};
+
+/** Per-custom-pattern wall-clock budget for the match() call. */
+const CUSTOM_PATTERN_BUDGET_MS = 50;
 
 export class SecurityScannerPlugin {
   private readonly securityPatterns = {
@@ -161,93 +174,105 @@ export class SecurityScannerPlugin {
     const modifications: string[] = [];
 
     try {
-      // Convert data to scannable string
-      const dataToScan = typeof context.data === 'string' 
-        ? context.data 
-        : JSON.stringify(context.data);
+      // Convert data to scannable string. safeStringify handles circular
+      // references (plain JSON.stringify throws, which used to crash the
+      // scanner entirely for any data graph with a back-reference).
+      const dataToScan = typeof context.data === 'string'
+        ? context.data
+        : this.safeStringify(context.data);
 
-      // Scan for SQL injection
-      for (const pattern of this.securityPatterns.sqlInjection) {
-        const matches = dataToScan.match(pattern);
-        if (matches) {
+      // Pre-compile the whitelist once so we can suppress threats whose
+      // match text has been explicitly approved. The `whitelistPatterns`
+      // setting was documented on the plugin definition but the
+      // previous shape never consulted it.
+      //
+      // Semantic: a threat is skipped only when EVERY match substring
+      // is whitelisted. A single unwhitelisted match is enough to
+      // still raise the threat, so a partial allow-list can't erase
+      // an attacker's novel payload simply because one of its
+      // fragments is on the safe list.
+      const whitelistRegexes = this.compileWhitelist(settings);
+      const isWhitelisted = (value: string) =>
+        whitelistRegexes.some(w => w.test(value));
+      const allWhitelisted = (matches: string[]) =>
+        whitelistRegexes.length > 0 && matches.every(isWhitelisted);
+
+      // Helper so every category can share the same match-push shape.
+      const scan = (
+        patterns: RegExp[],
+        type: SecurityThreat['type'],
+        severity: ThreatSeverity,
+        description: string,
+      ) => {
+        for (const pattern of patterns) {
+          const matches = dataToScan.match(pattern);
+          if (!matches) continue;
+          if (allWhitelisted(matches)) continue;
           threats.push({
-            type: 'sql_injection',
-            severity: 'high',
-            description: 'Potential SQL injection detected',
+            type,
+            severity,
+            description,
             location: scanType,
             pattern: pattern.toString(),
           });
         }
-      }
+      };
 
-      // Scan for XSS
-      for (const pattern of this.securityPatterns.xss) {
-        const matches = dataToScan.match(pattern);
-        if (matches) {
-          threats.push({
-            type: 'xss',
-            severity: 'high',
-            description: 'Potential XSS attack detected',
-            location: scanType,
-            pattern: pattern.toString(),
-          });
-        }
-      }
+      scan(this.securityPatterns.sqlInjection,    'sql_injection',     'high',     'Potential SQL injection detected');
+      scan(this.securityPatterns.xss,             'xss',               'high',     'Potential XSS attack detected');
+      scan(this.securityPatterns.commandInjection, 'command_injection', 'critical', 'Potential command injection detected');
+      scan(this.securityPatterns.pathTraversal,   'path_traversal',    'medium',   'Potential path traversal detected');
 
-      // Scan for command injection
-      for (const pattern of this.securityPatterns.commandInjection) {
-        const matches = dataToScan.match(pattern);
-        if (matches) {
-          threats.push({
-            type: 'command_injection',
-            severity: 'critical',
-            description: 'Potential command injection detected',
-            location: scanType,
-            pattern: pattern.toString(),
-          });
-        }
-      }
-
-      // Scan for path traversal
-      for (const pattern of this.securityPatterns.pathTraversal) {
-        const matches = dataToScan.match(pattern);
-        if (matches) {
-          threats.push({
-            type: 'path_traversal',
-            severity: 'medium',
-            description: 'Potential path traversal detected',
-            location: scanType,
-            pattern: pattern.toString(),
-          });
-        }
-      }
-
-      // Check custom patterns
+      // Custom patterns, with a wall-clock budget per pattern. The previous
+      // shape let a user-supplied pathological regex (`(a+)+b`, etc.) hang
+      // the scanner on every request with no upper bound.
       for (const customPattern of settings.customPatterns || []) {
+        let regex: RegExp;
         try {
-          const regex = new RegExp(customPattern.pattern, customPattern.flags || 'gi');
-          const matches = dataToScan.match(regex);
-          if (matches) {
-            threats.push({
-              type: 'suspicious_pattern',
-              severity: customPattern.severity || 'medium',
-              description: customPattern.description || 'Custom security pattern matched',
-              location: scanType,
-              pattern: customPattern.pattern,
-            });
-          }
-        } catch (error) {
-          // Invalid regex - skip
+          regex = new RegExp(customPattern.pattern, customPattern.flags || 'gi');
+        } catch {
+          continue;
         }
+
+        const started = Date.now();
+        let matches: RegExpMatchArray | null = null;
+        try {
+          matches = dataToScan.match(regex);
+        } catch {
+          continue;
+        }
+        if (Date.now() - started > CUSTOM_PATTERN_BUDGET_MS) {
+          // Abandon the rest of the custom patterns. Better to fail open
+          // on custom detection than keep burning CPU — the built-in
+          // categories have already run.
+          break;
+        }
+        if (!matches) continue;
+        if (allWhitelisted(matches)) continue;
+
+        threats.push({
+          type: 'suspicious_pattern',
+          severity: (customPattern.severity || 'medium') as ThreatSeverity,
+          description: customPattern.description || 'Custom security pattern matched',
+          location: scanType,
+          pattern: customPattern.pattern,
+        });
       }
 
-      // Evaluate threats
-      const criticalThreats = threats.filter(t => t.severity === 'critical');
-      const highThreats = threats.filter(t => t.severity === 'high');
-      const shouldBlock = settings.blockOnThreat && 
-        (criticalThreats.length > 0 || 
-         (settings.severityThreshold === 'high' && highThreats.length > 0) ||
-         (settings.severityThreshold === 'medium' && threats.length > 0));
+      // Evaluate threats. The previous logic was shaped as three hard-coded
+      // branches against `severityThreshold === 'high' | 'medium'`, which
+      // meant setting the threshold to `'low'` accidentally made the
+      // scanner STRICTER on critical only (the low branch matched nothing,
+      // the critical-branch fallback was the only firing condition). Now
+      // we compare numeric severity ranks so "block anything at or above
+      // the threshold" works for every value the user can set.
+      const threshold: ThreatSeverity =
+        settings?.severityThreshold && SEVERITY_RANK[settings.severityThreshold as ThreatSeverity]
+          ? (settings.severityThreshold as ThreatSeverity)
+          : 'medium';
+      const thresholdRank = SEVERITY_RANK[threshold];
+      const blockingThreats = threats.filter(t => SEVERITY_RANK[t.severity] >= thresholdRank);
+      const shouldBlock = settings.blockOnThreat === true && blockingThreats.length > 0;
 
       if (settings.logThreats && threats.length > 0) {
         modifications.push(`Security scan detected ${threats.length} threats`);
@@ -313,5 +338,55 @@ export class SecurityScannerPlugin {
         },
       };
     }
+  }
+
+  /**
+   * JSON.stringify that doesn't throw on cyclic graphs. The scanner used
+   * to call `JSON.stringify(context.data)` directly, which would throw a
+   * TypeError on any back-reference and fail the whole scan — a trivial
+   * bypass: include a circular ref in the request and the scanner silently
+   * errors out.
+   */
+  private safeStringify(value: any): string {
+    const seen = new WeakSet();
+    try {
+      return JSON.stringify(value, (_key, v) => {
+        if (v && typeof v === 'object') {
+          if (seen.has(v)) return '[Circular]';
+          seen.add(v);
+        }
+        return v;
+      }) ?? '';
+    } catch {
+      // Final fallback — a non-stringifiable value (e.g. bigint in older
+      // Node) shouldn't bypass scanning entirely; coerce to an empty
+      // string so the builtin patterns can't match anything and the
+      // rest of the plugin still runs.
+      return '';
+    }
+  }
+
+  /**
+   * Compile `settings.whitelistPatterns` into a regex list. Silently
+   * drops entries that can't be parsed as a regex. Each entry may be a
+   * literal string (matched case-insensitively as-is) or a `{pattern,
+   * flags}` object for full regex control.
+   */
+  private compileWhitelist(settings: any): RegExp[] {
+    const raw = settings?.whitelistPatterns;
+    if (!Array.isArray(raw) || raw.length === 0) return [];
+    const out: RegExp[] = [];
+    for (const entry of raw) {
+      try {
+        if (typeof entry === 'string') {
+          out.push(new RegExp(entry, 'i'));
+        } else if (entry && typeof entry.pattern === 'string') {
+          out.push(new RegExp(entry.pattern, entry.flags || 'i'));
+        }
+      } catch {
+        // Skip invalid entry
+      }
+    }
+    return out;
   }
 }
