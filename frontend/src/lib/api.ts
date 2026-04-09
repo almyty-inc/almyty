@@ -158,8 +158,24 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const config = error.config as any
 
-    // Handle auth errors — redirect to login once, not per-request
+    // Handle auth errors — redirect to login once, not per-request.
+    //
+    // Critical: skip the redirect when we're ALREADY on /auth/login (or
+    // any other unauthenticated page). Otherwise the bootstrap
+    // checkAuth() call → 401 → window.location.href = '/auth/login'
+    // → full page reload → module re-evaluates so isRedirectingToLogin
+    // resets to false → checkAuth() runs again → infinite loop
+    // (~5 requests/sec, observed on staging). The guard above only
+    // protects within a single page load, not across the reload it
+    // causes itself.
     if (error.response?.status === 401 && !isRedirectingToLogin) {
+      const path = typeof window !== 'undefined' ? window.location.pathname : ''
+      const isOnAuthPage = path.startsWith('/auth/') || path === '/cli-login'
+      if (isOnAuthPage) {
+        // Already on an unauthenticated page — surface the 401 to the
+        // caller and stop. No redirect, no logout call, no reload.
+        return Promise.reject(error)
+      }
       isRedirectingToLogin = true
       // Legacy cleanup for users upgrading from a build that
       // wrote the token into localStorage. Remove any residue
