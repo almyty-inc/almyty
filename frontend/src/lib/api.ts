@@ -174,6 +174,29 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    // Permission-denied feedback. Before this the UI would silently
+    // swallow 403s on queries (no mutation onError handler fires for
+    // a GET), leaving the user staring at a blank screen wondering
+    // what they did wrong. Emit a window event the top-level layout
+    // picks up and surfaces as a toast. We deliberately keep the
+    // message user-facing — "You don't have permission" instead of
+    // exposing the raw backend error shape.
+    if (error.response?.status === 403) {
+      const backendMsg = (error.response.data as any)?.message
+      const detail = {
+        url: config?.url as string | undefined,
+        method: (config?.method as string | undefined)?.toUpperCase(),
+        message: typeof backendMsg === 'string' && backendMsg.length > 0
+          ? backendMsg
+          : "You don't have permission to perform this action.",
+      }
+      // Only dispatch from a browser context — the unit tests mount
+      // this module in jsdom, which has window, so this is safe.
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('almyty:api-forbidden', { detail }))
+      }
+    }
+
     // Determine if error is retryable — idempotent method + transient
     // error. Delegates to the pure helper that the unit tests exercise.
     const isRetryable = shouldRetryRequest({
