@@ -89,6 +89,37 @@ export function LlmProviderDetailPage() {
     },
   })
 
+  // Connection health check — fires a minimal "Hello" prompt at the
+  // provider with maxTokens=10 so we can verify the API key, model
+  // name, and base URL without burning real budget. Backend endpoint
+  // is scoped to `{providerId, organizationId}` so a cross-tenant
+  // probe gets "Provider not found".
+  const testProviderMutation = useMutation({
+    mutationFn: () => llmProvidersApi.test(id!),
+    onSuccess: (result: any) => {
+      // The controller returns { success, data: { isHealthy, responseTime, error?, details? }, message }
+      // — apiPost unwraps `data` for us, so `result` here is the inner object.
+      if (result?.isHealthy) {
+        notifications.success(
+          'Connection OK',
+          `Provider responded in ${result.responseTime ?? '?'}ms`,
+        )
+      } else {
+        notifications.error(
+          'Connection failed',
+          result?.error || 'Provider did not report healthy',
+        )
+      }
+      queryClient.invalidateQueries({ queryKey: ['llm-provider', id] })
+    },
+    onError: (error: any) => {
+      notifications.error(
+        'Connection failed',
+        error?.response?.data?.message || error?.message || 'Test request failed',
+      )
+    },
+  })
+
   const handleSendChat = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!chatInput.trim() || isSending || !provider) return
@@ -501,14 +532,29 @@ export function LlmProviderDetailPage() {
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
                 Actions
-                <Button size="sm" onClick={() => {/* TODO: open test dialog */}} className="gap-2">
-                  <TestTube className="h-4 w-4" /> Test Provider
+                <Button
+                  size="sm"
+                  onClick={() => testProviderMutation.mutate()}
+                  disabled={testProviderMutation.isPending}
+                  className="gap-2"
+                >
+                  <TestTube className="h-4 w-4" />
+                  {testProviderMutation.isPending ? 'Testing…' : 'Test Provider'}
                 </Button>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" className="gap-2"><RefreshCw className="h-4 w-4" /> Refresh Health</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => testProviderMutation.mutate()}
+                  disabled={testProviderMutation.isPending}
+                >
+                  <RefreshCw className={`h-4 w-4 ${testProviderMutation.isPending ? 'animate-spin' : ''}`} />
+                  Refresh Health
+                </Button>
                 <Button size="sm" variant="outline" className="gap-2" onClick={() => {
                   toggleStatusMutation.mutate({ status: provider.status === 'active' ? 'inactive' : 'active' })
                 }}>

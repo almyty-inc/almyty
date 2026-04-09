@@ -48,11 +48,11 @@ export function CredentialsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Credentials</h1>
-          <p className="text-muted-foreground">Manage secrets and access keys for your APIs and agents</p>
+          <p className="text-muted-foreground">Manage vault credentials and access keys for your APIs and agents</p>
         </div>
         {tab === 'secrets' ? (
           <Button onClick={() => setIsCreateSecretOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Add Secret
+            <Plus className="h-4 w-4 mr-1" /> Add Credential
           </Button>
         ) : (
           <Button onClick={() => setIsGenerateKeyOpen(true)}>
@@ -61,7 +61,7 @@ export function CredentialsPage() {
         )}
       </div>
       <div className="flex items-center gap-1 border-b">
-        {([{ key: 'secrets', label: 'Secrets', icon: Shield }, { key: 'access-keys', label: 'Access Keys', icon: Key }] as const).map(({ key, label, icon: Icon }) => (
+        {([{ key: 'secrets', label: 'Vault', icon: Shield }, { key: 'access-keys', label: 'Access Keys', icon: Key }] as const).map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key)} className={cn(
             'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
             tab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -86,12 +86,12 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   const credentials: VaultCredential[] = Array.isArray(credentialsRaw) ? credentialsRaw : (credentialsRaw as any)?.credentials || []
   const createMut = useMutation({
     mutationFn: (data: any) => credentialsApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setIsCreateOpen(false); setForm({ name: '', type: 'api_key', description: '', value: '' }); notify.success('Created', 'Secret created') },
-    onError: () => notify.error('Error', 'Failed to create secret'),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setIsCreateOpen(false); setForm({ name: '', type: 'api_key', description: '', value: '' }); notify.success('Created', 'Credential created') },
+    onError: () => notify.error('Error', 'Failed to create credential'),
   })
   const deleteMut = useMutation({
     mutationFn: (id: string) => credentialsApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); notify.success('Deleted', 'Secret deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); notify.success('Deleted', 'Credential deleted') },
   })
 
   const columns = [
@@ -138,13 +138,13 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
     <>
       <Card>
         <CardContent className="pt-6">
-          <DataTable columns={columns} data={credentials} loading={isLoading} searchKey="name" searchPlaceholder="Search secrets..." />
+          <DataTable columns={columns} data={credentials} loading={isLoading} searchKey="name" searchPlaceholder="Search credentials..." />
         </CardContent>
       </Card>
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Secret</DialogTitle>
+            <DialogTitle>Add Credential</DialogTitle>
             <DialogDescription>Store a credential securely in the vault.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
@@ -170,7 +170,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
             <div><label className="text-sm font-medium">Description</label>
               <Input placeholder="Optional description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
             <Button className="w-full" disabled={!form.name || createMut.isPending} onClick={() => createMut.mutate(form)}>
-              {createMut.isPending ? 'Creating...' : 'Create Secret'}</Button>
+              {createMut.isPending ? 'Creating...' : 'Create Credential'}</Button>
           </div>
         </DialogContent>
       </Dialog>

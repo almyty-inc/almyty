@@ -142,7 +142,7 @@ const interfaceTypeIcons: Record<string, string> = {
 function getDefaultInterfaceConfig(type: string): Record<string, any> {
   switch (type) {
     case 'chat_widget':
-      return { welcomeMessage: '', primaryColor: '#6366f1', position: 'bottom-right', theme: 'auto' }
+      return { welcomeMessage: '', primaryColor: '#8b5cf6', position: 'bottom-right', theme: 'auto' }
     case 'slack':
       return { botToken: '', signingSecret: '', channelIds: '' }
     case 'discord':
@@ -181,7 +181,7 @@ function getInterfaceConfigSummary(type: string, config: Record<string, any>): {
     case 'chat_widget':
       return [
         { label: 'Welcome', value: config.welcomeMessage || '(default)' },
-        { label: 'Color', value: config.primaryColor || '#6366f1' },
+        { label: 'Color', value: config.primaryColor || '#8b5cf6' },
         { label: 'Position', value: config.position || 'bottom-right' },
         { label: 'Theme', value: config.theme || 'auto' },
       ]
@@ -329,7 +329,7 @@ export function AgentDetailPage() {
   const [newInterfaceName, setNewInterfaceName] = useState('')
   const [interfaceConfig, setInterfaceConfig] = useState<Record<string, any>>({
     welcomeMessage: '',
-    primaryColor: '#6366f1',
+    primaryColor: '#8b5cf6',
     position: 'bottom-right',
     theme: 'auto',
   })
@@ -2018,7 +2018,7 @@ console.log(r2.choices[0].message.content);`,
                   <Label htmlFor="cfg-color">Primary Color</Label>
                   <Input
                     id="cfg-color"
-                    placeholder="#6366f1"
+                    placeholder="#8b5cf6"
                     value={interfaceConfig.primaryColor || ''}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, primaryColor: e.target.value }))}
                     className="mt-1"

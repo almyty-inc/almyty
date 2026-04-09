@@ -40,7 +40,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useAuthStore } from '@/store/auth'
 import { useOrganizationStore } from '@/store/organization'
-import { useAppStore } from '@/store/app'
+import { useAppStore, useNotifications } from '@/store/app'
 import { getInitials } from '@/lib/utils'
 
 interface DashboardLayoutProps {
@@ -107,6 +107,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       initializeFromUser(user)
     }
   }, [user, organizations.length])
+
+  // Listen for 403 responses from the axios interceptor and surface
+  // them as a permission toast. Before this the 403s that came back
+  // on GET queries (no per-mutation onError handler) would be
+  // silently swallowed — the user just saw a blank screen with no
+  // explanation of why the page didn't load.
+  const notifications = useNotifications()
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | { url?: string; method?: string; message?: string }
+        | undefined
+      notifications.warning(
+        'Permission denied',
+        detail?.message || "You don't have permission to perform this action.",
+      )
+    }
+    window.addEventListener('almyty:api-forbidden', handler)
+    return () => window.removeEventListener('almyty:api-forbidden', handler)
+  }, [notifications])
 
   // Show loading only while hydrating or not authenticated
   if (!hasHydrated || !isAuthenticated) {
