@@ -50,6 +50,13 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Public()
+  // Rate limit the org-name check — without this, the endpoint
+  // is an enumeration oracle that lets an unauthenticated caller
+  // iterate a dictionary of organization names and learn which
+  // ones exist on the platform (reconnaissance + targeted phishing
+  // setup). 30/minute per IP is plenty for a real signup form
+  // doing live availability checks as the user types.
+  @Throttle({ default: { limit: 30, ttl: 60 * 1000 } })
   @Get('check-organization-name')
   @ApiOperation({ summary: 'Check if organization name is available' })
   @ApiResponse({
@@ -170,6 +177,13 @@ export class AuthController {
   }
 
   @Public()
+  // Rate limit the refresh endpoint — without this, an attacker
+  // with a stolen refresh token could pipeline refresh attempts
+  // at the global 100/60s limit, trying variants until one
+  // verifies. 20 per 5 minutes is still headroom for the web UI
+  // (which refreshes every ~23 hours) and for mobile apps that
+  // go offline and reconnect repeatedly.
+  @Throttle({ default: { limit: 20, ttl: 5 * 60 * 1000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token using refresh token' })

@@ -147,16 +147,16 @@ export class UtcpController {
     };
   }
 
-  // Health check
+  // Health check. Previously leaked process.uptime() to any
+  // anonymous caller — uptime is platform-operator info that
+  // helps attackers time their attempts around deploys. Strip
+  // the response to a minimal liveness shape.
   @Get('/health')
   async health() {
     return {
       protocol: 'utcp',
       status: 'healthy',
-      server: 'almyty',
       version: '1.0.0',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
     };
   }
 

@@ -46,12 +46,20 @@ export class GatewayResolverService {
       where: { slug: orgSlugOrId },
     });
 
-    // Fallback: name-based slug
+    // Fallback: name-based slug (for orgs created before the slug
+    // field was required). Previously this loaded every
+    // organization row into memory and iterated in JS — a DoS
+    // vector on a large deployment. Narrow to a single LOWER()
+    // + REPLACE match in SQL so the query runs in O(log n)
+    // instead of O(n).
     if (!org) {
-      const allOrgs = await this.organizationRepository.find();
-      org = allOrgs.find(o =>
-        o.name?.toLowerCase().replace(/\s+/g, '-') === orgSlugOrId,
-      );
+      org = await this.organizationRepository
+        .createQueryBuilder('org')
+        .where(
+          `REPLACE(LOWER(org.name), ' ', '-') = :slug`,
+          { slug: orgSlugOrId.toLowerCase() },
+        )
+        .getOne();
     }
 
     if (!org) {

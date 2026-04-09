@@ -13,10 +13,12 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Response, Request } from 'express';
+import * as crypto from 'crypto';
 
 import { Organization } from '../../entities/organization.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../entities/gateway.entity';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
+import { ApiKey } from '../../entities/api-key.entity';
 import { McpService } from '../mcp/mcp.service';
 import { A2AService } from '../mcp/a2a.service';
 import { UtcpService } from '../mcp/utcp.service';
@@ -45,6 +47,8 @@ export class UnifiedEndpointController {
     private gatewayRepository: Repository<Gateway>,
     @InjectRepository(Agent)
     private agentRepository: Repository<Agent>,
+    @InjectRepository(ApiKey)
+    private apiKeyRepository: Repository<ApiKey>,
     private readonly mcpService: McpService,
     private readonly a2aService: A2AService,
     private readonly utcpService: UtcpService,
@@ -52,6 +56,77 @@ export class UnifiedEndpointController {
     private readonly agentsService: AgentsService,
     private readonly executionEngine: AgentExecutionEngine,
   ) {}
+
+  /**
+   * Enforce API-key authentication for the agent path.
+   *
+   * Prior to this gate, `POST /:orgSlug/:agentSlug/invoke` and
+   * `POST /:orgSlug/:agentSlug/stream` were WIDE OPEN. Any
+   * anonymous caller could execute any agent by knowing the org
+   * slug and agent slug — and every successful execution burns
+   * LLM tokens billed to the agent's org, potentially reads
+   * credentials wired into the agent's tools, and produces
+   * output that bypasses the intended auth story. This was the
+   * single highest-severity finding of the full-sweep audit pass.
+   *
+   * The fix: every agent request MUST carry a valid API key via
+   * the `Authorization: Bearer <key>` header. The key is hashed
+   * with SHA-256, looked up in the `api_keys` table filtered by
+   * the agent's org (so a key from org A cannot execute an agent
+   * in org B), and every property of the key is verified
+   * (isActive, not expired).
+   *
+   * The gateway path is untouched — it already goes through
+   * `gatewayResolver.resolveAndAuthenticate` which enforces the
+   * gateway's own auth config (API key / OAuth / JWT).
+   */
+  private async authenticateAgentRequest(req: Request, agent: Agent): Promise<ApiKey> {
+    const authHeader = (req.headers?.authorization as string) || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      throw new HttpException(
+        {
+          success: false,
+          message: 'Agent execution requires an API key. Send it as `Authorization: Bearer <key>`.',
+          error: 'AGENT_AUTH_REQUIRED',
+        },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    const rawKey = authHeader.slice(7).trim();
+    if (!rawKey) {
+      throw new HttpException(
+        { success: false, message: 'Empty API key', error: 'AGENT_AUTH_REQUIRED' },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    // Scope the lookup to the agent's own org so a valid key
+    // from another org can't be used to execute this agent.
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const apiKey = await this.apiKeyRepository.findOne({
+      where: {
+        keyHash,
+        organizationId: agent.organizationId,
+        isActive: true,
+      },
+    });
+
+    if (!apiKey) {
+      throw new HttpException(
+        { success: false, message: 'Invalid API key for this agent', error: 'AGENT_AUTH_INVALID' },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
+      throw new HttpException(
+        { success: false, message: 'API key expired', error: 'AGENT_AUTH_EXPIRED' },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    return apiKey;
+  }
 
   /**
    * Catch-all handler for /:orgSlug/:resourceSlug and sub-paths.
@@ -274,6 +349,14 @@ export class UnifiedEndpointController {
     res: Response,
     body: any,
   ) {
+    // EVERY agent path requires an API key — no anonymous
+    // execution, no anonymous metadata read. The discovery info
+    // (GET /:org/:agent) also requires auth because the agent's
+    // description / node graph leaks the shape of the tool
+    // composition, which is tenant-sensitive. See
+    // authenticateAgentRequest's docstring for the threat model.
+    const apiKey = await this.authenticateAgentRequest(req, agent);
+
     // Extract action sub-path
     const pathParts = req.path.split('/').filter(Boolean);
     // pathParts: [orgSlug, agentSlug, ...action]
@@ -293,17 +376,23 @@ export class UnifiedEndpointController {
     }
 
     if (req.method === 'POST' && (!action || action === 'invoke')) {
-      return this.invokeAgent(agent, organization, body, res);
+      return this.invokeAgent(agent, organization, body, res, apiKey);
     }
 
     if (req.method === 'POST' && action === 'stream') {
-      return this.streamAgent(agent, organization, body, res);
+      return this.streamAgent(agent, organization, body, res, apiKey);
     }
 
     throw new HttpException(`Unknown agent action: ${action}`, HttpStatus.NOT_FOUND);
   }
 
-  private async invokeAgent(agent: Agent, organization: Organization, body: any, res: Response) {
+  private async invokeAgent(
+    agent: Agent,
+    organization: Organization,
+    body: any,
+    res: Response,
+    apiKey: ApiKey,
+  ) {
     if (agent.status !== AgentStatus.ACTIVE) {
       throw new HttpException(
         { success: false, message: 'Agent must be active to invoke', error: 'AGENT_NOT_ACTIVE' },
@@ -314,7 +403,11 @@ export class UnifiedEndpointController {
     const execution = await this.executionEngine.execute(
       agent,
       organization.id,
-      null,
+      // Attribute the execution to the API key's owner so audit
+      // logs can trace who actually ran the agent — previously
+      // the userId was hardcoded to null which made every run
+      // look anonymous.
+      apiKey.userId ?? null,
       {
         input: body.input || body,
         variables: body.variables,
@@ -331,7 +424,13 @@ export class UnifiedEndpointController {
     });
   }
 
-  private async streamAgent(agent: Agent, organization: Organization, body: any, res: Response) {
+  private async streamAgent(
+    agent: Agent,
+    organization: Organization,
+    body: any,
+    res: Response,
+    apiKey: ApiKey,
+  ) {
     if (agent.status !== AgentStatus.ACTIVE) {
       return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
@@ -353,7 +452,7 @@ export class UnifiedEndpointController {
     const execution = await this.executionEngine.execute(
       agent,
       organization.id,
-      null,
+      apiKey.userId ?? null,
       {
         input: body.input || body,
         variables: body.variables,
