@@ -33,7 +33,7 @@ export class AlmytyClient {
   }
 
   private async request(path: string, init: RequestInit = {}): Promise<any> {
-    const url = `${this.baseUrl}/api${path}`;
+    const url = `${this.baseUrl}${path}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.token}`,
       'Content-Type': 'application/json',
