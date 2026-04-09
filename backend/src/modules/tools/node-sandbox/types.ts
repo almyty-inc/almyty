@@ -18,6 +18,41 @@ export interface SandboxExecutionRequest {
   memoryLimitMb?: number;
   /** Optional npm registry config for private packages */
   npmRegistry?: NpmRegistryConfig;
+  /**
+   * Cooperative cancellation — if provided, aborting this signal
+   * terminates the worker and returns a cancelled result.
+   */
+  signal?: AbortSignal;
+  /**
+   * Host-side callback for tool invocation from inside the
+   * sandbox. When the user code calls the injected
+   * `tools.invoke(toolId, params)` global, the worker posts a
+   * message to the host and the host calls this function to run
+   * the nested tool in its own fresh sandbox with the same
+   * tenant context. If omitted, `tools.invoke` is not available
+   * inside the sandbox at all.
+   */
+  invokeTool?: (
+    toolId: string,
+    params: Record<string, any>,
+    signal?: AbortSignal,
+  ) => Promise<any>;
+  /**
+   * Extra `--allow-fs-read=<path>` entries for the worker's
+   * permission model. Used by integration tests to tighten or
+   * widen the allowed read set. In production, the set is
+   * computed from the dep install dir + the worker script dir
+   * and this field should stay unset.
+   */
+  extraAllowReads?: string[];
+  /**
+   * Test-only network allow list forwarded to the sandbox
+   * net-guard. Comma-separated `host:port` entries that bypass
+   * the SSRF ban list so integration tests can stand up a local
+   * HTTP server on 127.0.0.1 and exercise the worker against it.
+   * Production callers never set this.
+   */
+  testNetAllow?: string;
 }
 
 /** Result returned after sandbox execution */
@@ -37,6 +72,23 @@ export interface WorkerInput {
   credentials: Record<string, string>;
   /** Absolute paths to node_modules directories the worker may require from */
   modulePaths: string[];
+  /**
+   * True when the host wired up a tools.invoke callback. The
+   * worker bootstrap uses this to decide whether to inject the
+   * `tools` global — if the host can't service the invocation,
+   * we'd rather the global be undefined and user code fail with
+   * `ReferenceError: tools is not defined` than have it hang
+   * waiting for a response that never comes.
+   */
+  toolInvokeEnabled: boolean;
+  /**
+   * Test-only network allow list, forwarded to the sandbox
+   * net-guard. Comma-separated `host:port` entries that bypass
+   * the SSRF ban list so integration tests can stand up a local
+   * HTTP server on 127.0.0.1 and exercise the worker against it.
+   * Production callers never set this.
+   */
+  testNetAllow?: string;
 }
 
 /** Message sent from the worker back to the parent */
