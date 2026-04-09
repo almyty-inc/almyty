@@ -28,6 +28,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SchemaImportDialog } from '@/components/SchemaImportDialog'
 
@@ -144,7 +146,7 @@ export function ApisPage() {
   const [typeFilter, setTypeFilter] = React.useState('all')
   const [healthFilter, setHealthFilter] = React.useState('all')
 
-  const { data: apisData, isLoading } = useQuery({
+  const { data: apisData, isLoading, isError, error: apisError, refetch: refetchApis } = useQuery({
     queryKey: ['apis', currentOrganization?.id],
     queryFn: () => apisApi.getAll(),
     enabled: !!currentOrganization,
@@ -576,12 +578,8 @@ export function ApisPage() {
     ),
   ]
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <LoadingSpinner size="lg" />
-      </div>
-    )
+  if (isError) {
+    return <QueryError error={apisError} onRetry={() => refetchApis()} title="Couldn't load APIs" />
   }
 
   const apisExtracted = apisData?.apis || apisData || []
@@ -1203,9 +1201,26 @@ export function ApisPage() {
               <DataTable
                 columns={apiColumns}
                 data={filteredApis}
+                loading={isLoading}
                 onRowClick={(api) => navigate(`/apis/${api.id}`)}
                 hideSelectionCount
                 hideColumnsButton
+                emptyState={
+                  apis.length === 0 ? (
+                    <EmptyState
+                      icon={Globe}
+                      title="Connect your first API"
+                      description="Point almyty at an OpenAPI, GraphQL, SOAP, Protobuf, or SDK package and every operation becomes a tool your agents can call."
+                      action={
+                        <Button onClick={() => setCreateDialogOpen(true)}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Import API
+                        </Button>
+                      }
+                      className="py-16"
+                    />
+                  ) : undefined
+                }
               />
             </CardContent>
           </Card>

@@ -28,6 +28,8 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
 import {
   Dialog,
   DialogContent,
@@ -115,7 +117,7 @@ export function AgentsPage() {
   const [showTemplates, setShowTemplates] = useState(true)
 
   // Fetch agents
-  const { data: agentsData, isLoading } = useQuery({
+  const { data: agentsData, isLoading, isError, error: agentsError, refetch: refetchAgents } = useQuery({
     queryKey: ['agents', currentOrganization?.id],
     queryFn: async () => {
       const d = await agentsApi.getAll()
@@ -301,24 +303,23 @@ export function AgentsPage() {
             <p className="text-muted-foreground">No organization selected. Please select or create an organization.</p>
           </div>
         </div>
-      ) : isLoading ? (
-        <div className="flex items-center justify-center h-96">
-          <LoadingSpinner size="lg" />
-        </div>
-      ) : agents.length === 0 ? (
+      ) : isError ? (
+        <QueryError error={agentsError} onRetry={() => refetchAgents()} title="Couldn't load agents" />
+      ) : !isLoading && agents.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Bot className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">Create your first agent</h3>
-            <p className="text-muted-foreground mb-6 text-center max-w-md">
-              Agents orchestrate LLM calls, tool executions, and data transformations into powerful pipelines.
-            </p>
-            <Button size="lg" onClick={() => navigate('/agents/new')}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Agent
-            </Button>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={Bot}
+              title="Create your first agent"
+              description="Agents orchestrate LLM calls, tool executions, and data transformations into multi-step pipelines. Start with a visual DAG builder or pick a template."
+              action={
+                <Button onClick={() => navigate('/agents/new')}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Agent
+                </Button>
+              }
+              className="py-16"
+            />
           </CardContent>
         </Card>
       ) : (

@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus } from 'lucide-react'
+import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
 import { Switch } from '@/components/ui/switch'
 import {
   Select,
@@ -215,7 +217,7 @@ export function ToolsPage() {
     },
   })
 
-  const { data: toolsData, isLoading } = useQuery({
+  const { data: toolsData, isLoading, isError, error: toolsError, refetch: refetchTools } = useQuery({
     queryKey: ['tools', currentOrganization?.id, page],
     queryFn: () => toolsApi.getAll(currentOrganization?.id, { limit: PAGE_SIZE, page }),
     enabled: !!currentOrganization,
@@ -498,12 +500,8 @@ return new Promise((resolve, reject) => {
     )
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <LoadingSpinner size="lg" />
-      </div>
-    )
+  if (isError) {
+    return <QueryError error={toolsError} onRetry={() => refetchTools()} title="Couldn't load tools" />
   }
 
   return (
@@ -561,6 +559,22 @@ return new Promise((resolve, reject) => {
               loading={isLoading}
               onRowClick={(tool) => handleViewDetails(tool)}
               hideSelectionCount
+              emptyState={
+                tools.length === 0 ? (
+                  <EmptyState
+                    icon={Wrench}
+                    title="No tools yet"
+                    description="Tools are what your agents call. Import an API to auto-generate tools from its operations, or create one by hand for an HTTP endpoint, GraphQL query, JavaScript script, or LLM prompt."
+                    action={
+                      <Button onClick={() => setIsCreateDialogOpen(true)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create Tool
+                      </Button>
+                    }
+                    className="py-16"
+                  />
+                ) : undefined
+              }
               manualPagination
               pageCount={totalPages}
               pageIndex={page - 1}

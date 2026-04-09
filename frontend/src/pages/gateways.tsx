@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { Router, Plus, Search } from 'lucide-react'
+import { Router, Plus, Search, Zap } from 'lucide-react'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -62,7 +64,7 @@ export function GatewaysPage() {
   const { success, error: errorNotif } = useNotifications()
   const queryClient = useQueryClient()
 
-  const { data: gatewaysData, isLoading } = useQuery({
+  const { data: gatewaysData, isLoading, isError, error: gatewaysError, refetch: refetchGateways } = useQuery({
     queryKey: ['gateways', currentOrganization?.id],
     queryFn: () => gatewaysApi.getAll(),
     enabled: !!currentOrganization,
@@ -337,28 +339,27 @@ export function GatewaysPage() {
             <p className="text-muted-foreground">No organization selected. Please select or create an organization.</p>
           </div>
         </div>
-      ) : isLoading ? (
-        <div className="flex items-center justify-center h-96">
-          <LoadingSpinner size="lg" />
-        </div>
+      ) : isError ? (
+        <QueryError error={gatewaysError} onRetry={() => refetchGateways()} title="Couldn't load gateways" />
       ) : (
         <>
 
       {/* Gateways Table */}
-      {gateways.length === 0 ? (
+      {!isLoading && gateways.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Router className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No gateways found</h3>
-            <p className="text-muted-foreground mb-6 text-center max-w-md">
-              Create gateways to compose and deploy your API tools
-            </p>
-            <Button size="lg" onClick={() => setCreateDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create First Gateway
-            </Button>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={Zap}
+              title="No gateways yet"
+              description="Gateways expose your tools to AI agents via MCP, A2A, UTCP, or Agent Skills. Create one to give Claude, Cursor, or any MCP-compatible client access to your tools."
+              action={
+                <Button onClick={() => setCreateDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Gateway
+                </Button>
+              }
+              className="py-16"
+            />
           </CardContent>
         </Card>
       ) : (
@@ -404,6 +405,7 @@ export function GatewaysPage() {
             <DataTable
               columns={gatewayColumns}
               data={filteredGateways}
+              loading={isLoading}
               onRowClick={(gateway) => navigate(`/gateways/${gateway.id}`)}
               hideSelectionCount
               hideColumnsButton
