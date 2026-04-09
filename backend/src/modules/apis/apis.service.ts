@@ -136,9 +136,23 @@ export class ApisService {
     return saved;
   }
 
-  async findOne(id: string): Promise<Api | null> {
+  /**
+   * Fetch an API by id, scoped to a single organization. The
+   * `organizationId` argument is REQUIRED — this used to be a
+   * by-id lookup with no tenancy filter at all, which meant every
+   * downstream call site (update, remove, importSchema,
+   * generateToolsFromApi, testApiConnection, getApiOperations,
+   * getApiResources, getApiSchemas, updateStatus, and every
+   * controller route that did a findOne-then-check) was one
+   * forgotten guard away from leaking cross-tenant data. The
+   * controller did the org check at the HTTP layer, but any
+   * internal caller (worker, cron job, new code path) was
+   * implicitly trusting the id. Defence in depth now lives at
+   * this layer.
+   */
+  async findOne(id: string, organizationId: string): Promise<Api | null> {
     return this.apiRepository.findOne({
-      where: { id },
+      where: { id, organizationId },
       relations: ['organization', 'schemas', 'operations', 'resources'],
     });
   }
@@ -260,41 +274,54 @@ export class ApisService {
     return saved;
   }
 
-  async update(id: string, updateApiData: UpdateApiData): Promise<Api> {
-    const api = await this.findOne(id);
+  async update(
+    id: string,
+    updateApiData: UpdateApiData,
+    organizationId: string,
+  ): Promise<Api> {
+    const api = await this.findOne(id, organizationId);
 
     if (!api) {
       throw new NotFoundException('API not found');
     }
 
-    const orgId = api.organizationId;
     Object.assign(api, updateApiData);
     const saved = await this.apiRepository.save(api);
 
     // Audit log (fire-and-forget)
-    this.auditLogService.logUpdate(orgId, undefined, AuditResource.API, saved.id, saved.name);
+    this.auditLogService.logUpdate(organizationId, undefined, AuditResource.API, saved.id, saved.name);
 
     return saved;
   }
 
-  async remove(id: string): Promise<void> {
-    const api = await this.apiRepository.findOne({ where: { id } });
+  async remove(id: string, organizationId: string): Promise<void> {
+    // DELETE with a org-scoped WHERE in a single statement so a
+    // race between the findOne and the delete can't cause us to
+    // drop a row that was just re-homed (paranoid, but cheap).
+    const existing = await this.apiRepository.findOne({
+      where: { id, organizationId },
+    });
+    if (!existing) {
+      throw new NotFoundException('API not found');
+    }
 
-    const result = await this.apiRepository.delete(id);
+    const result = await this.apiRepository.delete({ id, organizationId });
 
     if (result.affected === 0) {
       throw new NotFoundException('API not found');
     }
 
     // Audit log (fire-and-forget)
-    if (api) {
-      this.auditLogService.logDelete(api.organizationId, undefined, AuditResource.API, id, api.name);
-    }
+    this.auditLogService.logDelete(organizationId, undefined, AuditResource.API, id, existing.name);
   }
 
-  async updateStatus(id: string, status: ApiStatus): Promise<Api> {
-    const api = await this.findOne(id);
-    
+  async updateStatus(
+    id: string,
+    status: ApiStatus,
+    organizationId: string,
+  ): Promise<Api> {
+    const api = await this.findOne(id, organizationId);
+
     if (!api) {
       throw new NotFoundException('API not found');
     }
@@ -306,9 +333,10 @@ export class ApisService {
   async importSchema(
     apiId: string,
     schemaContent: string,
+    organizationId: string,
     options: ImportSchemaOptions = {},
   ): Promise<{ api: Api; schema: ApiSchema; operations: Operation[]; resources: Resource[]; tools?: Tool[] }> {
-    const api = await this.findOne(apiId);
+    const api = await this.findOne(apiId, organizationId);
 
     if (!api) {
       throw new NotFoundException('API not found');
@@ -365,18 +393,18 @@ export class ApisService {
 
       // Update API status if it was draft
       if (api.status === ApiStatus.DRAFT) {
-        await this.updateStatus(apiId, ApiStatus.ACTIVE);
+        await this.updateStatus(apiId, ApiStatus.ACTIVE, organizationId);
       }
 
       let generatedTools: Tool[] = [];
-      
+
       // Generate tools if requested
       if (options.generateTools) {
-        generatedTools = await this.generateToolsFromApi(apiId);
+        generatedTools = await this.generateToolsFromApi(apiId, organizationId);
       }
 
       // Reload the API with updated relations
-      const updatedApi = await this.findOne(apiId);
+      const updatedApi = await this.findOne(apiId, organizationId);
 
       return {
         api: updatedApi!,
@@ -431,8 +459,11 @@ export class ApisService {
     }
   }
 
-  async generateToolsFromApi(apiId: string): Promise<Tool[]> {
-    const api = await this.findOne(apiId);
+  async generateToolsFromApi(
+    apiId: string,
+    organizationId: string,
+  ): Promise<Tool[]> {
+    const api = await this.findOne(apiId, organizationId);
 
     if (!api) {
       throw new NotFoundException('API not found');
@@ -511,29 +542,65 @@ export class ApisService {
     return generatedTools;
   }
 
-  async getApiOperations(apiId: string): Promise<Operation[]> {
+  /**
+   * Verify the api belongs to the requesting organization before
+   * returning any child rows. The operation/resource/schema tables
+   * don't carry an organizationId column of their own — they're
+   * tenant-scoped transitively through `apiId` → `api.organizationId`
+   * — so we have to look the api up first and refuse if it doesn't
+   * belong to the caller.
+   */
+  private async assertApiInOrganization(
+    apiId: string,
+    organizationId: string,
+  ): Promise<void> {
+    const found = await this.apiRepository.findOne({
+      where: { id: apiId, organizationId },
+      select: ['id'],
+    });
+    if (!found) {
+      throw new NotFoundException('API not found');
+    }
+  }
+
+  async getApiOperations(
+    apiId: string,
+    organizationId: string,
+  ): Promise<Operation[]> {
+    await this.assertApiInOrganization(apiId, organizationId);
     return this.operationRepository.find({
       where: { apiId },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async getApiResources(apiId: string): Promise<Resource[]> {
+  async getApiResources(
+    apiId: string,
+    organizationId: string,
+  ): Promise<Resource[]> {
+    await this.assertApiInOrganization(apiId, organizationId);
     return this.resourceRepository.find({
       where: { apiId },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async getApiSchemas(apiId: string): Promise<ApiSchema[]> {
+  async getApiSchemas(
+    apiId: string,
+    organizationId: string,
+  ): Promise<ApiSchema[]> {
+    await this.assertApiInOrganization(apiId, organizationId);
     return this.apiSchemaRepository.find({
       where: { apiId },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async testApiConnection(apiId: string): Promise<{ success: boolean; statusCode?: number; responseTime?: number; error?: string }> {
-    const api = await this.findOne(apiId);
+  async testApiConnection(
+    apiId: string,
+    organizationId: string,
+  ): Promise<{ success: boolean; statusCode?: number; responseTime?: number; error?: string }> {
+    const api = await this.findOne(apiId, organizationId);
 
     if (!api) {
       throw new NotFoundException('API not found');
