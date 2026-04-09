@@ -89,19 +89,32 @@ describe('GatewayResolverService', () => {
     it('should find org by name-based slug fallback', async () => {
       // First findOne (by slug) returns null
       jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(null);
-      // Fallback: find all orgs and match by name-based slug
+      // Fallback: JSONB query via createQueryBuilder (previously
+      // this path loaded every org into memory via `.find()` — now
+      // it's a single targeted SQL query). Monkey-patch the
+      // createQueryBuilder property onto the mocked repo since
+      // mockRepository() doesn't provide it.
       const orgWithName = { ...mockOrganization, name: 'My Cool Org', slug: 'something-else' };
-      jest.spyOn(organizationRepository, 'find').mockResolvedValue([orgWithName as Organization]);
+      const qbStub: any = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(orgWithName),
+      };
+      (organizationRepository as any).createQueryBuilder = jest.fn().mockReturnValue(qbStub);
 
       const result = await service.resolveOrganization('my-cool-org');
 
       expect(result).toEqual(orgWithName);
-      expect(organizationRepository.find).toHaveBeenCalled();
+      expect(qbStub.where).toHaveBeenCalled();
+      expect(qbStub.getOne).toHaveBeenCalled();
     });
 
     it('should throw 404 for non-existent org', async () => {
       jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(null);
-      jest.spyOn(organizationRepository, 'find').mockResolvedValue([]);
+      const qbStub: any = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null),
+      };
+      (organizationRepository as any).createQueryBuilder = jest.fn().mockReturnValue(qbStub);
 
       await expect(service.resolveOrganization('does-not-exist')).rejects.toThrow(HttpException);
       await expect(service.resolveOrganization('does-not-exist')).rejects.toMatchObject({

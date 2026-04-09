@@ -261,17 +261,17 @@ describe('UtcpController', () => {
   });
 
   describe('health', () => {
-    it('should return UTCP health status', async () => {
+    it('returns only protocol/status/version — no uptime or timestamp leaked', async () => {
+      // This endpoint used to dump process.uptime() to anonymous
+      // callers. Regression: pin the stripped-down shape.
       const result = await controller.health();
 
       expect(result).toEqual({
         protocol: 'utcp',
         status: 'healthy',
-        server: 'almyty',
         version: '1.0.0',
-        timestamp: expect.any(String),
-        uptime: expect.any(Number),
       });
+      expect(JSON.stringify(result)).not.toMatch(/uptime|timestamp/);
     });
   });
 

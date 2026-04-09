@@ -92,28 +92,22 @@ describe('McpTransportController', () => {
   });
 
   describe('getTransportHealth', () => {
-    it('should return transport health status', async () => {
-      sseTransport.getConnectionStats.mockReturnValue({
-        total: 5,
-        totalMessages: 100,
-        averageAge: 300,
-        byOrganization: {}
-      });
-      wsTransport.getConnectionStats.mockReturnValue({
-        total: 3,
-        totalMessages: 50,
-        averageAge: 200,
-        byOrganization: {}
-      });
-
+    it('returns only a minimal {status, transports} shape — no uptime or connection counts leaked', async () => {
+      // This endpoint used to dump process.uptime() + global
+      // SSE/WS connection counts to anyone. Regression: pin the
+      // stripped-down shape so nothing global slips back in.
       const result = await controller.getTransportHealth();
 
       expect(result).toEqual({
-        status: expect.any(String),
-        transports: expect.any(Object),
-        capabilities: expect.any(Object),
-        uptime: expect.any(Number),
+        status: 'healthy',
+        transports: {
+          sse: { status: 'active' },
+          websocket: { status: 'active' },
+        },
       });
+      expect(Object.keys(result)).toEqual(['status', 'transports']);
+      // No 'uptime', 'capabilities', 'connections', 'averageAge', etc.
+      expect(JSON.stringify(result)).not.toMatch(/uptime|connections|averageAge/);
     });
   });
 

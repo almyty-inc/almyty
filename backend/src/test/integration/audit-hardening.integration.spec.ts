@@ -29,11 +29,13 @@
  */
 jest.unmock('jsonwebtoken');
 
-import { UnauthorizedException } from '@nestjs/common';
+import * as crypto from 'crypto';
+import { UnauthorizedException, HttpException } from '@nestjs/common';
 import { MonitoringController } from '../../modules/monitoring/monitoring.controller';
 import { FilesController } from '../../modules/files/files.controller';
 import { TextExtractorService } from '../../modules/files/text-extractor.service';
 import { OrganizationsService } from '../../modules/organizations/organizations.service';
+import { UnifiedEndpointController } from '../../modules/gateways/unified-endpoint.controller';
 
 // ─── MonitoringController platform-metrics token gate ─────────
 
@@ -256,5 +258,158 @@ describe('OrganizationsService.getInviteDetails — email privacy', () => {
       isExpired: false,
     });
     expect((result as any).email).toBeUndefined();
+  });
+});
+
+// ─── UnifiedEndpointController agent API-key gate ─────────────
+
+describe('UnifiedEndpointController — agent path API key gate', () => {
+  // The unified endpoint used to let ANY anonymous caller execute
+  // any agent via POST /:orgSlug/:agentSlug/invoke. Every path that
+  // touches `handleAgentRequest` must now first resolve a real
+  // api_key row scoped to the agent's own org. The test exercises
+  // that gate at the controller level with mocked repositories so
+  // we don't need a full Nest app.
+
+  function buildController(apiKeyRow?: any) {
+    const orgRepo: any = { findOne: jest.fn() };
+    const gatewayRepo: any = { findOne: jest.fn().mockResolvedValue(null) };
+    const agentRepo: any = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'agent-1',
+        name: 'my-agent',
+        organizationId: 'org-1',
+        status: 'active',
+      }),
+      createQueryBuilder: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(null),
+      }),
+    };
+    const apiKeyRepo: any = {
+      findOne: jest.fn().mockResolvedValue(apiKeyRow ?? null),
+    };
+    const mcpServiceStub: any = {};
+    const a2aServiceStub: any = {};
+    const utcpServiceStub: any = {};
+    const gatewayResolverStub: any = {
+      resolveOrganization: jest.fn().mockResolvedValue({
+        id: 'org-1',
+        name: 'Org One',
+        slug: 'org-one',
+      }),
+    };
+    const agentsServiceStub: any = {};
+    const executionEngineStub: any = {
+      execute: jest.fn().mockResolvedValue({
+        id: 'exec-1',
+        status: 'completed',
+      }),
+    };
+
+    return new UnifiedEndpointController(
+      orgRepo,
+      gatewayRepo,
+      agentRepo,
+      apiKeyRepo,
+      mcpServiceStub,
+      a2aServiceStub,
+      utcpServiceStub,
+      gatewayResolverStub,
+      agentsServiceStub,
+      executionEngineStub,
+    );
+  }
+
+  const req = (headers: Record<string, string> = {}, method = 'POST', path = '/org-one/my-agent/invoke') =>
+    ({ path, method, headers } as any);
+  const res = () => {
+    const r: any = {};
+    r.json = jest.fn().mockReturnValue(r);
+    r.status = jest.fn().mockReturnValue(r);
+    r.setHeader = jest.fn();
+    r.flushHeaders = jest.fn();
+    r.write = jest.fn();
+    r.end = jest.fn();
+    return r;
+  };
+
+  it('refuses POST /:org/:agent/invoke with no Authorization header', async () => {
+    const controller = buildController();
+    await expect(
+      controller.handleSubPathRequest('org-one', 'my-agent', req({}), res(), {}),
+    ).rejects.toThrow(HttpException);
+  });
+
+  it('refuses POST /:org/:agent/invoke with a non-Bearer Authorization header', async () => {
+    const controller = buildController();
+    await expect(
+      controller.handleSubPathRequest(
+        'org-one',
+        'my-agent',
+        req({ authorization: 'Basic foo' }),
+        res(),
+        {},
+      ),
+    ).rejects.toThrow(HttpException);
+  });
+
+  it('refuses POST /:org/:agent/invoke when the API key hash does not match', async () => {
+    // apiKeyRepo returns null — simulates a missing or cross-org key.
+    const controller = buildController(null);
+    await expect(
+      controller.handleSubPathRequest(
+        'org-one',
+        'my-agent',
+        req({ authorization: 'Bearer attacker-guessed-key' }),
+        res(),
+        {},
+      ),
+    ).rejects.toThrow(HttpException);
+  });
+
+  it('refuses POST /:org/:agent/invoke when the API key is expired', async () => {
+    const apiKeyRow = {
+      id: 'key-1',
+      userId: 'u-1',
+      organizationId: 'org-1',
+      isActive: true,
+      expiresAt: new Date(Date.now() - 86_400_000),
+    };
+    const controller = buildController(apiKeyRow);
+    const rawKey = 'valid-but-expired';
+    await expect(
+      controller.handleSubPathRequest(
+        'org-one',
+        'my-agent',
+        req({ authorization: `Bearer ${rawKey}` }),
+        res(),
+        {},
+      ),
+    ).rejects.toThrow(HttpException);
+  });
+
+  it('accepts POST /:org/:agent/invoke with a valid in-org API key', async () => {
+    const rawKey = 'valid-in-org-api-key';
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const apiKeyRow = {
+      id: 'key-1',
+      userId: 'u-1',
+      organizationId: 'org-1',
+      keyHash,
+      isActive: true,
+      expiresAt: null,
+    };
+    const controller = buildController(apiKeyRow);
+    const r = res();
+    await controller.handleSubPathRequest(
+      'org-one',
+      'my-agent',
+      req({ authorization: `Bearer ${rawKey}` }),
+      r,
+      {},
+    );
+    expect(r.json).toHaveBeenCalled();
   });
 });
