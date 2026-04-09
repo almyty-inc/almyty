@@ -1,5 +1,11 @@
-# Multi-stage build for production optimization
-FROM node:22-alpine AS base
+# Multi-stage build for production optimization.
+#
+# Node 24 (Krypton) is the Active LTS and the version our sandbox
+# hardening depends on: `--permission` graduated from experimental
+# in 24 and the flag contract is stable from 24.0 forward. Do not
+# downgrade without also auditing NodeSandboxService's execArgv
+# plumbing — the worker code assumes the stable flag name.
+FROM node:24-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
