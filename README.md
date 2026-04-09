@@ -23,15 +23,21 @@ Twenty years of better APIs, better protocols, better tooling. Computers still d
 
 ### Why
 
-🔌 **Wraps any API.** SOAP behind your firewall, REST with no docs, that one endpoint nobody wants to touch.
+🔌 **Wraps any API.** OpenAPI, GraphQL, SOAP, Protobuf / gRPC. SOAP behind your firewall, REST with no docs, that one endpoint nobody wants to touch.
 
-🧠 **Agents, not just tools.** Visual builder, multi-LLM orchestration, autonomous tool calling. Run on platform or invoke via API.
+🧠 **Agents, not just tools.** Visual pipeline builder with 10 node types (LLM calls, tool calls, conditions, transforms, loops, parallel fan-out, sub-agents). Multi-LLM orchestration. Run on platform, trigger via webhook, schedule via cron, or invoke via OpenAI-compatible API.
 
-🌐 **Gateways expose everything.** Tools via MCP, A2A, UTCP, Skills. Agents via OpenAI-compatible API.
+🌐 **Gateways expose everything.** Tools via MCP, A2A, UTCP, Skills. Agents via OpenAI-compatible chat completions. One endpoint (`/{org}/{gateway}`), every protocol.
 
-⚡ **All protocols at once.** One endpoint. A and B, not A or B.
+🔒 **Sandboxed custom tools.** Write JavaScript tool code that imports npm packages (`pg`, `mongodb`, `stripe`, `@aws-sdk/*`, etc.). Each execution runs in a Node 24 worker thread with the `--permission` flag set: filesystem read is scoped to the tool's own deps, `fs.write` / `child_process` / `worker_threads` / native addons are denied, and a per-host network egress filter refuses RFC1918 / loopback / link-local / metadata-endpoint targets.
 
-🏠 **Self-hosted.** Your infra, your data.
+🛡️ **Hardened multi-tenancy.** Every tenant-scoped service filters by `organizationId` at the SQL layer. Cross-tenant isolation is verified by a real-Postgres integration suite across 7 services, not just mocked assertions.
+
+🔑 **Credentials + OAuth2.** Encrypted credential vault with per-tenant scoping. OAuth2 token refresh with SSRF-guarded token endpoint, refresh-token rotation, and concurrent-refresh debouncing.
+
+📊 **Analytics, audit, RBAC.** Usage metrics, audit trail for sensitive actions, four-role RBAC (owner / admin / member / viewer), multi-org membership, team scoping.
+
+🏠 **Self-hosted.** Your infra, your data. Docker Compose, Kubernetes (Kustomize overlays for dev/staging/prod), Let's Encrypt via cert-manager.
 
 ## Quick Start
 
@@ -61,7 +67,7 @@ cd frontend && npm run dev    # http://localhost:3002
 
 **Deploy** → One endpoint (`/{org}/{gateway}`), all protocols.
 
-**Run** → Scheduling, webhooks, versioning, analytics, RBAC. 3,800+ tests.
+**Run** → Scheduling, webhooks, versioning, analytics, RBAC. 4,000+ backend tests (incl. real-Postgres, real-HTTP, and real-worker-thread integration suites).
 
 ## Agent Skills CLI
 
@@ -74,9 +80,13 @@ Works with Claude Code, Cursor, Copilot, Windsurf, and [30+ more](https://agents
 ## Development
 
 ```bash
-cd backend && npm run test           # 3,800+ tests
+cd backend && npm run test           # unit + mocked (4,000+ tests)
+cd backend && npm run test:db        # real-Postgres integration (requires local DB)
+cd frontend && npm run test          # vitest
 cd frontend && npx playwright test   # E2E
 ```
+
+CI runs the full suite (backend unit + DB integration + frontend vitest + typecheck) on every push and PR.
 
 ## License
 
