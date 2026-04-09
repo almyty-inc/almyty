@@ -105,88 +105,33 @@ export function CliLoginPage() {
         throw new Error('Backend did not return a new API key')
       }
 
-      // Deliver the token to the local CLI via a hidden form POST —
-      // NOT a fetch(). Chrome's Private Network Access (PNA) policy
-      // blocks fetch/XHR from a public HTTPS origin
-      // (app.almyty.com) to a loopback HTTP target
-      // (http://127.0.0.1:PORT) as mixed-context private-network
-      // access, even when the loopback server serves the correct
-      // `Access-Control-Allow-Private-Network: true` preflight
-      // header. PNA is enforced at the client, before the preflight
-      // is ever sent, so adjusting the server headers alone doesn't
-      // help. Form-navigation POSTs, however, are treated as
-      // top-level navigations, which are NOT subject to PNA. The
-      // token still never leaves the machine: it goes straight to
-      // the loopback HTTP server started by the CLI.
+      // Deliver the token to the local CLI via a top-level navigation
+      // with token+state in the URL *fragment*. A fragment is never
+      // transmitted over the wire (HTTP never sees the `#…` part), so
+      // the token does not appear in server logs, reverse proxies, or
+      // Referer headers.
       //
-      // The form is submitted into a hidden iframe so the main
-      // window stays on this page and we can show a success state
-      // before redirecting to the CLI's /success landing page.
-      await new Promise<void>((resolve, reject) => {
-        const iframeName = `almyty-cli-cb-${Math.random().toString(36).slice(2)}`
-        const iframe = document.createElement('iframe')
-        iframe.name = iframeName
-        iframe.style.display = 'none'
-        iframe.setAttribute('aria-hidden', 'true')
-        document.body.appendChild(iframe)
-
-        const form = document.createElement('form')
-        form.method = 'POST'
-        form.action = callback
-        form.target = iframeName
-        // application/x-www-form-urlencoded is a "simple" content-type
-        // which, combined with navigation-style form submit, avoids
-        // the preflight PNA would block.
-        form.enctype = 'application/x-www-form-urlencoded'
-
-        const tokenInput = document.createElement('input')
-        tokenInput.type = 'hidden'
-        tokenInput.name = 'token'
-        tokenInput.value = rawKey
-        form.appendChild(tokenInput)
-
-        const stateInput = document.createElement('input')
-        stateInput.type = 'hidden'
-        stateInput.name = 'state'
-        stateInput.value = state
-        form.appendChild(stateInput)
-
-        document.body.appendChild(form)
-
-        let settled = false
-        const finish = (ok: boolean, err?: Error) => {
-          if (settled) return
-          settled = true
-          clearTimeout(timer)
-          // Leave the iframe attached briefly so Chrome finishes the
-          // navigation cleanly; clean up on a microtask tail.
-          setTimeout(() => {
-            try { form.remove() } catch { /* ignore */ }
-            try { iframe.remove() } catch { /* ignore */ }
-          }, 500)
-          if (ok) resolve()
-          else reject(err ?? new Error('Form POST failed'))
-        }
-
-        iframe.addEventListener('load', () => finish(true))
-        iframe.addEventListener('error', () => finish(false, new Error('Iframe load error')))
-        // Hard timeout — if neither load nor error fires we give up.
-        // This covers browsers that silently block the navigation.
-        const timer = setTimeout(
-          () => finish(false, new Error('Timed out waiting for local CLI to accept the token')),
-          10_000,
-        )
-
-        form.submit()
-      })
-
-      setStatus('done')
-      // Redirect to the local server's success page so the user gets a
-      // friendly confirmation that the connection completed. The success
-      // URL was sent by the CLI alongside the callback URL.
-      if (success && /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):/i.test(success)) {
-        window.location.href = success
-      }
+      // Why not fetch/XHR? Chrome's Private Network Access (PNA)
+      // policy blocks fetch, XHR, and iframe navigations from a
+      // public HTTPS origin (app.almyty.com) to a loopback HTTP
+      // target (http://127.0.0.1:PORT) regardless of any CORS or
+      // `Access-Control-Allow-Private-Network` headers the server
+      // returns. Verified experimentally: top-window navigations
+      // to loopback DO succeed, while hidden-iframe form POSTs
+      // are silently dropped (the server never receives them and
+      // the browser fires a bogus `load` event anyway).
+      //
+      // The loopback server (auth-cli/browser-login.ts) serves a
+      // tiny HTML page at /cb that reads the hash client-side and
+      // POSTs it to /cb-complete as a same-origin fetch — which
+      // is not subject to PNA because both sides are loopback.
+      const hash = `#token=${encodeURIComponent(rawKey)}&state=${encodeURIComponent(state)}`
+      window.location.href = callback + hash
+      // The above line navigates away from this page, so the
+      // promise below is unreachable in practice — but we still
+      // transition to 'sending' above and React may render that
+      // state for the brief moment before the navigation commits.
+      return
     } catch (err: any) {
       setStatus('error')
       setErrorMessage(err?.message ?? String(err))

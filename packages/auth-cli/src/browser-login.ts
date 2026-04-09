@@ -179,7 +179,11 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
       reject(err);
     };
 
+    const debug = process.env.ALMYTY_LOGIN_DEBUG === '1';
     const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+      if (debug) {
+        log(`[debug] ${req.method} ${req.url}  origin=${req.headers.origin || '-'}  ct=${req.headers['content-type'] || '-'}`);
+      }
       // CORS for the frontend POST.
       //
       // Critical: modern Chromium blocks fetches from a public HTTPS
@@ -219,13 +223,129 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
         return;
       }
 
-      // POST /cb — token delivery from the frontend. The body may be
-      // JSON (old clients, curl smoke tests) or URL-encoded form data
-      // (modern flow that sidesteps Chrome Private Network Access via
-      // form navigation). readRequestBody normalises both to an object.
+      // GET /cb — token landing page. The frontend redirects the
+      // top window here with token+state in the URL fragment
+      // (`#token=…&state=…`). Fragments are never transmitted over
+      // HTTP, so this page receives an empty URL from the server's
+      // perspective. It serves a tiny HTML document whose inline
+      // script reads the hash client-side and POSTs the data to
+      // /cb-complete as a same-origin fetch (which Chrome's
+      // Private Network Access policy does NOT block, because
+      // both sides are loopback).
+      //
+      // This two-step dance is necessary because:
+      //   - fetch/XHR from HTTPS → loopback is blocked by PNA
+      //   - hidden-iframe form POST from HTTPS → loopback is
+      //     silently dropped (server never sees it)
+      //   - top-window navigation from HTTPS → loopback works
+      //   - same-origin fetch within loopback works
+      if (req.method === 'GET' && url.startsWith('/cb')) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>almyty — finishing login</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; background: #09090b; color: #fafafa; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+  .card { text-align: center; padding: 2rem 3rem; border: 1px solid #27272a; border-radius: 8px; background: #18181b; max-width: 32rem; }
+  h1 { color: #8b5cf6; margin: 0 0 0.5rem; font-weight: 600; font-size: 1.25rem; }
+  p { margin: 0.5rem 0; color: #a1a1aa; font-size: 0.875rem; }
+  .err { color: #fb7185; }
+</style>
+</head>
+<body>
+<div class="card">
+<h1 id="t">Finishing login…</h1>
+<p id="m">You can close this tab in a moment.</p>
+</div>
+<script>
+(function () {
+  var hash = window.location.hash.replace(/^#/, '');
+  if (!hash) {
+    document.getElementById('t').textContent = 'Login failed';
+    document.getElementById('t').className = 'err';
+    document.getElementById('m').textContent = 'No credentials were delivered. Return to your terminal and retry.';
+    return;
+  }
+  var params = new URLSearchParams(hash);
+  var token = params.get('token');
+  var state = params.get('state');
+  if (!token || !state) {
+    document.getElementById('t').textContent = 'Login failed';
+    document.getElementById('t').className = 'err';
+    document.getElementById('m').textContent = 'Malformed credentials. Return to your terminal and retry.';
+    return;
+  }
+  // Wipe the fragment out of the URL bar so browsers don't
+  // retain the raw token in history even briefly.
+  try { history.replaceState({}, '', '/cb'); } catch (_) { /* ignore */ }
+  fetch('/cb-complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: token, state: state }),
+  }).then(function (r) {
+    if (!r.ok) return r.text().then(function (t) { throw new Error(t || ('HTTP ' + r.status)); });
+    window.location.href = '/success';
+  }).catch(function (err) {
+    document.getElementById('t').textContent = 'Login failed';
+    document.getElementById('t').className = 'err';
+    document.getElementById('m').textContent = String(err && err.message || err);
+  });
+})();
+</script>
+</body>
+</html>`);
+        return;
+      }
+
+      // POST /cb-complete — same-origin delivery from /cb's inline
+      // script. This is the only path that actually accepts a token.
+      // Kept as a separate endpoint so we can reject stray POSTs to
+      // /cb with a clear 405 if anything probes it.
+      if (req.method === 'POST' && url.startsWith('/cb-complete')) {
+        try {
+          const body = await readRequestBody(req);
+          if (debug) {
+            const keys = Object.keys(body).join(',');
+            const stateMatch = body.state === state;
+            const tokenPresent = typeof body.token === 'string';
+            log(`[debug] POST /cb-complete keys=${keys} stateMatch=${stateMatch} tokenPresent=${tokenPresent}`);
+          }
+          if (!body.state || body.state !== state) {
+            res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Invalid state');
+            return;
+          }
+          if (!body.token || typeof body.token !== 'string') {
+            res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Missing token');
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+          settleResolve({ token: body.token, frontendUrl });
+          return;
+        } catch (err: any) {
+          res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end(`Bad request: ${err.message}`);
+          return;
+        }
+      }
+
+      // POST /cb — legacy JSON/form delivery path (used by curl
+      // smoke tests and any non-browser client that doesn't need
+      // the PNA workaround). Kept for backwards compatibility with
+      // auth flows that don't involve a browser hash redirect.
       if (req.method === 'POST' && url.startsWith('/cb')) {
         try {
           const body = await readRequestBody(req);
+          if (debug) {
+            const keys = Object.keys(body).join(',');
+            const stateMatch = body.state === state;
+            const tokenPresent = typeof body.token === 'string';
+            log(`[debug] POST /cb (legacy) keys=${keys} stateMatch=${stateMatch} tokenPresent=${tokenPresent}`);
+          }
           if (!body.state || body.state !== state) {
             res.writeHead(400, {
               'Content-Type': 'text/plain; charset=utf-8',
@@ -242,16 +362,11 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
             res.end('Missing token');
             return;
           }
-          // For the form-POST flow the response lands in a hidden
-          // iframe. Return a tiny HTML page so the iframe's `load`
-          // event fires cleanly (a JSON body would also trigger it,
-          // but HTML avoids any browser quirk that could treat a
-          // JSON response as a download and stall the navigation).
           res.writeHead(200, {
-            'Content-Type': 'text/html; charset=utf-8',
+            'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': frontendUrl,
           });
-          res.end('<!doctype html><html><body>OK</body></html>');
+          res.end(JSON.stringify({ ok: true }));
           settleResolve({ token: body.token, frontendUrl });
           return;
         } catch (err: any) {
