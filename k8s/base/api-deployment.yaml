@@ -184,6 +184,18 @@ spec:
             configMapKeyRef:
               name: almyty-config
               key: CORS_ORIGIN
+        # Credential encryption key — REQUIRED in production. The
+        # backend Credential entity hard-fails at credential-
+        # operation time if this env var is unset. NOT marked
+        # optional: true so kube-scheduler refuses the pod if
+        # the secret key is missing, surfacing the misconfig
+        # loudly at deploy time instead of silently breaking the
+        # first credential operation later.
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: ENCRYPTION_KEY
         # Platform operator bearer token for the /monitoring/metrics
         # + /monitoring/metrics/history + /monitoring/metrics/prometheus
         # endpoints. Without this env var set, those endpoints
