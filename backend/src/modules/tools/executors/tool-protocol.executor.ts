@@ -86,6 +86,7 @@ export class ToolProtocolExecutor {
       timeout: tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
+      signal: options.signal,
     };
 
     if (api) await this.authService.applyApiAuth(axConfig, api, options);
@@ -143,6 +144,7 @@ export class ToolProtocolExecutor {
       timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
+      signal: options.signal,
       headers: {
         'Content-Type': 'application/json',
         'User-Agent': 'LLM-Tool-Gateway/1.0',
@@ -240,6 +242,7 @@ export class ToolProtocolExecutor {
       timeout: tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
+      signal: options.signal,
     };
 
     if (api) await this.authService.applyApiAuth(axConfig, api, options);
@@ -282,6 +285,7 @@ export class ToolProtocolExecutor {
       timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
+      signal: options.signal,
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',
         SOAPAction: soapRequest.action || `"${operation.name}"`,
@@ -375,6 +379,7 @@ export class ToolProtocolExecutor {
       timeout: tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
+      signal: options.signal,
     };
 
     if (api) await this.authService.applyApiAuth(axConfig, api, options);
@@ -415,6 +420,7 @@ export class ToolProtocolExecutor {
       timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
+      signal: options.signal,
       headers: {
         'Content-Type': 'application/grpc+proto',
         'User-Agent': 'LLM-Tool-Gateway/1.0',

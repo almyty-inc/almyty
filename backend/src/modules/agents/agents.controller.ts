@@ -578,17 +578,24 @@ export class AgentsController {
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders();
 
-      // Track whether the client has already gone away. If they have,
-      // subsequent `res.write` calls from onEvent will silently no-op
-      // rather than triggering EPIPE errors that bubble into the
-      // execution engine's error path. Previously the stream had no
-      // disconnect tracking at all — a client closing their browser
-      // mid-run would leave the handler writing into a dead socket,
-      // and the engine kept running the pipeline to completion anyway.
+      // Client disconnect handling. Two responsibilities:
+      //   1. suppress further res.write() so EPIPE doesn't bubble
+      //      into the engine's error path
+      //   2. fire an AbortController whose signal is threaded all
+      //      the way down through the engine, LLM provider calls,
+      //      and tool HTTP calls, so a browser tab close actually
+      //      cancels the real work instead of running the pipeline
+      //      to completion and discarding the output
       let clientClosed = false;
-      req.on('close', () => {
+      const abortController = new AbortController();
+      const markClosed = () => {
         clientClosed = true;
-      });
+        if (!abortController.signal.aborted) {
+          abortController.abort();
+        }
+      };
+      req.on('close', markClosed);
+      req.on('aborted', markClosed);
 
       const onEvent = (event: StreamEvent) => {
         if (clientClosed) return;
@@ -608,6 +615,7 @@ export class AgentsController {
           input: invokeDto.input,
           variables: invokeDto.variables,
           metadata: invokeDto.metadata,
+          signal: abortController.signal,
         },
         onEvent,
       );

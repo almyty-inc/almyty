@@ -74,6 +74,10 @@ export async function callOpenAI(
     headers,
     data: openaiRequest,
     timeout: provider.configuration.timeout || 30000,
+    // Propagate the caller's cancellation context down to the
+    // socket so a disconnected client doesn't leave the provider
+    // call hanging for the full 30s timeout.
+    signal: request.signal,
   };
 
   const response: AxiosResponse = await callLlmProviderHttp(config);

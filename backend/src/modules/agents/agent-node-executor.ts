@@ -21,6 +21,15 @@ export interface NodeExecutionOptions {
   nestingDepth?: number;
   maxNestingDepth?: number;
   edges?: AgentPipelineEdge[];
+  /**
+   * Cancellation signal from the owning agent execution. Flows
+   * through into LlmProvidersService.chat (as request.signal),
+   * ToolExecutorService.executeTool (as options.signal), and
+   * recursive sub-agent execute calls (as options.signal). Each
+   * leaf uses it to abort the underlying axios call at the socket
+   * layer so a cancel doesn't wait out a 30s upstream timeout.
+   */
+  signal?: AbortSignal;
 }
 
 @Injectable()
@@ -63,7 +72,7 @@ export class AgentNodeExecutor {
         return this.executeOutputNode(node, context);
 
       case 'llm_call':
-        return this.executeLlmCallNode(node, context, organizationId, userId);
+        return this.executeLlmCallNode(node, context, organizationId, userId, execOptions);
 
       case 'tool_call':
         return this.executeToolCallNode(node, context, execOptions);
@@ -147,6 +156,7 @@ export class AgentNodeExecutor {
     context: ExecutionContext,
     organizationId: string,
     userId?: string,
+    options?: NodeExecutionOptions,
   ): Promise<NodeExecutionResult> {
     const config = node.data || node.config || {};
     const startTime = Date.now();
@@ -179,13 +189,16 @@ export class AgentNodeExecutor {
     }
     messages.push({ role: 'user' as any, content: userPrompt });
 
-    // Build chat request
+    // Build chat request — thread the agent-execution signal in
+    // so the LLM HTTP call and its embedded tool-call loop both
+    // abort on client disconnect.
     const chatRequest: ChatRequest = {
       messages,
       model: config.model,
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       toolIds: config.toolIds,
+      signal: options?.signal,
     };
 
     this.logger.log(`[NODE_EXEC] Executing LLM call node '${node.id}' with provider=${providerId}, model=${config.model}`);
@@ -249,6 +262,10 @@ export class AgentNodeExecutor {
     const result = await this.toolExecutorService.executeTool(toolId, resolvedParams, {
       organizationId: options.organizationId,
       userId: options.userId,
+      // Propagate the agent-level cancellation context into the
+      // tool executor so its axios call honours a disconnected
+      // client or parent-cancelled run.
+      signal: options.signal,
     });
 
     const executionTime = Date.now() - startTime;
@@ -448,6 +465,7 @@ export class AgentNodeExecutor {
           {
             messages: [{ role: 'user' as any, content: prompt }],
             model: judgeConfig.model,
+            signal: options.signal,
           },
           options.organizationId,
           options.userId,
@@ -477,6 +495,7 @@ export class AgentNodeExecutor {
           {
             messages: [{ role: 'user' as any, content: prompt }],
             model: judgeConfig.model,
+            signal: options.signal,
           },
           options.organizationId,
           options.userId,
@@ -557,7 +576,10 @@ export class AgentNodeExecutor {
       throw new Error(`Sub-agent '${agentId}' not found`);
     }
 
-    // Execute sub-agent via the execution engine
+    // Execute sub-agent via the execution engine. Thread the
+    // cancellation signal through so a client disconnect at the
+    // top of the stack cascades through every nested sub-run,
+    // not just the outermost one.
     const result = await this.executionEngine.execute(
       subAgent,
       options.organizationId,
@@ -568,6 +590,7 @@ export class AgentNodeExecutor {
           parentNodeId: node.id,
           nestingDepth: currentDepth + 1,
         },
+        signal: options.signal,
       },
       undefined, // no onEvent callback for sub-agents
       {

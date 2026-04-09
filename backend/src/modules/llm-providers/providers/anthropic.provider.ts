@@ -57,6 +57,7 @@ export async function callAnthropic(
     headers,
     data: anthropicRequest,
     timeout: provider.configuration.timeout || 30000,
+    signal: request.signal,
   };
 
   const response: AxiosResponse = await callLlmProviderHttp(config);

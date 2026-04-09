@@ -58,6 +58,16 @@ export interface ChatRequest {
   sessionId?: string;
   gatewayId?: string;
   skipToolExecution?: boolean; // When true, return tool_calls without executing them (used by agent runtime)
+  /**
+   * Cooperative cancellation signal. When this fires (e.g. the
+   * originating HTTP client disconnected, or a parent agent run
+   * was cancelled), the in-flight provider HTTP call aborts at
+   * the socket level via axios's native signal config, and any
+   * tool calls the provider triggered via the tool-call loop also
+   * abort because the same signal is threaded through into
+   * ToolExecutorService.executeTool.
+   */
+  signal?: AbortSignal;
 }
 
 export interface ChatResponse {
@@ -454,7 +464,12 @@ export class LlmProvidersService {
         this.logger.log(`[CHAT] Tool call round ${toolRound}: ${response.message.toolCalls.length} tool(s)`);
 
         // Execute each tool call
-        await this.executeToolCalls(response.message.toolCalls, session, organizationId);
+        await this.executeToolCalls(
+          response.message.toolCalls,
+          session,
+          organizationId,
+          request.signal,
+        );
 
         // Save the assistant's tool-call message
         await this.llmMessageRepository.save(this.llmMessageRepository.create({
@@ -791,7 +806,8 @@ export class LlmProvidersService {
   private async executeToolCalls(
     toolCalls: ToolCall[],
     session: LlmSession,
-    organizationId: string
+    organizationId: string,
+    signal?: AbortSignal,
   ): Promise<void> {
     for (const toolCall of toolCalls) {
       try {
@@ -812,10 +828,14 @@ export class LlmProvidersService {
           continue;
         }
 
-        // Execute the tool
+        // Execute the tool. Forward the caller's cancellation
+        // context so a client disconnect mid-tool-call-loop aborts
+        // the outbound tool HTTP request and the LLM provider
+        // follow-up both, not just one.
         const executionOptions: ToolExecutionOptions = {
           userId: session.userId || 'system',
           organizationId,
+          signal,
         };
 
         const result = await this.toolExecutorService.executeTool(

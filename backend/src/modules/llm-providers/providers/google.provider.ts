@@ -48,6 +48,7 @@ export async function callGoogle(
     },
     data: googleRequest,
     timeout: provider.configuration.timeout || 30000,
+    signal: request.signal,
   };
 
   const response: AxiosResponse = await callLlmProviderHttp(config);
@@ -118,6 +119,7 @@ export async function callCohere(
     headers,
     data: cohereRequest,
     timeout: provider.configuration.timeout || 30000,
+    signal: request.signal,
   };
 
   const response: AxiosResponse = await callLlmProviderHttp(config);
@@ -180,6 +182,7 @@ export async function callHuggingFace(
     headers,
     data: hfRequest,
     timeout: provider.configuration.timeout || 30000,
+    signal: request.signal,
   };
 
   const response: AxiosResponse = await callLlmProviderHttp(config);
@@ -264,6 +267,7 @@ export async function callCustomProvider(
     headers,
     data: requestData,
     timeout: provider.configuration.timeout || 30000,
+    signal: request.signal,
   };
 
   const response: AxiosResponse = await callLlmProviderHttp(config);

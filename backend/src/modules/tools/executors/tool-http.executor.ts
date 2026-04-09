@@ -158,12 +158,18 @@ export class ToolHttpExecutor {
       }
       const safeHeaders = sanitizeHeaders(headers);
 
-      // 7. Axios config.
+      // 7. Axios config. `signal` propagates the caller's cancellation
+      // context down to the network layer — when it fires, axios aborts
+      // the in-flight request at whatever socket state it's in rather
+      // than waiting for the upstream timeout. Without this, a client
+      // disconnect at the top of the stack would leave the worker
+      // blocked on a 30s axios call for no one.
       const timeout = tool.configuration?.timeout ?? api?.timeoutMs ?? 30000;
       const axiosConfig: AxiosRequestConfig = {
         method: httpConfig.method as any,
         url,
         timeout,
+        signal: options.signal,
         maxContentLength: MAX_CONTENT_LENGTH,
         maxBodyLength: MAX_BODY_LENGTH,
         headers: safeHeaders,
@@ -351,6 +357,7 @@ export class ToolHttpExecutor {
         method: operation.method.toLowerCase() as any,
         url,
         timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
+        signal: options.signal,
         maxContentLength: MAX_CONTENT_LENGTH,
         maxBodyLength: MAX_BODY_LENGTH,
         params: queryParams,
@@ -449,6 +456,14 @@ export class ToolHttpExecutor {
     let offset = 0;
 
     while (pageCount < maxPages) {
+      // Bail between pages if the caller cancelled. The signal is
+      // also attached to pageConfig below (via the ...baseConfig
+      // spread), so in-flight fetches abort at the socket level
+      // too — this check just saves the next loop iteration.
+      if (baseConfig.signal?.aborted) {
+        break;
+      }
+
       const pageConfig: AxiosRequestConfig = {
         ...baseConfig,
         params: { ...(baseConfig.params as Record<string, any>) },
