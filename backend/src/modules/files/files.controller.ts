@@ -91,6 +91,52 @@ export class FilesController {
     res.setHeader('Content-Length', buffer.length);
   }
 
+  /**
+   * MIME-type allowlist for user uploads. Anything not in this
+   * prefix list is refused with a 400 before the file is written
+   * to storage. The list intentionally omits:
+   *   - `application/x-msdownload` / `.exe` / shell scripts
+   *   - `text/html` (stored-XSS surface if ever served inline)
+   *   - `image/svg+xml` (embedded <script> tag can execute)
+   *   - `application/java-archive`, `application/x-sharedlib`,
+   *     `application/vnd.android.package-archive`
+   * A 50 MB fileSize cap was already enforced by Multer; the
+   * allowlist closes the "store anything, serve anything" gap
+   * that would otherwise let a malicious client upload native
+   * binaries or scriptable content that a future downstream
+   * consumer renders without further validation.
+   */
+  private static readonly ALLOWED_MIME_PREFIXES: readonly string[] = [
+    'image/png',
+    'image/jpeg',
+    'image/gif',
+    'image/webp',
+    'image/bmp',
+    'text/plain',
+    'text/csv',
+    'text/markdown',
+    'application/json',
+    'application/yaml',
+    'application/x-yaml',
+    'application/pdf',
+    'application/zip',
+    'application/vnd.openxmlformats-officedocument.',
+    'application/msword',
+    'application/vnd.ms-excel',
+    'application/octet-stream', // generic — allowed so non-web
+                                // binary artifacts (zipped deps,
+                                // models) can still upload; the
+                                // download path always serves as
+                                // octet-stream anyway and nosniff
+                                // prevents browser reinterpretation.
+  ];
+
+  private isAllowedMimeType(mime: string | undefined): boolean {
+    if (!mime) return false;
+    const lower = mime.toLowerCase();
+    return FilesController.ALLOWED_MIME_PREFIXES.some((p) => lower.startsWith(p));
+  }
+
   @Post('upload')
   @Roles('member', 'admin', 'owner')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } })) // 50MB limit
@@ -103,6 +149,16 @@ export class FilesController {
     try {
       if (!file) {
         throw new HttpException({ success: false, message: 'No file provided', error: 'NO_FILE' }, HttpStatus.BAD_REQUEST);
+      }
+      if (!this.isAllowedMimeType(file.mimetype)) {
+        throw new HttpException(
+          {
+            success: false,
+            message: `Upload refused: mime type "${file.mimetype}" is not in the allowlist`,
+            error: 'MIME_NOT_ALLOWED',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       }
       const organizationId = this.getOrgId(req);
       const userId = req.user.sub || req.user.id;
