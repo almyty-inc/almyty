@@ -202,7 +202,30 @@ export class MemoryService {
   }
 
   /**
-   * Semantic search: find relevant memories for a query
+   * Upper bound on the candidate set we load into process memory for
+   * in-JS cosine similarity. Without this cap, an org with 100k+
+   * memories would transfer the entire row set (content + embedding
+   * float arrays, typically ~6KB per row) on every search() call —
+   * hundreds of MB of heap plus the CPU cost of scoring them all.
+   *
+   * The proper fix is pgvector with a SQL `ORDER BY embedding <=>
+   * :q LIMIT :n` index scan, and that's flagged as a follow-up.
+   * This cap is the KISS defence that prevents the DoS without a
+   * schema migration: take the most-recently-accessed /
+   * most-recently-created candidates first (which are the ones a
+   * user is most likely to be searching for anyway), bound the set,
+   * and do the similarity math on a fixed-size working set.
+   */
+  private static readonly SEARCH_CANDIDATE_CAP = 1_000;
+
+  /**
+   * Semantic search: find relevant memories for a query.
+   *
+   * Bounded: at most SEARCH_CANDIDATE_CAP rows are transferred from
+   * the DB and scored in-memory. For orgs with fewer memories, the
+   * behaviour is unchanged. For very large orgs, recent memories
+   * win over old ones — with the upgrade path being a real vector
+   * index as noted above.
    */
   async search(
     organizationId: string,
@@ -235,6 +258,14 @@ export class MemoryService {
         { shared: MemoryScope.SHARED, global: MemoryScope.GLOBAL, agent: MemoryScope.AGENT, agentId: options.agentId },
       );
     }
+
+    // Cap the candidate set in SQL. NULLS LAST on lastAccessedAt so
+    // memories that have been recalled recently sort first; newer
+    // creations fall in next. Both columns are covered by the
+    // entity's indexes.
+    qb.orderBy('memory.lastAccessedAt', 'DESC', 'NULLS LAST')
+      .addOrderBy('memory.createdAt', 'DESC')
+      .limit(MemoryService.SEARCH_CANDIDATE_CAP);
 
     const memories = await qb.getMany();
 

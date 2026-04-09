@@ -82,8 +82,13 @@ describe('NodeSandboxService', () => {
     expect(result.error).toContain('not allowed');
   }, 10_000);
 
-  // ── Regression: expanded module denylist ─────────────────────────────
-  describe('expanded module denylist (regression)', () => {
+  // ── Regression: allowlist-based module require ──────────────────────
+  describe('allowlist module require (regression)', () => {
+    // Everything that used to be on the denylist must still be
+    // refused, plus anything else the allowlist doesn't explicitly
+    // permit. We cover a cross-section of each category — actual
+    // threats (fs, http, child_process), niche builtins (readline,
+    // v8), and both bare + node:-prefixed forms.
     it.each([
       ['fs'],
       ['fs/promises'],
@@ -101,10 +106,48 @@ describe('NodeSandboxService', () => {
       ['os'],
       ['module'],
       ['node:module'],
+      ['child_process'],
+      ['worker_threads'],
+      ['vm'],
+      ['inspector'],
+      ['readline'], // not on denylist pre-flip, caught by allowlist
+      ['v8'],
+      ['perf_hooks'],
+      ['trace_events'],
     ])('refuses require(%s)', async (mod) => {
       const result = await exec(`require(${JSON.stringify(mod)})`);
       expect(result.success).toBe(false);
       expect(result.error).toContain('not allowed');
+    }, 10_000);
+
+    it.each([
+      ['crypto'],
+      ['node:crypto'],
+      ['buffer'],
+      ['util'],
+      ['url'],
+      ['querystring'],
+      ['path'],
+      ['zlib'],
+      ['stream'],
+      ['events'],
+      ['assert'],
+    ])('loads legitimate builtin require(%s)', async (mod) => {
+      const result = await exec(
+        `const m = require(${JSON.stringify(mod)}); return typeof m === 'object' || typeof m === 'function';`,
+      );
+      expect(result.success).toBe(true);
+      expect(result.data).toBe(true);
+    }, 10_000);
+
+    it('surfaces the allowlist contents in the refusal message for debuggability', async () => {
+      // If a tool author hits the allowlist they should be able to
+      // see at a glance which modules WOULD be accepted. Pin a
+      // few well-known ones.
+      const result = await exec("require('fs')");
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/Allowed built-ins:.*crypto/);
+      expect(result.error).toMatch(/Allowed built-ins:.*buffer/);
     }, 10_000);
   });
 

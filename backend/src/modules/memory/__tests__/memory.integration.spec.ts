@@ -27,12 +27,17 @@ describe('MemoryService (integration)', () => {
     memoryStore = [];
     idCounter = 0;
 
-    // Build a query builder mock that operates on memoryStore
+    // Build a query builder mock that operates on memoryStore.
+    // search() now chains orderBy().addOrderBy().limit() to bound
+    // the candidate set — all three must return `this` so the chain
+    // resolves without TypeError.
     mockQb = {
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       take: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
