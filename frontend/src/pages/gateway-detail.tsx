@@ -23,6 +23,7 @@ import { CodeBlock } from '@/components/ui/code-block'
 import { gatewaysApi, toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
+import { useCopySensitive } from '@/lib/clipboard'
 
 // Form Schema
 const editGatewaySchema = z.object({
@@ -473,6 +474,7 @@ const AUTH_TYPE_DESCRIPTIONS: Record<string, string> = {
 function GatewayAuthSection({ gatewayId, gatewayName }: { gatewayId: string; gatewayName: string }) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
+  const copySensitive = useCopySensitive()
 
   // API key state
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
@@ -865,8 +867,9 @@ function GatewayAuthSection({ gatewayId, gatewayName }: { gatewayId: string; gat
                   <Button
                     variant="outline"
                     size="sm"
+                    aria-label="Copy gateway API key"
                     onClick={async () => {
-                      await navigator.clipboard.writeText(generatedKey)
+                      await copySensitive(generatedKey, 'Gateway API key')
                       setCopied(true)
                       setTimeout(() => setCopied(false), 2000)
                     }}

@@ -82,7 +82,7 @@ export function CommandPalette() {
     { id: 'nav-dashboard', label: 'Dashboard', icon: LayoutDashboard, action: () => go('/dashboard'), keywords: ['home'] },
     { id: 'nav-agents', label: 'Agents', icon: Bot, action: () => go('/agents'), keywords: ['pipeline', 'workflow'] },
     { id: 'nav-gateways', label: 'Gateways', icon: Zap, action: () => go('/gateways'), keywords: ['mcp', 'a2a', 'utcp', 'skills'] },
-    { id: 'nav-tools', label: 'Tools', icon: Wrench, action: () => go('/tools'), keywords: ['http', 'javascript', 'graphql', 'llm'] },
+    { id: 'nav-tools', label: 'Tools', icon: Wrench, action: () => go('/tools'), keywords: ['http', 'javascript', 'graphql', 'llm', 'sdk'] },
     { id: 'nav-tool-hub', label: 'Tool Hub', icon: Store, action: () => go('/tool-hub'), keywords: ['templates', 'catalog'] },
     { id: 'nav-apis', label: 'APIs', icon: Globe, action: () => go('/apis'), keywords: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] },
     { id: 'nav-credentials', label: 'Credentials', icon: Key, action: () => go('/credentials'), keywords: ['vault', 'secrets', 'access keys'] },
@@ -97,7 +97,7 @@ export function CommandPalette() {
   const actionEntries: Entry[] = [
     { id: 'act-new-agent', label: 'Create Agent', hint: 'Open the visual agent builder', icon: Plus, action: () => go('/agents/new') },
     { id: 'act-new-gateway', label: 'Create Gateway', hint: 'MCP, A2A, UTCP, or Skills', icon: Plus, action: () => go('/gateways?new=1') },
-    { id: 'act-new-tool', label: 'Create Tool', hint: 'HTTP, JavaScript, GraphQL, or LLM', icon: Plus, action: () => go('/tools?new=1') },
+    { id: 'act-new-tool', label: 'Create Tool', hint: 'HTTP, JavaScript, GraphQL, LLM, or SDK', icon: Plus, action: () => go('/tools?new=1') },
     { id: 'act-new-api', label: 'Import API', hint: 'OpenAPI, GraphQL, SOAP, Protobuf, SDK', icon: Plus, action: () => go('/apis?new=1') },
     { id: 'act-new-provider', label: 'Add LLM Provider', hint: 'OpenAI, Anthropic, Gemini, etc.', icon: Plus, action: () => go('/llm-providers?new=1') },
     { id: 'act-new-credential', label: 'Add Credential', hint: 'Store a vault secret', icon: Plus, action: () => go('/credentials?new=1') },

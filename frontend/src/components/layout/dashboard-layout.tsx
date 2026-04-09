@@ -194,7 +194,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               {!sidebarCollapsed && <span className="text-xl font-heading font-medium tracking-tight text-foreground">almyty</span>}
             </div>
             {!sidebarCollapsed && (
-              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
+              <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Close navigation" onClick={() => setSidebarOpen(false)}>
                 <X className="h-6 w-6" />
               </Button>
             )}
@@ -307,6 +307,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               size="icon"
               onClick={toggleSidebarCollapse}
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}

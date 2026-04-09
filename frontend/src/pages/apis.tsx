@@ -839,6 +839,7 @@ export function ApisPage() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-7 w-7"
+                                  aria-label={`Remove ${pkg.name}`}
                                   onClick={() => setSdkPackages(sdkPackages.filter((_, i) => i !== idx))}
                                 >
                                   <XCircle className="h-3.5 w-3.5" />
@@ -875,6 +876,7 @@ export function ApisPage() {
                             variant="outline"
                             size="icon"
                             className="h-8 w-8"
+                            aria-label="Add package"
                             onClick={() => {
                               if (newPkgName.trim()) {
                                 setSdkPackages([...sdkPackages, { name: newPkgName.trim(), version: newPkgVersion }])

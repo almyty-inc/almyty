@@ -358,6 +358,7 @@ export function CreateToolDialog({
                       type="button"
                       variant="ghost"
                       size="icon"
+                      aria-label="Remove header"
                       onClick={() => setCustomHeaders(customHeaders.filter((_, i) => i !== idx))}
                     >
                       <Trash2 className="h-3 w-3" />

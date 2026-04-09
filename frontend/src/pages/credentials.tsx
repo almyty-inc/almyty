@@ -13,6 +13,7 @@ import { DataTable, createActionsColumn } from '@/components/ui/data-table'
 import { cn } from '@/lib/utils'
 import { credentialsApi, accessKeysApi, gatewaysApi, agentsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { useCopySensitive } from '@/lib/clipboard'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import type { VaultCredential, AccessKey } from '@/types'
 
@@ -185,6 +186,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
 
 function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (v: boolean) => void }) {
   const qc = useQueryClient(), notify = useNotifications()
+  const copySensitive = useCopySensitive()
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const [form, setForm] = useState({ name: '', resourceType: 'gateway' as 'gateway' | 'agent', resourceId: '', scopes: ['read'] as string[] })
 
@@ -260,7 +262,7 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
             <div className="space-y-4 pt-2">
               <div className="flex items-center gap-2 bg-muted p-3 rounded-lg">
                 <code className="text-sm flex-1 break-all select-all">{generatedKey}</code>
-                <Button variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(generatedKey); notify.success('Copied', 'Key copied') }}><Copy className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="sm" aria-label="Copy access key" onClick={() => copySensitive(generatedKey, 'Access key')}><Copy className="h-4 w-4" /></Button>
               </div>
               <div className="flex items-center gap-2 text-amber-600 text-sm"><Key className="h-4 w-4" /> Store this key securely. It cannot be retrieved later.</div>
               <Button className="w-full" onClick={() => { handleClose(false) }}>Done</Button>

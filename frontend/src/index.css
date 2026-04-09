@@ -101,3 +101,23 @@
   color: inherit !important;
   width: auto !important;
 }
+
+/* Honor prefers-reduced-motion globally.
+ *
+ * Any page-level animation (progress bars, sidebar transitions, toast
+ * slides, node-palette drag previews, skeleton pulse) inherits this.
+ * We don't kill animation completely — 0.01ms keeps React Flow's
+ * edge-recalculation happy and avoids layout jumps — but any
+ * perceivable motion is suppressed. Applies to both ::before and
+ * ::after pseudo-elements so shadcn's animate-in/animate-out variants
+ * that use ::after overlays also quiet down. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
