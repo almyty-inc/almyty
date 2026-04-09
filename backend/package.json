@@ -29,7 +29,7 @@
     "typeorm:migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/config/database.config.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.82.0",
+    "@anthropic-ai/sdk": "^0.86.1",
     "@apidevtools/swagger-parser": "^10.1.1",
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
@@ -50,7 +50,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/bull": "^3.15.9",
     "@types/ws": "^8.18.1",
-    "axios": "^1.14.0",
+    "axios": "^1.15.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
     "bull": "^4.16.5",
@@ -65,7 +65,7 @@
     "express-rate-limit": "^7.5.1",
     "graphql": "^16.13.2",
     "graphql-request": "^7.4.0",
-    "graphql-tools": "^9.0.26",
+    "graphql-tools": "^9.0.27",
     "helmet": "^7.2.0",
     "js2xmlparser": "^5.0.0",
     "jsonschema": "^1.5.0",
