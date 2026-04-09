@@ -95,7 +95,20 @@ async function buildApp(user: any): Promise<{ app: INestApplication; jwt: JwtSer
       PassportModule.register({ defaultStrategy: 'jwt' }),
       JwtModule.register({
         secret: TEST_SECRET,
-        signOptions: { expiresIn: '1h' },
+        // Match the production JwtModule config (see
+        // src/modules/auth/auth.module.ts) — iss + aud on signing,
+        // enforced on verification. Tests must sign with the
+        // same claims the prod JwtStrategy now requires, otherwise
+        // every token is rejected with "jwt issuer invalid".
+        signOptions: {
+          expiresIn: '1h',
+          issuer: 'almyty',
+          audience: 'almyty-api',
+        },
+        verifyOptions: {
+          issuer: 'almyty',
+          audience: 'almyty-api',
+        },
       }),
     ],
     controllers: [TestController],

@@ -24,13 +24,43 @@ spec:
     spec:
       imagePullSecrets:
       - name: ghcr-secret
+      # The frontend image is nginx:1.25-alpine. The image has an
+      # nginx user at uid 101. We explicitly set runAsUser: 101
+      # plus runAsNonRoot: true so the pod fails to start rather
+      # than silently running nginx as root if the image ever
+      # changes.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: frontend
         image: ghcr.io/frane/almyty/frontend:latest
         imagePullPolicy: Always
+        # readOnlyRootFilesystem is safe here because nginx only
+        # needs writable paths we control via emptyDir mounts
+        # (/var/cache/nginx, /var/run, /tmp). The HTML bundle is
+        # static and served from /usr/share/nginx/html which is
+        # read-only.
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 8080
           name: http
+        volumeMounts:
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+        - name: nginx-run
+          mountPath: /var/run
+        - name: tmp
+          mountPath: /tmp
         livenessProbe:
           httpGet:
             path: /health
@@ -52,6 +82,16 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "200m"
+      volumes:
+      - name: nginx-cache
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: nginx-run
+        emptyDir:
+          sizeLimit: 16Mi
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service

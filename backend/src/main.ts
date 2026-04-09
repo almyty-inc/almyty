@@ -112,8 +112,15 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger documentation (disabled in production via SWAGGER_ENABLED=false)
-  const swaggerEnabled = configService.get<string>('SWAGGER_ENABLED', 'true') === 'true';
+  // Swagger documentation. Default FAIL-CLOSED: unless
+  // SWAGGER_ENABLED is explicitly set to 'true', the /docs
+  // endpoint is not mounted at all. Previously the default was
+  // 'true', which meant any deployment that forgot to set the
+  // env var exposed its full API schema (every route, every DTO,
+  // every auth method) to anonymous callers. The k8s configmap
+  // sets this to 'false' for production but a hand-rolled
+  // deployment would have shipped with docs open.
+  const swaggerEnabled = configService.get<string>('SWAGGER_ENABLED', 'false') === 'true';
   if (swaggerEnabled) {
     const config = new DocumentBuilder()
       .setTitle('almyty API')
