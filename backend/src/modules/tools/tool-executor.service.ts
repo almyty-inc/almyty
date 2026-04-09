@@ -86,6 +86,13 @@ export class ToolExecutorService {
     let cached = false;
     let rateLimited = false;
 
+    // Short-circuit before any DB work if the caller already aborted
+    // (e.g. the HTTP request was cancelled between queueing and
+    // dispatch). Saves a tool load + audit write.
+    if (options.signal?.aborted) {
+      return this.abortedResult(startTime);
+    }
+
     try {
       if (!options.organizationId) {
         throw new Error('Tool not found');
@@ -196,6 +203,14 @@ export class ToolExecutorService {
             executionTime: Date.now() - startTime,
           };
         }
+      }
+
+      // Second abort check before dispatch. validation / rate-limit /
+      // cache all run synchronously or via short Redis ops, so this
+      // is the last meaningful chance to bail before a potentially
+      // long-running outbound HTTP call.
+      if (options.signal?.aborted) {
+        return this.abortedResult(startTime);
       }
 
       // ── Dispatch to the right executor ──────────────────────────
@@ -573,6 +588,28 @@ export class ToolExecutorService {
       })
       .where('id = :id', { id: toolId })
       .execute();
+  }
+
+  // ─── Cancellation helper ───────────────────────────────────────
+
+  /**
+   * Shared ToolExecutionResult shape for a cancelled call. Returned
+   * whenever `options.signal` fires before dispatch or when a
+   * downstream executor throws an AbortError. We don't record an
+   * audit row for cancelled calls — the caller's request was the
+   * thing that cancelled, and logging a spurious "failed execution"
+   * under their id would be misleading.
+   */
+  private abortedResult(startTime: number): ToolExecutionResult {
+    return {
+      success: false,
+      error: 'Tool execution cancelled',
+      executionTime: Date.now() - startTime,
+      cached: false,
+      rateLimited: false,
+      retryCount: 0,
+      metadata: { cancelled: true },
+    };
   }
 
   // ─── Stats reader ──────────────────────────────────────────────

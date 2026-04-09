@@ -12,6 +12,27 @@ export interface ExecuteAgentOptions {
   input?: Record<string, any>;
   variables?: Record<string, any>;
   metadata?: Record<string, any>;
+  /**
+   * Cooperative cancellation signal. When this fires (e.g. the HTTP
+   * client that kicked off the run disconnected, or a parent agent
+   * run was cancelled) the engine:
+   *
+   *   1. stops queueing new layers — no more nodes will be dispatched
+   *   2. marks the execution CANCELLED and saves it
+   *   3. emits an execution.failed event with errorType=CANCELLED
+   *   4. propagates the signal into every leaf call-site via
+   *      NodeExecutionOptions → LlmProvidersService.chat
+   *      (request.signal) and ToolExecutorService.executeTool
+   *      (options.signal), which in turn thread it into the axios
+   *      `signal` config so in-flight HTTP calls abort at the
+   *      socket level rather than waiting for the upstream timeout
+   *
+   * Nodes currently mid-flight inside a layer will see the axios
+   * abort surface as an error, which the per-node try/catch
+   * converts into a failed-node result; the layer then finishes,
+   * the post-layer abort check fires, and the run marks CANCELLED.
+   */
+  signal?: AbortSignal;
 }
 
 export interface StreamEvent {
@@ -150,6 +171,34 @@ export class AgentExecutionEngine {
 
       // 5. Process each layer
       for (const layer of layers) {
+        // Check cancellation FIRST. If the caller's context was
+        // aborted between layers (client disconnected, parent
+        // cancelled, job killed), stop dispatching more work and
+        // mark the run CANCELLED. This fires before timeout/budget
+        // checks so a genuine cancel doesn't get mis-classified.
+        if (options.signal?.aborted) {
+          execution.status = AgentExecutionStatus.CANCELLED;
+          execution.error = 'Execution cancelled';
+          execution.executionTime = Date.now() - startTime;
+          execution.totalCost = totalCost;
+          execution.totalTokens = totalTokens;
+          execution.nodeResults = nodeResults;
+          await this.agentExecutionRepository.save(execution);
+          await this.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
+
+          this.emitEvent(onEvent, {
+            type: 'execution.failed',
+            data: {
+              error: execution.error,
+              errorType: 'CANCELLED',
+              executionId: execution.id,
+            },
+            timestamp: Date.now(),
+          });
+
+          return execution;
+        }
+
         // Check timeout
         if (Date.now() - startTime > maxExecutionTime) {
           execution.status = AgentExecutionStatus.TIMEOUT;
@@ -210,7 +259,10 @@ export class AgentExecutionEngine {
           });
 
           try {
-            // Execute node
+            // Execute node. Thread the cancellation signal through
+            // NodeExecutionOptions so leaf calls (LLM, tool, sub-agent)
+            // can propagate it into their own axios / sub-execute paths
+            // and abort mid-flight on client disconnect.
             const result: NodeExecutionResult = await this.nodeExecutor.execute(
               node,
               context,
@@ -222,6 +274,7 @@ export class AgentExecutionEngine {
                 edges: pipeline.edges,
                 nestingDepth: internalOptions?.nestingDepth,
                 maxNestingDepth: internalOptions?.maxNestingDepth,
+                signal: options.signal,
               },
             );
 
