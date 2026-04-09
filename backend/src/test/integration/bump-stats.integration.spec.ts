@@ -49,9 +49,12 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
       username: process.env.DATABASE_USERNAME || 'postgres_test',
       password: process.env.DATABASE_PASSWORD || 'postgres',
       database: process.env.DATABASE_NAME || 'almyty_test',
-      // We're creating ephemeral tables for each test run, not
-      // touching the real schema. synchronize+dropSchema gives us
-      // a fresh, exact reflection of the current entity decorators.
+      // Use a spec-specific Postgres schema so this spec can run
+      // in parallel with other DB integration specs (e.g.
+      // cross-tenant-isolation) without them stepping on each
+      // other's DROP TABLE / CREATE TABLE cycles. TypeORM's
+      // `synchronize + dropSchema` only affects the named schema.
+      schema: 'bump_stats_test',
       synchronize: true,
       dropSchema: true,
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
