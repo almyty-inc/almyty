@@ -41,7 +41,7 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
 
       - name: Build and push API image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           push: true
@@ -50,7 +50,7 @@ jobs:
             ${{ env.REGISTRY }}/api:production-latest
 
       - name: Build and push Frontend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           push: true
