@@ -16,6 +16,17 @@ export interface ToolExecutionOptions {
   retries?: number;
   skipCache?: boolean;
   skipRateLimit?: boolean;
+  /**
+   * Cooperative cancellation signal. If the caller's context
+   * (HTTP request, parent agent run, scheduled job) is cancelled,
+   * pass the AbortSignal here and every outbound axios call inside
+   * the executor will be aborted in-flight via axios's native
+   * `signal` config. The orchestrator also checks `signal.aborted`
+   * between the validation / rate-limit / cache / dispatch steps
+   * so a cancellation that fires before the HTTP call still
+   * short-circuits the pipeline.
+   */
+  signal?: AbortSignal;
 }
 
 export interface ToolExecutionResult {

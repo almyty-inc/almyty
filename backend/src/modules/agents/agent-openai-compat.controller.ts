@@ -458,18 +458,22 @@ export class AgentOpenAICompatController {
     const completionId = `chatcmpl-${Date.now()}`;
     const created = Math.floor(Date.now() / 1000);
 
-    // Track client disconnect so we stop pushing chunks into a closed
-    // socket the moment the caller hangs up. Without this, every
-    // subsequent writeSSE() throws on a destroyed socket and the
-    // executionEngine keeps running in the background with each
-    // onEvent callback swallowing the write error. We can't abort
-    // the execution itself from here (the engine doesn't take an
-    // AbortSignal yet — tracked as a follow-up), but we can short-
-    // circuit the SSE fan-out so the process isn't burning CPU
-    // serialising events into /dev/null for a ghost client.
+    // Track client disconnect. This now does TWO things:
+    //   1. flips a `clientAlive` flag so we stop serialising SSE
+    //      chunks into a destroyed socket (existing behaviour)
+    //   2. fires an AbortController whose signal is threaded all
+    //      the way down through the agent-execution engine, the
+    //      LLM provider call, and the tool executor — so the
+    //      underlying axios calls are actually aborted at the
+    //      socket level rather than running to completion and
+    //      discarding the result.
     let clientAlive = true;
+    const abortController = new AbortController();
     const markClosed = () => {
       clientAlive = false;
+      if (!abortController.signal.aborted) {
+        abortController.abort();
+      }
     };
     logCtx.req.on('close', markClosed);
     logCtx.req.on('aborted', markClosed);
@@ -490,7 +494,7 @@ export class AgentOpenAICompatController {
         agent,
         apiKey.organizationId,
         apiKey.userId || null,
-        { input },
+        { input, signal: abortController.signal },
         (event: StreamEvent) => {
           // Client has hung up — drop the event on the floor rather
           // than attempting to write to a closed socket.
