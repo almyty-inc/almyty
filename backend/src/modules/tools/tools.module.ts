@@ -22,7 +22,6 @@ import { ToolHttpExecutor } from './executors/tool-http.executor';
 import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
 import { ToolScriptExecutor } from './executors/tool-script.executor';
 import { ToolAuthService } from './services/tool-auth.service';
-import { CustomCodeExecutorService } from './custom-code-executor.service';
 import { SkillGeneratorService } from './skill-generator.service';
 import { CliGeneratorService } from './cli-generator.service';
 import { CodegenService } from './codegen.service';
@@ -59,7 +58,6 @@ import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
     ToolProtocolExecutor,
     ToolScriptExecutor,
     ToolAuthService,
-    CustomCodeExecutorService,
     SkillGeneratorService,
     CliGeneratorService,
     CodegenService,
@@ -69,7 +67,6 @@ import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
     ToolsService,
     ToolGeneratorService,
     ToolExecutorService,
-    CustomCodeExecutorService,
     SkillGeneratorService,
     CliGeneratorService,
     CodegenService,

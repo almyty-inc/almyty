@@ -14,7 +14,6 @@ import { Api, ApiType } from '../../entities/api.entity';
 import { Operation } from '../../entities/operation.entity';
 import { User } from '../../entities/user.entity';
 import { Credential } from '../../entities/credential.entity';
-import { CustomCodeExecutorService } from './custom-code-executor.service';
 import { NodeSandboxService } from './node-sandbox/node-sandbox.service';
 import { SdkCodeAssemblerService } from './node-sandbox/sdk-code-assembler.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -134,13 +133,6 @@ describe('ToolExecutorService', () => {
         {
           provide: ModuleRef,
           useValue: { get: jest.fn().mockReturnValue(null) },
-        },
-        {
-          provide: CustomCodeExecutorService,
-          useValue: {
-            executeCode: jest.fn().mockResolvedValue({ success: true, data: null, executionTime: 0 }),
-            validateCode: jest.fn().mockReturnValue({ valid: true }),
-          },
         },
         {
           provide: NodeSandboxService,
