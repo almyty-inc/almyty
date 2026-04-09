@@ -77,16 +77,20 @@ describe('auth store logout', () => {
     // Zustand's persist middleware rewrites `auth-storage` on every
     // state change — and logout triggers `set({...})` right after we
     // remove the key. The key will therefore be present again, but
-    // it must contain only the CLEARED state (no live token/user).
-    // The regression we're guarding against: the key containing the
-    // STALE token value after logout, which would re-hydrate a
-    // logged-in session on the next page load.
+    // it must contain only the CLEARED state (no live user flag).
+    //
+    // The partialize config NO LONGER persists the `token` field
+    // at all — see auth.ts for the XSS rationale. So we check that
+    // the rehydrated state contains no user and isAuthenticated=false,
+    // and ALSO that the token field is absent from the persisted
+    // payload (previously writing the token to localStorage made it
+    // readable by any script on the page).
     const raw = ls.getItem('auth-storage')
     if (raw !== null) {
       const parsed = JSON.parse(raw)
-      expect(parsed.state?.token).toBeNull()
       expect(parsed.state?.user).toBeNull()
       expect(parsed.state?.isAuthenticated).toBe(false)
+      expect(parsed.state?.token).toBeUndefined()
     }
   })
 
