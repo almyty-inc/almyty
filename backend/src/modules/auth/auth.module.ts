@@ -47,10 +47,19 @@ import { UserOrganization } from '../../entities/user-organization.entity';
             '[SECURITY WARNING] JWT_SECRET not set. Using dev fallback. Set JWT_SECRET in production!',
           );
         }
+        // nestjs/jwt 11.x tightened the SignOptions.expiresIn type
+        // to `number | StringValue` where StringValue is the
+        // `ms` library's template-literal string union. A runtime
+        // string like "24h" IS valid but TypeScript can't narrow
+        // it from ConfigService.get<string>(). Cast through `any`
+        // to the expected runtime shape — jsonwebtoken accepts
+        // any parseable ms string at runtime regardless of the
+        // type declaration.
+        const expiresIn = configService.get<string>('JWT_EXPIRES_IN', '24h') as any;
         return {
           secret: secret || 'dev-only-jwt-secret-change-me-in-production',
           signOptions: {
-            expiresIn: configService.get<string>('JWT_EXPIRES_IN', '24h'),
+            expiresIn,
             // issuer + audience bind every signed token to THIS
             // service. If an attacker ever gets hold of a JWT_SECRET
             // that's shared across multiple services (common mistake
