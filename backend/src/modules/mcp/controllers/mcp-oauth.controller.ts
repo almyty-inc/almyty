@@ -15,6 +15,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
@@ -494,8 +495,17 @@ export class McpOAuthController {
   // ---------------------------------------------------------------------------
   // 5. Dynamic Client Registration (RFC 7591)
   // POST /:orgSlug/:gatewaySlug/register
+  //
+  // Tight rate limit — the global 100 req/60s lets a scripted
+  // attacker create 6,000 OAuth clients per hour. Per-gateway
+  // storage cap (MAX_CLIENTS_PER_GATEWAY in mcp-oauth.service.ts)
+  // is the other half of the defence; the rate limit is what
+  // stops the attacker from burning through the cap in seconds.
+  // 10 per 5 minutes per IP is still generous for any real
+  // integrator onboarding workflow.
   // ---------------------------------------------------------------------------
   @Post(':orgSlug/:gatewaySlug/register')
+  @Throttle({ default: { limit: 10, ttl: 5 * 60 * 1000 } })
   @Header('Content-Type', 'application/json')
   async register(
     @Param('orgSlug') orgSlug: string,

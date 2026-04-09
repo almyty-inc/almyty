@@ -8,6 +8,7 @@ resources:
   - postgres-deployment.yaml
   - redis-deployment.yaml
   - api-deployment.yaml
+  - api-network-policy.yaml
   - frontend-deployment.yaml
   - ingress.yaml
   - cert-manager.yaml
