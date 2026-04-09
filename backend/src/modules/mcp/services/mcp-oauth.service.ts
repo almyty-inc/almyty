@@ -84,6 +84,24 @@ const ALLOWED_GRANT_TYPES = ['authorization_code', 'refresh_token'];
 const ALLOWED_RESPONSE_TYPES = ['code'];
 const ALLOWED_AUTH_METHODS = ['none', 'client_secret_post'];
 
+/**
+ * Hard caps on dynamic-client-registration input so the public
+ * `/register` endpoint can't be turned into a DoS / storage-fill
+ * vector. RFC 7591 is client-friendly by design — the authorization
+ * server is supposed to accept registrations from anyone — which
+ * makes these limits the only thing between a crafted loop and an
+ * unbounded grow of the `oauth_clients` table.
+ *
+ * Values picked to be comfortably above any legitimate client
+ * (a real OAuth client rarely has >5 redirect URIs or a client
+ * name longer than a few dozen chars) and low enough that a
+ * single attacker can't exhaust a commodity database.
+ */
+const MAX_CLIENT_NAME_LENGTH = 255;
+const MAX_REDIRECT_URI_LENGTH = 2048;
+const MAX_REDIRECT_URIS_PER_CLIENT = 20;
+const MAX_CLIENTS_PER_GATEWAY = 500;
+
 @Injectable()
 export class McpOAuthService {
   private readonly logger = new Logger(McpOAuthService.name);
@@ -157,13 +175,51 @@ export class McpOAuthService {
     organizationId: string,
     dto: RegisterClientDto,
   ): Promise<ClientRegistrationResponse> {
+    // Input caps — defence against unbounded registration payloads.
+    // See MAX_* constants at the top of this file for rationale.
+    if (typeof dto.client_name !== 'string' || dto.client_name.length === 0) {
+      throw new BadRequestException('client_name is required');
+    }
+    if (dto.client_name.length > MAX_CLIENT_NAME_LENGTH) {
+      throw new BadRequestException(
+        `client_name exceeds ${MAX_CLIENT_NAME_LENGTH} characters`,
+      );
+    }
+
     // Validate redirect URIs
     if (!dto.redirect_uris || dto.redirect_uris.length === 0) {
       throw new BadRequestException('At least one redirect_uri is required');
     }
+    if (dto.redirect_uris.length > MAX_REDIRECT_URIS_PER_CLIENT) {
+      throw new BadRequestException(
+        `Too many redirect_uris (max ${MAX_REDIRECT_URIS_PER_CLIENT})`,
+      );
+    }
 
     for (const uri of dto.redirect_uris) {
+      if (typeof uri !== 'string' || uri.length === 0) {
+        throw new BadRequestException('redirect_uri must be a non-empty string');
+      }
+      if (uri.length > MAX_REDIRECT_URI_LENGTH) {
+        throw new BadRequestException(
+          `redirect_uri exceeds ${MAX_REDIRECT_URI_LENGTH} characters`,
+        );
+      }
       this.validateRedirectUri(uri);
+    }
+
+    // Per-gateway quota — refuse if the gateway has already hit
+    // the soft cap on registered clients. Protects against a
+    // single misbehaving or adversarial integrator from
+    // exhausting shared storage on behalf of every other
+    // integrator on the same gateway.
+    const existingCount = await this.oauthClientRepository.count({
+      where: { gatewayId, isActive: true },
+    });
+    if (existingCount >= MAX_CLIENTS_PER_GATEWAY) {
+      throw new BadRequestException(
+        `Gateway has reached the maximum of ${MAX_CLIENTS_PER_GATEWAY} registered OAuth clients`,
+      );
     }
 
     // Validate grant types

@@ -56,6 +56,11 @@ describe('McpOAuthService', () => {
             create: jest.fn().mockImplementation((data) => ({ ...data })),
             save: jest.fn().mockImplementation((data) => Promise.resolve(data)),
             findOne: jest.fn(),
+            // count is used by registerClient to enforce the
+            // per-gateway quota. Default to 0 so existing tests
+            // don't hit the cap; tests that exercise the cap
+            // explicitly override this mock.
+            count: jest.fn().mockResolvedValue(0),
           },
         },
         {
@@ -390,6 +395,62 @@ describe('McpOAuthService', () => {
       await expect(
         service.registerClient('gateway-1', 'org-1', dto),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    // ── Input caps (DoS defence for RFC 7591 public endpoint) ──
+
+    it('rejects client_name longer than 255 characters', async () => {
+      const dto = {
+        ...validDto,
+        client_name: 'x'.repeat(256),
+      };
+      await expect(
+        service.registerClient('gateway-1', 'org-1', dto),
+      ).rejects.toThrow(/client_name exceeds/);
+    });
+
+    it('rejects empty client_name', async () => {
+      const dto = { ...validDto, client_name: '' };
+      await expect(
+        service.registerClient('gateway-1', 'org-1', dto),
+      ).rejects.toThrow(/client_name is required/);
+    });
+
+    it('rejects more than 20 redirect_uris', async () => {
+      const dto = {
+        ...validDto,
+        redirect_uris: Array.from({ length: 21 }, (_, i) => `https://a${i}.example.com/cb`),
+      };
+      await expect(
+        service.registerClient('gateway-1', 'org-1', dto),
+      ).rejects.toThrow(/Too many redirect_uris/);
+    });
+
+    it('rejects a redirect_uri longer than 2048 characters', async () => {
+      const dto = {
+        ...validDto,
+        redirect_uris: [`https://example.com/${'x'.repeat(2100)}`],
+      };
+      await expect(
+        service.registerClient('gateway-1', 'org-1', dto),
+      ).rejects.toThrow(/redirect_uri exceeds/);
+    });
+
+    it('rejects registration when the gateway has reached the per-gateway client cap', async () => {
+      // Simulate the cap being full by returning the limit from
+      // the `count` stub.
+      jest.spyOn(oauthClientRepository, 'count').mockResolvedValueOnce(500);
+
+      await expect(
+        service.registerClient('gateway-1', 'org-1', validDto),
+      ).rejects.toThrow(/maximum of 500 registered OAuth clients/);
+    });
+
+    it('accepts a registration when one slot below the cap', async () => {
+      jest.spyOn(oauthClientRepository, 'count').mockResolvedValueOnce(499);
+
+      const result = await service.registerClient('gateway-1', 'org-1', validDto);
+      expect(result.client_id).toBeDefined();
     });
   });
 
