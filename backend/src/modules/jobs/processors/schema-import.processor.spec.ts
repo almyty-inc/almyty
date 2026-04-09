@@ -114,6 +114,7 @@ describe('SchemaImportProcessor', () => {
       expect(apisService.importSchema).toHaveBeenCalledWith(
         'api-42',
         '{"swagger":"2.0"}',
+        'org-1',
         { fileName: 'petstore.json', description: 'Petstore API', generateTools: false },
       );
     });
@@ -292,14 +293,17 @@ describe('SchemaImportProcessor', () => {
     });
 
     // Defence in depth: the controller already org-checks, but the worker
-    // re-verifies the api still belongs to the org from the job payload.
-    // This guards against stale jobs and direct Redis manipulation.
+    // re-verifies the api still belongs to the org from the job payload
+    // via the service layer's now-mandatory org-scoped findOne (a
+    // cross-org api id returns null from the query because the WHERE
+    // clause filters on organizationId). Guards against stale jobs
+    // and direct Redis manipulation.
     describe('cross-org defence in depth', () => {
       it('refuses to import when the api belongs to a different org', async () => {
-        apisService.findOne.mockResolvedValue({
-          id: 'api-1',
-          organizationId: 'attacker-org',
-        } as Api);
+        // Real service layer: findOne(apiId, 'victim-org') returns null
+        // because the row's organizationId is 'attacker-org'. Emulate
+        // that here so the test exercises the same contract.
+        apisService.findOne.mockResolvedValue(null as any);
 
         const job = createMockJob({
           apiId: 'api-1',
