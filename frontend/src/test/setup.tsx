@@ -8,19 +8,27 @@ afterEach(() => {
   cleanup()
 })
 
-// Mock IntersectionObserver
-global.IntersectionObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}))
-
-// Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}))
+// Mock IntersectionObserver / ResizeObserver.
+//
+// vitest 4 made `vi.fn().mockImplementation(arrow)` non-constructable,
+// which Radix + @floating-ui now invoke via `new ResizeObserver(...)`
+// inside `autoUpdate()`. Use real class stubs so `new` works.
+class MockIntersectionObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+  takeRecords = vi.fn().mockReturnValue([])
+  root = null
+  rootMargin = ''
+  thresholds = []
+}
+class MockResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
+global.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver
+global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
 
 // Mock matchMedia
 Object.defineProperty(window, 'matchMedia', {

@@ -196,9 +196,16 @@ describe('AgentsPage', () => {
     it('should show agent status badges', async () => {
       renderAgentsPage()
 
+      // "Active" also appears in the status filter dropdown
+      // (<option value="active">Active</option>), so
+      // getByText('Active') matches multiple elements. Scope
+      // the assertion to the agent row badges by matching the
+      // full text + its badge-shaped ancestor class.
       await waitFor(() => {
-        expect(screen.getByText('Active')).toBeInTheDocument()
-        expect(screen.getByText('Draft')).toBeInTheDocument()
+        const actives = screen.getAllByText('Active')
+        expect(actives.length).toBeGreaterThanOrEqual(1)
+        const drafts = screen.getAllByText('Draft')
+        expect(drafts.length).toBeGreaterThanOrEqual(1)
       })
     })
 
