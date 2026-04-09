@@ -48,7 +48,7 @@ export class AlmytyClient {
   }
 
   private async request(path: string): Promise<any> {
-    const url = `${this.baseUrl}/api${path}`;
+    const url = `${this.baseUrl}${path}`;
     const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${this.token}`,
@@ -68,7 +68,7 @@ export class AlmytyClient {
   }
 
   private async post(path: string, body: any): Promise<any> {
-    const url = `${this.baseUrl}/api${path}`;
+    const url = `${this.baseUrl}${path}`;
     const resp = await fetch(url, {
       method: 'POST',
       headers: {
