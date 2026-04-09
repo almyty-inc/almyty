@@ -83,7 +83,6 @@
     "resend": "^6.10.0",
     "rxjs": "^7.8.2",
     "soap": "^1.8.0",
-    "sqlite3": "^5.1.7",
     "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.28",
     "typeorm-versions": "^0.5.1",
@@ -91,6 +90,13 @@
     "winston": "^3.19.0",
     "ws": "^8.20.0",
     "xml2js": "^0.6.2"
+  },
+  "overrides": {
+    "tar": "^7.5.11",
+    "tar-fs": "^3.1.1",
+    "cacache": "^18.0.5",
+    "lodash": "^4.17.24",
+    "multer": "^2.1.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.9",
