@@ -52,9 +52,47 @@ async function bootstrap() {
   app.use(compression());
   app.use(cookieParser());
 
-  // CORS configuration
+  // CORS configuration — origin allowlist from env, NOT `origin: true`.
+  //
+  // The previous config set `origin: true`, which reflects whatever
+  // `Origin` header the request carried. Combined with
+  // `credentials: true` this told every browser that we're willing
+  // to send/receive cookies and auth headers to any origin — which
+  // modern browsers block at the preflight level, but which is
+  // still a dangerous default: any reverse proxy or middleware
+  // that normalizes/echoes the origin could accidentally bypass
+  // the browser safety and allow credentialed XHR from attacker
+  // sites. Pin to a concrete allowlist and fail closed for
+  // everything else.
+  //
+  // The allowlist is built from these env vars, in order:
+  //   CORS_ALLOWED_ORIGINS   comma-separated explicit list
+  //   FRONTEND_URL           the primary web UI (always included)
+  //   ADMIN_URL              optional admin panel (if deployed)
+  // Plus localhost:3002 in non-production for local dev.
+  const envOrigins = (configService.get<string>('CORS_ALLOWED_ORIGINS') || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const allowedOrigins = new Set<string>(envOrigins);
+  const frontendUrl = configService.get<string>('FRONTEND_URL');
+  if (frontendUrl) allowedOrigins.add(frontendUrl);
+  const adminUrl = configService.get<string>('ADMIN_URL');
+  if (adminUrl) allowedOrigins.add(adminUrl);
+  if (process.env.NODE_ENV !== 'production') {
+    allowedOrigins.add('http://localhost:3002');
+    allowedOrigins.add('http://127.0.0.1:3002');
+  }
+
   app.enableCors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Same-origin / server-to-server requests have no Origin
+      // header; allow those through (the browser protection only
+      // matters for cross-origin XHR).
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.has(origin)) return callback(null, true);
+      return callback(new Error(`CORS: origin "${origin}" not in allowlist`), false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Retry-Count', 'X-Organization-Id'],
