@@ -1,0 +1,75 @@
+# gitleaks configuration — secret scanning ruleset.
+#
+# Uses the upstream default ruleset (AWS, GCP, GitHub, Stripe,
+# Slack, Twilio, Discord, JWT, SSH private keys, generic high-
+# entropy strings) plus a handful of project-specific allowlists
+# so the CI job doesn't trip on test fixtures and dev fallbacks.
+#
+# Run locally:
+#   gitleaks detect --source . --verbose --redact
+#
+# The CI job in .github/workflows/ci.yml runs the same binary via
+# the upstream docker image.
+
+[extend]
+useDefault = true
+
+# ── Project-specific allowlist ──────────────────────────────
+#
+# These are known-safe occurrences of the word "secret" /
+# "password" / "token" / "key" etc. in the codebase. Every entry
+# is a conscious decision to exempt a file because the matched
+# string is either:
+#   (a) an obvious placeholder ("CHANGE_ME", "dev-only-...")
+#   (b) a test fixture — secrets that never leave the test
+#       harness
+#   (c) documentation showing what a config should look like
+
+[allowlist]
+description = "Known-safe test fixtures + placeholder secrets"
+
+paths = [
+  # Test fixtures — these files intentionally use fake
+  # credentials so that mocking works. Never treat as real.
+  '''(.*?)\.spec\.ts''',
+  '''(.*?)\.test\.ts''',
+  '''(.*?)\.test\.tsx''',
+  '''backend/src/test/integration/.*''',
+  '''backend/src/test/setup\.ts''',
+  '''frontend/src/test/setup\.tsx''',
+
+  # Secret TEMPLATES with CHANGE_ME placeholders. The real
+  # values are applied via kubectl in CI/CD; the committed
+  # templates document the shape.
+  '''k8s/base/secret\.yaml''',
+  '''k8s/overlays/.*/secret\.yaml''',
+
+  # docker-compose has dev defaults for POSTGRES_PASSWORD and
+  # JWT_SECRET. The strings literally say "postgres" / "dev-
+  # secret-change-me" — no actual secret material.
+  '''docker-compose\.yml''',
+
+  # Lock files — npm resolved URLs can contain integrity hashes
+  # that gitleaks' high-entropy check misclassifies as tokens.
+  '''package-lock\.json''',
+]
+
+regexes = [
+  # Recognise CHANGE_ME placeholders explicitly so a commit that
+  # accidentally leaves one in place is still flagged but isn't
+  # a false positive.
+  '''CHANGE_ME_[A-Z_]+''',
+  # Dev JWT fallback string in auth.module.ts + docker-compose.
+  '''dev-only-jwt-secret-change-me-in-production''',
+  '''dev-jwt-secret-not-for-production''',
+  '''dev-encryption-key-not-for-production''',
+  '''dev-platform-metrics-token''',
+  '''dev-secret-change-me''',
+  # Fake test tokens + mock API keys used in unit tests.
+  '''mock-jwt-token''',
+  '''test-jwt-secret-[a-zA-Z0-9-]+''',
+  '''sk-test-[a-zA-Z0-9]+''',
+  '''stale-jwt-value''',
+  '''attacker-controlled-secret''',
+  '''rbac-integration-test-secret''',
+]

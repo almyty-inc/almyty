@@ -48,14 +48,16 @@ spec:
       containers:
       - name: postgres
         image: postgres:16-alpine
-        # Container-level hardening. readOnlyRootFilesystem is left
-        # OFF here because postgres writes to a number of paths
-        # outside the PVC (notably /var/run/postgresql and /tmp);
-        # the PVC on /var/lib/postgresql/data is writable by
-        # design. The other primitives (drop-all-capabilities,
-        # no-priv-escalation, seccomp default) are safe to enable.
+        # Container-level hardening. readOnlyRootFilesystem: true
+        # is now safe because we expose the three paths postgres
+        # actually needs to write (the PVC at
+        # /var/lib/postgresql/data, the Unix socket dir at
+        # /var/run/postgresql, and /tmp for sort spill files and
+        # temp tables) via explicit volumeMounts below. Every
+        # other path on the filesystem is read-only.
         securityContext:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL
@@ -83,6 +85,17 @@ spec:
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data
+        # Postgres writes the Unix socket + lockfile here. Without
+        # a writable emptyDir overlay, readOnlyRootFilesystem
+        # above would block pg_ctl startup.
+        - name: postgres-run
+          mountPath: /var/run/postgresql
+        # /tmp is used by postgres for on-disk sort spills and
+        # temporary tables (work_mem overflow). emptyDir is
+        # ephemeral which is exactly what we want — temp data
+        # never survives a pod restart.
+        - name: tmp
+          mountPath: /tmp
         livenessProbe:
           exec:
             command:
@@ -112,6 +125,12 @@ spec:
       - name: postgres-storage
         persistentVolumeClaim:
           claimName: postgres-pvc
+      - name: postgres-run
+        emptyDir:
+          sizeLimit: 16Mi
+      - name: tmp
+        emptyDir:
+          sizeLimit: 512Mi
 ---
 apiVersion: v1
 kind: Service
