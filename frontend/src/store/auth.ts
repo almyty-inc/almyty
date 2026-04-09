@@ -32,10 +32,16 @@ export const useAuthStore = create<AuthState>()(
           const response = await authApi.login({ email, password })
           const { accessToken } = response
 
-          // Token is now set as httpOnly cookie by the backend.
-          // We no longer store it in localStorage to prevent XSS access.
-          // Keep localStorage token temporarily for backward compat during transition.
-          localStorage.setItem('token', accessToken)
+          // Token is set as an httpOnly cookie by the backend.
+          // We do NOT copy it into localStorage — any XSS (stored
+          // XSS from a user-provided string rendered somewhere, a
+          // compromised npm package, a malicious browser extension)
+          // can read localStorage. The whole point of the httpOnly
+          // cookie is that JavaScript can't touch the token; writing
+          // it back into localStorage defeats the protection. Keep
+          // the token in the Zustand in-memory state only — that
+          // memory is gone on page reload, and re-auth happens via
+          // the still-valid cookie through `checkAuth`.
 
           // Fetch user profile to populate organization data
           // (cookie is already set, so this request will authenticate via cookie)
@@ -66,8 +72,8 @@ export const useAuthStore = create<AuthState>()(
           const response = await authApi.register({ email, password, firstName, lastName, organizationName })
           const { accessToken } = response
 
-          // Token is now set as httpOnly cookie by the backend.
-          localStorage.setItem('token', accessToken)
+          // httpOnly cookie is set by the backend; no localStorage copy
+          // (see the login() comment for the threat model).
 
           // Fetch user profile to populate organization data
           const profileResponse = await authApi.getProfile()
@@ -97,12 +103,11 @@ export const useAuthStore = create<AuthState>()(
           // Best-effort — even if the call fails, clear local state
         })
 
+        // Legacy cleanup: old builds wrote 'token' + persisted
+        // 'auth-storage.token' into localStorage. Remove both so an
+        // upgrade from a vulnerable client leaves no residue behind.
         localStorage.removeItem('token')
         localStorage.removeItem('user')
-        // Also clear the Zustand persist key. Without this, `token`
-        // and `user` survived a local logout inside the persisted
-        // store (`auth-storage`) and re-hydrated on the next page
-        // load — a stale session would appear to be logged back in.
         localStorage.removeItem('auth-storage')
 
         set({
@@ -125,15 +130,22 @@ export const useAuthStore = create<AuthState>()(
       },
 
       checkAuth: async () => {
-        // With httpOnly cookies, we check auth by attempting to fetch the profile.
-        // The cookie is sent automatically — no need to check localStorage for token.
+        // With httpOnly cookies the browser sends the cookie
+        // automatically on every request to the same origin. The
+        // frontend doesn't know or care whether the cookie is
+        // present — we just try to fetch the profile and trust the
+        // server's answer. If the cookie is valid we're
+        // authenticated, otherwise we fall through to the cleared
+        // state. Previously we short-circuited this based on a
+        // localStorage.getItem('token') probe which is now always
+        // null (we stopped writing it); the short-circuit left
+        // users with a valid cookie stranded in the logged-out UI.
         const { user: persistedUser } = get()
-        const token = localStorage.getItem('token')
 
-        // If no persisted user AND no token, skip the network call
-        if (!persistedUser && !token) {
-          set({ isAuthenticated: false, user: null, token: null })
-          return
+        if (!persistedUser) {
+          // No cached user in the Zustand store → cold start. Try
+          // the profile fetch anyway; the cookie may still be valid
+          // from a previous session on this browser.
         }
 
         try {
@@ -148,11 +160,10 @@ export const useAuthStore = create<AuthState>()(
 
           set({
             user,
-            token: token || null,
+            token: null,
             isAuthenticated: true,
           })
         } catch (error) {
-          localStorage.removeItem('token')
           localStorage.removeItem('user')
           set({
             user: null,
@@ -164,9 +175,14 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      // Do NOT persist `token` to localStorage — the Zustand
+      // persist middleware would otherwise write it to
+      // `auth-storage.state.token`, defeating the whole point of
+      // the httpOnly cookie. Persist only the minimal display
+      // state (user profile + auth flag) so the UI can render
+      // without a round trip on page refresh.
       partialize: (state) => ({
         user: state.user,
-        token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {
