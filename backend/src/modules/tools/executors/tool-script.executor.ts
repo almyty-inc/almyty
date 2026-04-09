@@ -126,7 +126,7 @@ export class ToolScriptExecutor {
   async executeSdk(
     tool: Tool,
     parameters: Record<string, any>,
-    _options: ToolExecutionOptions,
+    options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
     try {
@@ -147,6 +147,8 @@ export class ToolScriptExecutor {
         dependencies,
         npmRegistry,
         timeoutMs: tool.configuration?.timeout ?? api?.timeoutMs ?? 30000,
+        signal: options.signal,
+        invokeTool: this.buildInvokeToolCallback(options),
       });
 
       let resultData = sandboxResult.data;
@@ -181,7 +183,7 @@ export class ToolScriptExecutor {
   async executeCustomCode(
     tool: Tool,
     parameters: Record<string, any>,
-    _options: ToolExecutionOptions,
+    options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
     try {
@@ -197,6 +199,8 @@ export class ToolScriptExecutor {
         dependencies: dependencies ?? undefined,
         npmRegistry: npmRegistry ?? undefined,
         timeoutMs: tool.configuration?.timeout ?? api?.timeoutMs ?? 30000,
+        signal: options.signal,
+        invokeTool: this.buildInvokeToolCallback(options),
       });
 
       return {
@@ -219,6 +223,50 @@ export class ToolScriptExecutor {
         retryCount: 0,
       };
     }
+  }
+
+  // ─── Nested tool invocation from inside the sandbox ───────────
+
+  /**
+   * Build the `invokeTool` callback passed to the sandbox. When
+   * user code inside the worker calls `tools.invoke(id, params)`,
+   * the worker posts a message to the host, node-sandbox.service
+   * routes it here, and we run the nested tool via the orchestrator
+   * in the SAME tenant context (organization + user) as the outer
+   * call.
+   *
+   * We use ModuleRef.get(..., { strict: false }) because importing
+   * ToolExecutorService directly would introduce a circular import
+   * (ToolExecutorService → ToolScriptExecutor → ToolExecutorService).
+   * Lazy resolution through the Nest DI container breaks the cycle
+   * at runtime.
+   *
+   * AbortSignal propagation: the outer signal is forwarded to the
+   * nested invocation, so cancelling the outer request tears down
+   * every nested tool in flight as well.
+   */
+  private buildInvokeToolCallback(
+    options: ToolExecutionOptions,
+  ): (toolId: string, params: Record<string, any>, signal?: AbortSignal) => Promise<any> {
+    return async (toolId: string, params: Record<string, any>, signal?: AbortSignal) => {
+      // Lazy import to break the circular dependency — the
+      // orchestrator (ToolExecutorService) injects us, so we
+      // can't inject it back.
+      const { ToolExecutorService } = await import('../tool-executor.service');
+      const orchestrator = this.moduleRef.get(ToolExecutorService, { strict: false });
+      if (!orchestrator) {
+        throw new Error('Tool executor service not available for nested invocation');
+      }
+      const result = await orchestrator.executeTool(toolId, params, {
+        userId: options.userId,
+        organizationId: options.organizationId,
+        signal: signal ?? options.signal,
+      });
+      if (!result.success) {
+        throw new Error(result.error ?? 'Nested tool invocation failed');
+      }
+      return result.data;
+    };
   }
 
   // ─── Credential hydration for sandbox tools ────────────────────
