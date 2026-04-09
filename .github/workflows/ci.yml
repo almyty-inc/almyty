@@ -1,0 +1,160 @@
+name: CI — tests
+
+# Runs the full test suite on every push to a feature branch and on
+# every PR targeting master. Prior to this workflow there were deploy
+# pipelines but NO test pipeline — PRs could land on master without
+# anything verifying the 4,000+ tests still pass. That was a gap
+# worth closing before the first external contributor lands.
+#
+# Three jobs run in parallel:
+#
+#   backend-tests         Backend unit + integration. Includes the
+#                         DB-gated specs (bump-stats, cross-tenant
+#                         isolation) via a Postgres 16 service
+#                         container. RUN_DB_INTEGRATION=1 flips the
+#                         describeIfDb gate so those specs exercise
+#                         real SQL instead of being skipped.
+#
+#   frontend-tests        Vitest unit tests for the React app.
+#
+#   typecheck             Fast tsc --noEmit against the backend. Catches
+#                         signature drift bugs (e.g. the ApisService
+#                         findOne(id) → findOne(id, organizationId)
+#                         refactor that broke every caller) before the
+#                         full test suite even starts.
+
+on:
+  push:
+    branches-ignore:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+# Cancel in-flight runs on the same ref — saves CI minutes on rapid
+# force-pushes while a PR is being iterated.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── Backend: unit + DB integration ──────────────────────────
+  backend-tests:
+    name: Backend tests (unit + DB integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: almyty_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci --ignore-scripts
+
+      # The DB integration specs use spec-specific Postgres schemas
+      # so parallel Jest workers don't collide on DROP TABLE cycles.
+      # Create them up front — TypeORM's `schema` option assumes the
+      # schema already exists.
+      - name: Pre-create integration test schemas
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h 127.0.0.1 -U postgres -d almyty_test -c \
+            "CREATE SCHEMA IF NOT EXISTS bump_stats_test; CREATE SCHEMA IF NOT EXISTS cross_tenant_test;"
+
+      - name: Run backend tests (unit + DB integration)
+        working-directory: backend
+        env:
+          RUN_DB_INTEGRATION: '1'
+          DATABASE_HOST: 127.0.0.1
+          DATABASE_PORT: '5432'
+          DATABASE_USERNAME: postgres
+          DATABASE_PASSWORD: postgres
+          DATABASE_NAME: almyty_test
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: '6379'
+        run: npm test -- --forceExit
+
+  # ─── Frontend: vitest unit tests ─────────────────────────────
+  frontend-tests:
+    name: Frontend tests (vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+
+      - name: Run vitest
+        working-directory: frontend
+        run: npm test -- --run
+
+  # ─── Typecheck (fast, independent of tests) ──────────────────
+  typecheck:
+    name: Typecheck (backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci --ignore-scripts
+
+      - name: tsc --noEmit
+        working-directory: backend
+        run: npx tsc --noEmit
