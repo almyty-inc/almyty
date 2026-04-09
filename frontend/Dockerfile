@@ -28,7 +28,7 @@ EXPOSE 3000
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
 
 # Stage 3: Production - serve with nginx
-FROM nginx:1.25-alpine AS production
+FROM nginx:1.29.8-alpine AS production
 
 # Remove default nginx config
 RUN rm /etc/nginx/conf.d/default.conf
