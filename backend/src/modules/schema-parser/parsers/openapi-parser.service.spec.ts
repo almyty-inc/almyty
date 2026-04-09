@@ -257,12 +257,17 @@ describe('OpenAPIParserService', () => {
     });
 
     it('should handle invalid OpenAPI schema', async () => {
+      // `@apidevtools/swagger-parser` v12 silently upgrades Swagger 2.0
+      // to OpenAPI 3.0, so the old fixture stopped rejecting. Pin to an
+      // unsupported version instead — the parser still rejects anything
+      // outside the 3.0.x / 3.1.x range.
       const invalidSchema = JSON.stringify({
-        swagger: '2.0', // Wrong version
+        openapi: '9.9.9', // Unsupported version
         info: {
           title: 'Invalid API',
           version: '1.0.0',
         },
+        paths: {},
       });
 
       await expect(service.parseSchema(invalidSchema)).rejects.toThrow('Invalid OpenAPI schema');
