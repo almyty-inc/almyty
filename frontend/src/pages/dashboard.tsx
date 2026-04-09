@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { gatewaysApi, toolsApi, apisApi, agentsApi, analyticsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
+import { useAuthStore } from '@/store/auth'
 import type { RequestLog } from '@/types'
 
 // Helper to humanize a log path
@@ -70,6 +71,7 @@ export function DashboardPage() {
   }, [])
 
   const { currentOrganization } = useOrganizationStore()
+  const { user } = useAuthStore()
   const orgId = currentOrganization?.id
   const navigate = useNavigate()
 
@@ -177,32 +179,65 @@ export function DashboardPage() {
         /* Getting Started Checklist */
         <Card className="border-t-2 border-t-violet-500/20">
           <CardHeader>
-            <CardTitle className="text-lg">Getting Started</CardTitle>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-lg">
+                  {user?.name ? `Welcome, ${user.name.split(' ')[0]}` : 'Welcome to almyty'}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Four steps from an API schema to a live AI-ready gateway. Open any step and we'll walk you through.
+                </p>
+              </div>
+              {(() => {
+                const done = [apis.length > 0, tools.length > 0, gateways.length > 0, agents.length > 0].filter(Boolean).length
+                const pct = Math.round((done / 4) * 100)
+                return (
+                  <div className="flex flex-col items-end gap-1 min-w-[140px]">
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {done} of 4 complete
+                    </span>
+                    <div
+                      role="progressbar"
+                      aria-label="Onboarding progress"
+                      aria-valuenow={done}
+                      aria-valuemin={0}
+                      aria-valuemax={4}
+                      className="h-1.5 w-full rounded-full bg-muted overflow-hidden"
+                    >
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-all duration-500 ease-out"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               <ChecklistItem
                 done={apis.length > 0}
                 label="Connect your first API"
-                description="Import an OpenAPI spec to auto-generate tools"
-                action={() => navigate('/apis')}
+                description="Import an OpenAPI, GraphQL, SOAP, or Protobuf schema to auto-generate tools"
+                action={() => navigate('/apis?new=1')}
               />
               <ChecklistItem
                 done={tools.length > 0}
                 label="Generate tools from your API"
-                description="Auto-generate AI-ready tools from API operations"
+                description="Each API operation becomes one callable tool with a typed parameter schema"
                 action={() => navigate('/tools')}
               />
               <ChecklistItem
                 done={gateways.length > 0}
                 label="Create a gateway"
-                description="Serve your tools via MCP, A2A, UTCP, or Skills"
-                action={() => navigate('/gateways')}
+                description="Serve your tools via MCP, A2A, UTCP, or Agent Skills"
+                action={() => navigate('/gateways?new=1')}
               />
               <ChecklistItem
                 done={agents.length > 0}
                 label="Build an agent"
-                description="Orchestrate LLM calls and tools into a pipeline"
+                description="Orchestrate LLM calls, tool calls, conditions, and loops in the visual DAG builder"
                 action={() => navigate('/agents/new')}
               />
             </div>

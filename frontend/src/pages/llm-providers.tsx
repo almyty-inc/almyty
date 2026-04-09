@@ -41,6 +41,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
+import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -723,6 +724,8 @@ export function LlmProvidersPage() {
 
   const navigate = useNavigate()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  // Honour ?new=1 from the command palette Add Provider action.
+  useCreateDeepLink(setIsCreateDialogOpen)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editProvider, setEditProvider] = useState<LlmProvider | null>(null)
   const [providerToEdit, setProviderToEdit] = useState<LlmProvider | null>(null)

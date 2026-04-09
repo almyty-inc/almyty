@@ -29,8 +29,9 @@ export function LoginPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<LoginFormData>({
+    mode: 'onTouched',
     resolver: zodResolver(loginSchema),
   })
 
@@ -130,7 +131,15 @@ export function LoginPage() {
           <Button
             type="submit"
             className="w-full"
-            disabled={isLoading}
+            disabled={isLoading || !isValid}
+            aria-disabled={isLoading || !isValid}
+            title={
+              isLoading
+                ? 'Signing you in…'
+                : !isValid
+                  ? 'Enter a valid email and password'
+                  : undefined
+            }
           >
             {isLoading ? 'Signing in...' : 'Sign in'}
           </Button>

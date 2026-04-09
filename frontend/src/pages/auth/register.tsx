@@ -44,10 +44,12 @@ export function RegisterPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<RegisterFormData>({
+    // Validate on every touch so the submit button can reflect
+    // isValid as soon as the user has engaged with each field.
+    mode: 'onTouched',
     resolver: zodResolver(registerSchema),
-    mode: 'onBlur', // Validate on blur for better UX
   })
 
   const onSubmit = async (data: RegisterFormData) => {
@@ -225,7 +227,15 @@ export function RegisterPage() {
           <Button
             type="submit"
             className="w-full"
-            disabled={isLoading}
+            disabled={isLoading || !isValid}
+            aria-disabled={isLoading || !isValid}
+            title={
+              isLoading
+                ? 'Creating your account…'
+                : !isValid
+                  ? 'Fill in every required field to continue'
+                  : undefined
+            }
           >
             {isLoading ? 'Creating account...' : 'Create account'}
           </Button>

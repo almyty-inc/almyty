@@ -13,6 +13,7 @@ import { DataTable, createActionsColumn } from '@/components/ui/data-table'
 import { cn } from '@/lib/utils'
 import { credentialsApi, accessKeysApi, gatewaysApi, agentsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import type { VaultCredential, AccessKey } from '@/types'
 
 function formatDate(date: string | null | undefined): string {
@@ -40,6 +41,10 @@ export function CredentialsPage() {
   // Dialog state lifted to page level so buttons in header can trigger them
   const [isCreateSecretOpen, setIsCreateSecretOpen] = useState(false)
   const [isGenerateKeyOpen, setIsGenerateKeyOpen] = useState(false)
+  // Honour ?new=1 from the command palette Add Credential action.
+  // Opens the secret dialog on the Vault tab; the Access Keys tab
+  // has its own generate-key entry if we wire it later.
+  useCreateDeepLink(setIsCreateSecretOpen)
 
   useEffect(() => { document.title = 'Credentials | almyty'; return () => { document.title = 'almyty' } }, [])
 
