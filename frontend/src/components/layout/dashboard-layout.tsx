@@ -42,6 +42,7 @@ import { useAuthStore } from '@/store/auth'
 import { useOrganizationStore } from '@/store/organization'
 import { useAppStore, useNotifications } from '@/store/app'
 import { getInitials } from '@/lib/utils'
+import { CommandPalette } from '@/components/command-palette'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -151,6 +152,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="h-screen flex overflow-hidden bg-muted">
+      {/* Global command palette — ⌘K / Ctrl+K toggle registered
+       * inside the component. Mounted once at the layout root so
+       * it's reachable from every authenticated page. */}
+      <CommandPalette />
       {/* Sidebar */}
       <div
         className={cn(
@@ -212,6 +217,31 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
+            </div>
+          )}
+
+          {/* Command palette hint — a visible affordance for the
+           * ⌘K / Ctrl+K shortcut registered in <CommandPalette/>.
+           * Clicking dispatches a synthetic keydown so there's one
+           * code path that opens the dialog. Hidden when the
+           * sidebar is collapsed (no room for the key hint). */}
+          {!sidebarCollapsed && (
+            <div className="px-2 pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  document.dispatchEvent(
+                    new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }),
+                  )
+                }}
+                className="w-full flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                aria-label="Open command palette"
+              >
+                <span className="text-muted-foreground">Search or jump to…</span>
+                <kbd className="ml-auto inline-flex items-center gap-1 rounded border border-border/80 bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                  ⌘K
+                </kbd>
+              </button>
             </div>
           )}
 
