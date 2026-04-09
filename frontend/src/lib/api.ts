@@ -84,15 +84,13 @@ export const api = axios.create({
   withCredentials: true, // Send cookies for httpOnly JWT auth
 })
 
-// Add auth token to requests (fallback for programmatic/transition use).
-// Primary auth is via httpOnly cookie sent automatically with withCredentials: true.
-// The Bearer header is only added if a token exists in localStorage (legacy/API client compat).
+// Auth is carried entirely by the httpOnly cookie (withCredentials: true
+// above). We do NOT read a token out of localStorage anymore — that used
+// to be an XSS-vulnerable fallback, any script running in the page could
+// read the token and impersonate the user. The cookie is
+// httpOnly+SameSite=lax and is set by the backend on login/register/
+// refresh; axios sends it automatically because withCredentials is on.
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-
   // Send the user's selected org on every request so multi-org users
   // don't get silently scoped to whichever membership happens to be
   // first. Read the value out of the Zustand org store via its
@@ -163,9 +161,12 @@ api.interceptors.response.use(
     // Handle auth errors — redirect to login once, not per-request
     if (error.response?.status === 401 && !isRedirectingToLogin) {
       isRedirectingToLogin = true
+      // Legacy cleanup for users upgrading from a build that
+      // wrote the token into localStorage. Remove any residue
+      // regardless of whether it exists — removeItem is a no-op
+      // for missing keys.
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      // Also clear persisted Zustand auth store
       localStorage.removeItem('auth-storage')
       // Clear httpOnly cookie via backend (best-effort, don't block redirect)
       api.post('/auth/logout').catch(() => {})
@@ -227,6 +228,9 @@ export const authApi = {
   
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     apiPatch('/auth/change-password', data),
+
+  createApiKey: (data: { name: string; scopes?: string[]; expiresAt?: string }) =>
+    apiPost('/auth/api-keys', data),
 }
 
 // Organizations API

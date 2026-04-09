@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
+import { authApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -9,8 +10,9 @@ import { Button } from '@/components/ui/button'
  *   1. The CLI starts a tiny HTTP server on 127.0.0.1:RANDOM and opens
  *      the user's browser to /cli-login?callback=…&state=…
  *   2. This page checks that the callback is on loopback, makes sure
- *      the user is signed in (kicking through /auth/login if not), and
- *      then POSTs `{ token, state }` to the callback URL.
+ *      the user is signed in (kicking through /auth/login if not), mints
+ *      a DEDICATED API key via POST /auth/api-keys, and POSTs
+ *      `{ token, state }` to the callback URL.
  *   3. The local server validates `state` and stores the token.
  *
  * Security:
@@ -21,11 +23,18 @@ import { Button } from '@/components/ui/button'
  *   land in browser history, server logs, or a reverse-proxy access log.
  * - We never auto-submit. The user clicks "Connect CLI" so the flow
  *   matches the consent expectation set by other CLIs.
+ * - The token sent to the CLI is a FRESH API key minted specifically
+ *   for this CLI session — NOT the user's browser JWT. The browser
+ *   JWT now lives in an httpOnly cookie and is unreadable by JavaScript
+ *   (XSS mitigation), so we can't forward it even if we wanted to.
+ *   The API key is tied to the caller's identity via the cookie that
+ *   authenticates the `POST /auth/api-keys` call, and the user can
+ *   revoke it from Settings → API keys at any time.
  */
 export function CliLoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { isAuthenticated, user, token, hasHydrated } = useAuthStore()
+  const { isAuthenticated, user, hasHydrated } = useAuthStore()
 
   const params = new URLSearchParams(location.search)
   const callback = params.get('callback') || ''
@@ -65,9 +74,9 @@ export function CliLoginPage() {
   }, [hasHydrated, isAuthenticated, callbackError, location.pathname, location.search, navigate])
 
   const handleConnect = async () => {
-    if (!token) {
+    if (!isAuthenticated) {
       setStatus('error')
-      setErrorMessage('No token available. Please log in again.')
+      setErrorMessage('Not authenticated. Please log in and try again.')
       return
     }
     if (callbackError) {
@@ -79,10 +88,27 @@ export function CliLoginPage() {
     setStatus('sending')
     setErrorMessage(null)
     try {
+      // Mint a fresh API key for this CLI session via the
+      // cookie-authenticated endpoint. The raw key value is only
+      // returned in the response to this call — it's never
+      // persisted in localStorage and never flows through the URL.
+      const hostLabel =
+        typeof navigator !== 'undefined' && navigator.platform
+          ? ` (${navigator.platform})`
+          : ''
+      const keyResponse: any = await authApi.createApiKey({
+        name: `CLI login${hostLabel} ${new Date().toISOString().slice(0, 10)}`,
+      })
+      const rawKey: string | undefined =
+        keyResponse?.apiKey ?? keyResponse?.data?.apiKey ?? keyResponse
+      if (!rawKey || typeof rawKey !== 'string') {
+        throw new Error('Backend did not return a new API key')
+      }
+
       const res = await fetch(callback, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, state }),
+        body: JSON.stringify({ token: rawKey, state }),
       })
       if (!res.ok) {
         const text = await res.text().catch(() => '')
