@@ -11,70 +11,72 @@ import * as path from 'path';
 import { WorkerInput, WorkerOutput } from './types';
 
 /**
- * Modules that user sandbox code is NOT allowed to require(). This is
- * a denylist rather than an allowlist because tools legitimately need
- * 'crypto', 'buffer', 'url', 'util', etc. for common HTTP/data work,
- * but a handful of modules are either outright code-exec primitives
- * (child_process, vm, worker_threads) or trivially defeat every other
- * protection in this worker:
+ * ALLOWLIST of Node built-ins that user sandbox code may require().
  *
- *   - fs / fs/promises: read arbitrary files on the host, including
- *     /etc/passwd, the backend's .env, stored credentials, and any
- *     mounted volume. Tools can do file transport via the platform
- *     Files API, they don't need raw fs.
- *   - http / https / http2 / net / tls / dgram / dns: raw networking
- *     sockets bypass every SSRF gate and egress restriction; tools
- *     that need HTTP should use the global `fetch` which runs through
- *     the rest of the stack.
- *   - os: leaks hostname, CPU model, user, network interfaces — a
- *     fingerprinting primitive for the host.
- *   - module: createRequire / _load can be used to reach anything
- *     the worker process can reach, defeating this allowlist.
- *   - path: by itself path is harmless, but allowing it while
- *     blocking fs leaves a papertrail that suggests fs is accessible,
- *     which is confusing. Left allowed for now — see fallthrough.
- *   - process: reachable globally anyway, scrubbed separately below.
+ * We previously ran a denylist (block fs, http, net, child_process,
+ * worker_threads, ...) but that's a losing game: every new Node
+ * release adds builtins, and forgetting to add one to the denylist
+ * is a silent regression. Flip to an explicit allowlist — if a
+ * module isn't in this set, the sandbox refuses to load it.
+ *
+ * The allowed set covers what legitimate tool code needs for data
+ * manipulation, text processing, cryptography, URL/query parsing,
+ * and compression. Everything else — filesystem, raw networking,
+ * process spawning, module loading, introspection, etc. — stays
+ * out of reach of user code (subject to the caveats below).
+ *
+ * Caveats:
+ *   - `process` is a global, so `process.env` / `process.exit` /
+ *     etc. don't go through require() at all. We scrub process.env
+ *     separately at worker boot; process.exit is left alone because
+ *     the worker terminating kills only its own thread, not the
+ *     parent process.
+ *   - Transitive requires from INSTALLED dependencies (tools with
+ *     an npm package dependency) use the worker's native require,
+ *     not this sandboxRequire. So a dependency that requires `http`
+ *     internally will still load `http`. The allowlist only gates
+ *     direct user-written `require('foo')` calls — this is deliberate,
+ *     because installed deps are trusted by the tool author and
+ *     most legitimate HTTP tools need their SDK to reach the network.
+ *   - Globals like `fetch` (Node 18+) and `URL` / `Buffer` are
+ *     always reachable without require(). The allowlist does not
+ *     stop them, and doesn't try to.
  */
-const BLOCKED_MODULES = new Set([
-  'child_process',
-  'cluster',
-  'dgram',
-  'dns',
-  'net',
-  'tls',
-  'vm',
-  'worker_threads',
-  'v8',
-  'perf_hooks',
-  'trace_events',
-  'inspector',
-  'repl',
-  'fs',
-  'fs/promises',
-  'node:fs',
-  'node:fs/promises',
-  'http',
-  'https',
-  'http2',
-  'node:http',
-  'node:https',
-  'node:http2',
-  'node:net',
-  'node:tls',
-  'node:dgram',
-  'node:dns',
-  'node:child_process',
-  'node:cluster',
-  'node:worker_threads',
-  'node:vm',
-  'node:v8',
-  'node:perf_hooks',
-  'node:trace_events',
-  'node:inspector',
-  'os',
-  'node:os',
-  'module',
-  'node:module',
+const ALLOWED_MODULES = new Set([
+  'crypto',
+  'node:crypto',
+  'buffer',
+  'node:buffer',
+  'util',
+  'node:util',
+  'url',
+  'node:url',
+  'querystring',
+  'node:querystring',
+  'string_decoder',
+  'node:string_decoder',
+  'punycode',
+  'node:punycode',
+  'events',
+  'node:events',
+  'stream',
+  'node:stream',
+  'stream/web',
+  'node:stream/web',
+  'stream/promises',
+  'node:stream/promises',
+  'timers',
+  'node:timers',
+  'timers/promises',
+  'node:timers/promises',
+  'zlib',
+  'node:zlib',
+  'assert',
+  'node:assert',
+  'path',
+  'node:path',
+  'async_hooks',
+  'node:async_hooks',
 ]);
 
 async function run() {
@@ -108,17 +110,18 @@ async function run() {
   }
 
   // Build a custom require that:
-  // 1) blocks dangerous built-in modules
-  // 2) resolves packages from the installed module paths
+  //   1) prefers installed dependencies (from the provided module
+  //      paths) so a tool's declared npm deps resolve correctly
+  //   2) falls back to the allowlist of built-ins for everything
+  //      that didn't resolve as a dep
+  //   3) refuses any built-in that isn't on the allowlist
   const originalRequire = createRequire(__filename);
 
   const sandboxRequire = (id: string) => {
-    // Block dangerous modules
-    if (BLOCKED_MODULES.has(id)) {
-      throw new Error(`Module "${id}" is not allowed in the sandbox`);
-    }
-
-    // First, try resolving from each module path (installed dependencies)
+    // First, try resolving from each module path (installed
+    // dependencies). These are trusted by the tool author and may
+    // legitimately include libraries that transitively require
+    // builtins we'd otherwise block.
     for (const mp of modulePaths) {
       try {
         const depRequire = createRequire(
@@ -131,7 +134,20 @@ async function run() {
       }
     }
 
-    // Fall back to the worker's own require (built-in modules like 'fs', 'path', 'crypto', etc.)
+    // Not an installed dep — must be a Node built-in. Refuse if
+    // it's not on the allowlist. This is the core of the
+    // denylist → allowlist flip: a built-in we didn't remember
+    // to add to the old blocklist now fails closed instead of
+    // falling through to originalRequire().
+    if (!ALLOWED_MODULES.has(id)) {
+      throw new Error(
+        `Module "${id}" is not allowed in the sandbox. Allowed built-ins: ${Array.from(
+          ALLOWED_MODULES,
+        )
+          .filter((m) => !m.startsWith('node:'))
+          .join(', ')}.`,
+      );
+    }
     return originalRequire(id);
   };
 

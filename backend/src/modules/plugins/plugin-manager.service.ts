@@ -4,6 +4,7 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import * as crypto from 'crypto';
 
 import {
   Plugin,
@@ -326,7 +327,16 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     pluginData: Omit<Plugin, 'id' | 'metadata'>,
     organizationId?: string,
   ): Promise<string> {
-    const pluginId = `plugin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Unguessable plugin id. The old shape was
+    // `plugin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    // — predictable timestamp prefix + non-cryptographic suffix. The
+    // manager keys several in-memory Maps (pluginModules,
+    // executionSemaphore, registry.byOrganization) by this id, so a
+    // guessable value let a caller who brute-forces the id collide
+    // with a real plugin's semaphore counter. Swap to
+    // crypto.randomBytes(16) for 128 bits of entropy, consistent with
+    // every other id in this codebase.
+    const pluginId = `plugin_${crypto.randomBytes(16).toString('hex')}`;
     
     const plugin: Plugin = {
       ...pluginData,
@@ -738,7 +748,10 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     organizationId?: string,
   ): Promise<void> {
     const event: PluginEvent = {
-      id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      // Event ids are written into Redis (plugin:events) and returned
+      // to dashboards as audit entries. Unguessable so a caller can't
+      // enumerate the recent-events feed by crafting id guesses.
+      id: `event_${crypto.randomBytes(16).toString('hex')}`,
       pluginId,
       type: type as any,
       message,
