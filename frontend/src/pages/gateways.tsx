@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
+import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -50,6 +51,8 @@ export function GatewaysPage() {
 
   const navigate = useNavigate()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  // Honour ?new=1 from the command palette Create Gateway action.
+  useCreateDeepLink(setCreateDialogOpen)
   const [deleteGatewayDialogOpen, setDeleteGatewayDialogOpen] = useState(false)
   const [gatewayToDelete, setGatewayToDelete] = useState<Gateway | null>(null)
   const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null)

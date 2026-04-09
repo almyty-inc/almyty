@@ -30,6 +30,7 @@ import { Progress } from '@/components/ui/progress'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
+import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SchemaImportDialog } from '@/components/SchemaImportDialog'
 
@@ -123,6 +124,8 @@ export function ApisPage() {
   const [editingApi, setEditingApi] = React.useState<Api | null>(null)
   const [deletingApi, setDeletingApi] = React.useState<Api | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
+  // Honour ?new=1 from the command palette Create API action.
+  useCreateDeepLink(setCreateDialogOpen)
   const [createStep, setCreateStep] = React.useState<'details' | 'schema'>('details')
   const [createdApiForSchema, setCreatedApiForSchema] = React.useState<Api | null>(null)
   const [uploadDialogOpen, setUploadDialogOpen] = React.useState(false)

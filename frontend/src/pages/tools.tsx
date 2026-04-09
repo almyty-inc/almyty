@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
+import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { Switch } from '@/components/ui/switch'
 import {
   Select,
@@ -142,6 +143,8 @@ export function ToolsPage() {
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false)
   const [isExecutionDialogOpen, setIsExecutionDialogOpen] = useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  // Honour ?new=1 from the command palette Create Tool action.
+  useCreateDeepLink(setIsCreateDialogOpen)
   const [executionParameters, setExecutionParameters] = useState<Record<string, any>>({})
   const [executionResult, setExecutionResult] = useState<any>(null)
   const [toolParameters, setToolParameters] = useState<any>({ type: 'object', properties: {} })
