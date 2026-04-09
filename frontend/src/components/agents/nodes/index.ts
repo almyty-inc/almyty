@@ -46,5 +46,5 @@ export const NODE_TYPE_CONFIG: Record<PipelineNodeType, { label: string; color: 
   transform: { label: 'Transform', color: 'bg-zinc-500', description: 'Transform data' },
   merge: { label: 'Merge', color: 'bg-teal-500', description: 'Merge parallel results' },
   parallel: { label: 'Parallel', color: 'bg-orange-500', description: 'Fan-out execution' },
-  sub_agent: { label: 'Sub-Agent', color: 'bg-indigo-500', description: 'Run another agent' },
+  sub_agent: { label: 'Sub-Agent', color: 'bg-violet-500', description: 'Run another agent' },
 }

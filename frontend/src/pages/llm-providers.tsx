@@ -42,6 +42,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
+import { useCopySensitive } from '@/lib/clipboard'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -757,6 +758,7 @@ export function LlmProvidersPage() {
 
   const queryClient = useQueryClient()
   const notifications = useNotifications()
+  const copySensitive = useCopySensitive()
 
   const { data: providersRaw, isLoading, isError, error, refetch: refetchProviders } = useQuery({
     queryKey: ['llm-providers'],
@@ -1064,8 +1066,7 @@ export function LlmProvidersPage() {
         {
           label: 'Copy API Key',
           onClick: (provider) => {
-            navigator.clipboard.writeText(provider.configuration.apiKey || '')
-            notifications.success('Copied', 'API key copied to clipboard')
+            copySensitive(provider.configuration.apiKey || '', 'API key')
           },
         },
         {

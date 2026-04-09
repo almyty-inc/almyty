@@ -663,7 +663,7 @@ export function AgentDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/agents')}>
+          <Button variant="ghost" size="icon" aria-label="Back to agents" onClick={() => navigate('/agents')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -1766,6 +1766,7 @@ console.log(r2.choices[0].message.content);`,
                               variant="ghost"
                               size="icon"
                               className="h-6 w-6 shrink-0"
+                              aria-label="Copy webhook URL"
                               onClick={() => { navigator.clipboard.writeText(webhookUrl); success('Copied', 'Webhook URL copied to clipboard.') }}
                             >
                               <Copy className="h-3 w-3" />
@@ -1782,6 +1783,7 @@ console.log(r2.choices[0].message.content);`,
                               variant="ghost"
                               size="icon"
                               className="h-6 w-6 shrink-0"
+                              aria-label="Copy embed snippet"
                               onClick={() => { navigator.clipboard.writeText(embedSnippet); success('Copied', 'Embed snippet copied to clipboard.') }}
                             >
                               <Copy className="h-3 w-3" />

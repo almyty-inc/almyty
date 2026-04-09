@@ -67,7 +67,7 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
           <div className={`w-2.5 h-2.5 rounded-full ${config?.color || 'bg-zinc-500'}`} />
           <span className="text-sm font-semibold">{config?.label || nodeType}</span>
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+        <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Close node configuration" onClick={onClose}>
           <X className="h-4 w-4" />
         </Button>
       </div>
@@ -558,7 +558,7 @@ function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; update
                 value={p.value}
                 onChange={(e) => updateParam(i, 'value', e.target.value)}
               />
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeParam(i)}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Remove parameter" onClick={() => removeParam(i)}>
                 <X className="h-3 w-3" />
               </Button>
             </div>
@@ -912,7 +912,7 @@ function SubAgentConfig({ node, updateData }: { node: Node; updateData: UpdateDa
                 value={m.value}
                 onChange={(e) => updateMapping(i, 'value', e.target.value)}
               />
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeMapping(i)}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Remove mapping" onClick={() => removeMapping(i)}>
                 <X className="h-3 w-3" />
               </Button>
             </div>

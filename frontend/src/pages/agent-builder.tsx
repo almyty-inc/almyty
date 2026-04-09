@@ -571,7 +571,7 @@ export function AgentBuilderPage() {
       {/* Top Bar */}
       <div className="flex items-center justify-between px-2 sm:px-4 py-2 border-b bg-background shrink-0 sticky top-0 z-30">
         <div className="flex items-center gap-1 sm:gap-3 min-w-0">
-          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => navigate('/agents')}>
+          <Button variant="ghost" size="icon" className="shrink-0" aria-label="Back to agents" onClick={() => navigate('/agents')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <Input
@@ -605,6 +605,7 @@ export function AgentBuilderPage() {
             className="h-8 w-8"
             onClick={undo}
             disabled={!canUndo}
+            aria-label="Undo"
             title="Undo (Ctrl+Z)"
           >
             <Undo2 className="h-4 w-4" />
@@ -615,6 +616,7 @@ export function AgentBuilderPage() {
             className="h-8 w-8"
             onClick={redo}
             disabled={!canRedo}
+            aria-label="Redo"
             title="Redo (Ctrl+Shift+Z)"
           >
             <Redo2 className="h-4 w-4" />
@@ -1322,6 +1324,7 @@ export function AgentBuilderPage() {
             onClick={() => setShowMobilePalette(!showMobilePalette)}
             size="icon"
             className="rounded-full shadow-lg h-12 w-12"
+            aria-label={showMobilePalette ? 'Close node palette' : 'Open node palette'}
           >
             {showMobilePalette ? <X className="h-6 w-6" /> : <Plus className="h-6 w-6" />}
           </Button>
@@ -1388,7 +1391,7 @@ export function AgentBuilderPage() {
           )}>
             {/* Mobile overlay backdrop close button */}
             <div className="lg:hidden absolute top-2 right-2 z-10">
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedNode(null)}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Close node configuration" onClick={() => setSelectedNode(null)}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -1409,7 +1412,7 @@ export function AgentBuilderPage() {
         <div className="border-t bg-muted/30 shrink-0">
           <div className="flex items-center justify-between px-4 py-2 border-b">
             <span className="text-sm font-semibold">Test Agent</span>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowTestPanel(false)}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Close test panel" onClick={() => setShowTestPanel(false)}>
               <X className="h-4 w-4" />
             </Button>
           </div>
