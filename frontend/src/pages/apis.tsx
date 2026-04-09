@@ -209,13 +209,10 @@ export function ApisPage() {
 
       // If response contains jobId, poll for completion
       if (importResult?.jobId) {
-        console.log('[UI] Got jobId, starting polling:', importResult.jobId)
         try {
-          const result = await apisApi.pollImportStatus(id, importResult.jobId)
-          console.log('[UI] Polling completed, result:', result)
-          return result
+          return await apisApi.pollImportStatus(id, importResult.jobId)
         } catch (pollError) {
-          console.error('[UI] Polling failed:', pollError)
+          console.error('Schema import polling failed:', pollError)
           throw pollError
         }
       }
