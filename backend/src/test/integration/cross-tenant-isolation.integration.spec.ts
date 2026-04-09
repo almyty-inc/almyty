@@ -78,6 +78,12 @@ interface TwoOrgFixture {
 }
 
 async function setupTwoOrgFixture(): Promise<TwoOrgFixture> {
+  // Each integration spec uses its own Postgres schema so that
+  // parallel Jest workers running different DB specs at the same
+  // time don't step on each other's table creation / drop cycles.
+  // `dropSchema: true` + `schema: 'cross_tenant_test'` means
+  // TypeORM drops only that schema (not public), then synchronizes
+  // all our entities into it.
   const ds = new DataSource({
     type: 'postgres',
     host: process.env.DATABASE_HOST || '127.0.0.1',
@@ -85,6 +91,7 @@ async function setupTwoOrgFixture(): Promise<TwoOrgFixture> {
     username: process.env.DATABASE_USERNAME || 'postgres',
     password: process.env.DATABASE_PASSWORD || '',
     database: process.env.DATABASE_NAME || 'almyty_test',
+    schema: 'cross_tenant_test',
     synchronize: true,
     dropSchema: true,
     entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
