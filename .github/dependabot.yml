@@ -1,0 +1,118 @@
+# Dependabot configuration for continuous dependency patching.
+#
+# Opens automated PRs against the default branch whenever a new
+# version of a tracked dependency is published. Combined with the
+# `npm audit` + Trivy jobs in .github/workflows/ci.yml, this is
+# the other half of a working dependency-hygiene story: CI catches
+# KNOWN vulnerable versions on every PR, and Dependabot keeps
+# proposing the patches that make CI pass.
+#
+# Scope:
+#
+#   - backend + frontend + docs-site: npm ecosystem, weekly cadence
+#     (frequent enough that a critical advisory lands within days,
+#     rare enough that we don't spam the PR queue with patch bumps)
+#
+#   - .github/workflows: GitHub Actions versions — trivial surface
+#     but the `@v3` / `@v4` pins rot and block on deprecation notices
+#
+#   - docker: the Dockerfile FROM lines for backend / frontend /
+#     docs-site. Base image updates (Alpine CVEs, Node security
+#     releases) otherwise get noticed only when someone manually
+#     runs Trivy against a deploy months later.
+#
+# Opens max 5 PRs per ecosystem at a time so a lock-file regen burst
+# doesn't overwhelm review. Groups minor+patch bumps into a single
+# PR per ecosystem — security advisories and major bumps come as
+# individual PRs so they can be reviewed independently.
+version: 2
+updates:
+  # ── Backend (NestJS API) ────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "backend"
+    groups:
+      backend-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── Frontend (React/Vite) ───────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "frontend"
+    groups:
+      frontend-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── Docs site (Nextra) ──────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/docs-site"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docs"
+    groups:
+      docs-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── GitHub Actions workflow pins ────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+
+  # ── Dockerfiles ─────────────────────────────────────────────
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/docs-site"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
