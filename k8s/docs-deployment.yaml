@@ -18,11 +18,43 @@ spec:
     spec:
       imagePullSecrets:
       - name: ghcr-secret
+      # The docs image is built on node:24-alpine and runs as the
+      # pre-existing `node` user at uid 1000 (see docs-site/Dockerfile).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: docs
         image: ghcr.io/frane/almyty/docs:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 3000
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
         resources:
           requests:
             cpu: 100m
@@ -30,6 +62,10 @@ spec:
           limits:
             cpu: 500m
             memory: 256Mi
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service

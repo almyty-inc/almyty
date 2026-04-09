@@ -19,17 +19,24 @@ export class HealthController {
   ) {}
 
   /**
-   * Full health check — DB + Redis + memory
-   * Used by: monitoring dashboards, external health checks
+   * Minimal public health endpoint. Returns `{status: "ok"}` on
+   * a 200 — no component breakdown, no dependency detail, no
+   * error-payload leak. External dashboards and uptime checkers
+   * that just need a "is it alive" signal use this; anything
+   * that needs actual diagnostics should use the token-gated
+   * /monitoring/health/details endpoint.
+   *
+   * Previously this returned the full Terminus check result
+   * (DB + Redis + memory), which on failure serialised the
+   * underlying connection error string — including the database
+   * hostname, port, and sometimes a fragment of the connection
+   * string. Anyone on the internet could poll it during a
+   * deploy to enumerate the platform's dependencies. The new
+   * shape hands out nothing beyond "alive".
    */
   @Get()
-  @HealthCheck()
   check() {
-    return this.health.check([
-      () => this.db.pingCheck('database'),
-      () => this.healthService.isRedisHealthy('redis'),
-      () => this.memory.checkHeap('memory_heap', 300 * 1024 * 1024), // 300MB
-    ]);
+    return { status: 'ok' };
   }
 
   /**

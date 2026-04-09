@@ -30,9 +30,35 @@ spec:
       labels:
         app: postgres
     spec:
+      # Pod-level security context. The postgres:16-alpine image
+      # expects its data dir to be owned by uid 70 (the `postgres`
+      # system user). Starting the container already as uid 70 +
+      # fsGroup: 70 lets Kubernetes chown the PVC mount to that uid
+      # BEFORE the container starts, so the postgres entrypoint
+      # doesn't need root privileges for its initial chown step.
+      # `runAsNonRoot: true` is the hard guarantee that no part of
+      # this pod ever runs as root.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:16-alpine
+        # Container-level hardening. readOnlyRootFilesystem is left
+        # OFF here because postgres writes to a number of paths
+        # outside the PVC (notably /var/run/postgresql and /tmp);
+        # the PVC on /var/lib/postgresql/data is writable by
+        # design. The other primitives (drop-all-capabilities,
+        # no-priv-escalation, seccomp default) are safe to enable.
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 5432
           name: postgres

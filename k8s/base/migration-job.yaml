@@ -13,10 +13,28 @@ spec:
       restartPolicy: Never
       imagePullSecrets:
         - name: ghcr-secret
+      # Same hardening baseline as the api deployment. The migration
+      # job uses the same image and the same `nestjs` user (uid 1001).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: migration
           image: ghcr.io/frane/almyty/api:latest
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+              - ALL
+          volumeMounts:
+          - name: tmp
+            mountPath: /tmp
           command: ["./node_modules/.bin/typeorm", "migration:run", "-d", "dist/config/database.config.js"]
           env:
             - name: NODE_ENV
@@ -51,3 +69,7 @@ spec:
                 configMapKeyRef:
                   name: almyty-config
                   key: DB_SSL
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 256Mi
