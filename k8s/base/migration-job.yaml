@@ -69,6 +69,15 @@ spec:
                 configMapKeyRef:
                   name: almyty-config
                   key: DB_SSL
+            # Credential encryption key — the migration path
+            # reads/writes Credential rows during
+            # CredentialSystemUpgrade (1744100000000). Same
+            # required-in-production contract as the api pod.
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: almyty-secrets
+                  key: ENCRYPTION_KEY
       volumes:
       - name: tmp
         emptyDir:
