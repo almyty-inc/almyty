@@ -18,6 +18,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:db": "RUN_DB_INTEGRATION=1 jest src/test/integration",
     "test:e2e:staging": "npx tsx test/e2e/agent-runtime.e2e.ts",
     "typeorm": "typeorm-ts-node-commonjs",
     "typeorm:migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/config/database.config.ts",
