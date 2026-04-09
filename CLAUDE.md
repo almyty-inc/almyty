@@ -86,7 +86,7 @@ packages/
 - **Agent node types** (10): `input`, `output`, `llm_call`, `tool_call`, `condition`, `transform`, `loop`, `parallel`, `merge`, `sub_agent`
 - **Gateway types**: MCP, A2A, UTCP, Skills
 - **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed via worker_threads), GraphQL, LLM
-- **Backend tests**: 130 spec files, 4,098 passing. Real-integration specs live in `src/test/integration/` and require `RUN_DB_INTEGRATION=1` for the two DB-gated ones (`bump-stats`, `cross-tenant-isolation`). Marketing number ("4,000+ tests") lives in README.md — keep the two in sync when it changes.
+- **Backend tests**: 130 spec files, 4,108 passing on NestJS 11 + Node 24. Real-integration specs live in `src/test/integration/` and require `RUN_DB_INTEGRATION=1` for the two DB-gated ones (`bump-stats`, `cross-tenant-isolation`). Marketing number ("4,000+ tests") lives in README.md — keep the two in sync when it changes.
 - **Agent Skills**: Compliant with https://agentskills.io spec
 
 ---
