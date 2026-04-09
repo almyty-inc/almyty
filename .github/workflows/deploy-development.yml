@@ -2,7 +2,7 @@ name: Deploy to Development
 
 on:
   push:
-    branches: [develop]
+    branches: [master]
   workflow_dispatch:
 
 env:
@@ -84,6 +84,25 @@ jobs:
             --docker-server=ghcr.io \
             --docker-username=${{ github.actor }} \
             --docker-password=${{ secrets.GHCR_PAT }} \
+            --namespace=almyty-dev \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create application secrets
+        # Dev shares the staging Postgres + Redis credentials
+        # (same DO managed cluster, same `doadmin` user) but
+        # uses its own database name (`almyty_dev`) and its own
+        # ENCRYPTION_KEY so credential rows are isolated from
+        # staging at the application layer.
+        run: |
+          kubectl create secret generic almyty-secrets \
+            --from-literal=DATABASE_USERNAME=${{ secrets.STAGING_DATABASE_USERNAME }} \
+            --from-literal=DATABASE_PASSWORD=${{ secrets.STAGING_DATABASE_PASSWORD }} \
+            --from-literal=DATABASE_URL=${{ secrets.DEV_DATABASE_URL }} \
+            --from-literal=REDIS_PASSWORD="" \
+            --from-literal=REDIS_URL="redis://dev-almyty-redis:6379" \
+            --from-literal=JWT_SECRET=${{ secrets.STAGING_JWT_SECRET }} \
+            --from-literal=ENCRYPTION_KEY=${{ secrets.DEV_ENCRYPTION_KEY }} \
+            --from-literal=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
             --namespace=almyty-dev \
             --dry-run=client -o yaml | kubectl apply -f -
 
