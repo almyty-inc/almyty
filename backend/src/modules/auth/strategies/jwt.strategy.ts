@@ -36,6 +36,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       secretOrKey:
         configService.get<string>('JWT_SECRET') ||
         'dev-only-jwt-secret-change-me-in-production',
+      // Enforce the iss + aud claims set by JwtModule.signOptions
+      // (see auth.module.ts). passport-jwt configures these as
+      // strings, not verifyOptions — if they're missing or wrong,
+      // verification fails with "jwt issuer invalid" / "jwt
+      // audience invalid" and the request is 401'd. Prevents
+      // cross-service token replay if JWT_SECRET is ever shared.
+      issuer: 'almyty',
+      audience: 'almyty-api',
       passReqToCallback: true,
     });
   }

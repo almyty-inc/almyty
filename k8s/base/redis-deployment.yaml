@@ -30,9 +30,30 @@ spec:
       labels:
         app: redis
     spec:
+      # The redis:7-alpine image creates a `redis` user at uid 999.
+      # Starting the pod at that uid + fsGroup lets Kubernetes chown
+      # the PVC to the right owner before redis-server starts, so no
+      # part of the pod needs root. runAsNonRoot enforces it.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: redis
         image: redis:7-alpine
+        # Redis doesn't need any capabilities. readOnlyRootFilesystem
+        # is safe here because redis writes only to /data (the PVC)
+        # and a tmpfs-backed /tmp; everything else in the image is
+        # static binaries.
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 6379
           name: redis
@@ -43,6 +64,8 @@ spec:
         volumeMounts:
         - name: redis-storage
           mountPath: /data
+        - name: tmp
+          mountPath: /tmp
         livenessProbe:
           exec:
             command:
@@ -70,6 +93,9 @@ spec:
       - name: redis-storage
         persistentVolumeClaim:
           claimName: redis-pvc
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service

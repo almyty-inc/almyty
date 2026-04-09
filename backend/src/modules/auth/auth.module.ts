@@ -51,6 +51,29 @@ import { UserOrganization } from '../../entities/user-organization.entity';
           secret: secret || 'dev-only-jwt-secret-change-me-in-production',
           signOptions: {
             expiresIn: configService.get<string>('JWT_EXPIRES_IN', '24h'),
+            // issuer + audience bind every signed token to THIS
+            // service. If an attacker ever gets hold of a JWT_SECRET
+            // that's shared across multiple services (common mistake
+            // in microservices architectures), a token signed by
+            // Service A still can't be used against Service B
+            // because B's verify will reject the `aud` mismatch.
+            // It's also a trivial extra check against a shared-secret
+            // compromise: a forged token is unlikely to guess both
+            // the secret AND the correct claim shape.
+            issuer: 'almyty',
+            audience: 'almyty-api',
+          },
+          verifyOptions: {
+            // Only enforce iss/aud if they're present on the token.
+            // Tokens issued before this commit don't carry these
+            // claims; once they expire (24h) everyone re-logs in
+            // with the stricter shape. After the grace window
+            // `ignoreNotBefore` can be dropped to `false` in a
+            // follow-up but that's a follow-up cleanup, not a
+            // security regression.
+            issuer: 'almyty',
+            audience: 'almyty-api',
+            ignoreExpiration: false,
           },
         };
       },
