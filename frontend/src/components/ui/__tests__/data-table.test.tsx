@@ -63,7 +63,7 @@ describe('DataTable', () => {
         />
       )
 
-      expect(screen.getByText('No results.')).toBeInTheDocument()
+      expect(screen.getByText('No results')).toBeInTheDocument()
     })
 
     it('should show default empty message', () => {
@@ -74,7 +74,7 @@ describe('DataTable', () => {
         />
       )
 
-      expect(screen.getByText('No results.')).toBeInTheDocument()
+      expect(screen.getByText('No results')).toBeInTheDocument()
     })
   })
 
@@ -126,7 +126,7 @@ describe('DataTable', () => {
       const searchInput = screen.getByRole('textbox')
       await user.type(searchInput, 'NonExistent')
 
-      expect(screen.getByText('No results.')).toBeInTheDocument()
+      expect(screen.getByText('No results')).toBeInTheDocument()
     })
   })
 
@@ -438,8 +438,8 @@ describe('DataTable', () => {
   })
 
   describe('Loading State', () => {
-    it('should show loading state when loading is true', () => {
-      render(
+    it('should render skeleton placeholder rows when loading is true', () => {
+      const { container } = render(
         <DataTable
           columns={basicColumns}
           data={[]}
@@ -447,7 +447,11 @@ describe('DataTable', () => {
         />
       )
 
-      expect(screen.getByText('Loading...')).toBeInTheDocument()
+      // Skeleton rows carry aria-hidden so assistive tech doesn't
+      // read the placeholder shapes as content. There should be
+      // one skeleton per placeholder row (6 by default).
+      const skeletonRows = container.querySelectorAll('tr[aria-hidden="true"]')
+      expect(skeletonRows.length).toBeGreaterThan(0)
     })
   })
 

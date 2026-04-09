@@ -167,8 +167,13 @@ describe('GatewaysPage', () => {
       renderGatewaysPage()
 
       await waitFor(() => {
-        expect(screen.getByText('No gateways found')).toBeInTheDocument()
-        expect(screen.getByText('Create First Gateway')).toBeInTheDocument()
+        // New shared <EmptyState/> primitive: "No gateways yet"
+        // headline + a "Create Gateway" CTA in the action slot.
+        expect(screen.getByText('No gateways yet')).toBeInTheDocument()
+        // Multiple "Create Gateway" buttons can exist on the page
+        // (one in the header, one in the empty state) — just
+        // assert at least one is present.
+        expect(screen.getAllByRole('button', { name: /Create Gateway/i }).length).toBeGreaterThan(0)
       })
     })
   })

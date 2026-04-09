@@ -39,6 +39,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -753,7 +755,7 @@ export function LlmProvidersPage() {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
 
-  const { data: providersRaw, isLoading, error } = useQuery({
+  const { data: providersRaw, isLoading, isError, error, refetch: refetchProviders } = useQuery({
     queryKey: ['llm-providers'],
     queryFn: async () => {
       try {
@@ -1100,27 +1102,24 @@ export function LlmProvidersPage() {
       </div>
 
       {/* Providers Table or Empty State */}
-      {isLoading ? (
-        <div className="flex items-center justify-center h-96">
-          <LoadingSpinner size="lg" />
-        </div>
-      ) : providers.length === 0 ? (
-        <Card className="p-12">
-          <div className="text-center space-y-4">
-            <div className="flex justify-center">
-              <Server className="h-16 w-16 text-muted-foreground" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold">No AI Models Configured</h3>
-              <p className="text-muted-foreground mt-2">
-                Connect your first AI model provider — OpenAI, Anthropic, Mistral, or any of 14 supported providers
-              </p>
-            </div>
-            <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add First Provider
-            </Button>
-          </div>
+      {isError ? (
+        <QueryError error={error} onRetry={() => refetchProviders()} title="Couldn't load providers" />
+      ) : !isLoading && providers.length === 0 ? (
+        <Card>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={Brain}
+              title="No models configured"
+              description="Connect OpenAI, Anthropic, Google, Mistral, xAI, Groq, OpenRouter, Azure, AWS Bedrock, or any of 14 supported providers. Agents and LLM tools need at least one model to call."
+              action={
+                <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Provider
+                </Button>
+              }
+              className="py-16"
+            />
+          </CardContent>
         </Card>
       ) : (
         <Card>

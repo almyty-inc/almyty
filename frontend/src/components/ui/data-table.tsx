@@ -33,6 +33,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Skeleton } from "@/components/ui/skeleton"
+import { EmptyState } from "@/components/ui/empty-state"
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -45,6 +47,10 @@ interface DataTableProps<TData, TValue> {
   hideColumnsButton?: boolean
   headerExtra?: React.ReactNode
   hidePaginationWhenSinglePage?: boolean
+  /** Optional custom empty-state block. Falls back to a generic
+   * "No results." row if not provided. Pass an <EmptyState />
+   * for the standard iconed layout. */
+  emptyState?: React.ReactNode
   /** Enable server-side pagination. When true, pagination is managed externally. */
   manualPagination?: boolean
   /** Total page count (required when manualPagination is true) */
@@ -68,6 +74,7 @@ export function DataTable<TData, TValue>({
   hideColumnsButton = false,
   headerExtra,
   hidePaginationWhenSinglePage = true,
+  emptyState,
   manualPagination = false,
   pageCount,
   pageIndex,
@@ -186,14 +193,21 @@ export function DataTable<TData, TValue>({
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  Loading...
-                </TableCell>
-              </TableRow>
+              // 6 skeleton rows mirroring the column count —
+              // approximates the page shape so the layout
+              // doesn't shift when real data arrives. `aria-hidden`
+              // inside the Skeleton component keeps screen readers
+              // quiet; the table landmark still announces it's
+              // busy via the DataTable wrapper.
+              Array.from({ length: 6 }).map((_, rowIdx) => (
+                <TableRow key={`skeleton-${rowIdx}`} aria-hidden="true">
+                  {columns.map((_col, colIdx) => (
+                    <TableCell key={colIdx}>
+                      <Skeleton className="h-4 w-full max-w-[160px]" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
             ) : table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
@@ -222,9 +236,15 @@ export function DataTable<TData, TValue>({
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
-                  className="h-24 text-center"
+                  className="p-0"
                 >
-                  No results.
+                  {emptyState ?? (
+                    <EmptyState
+                      title="No results"
+                      description="Nothing matches your current filters."
+                      className="py-10"
+                    />
+                  )}
                 </TableCell>
               </TableRow>
             )}

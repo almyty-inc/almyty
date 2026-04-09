@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
   Dialog,
   DialogContent,
@@ -526,23 +527,30 @@ export function MemoriesPage() {
             pageIndex={page - 1}
             onPageChange={(idx) => setPage(idx + 1)}
             pageSize={pageSize}
+            emptyState={
+              <EmptyState
+                icon={Brain}
+                title={
+                  searchText || typeFilter !== 'all' || scopeFilter !== 'all' || tagFilter !== 'all'
+                    ? 'No memories match your filters'
+                    : 'No memories yet'
+                }
+                description={
+                  searchText || typeFilter !== 'all' || scopeFilter !== 'all' || tagFilter !== 'all'
+                    ? 'Try clearing the filters or searching for a different term.'
+                    : 'Memories give agents persistent knowledge — facts, preferences, instructions, conversation history. Create your first memory to start.'
+                }
+                action={
+                  !(searchText || typeFilter !== 'all' || scopeFilter !== 'all' || tagFilter !== 'all') && (
+                    <Button onClick={openCreate}>
+                      <Plus className="h-4 w-4 mr-1" /> Add Memory
+                    </Button>
+                  )
+                }
+                className="py-12"
+              />
+            }
           />
-          {!isLoading && !isSearching && memories.length === 0 && (
-            <div className="text-center py-12">
-              <Brain className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
-              <h3 className="text-lg font-medium mb-1">No memories yet</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                {searchText || typeFilter !== 'all' || scopeFilter !== 'all' || tagFilter !== 'all'
-                  ? 'No memories match your filters. Try adjusting your search.'
-                  : 'Create your first memory to give agents persistent knowledge.'}
-              </p>
-              {!searchText && typeFilter === 'all' && scopeFilter === 'all' && tagFilter === 'all' && (
-                <Button onClick={openCreate}>
-                  <Plus className="h-4 w-4 mr-1" /> Add Memory
-                </Button>
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
 
