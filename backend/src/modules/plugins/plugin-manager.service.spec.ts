@@ -95,7 +95,10 @@ describe('PluginManagerService - Real Business Logic', () => {
     it('should register a global plugin successfully', async () => {
       const pluginId = await service.registerPlugin(mockPlugin);
 
-      expect(pluginId).toMatch(/^plugin_\d+_[a-z0-9]+$/);
+      // Id shape: `plugin_<32 hex chars>` — crypto.randomBytes(16).
+      // The previous shape mixed Date.now() with a base-36 Math.random
+      // suffix and was enumerable across tenants.
+      expect(pluginId).toMatch(/^plugin_[a-f0-9]{32}$/);
       expect(mockRedis.setex).toHaveBeenCalledWith(
         `plugin:${pluginId}`,
         86400,
