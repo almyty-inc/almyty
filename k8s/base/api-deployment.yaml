@@ -24,10 +24,39 @@ spec:
     spec:
       imagePullSecrets:
       - name: ghcr-secret
+      # Pod-level security context. Forces every container in this
+      # pod to run as a non-root user regardless of what the image
+      # says, drops every Linux capability, and applies the default
+      # seccomp profile. Matches the Kubernetes Pod Security
+      # Standard "restricted" level — the baseline every production
+      # workload should meet. Without these fields a compromised
+      # container would run as root inside its PID namespace and
+      # could exploit kernel bugs to escape to the host.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: api
         image: ghcr.io/frane/almyty/api:latest
         imagePullPolicy: Always
+        # Container-level hardening — tighter than the pod-level
+        # defaults above. readOnlyRootFilesystem means the container
+        # can't modify its own image layer at runtime (plant a
+        # binary, rewrite configs, add a cron), which is the
+        # typical first step of an RCE chain. Writable paths the
+        # app actually needs (/tmp for jest/worker tmp files, and
+        # /app/node_modules/.cache if present) are exposed via
+        # emptyDir volumes below.
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 3000
           name: http
@@ -155,6 +184,37 @@ spec:
             configMapKeyRef:
               name: almyty-config
               key: CORS_ORIGIN
+        # Platform operator bearer token for the /monitoring/metrics
+        # + /monitoring/metrics/history + /monitoring/metrics/prometheus
+        # endpoints. Without this env var set, those endpoints
+        # fail-closed and return 401 on every request (that's the
+        # intentional default). Configure Prometheus scrapers with
+        # `authorization: Bearer <PLATFORM_METRICS_TOKEN>`.
+        - name: PLATFORM_METRICS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: PLATFORM_METRICS_TOKEN
+              optional: true
+        # CORS allowlist env var — the new CORS config in main.ts
+        # replaces the old `origin: true` wildcard with a concrete
+        # allowlist derived from these fields. CORS_ALLOWED_ORIGINS
+        # is optional (extra explicit entries) and FRONTEND_URL is
+        # always included.
+        - name: CORS_ALLOWED_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: almyty-config
+              key: CORS_ALLOWED_ORIGINS
+              optional: true
+        # Writable tmp dir for the sandbox workers, dependency
+        # cache, etc. — readOnlyRootFilesystem above denies every
+        # other write. Mounted as an emptyDir so it's tied to the
+        # pod lifetime and disappears on restart (no cross-request
+        # state leaks).
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         livenessProbe:
           httpGet:
             path: /health/live
@@ -178,9 +238,32 @@ spec:
           limits:
             memory: "2Gi"
             cpu: "1000m"
+      # emptyDir tmp volume — see the volumeMounts above for why.
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
       initContainers:
       - name: wait-for-postgres
         image: postgres:16-alpine
+        # Resource limits on init containers too — without these, a
+        # hung init container can consume unbounded CPU/memory while
+        # blocking the main container from starting.
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
         env:
         - name: DATABASE_HOST
           valueFrom:
@@ -202,6 +285,21 @@ spec:
           done
       - name: wait-for-redis
         image: redis:7-alpine
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
         env:
         - name: REDIS_HOST
           valueFrom:

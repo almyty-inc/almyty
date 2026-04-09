@@ -1,0 +1,115 @@
+# NetworkPolicy for the backend API pod.
+#
+# Default-deny the pod's ingress + egress, then allow only the
+# traffic that's actually needed:
+#
+#   Ingress:
+#     - From the frontend pod (for the web UI)
+#     - From the nginx-ingress-controller (for public gateway
+#       traffic on /mcp, /a2a, /utcp, /:orgSlug/:gateway)
+#     - From inside the almyty namespace (for health checks,
+#       cluster-local tooling)
+#
+#   Egress:
+#     - Postgres + Redis (almyty namespace, TCP 5432 / 6379)
+#     - DNS (kube-system, UDP 53 + TCP 53)
+#     - HTTPS to anywhere (OpenAI / Anthropic / user-configured
+#       API targets + npm registry for the sandbox install path).
+#       The backend's url-validator refuses RFC1918 / loopback /
+#       metadata targets at the application layer; this network
+#       policy closes the defence-in-depth gap for *host*-level
+#       compromise (a sandbox escape that bypasses the net-guard).
+#
+# Without this policy, any pod in the cluster can reach the API
+# pod on 3000 and any pod the API compromises can reach every
+# other pod in the cluster. That's the default Kubernetes posture
+# and it's not suitable for a multi-tenant platform.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-network-policy
+  namespace: almyty
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Frontend pod → API
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+    ports:
+    - protocol: TCP
+      port: 3000
+  # Ingress controller → API (nginx-ingress typically lives in
+  # ingress-nginx namespace; adjust the selector if your cluster
+  # uses a different ingress class).
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+  # Same-namespace traffic (health checks, cron, etc.)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: almyty
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  # DNS
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Postgres (in-namespace)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Redis (in-namespace)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Outbound HTTPS to the public internet (LLM providers,
+  # customer API targets, npm registry). No egress to internal
+  # CIDRs at the network layer — the backend's url-validator
+  # blocks those at the application layer, and the sandbox
+  # net-guard closes the defence-in-depth gap inside the
+  # JavaScript runtime. If you need tighter control (deny all
+  # non-approved external hosts), add an egress gateway in front
+  # of this pod.
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+        - 169.254.0.0/16
+        - 127.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80

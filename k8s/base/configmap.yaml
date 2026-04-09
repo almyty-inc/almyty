@@ -28,8 +28,15 @@ data:
   # JWT Configuration
   JWT_EXPIRES_IN: "24h"
 
-  # CORS
+  # CORS — primary frontend origin. The backend's main.ts
+  # allowlist is built from FRONTEND_URL (wired from CORS_ORIGIN
+  # below) + the optional CORS_ALLOWED_ORIGINS comma-separated
+  # extras. `origin: true` is no longer used — any request from
+  # an origin not in this allowlist is refused at the CORS layer
+  # (closes the wildcard-with-credentials finding from the
+  # backend audit).
   CORS_ORIGIN: "https://app.almyty.com"
+  CORS_ALLOWED_ORIGINS: "https://app.almyty.com"
 
   # Base URL (used by MCP discovery, CLI exports, protocol endpoints)
   BASE_URL: "https://api.almyty.com"
