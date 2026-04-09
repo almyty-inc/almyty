@@ -14,6 +14,10 @@ const ToastViewport = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ToastPrimitive.Viewport
     ref={ref}
+    // Radix renders the viewport as a landmark region. Give it a
+    // descriptive label so assistive tech can identify it when
+    // the user tabs into the toast stack (F6 on most readers).
+    label="Notifications"
     className={cn(
       "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
       className
@@ -47,11 +51,18 @@ const Toast = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof ToastPrimitive.Root> &
     VariantProps<typeof toastVariants>
 >(({ className, variant, ...props }, ref) => {
+  // Radix announces foreground toasts via aria-live="assertive"
+  // (interrupts the screen reader's current utterance) and
+  // background toasts via aria-live="polite" (waits for a pause).
+  // Errors + warnings should interrupt so the user stops mid-task;
+  // success + info should slot in politely.
+  const toastType: 'foreground' | 'background' =
+    variant === 'destructive' || variant === 'warning' ? 'foreground' : 'background'
   return (
     <ToastPrimitive.Root
       ref={ref}
       className={cn(toastVariants({ variant }), className)}
-      role="status"
+      type={toastType}
       {...props}
     />
   )

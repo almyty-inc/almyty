@@ -43,18 +43,27 @@ import { useOrganizationStore } from '@/store/organization'
 import { useAppStore, useNotifications } from '@/store/app'
 import { getInitials } from '@/lib/utils'
 import { CommandPalette } from '@/components/command-palette'
+import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
 }
 
+// Sidebar order follows the onboarding checklist on the
+// Dashboard (Connect API → Generate Tools → Create Gateway →
+// Build Agent) and the `docs/brand` IA rules — reading the
+// sidebar top-down tells a new user the same story the
+// onboarding flow tells them. Previously Agents was first,
+// which rewarded existing users who already knew they wanted
+// an agent but left newcomers wondering what to click first.
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  // Core workflow
-  { name: 'Agents', href: '/agents', icon: Bot },
-  { name: 'Gateways', href: '/gateways', icon: Zap },
-  { name: 'Tools', href: '/tools', icon: Wrench },
+  // Core workflow — follows the APIs → Tools → Gateways → Agents
+  // pipeline narrative.
   { name: 'APIs', href: '/apis', icon: Globe },
+  { name: 'Tools', href: '/tools', icon: Wrench },
+  { name: 'Gateways', href: '/gateways', icon: Zap },
+  { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'Credentials', href: '/credentials', icon: Key },
   // Configuration
   { name: 'divider', href: '', icon: null as any },
@@ -152,10 +161,23 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="h-screen flex overflow-hidden bg-muted">
+      {/* Skip to main content — keyboard users should be able to
+       * bypass the 14-item sidebar on every page. Hidden visually
+       * until it receives focus, then pops in at the top-left as
+       * a first-class link. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:rounded-md focus:border focus:border-primary focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
       {/* Global command palette — ⌘K / Ctrl+K toggle registered
        * inside the component. Mounted once at the layout root so
        * it's reachable from every authenticated page. */}
       <CommandPalette />
+      {/* Keyboard shortcuts help dialog — `?` key toggles it
+       * from anywhere outside of an editable field. */}
+      <KeyboardShortcutsDialog />
       {/* Sidebar */}
       <div
         className={cn(
@@ -358,7 +380,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 relative overflow-y-auto focus:outline-none">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          aria-label="Main content"
+          className="flex-1 relative overflow-y-auto focus:outline-none"
+        >
           <div className="py-6">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-8">
               {children}
