@@ -238,8 +238,14 @@ describe('GatewaysPage', () => {
       await user.type(screen.getByLabelText('Gateway Name'), 'New Test Gateway')
       expect(screen.getByLabelText('Gateway Name')).toHaveValue('New Test Gateway')
 
-      await user.type(screen.getByLabelText('Endpoint Path'), '/new-test')
-      expect(screen.getByLabelText('Endpoint Path')).toHaveValue('/new-test')
+      // The form auto-generates an endpoint slug from the gateway
+      // name (e.g., "New Test Gateway" → "/n"), so without
+      // clearing first user.type appends to the prefill and we
+      // end up with "/n/new-test". Clear then type.
+      const endpointField = screen.getByLabelText('Endpoint Path')
+      await user.clear(endpointField)
+      await user.type(endpointField, '/new-test')
+      expect(endpointField).toHaveValue('/new-test')
     })
   })
 

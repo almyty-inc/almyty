@@ -48,7 +48,7 @@
     "nestjs",
     "react"
   ],
-  "author": "frane",
+  "author": "frane <frane.bandov@gmail.com>",
   "license": "BSL-1.1",
   "devDependencies": {
     "concurrently": "^8.2.2",
