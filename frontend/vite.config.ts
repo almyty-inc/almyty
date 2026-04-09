@@ -88,6 +88,16 @@ export default defineConfig({
     host: '0.0.0.0',
     port: parseInt(process.env.PORT || '3000'),
   },
+  esbuild: {
+    // Tree-shake debug-level console calls out of production bundles.
+    // Marking them "pure" tells esbuild their return values are
+    // side-effect-free and can be dropped when unused (which they
+    // always are — console.log/debug/info return void).
+    //
+    // We deliberately keep console.warn and console.error alive so
+    // the browser dev tools still surface real problems in prod.
+    pure: ['console.log', 'console.debug', 'console.info', 'console.trace'],
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,
