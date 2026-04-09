@@ -52,6 +52,24 @@ paths = [
   # Lock files — npm resolved URLs can contain integrity hashes
   # that gitleaks' high-entropy check misclassifies as tokens.
   '''package-lock\.json''',
+
+  # Docs-site MDX content — every `authentication.mdx` page has
+  # example JWT + API-key strings like `eyJhbGciOiJIUzI1NiIs...`
+  # and `almyty_gw_abc123...` that are documentation placeholders
+  # showing the shape of real credentials. They're high-entropy
+  # by design so callers can see what a token looks like, but
+  # they're truncated ellipses — not actual secret material.
+  '''docs-site/content/.*\.mdx''',
+
+  # Nextra + Next.js build output. The MDX content above gets
+  # compiled into static JS chunks under `.next/`, and gitleaks
+  # with `--no-git` scans the working tree so it re-flags every
+  # example token a second time inside the bundled SSR output.
+  # The folder is gitignored and never committed; ignore it for
+  # the scan too.
+  '''docs-site/\.next/.*''',
+  '''frontend/dist/.*''',
+  '''backend/dist/.*''',
 ]
 
 regexes = [
