@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Agent } from '../../entities/agent.entity';
+import { ApiKey } from '../../entities/api-key.entity';
 
 import { UnifiedEndpointController } from './unified-endpoint.controller';
 import { GatewaysModule } from './gateways.module';
@@ -17,7 +18,7 @@ import { AgentsModule } from '../agents/agents.module';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Organization, Gateway, Agent]),
+    TypeOrmModule.forFeature([Organization, Gateway, Agent, ApiKey]),
     forwardRef(() => McpModule),
     forwardRef(() => AgentsModule),
     GatewaysModule,

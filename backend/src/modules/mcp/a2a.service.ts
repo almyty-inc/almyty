@@ -335,6 +335,21 @@ export class A2AService extends EventEmitter {
       return;
     }
 
+    // Revalidate the agent endpoint on every delivery — registerAgent
+    // already runs validateUrl, but the agents map is in-memory and a
+    // future mutation path (admin rewrite, restore from storage,
+    // cached config drift) would otherwise bypass the SSRF gate.
+    // Keep the check tight: refuse RFC1918, loopback, link-local,
+    // metadata IPs, and anything non-http(s).
+    const endpointValidation = validateUrl(toAgent.endpoint);
+    if (!endpointValidation.valid) {
+      this.logger.error(
+        `Refused to deliver message to agent ${toAgent.id}: endpoint no longer safe (${endpointValidation.error})`,
+      );
+      await this.updateAgentInternal(toAgent.id, { isActive: false });
+      return;
+    }
+
     try {
       // Build request based on agent type
       const requestConfig = await this.buildAgentRequest(toAgent, message);
@@ -550,6 +565,15 @@ export class A2AService extends EventEmitter {
 
       // Resolve tools for the next request
       const tools = await this.resolveToolsFromContext(originalMessage.context);
+
+      // Revalidate the agent endpoint before every follow-up —
+      // defence in depth against a stale/tampered in-memory entry.
+      const followupValidation = validateUrl(agent.endpoint);
+      if (!followupValidation.valid) {
+        throw new Error(
+          `Refused LLM follow-up: agent endpoint no longer safe (${followupValidation.error})`,
+        );
+      }
 
       // Build and send the next LLM request
       const nextConfig = this.buildLLMFollowUpRequest(agent, messages, tools);

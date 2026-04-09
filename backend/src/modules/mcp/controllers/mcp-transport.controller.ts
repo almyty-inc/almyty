@@ -160,31 +160,22 @@ export class McpTransportController {
     };
   }
 
-  // Health check for transports
+  // Health check for transports. Previously this was a public
+  // endpoint that dumped global connection counts (`sseStats.total`,
+  // `wsStats.total`, averageAge, process.uptime). Those are
+  // platform-wide reconnaissance data that regular tenants have
+  // no business reading. Strip the response to a minimal liveness
+  // shape so it can still answer a K8s probe without leaking
+  // operational metrics. The full stats live behind /transport/stats
+  // which is JWT-gated.
   @Get('/transport/health')
   async getTransportHealth(): Promise<any> {
-    const sseStats = this.sseTransport.getConnectionStats();
-    const wsStats = this.wsTransport.getConnectionStats();
-
     return {
       status: 'healthy',
       transports: {
-        sse: {
-          status: 'active',
-          connections: sseStats.total,
-          averageAge: sseStats.averageAge,
-        },
-        websocket: {
-          status: 'active',
-          connections: wsStats.total,
-          averageAge: wsStats.averageAge,
-        },
+        sse: { status: 'active' },
+        websocket: { status: 'active' },
       },
-      capabilities: {
-        sse: ['streaming', 'notifications', 'keepalive'],
-        websocket: ['bidirectional', 'streaming', 'subscriptions', 'heartbeat'],
-      },
-      uptime: process.uptime(),
     };
   }
 }
