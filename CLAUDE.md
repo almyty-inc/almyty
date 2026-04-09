@@ -26,7 +26,7 @@
 - **Port**: 3002 (dev), 8080 (production/nginx)
 
 ### Infrastructure
-- **Docker**: Multi-stage Dockerfiles (node:22-alpine, nginx:1.25-alpine)
+- **Docker**: Multi-stage Dockerfiles (node:24-alpine, nginx:1.25-alpine)
 - **Docker Compose**: postgres, redis, backend, frontend, nginx
 - **Kubernetes**: Kustomize base + 3 overlays (development, staging, production)
 - **CI/CD**: GitHub Actions (5 workflows)
