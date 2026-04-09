@@ -522,7 +522,7 @@ export function AgentBuilderPage() {
             strategy: agentCollaboration.strategy,
             agents: agentCollaboration.agents,
             sharedBrief: agentCollaboration.sharedBrief || undefined,
-            rules: agentCollaboration.rules && Object.values(agentCollaboration.rules).some(v => v !== undefined && v !== null && v !== '')
+            rules: agentCollaboration.rules && Object.values(agentCollaboration.rules).some(v => v !== undefined && v !== null)
               ? agentCollaboration.rules
               : undefined,
             judgeAgentId: agentCollaboration.judgeAgentId,

@@ -43,7 +43,14 @@ const createApiSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   description: z.string().optional(),
   type: z.nativeEnum(ApiType),
-  baseUrl: z.string().optional().default(''),
+  // NOT .optional() — `.default('')` already makes the input
+  // optional but produces a `string` output, which is what the
+  // form field and submit handler expect. Chaining `.optional()`
+  // on top confuses the `@hookform/resolvers/zod` v5 type inference
+  // into thinking the output is `string | undefined`, which then
+  // doesn't match `useForm<CreateApiFormData>` (where baseUrl is
+  // a plain `string`).
+  baseUrl: z.string().default(''),
   version: z.string().optional(),
   configuration: z.record(z.any()).optional(),
   authentication: z.object({
@@ -76,8 +83,17 @@ const importSchemaSchema = z.object({
   path: ["schemaContent"],
 })
 
-type CreateApiFormData = z.infer<typeof createApiSchema>
-type ImportSchemaFormData = z.infer<typeof importSchemaSchema>
+// Two separate types: `Input` is the shape the form BINDS to
+// (with optional defaults still unfilled); `Output` is the shape
+// the submit handler RECEIVES after zod has applied defaults +
+// refinements. `@hookform/resolvers/zod` v5 requires both to be
+// passed to `useForm<Input, Context, Output>` so the resolver's
+// generics line up — otherwise it complains that the inferred
+// input shape (with `baseUrl?: string`) doesn't match a form
+// whose submit handler wants `baseUrl: string`.
+type CreateApiFormInput = z.input<typeof createApiSchema>
+type CreateApiFormData = z.output<typeof createApiSchema>
+type ImportSchemaFormData = z.output<typeof importSchemaSchema>
 
 export function ApisPage() {
   React.useEffect(() => {
@@ -250,7 +266,7 @@ export function ApisPage() {
     },
   })
 
-  const createForm = useForm<CreateApiFormData>({
+  const createForm = useForm<CreateApiFormInput, any, CreateApiFormData>({
     resolver: zodResolver(createApiSchema),
     defaultValues: {
       type: ApiType.OPENAPI,

@@ -619,7 +619,7 @@ function collectParamProperties(
 ) {
   if (!val.properties || !param.type.properties) return
   for (const subParam of param.type.properties) {
-    const subVal = val.properties[subParam.name]
+    const subVal: ParamValue | undefined = val.properties[subParam.name]
     if (subVal?.source === 'parameter') {
       const name = subVal.paramName || `${param.name}_${subParam.name}`
       properties[name] = buildJsonSchemaForParam(subParam)
