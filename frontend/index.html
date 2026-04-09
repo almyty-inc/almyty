@@ -2,16 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Tell the browser we support both color schemes so native controls
-         (scrollbars, form elements, date pickers) match the active theme
-         before our CSS has had a chance to set the .dark class. -->
     <meta name="color-scheme" content="light dark" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Preconnect to the backend API origin so the first /auth/me call
-         doesn't pay the DNS + TLS handshake. Vite substitutes %VITE_*%
-         at build time; in dev the var is usually empty (same-origin
-         requests) and the resulting empty href is ignored by browsers. -->
     <link rel="preconnect" href="%VITE_API_BASE_URL%" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
