@@ -702,16 +702,44 @@ export class GatewayAuthService {
 
     const token = authHeader.substring(7);
 
-    // Validate against OAuthAccessToken table via SHA-256 hash lookup
+    // Validate against OAuthAccessToken table via SHA-256 hash lookup.
+    //
+    // CRITICAL: the lookup MUST be scoped to the current gateway.
+    // An access token is issued by the MCP OAuth 2.1 server bound
+    // to a specific (clientId, gatewayId, userId) triple; if the
+    // lookup omits gatewayId, a valid token issued for gateway A
+    // can be presented to gateway B and pass the isValid=true
+    // branch — cross-gateway token replay. The MCP OAuth server
+    // stores the gatewayId on every issued token row, so the
+    // filter is a single column add on the WHERE clause.
     try {
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
       const oauthToken = await this.oauthAccessTokenRepository?.findOne({
-        where: { tokenHash, tokenType: 'access', isRevoked: false },
+        where: {
+          tokenHash,
+          tokenType: 'access',
+          isRevoked: false,
+          gatewayId: authConfig.gatewayId,
+        },
       });
 
       if (!oauthToken) {
         // Fallback: try legacy bearer token validation (ApiKey-based)
         return this.validateBearerToken(authConfig, headers);
+      }
+
+      // Defence in depth — even though the WHERE above already
+      // pinned gatewayId, also require the organizationId to
+      // match the gateway's owning org. A stale token with a
+      // gatewayId that survived a cross-tenant gateway rename
+      // would otherwise get through.
+      if (oauthToken.organizationId !== authConfig.gateway?.organizationId &&
+          authConfig.gateway?.organizationId !== undefined) {
+        return {
+          isValid: false,
+          error: 'OAuth2 token not bound to this gateway',
+          errorCode: 'OAUTH2_TOKEN_WRONG_GATEWAY',
+        };
       }
 
       if (oauthToken.expiresAt < new Date()) {

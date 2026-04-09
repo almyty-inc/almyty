@@ -359,11 +359,20 @@ export class OrganizationsService {
 
     // Check pending invites in org metadata (new users).
     //
-    // FOLLOW-UP: this loops every organization in the database, which is
-    // O(orgs) per accept. A JSON-path index on `settings.pendingInvites`
-    // or a dedicated `pending_invites` table would make this O(log n).
-    const orgs = await this.organizationRepository.find();
-    for (const org of orgs) {
+    // Previously this iterated every organization row in memory
+    // (O(orgs) per accept + an unbounded `find()` load that is a
+    // DoS vector on a large instance). Now we narrow to the single
+    // matching row via a JSONB containment query — the JSON path
+    // operator `@>` lets Postgres match elements of
+    // `settings.pendingInvites` that contain `{inviteToken: <t>}`
+    // in a single round trip, bounded work regardless of org count.
+    const candidateOrgs = await this.organizationRepository
+      .createQueryBuilder('org')
+      .where(`org.settings->'pendingInvites' @> :needle`, {
+        needle: JSON.stringify([{ inviteToken: token }]),
+      })
+      .getMany();
+    for (const org of candidateOrgs) {
       const pendingInvites = (org.settings as any)?.pendingInvites || [];
       const invite = pendingInvites.find((i: any) => i.inviteToken === token);
       if (invite) {
@@ -405,7 +414,27 @@ export class OrganizationsService {
     throw new NotFoundException('Invalid or expired invitation');
   }
 
-  async getInviteDetails(token: string): Promise<{ organizationName: string; role: string; email: string; isExpired: boolean }> {
+  /**
+   * Public endpoint — the invite link is reachable by anyone who
+   * can guess or intercept the token, so we must NOT leak the
+   * invited email address back to a caller who doesn't already
+   * know it (the inviter clearly knows, and the invited recipient
+   * sees it in the email client, so withholding it here costs
+   * nothing legitimate). Returning the email would let a leaked
+   * link enumerate "who was this sent to" across the platform,
+   * which is a privacy regression.
+   *
+   * Also: the pending-invites lookup now uses a JSONB containment
+   * query instead of `organizationRepository.find()` + in-memory
+   * scan. The old shape was O(orgs) per call and loaded every org
+   * row into memory — a DoS vector on a large instance.
+   */
+  async getInviteDetails(token: string): Promise<{ organizationName: string; role: string; isExpired: boolean }> {
+    // Defense-in-depth: reject empty/null tokens before the DB.
+    if (!token || typeof token !== 'string') {
+      throw new NotFoundException('Invalid invitation');
+    }
+
     // Check membership-based invites (existing users)
     const membership = await this.userOrganizationRepository.findOne({
       where: { inviteToken: token },
@@ -417,21 +446,25 @@ export class OrganizationsService {
       return {
         organizationName: membership.organization?.name || 'Organization',
         role: membership.role,
-        email: '',
         isExpired,
       };
     }
 
-    // Check pending invites in org metadata (new users)
-    const orgs = await this.organizationRepository.find();
-    for (const org of orgs) {
+    // Check pending invites in org metadata (new users) — narrow
+    // to the single matching row via a JSONB containment query.
+    const candidateOrgs = await this.organizationRepository
+      .createQueryBuilder('org')
+      .where(`org.settings->'pendingInvites' @> :needle`, {
+        needle: JSON.stringify([{ inviteToken: token }]),
+      })
+      .getMany();
+    for (const org of candidateOrgs) {
       const pendingInvites = (org.settings as any)?.pendingInvites || [];
       const invite = pendingInvites.find((i: any) => i.inviteToken === token);
       if (invite) {
         return {
           organizationName: org.name,
           role: invite.role,
-          email: invite.email,
           isExpired: new Date(invite.inviteExpiresAt) < new Date(),
         };
       }

@@ -203,7 +203,12 @@ export class InterfacesService {
     return this.update(id, organizationId, { status: InterfaceStatus.INACTIVE });
   }
 
-  async incrementMessages(id: string): Promise<void> {
+  async incrementMessages(id: string, organizationId: string): Promise<void> {
+    // The org-scoped WHERE prevents a cross-tenant counter bump
+    // in the rare case that a caller passes the wrong interfaceId
+    // (e.g. a rehydrated webhook payload pointing at another org's
+    // interface by mistake). The atomic `"totalMessages" + 1` is
+    // already race-safe; this fix closes the tenancy boundary.
     await this.interfaceRepository
       .createQueryBuilder()
       .update(AgentInterface)
@@ -211,12 +216,21 @@ export class InterfacesService {
         totalMessages: () => '"totalMessages" + 1',
         lastMessageAt: new Date(),
       })
-      .where('id = :id', { id })
+      .where('id = :id AND organizationId = :organizationId', { id, organizationId })
       .execute();
   }
 
-  async findByAgentId(agentId: string): Promise<AgentInterface[]> {
-    return this.interfaceRepository.find({ where: { agentId }, order: { createdAt: 'DESC' } });
+  async findByAgentId(
+    agentId: string,
+    organizationId: string,
+  ): Promise<AgentInterface[]> {
+    // organizationId is mandatory to prevent cross-tenant
+    // enumeration — an agentId is just a UUID and can't be
+    // trusted to imply the tenant on its own.
+    return this.interfaceRepository.find({
+      where: { agentId, organizationId },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -313,8 +327,8 @@ export class InterfacesService {
       this.listenForCompletionAndRespond(newRun.id, iface, adapter, normalized);
     }
 
-    // 7. Increment message count
-    await this.incrementMessages(interfaceId);
+    // 7. Increment message count (scoped to the interface's own org)
+    await this.incrementMessages(interfaceId, iface.organizationId);
   }
 
   /**
@@ -449,7 +463,7 @@ export class InterfacesService {
       await this.runRepository.save(run);
     }
 
-    await this.incrementMessages(interfaceId);
+    await this.incrementMessages(interfaceId, iface.organizationId);
 
     return {
       runId: run.id,

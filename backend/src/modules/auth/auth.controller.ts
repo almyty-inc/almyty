@@ -21,6 +21,7 @@ import {
   ApiBearerAuth,
   ApiBody,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 
 import { AuthService } from './auth.service';
@@ -79,6 +80,13 @@ export class AuthController {
   }
 
   @Public()
+  // Tight rate limit on register — 10 attempts / hour per IP is
+  // more than enough for a real user and a hard stop for
+  // automated signup abuse (bulk account creation, resource
+  // squatting, reputation poisoning). The global throttler only
+  // allows 100 req/60s which lets a script create thousands of
+  // accounts per day.
+  @Throttle({ default: { limit: 10, ttl: 60 * 60 * 1000 } })
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({
@@ -120,6 +128,13 @@ export class AuthController {
   }
 
   @Public()
+  // Tight rate limit on login — 10 attempts / 5 minutes per IP.
+  // Login is the primary brute-force target (credential stuffing,
+  // password spraying); the global 100 req/60s throttler is not
+  // remotely tight enough for a surface that fans out to every
+  // account. Attackers are slowed to 2/min per IP; legitimate
+  // users with a typo have plenty of headroom.
+  @Throttle({ default: { limit: 10, ttl: 5 * 60 * 1000 } })
   @UseGuards(LocalAuthGuard)
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -333,6 +348,12 @@ export class AuthController {
   }
 
   @Public()
+  // Tight rate limit on password reset — 5 attempts / hour per IP.
+  // Without this, forgot-password is an email-enumeration oracle
+  // (attacker iterates addresses, observes send/no-send side
+  // effects via SMTP metrics or timing) and a spam vector for
+  // the outbound mail relay.
+  @Throttle({ default: { limit: 5, ttl: 60 * 60 * 1000 } })
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset' })
