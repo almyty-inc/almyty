@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { Suspense, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -44,6 +44,26 @@ import { useAppStore, useNotifications } from '@/store/app'
 import { getInitials } from '@/lib/utils'
 import { CommandPalette } from '@/components/command-palette'
 import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+
+// Suspense fallback for lazy page chunks. Rendered INSIDE the main
+// landmark so the sidebar + header + <main> stay mounted during
+// route chunk loads — previously the Suspense boundary sat in
+// App.tsx above the layout, which meant every lazy page navigation
+// briefly tore the entire shell down to a centred spinner on a
+// blank background. On fresh-signup users hitting the Tools page
+// (one of the fattest chunks, with CodeMirror + multiple dialog
+// subcomponents), that blank state could persist for 5–10s on a
+// slow connection, which the Playwright smoke suite caught as a
+// "missing main landmark" failure.
+function PageContentFallback() {
+  return (
+    <div className="flex items-center justify-center h-[60vh]" role="status" aria-label="Loading page">
+      <LoadingSpinner size="lg" />
+      <span className="sr-only">Loading…</span>
+    </div>
+  )
+}
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -389,7 +409,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         >
           <div className="py-6">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-8">
-              {children}
+              <Suspense fallback={<PageContentFallback />}>
+                {children}
+              </Suspense>
             </div>
           </div>
         </main>

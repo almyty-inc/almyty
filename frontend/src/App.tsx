@@ -1,11 +1,16 @@
-import React, { useEffect, Suspense, lazy } from 'react'
+import React, { useEffect, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 
-// Layout components (kept eager — needed for every route)
+// Layout components (kept eager — needed for every route).
+// Each layout owns its own <Suspense> boundary so the shell
+// (sidebar, header, main landmark) stays mounted while the
+// lazy page chunk is fetching. A top-level Suspense would
+// unmount the entire layout every navigation — on fresh-signup
+// users hitting a fat chunk like /tools that looked like a
+// 5–10s blank-screen regression in the Playwright smoke suite.
 import { AuthLayout } from '@/components/layout/auth-layout'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Toaster } from '@/components/ui/toaster'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 // Auth pages (kept eager — first thing users see)
 import { LoginPage } from '@/pages/auth/login'
@@ -38,12 +43,6 @@ const ToolHubPage = lazy(() => import('@/pages/tool-hub').then(m => ({ default: 
 const AcceptInvitePage = lazy(() => import('@/pages/accept-invite').then(m => ({ default: m.AcceptInvitePage })))
 const CliLoginPage = lazy(() => import('@/pages/cli-login').then(m => ({ default: m.CliLoginPage })))
 
-const PageLoader = () => (
-  <div className="flex items-center justify-center h-96">
-    <LoadingSpinner size="lg" />
-  </div>
-)
-
 function App() {
   const { checkAuth } = useAuthStore()
 
@@ -54,7 +53,6 @@ function App() {
 
   return (
     <>
-      <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* Dashboard routes - protected */}
         <Route path="/dashboard" element={
@@ -180,7 +178,6 @@ function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/auth/login" replace />} />
       </Routes>
-      </Suspense>
       <Toaster />
     </>
   )
