@@ -104,7 +104,9 @@ export class ApisController {
   @Roles('viewer', 'member', 'admin', 'owner')
   async getSdkMaps(@Param('id') id: string, @Request() req: any) {
     try {
-      const api = await this.apisService.findOne(id);
+      const orgId = req.user?.currentOrganizationId;
+      if (!orgId) throw new BadRequestException('Organization context required');
+      const api = await this.apisService.findOne(id, orgId);
       if (!api) throw new NotFoundException('API not found');
       return { success: true, data: api.sdkMaps || {} };
     } catch (error) {
@@ -118,14 +120,10 @@ export class ApisController {
   @Get(':id')
   @Roles('member', 'admin', 'owner')
   async findOne(@Request() req, @Param('id') id: string) {
-    const api = await this.apisService.findOne(id);
-    
+    const api = await this.apisService.findOne(id, req.user.currentOrganizationId);
+
     if (!api) {
       throw new NotFoundException('API not found');
-    }
-
-    if (api.organizationId !== req.user.currentOrganizationId) {
-      throw new ForbiddenException('Access denied');
     }
 
     return { success: true, data: api, message: 'API retrieved successfully' };
@@ -153,17 +151,11 @@ export class ApisController {
     @Param('id') id: string,
     @Body() updateApiDto: UpdateApiDto,
   ) {
-    const api = await this.apisService.findOne(id);
-    
-    if (!api) {
-      throw new NotFoundException('API not found');
-    }
-
-    if (api.organizationId !== req.user.currentOrganizationId) {
-      throw new ForbiddenException('Access denied');
-    }
-
-    const result = await this.apisService.update(id, updateApiDto);
+    const result = await this.apisService.update(
+      id,
+      updateApiDto,
+      req.user.currentOrganizationId,
+    );
 
     return { success: true, data: result, message: 'API updated successfully' };
   }
@@ -171,18 +163,7 @@ export class ApisController {
   @Delete(':id')
   @Roles('admin', 'owner')
   async remove(@Request() req, @Param('id') id: string) {
-    const api = await this.apisService.findOne(id);
-    
-    if (!api) {
-      throw new NotFoundException('API not found');
-    }
-
-    if (api.organizationId !== req.user.currentOrganizationId) {
-      throw new ForbiddenException('Access denied');
-    }
-
-    await this.apisService.remove(id);
-
+    await this.apisService.remove(id, req.user.currentOrganizationId);
     return { success: true, data: null, message: 'API deleted successfully' };
   }
 
@@ -195,14 +176,11 @@ export class ApisController {
     @Body() importSchemaDto: ImportSchemaDto,
     @UploadedFile() file?: any,
   ) {
-    const api = await this.apisService.findOne(id);
+    const orgId = req.user.currentOrganizationId;
+    const api = await this.apisService.findOne(id, orgId);
 
     if (!api) {
       throw new NotFoundException('API not found');
-    }
-
-    if (api.organizationId !== req.user.currentOrganizationId) {
-      throw new ForbiddenException('Access denied');
     }
 
     let schemaContent: string;
@@ -279,13 +257,11 @@ export class ApisController {
     // job. Without this any authenticated user could poll any job by id
     // (state, error message, completed result with full api/schema body)
     // simply by guessing.
-    const api = await this.apisService.findOne(id);
+    const api = await this.apisService.findOne(id, req.user?.currentOrganizationId);
     if (!api) {
-      throw new NotFoundException('API not found');
-    }
-    if (api.organizationId !== req.user?.currentOrganizationId) {
-      // NotFound (not Forbidden) so the endpoint can't be used as a
-      // cross-org existence oracle for api ids.
+      // NotFound covers both "doesn't exist" and "exists in another org".
+      // That's deliberate — we don't want this endpoint to leak api
+      // existence across tenants.
       throw new NotFoundException('API not found');
     }
 
@@ -340,90 +316,50 @@ export class ApisController {
   @Post(':id/generate-tools')
   @Roles('admin', 'owner')
   async generateTools(@Request() req, @Param('id') id: string) {
-    const api = await this.apisService.findOne(id);
-    
-    if (!api) {
-      throw new NotFoundException('API not found');
-    }
-
-    if (api.organizationId !== req.user.currentOrganizationId) {
-      throw new ForbiddenException('Access denied');
-    }
-
-    const result = await this.apisService.generateToolsFromApi(id);
-
+    const result = await this.apisService.generateToolsFromApi(
+      id,
+      req.user.currentOrganizationId,
+    );
     return { success: true, data: result, message: 'Tools generated successfully' };
   }
 
   @Get(':id/operations')
   @Roles('member', 'admin', 'owner')
   async getOperations(@Request() req, @Param('id') id: string) {
-    const api = await this.apisService.findOne(id);
-    
-    if (!api) {
-      throw new NotFoundException('API not found');
-    }
-
-    if (api.organizationId !== req.user.currentOrganizationId) {
-      throw new ForbiddenException('Access denied');
-    }
-
-    const result = await this.apisService.getApiOperations(id);
-
+    const result = await this.apisService.getApiOperations(
+      id,
+      req.user.currentOrganizationId,
+    );
     return { success: true, data: result, message: 'Operations retrieved successfully' };
   }
 
   @Get(':id/resources')
   @Roles('member', 'admin', 'owner')
   async getResources(@Request() req, @Param('id') id: string) {
-    const api = await this.apisService.findOne(id);
-    
-    if (!api) {
-      throw new NotFoundException('API not found');
-    }
-
-    if (api.organizationId !== req.user.currentOrganizationId) {
-      throw new ForbiddenException('Access denied');
-    }
-
-    const result = await this.apisService.getApiResources(id);
-
+    const result = await this.apisService.getApiResources(
+      id,
+      req.user.currentOrganizationId,
+    );
     return { success: true, data: result, message: 'Resources retrieved successfully' };
   }
 
   @Post(':id/test-connection')
   @Roles('admin', 'owner')
   async testConnection(@Request() req, @Param('id') id: string) {
-    const api = await this.apisService.findOne(id);
-    
-    if (!api) {
-      throw new NotFoundException('API not found');
-    }
-
-    if (api.organizationId !== req.user.currentOrganizationId) {
-      throw new ForbiddenException('Access denied');
-    }
-
-    const result = await this.apisService.testApiConnection(id);
-
+    const result = await this.apisService.testApiConnection(
+      id,
+      req.user.currentOrganizationId,
+    );
     return { success: true, data: result, message: 'Connection test completed successfully' };
   }
 
   @Get(':id/schemas')
   @Roles('member', 'admin', 'owner')
   async getSchemas(@Request() req, @Param('id') id: string) {
-    const api = await this.apisService.findOne(id);
-    
-    if (!api) {
-      throw new NotFoundException('API not found');
-    }
-
-    if (api.organizationId !== req.user.currentOrganizationId) {
-      throw new ForbiddenException('Access denied');
-    }
-
-    const result = await this.apisService.getApiSchemas(id);
-
+    const result = await this.apisService.getApiSchemas(
+      id,
+      req.user.currentOrganizationId,
+    );
     return { success: true, data: result, message: 'Schemas retrieved successfully' };
   }
 
@@ -434,18 +370,11 @@ export class ApisController {
     @Param('id') id: string,
     @Body('status') status: ApiStatus,
   ) {
-    const api = await this.apisService.findOne(id);
-
-    if (!api) {
-      throw new NotFoundException('API not found');
-    }
-
-    if (api.organizationId !== req.user.currentOrganizationId) {
-      throw new ForbiddenException('Access denied');
-    }
-
-    const result = await this.apisService.updateStatus(id, status);
-
+    const result = await this.apisService.updateStatus(
+      id,
+      status,
+      req.user.currentOrganizationId,
+    );
     return { success: true, data: result, message: 'API status updated successfully' };
   }
 

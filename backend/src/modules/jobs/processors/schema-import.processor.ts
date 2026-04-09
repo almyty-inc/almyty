@@ -38,17 +38,16 @@ export class SchemaImportProcessor {
 
     try {
       // Mandatory tenant check: refuse to run any job without a
-      // payload-carried organizationId, and refuse any job whose
-      // (apiId, organizationId) pair doesn't match the stored row.
-      // A crafted/injected job with a mismatched pair would
-      // otherwise import a schema into the wrong tenant.
+      // payload-carried organizationId. The service layer's
+      // findOne now enforces tenancy via the WHERE clause so a
+      // mismatched pair will return null without leaking anything.
       if (!organizationId) {
         throw new NotFoundException(
           `Schema import job ${job.id} rejected: organizationId missing from payload`,
         );
       }
-      const api = await this.apisService.findOne(apiId);
-      if (!api || api.organizationId !== organizationId) {
+      const api = await this.apisService.findOne(apiId, organizationId);
+      if (!api) {
         throw new NotFoundException(
           `API ${apiId} not found in organization ${organizationId}`,
         );
@@ -61,6 +60,7 @@ export class SchemaImportProcessor {
       const result = await this.apisService.importSchema(
         apiId,
         schemaContent,
+        organizationId,
         options,
       );
 
