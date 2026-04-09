@@ -111,7 +111,7 @@ function openInBrowser(url: string, log: (msg: string) => void): void {
   }
 }
 
-function readJsonBody(req: IncomingMessage, maxBytes = 64 * 1024): Promise<any> {
+function readRequestBody(req: IncomingMessage, maxBytes = 64 * 1024): Promise<any> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
@@ -126,8 +126,26 @@ function readJsonBody(req: IncomingMessage, maxBytes = 64 * 1024): Promise<any> 
     });
     req.on('end', () => {
       try {
-        const body = Buffer.concat(chunks).toString('utf-8');
-        resolve(body ? JSON.parse(body) : {});
+        const raw = Buffer.concat(chunks).toString('utf-8');
+        if (!raw) {
+          resolve({});
+          return;
+        }
+        // Parse based on Content-Type. The frontend posts a hidden
+        // form (application/x-www-form-urlencoded) to sidestep
+        // Chrome's Private Network Access blocking of fetch/XHR to
+        // loopback; older clients / curl-based smoke tests may still
+        // send JSON. Accept both.
+        const contentType = (req.headers['content-type'] || '').toLowerCase();
+        if (contentType.startsWith('application/x-www-form-urlencoded')) {
+          const params = new URLSearchParams(raw);
+          const obj: Record<string, string> = {};
+          params.forEach((value, key) => { obj[key] = value; });
+          resolve(obj);
+          return;
+        }
+        // Default to JSON.
+        resolve(JSON.parse(raw));
       } catch (err) {
         reject(err);
       }
@@ -163,13 +181,31 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
 
     const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       // CORS for the frontend POST.
+      //
+      // Critical: modern Chromium blocks fetches from a public HTTPS
+      // origin (app.almyty.com) to a loopback address (127.0.0.1)
+      // under the Private Network Access (PNA) policy unless the
+      // server explicitly opts in. The browser sends
+      // `Access-Control-Request-Private-Network: true` on the preflight
+      // and expects `Access-Control-Allow-Private-Network: true` in the
+      // response. Without this header, Chrome reports:
+      //   "Permission was denied for this request to access the
+      //    `loopback` address space"
+      // and the login flow silently times out. Spec:
+      // https://wicg.github.io/private-network-access/
       if (req.method === 'OPTIONS') {
-        res.writeHead(204, {
+        const pnaRequested =
+          (req.headers['access-control-request-private-network'] as string | undefined)?.toLowerCase() === 'true';
+        const headers: Record<string, string> = {
           'Access-Control-Allow-Origin': frontendUrl,
           'Access-Control-Allow-Methods': 'POST, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Max-Age': '600',
-        });
+        };
+        if (pnaRequested) {
+          headers['Access-Control-Allow-Private-Network'] = 'true';
+        }
+        res.writeHead(204, headers);
         res.end();
         return;
       }
@@ -183,10 +219,13 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
         return;
       }
 
-      // POST /cb — token delivery from the frontend.
+      // POST /cb — token delivery from the frontend. The body may be
+      // JSON (old clients, curl smoke tests) or URL-encoded form data
+      // (modern flow that sidesteps Chrome Private Network Access via
+      // form navigation). readRequestBody normalises both to an object.
       if (req.method === 'POST' && url.startsWith('/cb')) {
         try {
-          const body = await readJsonBody(req);
+          const body = await readRequestBody(req);
           if (!body.state || body.state !== state) {
             res.writeHead(400, {
               'Content-Type': 'text/plain; charset=utf-8',
@@ -203,11 +242,16 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
             res.end('Missing token');
             return;
           }
+          // For the form-POST flow the response lands in a hidden
+          // iframe. Return a tiny HTML page so the iframe's `load`
+          // event fires cleanly (a JSON body would also trigger it,
+          // but HTML avoids any browser quirk that could treat a
+          // JSON response as a download and stall the navigation).
           res.writeHead(200, {
-            'Content-Type': 'application/json',
+            'Content-Type': 'text/html; charset=utf-8',
             'Access-Control-Allow-Origin': frontendUrl,
           });
-          res.end(JSON.stringify({ ok: true }));
+          res.end('<!doctype html><html><body>OK</body></html>');
           settleResolve({ token: body.token, frontendUrl });
           return;
         } catch (err: any) {
