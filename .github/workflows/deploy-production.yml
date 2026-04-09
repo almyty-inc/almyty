@@ -87,6 +87,7 @@ jobs:
             --from-literal=DATABASE_PASSWORD=${{ secrets.PROD_DATABASE_PASSWORD }} \
             --from-literal=REDIS_PASSWORD="" \
             --from-literal=JWT_SECRET=${{ secrets.PROD_JWT_SECRET }} \
+            --from-literal=ENCRYPTION_KEY=${{ secrets.PROD_ENCRYPTION_KEY }} \
             --from-literal=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
             --namespace=almyty-production \
             --dry-run=client -o yaml | kubectl apply -f -

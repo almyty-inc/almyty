@@ -92,7 +92,11 @@ spec:
     - protocol: TCP
       port: 6379
   # Outbound HTTPS to the public internet (LLM providers,
-  # customer API targets, npm registry). No egress to internal
+  # customer API targets, npm registry) and managed Postgres
+  # on DigitalOcean (port 25060 — the staging + production
+  # overlays point DATABASE_HOST at a DO managed database, not
+  # the in-cluster postgres pod, so 5432-in-namespace is not
+  # enough to actually reach the DB). No egress to internal
   # CIDRs at the network layer — the backend's url-validator
   # blocks those at the application layer, and the sandbox
   # net-guard closes the defence-in-depth gap inside the
@@ -113,3 +117,5 @@ spec:
       port: 443
     - protocol: TCP
       port: 80
+    - protocol: TCP
+      port: 25060
