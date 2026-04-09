@@ -5,7 +5,7 @@
 # in 24 and the flag contract is stable from 24.0 forward. Do not
 # downgrade without also auditing NodeSandboxService's execArgv
 # plumbing — the worker code assumes the stable flag name.
-FROM node:24-alpine AS base
+FROM node:25-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
