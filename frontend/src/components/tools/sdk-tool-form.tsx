@@ -125,16 +125,26 @@ function SdkParamField({ param, value, onChange, depth = 0 }: {
   const isObject = param.type.kind === 'object' || param.type.kind === 'class_ref'
 
   const kindBadge = (kind: string) => {
+    // Dark-mode aware palette. Each entry pairs a light-mode
+    // tinted bg+text with a dark-mode semi-transparent bg + the
+    // -300 text step — matches the protocol badge pattern from
+    // docs/brand/colors.md so these parameter badges look native
+    // alongside MCP/A2A/UTCP badges elsewhere in the UI.
     const colors: Record<string, string> = {
-      string: 'bg-blue-100 text-blue-700',
-      number: 'bg-green-100 text-green-700',
-      boolean: 'bg-purple-100 text-purple-700',
-      object: 'bg-amber-100 text-amber-700',
-      array: 'bg-pink-100 text-pink-700',
-      enum: 'bg-cyan-100 text-cyan-700',
+      string: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
+      number: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300',
+      boolean: 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300',
+      object: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300',
+      array: 'bg-pink-100 text-pink-700 dark:bg-pink-500/20 dark:text-pink-300',
+      enum: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300',
     }
     return (
-      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${colors[kind] || 'bg-zinc-100 text-zinc-700'}`}>
+      <Badge
+        variant="outline"
+        className={`text-[10px] px-1.5 py-0 ${
+          colors[kind] || 'bg-muted text-muted-foreground'
+        }`}
+      >
         {kind}
       </Badge>
     )
