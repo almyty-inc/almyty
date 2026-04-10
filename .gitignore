@@ -51,3 +51,5 @@ logs/
 # Claude worktrees
 .claude/worktrees/
 _internal/
+.playwright-mcp/
+test-results/
