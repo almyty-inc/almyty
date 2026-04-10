@@ -1,55 +1,49 @@
 # @almyty/agents
 
-List, run, and inspect [almyty](https://almyty.com) agents from the command line.
+List, run, and manage almyty agents from the command line.
+
+## Quick start
 
 ```bash
-# Browser-based login (one-time setup)
-npx @almyty/auth login
-
-# List your agents
-npx @almyty/agents list
-
-# Run a workflow agent
-npx @almyty/agents run my-summarizer --input '{"text": "..."}'
-
-# Start an autonomous run and stream steps
-npx @almyty/agents run my-researcher --input "look up the latest..." --watch
-
-# Inspect recent runs
-npx @almyty/agents runs my-researcher
-
-# Cancel a runaway run
-npx @almyty/agents cancel my-researcher <runId>
+$ npx @almyty/auth login
+$ npx @almyty/agents list
+$ npx @almyty/agents run my-agent --input '{"text": "hello"}' --watch
 ```
 
 ## Commands
 
 | Command | Description |
-|---|---|
-| `list` | List agents in your organization |
-| `get <ref>` | Show details for one agent |
-| `run <ref>` | Invoke a workflow agent or start an autonomous run |
-| `runs <ref>` | List recent runs for an agent |
-| `cancel <ref> <runId>` | Cancel an in-flight autonomous run |
+|---------|-------------|
+| `list [--json]` | List all agents in your organization |
+| `get <name\|id>` | Show details for one agent |
+| `run <name\|id> [options]` | Invoke a workflow or start an autonomous run |
+| `runs <name\|id>` | List recent runs for an agent |
+| `cancel <name\|id> <runId>` | Cancel an in-flight run |
 
-`<ref>` is either an agent name (case-insensitive, with hyphens) or a UUID.
+`<name|id>` accepts an agent name (case-insensitive) or UUID.
 
 ## Run options
 
-| Flag | Mode | Description |
-|---|---|---|
-| `--input '<json>'` | both | Workflow: object payload. Autonomous: string or object. |
-| `--watch` | autonomous | Stream steps as they arrive instead of returning the run id. |
-| `--max-steps <n>` | autonomous | Hard cap on reasoning steps. |
-| `--max-cost-cents <n>` | autonomous | Hard cap on spending (in cents). |
-| `--max-duration-ms <n>` | autonomous | Hard cap on wall-clock time. |
-| `--json` | both | Print raw JSON instead of pretty output. |
+| Flag | Description |
+|------|-------------|
+| `--input '<json>'` | Input payload (object for workflow, string or object for autonomous) |
+| `--watch` | Stream steps as they arrive |
+| `--json` | Print raw JSON output |
+
+## Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `ALMYTY_TOKEN` | Auth token override |
+| `ALMYTY_URL` | API URL override |
 
 ## Authentication
 
-Reads credentials from `~/.almyty/credentials.json` (created by
-`npx @almyty/auth login`). Override with `ALMYTY_TOKEN` and `ALMYTY_URL`
-environment variables for CI.
+Requires `npx @almyty/auth login` first. Reads credentials from `~/.almyty/credentials.json`.
+
+## Docs
+
+https://almyty.com/docs
 
 ## License
 

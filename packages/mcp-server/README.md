@@ -1,22 +1,23 @@
 # @almyty/mcp-server
 
-Local MCP server that connects your AI coding agent to [almyty](https://almyty.com) tools and skills.
+MCP server that connects AI coding agents to almyty tools and skills.
 
-## Quick Start
+## Quick start
 
 ```bash
-npx @almyty/mcp-server
+$ npx @almyty/auth login
+$ npx @almyty/mcp-server
 ```
 
-## Setup
+## Agent configuration
 
 ### Claude Code
 
 ```bash
-claude mcp add almyty -- npx -y @almyty/mcp-server
+$ claude mcp add almyty -- npx -y @almyty/mcp-server
 ```
 
-### Cursor / Windsurf (`.cursor/mcp.json`)
+### Cursor / Windsurf (`.cursor/mcp.json` or `.windsurf/mcp.json`)
 
 ```json
 {
@@ -42,6 +43,14 @@ claude mcp add almyty -- npx -y @almyty/mcp-server
 }
 ```
 
+### OpenAI Codex CLI (`~/.codex/config.toml`)
+
+```toml
+[mcp_servers.almyty]
+command = "npx"
+args = ["-y", "@almyty/mcp-server"]
+```
+
 ### Google Gemini CLI (`~/.gemini/settings.json`)
 
 ```json
@@ -55,45 +64,27 @@ claude mcp add almyty -- npx -y @almyty/mcp-server
 }
 ```
 
-### OpenAI Codex CLI (`~/.codex/config.toml`)
+## Modes
 
-```toml
-[mcp_servers.almyty]
-command = "npx"
-args = ["-y", "@almyty/mcp-server"]
-```
+- **Skill-first** (default): Exposes 2 tools (`almyty_execute` + `almyty_search`) and loads skills on demand. Keeps context small.
+- **Full**: Exposes all tools individually. Set `ALMYTY_MODE=full` to enable.
 
-## How It Works
+## Environment variables
 
-Instead of dumping every tool schema into the LLM context (thousands of tokens), this server uses a skill-first approach:
-
-1. **2 tools** exposed to the LLM: `almyty_execute` + `almyty_search`
-2. **Skills as prompts** loaded on demand when the LLM needs them
-3. LLM searches for relevant tools → loads the skill → calls execute
-
-```
-Traditional MCP: 20 tools × ~200 tokens = ~4,000 tokens (always in context)
-Skill-first:     2 tools + on-demand skills = ~300 tokens base
-```
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ALMYTY_URL` | `https://api.almyty.com` | almyty API URL |
-| `ALMYTY_TOKEN` | — | Auth token (or use `npx @almyty/mcp-server login`) |
-| `ALMYTY_GATEWAY_ID` | — | Scope to a specific gateway |
+| Variable | Description |
+|----------|-------------|
+| `ALMYTY_URL` | API URL (default: `https://api.almyty.com`) |
+| `ALMYTY_TOKEN` | Auth token |
+| `ALMYTY_GATEWAY_ID` | Scope to a specific gateway |
+| `ALMYTY_MODE` | `skill` (default) or `full` |
 
 ## Authentication
 
-```bash
-# Interactive login (opens browser)
-npx @almyty/mcp-server login
+Requires `npx @almyty/auth login` first. Reads credentials from `~/.almyty/credentials.json`.
 
-# Or set token directly
-export ALMYTY_TOKEN=your-token
-npx @almyty/mcp-server
-```
+## Docs
+
+https://almyty.com/docs
 
 ## License
 

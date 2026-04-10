@@ -1,55 +1,38 @@
 # @almyty/skills
 
-Install and manage AI skills from [almyty](https://almyty.com) in 30+ coding agents.
+Install and manage almyty skills in 30+ AI coding agents (Claude Code, Cursor, Windsurf, Copilot, Codex, and more).
 
-## Quick Start
+## Quick start
 
 ```bash
-# Install skills from a gateway
-npx @almyty/skills install @your-org/your-gateway
-
-# Keep skills synced (daemon mode)
-npx @almyty/skills daemon
-
-# Run a skill directly
-npx @almyty/skills run @your-org/your-gateway/tool-name --param value
+$ npx @almyty/auth login
+$ npx @almyty/skills gateways
+$ npx @almyty/skills install @org/gateway
 ```
-
-## What It Does
-
-almyty turns any API into AI-ready tools. This CLI installs those tools as **SKILL.md files** into your project, where they're automatically picked up by supported agents.
-
-## Supported Agents
-
-| Category | Agents |
-|----------|--------|
-| **IDE** | Claude Code, Cursor, Windsurf, VS Code Copilot, JetBrains |
-| **AI Assistants** | Claude Desktop, ChatGPT, Gemini |
-| **Dev Tools** | Aider, Continue, Cody, GitHub Copilot CLI |
-| **Frameworks** | LangChain, LlamaIndex, CrewAI, AutoGPT |
 
 ## Commands
 
-```
-npx @almyty/skills login              Authenticate with almyty
-npx @almyty/skills logout             Remove stored credentials
-npx @almyty/skills daemon             Start skill daemon (syncs all skills)
-npx @almyty/skills install <ref>      Install skills from a gateway
-npx @almyty/skills list [ref]         List available skills
-npx @almyty/skills search <query>     Search for skills
-npx @almyty/skills run <ref>          Execute a skill
-npx @almyty/skills installed          Show locally installed skills
-npx @almyty/skills remove             Remove all installed skills
-npx @almyty/skills gateways           List your gateways
-```
+| Command | Description |
+|---------|-------------|
+| `gateways` | List your gateways |
+| `list` | List all available skills |
+| `list @org/gateway` | List skills from one gateway |
+| `search <query>` | Search skills by keyword |
+| `install @org/gateway` | Install all skills from a gateway |
+| `install @org/gateway/skill` | Install a single skill |
+| `installed` | Show locally installed skills |
+| `remove` | Remove all installed skills |
+| `run @org/gateway/skill [--key value]` | Execute a skill |
+| `daemon [--interval 60]` | Sync all skills on a schedule |
+| `watch @org/gateway [--interval 60]` | Watch a specific gateway for changes |
 
 ## References
 
 Skills are referenced as `@org/gateway` or `@org/gateway/skill`:
 
 ```bash
-npx @almyty/skills install @acme/petstore        # All skills from a gateway
-npx @almyty/skills run @acme/petstore/get-pet     # Run a specific skill
+$ npx @almyty/skills install @acme/petstore
+$ npx @almyty/skills run @acme/petstore/get-pet --id 123
 ```
 
 ## Configuration
@@ -63,7 +46,21 @@ Create `.almytyrc` in your project or home directory:
 }
 ```
 
-Or use environment variables: `ALMYTY_URL`, `ALMYTY_TOKEN`.
+## Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `ALMYTY_TOKEN` | Auth token override |
+| `ALMYTY_URL` | API URL override |
+| `ALMYTY_SKILLS_DIR` | Custom directory for installed skill files |
+
+## Authentication
+
+Requires `npx @almyty/auth login` first. Reads credentials from `~/.almyty/credentials.json`.
+
+## Docs
+
+https://almyty.com/docs
 
 ## License
 
