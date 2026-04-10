@@ -1,0 +1,87 @@
+# CLI Tools
+
+almyty ships six npm packages that cover authentication, agent management, skill installation, interactive chat, and MCP server proxying. All packages share credentials via `~/.almyty/credentials.json`.
+
+## Install
+
+Install the umbrella CLI globally for a single `almyty` binary, or run any package standalone via `npx`:
+
+```bash
+# Umbrella (all commands under one binary)
+$ npm install -g @almyty/cli
+$ almyty login
+$ almyty skills install @acme/petstore
+
+# Or standalone packages via npx
+$ npx @almyty/auth login
+$ npx @almyty/skills install @acme/petstore
+```
+
+## Packages
+
+| Package | Binary | Purpose |
+|---------|--------|---------|
+| `@almyty/auth` | `almyty-auth` | Login, logout, identity |
+| `@almyty/agents` | `almyty-agents` | List, run, and inspect agents |
+| `@almyty/chat` | `almyty-chat` | Interactive agent chat REPL |
+| `@almyty/skills` | `almyty-skills` | Install API skills into AI coding agents |
+| `@almyty/mcp-server` | `almyty-mcp` | MCP server proxy for any LLM client |
+| `@almyty/cli` | `almyty` | Umbrella CLI (delegates to all above) |
+
+## Authentication
+
+All CLIs read credentials from `~/.almyty/credentials.json` (mode 0600). Authenticate once:
+
+```bash
+$ npx @almyty/auth login
+```
+
+This opens your browser, authenticates via your almyty account, and mints a long-lived API key. You can also pass a token directly:
+
+```bash
+$ npx @almyty/auth login --token <your-api-key>
+```
+
+Environment variables override the credentials file:
+
+| Variable | Description |
+|----------|-------------|
+| `ALMYTY_TOKEN` | API key or token |
+| `ALMYTY_URL` | Backend URL (default: `https://api.almyty.com`) |
+
+## Skill references
+
+Skills are addressed as `@org/gateway` or `@org/gateway/skill`:
+
+```bash
+$ npx @almyty/skills install @acme/petstore           # all skills from a gateway
+$ npx @almyty/skills install @acme/petstore/get-pet    # single skill
+$ npx @almyty/skills run @acme/petstore/get-pet --id 3 # execute a skill
+```
+
+## MCP server
+
+The MCP server turns your almyty gateway into an MCP-compatible tool provider. Add it to any MCP client:
+
+```bash
+# Claude Code
+$ claude mcp add almyty -- npx -y @almyty/mcp-server
+
+# Cursor (.cursor/mcp.json)
+{
+  "mcpServers": {
+    "almyty": { "command": "npx", "args": ["-y", "@almyty/mcp-server"] }
+  }
+}
+```
+
+Set `ALMYTY_MODE=full` to register every tool individually (higher token overhead) instead of the default skill-first mode.
+
+## Testing
+
+Smoke tests for all CLI commands live in `packages/cli-tests/`:
+
+```bash
+$ cd packages/cli-tests
+$ RUN_CLI_SMOKE=1 npx vitest run   # requires auth + a gateway with tools
+```
