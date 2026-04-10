@@ -38,11 +38,11 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
   }
 
   private extractApiKey(request: Request): string | null {
-    // Check Authorization header (Bearer token format)
+    // Check Authorization header (Bearer token format).
     const authHeader = request.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
-      if (token.startsWith('llm_')) {
+      if (token.startsWith('almyty_')) {
         return token;
       }
     }

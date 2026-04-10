@@ -31,7 +31,7 @@ describe('ApiKeyStrategy', () => {
     it('should validate API key from Authorization header', async () => {
       const mockRequest = {
         headers: {
-          authorization: 'Bearer llm_test-api-key-12345',
+          authorization: 'Bearer almyty_test-api-key-12345',
         },
         query: {},
       } as any;
@@ -40,7 +40,7 @@ describe('ApiKeyStrategy', () => {
         id: 'key-1',
         name: 'Test API Key',
         keyHash: 'hashed-key',
-        keyPrefix: 'llm_test',
+        keyPrefix: 'almyty_te',
         userId: 'user-1',
         organizationId: 'org-1',
         isActive: true,
