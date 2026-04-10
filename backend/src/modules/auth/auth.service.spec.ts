@@ -474,7 +474,7 @@ describe('AuthService', () => {
       expect(result).toBe(mockApiKey);
       expect(apiKeyRepository.findOne).toHaveBeenCalledWith({
         where: { keyHash: 'hashed-key' },
-        relations: ['user', 'organization'],
+        relations: ['user', 'user.organizationMemberships', 'user.organizationMemberships.organization', 'organization'],
       });
     });
 

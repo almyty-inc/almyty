@@ -179,7 +179,7 @@ export class AuthService {
   async validateApiKey(keyHash: string): Promise<ApiKey | null> {
     const apiKey = await this.apiKeyRepository.findOne({
       where: { keyHash },
-      relations: ['user', 'organization'],
+      relations: ['user', 'user.organizationMemberships', 'user.organizationMemberships.organization', 'organization'],
     });
 
     if (!apiKey || !apiKey.canMakeRequest()) {
