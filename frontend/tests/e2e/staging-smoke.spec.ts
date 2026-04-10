@@ -143,6 +143,34 @@ test.describe('A11y landmarks', () => {
   })
 })
 
+test.describe('Create dialogs open from deep-link', () => {
+  // Every list page supports `?new=1` as a deep-link to open its
+  // Create dialog. These tests verify that landing on each list
+  // page with that param actually renders a dialog with the expected
+  // heading — catches silent regressions in the `useCreateDeepLink`
+  // hook wiring on any page.
+  const deepLinks = [
+    { label: 'Create API', path: '/apis?new=1', heading: /create .*api|add .*api|new api|import api/i },
+    { label: 'Create Tool', path: '/tools?new=1', heading: /create tool|new tool/i },
+    { label: 'Create Gateway', path: '/gateways?new=1', heading: /create gateway|new gateway/i },
+    { label: 'Add Credential', path: '/credentials?new=1', heading: /add credential|new credential|create credential/i },
+    { label: 'Add LLM Provider', path: '/llm-providers?new=1', heading: /add provider|new provider|create provider|add llm/i },
+  ]
+
+  for (const link of deepLinks) {
+    test(link.label, async () => {
+      await page.goto(link.path)
+      await expect(page.locator('main#main-content')).toBeVisible({ timeout: 15_000 })
+      // Radix Dialog has role="dialog" on the content root.
+      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 })
+      // Close the dialog to reset state for the next test (Escape
+      // is the universal close for Radix Dialog).
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5_000 })
+    })
+  }
+})
+
 test.describe('Wrong-credential login stays on login page', () => {
   // Own context — don't taint the shared auth session.
   test('rejects invalid password', async ({ browser }) => {
