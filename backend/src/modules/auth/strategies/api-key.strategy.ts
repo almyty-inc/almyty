@@ -29,12 +29,29 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    // Return the user associated with the API key
-    return {
-      user: validApiKey.user,
-      apiKey: validApiKey,
-      organization: validApiKey.organization,
-    };
+    // Build the same user shape that JwtStrategy returns so guards
+    // and request handlers work identically regardless of whether
+    // auth was via JWT or API key.
+    const user = validApiKey.user;
+
+    // Set the active organization. API keys are scoped to an org,
+    // so we always use the key's org. Honour X-Organization-Id
+    // only if it matches (prevents confusion, not a security gate).
+    const headerOrgId = (request.headers?.['x-organization-id'] as string) || undefined;
+    if (headerOrgId && headerOrgId !== validApiKey.organizationId) {
+      throw new UnauthorizedException('API key is not scoped to the requested organization');
+    }
+    (user as any).currentOrganizationId =
+      validApiKey.organizationId || validApiKey.organization?.id;
+
+    // Attach org list (matches JwtStrategy shape).
+    (user as any).organizations = user.organizationMemberships?.map((m: any) => ({
+      id: m.organizationId || m.organization?.id,
+      name: m.organization?.name,
+      role: m.role,
+    })) || [{ id: validApiKey.organizationId, name: validApiKey.organization?.name }];
+
+    return user;
   }
 
   private extractApiKey(request: Request): string | null {

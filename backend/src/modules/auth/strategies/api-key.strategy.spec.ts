@@ -80,9 +80,9 @@ describe('ApiKeyStrategy', () => {
 
       const result = await strategy.validate(mockRequest);
 
-      expect(result.user).toBe(mockValidApiKey.user);
-      expect(result.apiKey).toBe(mockValidApiKey);
-      expect(result.organization).toBe(mockValidApiKey.organization);
+      // Strategy now returns the user object directly (matches JwtStrategy shape)
+      expect(result.id).toBe(mockValidApiKey.user.id);
+      expect(result.currentOrganizationId).toBe(mockValidApiKey.organizationId);
       expect(authService.validateApiKey).toHaveBeenCalledWith(
         expect.any(String) // SHA256 hash
       );
@@ -140,7 +140,8 @@ describe('ApiKeyStrategy', () => {
 
       const result = await strategy.validate(mockRequest);
 
-      expect(result.user).toBe(mockValidApiKey.user);
+      expect(result.id).toBe(mockValidApiKey.user.id);
+      expect(result.currentOrganizationId).toBe('org-2');
       expect(authService.validateApiKey).toHaveBeenCalled();
     });
 
