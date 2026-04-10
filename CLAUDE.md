@@ -82,11 +82,13 @@ frontend/src/
 └── types/             # TypeScript types
 
 packages/
-├── skills-cli/        # npx @almyty/skills CLI
-├── mcp-server/        # @almyty/mcp-server
-├── auth-cli/          # @almyty/auth CLI (browser-based login flow)
-├── agents-cli/        # @almyty/agents CLI
-└── chat-cli/          # @almyty/chat CLI
+├── almyty-cli/        # @almyty/cli — umbrella binary delegating to all CLIs below
+├── auth-cli/          # @almyty/auth — browser-based login, token storage
+├── agents-cli/        # @almyty/agents — list, run, inspect agents
+├── chat-cli/          # @almyty/chat — interactive agent REPL
+├── skills-cli/        # @almyty/skills — install API skills into 30+ AI coding agents
+├── mcp-server/        # @almyty/mcp-server — skill-first MCP proxy
+└── cli-tests/         # Smoke tests gated behind RUN_CLI_SMOKE=1
 ```
 
 ---
@@ -146,8 +148,15 @@ cd frontend && npx playwright test --config=playwright.staging.config.ts
 # Health check
 curl http://localhost:4000/health
 
-# Skills CLI
-npx @almyty/skills install --gateway <id>
+# CLI tools (authenticate once, all CLIs share ~/.almyty/credentials.json)
+npx @almyty/auth login
+npx @almyty/agents list
+npx @almyty/skills install @org/gateway
+npx @almyty/skills search "weather"
+npx @almyty/chat my-agent
+
+# CLI smoke tests (requires auth + at least one gateway with tools)
+cd packages/cli-tests && RUN_CLI_SMOKE=1 npx vitest run
 
 # Docker production builds
 docker build --target production -t almyty-api ./backend
