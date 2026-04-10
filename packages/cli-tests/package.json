@@ -1,0 +1,14 @@
+{
+  "name": "@almyty/cli-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Integration smoke tests for all almyty CLI packages",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:smoke": "RUN_CLI_SMOKE=1 vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.0"
+  }
+}
