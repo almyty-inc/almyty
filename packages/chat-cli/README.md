@@ -1,37 +1,41 @@
 # @almyty/chat
 
-Interactive chat REPL with [almyty](https://almyty.com) agents.
+Interactive chat REPL for almyty agents. Supports both workflow and autonomous agent modes.
+
+## Quick start
 
 ```bash
-# Browser-based login (one-time setup)
-npx @almyty/auth login
-
-# Pick an agent from a menu
-npx @almyty/chat
-
-# Or jump straight in
-npx @almyty/chat my-research-bot
+$ npx @almyty/auth login
+$ npx @almyty/chat
+$ npx @almyty/chat my-research-bot
 ```
 
-Works with both **workflow** agents (each turn becomes one `invoke` call)
-and **autonomous** agents (a run is started, polled, and resumed across
-turns — handles `waiting_input` for human-in-the-loop).
+## Usage
 
-## Slash commands inside the REPL
+Run without arguments to pick an agent from an interactive menu, or pass a name or ID to connect directly.
+
+```bash
+$ npx @almyty/chat              # interactive agent picker
+$ npx @almyty/chat <name|id>    # connect to a specific agent
+```
+
+## REPL commands
 
 | Command | Description |
-|---|---|
-| `/switch <agent>` | Switch to a different agent without leaving the REPL |
-| `/agents` | List agents in your organization (current one marked with →) |
+|---------|-------------|
+| `/switch <agent>` | Switch to a different agent |
+| `/agents` | List agents (current one marked) |
 | `/clear` | Clear the screen |
-| `/help` | Show command list |
-| `/quit`, `/exit` | Leave the REPL |
+| `/help` | Show available commands |
+| `/quit` | Exit the REPL |
 
 ## Authentication
 
-Reads credentials from `~/.almyty/credentials.json` (created by
-`npx @almyty/auth login`). Override with `ALMYTY_TOKEN` and `ALMYTY_URL`
-environment variables for CI.
+Requires `npx @almyty/auth login` first. Reads credentials from `~/.almyty/credentials.json`. Override with `ALMYTY_TOKEN` and `ALMYTY_URL` environment variables.
+
+## Docs
+
+https://almyty.com/docs
 
 ## License
 
