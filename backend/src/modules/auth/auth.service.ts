@@ -249,7 +249,20 @@ export class AuthService {
   }
 
   async createApiKey(userId: string, createApiKeyDto: CreateApiKeyDto): Promise<{ apiKey: string; keyData: ApiKey }> {
-    // Generate a new API key
+    // Default the org scope to the user's single org when the caller
+    // doesn't provide one (e.g. the CLI login flow mints a key from
+    // the frontend without an explicit org ID).
+    let orgId = createApiKeyDto.organizationId;
+    if (!orgId) {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['organizationMemberships'],
+      });
+      if (user?.organizationMemberships?.length === 1) {
+        orgId = user.organizationMemberships[0].organizationId;
+      }
+    }
+
     const keyValue = this.generateApiKeyValue();
     const keyHash = this.hashApiKey(keyValue);
     const keyPrefix = keyValue.substring(0, 8);
@@ -259,7 +272,7 @@ export class AuthService {
       keyHash,
       keyPrefix,
       userId,
-      organizationId: createApiKeyDto.organizationId,
+      organizationId: orgId,
       scopes: createApiKeyDto.scopes,
       expiresAt: createApiKeyDto.expiresAt,
       rateLimits: createApiKeyDto.rateLimits,
