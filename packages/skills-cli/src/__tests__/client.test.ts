@@ -130,7 +130,7 @@ describe('loadConfig', () => {
   beforeEach(() => {
     // Reset env between tests
     process.env = { ...originalEnv };
-    delete process.env.APIFAI_SKILLS_DIR;
+    delete process.env.ALMYTY_SKILLS_DIR;
   });
 
   afterEach(() => {
@@ -144,14 +144,14 @@ describe('loadConfig', () => {
     expect(config).toEqual({});
   });
 
-  it('uses APIFAI_SKILLS_DIR env var when set', () => {
-    process.env.APIFAI_SKILLS_DIR = '/custom/skills/dir';
+  it('uses ALMYTY_SKILLS_DIR env var when set', () => {
+    process.env.ALMYTY_SKILLS_DIR = '/custom/skills/dir';
     const config = loadConfig();
     expect(config).toEqual({ skillsDir: '/custom/skills/dir' });
   });
 
   it('env var takes precedence over .almytyrc files', () => {
-    process.env.APIFAI_SKILLS_DIR = '/env/override';
+    process.env.ALMYTY_SKILLS_DIR = '/env/override';
     // Even if we pass a projectDir, env should take priority
     const config = loadConfig('/some/project');
     expect(config.skillsDir).toBe('/env/override');
