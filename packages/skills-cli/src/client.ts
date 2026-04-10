@@ -118,8 +118,8 @@ export class AlmytyClient {
 
   async listGateways(): Promise<GatewayInfo[]> {
     const data: any = await this.request('/gateways');
-    const gateways = data?.data?.data?.gateways || data?.data?.data || data?.data || [];
-    return gateways.map((gw: any) => ({
+    const gateways = data?.data?.gateways || data?.data?.data || data?.data || [];
+    return (Array.isArray(gateways) ? gateways : []).map((gw: any) => ({
       id: gw.id,
       name: gw.name,
       type: gw.type,
@@ -148,7 +148,24 @@ export class AlmytyClient {
   }
 
   async executeSkill(gatewayId: string, toolId: string, parameters: Record<string, any>): Promise<any> {
-    return this.post(`/gateways/${gatewayId}/skills/${toolId}/execute`, { parameters });
+    // The execute endpoint expects a UUID. If toolId is a name slug,
+    // resolve it by listing the gateway's tools and matching.
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let resolvedId = toolId;
+    if (!uuidRegex.test(toolId)) {
+      const tools: any = await this.request(`/gateways/${gatewayId}/tools`);
+      const list = tools?.data?.gatewayTools || tools?.data?.data || tools?.data || [];
+      const match = (Array.isArray(list) ? list : []).find((gt: any) => {
+        const t = gt.tool || gt;
+        const slug = t.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        return slug === toolId || t.name === toolId;
+      });
+      if (!match) {
+        throw new Error(`Tool "${toolId}" not found in gateway ${gatewayId}`);
+      }
+      resolvedId = (match.tool || match).id;
+    }
+    return this.post(`/gateways/${gatewayId}/skills/${resolvedId}/execute`, { parameters });
   }
 
   private async resolveRef(ref: string): Promise<string> {
