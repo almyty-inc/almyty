@@ -1,42 +1,28 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  Panel,
-  useNodesState,
-  useEdgesState,
-  addEdge,
-  type Connection,
-  type Node,
-  type Edge,
-  type ReactFlowInstance,
-} from '@xyflow/react'
+import type { Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Save, Loader2, Download, AlertTriangle, Plus, X, Undo2, Redo2, Play, ChevronUp, ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { AlertTriangle, X, ChevronDown, ChevronRight, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CodeEditor } from '@/components/ui/code-editor'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { ErrorBoundary } from '@/components/ui/error-boundary'
-
-import { NodePalette } from '@/components/agents/node-palette'
-import { NodeConfigPanel } from '@/components/agents/node-config-panel'
-import { nodeTypes, type PipelineNodeType } from '@/components/agents/nodes'
-import { agentsApi, llmProvidersApi, toolsApi } from '@/lib/api'
-import { useOrganizationStore } from '@/store/organization'
-import { useNotifications } from '@/store/app'
-import { cn } from '@/lib/utils'
-import type { Agent, PipelineNode, PipelineEdge } from '@/types'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+
+import { useAgentPipeline } from '@/components/agents/builder/use-agent-pipeline'
+import { BuilderToolbar } from '@/components/agents/builder/builder-toolbar'
+import { TestPanel } from '@/components/agents/builder/test-panel'
+import { CanvasArea } from '@/components/agents/builder/canvas-area'
+
+import { agentsApi, llmProvidersApi, toolsApi } from '@/lib/api'
+import { useOrganizationStore } from '@/store/organization'
+import { useNotifications } from '@/store/app'
+import type { Agent, PipelineNode, PipelineEdge } from '@/types'
 
 const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
   { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } },
@@ -49,39 +35,6 @@ const DEFAULT_PIPELINE_EDGES: PipelineEdge[] = [
   { id: 'e2', source: 'llm_1', target: 'output_1' },
 ]
 
-let idCounter = 0
-function generateNodeId(type: string): string {
-  idCounter++
-  return `${type}_${Date.now()}_${idCounter}`
-}
-
-function getDefaultData(type: PipelineNodeType): Record<string, any> {
-  switch (type) {
-    case 'input':
-      return { schema: { type: 'object', properties: {}, required: [] } }
-    case 'output':
-      return { mapping: '' }
-    case 'llm_call':
-      return { providerId: '', model: '', systemPrompt: '', userPromptTemplate: '', temperature: 0.7 }
-    case 'tool_call':
-      return { toolId: '', toolName: '', parameterMapping: [] }
-    case 'condition':
-      return { expression: '' }
-    case 'transform':
-      return { expression: '' }
-    case 'merge':
-      return { strategy: 'first_response' }
-    case 'parallel':
-      return {}
-    case 'sub_agent':
-      return { agentId: '', agentName: '', inputMapping: [] }
-    case 'loop':
-      return { iterableExpression: '', maxIterations: 100 }
-    default:
-      return {}
-  }
-}
-
 export function AgentBuilderPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -92,9 +45,8 @@ export function AgentBuilderPage() {
 
   const isEditing = !!id
   const templateId = searchParams.get('template')
-  const reactFlowWrapper = useRef<HTMLDivElement>(null)
-  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
 
+  // ── Agent metadata state ───────────────────────────────────────────────
   const [agentName, setAgentName] = useState('New Agent')
   const [agentDescription, setAgentDescription] = useState('')
   const [agentStatus, setAgentStatus] = useState<string>('draft')
@@ -124,118 +76,14 @@ export function AgentBuilderPage() {
     maxRounds?: number;
   }>({ enabled: false, strategy: 'sequential', agents: [], rules: {} })
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([] as Node[])
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([] as Edge[])
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null)
-  const [initialized, setInitialized] = useState(false)
-  const [showMobilePalette, setShowMobilePalette] = useState(false)
   const [showTestPanel, setShowTestPanel] = useState(false)
-  const [testInput, setTestInput] = useState('{"message": "Hello"}')
-  const [testOutput, setTestOutput] = useState<string | null>(null)
-  const [testLoading, setTestLoading] = useState(false)
 
   // ── Tool picker state ──────────────────────────────────────────────────
   const [toolSearch, setToolSearch] = useState('')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
-  // ── Undo / Redo history ───────────────────────────────────────────────
-  const [history, setHistory] = useState<{ nodes: Node[]; edges: Edge[] }[]>([])
-  const [historyIndex, setHistoryIndex] = useState(-1)
-  const isUndoRedoRef = useRef(false)
-
-  const pushHistory = useCallback((newNodes: Node[], newEdges: Edge[]) => {
-    if (isUndoRedoRef.current) return
-    const snapshot = {
-      nodes: newNodes.map((n) => ({ ...n, data: { ...n.data } })),
-      edges: newEdges.map((e) => ({ ...e })),
-    }
-    setHistoryIndex((prevIndex) => {
-      setHistory((prev) => {
-        const truncated = prev.slice(0, prevIndex + 1)
-        const next = [...truncated, snapshot]
-        // Keep max 50 snapshots
-        if (next.length > 50) next.shift()
-        return next
-      })
-      const newIndex = Math.min(prevIndex + 1, 49)
-      return newIndex
-    })
-  }, [])
-
-  const canUndo = historyIndex > 0
-  const canRedo = historyIndex < history.length - 1
-
-  const undo = useCallback(() => {
-    if (!canUndo) return
-    isUndoRedoRef.current = true
-    const prev = history[historyIndex - 1]
-    setNodes(prev.nodes.map((n) => ({ ...n, data: { ...n.data } })))
-    setEdges(prev.edges.map((e) => ({ ...e })))
-    setHistoryIndex((i) => i - 1)
-    setSelectedNode(null)
-    requestAnimationFrame(() => { isUndoRedoRef.current = false })
-  }, [canUndo, history, historyIndex, setNodes, setEdges])
-
-  const redo = useCallback(() => {
-    if (!canRedo) return
-    isUndoRedoRef.current = true
-    const next = history[historyIndex + 1]
-    setNodes(next.nodes.map((n) => ({ ...n, data: { ...n.data } })))
-    setEdges(next.edges.map((e) => ({ ...e })))
-    setHistoryIndex((i) => i + 1)
-    setSelectedNode(null)
-    requestAnimationFrame(() => { isUndoRedoRef.current = false })
-  }, [canRedo, history, historyIndex, setNodes, setEdges])
-
-  const runTest = async () => {
-    if (!id) return
-    setTestLoading(true)
-    setTestOutput(null)
-    try {
-      const input = JSON.parse(testInput)
-      const result = await agentsApi.invoke(id, input)
-      setTestOutput(JSON.stringify(result, null, 2))
-    } catch (err: any) {
-      setTestOutput(`Error: ${err?.response?.data?.message || err?.message || 'Execution failed'}`)
-    } finally {
-      setTestLoading(false)
-    }
-  }
-
-  // Keyboard shortcuts for undo/redo
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey
-      if (mod && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        undo()
-      } else if (mod && e.key === 'z' && e.shiftKey) {
-        e.preventDefault()
-        redo()
-      } else if (mod && e.key === 'y') {
-        e.preventDefault()
-        redo()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [undo, redo])
-
-  // Push to history whenever nodes/edges change (debounced via a stable ref)
-  const historyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    if (!initialized) return
-    if (isUndoRedoRef.current) return
-    if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
-    historyTimerRef.current = setTimeout(() => {
-      pushHistory(nodes, edges)
-    }, 300)
-    return () => {
-      if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
-    }
-    // Only fire when nodes or edges actually change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, edges, initialized])
+  // ── Pipeline state (nodes, edges, undo/redo, CRUD) ─────────────────────
+  const pipeline = useAgentPipeline()
 
   // Document title
   useEffect(() => {
@@ -284,7 +132,7 @@ export function AgentBuilderPage() {
 
   // Initialize pipeline from fetched data, template, or defaults
   useEffect(() => {
-    if (initialized) return
+    if (pipeline.initialized) return
 
     if (isEditing && agentData) {
       const agent = agentData as Agent
@@ -316,9 +164,9 @@ export function AgentBuilderPage() {
         targetHandle: e.targetHandle,
         label: e.label,
       }))
-      setNodes(pipelineNodes)
-      setEdges(pipelineEdges)
-      setInitialized(true)
+      pipeline.setNodes(pipelineNodes)
+      pipeline.setEdges(pipelineEdges)
+      pipeline.setInitialized(true)
     } else if (!isEditing && templateId && Array.isArray(templatesData)) {
       // Initialize from template
       const template = templatesData.find((t: any) => t.id === templateId)
@@ -339,101 +187,25 @@ export function AgentBuilderPage() {
           targetHandle: e.targetHandle,
           label: e.label,
         }))
-        setNodes(pipelineNodes)
-        setEdges(pipelineEdges)
-        setInitialized(true)
+        pipeline.setNodes(pipelineNodes)
+        pipeline.setEdges(pipelineEdges)
+        pipeline.setInitialized(true)
       }
     } else if (!isEditing && !templateId) {
-      setNodes(DEFAULT_PIPELINE_NODES.map((n) => ({
+      pipeline.setNodes(DEFAULT_PIPELINE_NODES.map((n) => ({
         id: n.id,
         type: n.type,
         position: n.position,
         data: n.data,
       })))
-      setEdges(DEFAULT_PIPELINE_EDGES.map((e) => ({
+      pipeline.setEdges(DEFAULT_PIPELINE_EDGES.map((e) => ({
         id: e.id,
         source: e.source,
         target: e.target,
       })))
-      setInitialized(true)
+      pipeline.setInitialized(true)
     }
-  }, [isEditing, agentData, initialized, setNodes, setEdges, templateId, templatesData])
-
-  // Connect edges
-  const onConnect = useCallback(
-    (connection: Connection) => {
-      setEdges((eds) => addEdge({ ...connection, id: `e_${Date.now()}` }, eds))
-    },
-    [setEdges]
-  )
-
-  // Handle node selection
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    setSelectedNode(node)
-  }, [])
-
-  // Deselect when clicking on pane
-  const onPaneClick = useCallback(() => {
-    setSelectedNode(null)
-  }, [])
-
-  // Update node data from config panel
-  const onUpdateNode = useCallback(
-    (nodeId: string, data: Record<string, any>) => {
-      setNodes((nds) =>
-        nds.map((n) => {
-          if (n.id === nodeId) {
-            const updated = { ...n, data }
-            // Keep selectedNode in sync
-            setSelectedNode(updated)
-            return updated
-          }
-          return n
-        })
-      )
-    },
-    [setNodes]
-  )
-
-  // Delete node
-  const onDeleteNode = useCallback(
-    (nodeId: string) => {
-      setNodes((nds) => nds.filter((n) => n.id !== nodeId))
-      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
-      setSelectedNode(null)
-    },
-    [setNodes, setEdges]
-  )
-
-  // Drag-and-drop from palette
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'move'
-  }, [])
-
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault()
-      const type = event.dataTransfer.getData('application/reactflow') as PipelineNodeType
-      if (!type || !reactFlowInstance) return
-
-      // screenToFlowPosition expects raw screen coordinates — no manual offset needed
-      const position = reactFlowInstance.screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      })
-
-      const newNode: Node = {
-        id: generateNodeId(type),
-        type,
-        position,
-        data: getDefaultData(type),
-      }
-
-      setNodes((nds) => [...nds, newNode])
-    },
-    [reactFlowInstance, setNodes]
-  )
+  }, [isEditing, agentData, pipeline.initialized, pipeline.setNodes, pipeline.setEdges, pipeline.setInitialized, templateId, templatesData])
 
   // ── Validation ──────────────────────────────────────────────────────────
   const validationErrors = useMemo(() => {
@@ -444,8 +216,8 @@ export function AgentBuilderPage() {
     }
 
     if (agentMode === 'workflow') {
-      const hasInput = nodes.some((n) => n.type === 'input')
-      const hasOutput = nodes.some((n) => n.type === 'output')
+      const hasInput = pipeline.nodes.some((n) => n.type === 'input')
+      const hasOutput = pipeline.nodes.some((n) => n.type === 'output')
       if (!hasInput) {
         errors.push('Pipeline must have at least one Input node')
       }
@@ -454,7 +226,7 @@ export function AgentBuilderPage() {
       }
 
       // Check that all LLM call nodes have a provider selected
-      const llmNodes = nodes.filter((n) => n.type === 'llm_call')
+      const llmNodes = pipeline.nodes.filter((n) => n.type === 'llm_call')
       for (const llmNode of llmNodes) {
         if (!llmNode.data?.providerId) {
           errors.push(`LLM Call node "${llmNode.id}" is missing a provider`)
@@ -471,21 +243,21 @@ export function AgentBuilderPage() {
     }
 
     return errors
-  }, [agentName, agentMode, agentInstructions, agentModelConfig, nodes])
+  }, [agentName, agentMode, agentInstructions, agentModelConfig, pipeline.nodes])
 
   const canSave = validationErrors.length === 0
 
   // Build pipeline payload
   const buildPipeline = () => {
-    const viewport = reactFlowInstance?.getViewport()
+    const viewport = pipeline.reactFlowInstance?.getViewport()
     return {
-      nodes: nodes.map((n) => ({
+      nodes: pipeline.nodes.map((n) => ({
         id: n.id,
         type: n.type as PipelineNode['type'],
         position: n.position,
         data: n.data as Record<string, any>,
       })),
-      edges: edges.map((e) => ({
+      edges: pipeline.edges.map((e) => ({
         id: e.id,
         source: e.source,
         target: e.target,
@@ -509,7 +281,7 @@ export function AgentBuilderPage() {
       if (agentMode === 'workflow') {
         payload.pipeline = buildPipeline()
       } else {
-        // Autonomous mode — save instructions + soul + heartbeat + tools + model config
+        // Autonomous mode -- save instructions + soul + heartbeat + tools + model config
         payload.personality = agentPersonality || undefined
         payload.instructions = agentInstructions
         payload.heartbeat = agentHeartbeat.enabled ? agentHeartbeat : { enabled: false, intervalMinutes: agentHeartbeat.intervalMinutes, prompt: agentHeartbeat.prompt }
@@ -558,6 +330,30 @@ export function AgentBuilderPage() {
     },
   })
 
+  const handleSave = () => {
+    if (!canSave) {
+      errorNotif('Validation Failed', validationErrors.join('. '))
+      return
+    }
+    saveMutation.mutate()
+  }
+
+  const handleExport = async () => {
+    try {
+      const exportData = await agentsApi.exportAgent(id!)
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${agentName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      success('Exported', 'Agent JSON downloaded.')
+    } catch (err: any) {
+      errorNotif('Export Failed', err?.message || 'Failed to export agent')
+    }
+  }
+
   if (isEditing && isLoadingAgent) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-64px)]">
@@ -569,118 +365,28 @@ export function AgentBuilderPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
       {/* Top Bar */}
-      <div className="flex items-center justify-between px-2 sm:px-4 py-2 border-b bg-background shrink-0 sticky top-0 z-30">
-        <div className="flex items-center gap-1 sm:gap-3 min-w-0">
-          <Button variant="ghost" size="icon" className="shrink-0" aria-label="Back to agents" onClick={() => navigate('/agents')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <Input
-            className="text-base sm:text-lg font-semibold border-none shadow-none focus-visible:ring-0 w-[140px] sm:w-[260px] px-1"
-            value={agentName}
-            onChange={(e) => setAgentName(e.target.value)}
-            placeholder="Agent name"
-          />
-          <Badge variant={agentStatus === 'active' ? 'success' : agentStatus === 'error' ? 'destructive' : 'outline'} className="hidden sm:inline-flex">
-            {agentStatus}
-          </Badge>
-          <div className="hidden sm:flex items-center gap-1 ml-2 bg-muted rounded-md p-0.5">
-            <button
-              className={cn('px-2 py-1 text-xs rounded font-medium transition-colors', agentMode === 'workflow' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground')}
-              onClick={() => setAgentMode('workflow')}
-            >
-              Workflow
-            </button>
-            <button
-              className={cn('px-2 py-1 text-xs rounded font-medium transition-colors', agentMode === 'autonomous' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground')}
-              onClick={() => setAgentMode('autonomous')}
-            >
-              Autonomous
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 sm:gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={undo}
-            disabled={!canUndo}
-            aria-label="Undo"
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={redo}
-            disabled={!canRedo}
-            aria-label="Redo"
-            title="Redo (Ctrl+Shift+Z)"
-          >
-            <Redo2 className="h-4 w-4" />
-          </Button>
-          {isEditing && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="hidden sm:flex"
-              onClick={async () => {
-                try {
-                  const exportData = await agentsApi.exportAgent(id!)
-                  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url
-                  a.download = `${agentName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`
-                  a.click()
-                  URL.revokeObjectURL(url)
-                  success('Exported', 'Agent JSON downloaded.')
-                } catch (err: any) {
-                  errorNotif('Export Failed', err?.message || 'Failed to export agent')
-                }
-              }}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
-          )}
-          {isEditing && agentData && (
-            <Badge variant="outline" className="text-xs hidden sm:inline-flex">
-              v{(agentData as Agent).version || '1.0.0'}
-            </Badge>
-          )}
-          {isEditing && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowTestPanel(!showTestPanel)}
-            >
-              <Play className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Test</span>
-            </Button>
-          )}
-          <Button
-            size="sm"
-            onClick={() => {
-              if (!canSave) {
-                errorNotif('Validation Failed', validationErrors.join('. '))
-                return
-              }
-              saveMutation.mutate()
-            }}
-            disabled={saveMutation.isPending || !canSave}
-          >
-            {saveMutation.isPending ? (
-              <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4 sm:mr-2" />
-            )}
-            <span className="hidden sm:inline">Save</span>
-          </Button>
-        </div>
-      </div>
+      <BuilderToolbar
+        agentName={agentName}
+        onAgentNameChange={setAgentName}
+        agentStatus={agentStatus}
+        agentMode={agentMode}
+        onAgentModeChange={setAgentMode}
+        canUndo={pipeline.canUndo}
+        canRedo={pipeline.canRedo}
+        undo={pipeline.undo}
+        redo={pipeline.redo}
+        isEditing={isEditing}
+        id={id}
+        agentVersion={agentData ? (agentData as Agent).version || '1.0.0' : undefined}
+        showTestPanel={showTestPanel}
+        onToggleTestPanel={() => setShowTestPanel(!showTestPanel)}
+        canSave={canSave}
+        validationErrors={validationErrors}
+        isSaving={saveMutation.isPending}
+        onSave={handleSave}
+        onExport={handleExport}
+        onBack={() => navigate('/agents')}
+      />
 
       {/* Validation Errors Banner */}
       {validationErrors.length > 0 && (
@@ -1312,133 +1018,31 @@ export function AgentBuilderPage() {
           <div className="h-8" /> {/* Bottom spacer */}
         </div>
       ) : (
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* Left: Palette — visible on lg+, hidden on mobile */}
-        <div className="hidden lg:block">
-          <NodePalette />
-        </div>
-
-        {/* Mobile: floating add button to open palette dropdown */}
-        <div className="lg:hidden fixed bottom-4 right-4 z-50">
-          <Button
-            onClick={() => setShowMobilePalette(!showMobilePalette)}
-            size="icon"
-            className="rounded-full shadow-lg h-12 w-12"
-            aria-label={showMobilePalette ? 'Close node palette' : 'Open node palette'}
-          >
-            {showMobilePalette ? <X className="h-6 w-6" /> : <Plus className="h-6 w-6" />}
-          </Button>
-        </div>
-
-        {/* Mobile: palette dropdown */}
-        {showMobilePalette && (
-          <div className="lg:hidden fixed bottom-20 right-4 z-50 w-[220px] max-h-[60vh] overflow-y-auto rounded-lg border bg-background shadow-xl">
-            <NodePalette />
-          </div>
-        )}
-
-        {/* Center: Canvas */}
-        <div className="flex-1" ref={reactFlowWrapper}>
-          <ErrorBoundary
-            fallback={
-              <div className="flex items-center justify-center h-full bg-muted/20">
-                <div className="text-center p-8">
-                  <p className="text-sm font-medium text-destructive">Canvas rendering error</p>
-                  <p className="text-xs text-muted-foreground mt-1">A node may have invalid data. Try removing recently added nodes.</p>
-                </div>
-              </div>
-            }
-          >
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onNodeClick={onNodeClick}
-              onPaneClick={onPaneClick}
-              onInit={setReactFlowInstance}
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-              nodeTypes={nodeTypes}
-              fitView
-              fitViewOptions={{ padding: 0.2 }}
-              deleteKeyCode={['Backspace', 'Delete']}
-              className="bg-muted/20"
-              proOptions={{ hideAttribution: true }}
-            >
-              <Background gap={16} size={1} />
-              <Controls />
-              {/* In-app help overlay for empty/fresh canvas */}
-              {nodes.length <= 3 && !selectedNode && (
-                <Panel position="top-center" className="bg-background/80 backdrop-blur-sm rounded-lg p-4 text-center max-w-md">
-                  <p className="text-sm text-muted-foreground">
-                    Drag node types from the left panel onto the canvas.
-                    Connect them by dragging from output handles (right) to input handles (left).
-                    Click a node to configure it.
-                  </p>
-                </Panel>
-              )}
-            </ReactFlow>
-          </ErrorBoundary>
-        </div>
-
-        {/* Right: Config Panel — sidebar on lg+, overlay on mobile */}
-        {selectedNode && (
-          <div className={cn(
-            'lg:w-[320px] lg:relative lg:border-l lg:z-auto',
-            'fixed inset-0 z-50 bg-background lg:static lg:inset-auto',
-          )}>
-            {/* Mobile overlay backdrop close button */}
-            <div className="lg:hidden absolute top-2 right-2 z-10">
-              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Close node configuration" onClick={() => setSelectedNode(null)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <NodeConfigPanel
-              node={selectedNode}
-              nodes={nodes}
-              onUpdateNode={onUpdateNode}
-              onDeleteNode={onDeleteNode}
-              onClose={() => setSelectedNode(null)}
-            />
-          </div>
-        )}
-      </div>
+        <CanvasArea
+          nodes={pipeline.nodes}
+          edges={pipeline.edges}
+          onNodesChange={pipeline.onNodesChange}
+          onEdgesChange={pipeline.onEdgesChange}
+          onConnect={pipeline.onConnect}
+          onNodeClick={pipeline.onNodeClick}
+          onPaneClick={pipeline.onPaneClick}
+          onDrop={pipeline.onDrop}
+          onDragOver={pipeline.onDragOver}
+          reactFlowWrapper={pipeline.reactFlowWrapper}
+          setReactFlowInstance={pipeline.setReactFlowInstance}
+          selectedNode={pipeline.selectedNode}
+          setSelectedNode={pipeline.setSelectedNode}
+          onUpdateNode={pipeline.onUpdateNode}
+          onDeleteNode={pipeline.onDeleteNode}
+        />
       )}
 
       {/* Test Panel */}
       {showTestPanel && isEditing && agentMode === 'workflow' && (
-        <div className="border-t bg-muted/30 shrink-0">
-          <div className="flex items-center justify-between px-4 py-2 border-b">
-            <span className="text-sm font-semibold">Test Agent</span>
-            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Close test panel" onClick={() => setShowTestPanel(false)}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="flex gap-4 p-4 max-h-[250px]">
-            <div className="flex-1 space-y-2">
-              <Label className="text-xs">Input JSON</Label>
-              <CodeEditor
-                value={testInput}
-                onChange={(value) => setTestInput(value)}
-                language="json"
-                height="140px"
-                placeholder='{"message": "Hello"}'
-              />
-              <Button size="sm" onClick={runTest} disabled={testLoading}>
-                {testLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
-                Run
-              </Button>
-            </div>
-            <div className="flex-1 space-y-2">
-              <Label className="text-xs">Output</Label>
-              <pre className="font-mono text-xs bg-background border rounded-md p-3 h-[170px] overflow-auto whitespace-pre-wrap">
-                {testOutput || 'Run the agent to see output...'}
-              </pre>
-            </div>
-          </div>
-        </div>
+        <TestPanel
+          agentId={id!}
+          onClose={() => setShowTestPanel(false)}
+        />
       )}
     </div>
   )
