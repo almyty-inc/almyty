@@ -4,6 +4,7 @@ import {
 } from 'typeorm';
 import { Agent } from './agent.entity';
 import { Organization } from './organization.entity';
+import { Conversation } from './conversation.entity';
 
 export enum AgentRunStatus {
   PENDING = 'pending',
@@ -38,14 +39,14 @@ export class AgentRun {
   @Column({ nullable: true })
   userId: string;
 
+  @Column({ nullable: true })
+  conversationId: string;
+
   @Column({ type: 'varchar', default: AgentMode.WORKFLOW })
   mode: AgentMode;
 
   @Column({ type: 'varchar', default: AgentRunStatus.PENDING })
   status: AgentRunStatus;
-
-  @Column({ type: 'json', default: [] })
-  thread: Array<{ role: string; content: any; toolCalls?: any[]; toolCallId?: string; timestamp?: string }>;
 
   @Column({ type: 'json', default: {} })
   workingMemory: Record<string, any>;
@@ -114,6 +115,10 @@ export class AgentRun {
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organizationId' })
   organization: Organization;
+
+  @ManyToOne(() => Conversation, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'conversationId' })
+  conversation: Conversation;
 
   // Helper methods
   isRunning(): boolean {

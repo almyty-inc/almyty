@@ -7,6 +7,8 @@ import { AgentRun, AgentRunStatus, AgentMode } from '../../../entities/agent-run
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { Tool } from '../../../entities/tool.entity';
+import { Conversation } from '../../../entities/conversation.entity';
+import { Message } from '../../../entities/message.entity';
 import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { MemoryService } from '../../memory/memory.service';
@@ -27,7 +29,10 @@ describe('AgentRuntimeService (integration)', () => {
   let mockRunRepo: any;
   let mockAgentRepo: any;
   let mockToolRepo: any;
+  let mockConversationRepo: any;
+  let mockMessageRepo: any;
   let mockQueue: any;
+  let messageStore: Message[];
 
   const makeAgent = (overrides: Partial<Agent> = {}): Agent => {
     const agent = new Agent();
@@ -126,6 +131,26 @@ describe('AgentRuntimeService (integration)', () => {
       findByIds: jest.fn().mockResolvedValue([]),
     };
 
+    messageStore = [];
+    let convIdCounter = 0;
+    mockConversationRepo = {
+      save: jest.fn().mockImplementation((conv: Conversation) => {
+        if (!conv.id) conv.id = `conv-${++convIdCounter}`;
+        return Promise.resolve(conv);
+      }),
+    };
+    mockMessageRepo = {
+      save: jest.fn().mockImplementation((msg: Message) => {
+        if (!msg.id) msg.id = `msg-${messageStore.length + 1}`;
+        messageStore.push(msg);
+        return Promise.resolve(msg);
+      }),
+      find: jest.fn().mockImplementation(({ where }: any) => {
+        const filtered = messageStore.filter(m => m.conversationId === where?.conversationId);
+        return Promise.resolve(filtered);
+      }),
+    };
+
     mockQueue = {
       add: jest.fn().mockResolvedValue({ id: 'job-1' }),
     };
@@ -152,6 +177,14 @@ describe('AgentRuntimeService (integration)', () => {
           },
         },
         {
+          provide: getRepositoryToken(Conversation),
+          useValue: mockConversationRepo,
+        },
+        {
+          provide: getRepositoryToken(Message),
+          useValue: mockMessageRepo,
+        },
+        {
           provide: getQueueToken('agent-runtime'),
           useValue: mockQueue,
         },
@@ -168,7 +201,7 @@ describe('AgentRuntimeService (integration)', () => {
               usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
               cost: 0,
               model: 'gpt-4',
-              sessionId: 'session-1',
+              conversationId: 'conversation-1',
               messageId: 'msg-1',
               responseTime: 100,
             }),
@@ -223,11 +256,11 @@ describe('AgentRuntimeService (integration)', () => {
       expect(run.steps).toEqual([]);
       expect(run.maxSteps).toBe(50); // default
 
-      // Thread should have the user message
-      expect(run.thread).toHaveLength(1);
-      expect(run.thread[0].role).toBe('user');
-      expect(run.thread[0].content).toBe('Do something useful');
-      expect(run.thread[0].timestamp).toBeDefined();
+      // Conversation should have been created with the user message
+      expect(run.conversationId).toBeDefined();
+      expect(messageStore).toHaveLength(1);
+      expect(messageStore[0].role).toBe('user');
+      expect(messageStore[0].content).toBe('Do something useful');
     });
 
     it('should create a run with custom limits', async () => {
@@ -259,7 +292,8 @@ describe('AgentRuntimeService (integration)', () => {
     it('should stringify non-string input', async () => {
       const run = await service.startRun('agent-1', 'org-1', 'user-1', { task: 'do stuff', priority: 'high' });
 
-      expect(run.thread[0].content).toBe(JSON.stringify({ task: 'do stuff', priority: 'high' }));
+      const lastMsg = messageStore[messageStore.length - 1];
+      expect(lastMsg.content).toBe(JSON.stringify({ task: 'do stuff', priority: 'high' }));
     });
 
     it('should throw NotFoundException for non-existent agent', async () => {
@@ -492,10 +526,10 @@ describe('AgentRuntimeService (integration)', () => {
       const updated = await service.sendInput(run.id, 'org-1', 'Here is my input');
 
       expect(updated.status).toBe(AgentRunStatus.RUNNING);
-      expect(updated.thread).toHaveLength(2); // original + new
-      expect(updated.thread[1].role).toBe('user');
-      expect(updated.thread[1].content).toBe('Here is my input');
-      expect(updated.thread[1].timestamp).toBeDefined();
+      // User message should have been persisted
+      const userMessages = messageStore.filter(m => m.content === 'Here is my input');
+      expect(userMessages).toHaveLength(1);
+      expect(userMessages[0].role).toBe('user');
 
       // Should enqueue next step
       expect(mockQueue.add).toHaveBeenCalledTimes(2); // once for startRun, once for sendInput

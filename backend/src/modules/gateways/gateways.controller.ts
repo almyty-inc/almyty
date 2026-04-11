@@ -30,7 +30,7 @@ import { CodegenService } from '../tools/codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { GatewayType, GatewayStatus } from '../../entities/gateway.entity';
+import { GatewayKind, GatewayType, GatewayStatus } from '../../entities/gateway.entity';
 import { GatewayAuthType } from '../../entities/gateway-auth.entity';
 
 class CreateGatewayBodyDto {
@@ -41,8 +41,16 @@ class CreateGatewayBodyDto {
   @IsString()
   description?: string;
 
+  @IsOptional()
+  @IsEnum(GatewayKind)
+  kind?: GatewayKind;
+
   @IsEnum(GatewayType)
   type: GatewayType;
+
+  @IsOptional()
+  @IsString()
+  agentId?: string;
 
   @IsString()
   endpoint: string;

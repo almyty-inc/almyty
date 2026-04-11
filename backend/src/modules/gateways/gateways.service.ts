@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestEx
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindManyOptions, Like, MoreThanOrEqual } from 'typeorm';
 
-import { Gateway, GatewayType, GatewayStatus } from '../../entities/gateway.entity';
+import { Gateway, GatewayKind, GatewayType, GatewayStatus } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { User } from '../../entities/user.entity';
@@ -14,7 +14,9 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 export interface CreateGatewayDto {
   name: string;
   description?: string;
+  kind?: GatewayKind;
   type: GatewayType;
+  agentId?: string;
   endpoint: string;
   configuration: Record<string, any>;
   rateLimitConfig?: {
@@ -91,8 +93,10 @@ export interface UpdateGatewayDto {
 
 export interface GatewaySearchFilters {
   search?: string;
+  kind?: GatewayKind;
   type?: GatewayType;
   status?: GatewayStatus;
+  agentId?: string;
   organizationId: string;
   page?: number;
   limit?: number;
@@ -181,12 +185,24 @@ export class GatewaysService {
         throw new BadRequestException('Endpoint already exists in your organization');
       }
 
+      // Infer kind from type if not provided
+      const kind = createGatewayDto.kind || this.inferKind(createGatewayDto.type);
+
+      // Validate kind/type exclusivity
+      if (kind === GatewayKind.AGENT && !createGatewayDto.agentId) {
+        throw new BadRequestException('Agent-kind gateways require an agentId');
+      }
+      if (kind === GatewayKind.TOOL && createGatewayDto.agentId) {
+        throw new BadRequestException('Tool-kind gateways cannot have an agentId');
+      }
+
       // Validate configuration based on gateway type
       this.validateGatewayConfiguration(createGatewayDto.type, createGatewayDto.configuration);
 
       // Create the gateway
       const gateway = this.gatewayRepository.create({
         ...createGatewayDto,
+        kind,
         endpoint,
         organizationId,
         status: GatewayStatus.ACTIVE,
@@ -351,12 +367,20 @@ export class GatewaysService {
       );
     }
 
+    if (filters.kind) {
+      queryBuilder.andWhere('gateway.kind = :kind', { kind: filters.kind });
+    }
+
     if (filters.type) {
       queryBuilder.andWhere('gateway.type = :type', { type: filters.type });
     }
 
     if (filters.status) {
       queryBuilder.andWhere('gateway.status = :status', { status: filters.status });
+    }
+
+    if (filters.agentId) {
+      queryBuilder.andWhere('gateway.agentId = :agentId', { agentId: filters.agentId });
     }
 
     // Apply sorting
@@ -714,6 +738,11 @@ export class GatewaysService {
     });
   }
 
+  private inferKind(type: GatewayType): GatewayKind {
+    const toolTypes: GatewayType[] = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS];
+    return toolTypes.includes(type) ? GatewayKind.TOOL : GatewayKind.AGENT;
+  }
+
   private validateGatewayConfiguration(type: GatewayType, configuration: Record<string, any>): void {
     switch (type) {
       case GatewayType.MCP:
@@ -722,12 +751,6 @@ export class GatewaysService {
         }
         if (!['http', 'sse', 'websocket'].includes(configuration.transport)) {
           throw new BadRequestException('Invalid MCP transport type');
-        }
-        break;
-
-      case GatewayType.A2A:
-        if (!configuration.agentCapabilities) {
-          throw new BadRequestException('A2A gateway requires agentCapabilities configuration');
         }
         break;
 
@@ -740,7 +763,12 @@ export class GatewaysService {
         }
         break;
 
-      // SCOPED_TOOL was removed - scoping is now handled via selective tool assignment
+      case GatewayType.A2A:
+      case GatewayType.OPENAI_CHAT:
+        // Agent-kind protocol types — no special config required
+        break;
+
+      // Channel types and SKILLS don't require specific configuration validation
     }
   }
 

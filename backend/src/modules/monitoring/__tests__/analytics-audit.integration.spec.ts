@@ -11,8 +11,8 @@ import { AnalyticsService } from '../analytics.service';
 import { RequestLog } from '../../../entities/request-log.entity';
 import { UsageMetric } from '../../../entities/usage-metric.entity';
 import { ToolExecution } from '../../../entities/tool-execution.entity';
-import { LlmSession } from '../../../entities/llm-session.entity';
-import { LlmMessage } from '../../../entities/llm-message.entity';
+import { Conversation } from '../../../entities/conversation.entity';
+import { Message } from '../../../entities/message.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AgentRun } from '../../../entities/agent-run.entity';
 import { MoreThanOrEqual } from 'typeorm';
@@ -60,8 +60,8 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
   let requestLogRepo: any;
   let usageMetricRepo: any;
   let toolExecRepo: any;
-  let llmSessionRepo: any;
-  let llmMessageRepo: any;
+  let conversationRepo: any;
+  let messageRepo: any;
 
   const ORG_ID = 'org-test-1';
 
@@ -71,8 +71,8 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
     requestLogRepo = makeRepo();
     usageMetricRepo = makeRepo();
     toolExecRepo = makeRepo();
-    llmSessionRepo = makeRepo();
-    llmMessageRepo = makeRepo();
+    conversationRepo = makeRepo();
+    messageRepo = makeRepo();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -80,8 +80,8 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
         { provide: getRepositoryToken(RequestLog), useValue: requestLogRepo },
         { provide: getRepositoryToken(UsageMetric), useValue: usageMetricRepo },
         { provide: getRepositoryToken(ToolExecution), useValue: toolExecRepo },
-        { provide: getRepositoryToken(LlmSession), useValue: llmSessionRepo },
-        { provide: getRepositoryToken(LlmMessage), useValue: llmMessageRepo },
+        { provide: getRepositoryToken(Conversation), useValue: conversationRepo },
+        { provide: getRepositoryToken(Message), useValue: messageRepo },
         { provide: getRepositoryToken(AuditLog), useValue: auditRepo },
         { provide: getRepositoryToken(AgentRun), useValue: agentRunRepo },
       ],

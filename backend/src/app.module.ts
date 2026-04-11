@@ -36,6 +36,8 @@ import { Agent } from './entities/agent.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentRun } from './entities/agent-run.entity';
 import { Memory } from './entities/memory.entity';
+import { Conversation } from './entities/conversation.entity';
+import { Message } from './entities/message.entity';
 import { AgentInterface } from './entities/interface.entity';
 import { AgentFile } from './entities/file.entity';
 import { AuditLog } from './entities/audit-log.entity';
@@ -137,6 +139,8 @@ import { databaseConfig } from './config/database.config';
       AgentExecution,
       AgentRun,
       Memory,
+      Conversation,
+      Message,
       AgentInterface,
       AgentFile,
       AuditLog,

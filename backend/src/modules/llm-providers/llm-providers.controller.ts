@@ -24,8 +24,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
-import { MessageRole, MessageContent } from '../../entities/llm-message.entity';
-import { SessionStatus, SessionType } from '../../entities/llm-session.entity';
+import { MessageRole, MessageContent } from '../../entities/message.entity';
+import { ConversationStatus } from '../../entities/conversation.entity';
 
 class CreateLlmProviderBodyDto {
   @IsString()
@@ -228,10 +228,6 @@ class ChatRequestBodyDto {
 
 class CreateSessionDto {
   @IsOptional()
-  @IsEnum(SessionType)
-  type?: SessionType;
-
-  @IsOptional()
   @IsString()
   title?: string;
 
@@ -258,8 +254,8 @@ class CreateSessionDto {
 
 class UpdateSessionDto {
   @IsOptional()
-  @IsEnum(SessionStatus)
-  status?: SessionStatus;
+  @IsEnum(ConversationStatus)
+  status?: ConversationStatus;
 
   @IsOptional()
   @IsString()
@@ -712,7 +708,7 @@ export class LlmProvidersController {
   @ApiResponse({ status: 200, description: 'Sessions retrieved successfully' })
   async getSessions(
     @Param('providerId', ParseUUIDPipe) providerId: string,
-    @Query('status') status?: SessionStatus,
+    @Query('status') status?: ConversationStatus,
     @Query('userId') userId?: string,
     @Query('page', new ValidationPipe({ transform: true })) page = 1,
     @Query('limit', new ValidationPipe({ transform: true })) limit = 20,

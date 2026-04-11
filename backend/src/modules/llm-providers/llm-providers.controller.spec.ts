@@ -155,7 +155,7 @@ describe('LlmProvidersController', () => {
         usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
         cost: 0.001,
         model: 'gpt-4',
-        sessionId: 'session-1',
+        conversationId: 'conversation-1',
         messageId: 'msg-1',
         responseTime: 150,
       };

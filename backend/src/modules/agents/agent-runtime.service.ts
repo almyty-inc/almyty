@@ -12,7 +12,9 @@ import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers
 import { ToolExecutorService, ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
 import { MemoryService } from '../memory/memory.service';
 import { MemoryType, MemoryScope } from '../../entities/memory.entity';
-import { MessageRole } from '../../entities/llm-message.entity';
+import { MessageRole } from '../../entities/message.entity';
+import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
+import { Message } from '../../entities/message.entity';
 
 /**
  * Built-in tool definitions that the agent runtime injects for autonomous agents.
@@ -108,6 +110,10 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
     private readonly toolRepository: Repository<Tool>,
     @InjectRepository(Organization)
     private readonly organizationRepository: Repository<Organization>,
+    @InjectRepository(Conversation)
+    private readonly conversationRepository: Repository<Conversation>,
+    @InjectRepository(Message)
+    private readonly messageRepository: Repository<Message>,
     @InjectQueue('agent-runtime')
     private readonly runtimeQueue: Queue,
     @Inject(forwardRef(() => LlmProvidersService))
@@ -182,16 +188,29 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    // Create a conversation for this run
+    const conversation = Conversation.createConversation({
+      agentId,
+      organizationId,
+      userId,
+    });
+    const savedConversation = await this.conversationRepository.save(conversation);
+
+    // Persist initial user message
+    const userMessage = Message.createUserMessage(
+      savedConversation.id,
+      typeof input === 'string' ? input : JSON.stringify(input),
+    );
+    await this.messageRepository.save(userMessage);
+
     const run = this.runRepository.create({
       agentId,
       organizationId,
       userId,
+      conversationId: savedConversation.id,
       mode: AgentMode.AUTONOMOUS,
       status: AgentRunStatus.RUNNING,
       input,
-      thread: [
-        { role: 'user', content: typeof input === 'string' ? input : JSON.stringify(input), timestamp: new Date().toISOString() },
-      ],
       steps: [],
       currentStep: 0,
       maxSteps: options?.maxSteps || 50,
@@ -280,7 +299,10 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
       let memoryContext = '';
       if (agent.memoryConfig?.enabled) {
         try {
-          const lastUserMessage = [...run.thread].reverse().find(m => m.role === 'user');
+          const recentMessages = run.conversationId
+            ? await this.messageRepository.find({ where: { conversationId: run.conversationId, role: MessageRole.USER as any }, order: { createdAt: 'DESC' }, take: 1 })
+            : [];
+          const lastUserMessage = recentMessages[0];
           if (lastUserMessage) {
             const memories = await this.memoryService.search(
               run.organizationId,
@@ -301,7 +323,7 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
       const org = await this.organizationRepository.findOne({ where: { id: run.organizationId } });
 
       // Build messages for the LLM
-      const messages = this.buildMessages(agent, run, tools, memoryContext, org);
+      const messages = await this.buildMessages(agent, run, tools, memoryContext, org);
 
       // Build tool definitions for the LLM (user tools + built-in tools)
       const llmTools = this.buildToolDefinitions(tools, agent);
@@ -372,13 +394,13 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
 
       // Check if the LLM returned tool calls
       if (responseMessage.toolCalls && responseMessage.toolCalls.length > 0) {
-        // Add assistant message with tool calls to thread
-        run.thread.push({
-          role: 'assistant',
-          content: responseMessage.content || '',
-          toolCalls: responseMessage.toolCalls,
-          timestamp: new Date().toISOString(),
-        });
+        // Persist assistant message with tool calls
+        if (run.conversationId) {
+          const assistantMsg = Message.createToolCallMessage(run.conversationId, responseMessage.toolCalls);
+          assistantMsg.content = responseMessage.content || '';
+          assistantMsg.runId = run.id;
+          await this.messageRepository.save(assistantMsg);
+        }
 
         // Execute each tool call
         for (const toolCall of responseMessage.toolCalls) {
@@ -392,13 +414,13 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
             toolCall.error = builtInResult.error;
             toolCall.executionTime = Date.now() - toolExecStart;
 
-            // Add tool result to thread
-            run.thread.push({
-              role: 'tool',
-              content: builtInResult.error || (typeof builtInResult.result === 'string' ? builtInResult.result : JSON.stringify(builtInResult.result)),
-              toolCallId: toolCall.id,
-              timestamp: new Date().toISOString(),
-            });
+            // Persist tool result message
+            if (run.conversationId) {
+              const toolResultContent = builtInResult.error || (typeof builtInResult.result === 'string' ? builtInResult.result : JSON.stringify(builtInResult.result));
+              const toolMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, toolResultContent, builtInResult.error);
+              toolMsg.runId = run.id;
+              await this.messageRepository.save(toolMsg);
+            }
 
             // Record tool call step
             run.steps.push({
@@ -472,12 +494,13 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
               toolCall.executionTime = Date.now() - toolExecStart;
             }
 
-            run.thread.push({
-              role: 'tool',
-              content: toolCall.error || (typeof toolCall.result === 'string' ? toolCall.result : JSON.stringify(toolCall.result)),
-              toolCallId: toolCall.id,
-              timestamp: new Date().toISOString(),
-            });
+            // Persist sub-agent tool result
+            if (run.conversationId) {
+              const subContent = toolCall.error || (typeof toolCall.result === 'string' ? toolCall.result : JSON.stringify(toolCall.result));
+              const subMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, subContent, toolCall.error);
+              subMsg.runId = run.id;
+              await this.messageRepository.save(subMsg);
+            }
 
             run.steps.push({
               type: 'sub_agent_call',
@@ -500,12 +523,11 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
             toolCall.error = `Tool '${toolCall.name}' not found`;
             toolCall.executionTime = Date.now() - toolExecStart;
 
-            run.thread.push({
-              role: 'tool',
-              content: `Error: Tool '${toolCall.name}' not found`,
-              toolCallId: toolCall.id,
-              timestamp: new Date().toISOString(),
-            });
+            if (run.conversationId) {
+              const errMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, `Error: Tool '${toolCall.name}' not found`, toolCall.error);
+              errMsg.runId = run.id;
+              await this.messageRepository.save(errMsg);
+            }
 
             run.steps.push({
               type: 'tool_call',
@@ -535,14 +557,14 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
             toolCall.executionTime = toolResult.executionTime;
             toolCall.cached = toolResult.cached;
 
-            run.thread.push({
-              role: 'tool',
-              content: toolResult.success
+            if (run.conversationId) {
+              const toolContent = toolResult.success
                 ? (typeof toolResult.data === 'string' ? toolResult.data : JSON.stringify(toolResult.data))
-                : `Error: ${toolResult.error}`,
-              toolCallId: toolCall.id,
-              timestamp: new Date().toISOString(),
-            });
+                : `Error: ${toolResult.error}`;
+              const toolMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, toolContent, toolResult.success ? undefined : toolResult.error);
+              toolMsg.runId = run.id;
+              await this.messageRepository.save(toolMsg);
+            }
 
             run.steps.push({
               type: 'tool_call',
@@ -557,12 +579,11 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
             toolCall.error = err.message;
             toolCall.executionTime = Date.now() - toolExecStart;
 
-            run.thread.push({
-              role: 'tool',
-              content: `Error executing tool: ${err.message}`,
-              toolCallId: toolCall.id,
-              timestamp: new Date().toISOString(),
-            });
+            if (run.conversationId) {
+              const errMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, `Error executing tool: ${err.message}`, err.message);
+              errMsg.runId = run.id;
+              await this.messageRepository.save(errMsg);
+            }
 
             run.steps.push({
               type: 'tool_call',
@@ -602,11 +623,12 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
         // No tool calls — the agent has a final response
         const finalContent = responseMessage.content || '';
 
-        run.thread.push({
-          role: 'assistant',
-          content: finalContent,
-          timestamp: new Date().toISOString(),
-        });
+        // Persist final assistant message
+        if (run.conversationId) {
+          const finalMsg = Message.createAssistantMessage(run.conversationId, finalContent);
+          finalMsg.runId = run.id;
+          await this.messageRepository.save(finalMsg);
+        }
 
         run.status = AgentRunStatus.COMPLETED;
         run.output = finalContent;
@@ -1203,7 +1225,7 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
   /**
    * Build messages array for LLM call
    */
-  private buildMessages(agent: Agent, run: AgentRun, tools: Tool[], memoryContext: string, org?: Organization): any[] {
+  private async buildMessages(agent: Agent, run: AgentRun, tools: Tool[], memoryContext: string, org?: Organization): Promise<any[]> {
     const messages: any[] = [];
 
     // Build structured system prompt
@@ -1279,16 +1301,22 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
 
     messages.push({ role: 'system', content: systemPrompt });
 
-    // Thread history
-    for (const msg of run.thread) {
-      const msgObj: any = { role: msg.role, content: msg.content };
-      if (msg.toolCalls) {
-        msgObj.toolCalls = msg.toolCalls;
+    // Thread history: load from messages table
+    if (run.conversationId) {
+      const conversationMessages = await this.messageRepository.find({
+        where: { conversationId: run.conversationId },
+        order: { createdAt: 'ASC' },
+      });
+      for (const msg of conversationMessages) {
+        const msgObj: any = { role: msg.role, content: msg.content };
+        if (msg.toolCalls) {
+          msgObj.toolCalls = msg.toolCalls;
+        }
+        if (msg.toolCallId) {
+          msgObj.toolCallId = msg.toolCallId;
+        }
+        messages.push(msgObj);
       }
-      if (msg.toolCallId) {
-        msgObj.toolCallId = msg.toolCallId;
-      }
-      messages.push(msgObj);
     }
 
     return messages;
@@ -1542,12 +1570,12 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('Run is not waiting for input');
     }
 
-    // Add user message to thread
-    run.thread.push({
-      role: 'user',
-      content: input,
-      timestamp: new Date().toISOString(),
-    });
+    // Persist user message
+    if (run.conversationId) {
+      const userMsg = Message.createUserMessage(run.conversationId, input);
+      userMsg.runId = run.id;
+      await this.messageRepository.save(userMsg);
+    }
     run.status = AgentRunStatus.RUNNING;
     await this.runRepository.save(run);
 

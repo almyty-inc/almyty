@@ -9,8 +9,8 @@ import { AnalyticsService } from './analytics.service';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
-import { LlmSession } from '../../entities/llm-session.entity';
-import { LlmMessage } from '../../entities/llm-message.entity';
+import { Conversation } from '../../entities/conversation.entity';
+import { Message } from '../../entities/message.entity';
 import { Tool } from '../../entities/tool.entity';
 import { Api } from '../../entities/api.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -23,8 +23,8 @@ import { AgentRun } from '../../entities/agent-run.entity';
       UsageMetric,
       RequestLog,
       ToolExecution,
-      LlmSession,
-      LlmMessage,
+      Conversation,
+      Message,
       Tool,
       Api,
       Organization,

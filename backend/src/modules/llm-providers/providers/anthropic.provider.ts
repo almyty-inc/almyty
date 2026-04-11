@@ -1,7 +1,7 @@
 import { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { LlmProvider } from '../../../entities/llm-provider.entity';
-import { LlmSession } from '../../../entities/llm-session.entity';
-import { MessageRole, ToolCall } from '../../../entities/llm-message.entity';
+import { Conversation } from '../../../entities/conversation.entity';
+import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse } from '../llm-providers.service';
 import { callLlmProviderHttp } from './safe-request';
@@ -12,7 +12,7 @@ import { callLlmProviderHttp } from './safe-request';
 export async function callAnthropic(
   provider: LlmProvider,
   request: ChatRequest,
-  session: LlmSession,
+  conversation: Conversation,
   tools: Tool[],
   startTime: number,
   calculateProviderCost: (provider: LlmProvider, inputTokens: number, outputTokens: number) => number,
@@ -27,10 +27,10 @@ export async function callAnthropic(
   // Prepare Anthropic request
   const anthropicRequest: Record<string, unknown> = {
     model: request.model || provider.configuration.model || 'claude-sonnet-4-20250514',
-    max_tokens: request.maxTokens || session.context?.maxTokens || 1024,
-    temperature: request.temperature ?? session.context?.temperature,
-    top_p: request.topP ?? session.context?.topP,
-    stop_sequences: request.stopSequences || session.context?.stopSequences,
+    max_tokens: request.maxTokens || conversation.context?.maxTokens || 1024,
+    temperature: request.temperature ?? conversation.context?.temperature,
+    top_p: request.topP ?? conversation.context?.topP,
+    stop_sequences: request.stopSequences || conversation.context?.stopSequences,
     messages: nonSystemMessages.map(msg => ({
       role: msg.role === MessageRole.ASSISTANT ? 'assistant' : 'user',
       content: msg.content,
@@ -99,7 +99,7 @@ export async function callAnthropic(
     },
     cost,
     model: response.data.model,
-    sessionId: session.id,
+    conversationId: conversation.id,
     messageId: '',
     responseTime,
   };

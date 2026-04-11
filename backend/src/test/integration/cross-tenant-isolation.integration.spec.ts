@@ -48,8 +48,8 @@ import { Gateway, GatewayType, GatewayStatus } from '../../entities/gateway.enti
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { GatewayAuth } from '../../entities/gateway-auth.entity';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
-import { LlmSession } from '../../entities/llm-session.entity';
-import { LlmMessage } from '../../entities/llm-message.entity';
+import { Conversation } from '../../entities/conversation.entity';
+import { Message } from '../../entities/message.entity';
 import { Memory, MemoryType } from '../../entities/memory.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
@@ -604,8 +604,8 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
     beforeAll(async () => {
       service = new LlmProvidersService(
         fx.ds.getRepository(LlmProvider),
-        fx.ds.getRepository(LlmSession),
-        fx.ds.getRepository(LlmMessage),
+        fx.ds.getRepository(Conversation),
+        fx.ds.getRepository(Message),
         fx.ds.getRepository(User),
         fx.ds.getRepository(Organization),
         fx.ds.getRepository(Gateway),

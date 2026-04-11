@@ -292,14 +292,8 @@ export class InterfacesService {
     }
 
     if (run) {
-      // Existing run — add user message and resume
-      run.thread.push({
-        role: 'user',
-        content: normalized.text,
-        timestamp: new Date().toISOString(),
-      });
-      run.status = 'running' as any;
-      await this.runRepository.save(run);
+      // Existing run — add user message and resume via sendInput
+      await this.agentRuntimeService.sendInput(run.id, iface.organizationId, normalized.text);
 
       // Resume by listening for completion
       this.listenForCompletionAndRespond(run.id, iface, adapter, normalized);
@@ -355,11 +349,8 @@ export class InterfacesService {
           const finalRun = await this.runRepository.findOne({ where: { id: runId } });
           if (!finalRun) return;
 
-          // Extract the last assistant message from the thread
-          const lastAssistantMsg = [...finalRun.thread]
-            .reverse()
-            .find((m) => m.role === 'assistant');
-          const responseText = lastAssistantMsg?.content || finalRun.output?.text || 'No response';
+          // Use run output as the response text
+          const responseText = (typeof finalRun.output === 'string' ? finalRun.output : finalRun.output?.text) || 'No response';
 
           // Format and send via adapter
           const formatted = adapter.formatOutbound({ text: responseText });
@@ -435,14 +426,8 @@ export class InterfacesService {
     }
 
     if (run) {
-      // Continue existing run
-      run.thread.push({
-        role: 'user',
-        content: normalized.text,
-        timestamp: new Date().toISOString(),
-      });
-      run.status = 'running' as any;
-      await this.runRepository.save(run);
+      // Continue existing run via sendInput
+      run = await this.agentRuntimeService.sendInput(run.id, iface.organizationId, normalized.text);
     } else {
       // Start new run
       run = await this.agentRuntimeService.startRun(
