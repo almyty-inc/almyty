@@ -1,10 +1,26 @@
 # Self-Hosting
 
-almyty can be self-hosted using Docker Compose for single-server deployments or Kubernetes with Kustomize for production clusters. This page covers both approaches plus required environment variables and health checks.
+almyty can be self-hosted using Docker Compose for single-server deployments or Kubernetes with Kustomize for production clusters.
+
+## Docker Hub
+
+Official images are published to Docker Hub:
+
+```bash
+docker pull almyty/api:latest
+docker pull almyty/frontend:latest
+```
+
+| Image | Base | Description |
+|-------|------|-------------|
+| `almyty/api` | node:24-alpine | Backend API server |
+| `almyty/frontend` | nginx:1.25-alpine | Frontend SPA served via nginx |
+
+Tags: `latest` (most recent master build), `vX.Y.Z` (releases), `sha-XXXXXXX` (per-commit).
 
 ## Docker Compose
 
-The repository includes a `docker-compose.yml` that runs all services: PostgreSQL, Redis, backend, frontend, and nginx.
+The repository includes a `docker-compose.yml` that runs all services.
 
 ### Quick start
 
@@ -23,18 +39,19 @@ The frontend is available at `http://localhost:8080` and the backend API at `htt
 |---------|-------|-------------|-------------------|
 | `postgres` | postgres:16-alpine | 5432 | 5432 |
 | `redis` | redis:7-alpine | 6379 | 6379 |
-| `backend` | almyty-api (multi-stage) | 4000 | 3000 |
-| `frontend` | almyty-frontend (nginx) | 8080 | 8080 |
-| `nginx` | nginx:1.25-alpine | 80/443 | 80/443 |
+| `backend` | almyty/api | 4000 | 3000 |
+| `frontend` | almyty/frontend | 8080 | 8080 |
 
-### Production builds
+### Building from source
+
+If you need custom builds instead of pulling from Docker Hub:
 
 ```bash
-docker build --target production -t almyty-api ./backend
-docker build --target production -t almyty-frontend ./frontend
+docker build -t almyty/api ./backend
+docker build -t almyty/frontend ./frontend
 ```
 
-Both Dockerfiles use `node:22-alpine` for the build stage. The frontend production image uses `nginx:1.25-alpine`.
+Both Dockerfiles are multi-stage. The backend builds on `node:24-alpine` and produces a minimal production image. The frontend builds the Vite app on `node:24-alpine` and copies the output into `nginx:1.25-alpine`.
 
 ## Kubernetes
 
@@ -45,8 +62,8 @@ The repository provides Kustomize base manifests with three overlays.
 | Overlay | Purpose |
 |---------|---------|
 | `development` | Local k8s (minikube, kind). Single replicas, no TLS. |
-| `staging` | Pre-production. Managed Postgres egress allowed, `ENCRYPTION_KEY` wired. |
-| `production` | Full production. Multiple replicas, TLS via cert-manager (Let's Encrypt), resource limits. |
+| `staging` | Pre-production. Managed Postgres, `ENCRYPTION_KEY` wired. |
+| `production` | Full production. Multiple replicas, TLS via cert-manager, resource limits. |
 
 ### Deploy
 
@@ -72,7 +89,7 @@ The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt
 | `DATABASE_HOST` | PostgreSQL hostname | `localhost` |
 | `DATABASE_PORT` | PostgreSQL port | `5432` |
 | `DATABASE_USERNAME` | PostgreSQL user | `almyty` |
-| `DATABASE_PASSWORD` | PostgreSQL password | `secret` |
+| `DATABASE_PASSWORD` | PostgreSQL password | -- |
 | `DATABASE_NAME` | PostgreSQL database name | `almyty` |
 | `DB_SSL` | Enable SSL for managed databases | `true` or `false` |
 | `REDIS_HOST` | Redis hostname | `localhost` |
@@ -86,6 +103,7 @@ The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt
 |----------|-------------|---------|
 | `PORT` | Backend listen port | `3000` |
 | `FRONTEND_URL` | Frontend origin for CORS | `http://localhost:3002` |
+| `VITE_API_BASE_URL` | API origin for the frontend (cross-domain deploys) | (same origin) |
 | `ANALYTICS_RETENTION_DAYS` | How long to keep request/audit logs | `90` |
 | `BULL_REDIS_HOST` | Separate Redis for BullMQ (if desired) | Falls back to `REDIS_HOST` |
 | `MAIL_HOST` | SMTP host for outbound email | -- |
@@ -95,7 +113,7 @@ The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt
 
 ## Health check endpoints
 
-The backend exposes three health endpoints via `@nestjs/terminus`:
+The backend exposes three health endpoints:
 
 | Endpoint | Purpose | Checks |
 |----------|---------|--------|
@@ -103,25 +121,7 @@ The backend exposes three health endpoints via `@nestjs/terminus`:
 | `GET /health/live` | Liveness probe | Process is running |
 | `GET /health/ready` | Readiness probe | Database and Redis are reachable |
 
-### Example
-
-```bash
-curl http://localhost:4000/health
-```
-
-```json
-{
-  "status": "ok",
-  "info": {
-    "database": { "status": "up" },
-    "redis": { "status": "up" },
-    "disk": { "status": "up" },
-    "memory": { "status": "up" }
-  }
-}
-```
-
-Use `/health/live` for Kubernetes liveness probes and `/health/ready` for readiness probes:
+### Kubernetes probes
 
 ```yaml
 livenessProbe:
@@ -140,8 +140,6 @@ readinessProbe:
 ```
 
 ## Upgrades
-
-Pull the latest images and restart:
 
 ```bash
 docker-compose pull
