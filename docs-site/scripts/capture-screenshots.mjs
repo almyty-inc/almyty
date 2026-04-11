@@ -287,6 +287,102 @@ async function loginIfNeeded(context) {
   }
 }
 
+/** Create sample API + tools + gateway so screenshots show real data. */
+async function seedSampleData(context) {
+  console.log('Seeding sample data...')
+  const headers = { 'Content-Type': 'application/json' }
+
+  // 1. Create a sample API
+  let apiId
+  try {
+    const apiResp = await context.request.post(`${API_URL}/apis`, {
+      data: { name: 'Petstore', type: 'openapi', baseUrl: 'https://petstore3.swagger.io/api/v3' },
+      headers,
+    })
+    const apiBody = await apiResp.json().catch(() => null)
+    apiId = apiBody?.id || apiBody?.data?.id
+    if (apiId) console.log(`  + API created: ${apiId}`)
+    else console.log(`  ~ API creation returned ${apiResp.status()} (may already exist)`)
+  } catch (e) { console.log(`  ~ API seed skipped: ${e.message}`) }
+
+  // 2. Import schema
+  if (apiId) {
+    try {
+      const importResp = await context.request.post(`${API_URL}/apis/${apiId}/import-schema`, {
+        data: { schemaUrl: 'https://petstore3.swagger.io/api/v3/openapi.json', generateTools: true },
+        headers,
+      })
+      console.log(`  + Schema import: ${importResp.status()}`)
+      // Wait for async job to complete
+      await new Promise(r => setTimeout(r, 5000))
+    } catch (e) { console.log(`  ~ Schema import skipped: ${e.message}`) }
+
+    // 2b. Explicitly generate tools (in case generateTools flag didn't trigger)
+    try {
+      const genResp = await context.request.post(`${API_URL}/apis/${apiId}/generate-tools`, { headers })
+      console.log(`  + Tool generation: ${genResp.status()}`)
+      await new Promise(r => setTimeout(r, 3000))
+    } catch (e) { console.log(`  ~ Tool generation skipped: ${e.message}`) }
+  }
+
+  // 3. Create an MCP gateway
+  let gatewayId
+  try {
+    const gwResp = await context.request.post(`${API_URL}/gateways`, {
+      data: { name: 'Demo MCP Gateway', type: 'mcp', endpoint: 'demo-mcp' },
+      headers,
+    })
+    const gwBody = await gwResp.json().catch(() => null)
+    gatewayId = gwBody?.id || gwBody?.data?.id
+    if (gatewayId) console.log(`  + Gateway created: ${gatewayId}`)
+    else console.log(`  ~ Gateway creation returned ${gwResp.status()}: ${JSON.stringify(gwBody)}`)
+  } catch (e) { console.log(`  ~ Gateway seed skipped: ${e.message}`) }
+
+  // 4. Create an LLM provider (placeholder — no real key needed for screenshot)
+  try {
+    const llmResp = await context.request.post(`${API_URL}/llm-providers`, {
+      data: { name: 'OpenAI', type: 'openai', configuration: { apiKey: 'sk-demo-placeholder' } },
+      headers,
+    })
+    console.log(`  + LLM provider: ${llmResp.status()}`)
+  } catch (e) { console.log(`  ~ LLM provider skipped: ${e.message}`) }
+
+  // 5. Create a credential
+  try {
+    const credResp = await context.request.post(`${API_URL}/credentials`, {
+      data: { name: 'Demo API Key', type: 'api_key', value: 'demo-key-value' },
+      headers,
+    })
+    console.log(`  + Credential: ${credResp.status()}`)
+  } catch (e) { console.log(`  ~ Credential skipped: ${e.message}`) }
+
+  // 6. Create a sample agent
+  try {
+    const agentResp = await context.request.post(`${API_URL}/agents`, {
+      data: {
+        name: 'Pet Finder Agent',
+        description: 'Finds available pets using the Petstore API',
+        mode: 'workflow',
+        pipeline: {
+          nodes: [
+            { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, data: { schema: { type: 'object', properties: { query: { type: 'string' } } } } },
+            { id: 'llm_1', type: 'llm_call', position: { x: 350, y: 200 }, data: { userPromptTemplate: '{{input.query}}' } },
+            { id: 'output_1', type: 'output', position: { x: 650, y: 200 }, data: { mapping: '{{nodes.llm_1.output}}' } },
+          ],
+          edges: [
+            { id: 'e1', source: 'input_1', target: 'llm_1' },
+            { id: 'e2', source: 'llm_1', target: 'output_1' },
+          ],
+        },
+      },
+      headers,
+    })
+    console.log(`  + Agent: ${agentResp.status()}`)
+  } catch (e) { console.log(`  ~ Agent skipped: ${e.message}`) }
+
+  console.log('Seed complete.')
+}
+
 async function capture() {
   await mkdir(OUT_DIR, { recursive: true })
 
@@ -312,6 +408,10 @@ async function capture() {
   // Auth once before the loop. The cookie persists across steps.
   const hasAuthSteps = steps.some((s) => s.auth)
   if (hasAuthSteps) await loginIfNeeded(context)
+
+  // Seed sample data so screenshots show a populated product, not
+  // just empty states. Idempotent — skips if data already exists.
+  if (hasAuthSteps) await seedSampleData(context)
 
   const manifest = []
   let failed = 0
