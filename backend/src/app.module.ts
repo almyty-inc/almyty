@@ -96,7 +96,7 @@ import { databaseConfig } from './config/database.config';
             database: configService.get<string>('DATABASE_NAME', 'almyty'),
             entities: [__dirname + '/entities/*.entity{.ts,.js}'],
             migrations: [__dirname + '/migrations/*{.ts,.js}'],
-            migrationsRun: false,
+            migrationsRun: true,
             synchronize: false,
             logging: configService.get('NODE_ENV') === 'development',
             ssl: dbSsl ? { rejectUnauthorized: false } : false,
