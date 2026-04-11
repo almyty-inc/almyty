@@ -1,14 +1,84 @@
 # Organizations
 
-Organizations are the top-level tenant boundary in almyty. Every resource -- APIs, tools, gateways, agents, and LLM providers -- belongs to exactly one organization. Organizations provide multi-tenancy, team collaboration, and role-based access control.
+Organizations are the top-level tenant boundary in almyty. Every resource — APIs, tools, gateways, agents, credentials, and LLM providers — belongs to exactly one organization. Users can belong to multiple organizations and switch between them.
 
-## In the UI
+## Creating an Organization
 
-1. Click your organization name in the sidebar footer to open the org switcher
-2. Select an organization or click **Create Organization**
-3. To manage members, navigate to **Settings** and open the **Members** tab
-4. Click **Invite Member**, enter their email and role, and click **Send**
-5. To create a team, open the **Teams** tab, click **Create Team**, and add members
+When you sign up, your first organization is created automatically from the name you provide during registration.
+
+![Sign up](/screenshots/auth-register.png)
+
+To create additional organizations:
+
+1. Navigate to **Settings** in the sidebar
+2. In the **Organization** tab, scroll to the bottom and click **Create Organization**
+3. Enter a name and optional description
+4. You'll be set as the **owner** of the new organization
+
+## Switching Organizations
+
+Click the organization name in the **sidebar footer** (below the nav links). A dropdown shows all organizations you belong to. Click one to switch — all pages immediately scope to that organization's data.
+
+## Managing Members
+
+Navigate to **Settings** and open the **Members & Teams** tab.
+
+### Inviting members
+
+1. Click **Invite Member**
+2. Enter their email address
+3. Select a role (owner, admin, member, or viewer)
+4. Click **Send Invite**
+
+The invitee receives an email with a link to accept. If they don't have an account, the link takes them to the sign-up page with the invite pre-attached.
+
+### Changing roles
+
+Click the role badge next to any member to change it. Only owners and admins can modify roles.
+
+### Removing members
+
+Click the menu icon on a member row and select **Remove**. Removing a member revokes their access to all resources in the organization immediately.
+
+## Roles
+
+| Role | Description |
+|------|-------------|
+| **owner** | Full access. Can delete the organization and transfer ownership. One per org. |
+| **admin** | Manage members, all resources, and settings. Cannot delete the org. |
+| **member** | Create and manage own resources. Invoke agents and execute tools. |
+| **viewer** | Read-only access to all resources. Cannot create, edit, or delete anything. |
+
+### Permission matrix
+
+| Action | Owner | Admin | Member | Viewer |
+|--------|-------|-------|--------|--------|
+| View all resources | Yes | Yes | Yes | Yes |
+| Create resources | Yes | Yes | Yes | No |
+| Edit own resources | Yes | Yes | Yes | No |
+| Edit any resource | Yes | Yes | No | No |
+| Manage members | Yes | Yes | No | No |
+| Manage teams | Yes | Yes | No | No |
+| Change settings | Yes | Yes | No | No |
+| Delete organization | Yes | No | No | No |
+
+## Teams
+
+Teams are sub-groups within an organization for finer-grained access control.
+
+### Creating a team
+
+1. In **Settings** > **Members & Teams**, open the **Teams** section
+2. Click **Create Team**
+3. Enter a name and description
+4. Add members from the organization
+
+### Team roles
+
+| Role | Description |
+|------|-------------|
+| **lead** | Can manage team members and team settings |
+| **member** | Standard team member |
 
 ## Via the API
 
@@ -16,122 +86,44 @@ Organizations are the top-level tenant boundary in almyty. Every resource -- API
 
 ```bash
 curl -X POST /organizations \
-  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "Acme Corp",
-    "description": "Main production organization"
-  }'
+  -d '{ "name": "Acme Corp", "description": "Production org" }'
 ```
 
 ### List members
 
 ```bash
-curl /organizations/{orgId}/members \
-  -H "Authorization: Bearer $TOKEN"
+curl /organizations/{orgId}/members
 ```
 
 ### Invite a member
 
 ```bash
 curl -X POST /organizations/{orgId}/members \
-  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "developer@acme.com",
-    "role": "member"
-  }'
+  -d '{ "email": "dev@acme.com", "role": "member" }'
 ```
 
-### Update a member's role
+### Update role
 
 ```bash
 curl -X PATCH /organizations/{orgId}/members/{userId} \
-  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "role": "admin"
-  }'
+  -d '{ "role": "admin" }'
 ```
-
-### Remove a member
-
-```bash
-curl -X DELETE /organizations/{orgId}/members/{userId} \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Delete an organization
-
-Only the owner can delete an organization. This permanently removes all resources and cannot be undone.
-
-```bash
-curl -X DELETE /organizations/{orgId} \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-## Roles
-
-| Role | Description |
-|------|-------------|
-| `owner` | Full access. Can delete the organization and manage billing. |
-| `admin` | Manage members, APIs, tools, gateways, and agents. |
-| `member` | Create and manage own resources. Invoke agents. |
-| `viewer` | Read-only access to all resources. |
-
-### Permission matrix
-
-| Action | Owner | Admin | Member | Viewer |
-|--------|-------|-------|--------|--------|
-| View resources | Yes | Yes | Yes | Yes |
-| Create resources | Yes | Yes | Yes | No |
-| Edit own resources | Yes | Yes | Yes | No |
-| Edit all resources | Yes | Yes | No | No |
-| Manage members | Yes | Yes | No | No |
-| Delete organization | Yes | No | No | No |
-
-## Teams
-
-Teams are sub-groups within an organization for finer-grained access control.
 
 ### Create a team
 
 ```bash
 curl -X POST /organizations/{orgId}/teams \
-  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "Backend Team",
-    "description": "Backend API development"
-  }'
+  -d '{ "name": "Backend Team" }'
 ```
 
-### Add a team member
+### Delete an organization
+
+Only the owner can delete an organization. This permanently removes all resources.
 
 ```bash
-curl -X POST /organizations/{orgId}/teams/{teamId}/members \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "user-uuid",
-    "role": "member"
-  }'
-```
-
-### Team roles
-
-| Role | Description |
-|------|-------------|
-| `lead` | Can manage team members and team settings |
-| `member` | Standard team member |
-
-## Switching organizations
-
-Users can belong to multiple organizations. The frontend stores the current organization in app state. API requests are scoped to the organization associated with the JWT token.
-
-To work with a specific organization's resources, use organization-scoped endpoints:
-
-```bash
-curl /organizations/{orgId}/tools \
-  -H "Authorization: Bearer $TOKEN"
+curl -X DELETE /organizations/{orgId}
 ```
