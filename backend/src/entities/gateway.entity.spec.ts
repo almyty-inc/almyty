@@ -296,7 +296,7 @@ describe('Gateway Entity', () => {
     it('should return true for A2A protocols', () => {
       gateway.type = GatewayType.A2A;
       expect(gateway.supportsProtocol('http')).toBe(true);
-      expect(gateway.supportsProtocol('grpc')).toBe(true);
+      expect(gateway.supportsProtocol('jsonrpc')).toBe(true);
     });
 
     it('should return true for UTCP protocols', () => {
@@ -305,9 +305,10 @@ describe('Gateway Entity', () => {
       expect(gateway.supportsProtocol('tcp')).toBe(true);
     });
 
-    it('should return false for unknown gateway type', () => {
+    it('should return true for unknown gateway types with http (channel types)', () => {
       gateway.type = 'UNKNOWN' as any;
-      expect(gateway.supportsProtocol('http')).toBe(false);
+      expect(gateway.supportsProtocol('http')).toBe(true);
+      expect(gateway.supportsProtocol('grpc')).toBe(false);
     });
   });
 
@@ -330,15 +331,13 @@ describe('Gateway Entity', () => {
     it('should return A2A config', () => {
       gateway.type = GatewayType.A2A;
       gateway.configuration = {
-        agentCapabilities: ['chat', 'tools'],
-        conversationMemory: true,
+        a2aVersion: '0.2.0',
       };
 
       const config = gateway.getConfigForType();
 
       expect(config.type).toBe(GatewayType.A2A);
-      expect(config.agentCapabilities).toEqual(['chat', 'tools']);
-      expect(config.conversationMemory).toBe(true);
+      expect(config.a2aVersion).toBe('0.2.0');
     });
 
     it('should return UTCP config', () => {
@@ -512,11 +511,11 @@ describe('Gateway Entity', () => {
       expect(gateway.supportsProtocol('grpc')).toBe(false);
     });
 
-    it('should support http, grpc for A2A gateways', () => {
+    it('should support http, jsonrpc for A2A gateways', () => {
       gateway.type = GatewayType.A2A;
 
       expect(gateway.supportsProtocol('http')).toBe(true);
-      expect(gateway.supportsProtocol('grpc')).toBe(true);
+      expect(gateway.supportsProtocol('jsonrpc')).toBe(true);
       expect(gateway.supportsProtocol('sse')).toBe(false);
     });
 
@@ -528,10 +527,10 @@ describe('Gateway Entity', () => {
       expect(gateway.supportsProtocol('websocket')).toBe(false);
     });
 
-    it('should return false for unknown gateway types', () => {
+    it('should support http for channel gateway types (default)', () => {
       gateway.type = 'UNKNOWN' as any;
 
-      expect(gateway.supportsProtocol('http')).toBe(false);
+      expect(gateway.supportsProtocol('http')).toBe(true);
       expect(gateway.supportsProtocol('sse')).toBe(false);
     });
   });

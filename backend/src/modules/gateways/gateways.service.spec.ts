@@ -953,15 +953,9 @@ describe('GatewaysService', () => {
       }).not.toThrow();
     });
 
-    it('should validate A2A gateway configuration - missing agentCapabilities', () => {
+    it('should accept A2A gateway configuration without special requirements', () => {
       expect(() => {
         service['validateGatewayConfiguration']('a2a' as any, {});
-      }).toThrow('A2A gateway requires agentCapabilities configuration');
-    });
-
-    it('should validate A2A gateway configuration - valid', () => {
-      expect(() => {
-        service['validateGatewayConfiguration']('a2a' as any, { agentCapabilities: {} });
       }).not.toThrow();
     });
 
