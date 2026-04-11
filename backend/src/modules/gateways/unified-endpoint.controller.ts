@@ -24,6 +24,8 @@ import { UtcpService } from '../mcp/utcp.service';
 import { GatewayResolverService } from '../mcp/services/gateway-resolver.service';
 import { AgentsService } from '../agents/agents.service';
 import { AgentExecutionEngine, StreamEvent } from '../agents/agent-execution.engine';
+import { A2AServerService } from '../a2a/a2a-server.service';
+import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
 
 /**
  * Unified endpoint controller that provides GitHub-style URLs:
@@ -53,6 +55,8 @@ export class UnifiedEndpointController {
     private readonly gatewayResolver: GatewayResolverService,
     private readonly agentsService: AgentsService,
     private readonly executionEngine: AgentExecutionEngine,
+    private readonly a2aServerService: A2AServerService,
+    private readonly a2aAgentCardService: A2AAgentCardService,
   ) {}
 
   /**
@@ -254,7 +258,9 @@ export class UnifiedEndpointController {
         return this.delegateMcp(gateway, body, res);
       case GatewayType.UTCP:
         return this.delegateUtcp(gateway, organization, action, req, res, body);
-      // TODO (Phase 5): Channel gateway types (slack, discord, telegram, etc.)
+      case GatewayType.A2A:
+        return this.delegateA2A(gateway, organization, action, req, res, body);
+      // TODO: Channel gateway types (slack, discord, telegram, etc.)
       // will be routed to ChannelGatewayService.handleInboundMessage here.
       default:
         // Skills gateways don't have a runtime endpoint
@@ -275,7 +281,34 @@ export class UnifiedEndpointController {
     return res.json(result);
   }
 
-  // A2A delegation will be handled by the new A2A server module (Phase 5)
+  private async delegateA2A(
+    gateway: Gateway,
+    organization: Organization,
+    action: string,
+    req: Request,
+    res: Response,
+    body: any,
+  ) {
+    // Discovery: .well-known/agent-card.json
+    if (action === '.well-known/agent-card.json' || action === '.well-known/agent.json') {
+      const agent = await this.agentRepository.findOne({
+        where: { id: gateway.agentId, organizationId: organization.id },
+      });
+      if (!agent) {
+        throw new HttpException('Agent not found for this A2A gateway', HttpStatus.NOT_FOUND);
+      }
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const card = this.a2aAgentCardService.buildAgentCard(gateway, agent, organization, baseUrl);
+      return res.json(card);
+    }
+
+    // All other A2A requests are JSON-RPC POSTs to the gateway root
+    if (req.method !== 'POST') {
+      throw new HttpException('A2A gateways only accept POST for JSON-RPC', HttpStatus.METHOD_NOT_ALLOWED);
+    }
+
+    await this.a2aServerService.handleJsonRpc(gateway, req, body, res);
+  }
 
   private async delegateUtcp(
     gateway: Gateway,
