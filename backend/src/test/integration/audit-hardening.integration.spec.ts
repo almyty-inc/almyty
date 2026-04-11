@@ -308,6 +308,9 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
       }),
     };
 
+    const a2aServerStub: any = { handleJsonRpc: jest.fn() };
+    const a2aAgentCardStub: any = { buildAgentCard: jest.fn() };
+
     return new UnifiedEndpointController(
       orgRepo,
       gatewayRepo,
@@ -318,6 +321,8 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
       gatewayResolverStub,
       agentsServiceStub,
       executionEngineStub,
+      a2aServerStub,
+      a2aAgentCardStub,
     );
   }
 
