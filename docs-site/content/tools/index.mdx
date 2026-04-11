@@ -1,51 +1,75 @@
 # Tools
 
 Tools are the core building blocks of almyty. Each tool represents a single
-callable action — an API endpoint, a JavaScript function, a GraphQL query,
-or an LLM-powered operation. Tools are what AI agents actually invoke when
-they need to interact with the outside world.
+callable action that an AI agent can invoke to interact with the outside world.
+You can auto-generate tools from API schemas or create them manually using one
+of five execution methods.
 
-## Tool Types
+![Tools list showing auto-generated and custom tools](/screenshots/tools-list.png)
 
-almyty supports five tool types:
+## In the UI
 
-| Type | Source | Description |
-|------|--------|-------------|
-| **API** | Auto-generated | Created from imported API schemas (OpenAPI, GraphQL, SOAP, Protobuf) |
-| **HTTP** | Manual | Custom HTTP request tool with configurable method, URL, headers, body |
-| **JavaScript** | Manual | Sandboxed JavaScript function with full parameter control |
-| **GraphQL** | Manual | Custom GraphQL query or mutation tool |
-| **LLM** | Manual | LLM-powered tool that generates output from a prompt template |
+### Browsing tools
 
-## Auto-Generated Tools
+Open **Tools** in the sidebar. The table shows every tool in your organization
+with its name, type, status, and source API (if auto-generated). Use the search
+bar and type filter to narrow the list.
 
-When you import an API schema, almyty parses each operation and creates a tool:
+When no tools exist yet, the empty state links you to either import an API
+(which auto-generates tools) or create one manually.
 
-- **OpenAPI** — Each path + method combination becomes a tool
-- **GraphQL** — Each query and mutation becomes a tool
-- **SOAP** — Each operation in the WSDL becomes a tool
-- **Protobuf** — Each RPC method becomes a tool
+![Empty tools page with quick-start actions](/screenshots/tools-empty.png)
 
-Auto-generated tools include:
+### Creating a tool
 
-- **Name** derived from the operation ID or path
-- **Description** from the operation summary or description
-- **Parameters** with full JSON Schema types, validation, and descriptions
-- **Metadata** linking back to the source API and operation
+Click **Create Tool**. The dialog presents five execution methods:
 
-## Tool Lifecycle
-
-| Status | Description |
+| Method | When to use |
 |--------|-------------|
-| `active` | Tool is available for execution and gateway assignment |
-| `inactive` | Tool exists but cannot be executed |
-| `deprecated` | Tool is marked for removal, still functional |
-| `error` | Tool has a configuration issue |
+| **HTTP** | Call any REST endpoint with configurable method, URL, headers, and body |
+| **Custom JavaScript** | Run sandboxed JS/TS code with npm packages for logic, transforms, or integrations |
+| **GraphQL** | Execute a query or mutation against a GraphQL endpoint |
+| **LLM** | Generate output from a prompt template using a configured AI model |
+| **SDK** | Import an npm package and auto-generate tools from its exported functions |
 
-## Listing Tools
+![Create tool dialog showing the five execution methods](/screenshots/tools-create-dialog.png)
+
+After selecting a method:
+
+1. Enter a **name** and **description** -- the description is what agents see when deciding whether to use the tool
+2. Define **input parameters** using the JSON Schema builder (or write raw JSON Schema)
+3. Configure the method-specific settings (URL and headers for HTTP, code editor for JavaScript, etc.)
+4. Click **Create** to save
+
+### Auto-generated tools
+
+When you import an API schema on the **APIs** page, almyty parses each operation and
+creates a tool automatically:
+
+- **OpenAPI** -- each path + method combination becomes a tool
+- **GraphQL** -- each query and mutation becomes a tool
+- **SOAP** -- each WSDL operation becomes a tool
+- **Protobuf** -- each RPC method becomes a tool
+
+Auto-generated tools include a name derived from the operation ID, a description from
+the operation summary, and parameters with full JSON Schema types and validation. They
+link back to the source API and operation in their metadata.
+
+### Tool lifecycle
+
+| Status | Meaning |
+|--------|---------|
+| `active` | Available for execution and gateway assignment |
+| `inactive` | Exists but cannot be executed |
+| `deprecated` | Marked for removal, still functional |
+| `error` | Has a configuration issue that needs attention |
+
+## Via the API
+
+### List tools
 
 ```bash
-curl https://api.almyty.com/organizations/{orgId}/tools \
+curl /organizations/{orgId}/tools \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -77,10 +101,10 @@ Response:
 }
 ```
 
-## Executing a Tool
+### Execute a tool
 
 ```bash
-curl -X POST https://api.almyty.com/organizations/{orgId}/tools/{toolId}/execute \
+curl -X POST /organizations/{orgId}/tools/{toolId}/execute \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -97,28 +121,28 @@ Response:
 {
   "success": true,
   "data": {
-    "result": { "users": [...], "total": 42 },
+    "result": { "users": ["..."], "total": 42 },
     "duration": 234,
     "status": "success"
   }
 }
 ```
 
-## Deleting a Tool
+### Delete a tool
 
 ```bash
-curl -X DELETE https://api.almyty.com/tools/{toolId} \
+curl -X DELETE /organizations/{orgId}/tools/{toolId} \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 Deleting a tool removes it from all gateways it was assigned to.
 
-## Export Formats
+## Export formats
 
 Each tool can be exported in multiple formats:
 
-- **SKILL.md** — Agent Skills format for SKILL.md injection
-- **CLI** — Bash or Node.js command-line scripts
-- **SDK** — Generated SDK code for programmatic use
+- **SKILL.md** -- Agent Skills format for SKILL.md injection
+- **CLI** -- Bash or Node.js command-line scripts
+- **SDK** -- Generated SDK code for programmatic use
 
-See the individual tool type pages for type-specific details.
+See the individual tool type pages for type-specific configuration details.

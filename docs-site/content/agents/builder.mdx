@@ -1,0 +1,131 @@
+# Visual Pipeline Builder
+
+The pipeline builder is the primary interface for designing workflow agents. It
+provides a ReactFlow canvas where you drag, connect, and configure nodes to
+define your agent's execution graph.
+
+![Visual pipeline builder](/screenshots/agent-builder.png)
+
+## Interface Overview
+
+The builder has three main areas:
+
+| Area | Location | Purpose |
+|------|----------|---------|
+| **Node Palette** | Left panel | Lists all 10 node types available to drag onto the canvas |
+| **Canvas** | Center | The DAG workspace where you arrange and connect nodes |
+| **Node Config Panel** | Right panel (opens on node click) | Configure the selected node's properties |
+
+At the top of the builder, two tabs switch between **Workflow** (visual DAG) and
+**Autonomous** (form-based) modes.
+
+## In the UI
+
+### Adding Nodes
+
+1. Open an agent in the builder
+2. Find the node type you need in the **Node Palette** on the left
+3. Drag it onto the canvas
+4. The node appears with default configuration and unconnected handles
+
+### Connecting Nodes
+
+1. Hover over a node's output handle (right side)
+2. Click and drag to another node's input handle (left side)
+3. Release to create an edge
+4. Data flows left-to-right along edges at execution time
+
+To remove a connection, click the edge and press **Delete** or **Backspace**.
+
+### Configuring a Node
+
+1. Click any node on the canvas
+2. The **Node Config Panel** opens on the right
+3. Fill in the required fields (varies by node type)
+4. Changes are saved to the draft automatically
+
+### Saving and Testing
+
+1. Click **Save** in the top bar to persist the pipeline
+2. Validation runs automatically -- nodes with errors show a red border
+3. Fix any issues listed in the error panel at the bottom
+4. Click **Test** to open the test drawer, provide sample input, and run the pipeline
+5. Review the output and per-node execution details in the test results
+
+## Node Types
+
+The palette contains all 10 node types. Each has a distinct color on the canvas
+for quick identification.
+
+| Node Type | Purpose |
+|-----------|---------|
+| **Input** | Entry point -- defines the JSON Schema for incoming data |
+| **Output** | Exit point -- maps the final result from upstream nodes |
+| **LLM Call** | Sends a prompt to an LLM provider and returns the response |
+| **Tool Call** | Invokes a tool with explicit parameter mapping |
+| **Condition** | Branches the pipeline based on a boolean expression (true/false edges) |
+| **Transform** | Runs sandboxed JavaScript to reshape data |
+| **Loop** | Iterates over an array, running child nodes for each item |
+| **Parallel** | Executes multiple branches simultaneously and aggregates results |
+| **Merge** | Combines outputs from multiple upstream nodes into a single value |
+| **Sub-Agent** | Invokes another agent as a step in this pipeline |
+
+See [Node Types](/agents/node-types) for full configuration details on each.
+
+## Workflow vs Autonomous Mode
+
+### Workflow Mode
+
+The visual DAG shown above. You explicitly define every step, connection, and
+data transformation. Best for deterministic, repeatable pipelines where you need
+full control over execution order.
+
+### Autonomous Mode
+
+Switching to the **Autonomous** tab replaces the canvas with a form:
+
+- **System Instructions** -- free-text prompt describing the agent's behavior
+- **Tools** -- select which tools the agent can call
+- **Memory** -- toggle persistent memory across conversations
+- **Collaboration** -- optionally connect other agents for delegation
+
+The LLM decides at runtime which tools to call and in what order. Best for
+open-ended tasks where rigid sequencing is unnecessary.
+
+## Canvas Controls
+
+| Action | Shortcut |
+|--------|----------|
+| Pan | Click and drag on empty canvas |
+| Zoom | Scroll wheel or pinch |
+| Select multiple | Shift + click, or drag a selection box |
+| Delete selected | Delete or Backspace |
+| Undo | Ctrl/Cmd + Z |
+| Redo | Ctrl/Cmd + Shift + Z |
+
+## Via the API
+
+The pipeline structure set in the builder maps directly to the API's `pipeline`
+object:
+
+```bash
+curl -X PATCH /agents/{id} \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pipeline": {
+      "nodes": [
+        { "id": "input_1", "type": "input", "data": { "schema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] } } },
+        { "id": "llm_1", "type": "llm_call", "data": { "providerId": "provider-uuid", "userPromptTemplate": "Answer: {{input.query}}" } },
+        { "id": "output_1", "type": "output", "data": { "mapping": "{{nodes.llm_1.output}}" } }
+      ],
+      "edges": [
+        { "id": "e1", "source": "input_1", "target": "llm_1" },
+        { "id": "e2", "source": "llm_1", "target": "output_1" }
+      ]
+    }
+  }'
+```
+
+Node positions on the canvas are stored in each node's `position` field
+(`{ x, y }`) and are included in export/import payloads.

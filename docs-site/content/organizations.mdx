@@ -1,16 +1,21 @@
 # Organizations
 
-Organizations are the top-level grouping in almyty. Every resource — APIs, tools,
-gateways, agents, and LLM providers — belongs to an organization. Organizations
-enable multi-tenancy, team collaboration, and role-based access control.
+Organizations are the top-level tenant boundary in almyty. Every resource -- APIs, tools, gateways, agents, and LLM providers -- belongs to exactly one organization. Organizations provide multi-tenancy, team collaboration, and role-based access control.
 
-## Creating an Organization
+## In the UI
 
-An organization is automatically created during registration. Additional
-organizations can be created via the API:
+1. Click your organization name in the sidebar footer to open the org switcher
+2. Select an organization or click **Create Organization**
+3. To manage members, navigate to **Settings** and open the **Members** tab
+4. Click **Invite Member**, enter their email and role, and click **Send**
+5. To create a team, open the **Teams** tab, click **Create Team**, and add members
+
+## Via the API
+
+### Create an organization
 
 ```bash
-curl -X POST https://api.almyty.com/organizations \
+curl -X POST /organizations \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -19,45 +24,17 @@ curl -X POST https://api.almyty.com/organizations \
   }'
 ```
 
-### Response
-
-```json
-{
-  "id": "org-uuid",
-  "name": "Acme Corp",
-  "description": "Main production organization",
-  "createdAt": "2026-03-01T10:00:00Z"
-}
-```
-
-## Managing Members
-
-### List Members
+### List members
 
 ```bash
-curl https://api.almyty.com/organizations/{orgId}/members \
+curl /organizations/{orgId}/members \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-```json
-{
-  "members": [
-    {
-      "id": "user-uuid",
-      "email": "admin@acme.com",
-      "firstName": "Jane",
-      "lastName": "Doe",
-      "role": "admin",
-      "joinedAt": "2026-03-01T10:00:00Z"
-    }
-  ]
-}
-```
-
-### Add a Member
+### Invite a member
 
 ```bash
-curl -X POST https://api.almyty.com/organizations/{orgId}/members \
+curl -X POST /organizations/{orgId}/members \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -66,10 +43,10 @@ curl -X POST https://api.almyty.com/organizations/{orgId}/members \
   }'
 ```
 
-### Update Member Role
+### Update a member's role
 
 ```bash
-curl -X PATCH https://api.almyty.com/organizations/{orgId}/members/{userId} \
+curl -X PATCH /organizations/{orgId}/members/{userId} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -77,23 +54,32 @@ curl -X PATCH https://api.almyty.com/organizations/{orgId}/members/{userId} \
   }'
 ```
 
-### Remove a Member
+### Remove a member
 
 ```bash
-curl -X DELETE https://api.almyty.com/organizations/{orgId}/members/{userId} \
+curl -X DELETE /organizations/{orgId}/members/{userId} \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Delete an organization
+
+Only the owner can delete an organization. This permanently removes all resources and cannot be undone.
+
+```bash
+curl -X DELETE /organizations/{orgId} \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Roles
 
-| Role | Permissions |
+| Role | Description |
 |------|-------------|
-| `owner` | Full access, can delete organization, manage settings |
-| `admin` | Manage members, APIs, tools, gateways, agents |
-| `member` | Create and manage own resources, invoke agents |
-| `viewer` | Read-only access to all resources |
+| `owner` | Full access. Can delete the organization and manage billing. |
+| `admin` | Manage members, APIs, tools, gateways, and agents. |
+| `member` | Create and manage own resources. Invoke agents. |
+| `viewer` | Read-only access to all resources. |
 
-### Permission Matrix
+### Permission matrix
 
 | Action | Owner | Admin | Member | Viewer |
 |--------|-------|-------|--------|--------|
@@ -106,12 +92,12 @@ curl -X DELETE https://api.almyty.com/organizations/{orgId}/members/{userId} \
 
 ## Teams
 
-Teams are sub-groups within an organization for more granular access control.
+Teams are sub-groups within an organization for finer-grained access control.
 
-### Create a Team
+### Create a team
 
 ```bash
-curl -X POST https://api.almyty.com/organizations/{orgId}/teams \
+curl -X POST /organizations/{orgId}/teams \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -120,10 +106,10 @@ curl -X POST https://api.almyty.com/organizations/{orgId}/teams \
   }'
 ```
 
-### Add Team Member
+### Add a team member
 
 ```bash
-curl -X POST https://api.almyty.com/organizations/{orgId}/teams/{teamId}/members \
+curl -X POST /organizations/{orgId}/teams/{teamId}/members \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -132,36 +118,20 @@ curl -X POST https://api.almyty.com/organizations/{orgId}/teams/{teamId}/members
   }'
 ```
 
-### Team Roles
+### Team roles
 
 | Role | Description |
 |------|-------------|
 | `lead` | Can manage team members and team settings |
 | `member` | Standard team member |
 
-## Switching Organizations
+## Switching organizations
 
-Users can belong to multiple organizations. The frontend stores the
-current organization in the app state. API requests are scoped to the
-organization associated with the JWT token.
+Users can belong to multiple organizations. The frontend stores the current organization in app state. API requests are scoped to the organization associated with the JWT token.
 
-To work with a specific organization's resources, use organization-scoped
-endpoints:
+To work with a specific organization's resources, use organization-scoped endpoints:
 
 ```bash
-# List tools for a specific organization
-curl https://api.almyty.com/organizations/{orgId}/tools \
+curl /organizations/{orgId}/tools \
   -H "Authorization: Bearer $TOKEN"
 ```
-
-## Deleting an Organization
-
-Only the organization owner can delete an organization:
-
-```bash
-curl -X DELETE https://api.almyty.com/organizations/{orgId} \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-This permanently deletes the organization and all its resources
-(APIs, tools, gateways, agents, etc.). This action cannot be undone.

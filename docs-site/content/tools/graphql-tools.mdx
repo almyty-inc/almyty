@@ -1,24 +1,35 @@
 # GraphQL Tools
 
-GraphQL tools execute custom GraphQL queries or mutations against a specified endpoint.
-They provide a structured way to interact with GraphQL APIs with full parameter mapping
-and result extraction.
+GraphQL tools execute a custom query or mutation against a specified endpoint.
+They give you structured variable mapping, automatic type coercion, and
+built-in error detection for GraphQL responses.
 
-## Creating a GraphQL Tool
-
-### Via the UI
+## In the UI
 
 1. Navigate to **Tools** and click **Create Tool**
 2. Select **GraphQL** as the execution method
-3. Enter the GraphQL endpoint URL
-4. Write your query or mutation
-5. Define input parameters that map to GraphQL variables
-6. Configure authentication headers
+3. Fill in a **name** and **description**
+4. Enter the **GraphQL endpoint URL**
+5. Write your **query or mutation** in the query editor
+6. Define **input parameters** -- these map to GraphQL variables via `{{parameters.*}}` expressions
+7. Add **authentication headers** (typically a Bearer token)
+8. Optionally set an **operation name** if your document contains multiple operations
+9. Click **Create**
 
-### Via the API
+### Variable mapping
+
+GraphQL variables are mapped from tool parameters using template expressions.
+Type coercion happens automatically:
+
+- String parameters stay as strings
+- Numeric parameters are passed as numbers
+- Boolean parameters are passed as booleans
+- Object parameters are passed as nested objects
+
+## Via the API
 
 ```bash
-curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
+curl -X POST /organizations/{orgId}/tools \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -47,37 +58,15 @@ curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
   }'
 ```
 
-## Configuration
+## Configuration reference
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `endpoint` | string | GraphQL API URL |
 | `headers` | object | Request headers (authentication, content-type, etc.) |
 | `query` | string | GraphQL query or mutation string |
-| `variables` | object | Variable mapping using template expressions |
+| `variables` | object | Variable mapping using `{{parameters.*}}` template expressions |
 | `operationName` | string | Operation name (required for documents with multiple operations) |
-
-## Variable Mapping
-
-GraphQL variables are mapped from tool parameters using template expressions:
-
-```json
-{
-  "variables": {
-    "id": "{{parameters.userId}}",
-    "filters": {
-      "status": "{{parameters.status}}",
-      "limit": "{{parameters.limit}}"
-    }
-  }
-}
-```
-
-Type coercion happens automatically:
-- String parameters stay as strings
-- Numeric parameters are passed as numbers
-- Boolean parameters are passed as booleans
-- Object parameters are passed as nested objects
 
 ## Authentication
 
@@ -92,9 +81,9 @@ GraphQL endpoints typically use Bearer token authentication:
 }
 ```
 
-For APIs requiring custom authentication schemes, add any headers you need.
+For APIs requiring custom authentication, add any headers you need.
 
-## Error Handling
+## Error handling
 
 GraphQL APIs return errors in a specific format:
 
@@ -114,16 +103,16 @@ GraphQL APIs return errors in a specific format:
 almyty detects GraphQL errors and reports them as tool execution failures,
 including the error messages from the API.
 
-## Response Extraction
+## Response extraction
 
-By default, the entire `data` object from the GraphQL response is returned
-as the tool's result. For complex responses, you can use a Transform node
-in an agent pipeline to extract specific fields.
+By default, the entire `data` object from the GraphQL response is returned as
+the tool's result. For complex responses, use a Transform node in an agent
+pipeline to extract specific fields.
 
-## Best Practices
+## Best practices
 
-1. **Use variables** — Never interpolate values directly into the query string
-2. **Name your operations** — Helps with debugging and server-side logging
-3. **Request only needed fields** — GraphQL's strength is selective field querying
-4. **Handle nullable fields** — Many GraphQL schemas have nullable fields by default
-5. **Test with GraphiQL** — Verify your queries work before creating tools
+1. **Use variables** -- never interpolate values directly into the query string
+2. **Name your operations** -- helps with debugging and server-side logging
+3. **Request only needed fields** -- GraphQL's strength is selective field querying
+4. **Handle nullable fields** -- many GraphQL schemas have nullable fields by default
+5. **Test with GraphiQL** -- verify your queries work before creating tools

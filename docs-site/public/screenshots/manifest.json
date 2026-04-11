@@ -1,0 +1,21 @@
+{
+  "capturedAt": "2026-04-11T17:33:19.248Z",
+  "baseUrl": "https://app.staging.almyty.com",
+  "theme": "light",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "screenshots": [
+    {
+      "id": "auth-login",
+      "title": "Sign-in screen",
+      "path": "screenshots/auth-login.png"
+    },
+    {
+      "id": "auth-register",
+      "title": "Sign-up screen",
+      "path": "screenshots/auth-register.png"
+    }
+  ]
+}

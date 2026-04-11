@@ -1,13 +1,34 @@
 # Scheduling
 
-Agents can be scheduled to run automatically at regular intervals.
-This is useful for periodic data collection, reporting, monitoring,
-or any recurring AI workflow.
+Agents can run automatically on a recurring interval. This is useful for
+periodic data collection, reporting, monitoring, or any recurring AI workflow.
 
-## Creating a Schedule
+## In the UI
+
+### Creating a Schedule
+
+1. Open the agent's detail page
+2. Click the **Schedule** tab
+3. Set the **Interval** (minimum 5 minutes)
+4. Optionally provide **Static Input** -- a fixed JSON payload sent on each run
+5. Click **Enable Schedule**
+
+The next scheduled run time appears below the interval setting.
+
+### Removing a Schedule
+
+1. Open the agent's detail page
+2. Click the **Schedule** tab
+3. Click **Disable Schedule**
+
+Disabling does not delete existing execution history.
+
+## Via the API
+
+### Create a Schedule
 
 ```bash
-curl -X POST https://api.almyty.com/agents/{id}/schedule \
+curl -X POST /agents/{id}/schedule \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -16,14 +37,7 @@ curl -X POST https://api.almyty.com/agents/{id}/schedule \
   }'
 ```
 
-### Parameters
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `intervalMinutes` | number | Yes | How often to run (minimum: 5 minutes) |
-| `input` | object | No | Static input to pass on each invocation |
-
-### Response
+Response:
 
 ```json
 {
@@ -37,14 +51,12 @@ curl -X POST https://api.almyty.com/agents/{id}/schedule \
 }
 ```
 
-## Managing Schedules
-
 ### View Schedule
 
 The schedule is included in the agent detail response:
 
 ```bash
-curl https://api.almyty.com/agents/{id} \
+curl /agents/{id} \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -64,9 +76,16 @@ curl https://api.almyty.com/agents/{id} \
 ### Remove Schedule
 
 ```bash
-curl -X DELETE https://api.almyty.com/agents/{id}/schedule \
+curl -X DELETE /agents/{id}/schedule \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+## Configuration Reference
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `intervalMinutes` | number | Yes | How often to run (minimum: 5 minutes) |
+| `input` | object | No | Static input to pass on each invocation |
 
 ## Common Intervals
 
@@ -80,21 +99,21 @@ curl -X DELETE https://api.almyty.com/agents/{id}/schedule \
 
 ## Execution History
 
-Scheduled executions appear in the agent's execution history alongside
-manual invocations. Each scheduled execution is tagged with
-`trigger: "schedule"` in the metadata.
+Scheduled executions appear in the agent's execution history alongside manual
+invocations. Each scheduled execution is tagged with `trigger: "schedule"` in
+its metadata.
 
 ```bash
-curl https://api.almyty.com/agents/{id}/executions?trigger=schedule \
+curl /agents/{id}/executions?trigger=schedule \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Cost Estimation
 
-Before scheduling, check the estimated cost per run:
+Check the estimated cost per run before enabling a schedule:
 
 ```bash
-curl https://api.almyty.com/agents/{id}/cost-estimate \
+curl /agents/{id}/cost-estimate \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -112,9 +131,9 @@ curl https://api.almyty.com/agents/{id}/cost-estimate \
 
 Multiply by `(60 * 24 * 30) / intervalMinutes` to get the monthly run count.
 
-## Important Notes
+## Notes
 
 - The agent must be in `active` status for scheduled runs to execute
-- If an execution fails, the schedule continues — check the execution history for errors
+- If an execution fails, the schedule continues -- check execution history for errors
 - Deactivating an agent pauses its schedule; reactivating resumes it
 - Deleting the schedule does not affect existing execution history

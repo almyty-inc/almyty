@@ -1,8 +1,8 @@
 # Template Expressions
 
-Template expressions allow nodes in an agent pipeline to reference data from
-the input or from other nodes' outputs. They use the `{{...}}` syntax and are
-resolved at runtime just before each node executes.
+Template expressions let nodes in an agent pipeline reference data from the
+invocation input or from other nodes' outputs. They use `{{...}}` syntax and
+are resolved at runtime just before each node executes.
 
 ## Syntax
 
@@ -10,15 +10,18 @@ resolved at runtime just before each node executes.
 {{source.path.to.value}}
 ```
 
-All expressions are wrapped in double curly braces. The first segment identifies
-the data source, and subsequent segments navigate into the data structure using
-dot notation.
+The first segment identifies the data source. Subsequent segments navigate into
+the data structure using dot notation.
 
 ## Data Sources
 
-### Input Data
+| Source | Syntax | Description |
+|--------|--------|-------------|
+| **Input** | `{{input.property}}` | The agent's invocation payload |
+| **Node output** | `{{nodes.<id>.output}}` | Output of any upstream node |
+| **Loop context** | `{{loop.item}}`, `{{loop.index}}` | Current item and index inside a Loop node |
 
-Reference the agent's invocation input:
+### Input Data
 
 ```
 {{input.message}}          // Top-level property
@@ -28,8 +31,6 @@ Reference the agent's invocation input:
 
 ### Node Outputs
 
-Reference the output of any upstream node by its ID:
-
 ```
 {{nodes.llm_1.output}}          // Full output of node llm_1
 {{nodes.tool_1.output.data}}    // Nested property
@@ -38,7 +39,7 @@ Reference the output of any upstream node by its ID:
 
 ### Loop Context
 
-Inside a Loop node's body, access iteration data:
+Inside a Loop node's body:
 
 ```
 {{loop.item}}         // Current item being iterated
@@ -46,9 +47,22 @@ Inside a Loop node's body, access iteration data:
 {{loop.item.name}}    // Property of the current item
 ```
 
+## In the UI
+
+Template expressions are used in node configuration fields throughout the
+builder:
+
+1. Click a node on the canvas to open its config panel
+2. In any text field that supports expressions (prompts, mappings, parameters), type `{{`
+3. Autocomplete suggests available upstream nodes and input properties
+4. Select or type the full expression path
+5. Use the **Test** panel to verify expressions resolve correctly with sample input
+
 ## Examples
 
 ### Simple String Interpolation
+
+In an LLM Call node's user prompt template:
 
 ```
 You asked: {{input.message}}
@@ -77,8 +91,6 @@ return {
 
 ## Type Handling
 
-Template expressions resolve to the actual JavaScript type of the referenced value:
-
 | Expression Target | Resolved Type |
 |-------------------|--------------|
 | String property | `string` |
@@ -89,18 +101,18 @@ Template expressions resolve to the actual JavaScript type of the referenced val
 | Null/undefined | `null` |
 
 When an expression is used inside a string (like a prompt template), non-string
-values are automatically serialized to JSON.
+values are serialized to JSON automatically.
 
-When an expression is the entire value of a field (like a Transform node's input),
-the original type is preserved.
+When an expression is the entire value of a field (like a Transform node's
+input), the original type is preserved.
 
 ## Error Handling
 
-If a template expression references a node that:
-
-- **Does not exist** — Pipeline validation will catch this before execution
-- **Has not executed yet** — Topological sorting ensures this cannot happen for valid pipelines
-- **Returned an error** — The downstream node will receive `null` and the execution log records the failure
+| Scenario | Behavior |
+|----------|----------|
+| Node does not exist | Pipeline validation catches this before execution |
+| Node has not executed yet | Topological sorting prevents this for valid pipelines |
+| Node returned an error | Downstream node receives `null`; the failure is recorded in the execution log |
 
 To handle optional data, use JavaScript in Transform nodes:
 
@@ -112,7 +124,7 @@ return { name };
 
 ## Best Practices
 
-1. **Keep expressions simple** — Use Transform nodes for complex data manipulation
-2. **Validate your schema** — Define Input node schemas to catch bad data early
-3. **Use meaningful node IDs** — `search_api` is clearer than `tool_1` in expressions
-4. **Test incrementally** — Use the agent test panel to verify expressions resolve correctly
+1. **Keep expressions simple** -- use Transform nodes for complex data manipulation
+2. **Validate your schema** -- define Input node schemas to catch bad data early
+3. **Use meaningful node IDs** -- `search_api` is clearer than `tool_1` in expressions
+4. **Test incrementally** -- use the agent test panel to verify expressions resolve correctly
