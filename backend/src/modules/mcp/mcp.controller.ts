@@ -11,10 +11,14 @@ import {
   Header,
   Logger,
   Get,
+  Param,
   Query,
   Req,
   Res,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Organization } from '../../entities/organization.entity';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { McpService } from './mcp.service';
@@ -30,43 +34,51 @@ export class McpController {
     private readonly mcpService: McpService,
     private readonly almytyMcpService: AlmytyMcpService,
     private readonly mcpOAuthService: McpOAuthService,
+    @InjectRepository(Organization) private readonly orgRepo: Repository<Organization>,
   ) {}
+
+  private async resolveOrg(slug: string): Promise<Organization> {
+    const org = await this.orgRepo.findOne({ where: [{ slug }, { id: slug }] });
+    if (!org) throw new HttpException(`Organization not found: ${slug}`, HttpStatus.NOT_FOUND);
+    return org;
+  }
 
   // almyty platform MCP — management tools are now real Tool rows
   // served by the standard MCP infrastructure via the system gateway
   // (see SystemGatewayService). This endpoint forwards to McpService
   // for backward compatibility.
-  @Post('almyty')
+  @Post(':orgSlug/almyty')
   @UseGuards(JwtAuthGuard)
-  async handleAlmytyMcp(@Request() req, @Body() body: any): Promise<JsonRpcResponse> {
-    return this.handleMcp(req, body);
+  async handleAlmytyMcp(@Param('orgSlug') orgSlug: string, @Request() req, @Body() body: any): Promise<JsonRpcResponse> {
+    const org = await this.resolveOrg(orgSlug);
+    return this.almytyMcpService.handleJsonRpc(body, org.id, req.user?.id);
   }
 
-  @Get('almyty/.well-known/mcp')
-  async almytyWellKnown(): Promise<any> {
+  @Get(':orgSlug/almyty/.well-known/mcp')
+  async almytyWellKnown(@Param('orgSlug') orgSlug: string): Promise<any> {
     const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
     return {
       protocol: 'mcp',
       version: '2024-11-05',
       server: { name: 'almyty', version: '1.0.0' },
       capabilities: { tools: { listChanged: false } },
-      transports: { http: `${baseUrl}/mcp/almyty` },
+      transports: { http: `${baseUrl}/mcp/${orgSlug}/almyty` },
     };
   }
 
-  @Get('almyty/.well-known/oauth-protected-resource')
-  async almytyOAuthResource(): Promise<any> {
+  @Get(':orgSlug/almyty/.well-known/oauth-protected-resource')
+  async almytyOAuthResource(@Param('orgSlug') orgSlug: string): Promise<any> {
     const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
     return {
-      resource: `${baseUrl}/mcp/almyty`,
-      authorization_servers: [`${baseUrl}/mcp/almyty`],
+      resource: `${baseUrl}/mcp/${orgSlug}/almyty`,
+      authorization_servers: [`${baseUrl}/mcp/${orgSlug}/almyty`],
     };
   }
 
-  @Get('almyty/.well-known/oauth-authorization-server')
-  async almytyOAuthMetadata(): Promise<any> {
+  @Get(':orgSlug/almyty/.well-known/oauth-authorization-server')
+  async almytyOAuthMetadata(@Param('orgSlug') orgSlug: string): Promise<any> {
     const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
-    const prefix = `${baseUrl}/mcp/almyty`;
+    const prefix = `${baseUrl}/mcp/${orgSlug}/almyty`;
     return {
       issuer: prefix,
       authorization_endpoint: `${prefix}/authorize`,
@@ -79,11 +91,11 @@ export class McpController {
     };
   }
 
-  // OAuth for /mcp/almyty — dynamic client registration
-  @Post('almyty/register')
+  // OAuth for /mcp/${orgSlug}/almyty — dynamic client registration
+  @Post(':orgSlug/almyty/register')
   @HttpCode(HttpStatus.CREATED)
   @Header('Content-Type', 'application/json')
-  async almytyRegister(@Body() body: any, @Res() res: Response) {
+  async almytyRegister(@Param('orgSlug') orgSlug: string, @Body() body: any, @Res() res: Response) {
     if (!body.client_name || !body.redirect_uris?.length) {
       throw new HttpException({ error: 'invalid_client_metadata', error_description: 'client_name and redirect_uris required' }, HttpStatus.BAD_REQUEST);
     }
@@ -98,10 +110,11 @@ export class McpController {
     return res.status(201).json(client);
   }
 
-  // OAuth for /mcp/almyty — authorize (browser redirect)
-  @Get('almyty/authorize')
+  // OAuth for /mcp/${orgSlug}/almyty — authorize (browser redirect)
+  @Get(':orgSlug/almyty/authorize')
   @Header('Cache-Control', 'no-store')
   async almytyAuthorize(
+    @Param('orgSlug') orgSlug: string,
     @Query('response_type') responseType: string,
     @Query('client_id') clientId: string,
     @Query('redirect_uri') redirectUri: string,
@@ -115,16 +128,16 @@ export class McpController {
     if (!responseType || !clientId || !redirectUri || !codeChallenge) {
       throw new HttpException({ error: 'invalid_request' }, HttpStatus.BAD_REQUEST);
     }
+    const org = await this.resolveOrg(orgSlug);
     const user = req.user;
     if (!user) {
       const baseUrl = process.env.BASE_URL || 'http://localhost:4000';
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
       const params = new URLSearchParams({ response_type: responseType, client_id: clientId, redirect_uri: redirectUri, code_challenge: codeChallenge, code_challenge_method: codeChallengeMethod || 'S256', ...(scope ? { scope } : {}), ...(state ? { state } : {}) });
-      return res.redirect(302, `${frontendUrl}/auth/login?returnTo=${encodeURIComponent(`${baseUrl}/mcp/almyty/authorize?${params}`)}`);
+      return res.redirect(302, `${frontendUrl}/auth/login?returnTo=${encodeURIComponent(`${baseUrl}/mcp/${orgSlug}/almyty/authorize?${params}`)}`);
     }
-    const orgId = user.currentOrganizationId || user.organizations?.[0]?.id;
     const code = await this.mcpOAuthService.createAuthorizationCode({
-      organizationId: orgId,
+      organizationId: org.id,
       gatewayId: 'almyty-platform',
       userId: user.id,
       clientId,
@@ -139,12 +152,12 @@ export class McpController {
     return res.redirect(302, url.toString());
   }
 
-  // OAuth for /mcp/almyty — token exchange
-  @Post('almyty/token')
+  // OAuth for /mcp/${orgSlug}/almyty — token exchange
+  @Post(':orgSlug/almyty/token')
   @HttpCode(HttpStatus.OK)
   @Header('Content-Type', 'application/json')
   @Header('Cache-Control', 'no-store')
-  async almytyToken(@Body() body: any) {
+  async almytyToken(@Param('orgSlug') orgSlug: string, @Body() body: any) {
     if (body.grant_type === 'authorization_code') {
       return this.mcpOAuthService.exchangeCode({
         gatewayId: 'almyty-platform',
