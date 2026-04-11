@@ -1,17 +1,69 @@
 /**
- * DEPRECATED — replaced by the system gateway approach.
- *
- * Management tools are now real Tool rows (isSystemTool=true) served
- * through the standard gateway MCP infrastructure. See:
- *   - backend/src/modules/gateways/system-gateway.service.ts (provisioning)
- *   - backend/src/modules/tools/executors/system-tool.executor.ts (execution)
- *
- * This file is kept as a no-op stub so existing imports don't break
- * during the transition. It will be removed in a follow-up cleanup.
+ * AlmytyMcpService — serves almyty platform management as native MCP tools.
+ * Pure code. No DB entries. Tool definitions are inline. Execution calls
+ * existing NestJS services via ModuleRef. Mounted at POST /mcp/almyty.
  */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { JsonRpcResponse } from './types/mcp.types';
+
+const TOOLS = [
+  { name: 'list_apis', description: 'List all connected APIs', inputSchema: { type: 'object', properties: {} } },
+  { name: 'create_api', description: 'Connect a new API', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] }, baseUrl: { type: 'string' } }, required: ['name', 'type'] } },
+  { name: 'import_schema', description: 'Import schema + generate tools', inputSchema: { type: 'object', properties: { apiId: { type: 'string' }, schemaUrl: { type: 'string' }, generateTools: { type: 'boolean' } }, required: ['apiId', 'schemaUrl'] } },
+  { name: 'list_tools', description: 'List all tools', inputSchema: { type: 'object', properties: {} } },
+  { name: 'list_gateways', description: 'List all gateways', inputSchema: { type: 'object', properties: {} } },
+  { name: 'create_gateway', description: 'Create a gateway (MCP/A2A/UTCP/Skills)', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'a2a', 'utcp', 'skills'] }, endpoint: { type: 'string' } }, required: ['name', 'type', 'endpoint'] } },
+  { name: 'list_agents', description: 'List all agents', inputSchema: { type: 'object', properties: {} } },
+  { name: 'create_agent', description: 'Create an agent', inputSchema: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, mode: { type: 'string', enum: ['workflow', 'autonomous'] }, instructions: { type: 'string' } }, required: ['name'] } },
+  { name: 'list_providers', description: 'List LLM providers', inputSchema: { type: 'object', properties: {} } },
+  { name: 'add_provider', description: 'Add an LLM provider', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string' }, apiKey: { type: 'string' } }, required: ['name', 'type', 'apiKey'] } },
+];
 
 @Injectable()
 export class AlmytyMcpService {
-  // No-op — the system gateway serves management tools now.
+  private readonly logger = new Logger(AlmytyMcpService.name);
+  constructor(private readonly moduleRef: ModuleRef) {}
+
+  async handleJsonRpc(body: any, organizationId: string, userId: string): Promise<JsonRpcResponse> {
+    const { method, id, params } = body;
+    switch (method) {
+      case 'initialize':
+        return { jsonrpc: '2.0', id, result: { protocolVersion: '2024-11-05', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'almyty', version: '1.0.0' } } };
+      case 'tools/list':
+        return { jsonrpc: '2.0', id, result: { tools: TOOLS } };
+      case 'tools/call':
+        return this.callTool(id, params?.name, params?.arguments || {}, organizationId, userId);
+      case 'ping':
+        return { jsonrpc: '2.0', id, result: {} };
+      default:
+        return { jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } };
+    }
+  }
+
+  private async callTool(id: any, name: string, args: any, orgId: string, userId: string): Promise<JsonRpcResponse> {
+    try {
+      const result = await this.exec(name, args, orgId, userId);
+      return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] } };
+    } catch (err: any) {
+      return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true } };
+    }
+  }
+
+  private async exec(name: string, args: any, orgId: string, userId: string): Promise<any> {
+    const svc = (token: string) => this.moduleRef.get(token, { strict: false });
+    switch (name) {
+      case 'list_apis': return svc('ApisService').findAllByOrganization(orgId);
+      case 'create_api': return svc('ApisService').create({ ...args, organizationId: orgId, userId });
+      case 'import_schema': return svc('ApisService').importSchema(args.apiId, args.schemaUrl, orgId, userId, { generateTools: args.generateTools !== false });
+      case 'list_tools': return svc('ToolsService').getTools({ organizationId: orgId });
+      case 'list_gateways': return svc('GatewaysService').getGateways({ organizationId: orgId });
+      case 'create_gateway': return svc('GatewaysService').createGateway({ ...args, kind: 'tool', configuration: { transport: 'http' } }, orgId, userId);
+      case 'list_agents': return svc('AgentsService').getAgents({ organizationId: orgId });
+      case 'create_agent': return svc('AgentsService').createAgent({ ...args, organizationId: orgId }, userId);
+      case 'list_providers': return svc('LlmProvidersService').getProviders({ organizationId: orgId });
+      case 'add_provider': return svc('LlmProvidersService').createProvider({ name: args.name, type: args.type, configuration: { apiKey: args.apiKey } }, orgId, userId);
+      default: throw new Error(`Unknown tool: ${name}`);
+    }
+  }
 }
