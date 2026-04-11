@@ -231,7 +231,7 @@ export function DashboardPage() {
               <ChecklistItem
                 done={gateways.length > 0}
                 label="Create a gateway"
-                description="Serve your tools via MCP, A2A, UTCP, or Agent Skills"
+                description="Serve your tools and agents via MCP, UTCP, A2A, Agent Skills, and more"
                 action={() => navigate('/gateways?new=1')}
               />
               <ChecklistItem

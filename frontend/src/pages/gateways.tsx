@@ -144,7 +144,7 @@ export function GatewaysPage() {
   })
 
   // Handler function for gateway creation (extracted for clean state management)
-  const handleCreateGateway = (data: CreateGatewayForm) => {
+  const handleCreateGateway = (data: CreateGatewayForm & { kind?: string; agentId?: string }) => {
     // Ensure endpoint starts with /
     const endpoint = data.endpoint.startsWith('/') ? data.endpoint : '/' + data.endpoint
 
@@ -160,10 +160,18 @@ export function GatewaysPage() {
       configuration = { format: 'skill-md' }
     }
 
-    const payload = {
+    const payload: Record<string, any> = {
       ...data,
       endpoint,
-      configuration
+      configuration,
+    }
+
+    // Pass kind (defaults to 'tool' for backwards compat)
+    if (data.kind) {
+      payload.kind = data.kind
+    }
+    if (data.agentId) {
+      payload.agentId = data.agentId
     }
 
     createGatewayMutation.mutate(payload)
@@ -171,7 +179,7 @@ export function GatewaysPage() {
 
   // Create gateway mutation
   const createGatewayMutation = useMutation({
-    mutationFn: async (payload: CreateGatewayForm & { configuration: Record<string, unknown> }) => {
+    mutationFn: async (payload: Record<string, any>) => {
       return await gatewaysApi.create(payload)
     },
     onSuccess: async (result) => {
@@ -232,9 +240,15 @@ export function GatewaysPage() {
       accessorKey: 'type',
       header: 'Type',
       cell: ({ row }) => {
-        const type = row.original.type
+        const gateway = row.original
+        const type = gateway.type
         return (
-          <ProtocolBadge protocol={type || 'mcp'} />
+          <div className="flex items-center gap-1.5">
+            <ProtocolBadge protocol={type || 'mcp'} />
+            {gateway.kind === 'agent' && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">Agent</Badge>
+            )}
+          </div>
         )
       },
     },
@@ -354,7 +368,7 @@ export function GatewaysPage() {
             <EmptyState
               icon={Zap}
               title="No gateways yet"
-              description="Gateways expose your tools to AI agents via MCP, A2A, UTCP, or Agent Skills. Create one to give Claude, Cursor, or any MCP-compatible client access to your tools."
+              description="Gateways expose your tools and agents via MCP, UTCP, Agent Skills, A2A, and more. Create one to give Claude, Cursor, or any MCP-compatible client access to your tools."
               action={
                 <Button onClick={() => setCreateDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
@@ -382,7 +396,7 @@ export function GatewaysPage() {
                 </div>
               </div>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-40">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -391,6 +405,14 @@ export function GatewaysPage() {
                   <SelectItem value="a2a">A2A</SelectItem>
                   <SelectItem value="utcp">UTCP</SelectItem>
                   <SelectItem value="skills">Skills</SelectItem>
+                  <SelectItem value="openai_chat">OpenAI Chat</SelectItem>
+                  <SelectItem value="slack">Slack</SelectItem>
+                  <SelectItem value="discord">Discord</SelectItem>
+                  <SelectItem value="telegram">Telegram</SelectItem>
+                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="webhook">Webhook</SelectItem>
+                  <SelectItem value="chat_widget">Chat Widget</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>

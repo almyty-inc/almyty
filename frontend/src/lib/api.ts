@@ -318,7 +318,12 @@ export const organizationsApi = {
 
 // Gateways API
 export const gatewaysApi = {
-  getAll: () => apiGet('/gateways'),
+  getAll: (params?: { kind?: string; agentId?: string }) => {
+    const qs = params ? '?' + new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v != null) as [string, string][]
+    ).toString() : ''
+    return apiGet(`/gateways${qs}`)
+  },
 
   getById: (id: string) => apiGet(`/gateways/${id}`),
 
@@ -374,6 +379,17 @@ export const gatewaysApi = {
   getSkills: (id: string) => apiGet(`/gateways/${id}/skills`),
   getCliBundle: (id: string, format: 'bash' | 'node' = 'bash') => apiGet(`/gateways/${id}/cli-bundle`, { params: { format } }),
   getSdk: (id: string) => apiGet(`/gateways/${id}/sdk`),
+}
+
+// External Agents API
+export const externalAgentsApi = {
+  preview: (url: string) => apiPost('/external-agents/preview', { url }),
+  getAll: () => apiGet('/external-agents'),
+  getById: (id: string) => apiGet(`/external-agents/${id}`),
+  create: (data: any) => apiPost('/external-agents', data),
+  update: (id: string, data: any) => apiPatch(`/external-agents/${id}`, data),
+  delete: (id: string) => apiDel(`/external-agents/${id}`),
+  refresh: (id: string) => apiPost(`/external-agents/${id}/refresh`),
 }
 
 // APIs API
