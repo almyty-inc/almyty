@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-04-11T17:33:19.248Z",
+  "capturedAt": "2026-04-11T19:08:45.200Z",
   "baseUrl": "https://app.staging.almyty.com",
-  "theme": "light",
+  "theme": "dark",
   "viewport": {
     "width": 1440,
     "height": 900
@@ -16,6 +16,111 @@
       "id": "auth-register",
       "title": "Sign-up screen",
       "path": "screenshots/auth-register.png"
+    },
+    {
+      "id": "dashboard-empty",
+      "title": "Empty-org dashboard — first-run onboarding checklist",
+      "path": "screenshots/dashboard-empty.png"
+    },
+    {
+      "id": "command-palette",
+      "title": "Global ⌘K command palette",
+      "path": "screenshots/command-palette.png"
+    },
+    {
+      "id": "apis-empty",
+      "title": "APIs page — empty state",
+      "path": "screenshots/apis-empty.png"
+    },
+    {
+      "id": "apis-import-dialog",
+      "title": "Import API dialog",
+      "path": "screenshots/apis-import-dialog.png"
+    },
+    {
+      "id": "apis-list",
+      "title": "APIs list with a Petstore import",
+      "path": "screenshots/apis-list.png"
+    },
+    {
+      "id": "tools-empty",
+      "title": "Tools page — empty state",
+      "path": "screenshots/tools-empty.png"
+    },
+    {
+      "id": "tools-create-dialog",
+      "title": "Create Tool dialog — 5 execution methods",
+      "path": "screenshots/tools-create-dialog.png"
+    },
+    {
+      "id": "tools-list",
+      "title": "Tools list",
+      "path": "screenshots/tools-list.png"
+    },
+    {
+      "id": "gateways-empty",
+      "title": "Gateways page — empty state",
+      "path": "screenshots/gateways-empty.png"
+    },
+    {
+      "id": "gateways-create-dialog",
+      "title": "Create Gateway dialog (MCP / A2A / UTCP / Skills)",
+      "path": "screenshots/gateways-create-dialog.png"
+    },
+    {
+      "id": "gateway-detail-tools",
+      "title": "Gateway detail — Tools tab with scoping",
+      "path": "screenshots/gateway-detail-tools.png"
+    },
+    {
+      "id": "agents-empty",
+      "title": "Agents page — empty state",
+      "path": "screenshots/agents-empty.png"
+    },
+    {
+      "id": "agent-builder",
+      "title": "Visual agent DAG builder (react-flow)",
+      "path": "screenshots/agent-builder.png"
+    },
+    {
+      "id": "llm-providers-empty",
+      "title": "Models page — empty state",
+      "path": "screenshots/llm-providers-empty.png"
+    },
+    {
+      "id": "llm-providers-create",
+      "title": "Add LLM Provider dialog",
+      "path": "screenshots/llm-providers-create.png"
+    },
+    {
+      "id": "credentials-vault",
+      "title": "Credentials vault",
+      "path": "screenshots/credentials-vault.png"
+    },
+    {
+      "id": "credentials-add",
+      "title": "Add Credential dialog",
+      "path": "screenshots/credentials-add.png"
+    },
+    {
+      "id": "analytics-overview",
+      "title": "Analytics overview",
+      "path": "screenshots/analytics-overview.png"
+    },
+    {
+      "id": "analytics-audit",
+      "title": "Analytics → Audit trail tab",
+      "path": "screenshots/analytics-audit.png"
+    },
+    {
+      "id": "memories",
+      "title": "Memories page",
+      "path": "screenshots/memories.png"
+    },
+    {
+      "id": "keyboard-shortcuts",
+      "title": "Keyboard shortcuts help dialog",
+      "path": "screenshots/keyboard-shortcuts.png"
     }
   ]
 }
