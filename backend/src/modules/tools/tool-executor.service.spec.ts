@@ -6,6 +6,7 @@ import { ToolExecutorService } from './tool-executor.service';
 import { ToolHttpExecutor } from './executors/tool-http.executor';
 import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
 import { ToolScriptExecutor } from './executors/tool-script.executor';
+import { SystemToolExecutor } from './executors/system-tool.executor';
 import { ToolAuthService } from './services/tool-auth.service';
 import { hashCacheObject, sleep as sleepUtil } from './tool-execution-utils';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
@@ -80,6 +81,7 @@ describe('ToolExecutorService', () => {
         ToolHttpExecutor,
         ToolProtocolExecutor,
         ToolScriptExecutor,
+        SystemToolExecutor,
         ToolAuthService,
         {
           provide: getRepositoryToken(Tool),

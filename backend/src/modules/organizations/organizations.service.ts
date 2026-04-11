@@ -1,10 +1,12 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
   ConflictException,
   Logger,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -20,6 +22,7 @@ import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { MailService } from '../mail/mail.service';
+import { SystemGatewayService } from '../gateways/system-gateway.service';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -38,6 +41,8 @@ export class OrganizationsService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private readonly mailService: MailService,
+    @Inject(forwardRef(() => SystemGatewayService))
+    private readonly systemGatewayService: SystemGatewayService,
   ) {}
 
   async create(createOrganizationDto: CreateOrganizationDto, ownerId: string): Promise<Organization> {
@@ -71,6 +76,17 @@ export class OrganizationsService {
     });
 
     await this.userOrganizationRepository.save(membership);
+
+    // Provision the built-in system gateway (almyty management MCP tools).
+    // Fire-and-forget: a failure here should not prevent org creation.
+    try {
+      await this.systemGatewayService.provisionSystemGateway(savedOrganization.id);
+    } catch (error) {
+      this.logger.error(
+        `Failed to provision system gateway for org ${savedOrganization.id}: ${error.message}`,
+        error.stack,
+      );
+    }
 
     return this.findOne(savedOrganization.id);
   }
@@ -183,7 +199,9 @@ export class OrganizationsService {
       throw new ForbiddenException('Cannot delete organization with active APIs');
     }
 
-    if (organization.gateways?.length > 0) {
+    // System gateways (auto-provisioned) should not block org deletion
+    const userGateways = organization.gateways?.filter(g => !g.isSystem) || [];
+    if (userGateways.length > 0) {
       throw new ForbiddenException('Cannot delete organization with active gateways');
     }
 

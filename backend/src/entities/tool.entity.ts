@@ -95,6 +95,7 @@ export enum ToolExecutionMethod {
   CUSTOM = 'custom',
   LLM = 'llm',
   SDK = 'sdk',
+  INTERNAL = 'internal',
 }
 
 export enum ToolStatus {
@@ -226,6 +227,9 @@ export class Tool {
 
   @Column({ type: 'jsonb', nullable: true })
   sdkConfig: any | null;
+
+  @Column({ default: false })
+  isSystemTool: boolean;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
   definitionHash: string | null; // SHA-256 hash of tool definition for integrity verification
