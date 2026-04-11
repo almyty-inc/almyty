@@ -45,8 +45,9 @@ logs/
 *.sqlite
 *.db
 
-# Playwright MCP screenshots
+# Playwright MCP/CLI artifacts
 .playwright-mcp/
+.playwright-cli/
 
 # Claude worktrees
 .claude/worktrees/
