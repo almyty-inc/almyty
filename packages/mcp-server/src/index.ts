@@ -306,7 +306,7 @@ async function main() {
   await server.connect(transport);
 }
 
-// Handle subcommands
+// Handle subcommands (check before main() uses argv[2] as gateway ID)
 const subcommand = process.argv[2];
 
 if (subcommand === 'login' || subcommand === 'logout' || subcommand === 'whoami') {
@@ -328,18 +328,21 @@ Token overhead comparison:
   Skill-first:      2 tools  = ~300 tokens/turn (skills loaded on demand)
 
 Usage:
-  npx @almyty/mcp-server              Start server (skill-first mode)
+  npx @almyty/mcp-server <org/gateway>   Start server for a specific gateway
+  npx @almyty/mcp-server                 Start server (all gateways)
+
+Examples:
+  npx @almyty/mcp-server acme/petstore
+  claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
 
 Authentication:
   npx @almyty/auth login              Browser-based login (one-time setup)
-                                      Credentials at ~/.almyty/credentials.json
-                                      are shared across every almyty CLI.
 
 Environment:
   ALMYTY_URL         Base URL (default: https://api.almyty.com)
-  ALMYTY_TOKEN       JWT Bearer token
-  ALMYTY_GATEWAY_ID  Scope to specific gateway
-  ALMYTY_MODE        "skill-first" (default) | "full" (all tools individually)
+  ALMYTY_TOKEN       API key (auto-read from ~/.almyty/credentials.json)
+  ALMYTY_GATEWAY_ID  Gateway (alternative to positional arg)
+  ALMYTY_MODE        "skill-first" (default) | "full"
 
 Modes:
   skill-first  2 tools (almyty_execute + almyty_search) + skills as prompts
@@ -349,9 +352,8 @@ Modes:
 
 Configuration:
 
-  Claude Code:  claude mcp add almyty -- npx -y @almyty/mcp-server
-  Cursor:       .cursor/mcp.json → { "mcpServers": { "almyty": { "command": "npx", "args": ["-y", "@almyty/mcp-server"] } } }
-  Codex:        ~/.codex/config.toml → [mcp_servers.almyty] command="npx" args=["-y","@almyty/mcp-server"]
+  Claude Code:  claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
+  Cursor:       .cursor/mcp.json → { "mcpServers": { "petstore": { "command": "npx", "args": ["-y", "@almyty/mcp-server", "acme/petstore"] } } }
   Copilot:      .vscode/mcp.json → { "servers": { "almyty": { "command": "npx", "args": ["-y", "@almyty/mcp-server"] } } }
   Gemini:       ~/.gemini/settings.json → { "mcpServers": { "almyty": { ... } } }
 `);
