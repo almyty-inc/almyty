@@ -54,83 +54,112 @@ Authenticate once before configuring any client:
 $ npx @almyty/auth login
 ```
 
-### Claude Code
+almyty is a remote MCP server. Most clients can connect directly via URL — no npm install needed. Use the CLI proxy only if you want skill-first mode (lower token overhead).
 
-```bash
-$ claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
-```
+### Claude Desktop
 
-### Cursor
-
-Create or edit `.cursor/mcp.json` in your project root:
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server", "acme/petstore"]
+      "url": "https://api.almyty.com/mcp"
     }
+  }
+}
+```
+
+For a specific gateway:
+
+```json
+{
+  "mcpServers": {
+    "petstore": {
+      "url": "https://api.almyty.com/mcp/acme/petstore"
+    }
+  }
+}
+```
+
+Restart Claude Desktop. Tools appear under the hammer icon.
+
+### Claude Code
+
+```bash
+$ claude mcp add almyty --url https://api.almyty.com/mcp
+```
+
+Or for a specific gateway:
+
+```bash
+$ claude mcp add petstore --url https://api.almyty.com/mcp/acme/petstore
+```
+
+### Cursor
+
+`.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "almyty": { "url": "https://api.almyty.com/mcp" }
   }
 }
 ```
 
 ### Windsurf
 
-Edit `~/.codeium/windsurf/mcp_config.json`:
+`~/.codeium/windsurf/mcp_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server", "acme/petstore"]
-    }
+    "almyty": { "url": "https://api.almyty.com/mcp" }
   }
 }
 ```
 
 ### VS Code (GitHub Copilot)
 
-Create or edit `.vscode/mcp.json` in your project root:
+`.vscode/mcp.json`:
 
 ```json
 {
   "servers": {
-    "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server", "acme/petstore"]
-    }
+    "almyty": { "url": "https://api.almyty.com/mcp" }
   }
 }
 ```
 
 ### OpenAI Codex CLI
 
-Edit `~/.codex/config.toml`:
+`~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.almyty]
-command = "npx"
-args = ["-y", "@almyty/mcp-server"]
-
-[mcp_servers.almyty.env]
-ALMYTY_TOKEN = "ak_live_abc123..."
+url = "https://api.almyty.com/mcp"
 ```
 
 ### Google Gemini CLI
 
-Edit `~/.gemini/settings.json`:
+`~/.gemini/settings.json`:
 
 ```json
 {
   "mcpServers": {
-    "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server", "acme/petstore"]
-    }
+    "almyty": { "url": "https://api.almyty.com/mcp" }
   }
 }
+```
+
+### Using the CLI proxy instead (optional)
+
+If you want skill-first mode (2 tools instead of N, lower token cost), use the local proxy:
+
+```bash
+$ npx @almyty/auth login
+$ claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
 ```
 
 ## Environment variables
