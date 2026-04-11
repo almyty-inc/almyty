@@ -38,7 +38,10 @@ import { z } from 'zod';
 import { resolveCredentials } from './auth.js';
 import { AlmytyProxy } from './proxy.js';
 
-const ALMYTY_GATEWAY_ID = process.env.ALMYTY_GATEWAY_ID;
+// Accept gateway as positional arg or env var:
+//   npx @almyty/mcp-server acme/petstore
+//   ALMYTY_GATEWAY_ID=acme/petstore npx @almyty/mcp-server
+const ALMYTY_GATEWAY_ID = process.argv[2] || process.env.ALMYTY_GATEWAY_ID;
 const ALMYTY_MODE = (process.env.ALMYTY_MODE || 'skill-first') as 'skill-first' | 'full';
 
 /**
