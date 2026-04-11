@@ -358,21 +358,23 @@ async function main() {
 
   server.tool(
     'almyty_create_gateway',
-    'Create a new gateway to expose tools via a protocol (MCP, A2A, UTCP, or Skills).',
+    'Create a gateway to expose tools OR an agent via a protocol (MCP, A2A, UTCP, Skills). Use kind="tool" for a tool gateway or kind="agent" for an agent gateway.',
     {
       name: z.string().describe('Gateway name'),
       type: z.enum(['mcp', 'a2a', 'utcp', 'skills']).describe('Protocol type'),
       endpoint: z.string().describe('URL slug for the gateway endpoint'),
+      kind: z.enum(['tool', 'agent']).default('tool').describe('What the gateway exposes: tools or a single agent'),
+      agentId: z.string().optional().describe('Agent ID (required when kind is "agent")'),
     },
     async (args) => {
-      const result = await proxy.createGateway({ ...args, kind: 'tool', configuration: {} });
+      const result = await proxy.createGateway({ ...args, configuration: {} });
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
 
   server.tool(
     'almyty_assign_tool',
-    'Assign a tool to a gateway so it becomes available via that protocol.',
+    'Assign a tool to a tool-kind gateway.',
     {
       gatewayId: z.string().describe('Gateway ID'),
       toolId: z.string().describe('Tool ID to assign'),
@@ -395,14 +397,28 @@ async function main() {
 
   server.tool(
     'almyty_create_agent',
-    'Create a new agent with a name and description.',
+    'Create a new agent. Workflow agents use a visual DAG pipeline. Autonomous agents use instructions + tool access.',
     {
       name: z.string().describe('Agent name'),
       description: z.string().optional().describe('What the agent does'),
-      mode: z.enum(['workflow', 'autonomous']).default('autonomous').describe('Agent mode'),
+      mode: z.enum(['workflow', 'autonomous']).default('autonomous').describe('workflow = visual pipeline, autonomous = instruction-driven'),
+      instructions: z.string().optional().describe('Instructions for autonomous agents'),
     },
     async (args) => {
       const result = await proxy.createAgent(args);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'almyty_invoke_agent',
+    'Invoke an agent with input. Returns the agent execution result.',
+    {
+      agentId: z.string().describe('Agent ID'),
+      input: z.record(z.unknown()).describe('Input data for the agent'),
+    },
+    async (args) => {
+      const result = await proxy.invokeAgent(args.agentId, args.input);
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -421,7 +437,7 @@ async function main() {
     },
   );
 
-  process.stderr.write(`almyty: ${tools.length} tools, ${skills.length} skills, 9 management tools (mode: ${ALMYTY_MODE})\n`);
+  process.stderr.write(`almyty: ${tools.length} gateway tools, ${skills.length} skills, 10 management tools (mode: ${ALMYTY_MODE})\n`);
 
   // Connect via stdio
   const transport = new StdioServerTransport();
