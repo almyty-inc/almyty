@@ -80,11 +80,3 @@ $ claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
 
 The gateway ID is `org/slug` from the gateway detail page. See [MCP Server](/cli/mcp-server) for all client configs and modes.
 
-## Testing
-
-Smoke tests for all CLI commands live in `packages/cli-tests/`:
-
-```bash
-$ cd packages/cli-tests
-$ RUN_CLI_SMOKE=1 npx vitest run   # requires auth + a gateway with tools
-```
