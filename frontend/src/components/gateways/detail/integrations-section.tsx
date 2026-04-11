@@ -201,7 +201,8 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
-              <h4 className="text-sm font-medium">Claude Code</h4>
+              <h4 className="text-sm font-medium">Claude Desktop</h4>
+              <p className="text-xs text-muted-foreground">Paste into ~/Library/Application Support/Claude/claude_desktop_config.json, then restart Claude Desktop.</p>
               <CodeBlock
                 value={JSON.stringify({
                   mcpServers: {
@@ -211,23 +212,33 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
                   }
                 }, null, 2)}
                 language="json"
-                maxHeight="200px"
+                maxHeight="160px"
               />
             </div>
 
             <div className="space-y-2">
-              <h4 className="text-sm font-medium">Cursor / Windsurf</h4>
+              <h4 className="text-sm font-medium">Claude Code</h4>
+              <p className="text-xs text-muted-foreground">Run in your terminal:</p>
+              <div className="flex gap-2">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">claude mcp add {(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')} --transport http {mcpEndpoint}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`claude mcp add ${(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')} --transport http ${mcpEndpoint}`, 'claude-code-cmd')}>
+                  {copiedField === 'claude-code-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Cursor / Windsurf / VS Code</h4>
               <CodeBlock
                 value={JSON.stringify({
                   mcpServers: {
                     [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
-                      url: mcpEndpoint,
-                      transport: "streamable-http"
+                      url: mcpEndpoint
                     }
                   }
                 }, null, 2)}
                 language="json"
-                maxHeight="200px"
+                maxHeight="160px"
               />
             </div>
           </CardContent>
