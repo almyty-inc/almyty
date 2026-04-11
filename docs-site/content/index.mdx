@@ -179,42 +179,60 @@ Press **?** anywhere to see available shortcuts.
 
 ![Keyboard shortcuts](/screenshots/keyboard-shortcuts.png)
 
-## Use almyty from Claude Code / Cursor / Any MCP Client
+## Connect to almyty via MCP
 
-almyty itself is an MCP server. Add it to your AI coding tool and manage the entire platform — create APIs, generate tools, build agents, set up gateways — without leaving your editor.
+almyty is a remote MCP server. Any MCP-compatible client (Claude Code, Cursor, Windsurf, Copilot, Gemini CLI) can connect directly — no CLI install needed.
 
-**1. Get an API key**: go to **Credentials** → **Access Keys** → **Generate Key**
+### Connect the platform (manage almyty from your AI tools)
 
-**2. Add to your MCP client:**
+Add the almyty MCP endpoint to your client:
 
 Claude Code:
 ```bash
-claude mcp add almyty -- npx -y @almyty/mcp-server
+claude mcp add almyty --url https://api.almyty.com/mcp
 ```
 
-Cursor (`.cursor/mcp.json`):
+Cursor / Windsurf (`.cursor/mcp.json`):
 ```json
 {
   "mcpServers": {
     "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server"]
+      "url": "https://api.almyty.com/mcp"
     }
   }
 }
 ```
 
-Once connected, your AI assistant can:
-- `almyty_create_api` — connect an API by URL
-- `almyty_import_schema` — parse the schema and generate tools
-- `almyty_create_gateway` — expose tools or agents via MCP/A2A/UTCP/Skills
-- `almyty_create_agent` — build an autonomous or workflow agent
-- `almyty_invoke_agent` — run an agent and get results
-- `almyty_list_apis`, `almyty_list_gateways`, `almyty_list_agents` — browse your resources
+This gives your AI assistant tools to manage almyty: create APIs, import schemas, generate tools, build agents, set up gateways.
 
-To also access a specific gateway's tools alongside the management tools:
+### Connect a specific gateway (use your API tools from your AI tools)
+
+Each gateway has its own MCP endpoint. Find it on the gateway's **Integrations** tab, or construct it as:
+
+```
+https://api.almyty.com/mcp/{org}/{gateway-slug}
+```
+
+Claude Code:
 ```bash
-claude mcp add almyty -- npx -y @almyty/mcp-server acme/petstore
+claude mcp add petstore --url https://api.almyty.com/mcp/acme/petstore
+```
+
+### Discovery
+
+MCP clients that support server discovery can find almyty at:
+
+```
+https://api.almyty.com/mcp/.well-known/mcp
+```
+
+### Using the CLI proxy (optional, lower token overhead)
+
+For skill-first mode (2 tools instead of N, ~300 tokens/turn instead of ~4,000):
+
+```bash
+npx @almyty/auth login
+npx @almyty/mcp-server acme/petstore
 ```
 
 ## Next Steps
