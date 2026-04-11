@@ -7,12 +7,14 @@
 </p>
 
 <p align="center">
-  <strong>The open platform for AI agents ⚡</strong><br>
-  APIs → Tools → Agents — one platform, every protocol
+  <strong>APIs to tools to agents. One platform, every protocol.</strong>
 </p>
 
 <p align="center">
-  <code>MCP</code> · <code>A2A</code> · <code>UTCP</code> · <code>OpenAI API</code> · <a href="https://agentskills.io">Agent Skills</a>
+  <a href="https://docs.almyty.com">Docs</a> &middot;
+  <a href="https://docs.almyty.com/cli/skills">Skills CLI</a> &middot;
+  <a href="https://docs.almyty.com/agents">Agents</a> &middot;
+  <a href="https://docs.almyty.com/self-hosting">Self-hosting</a>
 </p>
 
 ---
@@ -21,25 +23,17 @@ In university I learned about service-oriented architecture. Services discoverin
 
 Twenty years of better APIs, better protocols, better tooling. Computers still didn't get it. Then LLMs happened and that thing I'd been wondering about since university just... works. But we're sitting on decades of messy SOAP, REST, gRPC, and now five new agent protocols that don't talk to each other. Every tool makes you pick one. I wanted all of them.
 
-### Why
+## What almyty does
 
-🔌 **Wraps any API.** OpenAPI, GraphQL, SOAP, Protobuf / gRPC. SOAP behind your firewall, REST with no docs, that one endpoint nobody wants to touch.
+Point it at an API schema — OpenAPI, GraphQL, SOAP, Protobuf. Each operation becomes a tool. Write custom tools in JavaScript if the API doesn't have a schema, or if you need something that doesn't exist yet.
 
-🧠 **Agents, not just tools.** Visual pipeline builder with 10 node types (LLM calls, tool calls, conditions, transforms, loops, parallel fan-out, sub-agents). Multi-LLM orchestration. Run on platform, trigger via webhook, schedule via cron, or invoke via OpenAI-compatible API.
+Build agents with a visual pipeline builder. Chain LLM calls, tool calls, conditions, loops, parallel fan-out, sub-agents. Or skip the pipeline and run autonomous agents that figure out the steps themselves. Either way, you get scheduling, webhooks, human-in-the-loop, and an OpenAI-compatible chat API.
 
-🌐 **Gateways expose everything.** Tools via MCP, A2A, UTCP, Skills. Agents via OpenAI-compatible chat completions. One endpoint (`/{org}/{gateway}`), every protocol.
+Expose everything through gateways. Tools and agents are served over [MCP](https://docs.almyty.com/gateways/mcp), [A2A](https://docs.almyty.com/gateways/a2a), [UTCP](https://docs.almyty.com/gateways/utcp), [Agent Skills](https://docs.almyty.com/gateways/skills), and the [OpenAI-compatible API](https://docs.almyty.com/api-reference/openai-compatible) — from a single endpoint per gateway (`/{org}/{gateway}`). Connect agents to Slack, Discord, Telegram, email, or any webhook. You pick the protocol, almyty translates.
 
-🔒 **Sandboxed custom tools.** Write JavaScript tool code that imports npm packages (`pg`, `mongodb`, `stripe`, `@aws-sdk/*`, etc.). Each execution runs in a Node 24 worker thread with the `--permission` flag set: filesystem read is scoped to the tool's own deps, `fs.write` / `child_process` / `worker_threads` / native addons are denied, and a per-host network egress filter refuses RFC1918 / loopback / link-local / metadata-endpoint targets.
+Self-hosted. Your infrastructure, your data.
 
-🛡️ **Hardened multi-tenancy.** Every tenant-scoped service filters by `organizationId` at the SQL layer. Cross-tenant isolation is verified by a real-Postgres integration suite across 7 services, not just mocked assertions.
-
-🔑 **Credentials + OAuth2.** Encrypted credential vault with per-tenant scoping. OAuth2 token refresh with SSRF-guarded token endpoint, refresh-token rotation, and concurrent-refresh debouncing.
-
-📊 **Analytics, audit, RBAC.** Usage metrics, audit trail for sensitive actions, four-role RBAC (owner / admin / member / viewer), multi-org membership, team scoping.
-
-🏠 **Self-hosted.** Your infra, your data. Docker Compose, Kubernetes (Kustomize overlays for dev/staging/prod), Let's Encrypt via cert-manager.
-
-## Quick Start
+## Quick start
 
 ```bash
 git clone https://github.com/frane/almyty.git
@@ -48,45 +42,55 @@ docker-compose up -d
 cd frontend && npm run dev    # http://localhost:3002
 ```
 
-## How It Works
+See the [self-hosting guide](https://docs.almyty.com/self-hosting) for production deployment with Kubernetes.
+
+## How it works
 
 ```
   APIs              Tools              Agents             Protocols
- ┌──────────┐     ┌──────────┐     ┌──────────────┐    ┌───────────┐
- │ OpenAPI  │     │ Auto-gen │     │ Visual       │    │ MCP       │
- │ GraphQL  │────>│ HTTP     │────>│ Pipeline     │───>│ A2A       │
- │ SOAP     │     │ JS/Code  │     │ Builder      │    │ UTCP      │
- │ Protobuf │     │ GraphQL  │     │              │    │ OpenAI API│
- │          │     │ LLM      │     │ Multi-LLM    │    │ Skills    │
- └──────────┘     └──────────┘     └──────────────┘    └───────────┘
+ +----------+     +----------+     +--------------+    +-----------+
+ | OpenAPI  |     | Auto-gen |     | Visual       |    | MCP       |
+ | GraphQL  |---->| HTTP     |---->| pipeline     |--->| A2A       |
+ | SOAP     |     | JS/Code  |     | builder      |    | UTCP      |
+ | Protobuf |     | GraphQL  |     |              |    | OpenAI API|
+ |          |     | LLM      |     | Autonomous   |    | Skills    |
+ +----------+     +----------+     +--------------+    +-----------+
 ```
 
-**Import** → Point at any schema. Each operation becomes a tool.
+**Import** any API schema. Each operation becomes a tool. ([docs](https://docs.almyty.com))
 
-**Build** → Visual pipeline builder. LLM calls, tool calls, conditions, parallel fan-out, sub-agents.
+**Build** agents visually or let them run autonomously. 10 node types, 14 LLM providers. ([docs](https://docs.almyty.com/agents))
 
-**Deploy** → One endpoint (`/{org}/{gateway}`), all protocols.
+**Deploy** tools and agents behind gateways. One endpoint, every protocol. ([docs](https://docs.almyty.com/gateways/mcp))
 
-**Run** → Scheduling, webhooks, versioning, analytics, RBAC. 4,000+ backend tests (incl. real-Postgres, real-HTTP, and real-worker-thread integration suites).
+## Skills CLI
 
-## Agent Skills CLI
+Install tools as [Agent Skills](https://agentskills.io) into your coding agent:
 
 ```bash
-npx @almyty/skills install --gateway <id>
+npx @almyty/skills install @acme/petstore
 ```
 
-Works with Claude Code, Cursor, Copilot, Windsurf, and [30+ more](https://agentskills.io).
+Works with Claude Code, Cursor, Copilot, Windsurf, and [30+ more](https://docs.almyty.com/cli/skills).
+
+## CLI tools
+
+```bash
+npx @almyty/auth login                    # authenticate
+npx @almyty/skills install @org/gateway   # install skills
+npx @almyty/agents list                   # list agents
+npx @almyty/chat my-agent                 # interactive agent REPL
+```
+
+See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
 
 ## Development
 
 ```bash
-cd backend && npm run test           # unit + mocked (4,000+ tests)
-cd backend && npm run test:db        # real-Postgres integration (requires local DB)
-cd frontend && npm run test          # vitest
+cd backend && npm run test           # unit + integration
+cd frontend && npm test -- --run     # vitest
 cd frontend && npx playwright test   # E2E
 ```
-
-CI runs the full suite (backend unit + DB integration + frontend vitest + typecheck) on every push and PR.
 
 ## License
 
