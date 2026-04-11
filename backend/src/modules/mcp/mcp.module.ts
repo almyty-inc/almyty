@@ -8,6 +8,7 @@ import { UtcpController } from './controllers/utcp.controller';
 import { GatewayUtcpController } from './controllers/gateway-utcp.controller';
 import { McpOAuthController } from './controllers/mcp-oauth.controller';
 import { McpService } from './mcp.service';
+import { AlmytyMcpService } from './almyty-mcp.service';
 import { McpGatewayService } from './mcp-gateway.service';
 import { McpSessionService } from './mcp-session.service';
 import { UtcpService } from './utcp.service';
@@ -56,6 +57,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
   ],
   controllers: [McpOAuthController, McpController, GatewayMcpController, McpTransportController, UtcpController, GatewayUtcpController],
   providers: [
+    AlmytyMcpService,
     McpService,
     McpGatewayService,
     McpSessionService,
