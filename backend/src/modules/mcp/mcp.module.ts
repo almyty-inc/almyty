@@ -5,16 +5,12 @@ import { McpController } from './mcp.controller';
 import { GatewayMcpController } from './gateway-mcp.controller';
 import { McpTransportController } from './controllers/mcp-transport.controller';
 import { UtcpController } from './controllers/utcp.controller';
-import { A2AController } from './controllers/a2a.controller';
 import { GatewayUtcpController } from './controllers/gateway-utcp.controller';
-import { GatewayA2AController } from './controllers/gateway-a2a.controller';
-import { PublicController } from './controllers/public.controller';
 import { McpOAuthController } from './controllers/mcp-oauth.controller';
 import { McpService } from './mcp.service';
 import { McpGatewayService } from './mcp-gateway.service';
 import { McpSessionService } from './mcp-session.service';
 import { UtcpService } from './utcp.service';
-import { A2AService } from './a2a.service';
 import { RealtimeExecutorService } from './realtime-executor.service';
 import { GatewayResolverService } from './services/gateway-resolver.service';
 import { McpOAuthService } from './services/mcp-oauth.service';
@@ -58,13 +54,12 @@ import { GatewaysModule } from '../gateways/gateways.module';
     forwardRef(() => ToolsModule),
     GatewaysModule,
   ],
-  controllers: [McpOAuthController, McpController, GatewayMcpController, McpTransportController, UtcpController, GatewayUtcpController, A2AController, GatewayA2AController, PublicController],
+  controllers: [McpOAuthController, McpController, GatewayMcpController, McpTransportController, UtcpController, GatewayUtcpController],
   providers: [
     McpService,
     McpGatewayService,
     McpSessionService,
     UtcpService,
-    A2AService,
     RealtimeExecutorService,
     GatewayResolverService,
     McpOAuthService,
@@ -76,7 +71,6 @@ import { GatewaysModule } from '../gateways/gateways.module';
     McpGatewayService,
     McpSessionService,
     UtcpService,
-    A2AService,
     RealtimeExecutorService,
     GatewayResolverService,
     SseTransport,

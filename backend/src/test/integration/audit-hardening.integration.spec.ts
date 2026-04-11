@@ -291,7 +291,7 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
       findOne: jest.fn().mockResolvedValue(apiKeyRow ?? null),
     };
     const mcpServiceStub: any = {};
-    const a2aServiceStub: any = {};
+
     const utcpServiceStub: any = {};
     const gatewayResolverStub: any = {
       resolveOrganization: jest.fn().mockResolvedValue({
@@ -314,7 +314,6 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
       agentRepo,
       apiKeyRepo,
       mcpServiceStub,
-      a2aServiceStub,
       utcpServiceStub,
       gatewayResolverStub,
       agentsServiceStub,

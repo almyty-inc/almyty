@@ -20,7 +20,6 @@ import { Gateway, GatewayStatus, GatewayType } from '../../entities/gateway.enti
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { McpService } from '../mcp/mcp.service';
-import { A2AService } from '../mcp/a2a.service';
 import { UtcpService } from '../mcp/utcp.service';
 import { GatewayResolverService } from '../mcp/services/gateway-resolver.service';
 import { AgentsService } from '../agents/agents.service';
@@ -50,7 +49,6 @@ export class UnifiedEndpointController {
     @InjectRepository(ApiKey)
     private apiKeyRepository: Repository<ApiKey>,
     private readonly mcpService: McpService,
-    private readonly a2aService: A2AService,
     private readonly utcpService: UtcpService,
     private readonly gatewayResolver: GatewayResolverService,
     private readonly agentsService: AgentsService,
@@ -254,8 +252,6 @@ export class UnifiedEndpointController {
     switch (gateway.type) {
       case GatewayType.MCP:
         return this.delegateMcp(gateway, body, res);
-      case GatewayType.A2A:
-        return this.delegateA2A(gateway, organization, orgSlug, resourceSlug, action, req, res, body);
       case GatewayType.UTCP:
         return this.delegateUtcp(gateway, organization, action, req, res, body);
       // TODO (Phase 5): Channel gateway types (slack, discord, telegram, etc.)
@@ -279,46 +275,7 @@ export class UnifiedEndpointController {
     return res.json(result);
   }
 
-  private async delegateA2A(
-    gateway: Gateway,
-    organization: Organization,
-    orgSlug: string,
-    resourceSlug: string,
-    action: string,
-    req: Request,
-    res: Response,
-    body: any,
-  ) {
-    // Discovery endpoints
-    if (action === '.well-known/agent.json' || action === '.well-known/agent-card.json' || action === '.well-known/a2a') {
-      const baseUrl = process.env.BASE_URL || 'http://localhost:4000';
-      return res.json({
-        protocol: 'a2a',
-        version: '1.0.0',
-        server: { name: 'almyty', version: '1.0.0', description: gateway.name },
-        endpoints: {
-          agents: `${baseUrl}/${orgSlug}/${resourceSlug}/agents`,
-          messages: `${baseUrl}/${orgSlug}/${resourceSlug}/messages`,
-          discovery: `${baseUrl}/${orgSlug}/${resourceSlug}/.well-known/agent.json`,
-        },
-        gateway: { id: gateway.id, name: gateway.name },
-      });
-    }
-
-    if (action === 'agents' && req.method === 'GET') {
-      return res.json(await this.a2aService.listAgents(organization.id));
-    }
-
-    if (action === 'messages' && req.method === 'POST' && body.fromAgentId && body.toAgentId) {
-      return res.json(await this.a2aService.sendMessage(body.fromAgentId, body.toAgentId, body.content, body.messageType));
-    }
-
-    if (action === 'agents' && req.method === 'POST' && body.name) {
-      return res.json(await this.a2aService.registerAgent(organization.id, body));
-    }
-
-    throw new HttpException(`Unknown A2A action: ${action}`, HttpStatus.NOT_FOUND);
-  }
+  // A2A delegation will be handled by the new A2A server module (Phase 5)
 
   private async delegateUtcp(
     gateway: Gateway,
