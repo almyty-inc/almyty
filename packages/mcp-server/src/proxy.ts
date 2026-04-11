@@ -235,6 +235,7 @@ export class AlmytyProxy {
   async assignToolToGateway(gatewayId: string, toolId: string): Promise<any> { return this.rest('POST', `/gateways/${gatewayId}/tools`, { toolId }); }
   async listAgents(): Promise<any> { return this.rest('GET', '/agents'); }
   async createAgent(data: object): Promise<any> { return this.rest('POST', '/agents', data); }
+  async invokeAgent(agentId: string, input: object): Promise<any> { return this.rest('POST', `/agents/${agentId}/invoke`, input); }
   async listProviders(): Promise<any> { return this.rest('GET', '/llm-providers'); }
   async addProvider(data: object): Promise<any> { return this.rest('POST', '/llm-providers', data); }
 }
