@@ -1,23 +1,31 @@
 # AI Models
 
-AI Models (LLM Providers) are the language model connections that power
-agent pipelines and LLM tools. almyty supports OpenAI, Anthropic, and any
-OpenAI-compatible API endpoint.
+AI Models connect language model providers to your agent pipelines and LLM-powered tools. almyty supports 14 providers out of the box and any OpenAI-compatible endpoint.
 
-## Adding a Provider
+![Models page](/screenshots/llm-providers-empty.png)
 
-### Via the UI
+## In the UI
 
-1. Navigate to **AI Models** in the sidebar
+1. Navigate to **Models** in the sidebar
 2. Click **Add Provider**
-3. Select the provider type (OpenAI, Anthropic, or Custom)
-4. Enter your API key and optional configuration
-5. Click **Test Connection** to verify
 
-### Via the API
+![Add Provider dialog](/screenshots/llm-providers-create.png)
+
+3. Select the provider type
+4. Enter a display name and your API key
+5. Choose a default model from the dropdown
+6. Optionally adjust temperature, max tokens, and top-p
+7. Click **Test Connection** -- almyty sends a lightweight request to verify the key and model
+8. Click **Save**
+
+The provider now appears in the Models list and is available in agent pipeline LLM Call nodes and LLM-type tools.
+
+## Via the API
+
+### Add a provider
 
 ```bash
-curl -X POST https://api.almyty.com/llm-providers \
+curl -X POST /llm-providers \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -28,60 +36,19 @@ curl -X POST https://api.almyty.com/llm-providers \
   }'
 ```
 
-## Provider Types
-
-### OpenAI
-
-Works with OpenAI's API and any OpenAI-compatible endpoint (Azure OpenAI,
-Together AI, Groq, Ollama, vLLM, etc.).
-
-| Field | Description |
-|-------|-------------|
-| `apiKey` | OpenAI API key |
-| `model` | Default model (gpt-4o, gpt-4o-mini, o1, etc.) |
-| `baseUrl` | Override for compatible APIs (default: `https://api.openai.com/v1`) |
-
-### Anthropic
-
-Direct integration with Anthropic's API.
-
-| Field | Description |
-|-------|-------------|
-| `apiKey` | Anthropic API key |
-| `model` | Default model (claude-opus-4-6, claude-sonnet-4-6, etc.) |
-
-### Custom
-
-Any OpenAI-compatible HTTP endpoint. Set `baseUrl` to your endpoint and
-`apiKey` to whatever token your server expects.
-
-## Configuration
-
-Each provider has default parameters that can be overridden per-agent or per-tool:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `temperature` | number | 0.7 | Sampling temperature (0-2) |
-| `maxTokens` | number | 4096 | Maximum response tokens |
-| `topP` | number | 1.0 | Nucleus sampling |
-
-## Testing
-
-Test a provider connection from the UI or API:
+### Test connection
 
 ```bash
-curl -X POST https://api.almyty.com/llm-providers/{id}/test \
+curl -X POST /llm-providers/{id}/test \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 Returns the model name, response time, and status.
 
-## Chat Sessions
-
-Each provider supports interactive chat sessions with conversation history:
+### Chat
 
 ```bash
-curl -X POST https://api.almyty.com/llm-providers/{id}/chat \
+curl -X POST /llm-providers/{id}/chat \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -92,16 +59,63 @@ curl -X POST https://api.almyty.com/llm-providers/{id}/chat \
 
 Sessions are stored server-side and maintain full message history.
 
-## Cost Tracking
+### Update a provider
 
-almyty tracks token usage and estimated cost for every LLM call. View
-aggregate costs per provider in the **Analytics** dashboard or on the
-provider detail page.
+```bash
+curl -X PATCH /llm-providers/{id} \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "configuration": { "temperature": 0.5 }
+  }'
+```
 
-## Usage in Agents
+### Delete a provider
 
-When building an agent pipeline, LLM Call nodes reference a provider by ID.
-The provider's default model and parameters are used unless overridden
-in the node configuration.
+```bash
+curl -X DELETE /llm-providers/{id} \
+  -H "Authorization: Bearer $TOKEN"
+```
 
-See [Agents → Node Types](/agents/node-types) for LLM Call node configuration.
+## Supported providers
+
+| Provider | Type | Notes |
+|----------|------|-------|
+| OpenAI | `openai` | GPT-4o, GPT-4o-mini, o1, o3, etc. |
+| Anthropic | `anthropic` | Claude Opus, Sonnet, Haiku |
+| Google Gemini | `openai` | Via OpenAI-compatible endpoint |
+| Azure OpenAI | `openai` | Set `baseUrl` to your Azure deployment |
+| AWS Bedrock | `openai` | Via OpenAI-compatible proxy |
+| Google Vertex | `openai` | Via OpenAI-compatible proxy |
+| Mistral | `openai` | Set `baseUrl` to `https://api.mistral.ai/v1` |
+| Cohere | `openai` | Via OpenAI-compatible endpoint |
+| Groq | `openai` | Set `baseUrl` to `https://api.groq.com/openai/v1` |
+| Together | `openai` | Set `baseUrl` to `https://api.together.xyz/v1` |
+| Perplexity | `openai` | Set `baseUrl` to `https://api.perplexity.ai` |
+| DeepSeek | `openai` | Set `baseUrl` to `https://api.deepseek.com/v1` |
+| Ollama | `openai` | Set `baseUrl` to `http://localhost:11434/v1` |
+| Custom | `openai` | Any OpenAI-compatible HTTP endpoint |
+
+For providers listed as type `openai`, set the `baseUrl` field to point at the provider's OpenAI-compatible endpoint. The `apiKey` field accepts whatever token the provider expects.
+
+## Configuration reference
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | -- | Display name |
+| `provider` | string | -- | `openai` or `anthropic` |
+| `apiKey` | string | -- | Provider API key (encrypted at rest) |
+| `model` | string | -- | Default model identifier |
+| `baseUrl` | string | `https://api.openai.com/v1` | Override for compatible APIs |
+| `temperature` | number | 0.7 | Sampling temperature (0-2) |
+| `maxTokens` | number | 4096 | Maximum response tokens |
+| `topP` | number | 1.0 | Nucleus sampling |
+
+## Cost tracking
+
+almyty tracks token usage and estimated cost for every LLM call. View aggregate costs per provider in the **Analytics** dashboard or on the provider detail page.
+
+## Usage in agents
+
+When building an agent pipeline, LLM Call nodes reference a provider by ID. The provider's default model and parameters are used unless overridden in the node configuration. See [Agents](/agents) for details.

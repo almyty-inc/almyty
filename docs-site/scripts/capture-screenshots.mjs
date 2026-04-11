@@ -244,26 +244,47 @@ const steps = [
   },
 ]
 
-/** POST /auth/login and set the resulting cookies on the browser
- * context. We use the HTTP API rather than driving the login form
- * so the capture runs are deterministic (no flakes from animated
- * focus rings or slow form validation). */
+/** Ensure the browser context is authenticated. Tries login first;
+ * if the account doesn't exist yet, registers a fresh throwaway
+ * user and retries. */
 async function loginIfNeeded(context) {
-  // Cheap check: if we already have an access_token cookie, skip.
   const cookies = await context.cookies()
   if (cookies.some((c) => c.name === 'access_token')) return
 
-  const resp = await context.request.post(`${API_URL}/auth/login`, {
+  let resp = await context.request.post(`${API_URL}/auth/login`, {
     data: { email: DEMO_EMAIL, password: DEMO_PASSWORD },
     headers: { 'Content-Type': 'application/json' },
   })
-  if (!resp.ok()) {
-    throw new Error(
-      `Demo login failed (${resp.status()}). Make sure DEMO_EMAIL + DEMO_PASSWORD match a real account on ${API_URL}.`,
-    )
+
+  if (resp.status() === 401) {
+    // Account doesn't exist — register it.
+    const regResp = await context.request.post(`${API_URL}/auth/register`, {
+      data: {
+        email: DEMO_EMAIL,
+        password: DEMO_PASSWORD,
+        firstName: 'Demo',
+        lastName: 'User',
+        organizationName: `Docs ${Date.now()}`,
+      },
+      headers: { 'Content-Type': 'application/json' },
+    })
+    if (!regResp.ok()) {
+      throw new Error(`Registration failed (${regResp.status()}): ${await regResp.text()}`)
+    }
+    // Registration sets the cookie directly — check before retrying login.
+    const postRegCookies = await context.cookies()
+    if (postRegCookies.some((c) => c.name === 'access_token')) return
+
+    // Retry login with the just-registered account.
+    resp = await context.request.post(`${API_URL}/auth/login`, {
+      data: { email: DEMO_EMAIL, password: DEMO_PASSWORD },
+      headers: { 'Content-Type': 'application/json' },
+    })
   }
-  // Cookie is set on the response; Playwright picks it up via the
-  // request context.
+
+  if (!resp.ok()) {
+    throw new Error(`Login failed (${resp.status()}): ${await resp.text()}`)
+  }
 }
 
 async function capture() {
@@ -288,13 +309,16 @@ async function capture() {
     document.documentElement.appendChild(style)
   })
 
+  // Auth once before the loop. The cookie persists across steps.
+  const hasAuthSteps = steps.some((s) => s.auth)
+  if (hasAuthSteps) await loginIfNeeded(context)
+
   const manifest = []
   let failed = 0
 
   for (const step of steps) {
     const out = resolve(OUT_DIR, `${step.id}.png`)
     try {
-      if (step.auth) await loginIfNeeded(context)
       await step.navigate(page)
       if (step.waitFor) await step.waitFor(page).catch(() => null)
       if (step.after) await step.after(page).catch(() => null)

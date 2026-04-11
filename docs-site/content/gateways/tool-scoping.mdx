@@ -1,23 +1,25 @@
 # Tool Scoping
 
-Tool scoping controls which tools are exposed through each gateway.
-Not every tool needs to be available on every gateway — scoping lets you
-create purpose-specific gateways with carefully curated tool sets.
+Tool scoping controls which tools are exposed through each gateway. A gateway starts with no tools assigned -- you explicitly choose which tools to include so each gateway has a focused, purpose-specific surface area.
 
-## How It Works
+![Gateway tools](/screenshots/gateway-detail-tools.png)
 
-When you create a gateway, it starts with no tools assigned. You explicitly
-assign tools to control the gateway's surface area.
+## In the UI
 
-Each assignment creates a `GatewayTool` record that links the tool to the
-gateway with optional per-gateway configuration.
+1. Open the gateway detail page
+2. Click the **Tools** tab
+3. Click **Add Tools** to see all available tools in your organization
+4. Select one or more tools and click **Assign**
+5. Use the presets dropdown (All, None, Read Only, Admin, Public) for quick selection
+6. Toggle individual tools on or off with the **Enabled** switch
+7. Click a tool row to configure per-gateway rate limits and security policies
 
-## Assigning Tools
+## Via the API
 
-### Single Tool
+### Assign a single tool
 
 ```bash
-curl -X POST https://api.almyty.com/gateways/{gatewayId}/tools \
+curl -X POST /gateways/{gatewayId}/tools \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -25,10 +27,10 @@ curl -X POST https://api.almyty.com/gateways/{gatewayId}/tools \
   }'
 ```
 
-### Bulk Assignment
+### Bulk assignment
 
 ```bash
-curl -X POST https://api.almyty.com/gateways/{gatewayId}/tools/bulk \
+curl -X POST /gateways/{gatewayId}/tools/bulk \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -36,57 +38,45 @@ curl -X POST https://api.almyty.com/gateways/{gatewayId}/tools/bulk \
   }'
 ```
 
-### Remove a Tool
+### Remove a tool
 
 ```bash
-curl -X DELETE https://api.almyty.com/gateways/{gatewayId}/tools/{toolId} \
+curl -X DELETE /gateways/{gatewayId}/tools/{toolId} \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Remove All Tools
+### Remove all tools
 
 ```bash
-curl -X DELETE https://api.almyty.com/gateways/{gatewayId}/tools \
+curl -X DELETE /gateways/{gatewayId}/tools \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-## Scoping Presets
+### List available tools
 
-The UI provides quick presets for common scoping patterns:
+Returns tools in the organization that are not yet assigned to this gateway.
+
+```bash
+curl /gateways/{gatewayId}/tools/available \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Presets
 
 | Preset | Description |
 |--------|-------------|
-| **All** | Assign all available tools |
-| **None** | Remove all tool assignments |
+| **All** | Assign every available tool |
+| **None** | Remove all assignments |
 | **Read Only** | Assign only GET/query operations |
 | **Admin** | Assign all CRUD operations |
 | **Public** | Assign tools suitable for public access |
 
-### Using Presets via API
+## Per-gateway tool configuration
 
-Apply presets by filtering tools and using bulk assignment:
-
-```bash
-# Get all available tools
-TOOLS=$(curl -s https://api.almyty.com/gateways/{id}/tools/available \
-  -H "Authorization: Bearer $TOKEN")
-
-# Filter read-only tools (GET methods)
-READ_TOOLS=$(echo $TOOLS | jq '[.tools[] | select(.operation.method == "GET") | .id]')
-
-# Bulk assign
-curl -X POST https://api.almyty.com/gateways/{id}/tools/bulk \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"toolIds\": $READ_TOOLS}"
-```
-
-## Per-Gateway Tool Configuration
-
-Each tool assignment can have gateway-specific configuration:
+Each assignment can carry gateway-specific overrides:
 
 ```bash
-curl -X PATCH https://api.almyty.com/gateways/{gatewayId}/tools/{gatewayToolId} \
+curl -X PATCH /gateways/{gatewayId}/tools/{gatewayToolId} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -105,21 +95,10 @@ curl -X PATCH https://api.almyty.com/gateways/{gatewayId}/tools/{gatewayToolId} 
 | `rateLimit` | number | Max requests per minute for this tool |
 | `securityPolicy` | object | Gateway-specific security overrides |
 
-## Available Tools
-
-List all tools available for assignment (not yet assigned):
+## Usage statistics
 
 ```bash
-curl https://api.almyty.com/gateways/{gatewayId}/tools/available \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-## Gateway Tool Stats
-
-View usage statistics for tools on a gateway:
-
-```bash
-curl https://api.almyty.com/gateways/{gatewayId}/tools/stats \
+curl /gateways/{gatewayId}/tools/stats \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -138,25 +117,10 @@ curl https://api.almyty.com/gateways/{gatewayId}/tools/stats \
 }
 ```
 
-## Common Patterns
+## Common patterns
 
-### Read-Only Public Gateway
+**Read-only public gateway** -- assign only GET/query tools, enable API key auth, set rate limits per tool.
 
-Expose only safe, read operations to the public:
-- Assign only GET/query tools
-- Enable API key auth
-- Set rate limits per tool
+**Internal admin gateway** -- assign all tools, require Bearer token auth, no rate limits.
 
-### Internal Admin Gateway
-
-Full CRUD access for internal tooling:
-- Assign all tools
-- Require Bearer token auth
-- No rate limits
-
-### Per-Team Gateways
-
-Create separate gateways for different teams:
-- Marketing team gets analytics and content tools
-- Engineering team gets deployment and monitoring tools
-- Each gateway has its own API keys
+**Per-team gateways** -- create separate gateways for different teams (e.g., marketing gets analytics tools, engineering gets deployment tools), each with its own API keys.

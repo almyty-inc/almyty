@@ -1,0 +1,151 @@
+# Self-Hosting
+
+almyty can be self-hosted using Docker Compose for single-server deployments or Kubernetes with Kustomize for production clusters. This page covers both approaches plus required environment variables and health checks.
+
+## Docker Compose
+
+The repository includes a `docker-compose.yml` that runs all services: PostgreSQL, Redis, backend, frontend, and nginx.
+
+### Quick start
+
+```bash
+git clone https://github.com/almyty/almyty.git
+cd almyty
+cp .env.example .env   # edit with your values
+docker-compose up -d
+```
+
+The frontend is available at `http://localhost:8080` and the backend API at `http://localhost:4000`.
+
+### Services
+
+| Service | Image | Port (host) | Port (container) |
+|---------|-------|-------------|-------------------|
+| `postgres` | postgres:16-alpine | 5432 | 5432 |
+| `redis` | redis:7-alpine | 6379 | 6379 |
+| `backend` | almyty-api (multi-stage) | 4000 | 3000 |
+| `frontend` | almyty-frontend (nginx) | 8080 | 8080 |
+| `nginx` | nginx:1.25-alpine | 80/443 | 80/443 |
+
+### Production builds
+
+```bash
+docker build --target production -t almyty-api ./backend
+docker build --target production -t almyty-frontend ./frontend
+```
+
+Both Dockerfiles use `node:22-alpine` for the build stage. The frontend production image uses `nginx:1.25-alpine`.
+
+## Kubernetes
+
+The repository provides Kustomize base manifests with three overlays.
+
+### Overlays
+
+| Overlay | Purpose |
+|---------|---------|
+| `development` | Local k8s (minikube, kind). Single replicas, no TLS. |
+| `staging` | Pre-production. Managed Postgres egress allowed, `ENCRYPTION_KEY` wired. |
+| `production` | Full production. Multiple replicas, TLS via cert-manager (Let's Encrypt), resource limits. |
+
+### Deploy
+
+```bash
+# Development
+kubectl apply -k k8s/overlays/development
+
+# Staging
+kubectl apply -k k8s/overlays/staging
+
+# Production
+kubectl apply -k k8s/overlays/production
+```
+
+### TLS
+
+The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt. Set `DOMAIN` in the overlay's configmap to your domain. Certificates are provisioned automatically.
+
+## Required environment variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DATABASE_HOST` | PostgreSQL hostname | `localhost` |
+| `DATABASE_PORT` | PostgreSQL port | `5432` |
+| `DATABASE_USERNAME` | PostgreSQL user | `almyty` |
+| `DATABASE_PASSWORD` | PostgreSQL password | `secret` |
+| `DATABASE_NAME` | PostgreSQL database name | `almyty` |
+| `DB_SSL` | Enable SSL for managed databases | `true` or `false` |
+| `REDIS_HOST` | Redis hostname | `localhost` |
+| `REDIS_PORT` | Redis port | `6379` |
+| `JWT_SECRET` | Secret for signing JWT tokens | Random 64+ char string |
+| `ENCRYPTION_KEY` | AES-256 key for encrypting credentials | Random 32-byte hex string |
+
+### Optional variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Backend listen port | `3000` |
+| `FRONTEND_URL` | Frontend origin for CORS | `http://localhost:3002` |
+| `ANALYTICS_RETENTION_DAYS` | How long to keep request/audit logs | `90` |
+| `BULL_REDIS_HOST` | Separate Redis for BullMQ (if desired) | Falls back to `REDIS_HOST` |
+| `MAIL_HOST` | SMTP host for outbound email | -- |
+| `MAIL_PORT` | SMTP port | `587` |
+| `MAIL_USER` | SMTP username | -- |
+| `MAIL_PASS` | SMTP password | -- |
+
+## Health check endpoints
+
+The backend exposes three health endpoints via `@nestjs/terminus`:
+
+| Endpoint | Purpose | Checks |
+|----------|---------|--------|
+| `GET /health` | Full health | Database, Redis, disk, memory |
+| `GET /health/live` | Liveness probe | Process is running |
+| `GET /health/ready` | Readiness probe | Database and Redis are reachable |
+
+### Example
+
+```bash
+curl http://localhost:4000/health
+```
+
+```json
+{
+  "status": "ok",
+  "info": {
+    "database": { "status": "up" },
+    "redis": { "status": "up" },
+    "disk": { "status": "up" },
+    "memory": { "status": "up" }
+  }
+}
+```
+
+Use `/health/live` for Kubernetes liveness probes and `/health/ready` for readiness probes:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+```
+
+## Upgrades
+
+Pull the latest images and restart:
+
+```bash
+docker-compose pull
+docker-compose up -d
+```
+
+TypeORM runs migrations automatically on startup. Back up the database before upgrading.

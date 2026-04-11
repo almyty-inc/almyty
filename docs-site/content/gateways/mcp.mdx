@@ -1,22 +1,38 @@
 # MCP Gateway
 
-The Model Context Protocol (MCP) gateway exposes your tools using the MCP standard,
-enabling Claude, Cursor, Windsurf, and other MCP-compatible AI clients to discover
-and invoke your tools natively.
+The Model Context Protocol (MCP) gateway exposes your tools via JSON-RPC 2.0 to any MCP-compatible client, including Claude, Cursor, Windsurf, and VS Code Copilot. almyty supports HTTP, SSE, and WebSocket transports.
 
-## Overview
+![Gateways page](/screenshots/gateways-empty.png)
 
-MCP is a JSON-RPC 2.0 based protocol for connecting AI models to external tools
-and data sources. almyty implements the full MCP specification, supporting:
+## In the UI
 
-- **Tool listing** — `tools/list` method
-- **Tool invocation** — `tools/call` method
-- **Multiple transports** — HTTP, Server-Sent Events (SSE), WebSocket
+1. Navigate to **Gateways** in the sidebar
+2. Click **Create Gateway**
+3. Select **MCP** as the protocol
 
-## Creating an MCP Gateway
+![Create Gateway dialog](/screenshots/gateways-create-dialog.png)
+
+4. Enter a name, slug (used in the endpoint URL), and optional description
+5. Under **Transport**, choose HTTP (default), SSE, or WebSocket
+6. Click **Create**
+7. On the gateway detail page, open the **Tools** tab to assign tools
+
+![Gateway tools](/screenshots/gateway-detail-tools.png)
+
+8. Use the **Authentication** tab to add an auth method before going live
+
+Your MCP endpoint is available at:
+
+```
+/mcp/{org-slug}/{gateway-slug}
+```
+
+## Via the API
+
+### Create a gateway
 
 ```bash
-curl -X POST https://api.almyty.com/gateways \
+curl -X POST /gateways \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -29,31 +45,55 @@ curl -X POST https://api.almyty.com/gateways \
   }'
 ```
 
-## Endpoint URL
+### List tools (JSON-RPC)
 
-After creation, your MCP endpoint is available at:
-
+```bash
+curl -X POST /mcp/acme/my-tools \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/list",
+    "id": 1
+  }'
 ```
-https://api.almyty.com/mcp/{org-slug}{endpoint}
+
+### Call a tool (JSON-RPC)
+
+```bash
+curl -X POST /mcp/acme/my-tools \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "get_users",
+      "arguments": { "page": 1, "limit": 10 }
+    },
+    "id": 2
+  }'
 ```
 
-For example, if your organization is "acme" and endpoint is "/my-tools":
+## Transport options
 
-```
-https://api.almyty.com/mcp/acme/my-tools
-```
+| Transport | URL pattern | Use case |
+|-----------|-------------|----------|
+| **HTTP** | `POST /mcp/{org}/{slug}` | Standard request-response |
+| **SSE** | `GET /mcp/{org}/{slug}/sse` | Streaming, long-running tools |
+| **WebSocket** | `WS /mcp/{org}/{slug}/ws` | Bidirectional, real-time |
 
-## Connecting Clients
+## Connecting clients
 
 ### Claude Desktop
 
-Add to your Claude Desktop configuration (`claude_desktop_config.json`):
+Add to `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "my-tools": {
-      "url": "https://api.almyty.com/mcp/acme/my-tools",
+      "url": "https://your-instance/mcp/acme/my-tools",
       "headers": {
         "Authorization": "Bearer your-api-key"
       }
@@ -64,61 +104,19 @@ Add to your Claude Desktop configuration (`claude_desktop_config.json`):
 
 ### Cursor
 
-In Cursor settings, add a new MCP server:
+In Cursor settings, add:
 
 ```json
 {
   "name": "my-tools",
-  "url": "https://api.almyty.com/mcp/acme/my-tools",
+  "url": "https://your-instance/mcp/acme/my-tools",
   "apiKey": "your-api-key"
 }
 ```
 
-### Custom MCP Client
+## MCP tool schema
 
-```python
-import httpx
-
-# List available tools
-response = httpx.post(
-    "https://api.almyty.com/mcp/acme/my-tools",
-    json={
-        "jsonrpc": "2.0",
-        "method": "tools/list",
-        "id": 1
-    },
-    headers={"Authorization": "Bearer your-api-key"}
-)
-tools = response.json()["result"]["tools"]
-
-# Call a tool
-response = httpx.post(
-    "https://api.almyty.com/mcp/acme/my-tools",
-    json={
-        "jsonrpc": "2.0",
-        "method": "tools/call",
-        "params": {
-            "name": "get_users",
-            "arguments": {"page": 1, "limit": 10}
-        },
-        "id": 2
-    },
-    headers={"Authorization": "Bearer your-api-key"}
-)
-result = response.json()["result"]
-```
-
-## Transport Options
-
-| Transport | URL Pattern | Use Case |
-|-----------|-------------|----------|
-| **HTTP** | `POST /mcp/{org}/{endpoint}` | Standard request-response |
-| **SSE** | `GET /mcp/{org}/{endpoint}/sse` | Streaming, long-running tools |
-| **WebSocket** | `WS /mcp/{org}/{endpoint}/ws` | Bidirectional, real-time |
-
-## MCP Tool Format
-
-Tools exposed via MCP follow the MCP tool schema:
+Tools exposed through the gateway follow the MCP tool format:
 
 ```json
 {
@@ -135,38 +133,23 @@ Tools exposed via MCP follow the MCP tool schema:
 }
 ```
 
-## Authentication
+## OAuth 2.1
 
-MCP gateways support all [gateway authentication methods](/gateways/authentication),
-including OAuth 2.1 with PKCE. MCP clients that support the OAuth flow
-will automatically discover the authorization server via:
+MCP gateways with OAuth enabled expose discovery endpoints automatically:
 
+```bash
+# Authorization server metadata
+curl /mcp/acme/my-tools/.well-known/oauth-authorization-server
+
+# Protected resource metadata
+curl /mcp/acme/my-tools/.well-known/oauth-protected-resource
 ```
-GET /mcp/{org}/{endpoint}/.well-known/oauth-authorization-server
-```
 
-On 401 responses, the gateway returns a `WWW-Authenticate` header with a
-link to the protected resource metadata, allowing MCP clients to
-initiate the OAuth flow automatically.
+On 401 responses, the gateway returns a `WWW-Authenticate` header linking to the protected resource metadata so MCP clients can initiate the OAuth flow automatically. See [Gateway Authentication](/gateways/authentication) for the full OAuth 2.1 walkthrough.
 
-For simpler setups, use API key or Bearer token auth via headers.
+## Error codes
 
-See [Gateway Authentication](/gateways/authentication) for full details.
-
-## Error Responses
-
-MCP errors follow the JSON-RPC 2.0 error format:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "error": {
-    "code": -32600,
-    "message": "Invalid request"
-  },
-  "id": 1
-}
-```
+MCP errors follow JSON-RPC 2.0:
 
 | Code | Meaning |
 |------|---------|

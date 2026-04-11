@@ -1,0 +1,109 @@
+# Memory
+
+Memory lets agents store and recall information across conversations. Agents can persist facts, preferences, context, and instructions that survive between runs, making them more useful over time.
+
+![Memories page](/screenshots/memories.png)
+
+## In the UI
+
+1. Navigate to **Agents** in the sidebar and open an agent's detail page
+2. Click the **Memory** tab to view all memories associated with this agent
+3. Click **Add Memory** to create a memory manually
+4. Enter the content, select a type and scope, and click **Save**
+5. To edit or delete a memory, click the row and use the action buttons
+
+Agents can also create memories automatically during conversations when configured with memory-enabled instructions.
+
+## Via the API
+
+### Create a memory
+
+```bash
+curl -X POST /memories \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "The user prefers concise responses under 200 words",
+    "type": "preference",
+    "scope": "agent",
+    "agentId": "agent-uuid"
+  }'
+```
+
+### List memories
+
+```bash
+curl "/memories?agentId=agent-uuid" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Update a memory
+
+```bash
+curl -X PATCH /memories/{id} \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "The user prefers concise responses under 150 words"
+  }'
+```
+
+### Delete a memory
+
+```bash
+curl -X DELETE /memories/{id} \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Search memories
+
+Memories are embedded as vectors for semantic search. Query by meaning, not just keywords:
+
+```bash
+curl -X POST /memories/search \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "response length preference",
+    "agentId": "agent-uuid",
+    "limit": 5
+  }'
+```
+
+## Memory types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `fact` | Objective information the agent has learned | "The company uses PostgreSQL 16" |
+| `preference` | User or behavioral preferences | "Prefers bullet points over paragraphs" |
+| `context` | Background context for ongoing work | "Currently migrating from v2 to v3 API" |
+| `episode` | Record of a past interaction or event | "On 2026-03-15, user asked to reset their API keys" |
+| `instruction` | Standing instructions that guide behavior | "Always include error handling in code examples" |
+
+## Scopes
+
+| Scope | Visibility | Use case |
+|-------|------------|----------|
+| `agent` | Single agent only | Agent-specific knowledge and preferences |
+| `shared` | All agents in the organization | Cross-agent knowledge (e.g., company coding standards) |
+| `global` | All agents across all organizations (admin) | Platform-wide instructions |
+
+## Configuration reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `content` | string | The memory text |
+| `type` | string | One of: `fact`, `preference`, `context`, `episode`, `instruction` |
+| `scope` | string | One of: `agent`, `shared`, `global` |
+| `agentId` | string | Required when scope is `agent` |
+| `metadata` | object | Optional key-value pairs for tagging |
+
+## How agents use memory
+
+During execution, the agent's memory module:
+
+1. Retrieves relevant memories via semantic search using the current conversation context
+2. Injects matching memories into the LLM prompt as additional context
+3. Optionally auto-saves new facts discovered during the conversation
+
+Configure memory behavior in the agent's settings under **Memory** -- toggle auto-save, set the maximum number of memories injected per turn, and choose which scopes to include.

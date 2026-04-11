@@ -1,18 +1,40 @@
 # Node Types
 
-almyty agents support 9 node types. Each node performs a specific function
-within the pipeline and can be connected to other nodes via edges.
+Workflow agents support 10 node types. Each performs a specific function within
+the pipeline and connects to other nodes via edges on the canvas.
 
-## Input Node
+## Quick Reference
 
-The entry point of every pipeline. Defines the JSON Schema that incoming
-data must conform to.
+| Node Type | Required Fields | Output available as |
+|-----------|----------------|---------------------|
+| **Input** | `schema` | `{{input.*}}` |
+| **Output** | `mapping` | -- (terminal node) |
+| **LLM Call** | `providerId`, `userPromptTemplate` | `{{nodes.<id>.output}}` |
+| **Tool Call** | `toolId` | `{{nodes.<id>.output}}` |
+| **Condition** | `expression` | -- (routes to true/false branches) |
+| **Transform** | `code` | `{{nodes.<id>.output}}` |
+| **Loop** | `iterableExpression` | `{{nodes.<id>.output}}` |
+| **Parallel** | `branches` | `{{nodes.<id>.output}}` |
+| **Merge** | `sources`, `strategy` | `{{nodes.<id>.output}}` |
+| **Sub-Agent** | `agentId` | `{{nodes.<id>.output}}` |
 
-**Configuration:**
+## Input
+
+The entry point of every pipeline. Defines the JSON Schema that incoming data
+must conform to.
+
+### In the UI
+
+1. Click the **Input** node on the canvas
+2. In the config panel, define properties and their types
+3. Mark required fields
+4. The schema is validated against invocation payloads at runtime
+
+### Configuration
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `schema` | JSON Schema | Defines the shape of accepted input |
+| `schema` | JSON Schema | Shape of accepted input |
 
 ```json
 {
@@ -31,14 +53,19 @@ data must conform to.
 }
 ```
 
-Every pipeline must have exactly one Input node. Access its data in templates
-via `{{input.message}}` or `{{input.context}}`.
+Every pipeline must have exactly one Input node. Access its data in template
+expressions via `{{input.message}}` or `{{input.context}}`.
 
-## Output Node
+## Output
 
 The exit point of the pipeline. Maps the final result from upstream nodes.
 
-**Configuration:**
+### In the UI
+
+1. Click the **Output** node on the canvas
+2. In the config panel, set the **Mapping** expression to reference an upstream node's output
+
+### Configuration
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -56,21 +83,28 @@ The exit point of the pipeline. Maps the final result from upstream nodes.
 
 Every pipeline must have exactly one Output node.
 
-## LLM Call Node
+## LLM Call
 
 Sends a prompt to a configured LLM provider and returns the response.
 
-**Configuration:**
+### In the UI
+
+1. Drag an **LLM Call** node onto the canvas and connect it
+2. In the config panel, select a **Provider** and **Model** from the dropdowns
+3. Write a **System Prompt** and **User Prompt Template** (supports `{{...}}` expressions)
+4. Optionally attach tools for function calling and adjust temperature/token limits
+
+### Configuration
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `providerId` | string | — | ID of the LLM provider to use |
+| `providerId` | string | -- | ID of the LLM provider to use |
 | `model` | string | Provider default | Specific model (e.g., `gpt-4o`, `claude-sonnet-4-20250514`) |
-| `systemPrompt` | string | — | System prompt for the LLM |
-| `userPromptTemplate` | string | — | User prompt with template expressions |
+| `systemPrompt` | string | -- | System prompt for the LLM |
+| `userPromptTemplate` | string | -- | User prompt with template expressions |
 | `temperature` | number | `0.7` | Sampling temperature (0-2) |
 | `maxTokens` | number | `1024` | Maximum tokens in the response |
-| `toolIds` | string[] | `[]` | Tool IDs to make available for function calling |
+| `toolIds` | string[] | `[]` | Tool IDs available for function calling |
 
 ```json
 {
@@ -89,13 +123,19 @@ Sends a prompt to a configured LLM provider and returns the response.
 ```
 
 When `toolIds` are provided, the LLM can invoke those tools during execution.
-The tool call results are fed back to the LLM automatically.
+Tool call results are fed back to the LLM automatically.
 
-## Tool Call Node
+## Tool Call
 
-Directly invokes a tool with explicit parameter mapping.
+Directly invokes a tool with explicit parameter mapping, without involving an LLM.
 
-**Configuration:**
+### In the UI
+
+1. Drag a **Tool Call** node onto the canvas
+2. In the config panel, select a tool from the dropdown
+3. Map each parameter using template expressions or static values
+
+### Configuration
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -118,15 +158,22 @@ Directly invokes a tool with explicit parameter mapping.
 
 The result is available downstream as `{{nodes.tool_1.output}}`.
 
-## Condition Node
+## Condition
 
-Branches the pipeline based on a boolean expression.
+Branches the pipeline based on a boolean expression. The node has two outgoing
+edges: one for `true` and one for `false`.
 
-**Configuration:**
+### In the UI
+
+1. Drag a **Condition** node onto the canvas
+2. In the config panel, write a JavaScript expression that evaluates to true or false
+3. Connect the **true** handle to one branch and the **false** handle to another
+
+### Configuration
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `expression` | string | JavaScript expression that evaluates to true/false |
+| `expression` | string | JavaScript expression evaluating to true/false |
 
 ```json
 {
@@ -138,14 +185,19 @@ Branches the pipeline based on a boolean expression.
 }
 ```
 
-A Condition node has two outgoing edges: one for `true` and one for `false`.
-Connect each branch to different downstream nodes.
-
-## Transform Node
+## Transform
 
 Applies a JavaScript transformation to data flowing through the pipeline.
+Transform nodes run in a sandboxed environment.
 
-**Configuration:**
+### In the UI
+
+1. Drag a **Transform** node onto the canvas
+2. In the config panel, write JavaScript code in the code editor
+3. Use `{{...}}` expressions to reference upstream data
+4. The code must return a value
+
+### Configuration
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -161,14 +213,18 @@ Applies a JavaScript transformation to data flowing through the pipeline.
 }
 ```
 
-Transform nodes run in a sandboxed environment. They receive the resolved
-template values and must return a value.
+## Loop
 
-## Loop Node
+Iterates over an array, executing downstream nodes for each item.
 
-Iterates over an array, executing a sub-pipeline for each item.
+### In the UI
 
-**Configuration:**
+1. Drag a **Loop** node onto the canvas
+2. In the config panel, set the **Iterable Expression** to an array reference
+3. Optionally set a **Max Iterations** safety limit
+4. Connect downstream nodes that should run per iteration
+
+### Configuration
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -189,11 +245,17 @@ Iterates over an array, executing a sub-pipeline for each item.
 Inside the loop body, access the current item as `{{loop.item}}` and the
 index as `{{loop.index}}`.
 
-## Parallel Node
+## Parallel
 
 Executes multiple downstream branches simultaneously and aggregates results.
 
-**Configuration:**
+### In the UI
+
+1. Drag a **Parallel** node onto the canvas
+2. In the config panel, select which downstream nodes to run concurrently
+3. Choose an **Aggregation** strategy: `array`, `object`, or `first`
+
+### Configuration
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -211,14 +273,52 @@ Executes multiple downstream branches simultaneously and aggregates results.
 }
 ```
 
-Results are available as `{{nodes.parallel_1.output}}`, which is an array
-or object depending on the aggregation strategy.
+Results are available as `{{nodes.parallel_1.output}}`, which is an array or
+object depending on the aggregation strategy.
 
-## Sub-Agent Node
+## Merge
 
-Invokes another agent as a step within this pipeline.
+Combines outputs from multiple upstream nodes into a single value. Use this
+after parallel branches or condition branches to unify data before continuing.
 
-**Configuration:**
+### In the UI
+
+1. Drag a **Merge** node onto the canvas
+2. Connect the branches you want to combine as inputs
+3. In the config panel, select a **Strategy** for combining the values
+
+### Configuration
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `sources` | string[] | IDs of upstream nodes whose outputs to merge |
+| `strategy` | string | Merge strategy: `concat`, `object`, or `first_non_null` |
+
+```json
+{
+  "id": "merge_1",
+  "type": "merge",
+  "data": {
+    "sources": ["llm_1", "llm_2"],
+    "strategy": "object"
+  }
+}
+```
+
+The merged result is available as `{{nodes.merge_1.output}}`.
+
+## Sub-Agent
+
+Invokes another agent as a step within this pipeline, enabling composable and
+modular architectures.
+
+### In the UI
+
+1. Drag a **Sub-Agent** node onto the canvas
+2. In the config panel, select the target agent from the dropdown
+3. Map input fields from upstream node outputs to the sub-agent's expected input schema
+
+### Configuration
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -238,5 +338,4 @@ Invokes another agent as a step within this pipeline.
 }
 ```
 
-The sub-agent's output is available as `{{nodes.sub_1.output}}`. This enables
-composable, modular agent architectures.
+The sub-agent's output is available as `{{nodes.sub_1.output}}`.

@@ -1,62 +1,62 @@
 # Agents
 
-Agents in almyty are composable AI pipelines that orchestrate LLM calls, tool executions,
-conditional logic, and data transformations into repeatable workflows. Each agent is defined
-as a directed acyclic graph (DAG) of nodes connected by edges.
+Agents orchestrate LLM calls, tool executions, conditional logic, and data
+transformations into repeatable pipelines. almyty supports two agent modes:
+**Workflow** agents defined as visual DAGs, and **Autonomous** agents configured
+with instructions, tools, and memory.
 
-## Key Concepts
+![Agents list empty state](/screenshots/agents-empty.png)
 
-### Pipelines
+## Agent Modes
 
-A pipeline is the core structure of an agent. It consists of:
+| Mode | Best for | How it works |
+|------|----------|--------------|
+| **Workflow** | Deterministic multi-step pipelines | Visual DAG builder with 10 node types connected by edges |
+| **Autonomous** | Open-ended reasoning tasks | Form-based config: system instructions, attached tools, memory, and optional collaboration with other agents |
 
-- **Nodes** — individual processing steps (LLM calls, tool invocations, transforms, etc.)
-- **Edges** — connections that define data flow between nodes
+## In the UI
 
-Every pipeline starts with an **Input** node and ends with an **Output** node.
-Between them, you wire up any combination of the 9 available node types.
+### Creating a Workflow Agent
 
-### Execution Model
+1. Click **Agents** in the sidebar
+2. Click **Create Agent**
+3. Select the **Workflow** tab
+4. Enter a name and optional description
+5. The canvas opens with a default Input, LLM Call, and Output pipeline
+6. Drag nodes from the left palette, connect them, and configure each node in the right panel
+7. Click **Save** to store the agent as a draft
 
-When an agent is invoked, almyty:
+### Creating an Autonomous Agent
 
-1. Validates the input against the Input node's schema
-2. Topologically sorts the pipeline nodes
-3. Executes each node in order, passing data along edges
-4. Resolves template expressions (`{{nodes.llm_1.output}}`) at runtime
-5. Returns the Output node's result
+1. Click **Agents** in the sidebar
+2. Click **Create Agent**
+3. Select the **Autonomous** tab
+4. Enter a name and system instructions describing the agent's behavior
+5. Attach tools the agent can call
+6. Optionally enable memory and configure collaboration with other agents
+7. Click **Save**
 
-Execution is synchronous by default. Each node runs only after all its
-upstream dependencies have completed.
+### Managing Agents
 
-### Agent Lifecycle
+From the agents list you can:
 
-| Status | Description |
-|--------|-------------|
-| `draft` | Agent is being built, not yet invokable |
-| `active` | Agent is live and accepting invocations |
-| `inactive` | Agent is paused, invocations will be rejected |
-| `error` | Agent has a configuration issue |
+- **Activate / Deactivate** an agent using the status toggle
+- **Duplicate** an agent to create a copy
+- **Import** an agent from JSON using the **Import** button in the top bar
+- **Delete** an agent from its detail page
 
-## Creating an Agent
+## Via the API
 
-### Via the UI
-
-1. Navigate to **Agents** and click **Create Agent**
-2. Give it a name and optional description
-3. The default pipeline has Input -> LLM Call -> Output nodes
-4. Use the visual editor to add, remove, and connect nodes
-5. Configure each node by clicking on it in the canvas
-
-### Via the API
+### Create a Workflow Agent
 
 ```bash
-curl -X POST https://api.almyty.com/agents \
+curl -X POST /agents \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Research Agent",
     "description": "Searches and summarizes information",
+    "mode": "workflow",
     "pipeline": {
       "nodes": [
         { "id": "input_1", "type": "input", "data": {
@@ -79,23 +79,25 @@ curl -X POST https://api.almyty.com/agents \
   }'
 ```
 
-### From a Template
-
-almyty ships with several built-in templates:
-
-| Template | Description |
-|----------|-------------|
-| **Simple Chat** | Input -> LLM -> Output. The simplest possible agent. |
-| **Research Agent** | Chains multiple LLM calls with web search tools. |
-| **Tool-Augmented** | LLM with tool calling for dynamic API interaction. |
-| **Multi-Step Pipeline** | Conditional branching with data transformations. |
-
-Select a template when creating an agent to get a pre-wired pipeline.
-
-## Invoking an Agent
+### Create an Autonomous Agent
 
 ```bash
-curl -X POST https://api.almyty.com/agents/{id}/invoke \
+curl -X POST /agents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Support Agent",
+    "mode": "autonomous",
+    "instructions": "You are a customer support agent. Answer questions using the knowledge base tool.",
+    "toolIds": ["tool-uuid-1", "tool-uuid-2"],
+    "memoryEnabled": true
+  }'
+```
+
+### Invoke an Agent
+
+```bash
+curl -X POST /agents/{id}/invoke \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -109,7 +111,7 @@ Response:
 {
   "success": true,
   "data": {
-    "output": "The current weather in Berlin is 12°C with partly cloudy skies.",
+    "output": "The current weather in Berlin is 12C with partly cloudy skies.",
     "executionId": "exec-uuid",
     "duration": 2340,
     "tokensUsed": 156
@@ -117,18 +119,52 @@ Response:
 }
 ```
 
-## Import & Export
-
-Export an agent as JSON for version control or sharing:
+### Import and Export
 
 ```bash
 # Export
-curl https://api.almyty.com/agents/{id}/export \
+curl /agents/{id}/export \
   -H "Authorization: Bearer $TOKEN" > agent.json
 
 # Import
-curl -X POST https://api.almyty.com/agents/import \
+curl -X POST /agents/import \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d @agent.json
 ```
+
+## Agent Lifecycle
+
+| Status | Description |
+|--------|-------------|
+| `draft` | Agent is being built, not yet invokable |
+| `active` | Agent is live and accepting invocations |
+| `inactive` | Agent is paused, invocations will be rejected |
+| `error` | Agent has a configuration issue |
+
+## Execution Model
+
+When a workflow agent is invoked, almyty:
+
+1. Validates the input against the Input node's schema
+2. Topologically sorts the pipeline nodes
+3. Executes each node in dependency order, passing data along edges
+4. Resolves template expressions (`{{nodes.llm_1.output}}`) at runtime
+5. Returns the Output node's result
+
+When an autonomous agent is invoked, almyty sends the input to the LLM with the
+configured instructions and tools, letting the model decide which tools to call
+and how to compose the final response.
+
+## Templates
+
+almyty ships with built-in templates to get started quickly:
+
+| Template | Description |
+|----------|-------------|
+| **Simple Chat** | Input, LLM, Output -- the simplest possible agent |
+| **Research Agent** | Chains multiple LLM calls with web search tools |
+| **Tool-Augmented** | LLM with tool calling for dynamic API interaction |
+| **Multi-Step Pipeline** | Conditional branching with data transformations |
+
+Select a template when creating an agent to get a pre-wired pipeline.

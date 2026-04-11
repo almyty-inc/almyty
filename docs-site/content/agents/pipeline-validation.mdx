@@ -1,8 +1,24 @@
 # Pipeline Validation
 
-Before an agent can be activated or invoked, almyty validates its pipeline
-to ensure correctness. Validation runs automatically when saving an agent
-and can be triggered manually via the API.
+almyty validates every workflow pipeline before it can be activated or invoked.
+Validation runs automatically when you save an agent in the builder and surfaces
+errors directly on the canvas.
+
+## In the UI
+
+When you save a pipeline in the builder:
+
+- Nodes with configuration errors display a **red border**
+- Edges with expression issues show a **warning icon**
+- An **error panel** at the bottom lists all validation problems with clickable links to the affected nodes
+
+Fix all issues before activating the agent. Draft agents can be saved with
+validation warnings but cannot be activated or invoked.
+
+1. Click **Save** in the builder top bar
+2. Review any errors highlighted on the canvas and in the error panel
+3. Click a node with a red border to open its config panel and fix the issue
+4. Save again -- the error panel clears when all issues are resolved
 
 ## Validation Rules
 
@@ -27,22 +43,25 @@ and can be triggered manually via the API.
 | **Condition** | Must have a non-empty `expression` |
 | **Transform** | Must have non-empty `code` |
 | **Loop** | Must have `iterableExpression` |
+| **Parallel** | Must have at least one branch |
+| **Merge** | Must have at least one source |
 | **Sub-Agent** | Must have `agentId` referencing an existing agent |
 
 ### Expression Validation
 
 Template expressions (`{{...}}`) are checked for:
 
-- **Valid syntax** — Properly closed double curly braces
-- **Valid references** — Referenced node IDs must exist in the pipeline
-- **Upstream dependency** — Referenced nodes must be upstream (executed before) the current node
-- **No self-reference** — A node cannot reference its own output
+- **Valid syntax** -- properly closed double curly braces
+- **Valid references** -- referenced node IDs must exist in the pipeline
+- **Upstream dependency** -- referenced nodes must be upstream (executed before) the current node
+- **No self-reference** -- a node cannot reference its own output
 
-## Validation API
+## Via the API
+
+Validation happens automatically on save. Errors are returned in the response:
 
 ```bash
-# Validation happens on save — errors are returned in the response
-curl -X PATCH https://api.almyty.com/agents/{id} \
+curl -X PATCH /agents/{id} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -50,7 +69,7 @@ curl -X PATCH https://api.almyty.com/agents/{id} \
   }'
 ```
 
-If validation fails, the response includes detailed errors:
+If validation fails:
 
 ```json
 {
@@ -75,42 +94,30 @@ If validation fails, the response includes detailed errors:
 
 ### Disconnected Nodes
 
-If you add a node but forget to connect it with edges, validation
-will report it as unreachable. Fix by adding edges from an upstream
-node to the disconnected node.
+A node added to the canvas but not connected with edges is reported as
+unreachable. Fix by dragging an edge from an upstream node to the disconnected
+node.
 
 ### Circular Dependencies
 
-Pipelines must be acyclic. If node A depends on node B and node B
-depends on node A, validation fails. Use Loop nodes instead for
-iterative processing.
+Pipelines must be acyclic. If node A depends on node B and node B depends on
+node A, validation fails. Use a Loop node instead for iterative processing.
 
 ### Missing Provider
 
-LLM Call nodes require a valid `providerId`. If the referenced provider
-has been deleted or is inactive, validation will flag it. Navigate to
-**AI Models** to configure a provider first.
+LLM Call nodes require a valid `providerId`. If the referenced provider has been
+deleted or is inactive, validation flags it. Navigate to **Models** in the
+sidebar to configure a provider first.
 
 ### Invalid Template Expressions
 
 ```
-// Bad — references a non-existent node
+// Bad -- references a non-existent node
 {{nodes.nonexistent.output}}
 
-// Bad — references a downstream node (not yet executed)
-{{nodes.output_1.output}}  // Output is always the last node
+// Bad -- references a downstream node (not yet executed)
+{{nodes.output_1.output}}
 
-// Good — references an upstream node
+// Good -- references an upstream node
 {{nodes.llm_1.output}}
 ```
-
-## UI Validation Indicators
-
-In the visual agent builder, validation issues are displayed as:
-
-- **Red border** on nodes with configuration errors
-- **Warning icon** on edges with expression issues
-- **Error panel** at the bottom listing all validation problems
-
-Fix all issues before activating the agent. Draft agents can be saved
-with validation warnings but cannot be activated or invoked.

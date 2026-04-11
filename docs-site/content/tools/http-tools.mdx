@@ -1,23 +1,65 @@
 # HTTP Tools
 
-HTTP tools make custom HTTP requests to any endpoint. Unlike auto-generated API tools
-(which are derived from schemas), HTTP tools are created manually and give you full
-control over the request configuration.
+HTTP tools make custom HTTP requests to any endpoint. Unlike auto-generated API
+tools (derived from imported schemas), HTTP tools are created manually and give
+you full control over the request method, URL, headers, query parameters, and body.
 
-## Creating an HTTP Tool
-
-### Via the UI
+## In the UI
 
 1. Navigate to **Tools** and click **Create Tool**
 2. Select **HTTP** as the execution method
-3. Configure the request details
-4. Define input parameters
-5. Write the execution code or use the defaults
+3. Fill in a **name** and **description**
+4. Configure the request:
+   - **Method** -- `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`
+   - **URL** -- the full endpoint URL (supports `{{parameters.*}}` expressions)
+   - **Headers** -- key-value pairs, including authentication headers
+   - **Query parameters** -- appended to the URL at execution time
+   - **Body** -- for POST/PUT/PATCH, a JSON or text body with template expressions
+5. Define **input parameters** using the schema builder -- these become available as `{{parameters.*}}` in the URL, headers, and body
+6. Optionally set **timeout** and **retry** count
+7. Click **Create**
 
-### Via the API
+### Template expressions
+
+HTTP tools support `{{parameters.*}}` and `{{env.*}}` expressions in URLs,
+headers, query params, and body fields:
+
+```
+URL:     https://api.example.com/users/{{parameters.userId}}
+Header:  Authorization: Bearer {{parameters.token}}
+Body:    { "name": "{{parameters.name}}", "email": "{{parameters.email}}" }
+```
+
+### Custom code
+
+For complex request logic, switch to the code editor and write JavaScript
+directly. The `axios` library is available as a global:
+
+```javascript
+const response = await axios({
+  method: 'POST',
+  url: `https://api.example.com/search`,
+  headers: {
+    'Authorization': `Bearer ${parameters.apiKey}`,
+    'Content-Type': 'application/json',
+  },
+  data: {
+    query: parameters.query,
+    filters: parameters.filters || {},
+  },
+  timeout: 10000,
+});
+
+return {
+  results: response.data.items,
+  total: response.data.total,
+};
+```
+
+## Via the API
 
 ```bash
-curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
+curl -X POST /organizations/{orgId}/tools \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -53,33 +95,23 @@ curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
   }'
 ```
 
-## Configuration
+## Configuration reference
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `method` | string | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
-| `url` | string | Full URL, supports template expressions |
-| `headers` | object | Request headers, supports template expressions |
-| `queryParams` | object | Query string parameters |
-| `body` | object/string | Request body (for POST/PUT/PATCH) |
-| `timeout` | number | Request timeout in milliseconds (default: 30000) |
-| `retries` | number | Number of retry attempts on failure (default: 0) |
-
-## Template Expressions in HTTP Tools
-
-HTTP tools support template expressions in URLs, headers, and body:
-
-```
-URL:     https://api.example.com/users/{{parameters.userId}}
-Header:  Authorization: Bearer {{parameters.token}}
-Body:    { "name": "{{parameters.name}}", "email": "{{parameters.email}}" }
-```
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `method` | string | -- | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
+| `url` | string | -- | Full URL, supports template expressions |
+| `headers` | object | `{}` | Request headers, supports template expressions |
+| `queryParams` | object | `{}` | Query string parameters |
+| `body` | object/string | -- | Request body (for POST/PUT/PATCH) |
+| `timeout` | number | `30000` | Request timeout in milliseconds |
+| `retries` | number | `0` | Number of retry attempts on failure |
 
 ## Authentication
 
-HTTP tools can use credentials configured on the parent API or inline:
+HTTP tools can reference credentials via `{{env.*}}` expressions in headers:
 
-### API Key
+**API Key**
 
 ```json
 {
@@ -89,7 +121,7 @@ HTTP tools can use credentials configured on the parent API or inline:
 }
 ```
 
-### Bearer Token
+**Bearer Token**
 
 ```json
 {
@@ -99,7 +131,7 @@ HTTP tools can use credentials configured on the parent API or inline:
 }
 ```
 
-### Basic Auth
+**Basic Auth**
 
 ```json
 {
@@ -109,42 +141,14 @@ HTTP tools can use credentials configured on the parent API or inline:
 }
 ```
 
-## Custom Code
-
-For complex HTTP tools, write custom JavaScript:
-
-```javascript
-// axios is available as a global
-const response = await axios({
-  method: 'POST',
-  url: `https://api.example.com/search`,
-  headers: {
-    'Authorization': `Bearer ${parameters.apiKey}`,
-    'Content-Type': 'application/json',
-  },
-  data: {
-    query: parameters.query,
-    filters: parameters.filters || {},
-  },
-  timeout: 10000,
-});
-
-return {
-  results: response.data.items,
-  total: response.data.total,
-};
-```
-
-## Error Handling
-
-HTTP tools automatically handle common error scenarios:
+## Error handling
 
 | Status Code | Behavior |
 |-------------|----------|
-| 2xx | Success — response body is returned |
-| 4xx | Client error — error message returned to the caller |
-| 5xx | Server error — retried if `retries > 0`, then error |
-| Timeout | Request timed out — error returned |
-| Network | Connection failed — retried if configured |
+| 2xx | Success -- response body is returned |
+| 4xx | Client error -- error message returned to the caller |
+| 5xx | Server error -- retried if `retries > 0`, then error |
+| Timeout | Request timed out -- error returned |
+| Network | Connection failed -- retried if configured |
 
 Custom code can implement additional error handling logic.

@@ -1,0 +1,92 @@
+# Analytics
+
+The analytics dashboard gives you real-time visibility into usage across all protocols, tools, agents, and LLM providers. Seven tabs cover different aspects of your organization's activity.
+
+![Analytics overview](/screenshots/analytics-overview.png)
+
+## In the UI
+
+1. Navigate to **Analytics** in the sidebar
+2. The **Overview** tab loads by default, showing aggregate metrics
+3. Use the date range picker in the top-right corner to filter data
+4. Click any of the seven tabs to drill into a specific area
+5. Click **Export** on any tab to download the data as CSV
+
+## Tabs
+
+### Overview
+
+Top-level metrics: total requests, success rate, average latency, active tools, active gateways, and LLM token usage. Includes a time-series chart of request volume over the selected period.
+
+### Request Log
+
+Paginated list of every gateway request with timestamp, tool name, protocol, status code, latency, and caller IP. Click a row to see full request and response payloads.
+
+### Tools
+
+Per-tool breakdown: call count, success rate, average duration, and error rate. Sorted by most-used by default.
+
+### Gateways
+
+Per-gateway breakdown: total requests, unique callers, bandwidth, and error rate. Useful for spotting misconfigured or underused gateways.
+
+### LLM
+
+Per-provider usage: total calls, token counts (input and output), estimated cost, and average latency. Helps track spending across providers.
+
+### Agents
+
+Per-agent execution metrics: run count, success rate, average duration, and node-level breakdowns for pipeline agents.
+
+### Audit Trail
+
+Chronological log of every sensitive action (create, update, delete, execute) with the acting user, timestamp, resource type, resource ID, and source IP.
+
+![Audit trail](/screenshots/analytics-audit.png)
+
+## Via the API
+
+### Usage metrics
+
+```bash
+curl "/usage-metrics?startDate=2026-04-01&endDate=2026-04-09" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Request logs
+
+```bash
+curl "/request-logs?page=1&limit=50" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Audit trail
+
+```bash
+curl "/audit-logs?page=1&limit=50" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Export
+
+```bash
+curl "/usage-metrics/export?startDate=2026-04-01&endDate=2026-04-09&format=csv" \
+  -H "Authorization: Bearer $TOKEN" \
+  -o metrics.csv
+```
+
+## Metrics reference
+
+| Metric | Description |
+|--------|-------------|
+| `totalRequests` | Total gateway requests in the period |
+| `successRate` | Percentage of 2xx responses |
+| `avgLatency` | Average response time in milliseconds |
+| `totalTokens` | Total LLM tokens consumed (input + output) |
+| `estimatedCost` | Estimated LLM cost in USD |
+| `uniqueCallers` | Distinct API keys or IPs that made requests |
+| `errorRate` | Percentage of 4xx and 5xx responses |
+
+## Retention
+
+Request logs and audit entries are retained for 90 days by default. Self-hosted deployments can configure retention via the `ANALYTICS_RETENTION_DAYS` environment variable.
