@@ -117,8 +117,31 @@ curl https://api.almyty.com/apis \
 
 ## Token Expiration
 
-JWT tokens expire after 24 hours. When a token expires, the API returns
-a `401 Unauthorized` response. Obtain a new token by logging in again.
+JWT tokens expire after 24 hours. For long-lived programmatic access, use API keys instead.
+
+## API Keys
+
+API keys are long-lived tokens for scripts, CI pipelines, and CLI tools. They don't expire (unless revoked) and carry the same permissions as your user account.
+
+### Getting an API key
+
+![Credentials vault](/screenshots/credentials-vault.png)
+
+1. Go to **Credentials** in the sidebar
+2. Open the **Access Keys** tab
+3. Click **Generate Key**
+4. Pick a name, select the gateway or agent to scope it to, and choose permissions
+5. **Copy the key immediately** — it's shown only once
+
+The key looks like `ak_live_abc123...`. Use it anywhere a Bearer token is expected:
+
+```bash
+curl /apis -H "Authorization: Bearer ak_live_abc123..."
+```
+
+For CLI tools, run `npx @almyty/auth login` instead — it opens your browser, authenticates, and stores the key at `~/.almyty/credentials.json` so every CLI picks it up automatically.
+
+To revoke: **Credentials** → **Access Keys** → menu → **Revoke**.
 
 ## Profile
 
