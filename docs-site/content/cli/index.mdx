@@ -10,11 +10,11 @@ Install the umbrella CLI globally for a single `almyty` binary, or run any packa
 # Umbrella (all commands under one binary)
 $ npm install -g @almyty/cli
 $ almyty login
-$ almyty skills install @acme/petstore
+$ almyty skills install acme/petstore
 
 # Or standalone packages via npx
 $ npx @almyty/auth login
-$ npx @almyty/skills install @acme/petstore
+$ npx @almyty/skills install acme/petstore
 ```
 
 ## Packages
@@ -51,12 +51,12 @@ Environment variables override the credentials file:
 
 ## Skill references
 
-Skills are addressed as `@org/gateway` or `@org/gateway/skill`:
+Skills are addressed as `org/gateway` or `org/gateway/skill`:
 
 ```bash
-$ npx @almyty/skills install @acme/petstore           # all skills from a gateway
-$ npx @almyty/skills install @acme/petstore/get-pet    # single skill
-$ npx @almyty/skills run @acme/petstore/get-pet --id 3 # execute a skill
+$ npx @almyty/skills install acme/petstore           # all skills from a gateway
+$ npx @almyty/skills install acme/petstore/get-pet    # single skill
+$ npx @almyty/skills run acme/petstore/get-pet --id 3 # execute a skill
 ```
 
 ## MCP server
@@ -65,8 +65,9 @@ The MCP server connects your almyty **gateway** to any MCP-compatible client. Yo
 
 ```bash
 # Claude Code
-$ claude mcp add petstore -- npx -y @almyty/mcp-server \
-    --env ALMYTY_GATEWAY_ID=@acme/petstore
+$ claude mcp add petstore \
+    -e ALMYTY_GATEWAY_ID=acme/petstore \
+    -- npx -y @almyty/mcp-server
 
 # Cursor (.cursor/mcp.json)
 {
@@ -74,13 +75,13 @@ $ claude mcp add petstore -- npx -y @almyty/mcp-server \
     "petstore": {
       "command": "npx",
       "args": ["-y", "@almyty/mcp-server"],
-      "env": { "ALMYTY_GATEWAY_ID": "@acme/petstore" }
+      "env": { "ALMYTY_GATEWAY_ID": "acme/petstore" }
     }
   }
 }
 ```
 
-`ALMYTY_GATEWAY_ID` uses the `@org/gateway` format. See [MCP Server](/cli/mcp-server) for all client configs and modes.
+`ALMYTY_GATEWAY_ID` uses the `org/gateway` format. See [MCP Server](/cli/mcp-server) for all client configs and modes.
 
 ## Testing
 
