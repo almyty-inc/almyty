@@ -1,0 +1,223 @@
+# MCP Server
+
+The `@almyty/mcp-server` package turns your almyty gateway into an MCP-compatible tool provider. Any LLM client that speaks MCP (Claude Code, Cursor, Windsurf, Copilot, Codex, Gemini CLI) can call your API tools through it.
+
+```bash
+$ npx @almyty/mcp-server --help
+```
+
+## How it works
+
+The MCP server sits between your LLM client and the almyty backend. When the client starts, the server fetches your tools and skills from almyty and registers them as MCP tools and prompts. When the LLM calls a tool, the server proxies the request to your almyty gateway, which executes it against the real API.
+
+## Modes
+
+### Skill-first mode (default)
+
+Instead of registering every tool as a separate MCP tool (which consumes context window tokens on every turn), skill-first mode registers only two tools:
+
+| Tool | Purpose |
+|------|---------|
+| `almyty_execute` | Call any almyty tool by name with parameters |
+| `almyty_search` | Find tools by keyword |
+
+Skills are registered as MCP prompts, loaded on demand only when the LLM needs them. This dramatically reduces token overhead:
+
+| Approach | 20 tools | 50 tools | 100 tools |
+|----------|----------|----------|-----------|
+| Traditional MCP (full mode) | ~4,000 tokens/turn | ~10,000 tokens/turn | ~20,000 tokens/turn |
+| Skill-first | ~300 tokens/turn | ~300 tokens/turn | ~300 tokens/turn |
+
+The LLM reads a skill prompt to learn the workflow, then calls `almyty_execute` with the tool name and parameters from the skill.
+
+### Full mode
+
+Registers every tool individually as a standard MCP tool. Use this when your LLM client does not support MCP prompts, or when you have a small number of tools and prefer traditional tool calling:
+
+```bash
+$ ALMYTY_MODE=full npx @almyty/mcp-server
+```
+
+## Setup
+
+### Prerequisites
+
+Authenticate once before configuring any client:
+
+```bash
+$ npx @almyty/auth login
+```
+
+### Claude Code
+
+```bash
+$ claude mcp add almyty -- npx -y @almyty/mcp-server
+```
+
+To scope to a specific gateway:
+
+```bash
+$ claude mcp add almyty -- npx -y @almyty/mcp-server \
+    --env ALMYTY_GATEWAY_ID=acme/petstore
+```
+
+### Cursor
+
+Create or edit `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "almyty": {
+      "command": "npx",
+      "args": ["-y", "@almyty/mcp-server"],
+      "env": {
+        "ALMYTY_TOKEN": "ak_live_abc123..."
+      }
+    }
+  }
+}
+```
+
+### Windsurf
+
+Edit `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "almyty": {
+      "command": "npx",
+      "args": ["-y", "@almyty/mcp-server"],
+      "env": {
+        "ALMYTY_TOKEN": "ak_live_abc123..."
+      }
+    }
+  }
+}
+```
+
+### VS Code (GitHub Copilot)
+
+Create or edit `.vscode/mcp.json` in your project root:
+
+```json
+{
+  "servers": {
+    "almyty": {
+      "command": "npx",
+      "args": ["-y", "@almyty/mcp-server"],
+      "env": {
+        "ALMYTY_TOKEN": "ak_live_abc123..."
+      }
+    }
+  }
+}
+```
+
+### OpenAI Codex CLI
+
+Edit `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.almyty]
+command = "npx"
+args = ["-y", "@almyty/mcp-server"]
+
+[mcp_servers.almyty.env]
+ALMYTY_TOKEN = "ak_live_abc123..."
+```
+
+### Google Gemini CLI
+
+Edit `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "almyty": {
+      "command": "npx",
+      "args": ["-y", "@almyty/mcp-server"],
+      "env": {
+        "ALMYTY_TOKEN": "ak_live_abc123..."
+      }
+    }
+  }
+}
+```
+
+## Environment variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ALMYTY_URL` | almyty backend URL | `https://api.almyty.com` |
+| `ALMYTY_TOKEN` | API key or JWT token | Read from `~/.almyty/credentials.json` |
+| `ALMYTY_GATEWAY_ID` | Scope to a specific gateway (`orgSlug/gatewaySlug`) | All gateways |
+| `ALMYTY_MODE` | `skill-first` or `full` | `skill-first` |
+
+### Scoping to a gateway
+
+By default, the MCP server exposes tools from all gateways in your organization. To restrict it to a single gateway, set `ALMYTY_GATEWAY_ID` to the `orgSlug/gatewaySlug` format:
+
+```bash
+$ ALMYTY_GATEWAY_ID=acme/petstore npx @almyty/mcp-server
+```
+
+Or in a JSON config file:
+
+```json
+{
+  "env": {
+    "ALMYTY_GATEWAY_ID": "acme/petstore"
+  }
+}
+```
+
+## Skills as MCP prompts
+
+In skill-first mode, each skill from your gateway is registered as an MCP prompt with the naming pattern `skill-<name>`. The LLM client can list available prompts and load one when it needs detailed instructions for a specific API workflow.
+
+An overview prompt (`almyty-overview`) is also registered, providing a compact index of all available tools and skills.
+
+The flow works like this:
+
+1. The LLM sees `almyty_execute` and `almyty_search` in its tool list.
+2. When the user asks to do something API-related, the LLM calls `almyty_search` to find relevant tools.
+3. The LLM loads the corresponding skill prompt to understand parameters and usage.
+4. The LLM calls `almyty_execute` with the tool name and parameters from the skill.
+
+Skills are only loaded into context when explicitly requested, keeping the baseline token cost low.
+
+## Troubleshooting
+
+### "No tools found"
+
+The MCP server connected to the backend but no tools were returned. Possible causes:
+
+- **No tools assigned to your gateway.** Open the almyty dashboard, go to your gateway, and assign tools.
+- **Wrong gateway ID.** Double-check the `ALMYTY_GATEWAY_ID` value. It should be `orgSlug/gatewaySlug`, not a UUID.
+- **No gateways at all.** If you have not set `ALMYTY_GATEWAY_ID`, the server fetches tools from the universal `/mcp` endpoint. Make sure you have at least one gateway with tools assigned.
+
+### Authentication errors
+
+```
+Error: No authentication token found.
+Set ALMYTY_TOKEN environment variable or run: npx @almyty/auth login
+```
+
+The MCP server needs a token. If you authenticated interactively with `npx @almyty/auth login`, the credentials file is read automatically. For MCP config files that run in a different user context (e.g., an IDE subprocess), you may need to set `ALMYTY_TOKEN` explicitly in the `env` block.
+
+### Connection timeouts
+
+Tool discovery times out after 15 seconds. Tool execution times out after 120 seconds. If your backend is slow or behind a VPN:
+
+- Check that `ALMYTY_URL` is reachable from the machine running the MCP server.
+- If using a self-hosted instance, verify the backend health endpoint: `curl https://your-instance/health`.
+
+### Tools appear in full mode but not skill-first
+
+Skill-first mode requires skills to be configured on the gateway. If your gateway only has raw tools without generated skills, the `almyty_search` and `almyty_execute` tools will still work, but there will be no skill prompts to guide the LLM. Either switch to full mode or enable skill generation on your gateway in the dashboard.
+
+### stderr messages
+
+The MCP server writes diagnostic output to stderr (stdout is reserved for the MCP JSON-RPC protocol). Messages like `almyty: 12 tools, 3 skills (mode: skill-first)` on startup are normal and will not interfere with the MCP protocol.

@@ -1,0 +1,225 @@
+# Chat CLI
+
+The Chat CLI provides an interactive REPL for conversing with your almyty agents directly from the terminal. Think of it as a lightweight client that connects to your agents without needing a browser.
+
+```bash
+$ npx @almyty/chat
+```
+
+## Starting a chat
+
+### Interactive agent picker
+
+Run the CLI without arguments to see a list of available agents and pick one:
+
+```bash
+$ npx @almyty/chat
+Available agents:
+
+  1. invoice-pipeline (workflow)
+  2. research-bot (autonomous)
+  3. support-assistant (workflow)
+
+Select agent [1-3]: 2
+
+Connected to research-bot (autonomous mode)
+Type /help for commands, /quit to exit.
+
+research-bot>
+```
+
+### Direct agent selection
+
+Skip the picker by passing the agent name or UUID:
+
+```bash
+$ npx @almyty/chat research-bot
+Connected to research-bot (autonomous mode)
+Type /help for commands, /quit to exit.
+
+research-bot>
+```
+
+## Chat modes
+
+How the chat behaves depends on whether the agent runs in workflow or autonomous mode.
+
+### Workflow mode
+
+Each message you send becomes a single invocation of the agent's DAG. You send input, the agent runs its pipeline, and you get a response. The conversation is stateless between messages unless the agent uses memory nodes.
+
+```
+support-assistant> What is the refund policy for order #4521?
+
+Processing...
+
+The refund policy for order #4521:
+- Order placed on March 12, 2026
+- Within the 30-day return window (expires April 11)
+- Full refund eligible for unused items
+- Contact support@acme.com to initiate
+
+support-assistant> Is that order eligible for express replacement?
+
+Processing...
+
+Yes, order #4521 qualifies for express replacement because:
+- Premium tier customer
+- Item is in stock
+- Original delivery was domestic
+
+support-assistant>
+```
+
+### Autonomous mode
+
+In autonomous mode, each message starts a run. The agent takes multiple steps, calling tools and making decisions. You see each step as it happens. The agent may pause and ask for confirmation before taking certain actions (human-in-the-loop).
+
+```
+research-bot> Find recent papers on protein folding with AlphaFold 3
+
+[step 1] Planning search strategy...
+[step 2] Searching: "AlphaFold 3 protein folding 2026 papers"
+[step 3] Found 12 results, analyzing...
+[step 4] Searching: "AlphaFold 3 drug discovery applications"
+[step 5] Cross-referencing authors and citations...
+
+Found 8 relevant papers published in the last 6 months:
+
+1. "AlphaFold 3 Multimer Predictions for Drug Target Complexes"
+   Chen et al., Nature Methods, Feb 2026
+   Key finding: 40% improvement in multimer prediction accuracy
+
+2. "Benchmarking AlphaFold 3 on Disordered Protein Regions"
+   ...
+
+research-bot> Summarize paper #1 in more detail
+
+[step 1] Fetching full abstract and metadata...
+[step 2] Analyzing methodology section...
+
+"AlphaFold 3 Multimer Predictions for Drug Target Complexes"
+...
+
+research-bot>
+```
+
+## REPL commands
+
+Slash commands control the REPL session:
+
+| Command | Description |
+|---------|-------------|
+| `/agents` | List all available agents |
+| `/switch <name>` | Switch to a different agent without leaving the REPL |
+| `/clear` | Clear the conversation history |
+| `/help` | Show available commands |
+| `/quit` | Exit the REPL (also Ctrl+C or Ctrl+D) |
+
+### Switching agents mid-session
+
+```
+research-bot> /switch support-assistant
+Switched to support-assistant (workflow mode)
+
+support-assistant> What's the status of ticket #789?
+
+Processing...
+
+Ticket #789: "Login page CSS broken on mobile"
+Status: In progress
+Assigned to: frontend team
+Priority: High
+ETA: April 10, 2026
+
+support-assistant> /switch research-bot
+Switched to research-bot (autonomous mode)
+
+research-bot>
+```
+
+## Authentication
+
+The Chat CLI reads credentials from the shared `~/.almyty/credentials.json` file. If you have not authenticated yet:
+
+```bash
+$ npx @almyty/auth login
+$ npx @almyty/chat
+```
+
+You can also pass a token via the environment:
+
+```bash
+$ ALMYTY_TOKEN=ak_live_abc123 npx @almyty/chat research-bot
+```
+
+## Example session
+
+Here is a complete session showing agent selection, conversation, switching, and exit:
+
+```
+$ npx @almyty/chat
+Available agents:
+
+  1. invoice-pipeline (workflow)
+  2. research-bot (autonomous)
+  3. data-cleanup (workflow)
+
+Select agent [1-3]: 1
+
+Connected to invoice-pipeline (workflow mode)
+Type /help for commands, /quit to exit.
+
+invoice-pipeline> Process this invoice: https://example.com/inv-2026-042.pdf
+
+Processing...
+
+Invoice processed:
+  Vendor:    Globex Corporation
+  Amount:    $3,200.00
+  Currency:  USD
+  Due date:  May 15, 2026
+  PO match:  PO-2026-089 (verified)
+
+invoice-pipeline> /agents
+Available agents:
+  invoice-pipeline (workflow) -- current
+  research-bot (autonomous)
+  data-cleanup (workflow)
+
+invoice-pipeline> /switch research-bot
+Switched to research-bot (autonomous mode)
+
+research-bot> What are the latest developments in WebAssembly?
+
+[step 1] Planning research strategy...
+[step 2] Searching: "WebAssembly developments 2026"
+[step 3] Analyzing 15 results...
+
+Key developments in WebAssembly (2026):
+1. WASI 0.3 reached Phase 3, adding async I/O and component linking
+2. Chrome and Firefox shipped JSPI (JavaScript Promise Integration)
+3. The Component Model specification reached 1.0
+...
+
+research-bot> /quit
+Goodbye.
+```
+
+## Troubleshooting
+
+### "No agents found"
+
+Your organization has no agents configured. Create one from the almyty dashboard at **Agents > Create Agent**, or check that your token belongs to the correct organization.
+
+### Agent runs time out
+
+Autonomous agent runs may take minutes. The Chat CLI streams steps in real time, but network timeouts can interrupt long sessions. If the connection drops, the run continues server-side. Check its status with:
+
+```bash
+$ npx @almyty/agents runs <agent-name>
+```
+
+### Conversation feels stateless
+
+Workflow agents are stateless by default. Each message is an independent invocation. If you need context to carry across messages, the agent must include memory nodes in its pipeline, or you should use an autonomous agent instead.
