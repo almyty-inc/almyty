@@ -1,14 +1,20 @@
 # MCP Server
 
-The `@almyty/mcp-server` package turns your almyty gateway into an MCP-compatible tool provider. Any LLM client that speaks MCP (Claude Code, Cursor, Windsurf, Copilot, Codex, Gemini CLI) can call your API tools through it.
+The `@almyty/mcp-server` package connects an almyty **gateway** to any MCP-compatible LLM client. You create a gateway in the almyty UI, assign tools to it, then point this server at that gateway. The LLM sees your tools as native MCP tools.
+
+**Prerequisites:**
+1. Create a gateway in the UI (type: MCP, A2A, UTCP, or Skills — the MCP server works with all types)
+2. Assign tools to the gateway
+3. Authenticate: `npx @almyty/auth login`
+4. Set `ALMYTY_GATEWAY_ID` to your gateway's `@org/slug` identifier
 
 ```bash
-$ npx @almyty/mcp-server --help
+$ ALMYTY_GATEWAY_ID=@acme/petstore npx @almyty/mcp-server
 ```
 
 ## How it works
 
-The MCP server sits between your LLM client and the almyty backend. When the client starts, the server fetches your tools and skills from almyty and registers them as MCP tools and prompts. When the LLM calls a tool, the server proxies the request to your almyty gateway, which executes it against the real API.
+The MCP server fetches tools from your almyty gateway and registers them as MCP tools (or skills). When the LLM calls a tool, the server proxies the request through the gateway to the real API. Authentication, rate limiting, and audit logging are handled by the gateway.
 
 ## Modes
 
@@ -51,14 +57,8 @@ $ npx @almyty/auth login
 ### Claude Code
 
 ```bash
-$ claude mcp add almyty -- npx -y @almyty/mcp-server
-```
-
-To scope to a specific gateway:
-
-```bash
-$ claude mcp add almyty -- npx -y @almyty/mcp-server \
-    --env ALMYTY_GATEWAY_ID=acme/petstore
+$ claude mcp add petstore -- npx -y @almyty/mcp-server \
+    --env ALMYTY_GATEWAY_ID=@acme/petstore
 ```
 
 ### Cursor
@@ -152,25 +152,15 @@ Edit `~/.gemini/settings.json`:
 |----------|-------------|---------|
 | `ALMYTY_URL` | almyty backend URL | `https://api.almyty.com` |
 | `ALMYTY_TOKEN` | API key or JWT token | Read from `~/.almyty/credentials.json` |
-| `ALMYTY_GATEWAY_ID` | Scope to a specific gateway (`orgSlug/gatewaySlug`) | All gateways |
+| `ALMYTY_GATEWAY_ID` | Gateway to serve (`@orgSlug/gatewaySlug`) | **Required** |
 | `ALMYTY_MODE` | `skill-first` or `full` | `skill-first` |
 
-### Scoping to a gateway
+### Finding your gateway ID
 
-By default, the MCP server exposes tools from all gateways in your organization. To restrict it to a single gateway, set `ALMYTY_GATEWAY_ID` to the `orgSlug/gatewaySlug` format:
+Your gateway ID is the `@org/slug` shown on the gateway detail page in the UI. For example, if your org is "acme" and your gateway slug is "petstore", the ID is `@acme/petstore`.
 
 ```bash
-$ ALMYTY_GATEWAY_ID=acme/petstore npx @almyty/mcp-server
-```
-
-Or in a JSON config file:
-
-```json
-{
-  "env": {
-    "ALMYTY_GATEWAY_ID": "acme/petstore"
-  }
-}
+$ ALMYTY_GATEWAY_ID=@acme/petstore npx @almyty/mcp-server
 ```
 
 ## Skills as MCP prompts

@@ -61,21 +61,26 @@ $ npx @almyty/skills run @acme/petstore/get-pet --id 3 # execute a skill
 
 ## MCP server
 
-The MCP server turns your almyty gateway into an MCP-compatible tool provider. Add it to any MCP client:
+The MCP server connects your almyty **gateway** to any MCP-compatible client. You create a gateway in the UI, assign tools to it, then point the MCP server at that gateway:
 
 ```bash
 # Claude Code
-$ claude mcp add almyty -- npx -y @almyty/mcp-server
+$ claude mcp add petstore -- npx -y @almyty/mcp-server \
+    --env ALMYTY_GATEWAY_ID=@acme/petstore
 
 # Cursor (.cursor/mcp.json)
 {
   "mcpServers": {
-    "almyty": { "command": "npx", "args": ["-y", "@almyty/mcp-server"] }
+    "petstore": {
+      "command": "npx",
+      "args": ["-y", "@almyty/mcp-server"],
+      "env": { "ALMYTY_GATEWAY_ID": "@acme/petstore" }
+    }
   }
 }
 ```
 
-Set `ALMYTY_MODE=full` to register every tool individually (higher token overhead) instead of the default skill-first mode.
+`ALMYTY_GATEWAY_ID` uses the `@org/gateway` format. See [MCP Server](/cli/mcp-server) for all client configs and modes.
 
 ## Testing
 
