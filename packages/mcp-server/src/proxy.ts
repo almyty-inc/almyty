@@ -199,4 +199,42 @@ export class AlmytyProxy {
 
     return data.result;
   }
+
+  // ── Management API ──────────────────────────────────────────────
+  // These let LLMs control the almyty platform itself — create APIs,
+  // tools, gateways, agents — not just call existing tools.
+
+  private async rest(method: string, path: string, body?: object): Promise<any> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.toolTimeoutMs);
+    try {
+      const resp = await fetch(`${this.baseUrl}${path}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+      const data: any = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.error?.message || `${resp.status}`);
+      return data;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async listApis(): Promise<any> { return this.rest('GET', '/apis'); }
+  async createApi(data: object): Promise<any> { return this.rest('POST', '/apis', data); }
+  async importSchema(apiId: string, data: object): Promise<any> { return this.rest('POST', `/apis/${apiId}/import-schema`, data); }
+  async generateTools(apiId: string): Promise<any> { return this.rest('POST', `/apis/${apiId}/generate-tools`); }
+  async listTools(): Promise<any> { return this.rest('GET', '/tools'); }
+  async listGateways(): Promise<any> { return this.rest('GET', '/gateways'); }
+  async createGateway(data: object): Promise<any> { return this.rest('POST', '/gateways', data); }
+  async assignToolToGateway(gatewayId: string, toolId: string): Promise<any> { return this.rest('POST', `/gateways/${gatewayId}/tools`, { toolId }); }
+  async listAgents(): Promise<any> { return this.rest('GET', '/agents'); }
+  async createAgent(data: object): Promise<any> { return this.rest('POST', '/agents', data); }
+  async listProviders(): Promise<any> { return this.rest('GET', '/llm-providers'); }
+  async addProvider(data: object): Promise<any> { return this.rest('POST', '/llm-providers', data); }
 }

@@ -301,6 +301,128 @@ async function main() {
     }),
   );
 
+  // =====================================================
+  // MANAGEMENT TOOLS — control the almyty platform itself
+  // =====================================================
+  // These tools let LLMs manage almyty: create APIs, import
+  // schemas, generate tools, set up gateways, build agents.
+  // Available in both modes (skill-first and full).
+
+  server.tool(
+    'almyty_list_apis',
+    'List all connected APIs in your organization.',
+    {},
+    async () => {
+      const result = await proxy.listApis();
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'almyty_create_api',
+    'Connect a new API. Provide a name, type (openapi/graphql/soap/protobuf/sdk), and base URL.',
+    {
+      name: z.string().describe('Human-readable API name'),
+      type: z.enum(['openapi', 'graphql', 'soap', 'protobuf', 'sdk']).describe('Schema type'),
+      baseUrl: z.string().optional().describe('API base URL (not needed for SDK type)'),
+    },
+    async (args) => {
+      const result = await proxy.createApi(args);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'almyty_import_schema',
+    'Import an API schema and auto-generate tools. Provide the API ID and a schema URL.',
+    {
+      apiId: z.string().describe('ID of the API to import into'),
+      schemaUrl: z.string().describe('URL of the schema (e.g. OpenAPI JSON endpoint)'),
+      generateTools: z.boolean().default(true).describe('Auto-generate tools from operations'),
+    },
+    async (args) => {
+      const result = await proxy.importSchema(args.apiId, { schemaUrl: args.schemaUrl, generateTools: args.generateTools });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'almyty_list_gateways',
+    'List all gateways in your organization.',
+    {},
+    async () => {
+      const result = await proxy.listGateways();
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'almyty_create_gateway',
+    'Create a new gateway to expose tools via a protocol (MCP, A2A, UTCP, or Skills).',
+    {
+      name: z.string().describe('Gateway name'),
+      type: z.enum(['mcp', 'a2a', 'utcp', 'skills']).describe('Protocol type'),
+      endpoint: z.string().describe('URL slug for the gateway endpoint'),
+    },
+    async (args) => {
+      const result = await proxy.createGateway({ ...args, kind: 'tool', configuration: {} });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'almyty_assign_tool',
+    'Assign a tool to a gateway so it becomes available via that protocol.',
+    {
+      gatewayId: z.string().describe('Gateway ID'),
+      toolId: z.string().describe('Tool ID to assign'),
+    },
+    async (args) => {
+      const result = await proxy.assignToolToGateway(args.gatewayId, args.toolId);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'almyty_list_agents',
+    'List all agents in your organization.',
+    {},
+    async () => {
+      const result = await proxy.listAgents();
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'almyty_create_agent',
+    'Create a new agent with a name and description.',
+    {
+      name: z.string().describe('Agent name'),
+      description: z.string().optional().describe('What the agent does'),
+      mode: z.enum(['workflow', 'autonomous']).default('autonomous').describe('Agent mode'),
+    },
+    async (args) => {
+      const result = await proxy.createAgent(args);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'almyty_add_provider',
+    'Add an LLM provider (OpenAI, Anthropic, etc.).',
+    {
+      name: z.string().describe('Display name'),
+      type: z.string().describe('Provider type (openai, anthropic, gemini, azure, bedrock, etc.)'),
+      apiKey: z.string().describe('API key for the provider'),
+    },
+    async (args) => {
+      const result = await proxy.addProvider({ name: args.name, type: args.type, configuration: { apiKey: args.apiKey } });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  process.stderr.write(`almyty: ${tools.length} tools, ${skills.length} skills, 9 management tools (mode: ${ALMYTY_MODE})\n`);
+
   // Connect via stdio
   const transport = new StdioServerTransport();
   await server.connect(transport);
