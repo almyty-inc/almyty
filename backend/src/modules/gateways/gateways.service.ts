@@ -228,6 +228,56 @@ export class GatewaysService {
     }
   }
 
+  /**
+   * Create a system gateway for internal use (e.g. the almyty management gateway).
+   * Bypasses permission checks, org limit checks, and user validation since this
+   * is called during org provisioning before the user context is fully established.
+   */
+  async createSystemGateway(
+    dto: {
+      name: string;
+      type: GatewayType;
+      kind: GatewayKind;
+      endpoint: string;
+      configuration: Record<string, any>;
+      description?: string;
+    },
+    organizationId: string,
+  ): Promise<Gateway> {
+    const endpoint = dto.endpoint.startsWith('/') ? dto.endpoint : '/' + dto.endpoint;
+
+    // Check if system gateway already exists for this org + endpoint
+    const existing = await this.gatewayRepository.findOne({
+      where: { organizationId, endpoint },
+    });
+
+    if (existing) {
+      this.logger.log(`System gateway already exists for org=${organizationId}, endpoint=${endpoint}`);
+      return existing;
+    }
+
+    const gateway = this.gatewayRepository.create({
+      name: dto.name,
+      description: dto.description,
+      kind: dto.kind,
+      type: dto.type,
+      endpoint,
+      organizationId,
+      configuration: dto.configuration,
+      status: GatewayStatus.ACTIVE,
+      isSystem: true,
+    });
+
+    const savedGateway = await this.gatewayRepository.save(gateway);
+
+    // Create default authentication
+    await this.createDefaultAuth(savedGateway);
+
+    this.logger.log(`System gateway '${savedGateway.name}' created for org=${organizationId}`);
+
+    return savedGateway;
+  }
+
   async updateGateway(
     gatewayId: string,
     updateGatewayDto: UpdateGatewayDto,
@@ -480,6 +530,11 @@ export class GatewaysService {
     userId: string
   ): Promise<void> {
     const gateway = await this.getGateway(gatewayId, organizationId, false);
+
+    // System gateways cannot be deleted
+    if (gateway.isSystem) {
+      throw new ForbiddenException('System gateways cannot be deleted');
+    }
 
     // Check permissions
     const user = await this.userRepository.findOne({

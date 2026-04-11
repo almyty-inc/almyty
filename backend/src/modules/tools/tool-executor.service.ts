@@ -46,6 +46,7 @@ import { hashCacheObject, sleep } from './tool-execution-utils';
 import { ToolHttpExecutor } from './executors/tool-http.executor';
 import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
 import { ToolScriptExecutor } from './executors/tool-script.executor';
+import { SystemToolExecutor } from './executors/system-tool.executor';
 
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
@@ -71,6 +72,7 @@ export class ToolExecutorService {
     private readonly httpExecutor: ToolHttpExecutor,
     private readonly protocolExecutor: ToolProtocolExecutor,
     private readonly scriptExecutor: ToolScriptExecutor,
+    private readonly systemToolExecutor: SystemToolExecutor,
     private readonly auditLogService: AuditLogService,
   ) {}
 
@@ -217,7 +219,10 @@ export class ToolExecutorService {
 
       let result: ToolExecutionResult | undefined;
 
-      if (tool.llmConfig?.providerId && tool.llmConfig?.promptTemplate) {
+      // System/internal tools — route to service methods, not HTTP/sandbox.
+      if (this.systemToolExecutor.canHandle(tool)) {
+        result = await this.systemToolExecutor.execute(tool, parameters, options);
+      } else if (tool.llmConfig?.providerId && tool.llmConfig?.promptTemplate) {
         result = await this.scriptExecutor.executeLlm(tool, parameters, options);
       } else if (tool.sdkConfig) {
         result = await this.scriptExecutor.executeSdk(tool, parameters, options);

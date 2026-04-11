@@ -18,6 +18,7 @@ import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
 import { GatewayAuthService } from './gateway-auth.service';
 import { GatewayToolService } from './gateway-tool.service';
+import { SystemGatewayService } from './system-gateway.service';
 import { GatewaysController } from './gateways.controller';
 // GatewayProtocolController removed — all protocol traffic goes through org-scoped
 // controllers in mcp.module.ts: /mcp/:orgId/, /a2a/:orgId/, /utcp/:orgId/
@@ -64,6 +65,7 @@ import { ChannelGatewayService } from './channels/channel-gateway.service';
     GatewayProtocolService,
     GatewayAuthService,
     GatewayToolService,
+    SystemGatewayService,
     // Channel adapters
     ChannelGatewayService,
     ChatWidgetAdapter,
@@ -87,6 +89,7 @@ import { ChannelGatewayService } from './channels/channel-gateway.service';
     GatewayProtocolService,
     GatewayAuthService,
     GatewayToolService,
+    SystemGatewayService,
     ChannelGatewayService,
   ],
 })
