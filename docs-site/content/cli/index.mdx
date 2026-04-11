@@ -65,23 +65,20 @@ The MCP server connects your almyty **gateway** to any MCP-compatible client. Yo
 
 ```bash
 # Claude Code
-$ claude mcp add petstore \
-    -e ALMYTY_GATEWAY_ID=acme/petstore \
-    -- npx -y @almyty/mcp-server
+$ claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
 
 # Cursor (.cursor/mcp.json)
 {
   "mcpServers": {
     "petstore": {
       "command": "npx",
-      "args": ["-y", "@almyty/mcp-server"],
-      "env": { "ALMYTY_GATEWAY_ID": "acme/petstore" }
+      "args": ["-y", "@almyty/mcp-server", "acme/petstore"]
     }
   }
 }
 ```
 
-`ALMYTY_GATEWAY_ID` uses the `org/gateway` format. See [MCP Server](/cli/mcp-server) for all client configs and modes.
+The gateway ID is `org/slug` from the gateway detail page. See [MCP Server](/cli/mcp-server) for all client configs and modes.
 
 ## Testing
 
