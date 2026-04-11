@@ -249,7 +249,6 @@ describe('OrganizationsService.getInviteDetails — email privacy', () => {
       { findOne: jest.fn() } as any, // UserTeam
       { findOne: jest.fn() } as any, // User
       { sendInvitation: jest.fn() } as any, // MailService
-      { provisionSystemGateway: jest.fn() } as any, // SystemGatewayService
     );
 
     const result = await service.getInviteDetails('valid-token');
