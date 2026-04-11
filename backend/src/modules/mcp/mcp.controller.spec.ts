@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { McpController } from './mcp.controller';
 import { McpService } from './mcp.service';
-import { AlmytyMcpService } from './almyty-mcp.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 describe('McpController', () => {
@@ -20,10 +19,6 @@ describe('McpController', () => {
         {
           provide: McpService,
           useValue: mockMcpService,
-        },
-        {
-          provide: AlmytyMcpService,
-          useValue: {},
         },
       ],
     })
