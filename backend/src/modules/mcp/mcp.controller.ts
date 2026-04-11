@@ -12,13 +12,39 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { McpService } from './mcp.service';
+import { AlmytyMcpService } from './almyty-mcp.service';
 import { JsonRpcRequest, JsonRpcResponse } from './types/mcp.types';
 
 @Controller('mcp')
 export class McpController {
   private readonly logger = new Logger(McpController.name);
 
-  constructor(private readonly mcpService: McpService) {}
+  constructor(
+    private readonly mcpService: McpService,
+    private readonly almytyMcpService: AlmytyMcpService,
+  ) {}
+
+  // almyty platform MCP — management tools are now real Tool rows
+  // served by the standard MCP infrastructure via the system gateway
+  // (see SystemGatewayService). This endpoint forwards to McpService
+  // for backward compatibility.
+  @Post('almyty')
+  @UseGuards(JwtAuthGuard)
+  async handleAlmytyMcp(@Request() req, @Body() body: any): Promise<JsonRpcResponse> {
+    return this.handleMcp(req, body);
+  }
+
+  @Get('almyty/.well-known/mcp')
+  async almytyWellKnown(): Promise<any> {
+    const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
+    return {
+      protocol: 'mcp',
+      version: '2024-11-05',
+      server: { name: 'almyty', version: '1.0.0' },
+      capabilities: { tools: { listChanged: true } },
+      transports: { http: `${baseUrl}/mcp/almyty` },
+    };
+  }
 
   // Main MCP JSON-RPC Endpoint
   @Post()
@@ -61,14 +87,14 @@ export class McpController {
   @UseGuards(JwtAuthGuard)
   async handleNotifications(@Request() req, @Body() body: any): Promise<void> {
     const organizationId = req.user?.currentOrganizationId;
-    
+
     if (!organizationId) {
       throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
 
     // Handle MCP notifications
     this.logger.debug(`MCP notification: ${body.method} from user ${req.user.id}`);
-    
+
     // Delegate to notification handling logic
     // For now, just log - we can enhance this later
   }
