@@ -1,6 +1,6 @@
 /**
  * Real-Postgres integration spec for the atomic `bump*Stats` helpers
- * we introduced across agents, tools, LLM providers, and LLM sessions.
+ * we introduced across agents, tools, LLM providers, and conversations.
  *
  * EVERY other spec in this repo mocks `createQueryBuilder()` and just
  * asserts the chain was called, which means a column-name typo, a bad
@@ -23,7 +23,7 @@ import { DataSource, Repository } from 'typeorm';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Tool, ToolStatus, ToolType } from '../../entities/tool.entity';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
-import { LlmSession, SessionStatus, SessionType } from '../../entities/llm-session.entity';
+import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
 import { Organization } from '../../entities/organization.entity';
 
 import { AgentExecutionEngine } from '../../modules/agents/agent-execution.engine';
@@ -292,17 +292,17 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
   // ── LlmProvidersService.bumpSessionStats + bumpProviderStats ────
 
   describe('LlmProvidersService bump helpers', () => {
-    let sessionRepo: Repository<LlmSession>;
+    let conversationRepo: Repository<Conversation>;
     let providerRepo: Repository<LlmProvider>;
     let service: LlmProvidersService;
 
     beforeAll(() => {
-      sessionRepo = ds.getRepository(LlmSession);
+      conversationRepo = ds.getRepository(Conversation);
       providerRepo = ds.getRepository(LlmProvider);
       service = new LlmProvidersService(
         providerRepo,
-        sessionRepo,
-        {} as any, // llmMessageRepository
+        conversationRepo,
+        {} as any, // messageRepository
         {} as any, // userRepository
         {} as any, // organizationRepository
         {} as any, // gatewayRepository
@@ -320,13 +320,12 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
           status: LlmProviderStatus.ACTIVE,
           configuration: {} as any,
         } as any) as LlmProvider;
-      const session = await sessionRepo.save({
+      const session = await conversationRepo.save({
           providerId: provider.id,
           organizationId: orgId,
-          type: SessionType.CHAT,
-          status: SessionStatus.ACTIVE,
+          status: ConversationStatus.ACTIVE,
           title: 'fixture-session',
-        } as any) as LlmSession;
+        } as any) as Conversation;
 
       await (service as any).bumpSessionStats(session.id, {
         inputTokens: 100,
@@ -336,7 +335,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         toolCallSuccess: true,
       });
 
-      const after = await sessionRepo.findOneByOrFail({ id: session.id });
+      const after = await conversationRepo.findOneByOrFail({ id: session.id });
       expect(after.messageCount).toBe(1);
       expect(after.totalInputTokens).toBe(100);
       expect(after.totalOutputTokens).toBe(50);
@@ -354,13 +353,12 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
           status: LlmProviderStatus.ACTIVE,
           configuration: {} as any,
         } as any) as LlmProvider;
-      const session = await sessionRepo.save({
+      const session = await conversationRepo.save({
           providerId: provider.id,
           organizationId: orgId,
-          type: SessionType.CHAT,
-          status: SessionStatus.ACTIVE,
+          status: ConversationStatus.ACTIVE,
           title: 'fixture-session-no-tool',
-        } as any) as LlmSession;
+        } as any) as Conversation;
 
       await (service as any).bumpSessionStats(session.id, {
         inputTokens: 10,
@@ -370,7 +368,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         toolCallSuccess: false,
       });
 
-      const after = await sessionRepo.findOneByOrFail({ id: session.id });
+      const after = await conversationRepo.findOneByOrFail({ id: session.id });
       expect(after.messageCount).toBe(1);
       expect(after.toolCalls).toBe(0);
       expect(after.successfulToolCalls).toBe(0);
@@ -427,13 +425,12 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
           status: LlmProviderStatus.ACTIVE,
           configuration: {} as any,
         } as any) as LlmProvider;
-      const session = await sessionRepo.save({
+      const session = await conversationRepo.save({
           providerId: provider.id,
           organizationId: orgId,
-          type: SessionType.CHAT,
-          status: SessionStatus.ACTIVE,
+          status: ConversationStatus.ACTIVE,
           title: 'fixture-session-race',
-        } as any) as LlmSession;
+        } as any) as Conversation;
 
       await Promise.all(
         Array.from({ length: 50 }, () =>
@@ -447,7 +444,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         ),
       );
 
-      const after = await sessionRepo.findOneByOrFail({ id: session.id });
+      const after = await conversationRepo.findOneByOrFail({ id: session.id });
       expect(after.messageCount).toBe(50);
       expect(after.totalInputTokens).toBe(100);
       expect(after.totalOutputTokens).toBe(50);

@@ -1,0 +1,137 @@
+- generic:
+  - generic:
+    - generic:
+      - link:
+        - /url: "#main-content"
+        - text: Skip to main content
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - img
+              - generic: almyty
+          - generic:
+            - button:
+              - generic:
+                - generic:
+                  - generic: C
+                - generic: cli-qa-1775772658
+              - img
+          - generic:
+            - button:
+              - generic: Search or jump to…
+              - generic: ⌘K
+          - navigation:
+            - link:
+              - /url: /dashboard
+              - img
+              - text: Dashboard
+            - link:
+              - /url: /apis
+              - img
+              - text: APIs
+            - link:
+              - /url: /tools
+              - img
+              - text: Tools
+            - link:
+              - /url: /gateways
+              - img
+              - text: Gateways
+            - link:
+              - /url: /agents
+              - img
+              - text: Agents
+            - link:
+              - /url: /credentials
+              - img
+              - text: Credentials
+            - link:
+              - /url: /llm-providers
+              - img
+              - text: Models
+            - link:
+              - /url: /memories
+              - img
+              - text: Memory
+            - link:
+              - /url: /analytics
+              - img
+              - text: Analytics
+            - link:
+              - /url: /settings
+              - img
+              - text: Settings
+          - generic:
+            - button:
+              - img
+          - generic:
+            - button:
+              - generic:
+                - generic: U
+              - generic:
+                - paragraph: qa-cli-1775772658@almyty.test
+      - generic:
+        - main:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - heading [level=1]: Gateways
+                    - paragraph: 0 gateways (0 active) · 0 tool assignments
+                  - button:
+                    - img
+                    - text: Create Gateway
+                - generic:
+                  - generic:
+                    - status:
+                      - generic:
+                        - img
+                      - heading [level=3]: No gateways yet
+                      - paragraph: Gateways expose your tools to AI agents via MCP, A2A, UTCP, or Agent Skills. Create one to give Claude, Cursor, or any MCP-compatible client access to your tools.
+                      - generic:
+                        - button:
+                          - img
+                          - text: Create Gateway
+    - list
+  - dialog:
+    - generic:
+      - heading [level=2]: Create New Gateway
+      - paragraph: Create a new gateway to expose your tools via different protocols.
+    - generic:
+      - generic:
+        - text: Gateway Name
+        - textbox:
+          - /placeholder: Enter gateway name
+          - text: petstore-skills
+      - generic:
+        - text: Gateway Type
+        - combobox [expanded]:
+          - generic: Select gateway type
+          - img
+        - combobox
+      - generic:
+        - text: Endpoint Path
+        - textbox:
+          - /placeholder: /my-gateway
+          - text: /petstore-skills
+      - generic:
+        - text: Description (Optional)
+        - textbox:
+          - /placeholder: Enter gateway description
+      - generic:
+        - button: Cancel
+        - button: Create Gateway
+    - button:
+      - img
+      - generic: Close
+  - listbox [ref=e250]:
+    - option "MCP - Model Context Protocol" [active] [ref=e251]:
+      - generic [ref=e253]: MCP - Model Context Protocol
+    - option "A2A - Agent-to-Agent" [ref=e254]:
+      - generic [ref=e256]: A2A - Agent-to-Agent
+    - option "UTCP - Universal Tool Call Protocol" [ref=e257]:
+      - generic [ref=e259]: UTCP - Universal Tool Call Protocol
+    - option "Skills - Agent Skills (SKILL.md)" [ref=e260]:
+      - generic [ref=e262]: Skills - Agent Skills (SKILL.md)

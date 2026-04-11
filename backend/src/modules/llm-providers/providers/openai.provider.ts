@@ -1,7 +1,7 @@
 import { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { LlmProvider } from '../../../entities/llm-provider.entity';
-import { LlmSession } from '../../../entities/llm-session.entity';
-import { MessageRole, ToolCall } from '../../../entities/llm-message.entity';
+import { Conversation } from '../../../entities/conversation.entity';
+import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse } from '../llm-providers.service';
 import { callLlmProviderHttp } from './safe-request';
@@ -13,7 +13,7 @@ import { callLlmProviderHttp } from './safe-request';
 export async function callOpenAI(
   provider: LlmProvider,
   request: ChatRequest,
-  session: LlmSession,
+  conversation: Conversation,
   tools: Tool[],
   startTime: number,
   calculateProviderCost: (provider: LlmProvider, inputTokens: number, outputTokens: number) => number,
@@ -47,12 +47,12 @@ export async function callOpenAI(
 
       return openaiMsg;
     }),
-    max_tokens: request.maxTokens || session.context?.maxTokens,
-    temperature: request.temperature ?? session.context?.temperature,
-    top_p: request.topP ?? session.context?.topP,
-    frequency_penalty: request.frequencyPenalty ?? session.context?.frequencyPenalty,
-    presence_penalty: request.presencePenalty ?? session.context?.presencePenalty,
-    stop: request.stopSequences || session.context?.stopSequences,
+    max_tokens: request.maxTokens || conversation.context?.maxTokens,
+    temperature: request.temperature ?? conversation.context?.temperature,
+    top_p: request.topP ?? conversation.context?.topP,
+    frequency_penalty: request.frequencyPenalty ?? conversation.context?.frequencyPenalty,
+    presence_penalty: request.presencePenalty ?? conversation.context?.presencePenalty,
+    stop: request.stopSequences || conversation.context?.stopSequences,
     stream: request.stream || false,
   };
 
@@ -126,7 +126,7 @@ export async function callOpenAI(
     },
     cost,
     model: response.data.model,
-    sessionId: session.id,
+    conversationId: conversation.id,
     messageId: '',
     responseTime,
   };

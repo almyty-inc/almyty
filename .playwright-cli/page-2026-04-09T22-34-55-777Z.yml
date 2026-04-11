@@ -1,0 +1,188 @@
+- generic:
+  - generic:
+    - generic:
+      - link:
+        - /url: "#main-content"
+        - text: Skip to main content
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - img
+              - generic: almyty
+          - generic:
+            - button:
+              - generic:
+                - generic:
+                  - generic: C
+                - generic: cli-qa-1775772658
+              - img
+          - generic:
+            - button:
+              - generic: Search or jump to…
+              - generic: ⌘K
+          - navigation:
+            - link:
+              - /url: /dashboard
+              - img
+              - text: Dashboard
+            - link:
+              - /url: /apis
+              - img
+              - text: APIs
+            - link:
+              - /url: /tools
+              - img
+              - text: Tools
+            - link:
+              - /url: /gateways
+              - img
+              - text: Gateways
+            - link:
+              - /url: /agents
+              - img
+              - text: Agents
+            - link:
+              - /url: /credentials
+              - img
+              - text: Credentials
+            - link:
+              - /url: /llm-providers
+              - img
+              - text: Models
+            - link:
+              - /url: /memories
+              - img
+              - text: Memory
+            - link:
+              - /url: /analytics
+              - img
+              - text: Analytics
+            - link:
+              - /url: /settings
+              - img
+              - text: Settings
+          - generic:
+            - button:
+              - img
+          - generic:
+            - button:
+              - generic:
+                - generic: U
+              - generic:
+                - paragraph: qa-cli-1775772658@almyty.test
+      - generic:
+        - main:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - heading [level=1]: APIs
+                    - paragraph: 1 connected · 0 operations · 0 tools generated
+                  - generic:
+                    - button [expanded]:
+                      - img
+                      - text: Connect API
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - img
+                          - textbox:
+                            - /placeholder: Search APIs...
+                      - combobox:
+                        - generic: All Types
+                        - img
+                      - combobox:
+                        - generic: All Status
+                        - img
+                    - generic:
+                      - generic:
+                        - generic:
+                          - table:
+                            - rowgroup:
+                              - row:
+                                - columnheader:
+                                  - button:
+                                    - text: API
+                                    - img
+                                - columnheader: Type
+                                - columnheader: Auth
+                                - columnheader: Tools
+                                - columnheader: Operations
+                                - columnheader
+                            - rowgroup:
+                              - row:
+                                - cell:
+                                  - generic:
+                                    - generic:
+                                      - img
+                                    - generic:
+                                      - generic: Petstore
+                                      - generic: https://petstore3.swagger.io/api/v3
+                                - cell:
+                                  - generic: OpenAPI
+                                - cell:
+                                  - generic:
+                                    - img
+                                    - generic: None
+                                - cell:
+                                  - generic: "0"
+                                - cell:
+                                  - generic: "0"
+                                - cell:
+                                  - button:
+                                    - generic: Actions
+                                    - img
+    - list
+  - dialog "Connect New API" [active] [ref=e182]:
+    - generic [ref=e105]:
+      - heading "Connect New API" [level=2] [ref=e183]
+      - paragraph [ref=e107]: Connect an existing API to automatically generate tools for LLM usage.
+    - generic [ref=e184]:
+      - generic [ref=e185]:
+        - generic [ref=e186]:
+          - text: API Name
+          - textbox "API Name" [ref=e187]:
+            - /placeholder: Enter API name
+            - text: Petstore
+        - generic [ref=e188]:
+          - text: API Type
+          - combobox [ref=e189] [cursor=pointer]:
+            - generic:
+              - generic:
+                - img
+                - generic: OpenAPI/REST
+            - img [ref=e190]
+          - combobox [ref=e192]
+      - generic [ref=e193]:
+        - text: Base URL
+        - textbox "Base URL" [ref=e194]:
+          - /placeholder: https://api.example.com/v1
+          - text: https://petstore3.swagger.io/api/v3
+        - paragraph [ref=e195]: REST APIs can have versioned paths like /v1 or /api/v2
+      - generic [ref=e196]:
+        - generic [ref=e197]:
+          - text: Version (Optional)
+          - textbox "Version (Optional)" [ref=e198]:
+            - /placeholder: v1.0
+            - text: "1.0"
+        - generic [ref=e199]:
+          - text: Authentication
+          - combobox [ref=e200] [cursor=pointer]:
+            - generic: Select auth type
+            - img [ref=e201]
+          - combobox [ref=e203]
+      - generic [ref=e204]:
+        - text: Description (Optional)
+        - textbox "Description (Optional)" [ref=e205]:
+          - /placeholder: Enter API description
+          - text: Swagger Petstore reference API (OpenAPI 3.0)
+      - generic [ref=e206]:
+        - button "Cancel" [ref=e207] [cursor=pointer]
+        - button "Connect API" [ref=e208] [cursor=pointer]
+    - button "Close" [ref=e133] [cursor=pointer]:
+      - img [ref=e134]
+      - generic [ref=e137]: Close

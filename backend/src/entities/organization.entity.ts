@@ -15,7 +15,7 @@ import { Api } from './api.entity';
 import { Tool } from './tool.entity';
 import { Gateway } from './gateway.entity';
 import { LlmProvider } from './llm-provider.entity';
-import { LlmSession } from './llm-session.entity';
+import { Conversation } from './conversation.entity';
 import { UsageMetric } from './usage-metric.entity';
 
 export interface OrganizationSettings {
@@ -102,8 +102,8 @@ export class Organization {
   @OneToMany(() => LlmProvider, provider => provider.organization)
   llmProviders: LlmProvider[];
 
-  @OneToMany(() => LlmSession, session => session.organization)
-  llmSessions: LlmSession[];
+  @OneToMany(() => Conversation, conversation => conversation.organization)
+  conversations: Conversation[];
 
   @OneToMany(() => UsageMetric, metric => metric.organization)
   usageMetrics: UsageMetric[];

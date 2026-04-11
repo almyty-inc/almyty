@@ -1,20 +1,20 @@
 import {
-  LlmMessage,
+  Message,
   MessageRole,
   MessageType,
   MessageStatus,
   MessageContent,
   ToolCall,
   FunctionCall,
-} from './llm-message.entity';
+} from './message.entity';
 
-describe('LlmMessage Entity', () => {
-  let message: LlmMessage;
+describe('Message Entity', () => {
+  let message: Message;
 
   beforeEach(() => {
-    message = new LlmMessage();
+    message = new Message();
     message.id = 'msg-1';
-    message.sessionId = 'session-1';
+    message.conversationId = 'conversation-1';
     message.role = MessageRole.ASSISTANT;
     message.type = MessageType.TEXT;
     message.status = MessageStatus.COMPLETED;
@@ -297,9 +297,9 @@ describe('LlmMessage Entity', () => {
   describe('Static Factory Methods', () => {
     describe('createUserMessage', () => {
       it('should create user message with string content', () => {
-        const msg = LlmMessage.createUserMessage('session-1', 'Hello');
+        const msg = Message.createUserMessage('conversation-1', 'Hello');
 
-        expect(msg.sessionId).toBe('session-1');
+        expect(msg.conversationId).toBe('conversation-1');
         expect(msg.role).toBe(MessageRole.USER);
         expect(msg.type).toBe(MessageType.TEXT);
         expect(msg.status).toBe(MessageStatus.COMPLETED);
@@ -312,7 +312,7 @@ describe('LlmMessage Entity', () => {
           { type: 'image', imageUrl: 'http://example.com/img.jpg' },
         ];
 
-        const msg = LlmMessage.createUserMessage('session-1', contentParts);
+        const msg = Message.createUserMessage('conversation-1', contentParts);
 
         expect(msg.contentParts).toEqual(contentParts);
         expect(msg.content).toBe('What is this?');
@@ -321,9 +321,9 @@ describe('LlmMessage Entity', () => {
 
     describe('createAssistantMessage', () => {
       it('should create assistant message', () => {
-        const msg = LlmMessage.createAssistantMessage('session-1', 'Response');
+        const msg = Message.createAssistantMessage('conversation-1', 'Response');
 
-        expect(msg.sessionId).toBe('session-1');
+        expect(msg.conversationId).toBe('conversation-1');
         expect(msg.role).toBe(MessageRole.ASSISTANT);
         expect(msg.type).toBe(MessageType.TEXT);
         expect(msg.status).toBe(MessageStatus.COMPLETED);
@@ -337,9 +337,9 @@ describe('LlmMessage Entity', () => {
           { id: 'tc-1', name: 'getTool', parameters: { id: '123' } },
         ];
 
-        const msg = LlmMessage.createToolCallMessage('session-1', toolCalls);
+        const msg = Message.createToolCallMessage('conversation-1', toolCalls);
 
-        expect(msg.sessionId).toBe('session-1');
+        expect(msg.conversationId).toBe('conversation-1');
         expect(msg.role).toBe(MessageRole.ASSISTANT);
         expect(msg.type).toBe(MessageType.TOOL_CALL);
         expect(msg.status).toBe(MessageStatus.PROCESSING);
@@ -351,9 +351,9 @@ describe('LlmMessage Entity', () => {
       it('should create successful tool result message', () => {
         const result = { data: 'success' };
 
-        const msg = LlmMessage.createToolResultMessage('session-1', 'tc-1', result);
+        const msg = Message.createToolResultMessage('conversation-1', 'tc-1', result);
 
-        expect(msg.sessionId).toBe('session-1');
+        expect(msg.conversationId).toBe('conversation-1');
         expect(msg.role).toBe(MessageRole.TOOL);
         expect(msg.type).toBe(MessageType.TOOL_RESULT);
         expect(msg.status).toBe(MessageStatus.COMPLETED);
@@ -363,14 +363,14 @@ describe('LlmMessage Entity', () => {
       });
 
       it('should create failed tool result message', () => {
-        const msg = LlmMessage.createToolResultMessage('session-1', 'tc-1', null, 'timeout');
+        const msg = Message.createToolResultMessage('conversation-1', 'tc-1', null, 'timeout');
 
         expect(msg.status).toBe(MessageStatus.FAILED);
         expect(msg.error).toBe('timeout');
       });
 
       it('should handle string result', () => {
-        const msg = LlmMessage.createToolResultMessage('session-1', 'tc-1', 'string result');
+        const msg = Message.createToolResultMessage('conversation-1', 'tc-1', 'string result');
 
         expect(msg.content).toBe('string result');
       });
@@ -383,9 +383,9 @@ describe('LlmMessage Entity', () => {
           arguments: '{"param":"value"}',
         };
 
-        const msg = LlmMessage.createFunctionCallMessage('session-1', functionCall);
+        const msg = Message.createFunctionCallMessage('conversation-1', functionCall);
 
-        expect(msg.sessionId).toBe('session-1');
+        expect(msg.conversationId).toBe('conversation-1');
         expect(msg.role).toBe(MessageRole.ASSISTANT);
         expect(msg.type).toBe(MessageType.FUNCTION_CALL);
         expect(msg.status).toBe(MessageStatus.PROCESSING);
@@ -395,9 +395,9 @@ describe('LlmMessage Entity', () => {
 
     describe('createFunctionResultMessage', () => {
       it('should create successful function result message', () => {
-        const msg = LlmMessage.createFunctionResultMessage('session-1', 'testFunc', 'result');
+        const msg = Message.createFunctionResultMessage('conversation-1', 'testFunc', 'result');
 
-        expect(msg.sessionId).toBe('session-1');
+        expect(msg.conversationId).toBe('conversation-1');
         expect(msg.role).toBe(MessageRole.FUNCTION);
         expect(msg.type).toBe(MessageType.FUNCTION_RESULT);
         expect(msg.status).toBe(MessageStatus.COMPLETED);
@@ -406,7 +406,7 @@ describe('LlmMessage Entity', () => {
       });
 
       it('should create failed function result message', () => {
-        const msg = LlmMessage.createFunctionResultMessage('session-1', 'testFunc', '', 'error');
+        const msg = Message.createFunctionResultMessage('conversation-1', 'testFunc', '', 'error');
 
         expect(msg.status).toBe(MessageStatus.FAILED);
         expect(msg.error).toBe('error');
@@ -415,9 +415,9 @@ describe('LlmMessage Entity', () => {
 
     describe('createSystemMessage', () => {
       it('should create system message', () => {
-        const msg = LlmMessage.createSystemMessage('session-1', 'System instruction');
+        const msg = Message.createSystemMessage('conversation-1', 'System instruction');
 
-        expect(msg.sessionId).toBe('session-1');
+        expect(msg.conversationId).toBe('conversation-1');
         expect(msg.role).toBe(MessageRole.SYSTEM);
         expect(msg.type).toBe(MessageType.TEXT);
         expect(msg.status).toBe(MessageStatus.COMPLETED);
@@ -427,9 +427,9 @@ describe('LlmMessage Entity', () => {
 
     describe('createErrorMessage', () => {
       it('should create error message', () => {
-        const msg = LlmMessage.createErrorMessage('session-1', 'API timeout');
+        const msg = Message.createErrorMessage('conversation-1', 'API timeout');
 
-        expect(msg.sessionId).toBe('session-1');
+        expect(msg.conversationId).toBe('conversation-1');
         expect(msg.role).toBe(MessageRole.ASSISTANT);
         expect(msg.type).toBe(MessageType.ERROR);
         expect(msg.status).toBe(MessageStatus.FAILED);

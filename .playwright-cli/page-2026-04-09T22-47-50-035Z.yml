@@ -1,0 +1,80 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to main content" [ref=e4] [cursor=pointer]:
+      - /url: "#main-content"
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - img "almyty" [ref=e9]
+        - generic [ref=e10]: almyty
+      - button "C cli-qa-1775772658" [ref=e12] [cursor=pointer]:
+        - generic [ref=e13]:
+          - generic [ref=e15]: C
+          - generic [ref=e16]: cli-qa-1775772658
+        - img [ref=e17]
+      - button "Open command palette" [ref=e20] [cursor=pointer]:
+        - generic [ref=e21]: Search or jump to…
+        - generic [ref=e22]: ⌘K
+      - navigation "Main navigation" [ref=e23]:
+        - link "Dashboard" [ref=e24] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e25]
+          - text: Dashboard
+        - link "APIs" [ref=e30] [cursor=pointer]:
+          - /url: /apis
+          - img [ref=e31]
+          - text: APIs
+        - link "Tools" [ref=e34] [cursor=pointer]:
+          - /url: /tools
+          - img [ref=e35]
+          - text: Tools
+        - link "Gateways" [ref=e37] [cursor=pointer]:
+          - /url: /gateways
+          - img [ref=e38]
+          - text: Gateways
+        - link "Agents" [ref=e40] [cursor=pointer]:
+          - /url: /agents
+          - img [ref=e41]
+          - text: Agents
+        - link "Credentials" [ref=e44] [cursor=pointer]:
+          - /url: /credentials
+          - img [ref=e45]
+          - text: Credentials
+        - link "Models" [ref=e50] [cursor=pointer]:
+          - /url: /llm-providers
+          - img [ref=e51]
+          - text: Models
+        - link "Memory" [ref=e59] [cursor=pointer]:
+          - /url: /memories
+          - img [ref=e60]
+          - text: Memory
+        - link "Analytics" [ref=e64] [cursor=pointer]:
+          - /url: /analytics
+          - img [ref=e65]
+          - text: Analytics
+        - link "Settings" [ref=e67] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e68]
+          - text: Settings
+      - button "Collapse sidebar" [ref=e72] [cursor=pointer]:
+        - img [ref=e73]
+      - button "User menu" [ref=e76] [cursor=pointer]:
+        - generic [ref=e78]: U
+        - paragraph [ref=e80]: qa-cli-1775772658@almyty.test
+    - main "Main content" [ref=e82]:
+      - generic [ref=e85]:
+        - generic [ref=e86]:
+          - generic [ref=e87]:
+            - heading "APIs" [level=1] [ref=e88]
+            - paragraph [ref=e89]: 0 connected · 0 operations · 0 tools generated
+          - button "Connect API" [ref=e91] [cursor=pointer]:
+            - img [ref=e92]
+            - text: Connect API
+        - generic [ref=e94]:
+          - img [ref=e96]
+          - heading "No APIs" [level=3] [ref=e99]
+          - paragraph [ref=e100]: Create your first API to get started. We support OpenAPI, GraphQL, SOAP, and gRPC protocols.
+          - button "Connect Your First API" [ref=e101] [cursor=pointer]:
+            - img [ref=e102]
+            - text: Connect Your First API
+  - region "Notifications":
+    - list

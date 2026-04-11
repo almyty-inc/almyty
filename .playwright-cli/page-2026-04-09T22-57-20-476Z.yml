@@ -1,0 +1,137 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to main content" [ref=e4] [cursor=pointer]:
+      - /url: "#main-content"
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - img "almyty" [ref=e9]
+        - generic [ref=e10]: almyty
+      - button "C cli-qa-1775772658" [ref=e12] [cursor=pointer]:
+        - generic [ref=e13]:
+          - generic [ref=e15]: C
+          - generic [ref=e16]: cli-qa-1775772658
+        - img [ref=e17]
+      - button "Open command palette" [ref=e20] [cursor=pointer]:
+        - generic [ref=e21]: Search or jump to…
+        - generic [ref=e22]: ⌘K
+      - navigation "Main navigation" [ref=e23]:
+        - link "Dashboard" [ref=e24] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e25]
+          - text: Dashboard
+        - link "APIs" [ref=e30] [cursor=pointer]:
+          - /url: /apis
+          - img [ref=e31]
+          - text: APIs
+        - link "Tools" [ref=e34] [cursor=pointer]:
+          - /url: /tools
+          - img [ref=e35]
+          - text: Tools
+        - link "Gateways" [ref=e37] [cursor=pointer]:
+          - /url: /gateways
+          - img [ref=e38]
+          - text: Gateways
+        - link "Agents" [ref=e40] [cursor=pointer]:
+          - /url: /agents
+          - img [ref=e41]
+          - text: Agents
+        - link "Credentials" [ref=e44] [cursor=pointer]:
+          - /url: /credentials
+          - img [ref=e45]
+          - text: Credentials
+        - link "Models" [ref=e50] [cursor=pointer]:
+          - /url: /llm-providers
+          - img [ref=e51]
+          - text: Models
+        - link "Memory" [ref=e59] [cursor=pointer]:
+          - /url: /memories
+          - img [ref=e60]
+          - text: Memory
+        - link "Analytics" [ref=e64] [cursor=pointer]:
+          - /url: /analytics
+          - img [ref=e65]
+          - text: Analytics
+        - link "Settings" [ref=e67] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e68]
+          - text: Settings
+      - button "Collapse sidebar" [ref=e72] [cursor=pointer]:
+        - img [ref=e73]
+      - button "User menu" [ref=e76] [cursor=pointer]:
+        - generic [ref=e78]: U
+        - paragraph [ref=e80]: qa-cli-1775772658@almyty.test
+    - main "Main content" [ref=e82]:
+      - generic [ref=e357]:
+        - generic [ref=e358]:
+          - link "Gateways" [ref=e359] [cursor=pointer]:
+            - /url: /gateways
+          - img [ref=e360]
+          - generic [ref=e362]: petstore-skills
+        - generic [ref=e363]:
+          - generic [ref=e364]:
+            - button [ref=e365] [cursor=pointer]:
+              - img [ref=e366]
+            - generic [ref=e368]:
+              - img [ref=e370]
+              - generic [ref=e374]:
+                - heading "petstore-skills" [level=1] [ref=e375]
+                - paragraph [ref=e376]: API Gateway
+          - generic [ref=e377]:
+            - button "Edit Gateway" [ref=e378] [cursor=pointer]:
+              - img [ref=e379]
+              - text: Edit Gateway
+            - generic [ref=e382]: Active
+            - generic [ref=e383]: SKILLS
+        - generic [ref=e384]:
+          - generic [ref=e385]:
+            - heading "Configuration" [level=3] [ref=e386]
+            - paragraph [ref=e387]: Install command and setup
+          - generic [ref=e390]:
+            - paragraph [ref=e391]: Install Command
+            - generic [ref=e392]:
+              - code [ref=e393]: npx @almyty/skills install @cli-qa-1775772658/petstore-skills
+              - button [ref=e394] [cursor=pointer]:
+                - img [ref=e395]
+        - generic [ref=e398]:
+          - tablist [ref=e399]:
+            - tab "Tool Scoping (1/3)" [selected] [ref=e437] [cursor=pointer]
+            - tab "Metrics" [ref=e401] [cursor=pointer]
+            - tab "Integrations" [ref=e402] [cursor=pointer]
+          - tabpanel "Tool Scoping (1/3)" [ref=e438]:
+            - generic [ref=e404]:
+              - generic [ref=e405]:
+                - heading "Tool Scoping" [level=3] [ref=e406]
+                - paragraph [ref=e407]: Control which tools are available through this gateway. 1 of 3 assigned
+              - generic [ref=e409]:
+                - button "Read Only" [ref=e410] [cursor=pointer]
+                - button "Admin Tools" [ref=e411] [cursor=pointer]
+                - button "Public API" [ref=e412] [cursor=pointer]
+                - button "All Tools" [ref=e413] [cursor=pointer]
+                - button "Remove All" [ref=e414] [cursor=pointer]
+            - generic [ref=e415]:
+              - generic [ref=e417]:
+                - generic [ref=e418]:
+                  - generic [ref=e419]: petstore_update_user
+                  - generic [ref=e420]: This can only be done by the logged in user.
+                - generic [ref=e421]:
+                  - button [ref=e439] [cursor=pointer]:
+                    - img [ref=e440]
+                  - button "Remove" [ref=e442] [cursor=pointer]
+              - generic [ref=e424]:
+                - generic [ref=e425]:
+                  - generic [ref=e426]: petstore_logout_user
+                  - generic [ref=e427]: Log user out of the system.
+                - button "Assign" [ref=e429] [cursor=pointer]
+              - generic [ref=e431]:
+                - generic [ref=e432]:
+                  - generic [ref=e433]: petstore_get_inventory
+                  - generic [ref=e434]: Returns a map of status codes to quantities.
+                - button "Assign" [ref=e436] [cursor=pointer]
+  - region "Notifications":
+    - list [ref=e323]:
+      - listitem [ref=e444]:
+        - generic [ref=e445]:
+          - generic [ref=e446]: Tool assigned
+          - generic [ref=e447]: Tool has been assigned to the gateway successfully.
+        - button [ref=e448] [cursor=pointer]:
+          - img [ref=e449]

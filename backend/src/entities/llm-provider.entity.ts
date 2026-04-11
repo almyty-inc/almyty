@@ -12,7 +12,7 @@ import {
 import { VersionedEntity } from 'typeorm-versions';
 import { Organization } from './organization.entity';
 import { Credential } from './credential.entity';
-import { LlmSession } from './llm-session.entity';
+import { Conversation } from './conversation.entity';
 import { UsageMetric } from './usage-metric.entity';
 
 export enum LlmProviderType {
@@ -182,8 +182,8 @@ export class LlmProvider {
   @JoinColumn({ name: 'credentialId' })
   credential: Credential;
 
-  @OneToMany(() => LlmSession, session => session.provider)
-  sessions: LlmSession[];
+  @OneToMany(() => Conversation, conversation => conversation.provider)
+  sessions: Conversation[];
 
   @OneToMany(() => UsageMetric, metric => metric.llmProvider)
   usageMetrics: UsageMetric[];

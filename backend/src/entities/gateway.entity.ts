@@ -11,16 +11,38 @@ import {
 } from 'typeorm';
 import { VersionedEntity } from 'typeorm-versions';
 import { Organization } from './organization.entity';
+import { Agent } from './agent.entity';
 import { GatewayTool } from './gateway-tool.entity';
 import { GatewayAuth } from './gateway-auth.entity';
-import { LlmSession } from './llm-session.entity';
+import { Conversation } from './conversation.entity';
 import { UsageMetric } from './usage-metric.entity';
 
+export enum GatewayKind {
+  TOOL = 'tool',
+  AGENT = 'agent',
+}
+
 export enum GatewayType {
+  // Tool-kind types
   MCP = 'mcp',
-  A2A = 'a2a',
   UTCP = 'utcp',
   SKILLS = 'skills',
+  // Agent-kind types
+  A2A = 'a2a',
+  OPENAI_CHAT = 'openai_chat',
+  // Channel types (agent-kind)
+  SLACK = 'slack',
+  DISCORD = 'discord',
+  TELEGRAM = 'telegram',
+  WHATSAPP = 'whatsapp',
+  EMAIL = 'email',
+  WEBHOOK = 'webhook',
+  GOOGLE_CHAT = 'google_chat',
+  MICROSOFT_TEAMS = 'microsoft_teams',
+  SIGNAL = 'signal',
+  MATRIX = 'matrix',
+  IRC = 'irc',
+  CHAT_WIDGET = 'chat_widget',
 }
 
 export enum GatewayStatus {
@@ -55,8 +77,17 @@ export class Gateway {
 
   @Column({
     type: 'varchar',
+    default: GatewayKind.TOOL,
+  })
+  kind: GatewayKind;
+
+  @Column({
+    type: 'varchar',
   })
   type: GatewayType;
+
+  @Column({ nullable: true })
+  agentId: string;
 
   @Column({
     type: 'varchar',
@@ -141,6 +172,13 @@ export class Gateway {
   @JoinColumn({ name: 'organizationId' })
   organization: Organization;
 
+  @ManyToOne(() => Agent, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'agentId' })
+  agent: Agent;
+
   @OneToMany(() => GatewayTool, gatewayTool => gatewayTool.gateway, {
     cascade: true,
   })
@@ -151,8 +189,8 @@ export class Gateway {
   })
   authConfigs: GatewayAuth[];
 
-  @OneToMany(() => LlmSession, session => session.gateway)
-  llmSessions: LlmSession[];
+  @OneToMany(() => Conversation, conversation => conversation.gateway)
+  conversations: Conversation[];
 
   @OneToMany(() => UsageMetric, usageMetric => usageMetric.gateway)
   usageMetrics: UsageMetric[];
@@ -208,29 +246,42 @@ export class Gateway {
     return `${baseUrl.replace(/\/$/, '')}${this.endpoint}`;
   }
 
+  isToolKind(): boolean {
+    return this.kind === GatewayKind.TOOL;
+  }
+
+  isAgentKind(): boolean {
+    return this.kind === GatewayKind.AGENT;
+  }
+
   supportsProtocol(protocol: string): boolean {
     switch (this.type) {
       case GatewayType.MCP:
         return ['http', 'sse', 'websocket'].includes(protocol);
       case GatewayType.A2A:
-        return ['http', 'grpc'].includes(protocol);
+        return ['http', 'jsonrpc'].includes(protocol);
       case GatewayType.UTCP:
         return ['http', 'tcp'].includes(protocol);
       case GatewayType.SKILLS:
         return ['cli', 'file'].includes(protocol);
+      case GatewayType.OPENAI_CHAT:
+        return ['http'].includes(protocol);
       default:
-        return false;
+        // Channel types all use http
+        return protocol === 'http';
     }
   }
 
   getConfigForType(): Record<string, any> {
     const baseConfig = {
       name: this.name,
+      kind: this.kind,
       type: this.type,
       endpoint: this.endpoint,
       timeout: this.requestTimeout,
       retries: this.maxRetries,
       toolCount: this.tools?.length || 0,
+      agentId: this.agentId,
     };
 
     switch (this.type) {
@@ -244,8 +295,7 @@ export class Gateway {
       case GatewayType.A2A:
         return {
           ...baseConfig,
-          agentCapabilities: this.configuration.agentCapabilities || [],
-          conversationMemory: this.configuration.conversationMemory || false,
+          a2aVersion: this.configuration.a2aVersion || '0.3.0',
         };
 
       case GatewayType.UTCP:

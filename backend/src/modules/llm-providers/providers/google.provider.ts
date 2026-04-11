@@ -1,7 +1,7 @@
 import { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { LlmProvider } from '../../../entities/llm-provider.entity';
-import { LlmSession } from '../../../entities/llm-session.entity';
-import { MessageRole } from '../../../entities/llm-message.entity';
+import { Conversation } from '../../../entities/conversation.entity';
+import { MessageRole } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse } from '../llm-providers.service';
 import { callLlmProviderHttp } from './safe-request';
@@ -12,7 +12,7 @@ import { callLlmProviderHttp } from './safe-request';
 export async function callGoogle(
   provider: LlmProvider,
   request: ChatRequest,
-  session: LlmSession,
+  conversation: Conversation,
   tools: Tool[],
   startTime: number,
   calculateProviderCost: (provider: LlmProvider, inputTokens: number, outputTokens: number) => number,
@@ -27,10 +27,10 @@ export async function callGoogle(
       parts: [{ text: msg.content }],
     })),
     generationConfig: {
-      maxOutputTokens: request.maxTokens || session.context?.maxTokens,
-      temperature: request.temperature ?? session.context?.temperature,
-      topP: request.topP ?? session.context?.topP,
-      topK: request.topK ?? session.context?.topK,
+      maxOutputTokens: request.maxTokens || conversation.context?.maxTokens,
+      temperature: request.temperature ?? conversation.context?.temperature,
+      topP: request.topP ?? conversation.context?.topP,
+      topK: request.topK ?? conversation.context?.topK,
     },
   };
 
@@ -73,7 +73,7 @@ export async function callGoogle(
     },
     cost,
     model: request.model || 'gemini-pro',
-    sessionId: session.id,
+    conversationId: conversation.id,
     messageId: '',
     responseTime,
   };
@@ -85,7 +85,7 @@ export async function callGoogle(
 export async function callCohere(
   provider: LlmProvider,
   request: ChatRequest,
-  session: LlmSession,
+  conversation: Conversation,
   tools: Tool[],
   startTime: number,
   calculateProviderCost: (provider: LlmProvider, inputTokens: number, outputTokens: number) => number,
@@ -104,13 +104,13 @@ export async function callCohere(
     model: request.model || provider.configuration.model || 'command',
     message: lastMessage.content,
     chat_history: chatHistory,
-    max_tokens: request.maxTokens || session.context?.maxTokens,
-    temperature: request.temperature ?? session.context?.temperature,
-    p: request.topP ?? session.context?.topP,
-    k: request.topK ?? session.context?.topK,
-    frequency_penalty: request.frequencyPenalty ?? session.context?.frequencyPenalty,
-    presence_penalty: request.presencePenalty ?? session.context?.presencePenalty,
-    stop_sequences: request.stopSequences || session.context?.stopSequences,
+    max_tokens: request.maxTokens || conversation.context?.maxTokens,
+    temperature: request.temperature ?? conversation.context?.temperature,
+    p: request.topP ?? conversation.context?.topP,
+    k: request.topK ?? conversation.context?.topK,
+    frequency_penalty: request.frequencyPenalty ?? conversation.context?.frequencyPenalty,
+    presence_penalty: request.presencePenalty ?? conversation.context?.presencePenalty,
+    stop_sequences: request.stopSequences || conversation.context?.stopSequences,
   };
 
   const config: AxiosRequestConfig = {
@@ -142,7 +142,7 @@ export async function callCohere(
     },
     cost,
     model: cohereRequest.model as string,
-    sessionId: session.id,
+    conversationId: conversation.id,
     messageId: '',
     responseTime,
   };
@@ -154,7 +154,7 @@ export async function callCohere(
 export async function callHuggingFace(
   provider: LlmProvider,
   request: ChatRequest,
-  session: LlmSession,
+  conversation: Conversation,
   tools: Tool[],
   startTime: number,
 ): Promise<ChatResponse> {
@@ -167,12 +167,12 @@ export async function callHuggingFace(
   const hfRequest: Record<string, unknown> = {
     inputs: prompt,
     parameters: {
-      max_new_tokens: request.maxTokens || session.context?.maxTokens || 100,
-      temperature: request.temperature ?? session.context?.temperature ?? 0.7,
-      top_p: request.topP ?? session.context?.topP,
-      top_k: request.topK ?? session.context?.topK,
+      max_new_tokens: request.maxTokens || conversation.context?.maxTokens || 100,
+      temperature: request.temperature ?? conversation.context?.temperature ?? 0.7,
+      top_p: request.topP ?? conversation.context?.topP,
+      top_k: request.topK ?? conversation.context?.topK,
       repetition_penalty: (request.frequencyPenalty || 0) + 1,
-      stop_sequences: request.stopSequences || session.context?.stopSequences,
+      stop_sequences: request.stopSequences || conversation.context?.stopSequences,
     },
   };
 
@@ -213,7 +213,7 @@ export async function callHuggingFace(
     },
     cost,
     model: request.model || provider.configuration.model || 'unknown',
-    sessionId: session.id,
+    conversationId: conversation.id,
     messageId: '',
     responseTime,
   };
@@ -225,7 +225,7 @@ export async function callHuggingFace(
 export async function callCustomProvider(
   provider: LlmProvider,
   request: ChatRequest,
-  session: LlmSession,
+  conversation: Conversation,
   tools: Tool[],
   startTime: number,
 ): Promise<ChatResponse> {
@@ -242,22 +242,22 @@ export async function callCustomProvider(
     requestData = {
       model: request.model || provider.configuration.model,
       messages: request.messages,
-      max_tokens: request.maxTokens || session.context?.maxTokens,
-      temperature: request.temperature ?? session.context?.temperature,
+      max_tokens: request.maxTokens || conversation.context?.maxTokens,
+      temperature: request.temperature ?? conversation.context?.temperature,
     };
   } else if (requestFormat === 'anthropic') {
     requestData = {
       model: request.model || provider.configuration.model,
       messages: request.messages,
-      max_tokens: request.maxTokens || session.context?.maxTokens,
-      temperature: request.temperature ?? session.context?.temperature,
+      max_tokens: request.maxTokens || conversation.context?.maxTokens,
+      temperature: request.temperature ?? conversation.context?.temperature,
     };
   } else {
     // Custom format
     requestData = {
       prompt: request.messages.map(m => m.content).join('\n'),
-      max_tokens: request.maxTokens || session.context?.maxTokens,
-      temperature: request.temperature ?? session.context?.temperature,
+      max_tokens: request.maxTokens || conversation.context?.maxTokens,
+      temperature: request.temperature ?? conversation.context?.temperature,
     };
   }
 
@@ -323,7 +323,7 @@ export async function callCustomProvider(
     },
     cost: 0, // Custom providers would need their own cost calculation
     model: request.model || provider.configuration.model || 'custom',
-    sessionId: session.id,
+    conversationId: conversation.id,
     messageId: '',
     responseTime,
   };

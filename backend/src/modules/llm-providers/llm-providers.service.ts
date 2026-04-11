@@ -7,8 +7,8 @@ import { callOpenAI, callAnthropic, callGoogle, callCohere, callHuggingFace, cal
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
-import { LlmSession, SessionStatus, SessionType } from '../../entities/llm-session.entity';
-import { LlmMessage, MessageRole, MessageType, MessageStatus, ToolCall, MessageContent } from '../../entities/llm-message.entity';
+import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
+import { Message, MessageRole, MessageType, MessageStatus, ToolCall, MessageContent } from '../../entities/message.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
@@ -84,7 +84,7 @@ export interface ChatResponse {
   };
   cost: number;
   model: string;
-  sessionId: string;
+  conversationId: string;
   messageId: string;
   cached?: boolean;
   responseTime: number;
@@ -154,10 +154,10 @@ export class LlmProvidersService {
   constructor(
     @InjectRepository(LlmProvider)
     private llmProviderRepository: Repository<LlmProvider>,
-    @InjectRepository(LlmSession)
-    private llmSessionRepository: Repository<LlmSession>,
-    @InjectRepository(LlmMessage)
-    private llmMessageRepository: Repository<LlmMessage>,
+    @InjectRepository(Conversation)
+    private conversationRepository: Repository<Conversation>,
+    @InjectRepository(Message)
+    private messageRepository: Repository<Message>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
     @InjectRepository(Organization)
@@ -410,21 +410,21 @@ export class LlmProvidersService {
       }
 
       // Get or create session
-      let session: LlmSession;
+      let session: Conversation;
       if (request.sessionId) {
-        session = await this.llmSessionRepository.findOne({
+        session = await this.conversationRepository.findOne({
           where: { id: request.sessionId, organizationId },
         });
         if (!session) {
           throw new NotFoundException('Session not found');
         }
       } else {
-        session = LlmSession.createSession({
+        session = Conversation.createConversation({
           providerId: provider.id,
           organizationId,
           gatewayId: request.gatewayId,
           userId,
-          type: SessionType.CHAT,
+
           context: {
             model: request.model || provider.configuration.model,
             maxTokens: request.maxTokens || provider.configuration.maxTokens,
@@ -437,7 +437,7 @@ export class LlmProvidersService {
             toolsEnabled: (request.tools && request.tools.length > 0) || (request.toolIds && request.toolIds.length > 0),
           },
         });
-        session = await this.llmSessionRepository.save(session);
+        session = await this.conversationRepository.save(session);
       }
 
       // Resolve toolIds to tool entities directly if provided
@@ -472,8 +472,8 @@ export class LlmProvidersService {
         );
 
         // Save the assistant's tool-call message
-        await this.llmMessageRepository.save(this.llmMessageRepository.create({
-          sessionId: session.id,
+        await this.messageRepository.save(this.messageRepository.create({
+          conversationId: session.id,
           role: MessageRole.ASSISTANT,
           type: MessageType.TOOL_CALL,
           content: response.message.content || '',
@@ -511,8 +511,8 @@ export class LlmProvidersService {
       }
 
       // Save final message to database
-      const message = this.llmMessageRepository.create({
-        sessionId: session.id,
+      const message = this.messageRepository.create({
+        conversationId: session.id,
         role: response.message.role,
         type: response.message.toolCalls?.length > 0 ? MessageType.TOOL_CALL : MessageType.TEXT,
         content: response.message.content,
@@ -526,11 +526,11 @@ export class LlmProvidersService {
         status: MessageStatus.COMPLETED,
       });
 
-      const savedMessage = await this.llmMessageRepository.save(message);
+      const savedMessage = await this.messageRepository.save(message);
 
       // Update session stats atomically. The old path was
       // `session.addMessage(...) + session.addToolCall(...) +
-      // llmSessionRepository.save(session)` — a classic
+      // conversationRepository.save(session)` — a classic
       // read-modify-write race. Two concurrent chats against the
       // same session would both read the old counters, both
       // compute `+1` / `+ cost`, both save, and one increment
@@ -555,7 +555,7 @@ export class LlmProvidersService {
 
       return {
         ...response,
-        sessionId: session.id,
+        conversationId: session.id,
         messageId: savedMessage.id,
       };
 
@@ -609,9 +609,9 @@ export class LlmProvidersService {
     const input = Number(delta.inputTokens) || 0;
     const output = Number(delta.outputTokens) || 0;
     const cost = Number(delta.cost) || 0;
-    await this.llmSessionRepository
+    await this.conversationRepository
       .createQueryBuilder()
-      .update(LlmSession)
+      .update(Conversation)
       .set({
         messageCount: () => '"messageCount" + 1',
         totalInputTokens: () => `"totalInputTokens" + ${input}`,
@@ -660,7 +660,7 @@ export class LlmProvidersService {
   private async callLlmProvider(
     provider: LlmProvider,
     request: ChatRequest,
-    session: LlmSession,
+    session: Conversation,
     tools: Tool[]
   ): Promise<ChatResponse> {
     const maxRetries = 2;
@@ -731,7 +731,7 @@ export class LlmProvidersService {
   private async dispatchProviderCall(
     provider: LlmProvider,
     request: ChatRequest,
-    session: LlmSession,
+    session: Conversation,
     tools: Tool[],
     startTime: number,
   ): Promise<ChatResponse> {
@@ -805,7 +805,7 @@ export class LlmProvidersService {
 
   private async executeToolCalls(
     toolCalls: ToolCall[],
-    session: LlmSession,
+    session: Conversation,
     organizationId: string,
     signal?: AbortSignal,
   ): Promise<void> {
@@ -1251,10 +1251,9 @@ export class LlmProvidersService {
         temperature: 0.1,
       };
 
-      const session = LlmSession.createSession({
+      const session = Conversation.createConversation({
         providerId: provider.id,
         organizationId: provider.organizationId,
-        type: SessionType.CHAT,
         title: 'Health Check',
       });
 
@@ -1312,22 +1311,22 @@ export class LlmProvidersService {
     providerId: string,
     organizationId: string,
     userId?: string,
-    sessionData?: Partial<LlmSession>
-  ): Promise<LlmSession> {
+    sessionData?: Partial<Conversation>
+  ): Promise<Conversation> {
     const provider = await this.getProvider(providerId, organizationId);
 
-    const session = LlmSession.createSession({
+    const session = Conversation.createConversation({
       providerId: provider.id,
       organizationId,
       userId,
       ...sessionData,
     });
 
-    return this.llmSessionRepository.save(session);
+    return this.conversationRepository.save(session);
   }
 
-  async getSession(sessionId: string, organizationId: string): Promise<LlmSession> {
-    const session = await this.llmSessionRepository.findOne({
+  async getSession(sessionId: string, organizationId: string): Promise<Conversation> {
+    const session = await this.conversationRepository.findOne({
       where: { id: sessionId, organizationId },
       relations: ['provider', 'messages'],
     });
@@ -1343,11 +1342,11 @@ export class LlmProvidersService {
     organizationId: string,
     providerId?: string,
     userId?: string,
-    status?: SessionStatus,
+    status?: ConversationStatus,
     page = 1,
     limit = 20
   ): Promise<{
-    sessions: LlmSession[];
+    sessions: Conversation[];
     total: number;
     page: number;
     limit: number;
@@ -1355,7 +1354,7 @@ export class LlmProvidersService {
   }> {
     const skip = (page - 1) * limit;
     
-    const queryBuilder = this.llmSessionRepository
+    const queryBuilder = this.conversationRepository
       .createQueryBuilder('session')
       .leftJoinAndSelect('session.provider', 'provider')
       .where('session.organizationId = :organizationId', { organizationId });
@@ -1390,21 +1389,21 @@ export class LlmProvidersService {
     sessionId: string,
     organizationId: string,
     updates: Partial<{
-      status: SessionStatus;
+      status: ConversationStatus;
       title: string;
-      context: LlmSession['context'];
-      metadata: LlmSession['metadata'];
+      context: Conversation['context'];
+      metadata: Conversation['metadata'];
     }>
-  ): Promise<LlmSession> {
+  ): Promise<Conversation> {
     const session = await this.getSession(sessionId, organizationId);
 
     Object.assign(session, updates);
 
-    return this.llmSessionRepository.save(session);
+    return this.conversationRepository.save(session);
   }
 
   async deleteSession(sessionId: string, organizationId: string): Promise<void> {
     const session = await this.getSession(sessionId, organizationId);
-    await this.llmSessionRepository.remove(session);
+    await this.conversationRepository.remove(session);
   }
 }

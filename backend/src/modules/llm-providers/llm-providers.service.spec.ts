@@ -4,8 +4,8 @@ import { NotFoundException, ForbiddenException, BadRequestException } from '@nes
 import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest } from './llm-providers.service';
 import { callOpenAI, callAnthropic, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
-import { LlmSession, SessionStatus, SessionType } from '../../entities/llm-session.entity';
-import { LlmMessage, MessageRole, MessageStatus } from '../../entities/llm-message.entity';
+import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
+import { Message, MessageRole, MessageStatus } from '../../entities/message.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
@@ -16,8 +16,8 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 describe('LlmProvidersService', () => {
   let service: LlmProvidersService;
   let llmProviderRepository: any;
-  let llmSessionRepository: any;
-  let llmMessageRepository: any;
+  let conversationRepository: any;
+  let messageRepository: any;
   let userRepository: any;
   let organizationRepository: any;
   let gatewayRepository: any;
@@ -52,7 +52,7 @@ describe('LlmProvidersService', () => {
           },
         },
         {
-          provide: getRepositoryToken(LlmSession),
+          provide: getRepositoryToken(Conversation),
           useValue: {
             findOne: jest.fn(),
             find: jest.fn(),
@@ -64,7 +64,7 @@ describe('LlmProvidersService', () => {
           },
         },
         {
-          provide: getRepositoryToken(LlmMessage),
+          provide: getRepositoryToken(Message),
           useValue: {
             findOne: jest.fn(),
             find: jest.fn(),
@@ -123,8 +123,8 @@ describe('LlmProvidersService', () => {
 
     service = module.get<LlmProvidersService>(LlmProvidersService);
     llmProviderRepository = module.get(getRepositoryToken(LlmProvider));
-    llmSessionRepository = module.get(getRepositoryToken(LlmSession));
-    llmMessageRepository = module.get(getRepositoryToken(LlmMessage));
+    conversationRepository = module.get(getRepositoryToken(Conversation));
+    messageRepository = module.get(getRepositoryToken(Message));
     userRepository = module.get(getRepositoryToken(User));
     organizationRepository = module.get(getRepositoryToken(Organization));
     gatewayRepository = module.get(getRepositoryToken(Gateway));
@@ -500,7 +500,7 @@ describe('LlmProvidersService', () => {
       };
       const mockSession = {
         id: 'session-1',
-        status: SessionStatus.ACTIVE,
+        status: ConversationStatus.ACTIVE,
         addMessage: jest.fn(),
         addToolCall: jest.fn(),
       };
@@ -512,19 +512,19 @@ describe('LlmProvidersService', () => {
         usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
         cost: 0.001,
         model: 'gpt-4',
-        sessionId: 'session-1',
+        conversationId: 'session-1',
         messageId: 'msg-1',
         responseTime: 1200,
       };
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
-      llmSessionRepository.findOne.mockResolvedValue(mockSession);
-      llmSessionRepository.save.mockResolvedValue(mockSession);
+      conversationRepository.findOne.mockResolvedValue(mockSession);
+      conversationRepository.save.mockResolvedValue(mockSession);
       jest.spyOn(service as any, 'callLlmProvider').mockResolvedValue(mockResponse);
       jest.spyOn(service as any, 'prepareTools').mockResolvedValue([]);
-      llmMessageRepository.create.mockReturnValue({});
-      llmMessageRepository.save.mockResolvedValue({ id: 'msg-1' });
+      messageRepository.create.mockReturnValue({});
+      messageRepository.save.mockResolvedValue({ id: 'msg-1' });
 
       const result = await service.chat('provider-1', chatRequest, 'org-1', 'user-1');
 
@@ -578,7 +578,7 @@ describe('LlmProvidersService', () => {
       };
       const mockSession = {
         id: 'new-session-1',
-        status: SessionStatus.ACTIVE,
+        status: ConversationStatus.ACTIVE,
         context: {},
         addMessage: jest.fn(),
         addToolCall: jest.fn(),
@@ -588,18 +588,18 @@ describe('LlmProvidersService', () => {
         usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
         cost: 0.001,
         model: 'gpt-4',
-        sessionId: 'new-session-1',
+        conversationId: 'new-session-1',
         messageId: 'msg-1',
         responseTime: 1200,
       };
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
-      llmSessionRepository.save.mockResolvedValue(mockSession);
+      conversationRepository.save.mockResolvedValue(mockSession);
       jest.spyOn(service as any, 'callLlmProvider').mockResolvedValue(mockResponse);
       jest.spyOn(service as any, 'prepareTools').mockResolvedValue([]);
-      llmMessageRepository.create.mockReturnValue({});
-      llmMessageRepository.save.mockResolvedValue({ id: 'msg-1' });
+      messageRepository.create.mockReturnValue({});
+      messageRepository.save.mockResolvedValue({ id: 'msg-1' });
 
       const requestWithoutSession = {
         messages: chatRequest.messages,
@@ -608,8 +608,8 @@ describe('LlmProvidersService', () => {
 
       const result = await service.chat('provider-1', requestWithoutSession, 'org-1', 'user-1');
 
-      expect(result.sessionId).toBe('new-session-1');
-      expect(llmSessionRepository.save).toHaveBeenCalled();
+      expect(result.conversationId).toBe('new-session-1');
+      expect(conversationRepository.save).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException for non-existent session', async () => {
@@ -620,7 +620,7 @@ describe('LlmProvidersService', () => {
       };
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
-      llmSessionRepository.findOne.mockResolvedValue(null);
+      conversationRepository.findOne.mockResolvedValue(null);
 
       await expect(service.chat('provider-1', chatRequest, 'org-1', 'user-1'))
         .rejects
@@ -638,7 +638,7 @@ describe('LlmProvidersService', () => {
       };
       const mockSession = {
         id: 'session-1',
-        status: SessionStatus.ACTIVE,
+        status: ConversationStatus.ACTIVE,
         addMessage: jest.fn(),
         addToolCall: jest.fn(),
       };
@@ -653,20 +653,20 @@ describe('LlmProvidersService', () => {
         usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
         cost: 0.001,
         model: 'gpt-4',
-        sessionId: 'session-1',
+        conversationId: 'session-1',
         messageId: 'msg-1',
         responseTime: 1200,
       };
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
-      llmSessionRepository.findOne.mockResolvedValue(mockSession);
-      llmSessionRepository.save.mockResolvedValue(mockSession);
+      conversationRepository.findOne.mockResolvedValue(mockSession);
+      conversationRepository.save.mockResolvedValue(mockSession);
       jest.spyOn(service as any, 'callLlmProvider').mockResolvedValue(mockResponse);
       jest.spyOn(service as any, 'prepareTools').mockResolvedValue([]);
       jest.spyOn(service as any, 'executeToolCalls').mockResolvedValue(undefined);
-      llmMessageRepository.create.mockReturnValue({});
-      llmMessageRepository.save.mockResolvedValue({ id: 'msg-1' });
+      messageRepository.create.mockReturnValue({});
+      messageRepository.save.mockResolvedValue({ id: 'msg-1' });
 
       const result = await service.chat('provider-1', chatRequest, 'org-1', 'user-1');
 
@@ -682,13 +682,13 @@ describe('LlmProvidersService', () => {
       };
       const mockSession = {
         id: 'session-1',
-        status: SessionStatus.ACTIVE,
+        status: ConversationStatus.ACTIVE,
       };
 
       llmProviderRepository.findOne
         .mockResolvedValueOnce(mockProvider)
         .mockResolvedValueOnce(mockProvider);
-      llmSessionRepository.findOne.mockResolvedValue(mockSession);
+      conversationRepository.findOne.mockResolvedValue(mockSession);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
       jest.spyOn(service as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
       jest.spyOn(service as any, 'prepareTools').mockResolvedValue([]);
@@ -813,20 +813,18 @@ describe('LlmProvidersService', () => {
         providerId: 'provider-1',
         organizationId: 'org-1',
         userId: 'user-1',
-        status: SessionStatus.ACTIVE,
-        type: SessionType.CHAT,
+        status: ConversationStatus.ACTIVE,
       };
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
-      llmSessionRepository.save.mockResolvedValue(mockSession);
+      conversationRepository.save.mockResolvedValue(mockSession);
 
       const result = await service.createSession('provider-1', 'org-1', 'user-1', {
         title: 'Test Session',
-        type: SessionType.CHAT,
       });
 
       expect(result).toEqual(mockSession);
-      expect(llmSessionRepository.save).toHaveBeenCalled();
+      expect(conversationRepository.save).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException for invalid provider', async () => {
@@ -834,7 +832,6 @@ describe('LlmProvidersService', () => {
 
       await expect(service.createSession('invalid-provider', 'org-1', 'user-1', {
         title: 'Test Session',
-        type: SessionType.CHAT,
       })).rejects.toThrow(NotFoundException);
     });
   });
@@ -847,7 +844,7 @@ describe('LlmProvidersService', () => {
         messages: [],
       };
 
-      llmSessionRepository.findOne.mockResolvedValue(mockSession);
+      conversationRepository.findOne.mockResolvedValue(mockSession);
 
       const result = await service.getSession('session-1', 'org-1');
 
@@ -855,7 +852,7 @@ describe('LlmProvidersService', () => {
     });
 
     it('should throw NotFoundException when session not found', async () => {
-      llmSessionRepository.findOne.mockResolvedValue(null);
+      conversationRepository.findOne.mockResolvedValue(null);
 
       await expect(service.getSession('invalid-session', 'org-1'))
         .rejects
@@ -882,7 +879,7 @@ describe('LlmProvidersService', () => {
         getManyAndCount: jest.fn().mockResolvedValue([mockSessions, 2]),
       };
 
-      llmSessionRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      conversationRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
       const result = await service.getSessions('org-1', 'provider-1', undefined, undefined, 1, 10);
 
@@ -904,7 +901,7 @@ describe('LlmProvidersService', () => {
         getMany: jest.fn().mockResolvedValue([]),
       };
 
-      llmSessionRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      conversationRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
       await service.getSessions('org-1', undefined, 'user-1', undefined, 1, 10);
 
@@ -923,11 +920,11 @@ describe('LlmProvidersService', () => {
         getMany: jest.fn().mockResolvedValue([]),
       };
 
-      llmSessionRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      conversationRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
-      await service.getSessions('org-1', undefined, undefined, SessionStatus.ACTIVE, 1, 10);
+      await service.getSessions('org-1', undefined, undefined, ConversationStatus.ACTIVE, 1, 10);
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('session.status = :status', { status: SessionStatus.ACTIVE });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('session.status = :status', { status: ConversationStatus.ACTIVE });
     });
   });
 
@@ -944,15 +941,15 @@ describe('LlmProvidersService', () => {
         title: 'Updated Session',
       };
 
-      llmSessionRepository.findOne.mockResolvedValue(mockSession);
-      llmSessionRepository.save.mockResolvedValue(updatedSession);
+      conversationRepository.findOne.mockResolvedValue(mockSession);
+      conversationRepository.save.mockResolvedValue(updatedSession);
 
       const result = await service.updateSession('session-1', 'org-1', {
         title: 'Updated Session',
       });
 
       expect(result.title).toBe('Updated Session');
-      expect(llmSessionRepository.save).toHaveBeenCalled();
+      expect(conversationRepository.save).toHaveBeenCalled();
     });
   });
 
@@ -960,12 +957,12 @@ describe('LlmProvidersService', () => {
     it('should delete session successfully', async () => {
       const mockSession = { id: 'session-1', organizationId: 'org-1' };
 
-      llmSessionRepository.findOne.mockResolvedValue(mockSession);
-      llmSessionRepository.remove.mockResolvedValue();
+      conversationRepository.findOne.mockResolvedValue(mockSession);
+      conversationRepository.remove.mockResolvedValue();
 
       await service.deleteSession('session-1', 'org-1');
 
-      expect(llmSessionRepository.remove).toHaveBeenCalledWith(mockSession);
+      expect(conversationRepository.remove).toHaveBeenCalledWith(mockSession);
     });
   });
 
@@ -1308,14 +1305,14 @@ describe('LlmProvidersService', () => {
 
       const mockSession = {
         id: 'session-1',
-        status: SessionStatus.ACTIVE,
+        status: ConversationStatus.ACTIVE,
         addMessage: jest.fn(),
         addToolCall: jest.fn(),
       };
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
-      llmSessionRepository.save.mockResolvedValue(mockSession);
+      conversationRepository.save.mockResolvedValue(mockSession);
 
       const chatRequest = {
         messages: [{ role: MessageRole.USER, content: 'What is the weather in NYC?' }],
@@ -1344,7 +1341,7 @@ describe('LlmProvidersService', () => {
         usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
         cost: 0.002,
         model: 'gpt-4',
-        sessionId: 'session-1',
+        conversationId: 'session-1',
         messageId: 'msg-1',
         responseTime: 1500,
       };
@@ -1364,8 +1361,8 @@ describe('LlmProvidersService', () => {
         },
       ]);
 
-      llmMessageRepository.create.mockReturnValue({});
-      llmMessageRepository.save.mockResolvedValue({});
+      messageRepository.create.mockReturnValue({});
+      messageRepository.save.mockResolvedValue({});
 
       const result = await service.chat('provider-1', chatRequest, 'org-1', 'user-1');
 
@@ -1395,8 +1392,8 @@ describe('LlmProvidersService', () => {
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
-      llmSessionRepository.findOne.mockResolvedValue(mockSession);
-      llmSessionRepository.save.mockResolvedValue(mockSession);
+      conversationRepository.findOne.mockResolvedValue(mockSession);
+      conversationRepository.save.mockResolvedValue(mockSession);
 
       const chatRequest = {
         messages: [{ role: MessageRole.USER, content: 'How are you?' }],
@@ -1408,19 +1405,19 @@ describe('LlmProvidersService', () => {
         usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
         cost: 0.001,
         model: 'gpt-4',
-        sessionId: 'session-1',
+        conversationId: 'session-1',
         messageId: 'msg-2',
         responseTime: 1000,
       };
 
       jest.spyOn(service as any, 'callLlmProvider').mockResolvedValue(mockResponse);
       jest.spyOn(service as any, 'prepareTools').mockResolvedValue([]);
-      llmMessageRepository.create.mockReturnValue({});
-      llmMessageRepository.save.mockResolvedValue({});
+      messageRepository.create.mockReturnValue({});
+      messageRepository.save.mockResolvedValue({});
 
       const result = await service.chat('provider-1', chatRequest, 'org-1', 'user-1');
 
-      expect(result.sessionId).toBe('session-1');
+      expect(result.conversationId).toBe('session-1');
     });
   });
 
@@ -2258,7 +2255,7 @@ describe('LlmProvidersService', () => {
         usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
         cost: 0.001,
         model: 'gpt-4o',
-        sessionId: 'session-1',
+        conversationId: 'session-1',
         messageId: '',
         responseTime: 100,
       };

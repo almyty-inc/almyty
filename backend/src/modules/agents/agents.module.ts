@@ -12,6 +12,8 @@ import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { ApiKey } from '../../entities/api-key.entity';
+import { Conversation } from '../../entities/conversation.entity';
+import { Message } from '../../entities/message.entity';
 
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
@@ -42,6 +44,8 @@ import { MemoryModule } from '../memory/memory.module';
       User,
       Organization,
       ApiKey,
+      Conversation,
+      Message,
     ]),
     BullModule.registerQueue({ name: 'agent-scheduler' }),
     BullModule.registerQueue({ name: 'agent-runtime' }),

@@ -2,8 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { LlmProvider } from '../../entities/llm-provider.entity';
-import { LlmSession } from '../../entities/llm-session.entity';
-import { LlmMessage } from '../../entities/llm-message.entity';
+import { Conversation } from '../../entities/conversation.entity';
+import { Message } from '../../entities/message.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
@@ -18,8 +18,8 @@ import { ToolsModule } from '../tools/tools.module';
   imports: [
     TypeOrmModule.forFeature([
       LlmProvider,
-      LlmSession,
-      LlmMessage,
+      Conversation,
+      Message,
       User,
       Organization,
       Gateway,

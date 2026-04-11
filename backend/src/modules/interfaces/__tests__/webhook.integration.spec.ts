@@ -53,7 +53,6 @@ function makeRun(overrides: Partial<AgentRun> = {}): AgentRun {
   run.agentId = 'agent-uuid-1';
   run.organizationId = 'org-uuid-1';
   run.status = AgentRunStatus.RUNNING;
-  run.thread = [];
   run.steps = [];
   run.currentStep = 0;
   run.maxSteps = 25;
@@ -368,7 +367,6 @@ describe('Webhook & Widget Integration Tests', () => {
       const existingRun = makeRun({
         id: 'existing-run-id',
         status: AgentRunStatus.WAITING_INPUT,
-        thread: [{ role: 'user', content: 'first message', timestamp: new Date().toISOString() }],
         metadata: { threadId: 'thread-existing' },
       });
 
@@ -382,13 +380,12 @@ describe('Webhook & Widget Integration Tests', () => {
       expect(result.success).toBe(true);
       // Should NOT call startRun since we continue existing
       expect(agentRuntime.startRun).not.toHaveBeenCalled();
-      // Should save the existing run with new message appended
-      expect(runRepo.save).toHaveBeenCalled();
-      const savedRun = runRepo.save.mock.calls[0][0];
-      expect(savedRun.thread).toHaveLength(2);
-      expect(savedRun.thread[1].role).toBe('user');
-      expect(savedRun.thread[1].content).toBe('follow up');
-      expect(savedRun.status).toBe('running');
+      // Should call sendInput to resume the run
+      expect(agentRuntime.sendInput).toHaveBeenCalledWith(
+        'existing-run-id',
+        iface.organizationId,
+        'follow up',
+      );
     });
   });
 

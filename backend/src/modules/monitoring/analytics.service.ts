@@ -4,8 +4,8 @@ import { Repository, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric, MetricType } from '../../entities/usage-metric.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
-import { LlmSession } from '../../entities/llm-session.entity';
-import { LlmMessage } from '../../entities/llm-message.entity';
+import { Conversation } from '../../entities/conversation.entity';
+import { Message } from '../../entities/message.entity';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 
@@ -40,10 +40,10 @@ export class AnalyticsService {
     private readonly usageMetricRepository: Repository<UsageMetric>,
     @InjectRepository(ToolExecution)
     private readonly toolExecutionRepository: Repository<ToolExecution>,
-    @InjectRepository(LlmSession)
-    private readonly llmSessionRepository: Repository<LlmSession>,
-    @InjectRepository(LlmMessage)
-    private readonly llmMessageRepository: Repository<LlmMessage>,
+    @InjectRepository(Conversation)
+    private readonly conversationRepository: Repository<Conversation>,
+    @InjectRepository(Message)
+    private readonly messageRepository: Repository<Message>,
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
     @InjectRepository(AgentRun)
@@ -115,10 +115,10 @@ export class AnalyticsService {
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getCount()
         .catch(() => 0),
-      this.llmSessionRepository.count({
+      this.conversationRepository.count({
         where: { organizationId, createdAt: MoreThanOrEqual(last24h) },
       }).catch(() => 0),
-      this.llmSessionRepository
+      this.conversationRepository
         .createQueryBuilder('session')
         .select('SUM(session.totalCost)', 'total')
         .where('session.organizationId = :orgId', { orgId: organizationId })
@@ -284,7 +284,7 @@ export class AnalyticsService {
     }
     const since = this.getTimeframeDate(timeframe);
 
-    const sessions = await this.llmSessionRepository
+    const sessions = await this.conversationRepository
       .createQueryBuilder('session')
       .select('session.providerId', 'providerId')
       .addSelect('COUNT(*)', 'sessionCount')
@@ -595,7 +595,7 @@ export class AnalyticsService {
     }
 
     if (query.type === 'llm-sessions') {
-      const sessions = await this.llmSessionRepository.find({
+      const sessions = await this.conversationRepository.find({
         where: {
           organizationId: query.organizationId,
           createdAt: Between(from, to),

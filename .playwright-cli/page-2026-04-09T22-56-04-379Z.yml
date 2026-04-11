@@ -1,0 +1,126 @@
+- generic:
+  - generic:
+    - generic:
+      - link:
+        - /url: "#main-content"
+        - text: Skip to main content
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - img
+              - generic: almyty
+          - generic:
+            - button:
+              - generic:
+                - generic:
+                  - generic: C
+                - generic: cli-qa-1775772658
+              - img
+          - generic:
+            - button:
+              - generic: Search or jump to…
+              - generic: ⌘K
+          - navigation:
+            - link:
+              - /url: /dashboard
+              - img
+              - text: Dashboard
+            - link:
+              - /url: /apis
+              - img
+              - text: APIs
+            - link:
+              - /url: /tools
+              - img
+              - text: Tools
+            - link:
+              - /url: /gateways
+              - img
+              - text: Gateways
+            - link:
+              - /url: /agents
+              - img
+              - text: Agents
+            - link:
+              - /url: /credentials
+              - img
+              - text: Credentials
+            - link:
+              - /url: /llm-providers
+              - img
+              - text: Models
+            - link:
+              - /url: /memories
+              - img
+              - text: Memory
+            - link:
+              - /url: /analytics
+              - img
+              - text: Analytics
+            - link:
+              - /url: /settings
+              - img
+              - text: Settings
+          - generic:
+            - button:
+              - img
+          - generic:
+            - button:
+              - generic:
+                - generic: U
+              - generic:
+                - paragraph: qa-cli-1775772658@almyty.test
+      - generic:
+        - main:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - heading [level=1]: Gateways
+                    - paragraph: 0 gateways (0 active) · 0 tool assignments
+                  - button:
+                    - img
+                    - text: Create Gateway
+                - generic:
+                  - generic:
+                    - status:
+                      - generic:
+                        - img
+                      - heading [level=3]: No gateways yet
+                      - paragraph: Gateways expose your tools to AI agents via MCP, A2A, UTCP, or Agent Skills. Create one to give Claude, Cursor, or any MCP-compatible client access to your tools.
+                      - generic:
+                        - button:
+                          - img
+                          - text: Create Gateway
+    - list
+  - dialog "Create New Gateway" [ref=e226]:
+    - generic [ref=e227]:
+      - heading "Create New Gateway" [level=2] [ref=e228]
+      - paragraph [ref=e229]: Create a new gateway to expose your tools via different protocols.
+    - generic [ref=e230]:
+      - generic [ref=e231]:
+        - text: Gateway Name
+        - textbox "Gateway Name" [active] [ref=e232]:
+          - /placeholder: Enter gateway name
+      - generic [ref=e233]:
+        - text: Gateway Type
+        - combobox "Gateway Type" [ref=e234] [cursor=pointer]:
+          - generic: Select gateway type
+          - img [ref=e235]
+        - combobox [ref=e237]
+      - generic [ref=e238]:
+        - text: Endpoint Path
+        - textbox "Endpoint Path" [ref=e239]:
+          - /placeholder: /my-gateway
+      - generic [ref=e240]:
+        - text: Description (Optional)
+        - textbox "Description (Optional)" [ref=e241]:
+          - /placeholder: Enter gateway description
+      - generic [ref=e242]:
+        - button "Cancel" [ref=e243] [cursor=pointer]
+        - button "Create Gateway" [ref=e244] [cursor=pointer]
+    - button "Close" [ref=e245] [cursor=pointer]:
+      - img [ref=e246]
+      - generic [ref=e249]: Close
