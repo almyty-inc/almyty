@@ -158,9 +158,9 @@ npx @almyty/chat my-agent
 # CLI smoke tests (requires auth + at least one gateway with tools)
 cd packages/cli-tests && RUN_CLI_SMOKE=1 npx vitest run
 
-# Docker production builds
-docker build --target production -t almyty-api ./backend
-docker build --target production -t almyty-frontend ./frontend
+# Build + push to Docker Hub
+docker build -t almyty/api ./backend && docker push almyty/api
+docker build -t almyty/frontend ./frontend && docker push almyty/frontend
 ```
 
 ---
