@@ -7,6 +7,8 @@ import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { Agent, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
 import { AgentExecutionEngine } from './agent-execution.engine';
+import { A2AClientService } from '../a2a/a2a-client.service';
+import { ExternalAgentsService } from '../a2a/external-agents.service';
 
 export interface NodeExecutionResult {
   output: any;
@@ -44,6 +46,8 @@ export class AgentNodeExecutor {
     private readonly agentRepository: Repository<Agent>,
     @Inject(forwardRef(() => AgentExecutionEngine))
     private readonly executionEngine: AgentExecutionEngine,
+    private readonly a2aClientService: A2AClientService,
+    private readonly externalAgentsService: ExternalAgentsService,
   ) {}
 
   /**
@@ -523,18 +527,20 @@ export class AgentNodeExecutor {
   /**
    * Execute a sub_agent node — loads and runs another agent with mapped inputs.
    * Enforces maximum nesting depth to prevent runaway recursion.
+   *
+   * Supports two target kinds:
+   * - { kind: 'native', agentId } — run a local agent via the execution engine
+   * - { kind: 'external_a2a', externalAgentId } — call a remote agent via A2A protocol
+   * - Legacy format (no target property) — treat agentId as a native agent
    */
   private async executeSubAgentNode(
     node: AgentPipelineNode,
     context: ExecutionContext,
     options: NodeExecutionOptions,
   ): Promise<NodeExecutionResult> {
-    const { agentId, inputMapping } = node.data || node.config || {};
+    const config = node.data || node.config || {};
+    const { inputMapping, target } = config;
     const startTime = Date.now();
-
-    if (!agentId) {
-      throw new Error(`Sub-agent node '${node.id}' is missing 'agentId' in config`);
-    }
 
     const currentDepth = options.nestingDepth || 0;
     const maxDepth = options.maxNestingDepth || 5;
@@ -558,17 +564,43 @@ export class AgentNodeExecutor {
       Object.assign(subInput, context.input);
     }
 
+    // Determine target kind — legacy nodes have agentId at the top level
+    const resolvedTarget = target
+      ? target
+      : config.agentId
+        ? { kind: 'native' as const, agentId: config.agentId }
+        : null;
+
+    if (!resolvedTarget) {
+      throw new Error(`Sub-agent node '${node.id}' is missing 'target' or 'agentId' in config`);
+    }
+
+    if (resolvedTarget.kind === 'external_a2a') {
+      return this.executeExternalA2ASubAgent(node, resolvedTarget.externalAgentId, subInput, options, startTime);
+    }
+
+    // Default: native sub-agent
+    return this.executeNativeSubAgent(node, resolvedTarget.agentId, subInput, options, startTime);
+  }
+
+  /**
+   * Execute a native (local) sub-agent via the execution engine.
+   */
+  private async executeNativeSubAgent(
+    node: AgentPipelineNode,
+    agentId: string,
+    subInput: Record<string, any>,
+    options: NodeExecutionOptions,
+    startTime: number,
+  ): Promise<NodeExecutionResult> {
+    if (!agentId) {
+      throw new Error(`Sub-agent node '${node.id}' is missing 'agentId' in target`);
+    }
+
+    const currentDepth = options.nestingDepth || 0;
+    const maxDepth = options.maxNestingDepth || 5;
+
     // Load sub-agent. CRITICAL: scope to the caller's organizationId.
-    // The previous shape was `findOne({ where: { id: agentId } })` with no
-    // org filter, which meant a user in org A could craft a pipeline with
-    // a sub_agent node pointing at ANY agentId in the system and have
-    // this engine load and execute the referenced pipeline under org A's
-    // identity. The effect: org A runs org B's private pipeline logic —
-    // prompts, tool-call configurations, judge prompts, LLM provider
-    // choices — against org A's inputs, silently exfiltrating the shape
-    // of org B's agent definitions. The sub-agent execution itself uses
-    // org A's tools and credentials so there's no privilege escalation,
-    // but the IP theft is still severe.
     const subAgent = await this.agentRepository.findOne({
       where: { id: agentId, organizationId: options.organizationId },
     });
@@ -576,10 +608,6 @@ export class AgentNodeExecutor {
       throw new Error(`Sub-agent '${agentId}' not found`);
     }
 
-    // Execute sub-agent via the execution engine. Thread the
-    // cancellation signal through so a client disconnect at the
-    // top of the stack cascades through every nested sub-run,
-    // not just the outermost one.
     const result = await this.executionEngine.execute(
       subAgent,
       options.organizationId,
@@ -592,7 +620,7 @@ export class AgentNodeExecutor {
         },
         signal: options.signal,
       },
-      undefined, // no onEvent callback for sub-agents
+      undefined,
       {
         nestingDepth: currentDepth + 1,
         maxNestingDepth: maxDepth,
@@ -609,6 +637,60 @@ export class AgentNodeExecutor {
       output: result.output,
       cost: result.totalCost || 0,
       tokens: result.totalTokens || 0,
+      executionTime,
+    };
+  }
+
+  /**
+   * Execute a remote external agent via the A2A protocol.
+   */
+  private async executeExternalA2ASubAgent(
+    node: AgentPipelineNode,
+    externalAgentId: string,
+    subInput: Record<string, any>,
+    options: NodeExecutionOptions,
+    startTime: number,
+  ): Promise<NodeExecutionResult> {
+    if (!externalAgentId) {
+      throw new Error(`Sub-agent node '${node.id}' is missing 'externalAgentId' in target`);
+    }
+
+    const externalAgent = await this.externalAgentsService.findById(
+      externalAgentId,
+      options.organizationId,
+    );
+
+    // Build a text message from the sub-input
+    const text = typeof subInput === 'string'
+      ? subInput
+      : subInput.text || subInput.message || subInput.prompt || JSON.stringify(subInput);
+
+    const rpcResponse = await this.a2aClientService.sendMessage(externalAgent, text);
+    const executionTime = Date.now() - startTime;
+
+    // Extract text from A2A response
+    let output: any = rpcResponse;
+    if (rpcResponse?.result) {
+      const task = rpcResponse.result;
+      // Try to extract text from artifacts or status message
+      if (task.artifacts?.length) {
+        const textParts = task.artifacts
+          .flatMap((a: any) => a.parts || [])
+          .filter((p: any) => p.type === 'text')
+          .map((p: any) => p.text);
+        output = textParts.length === 1 ? textParts[0] : textParts.join('\n');
+      } else if (task.status?.message?.parts?.length) {
+        const textParts = task.status.message.parts
+          .filter((p: any) => p.type === 'text')
+          .map((p: any) => p.text);
+        output = textParts.length === 1 ? textParts[0] : textParts.join('\n');
+      }
+    } else if (rpcResponse?.error) {
+      throw new Error(`A2A call failed: ${rpcResponse.error.message || JSON.stringify(rpcResponse.error)}`);
+    }
+
+    return {
+      output,
       executionTime,
     };
   }

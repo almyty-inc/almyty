@@ -30,6 +30,7 @@ import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
 import { ToolsModule } from '../tools/tools.module';
 import { MemoryModule } from '../memory/memory.module';
+import { A2AModule } from '../a2a/a2a.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { MemoryModule } from '../memory/memory.module';
     forwardRef(() => LlmProvidersModule),
     forwardRef(() => ToolsModule),
     forwardRef(() => MemoryModule),
+    forwardRef(() => A2AModule),
   ],
   providers: [AgentsService, AgentExecutionEngine, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeProcessor],
   controllers: [AgentsController, AgentOpenAICompatController],
