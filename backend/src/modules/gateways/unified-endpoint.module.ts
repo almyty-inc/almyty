@@ -10,6 +10,7 @@ import { UnifiedEndpointController } from './unified-endpoint.controller';
 import { GatewaysModule } from './gateways.module';
 import { McpModule } from '../mcp/mcp.module';
 import { AgentsModule } from '../agents/agents.module';
+import { A2AModule } from '../a2a/a2a.module';
 
 /**
  * Unified endpoint module — MUST be imported LAST in AppModule
@@ -21,6 +22,7 @@ import { AgentsModule } from '../agents/agents.module';
     TypeOrmModule.forFeature([Organization, Gateway, Agent, ApiKey]),
     forwardRef(() => McpModule),
     forwardRef(() => AgentsModule),
+    forwardRef(() => A2AModule),
     GatewaysModule,
   ],
   controllers: [UnifiedEndpointController],

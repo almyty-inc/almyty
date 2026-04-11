@@ -64,6 +64,7 @@ import { MemoryModule } from './modules/memory/memory.module';
 import { FilesModule } from './modules/files/files.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { ToolHubModule } from './modules/tool-hub/tool-hub.module';
+import { A2AModule } from './modules/a2a/a2a.module';
 import { UnifiedEndpointModule } from './modules/gateways/unified-endpoint.module';
 import { MailModule } from './modules/mail/mail.module';
 import { VersionsModule } from './modules/versions/versions.module';
@@ -205,6 +206,7 @@ import { databaseConfig } from './config/database.config';
     AuditLogModule,
     VersionsModule,
     ToolHubModule,
+    A2AModule,
     // MUST be last — wildcard /:orgSlug/:resourceSlug catches everything
     UnifiedEndpointModule,
   ],
