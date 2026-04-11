@@ -38,7 +38,6 @@ import { AgentRun } from './entities/agent-run.entity';
 import { Memory } from './entities/memory.entity';
 import { Conversation } from './entities/conversation.entity';
 import { Message } from './entities/message.entity';
-import { AgentInterface } from './entities/interface.entity';
 import { AgentFile } from './entities/file.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { ToolTemplate } from './entities/tool-template.entity';
@@ -63,7 +62,6 @@ import { CredentialsModule } from './modules/credentials/credentials.module';
 import { AgentsModule } from './modules/agents/agents.module';
 import { MemoryModule } from './modules/memory/memory.module';
 import { FilesModule } from './modules/files/files.module';
-import { InterfacesModule } from './modules/interfaces/interfaces.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { ToolHubModule } from './modules/tool-hub/tool-hub.module';
 import { UnifiedEndpointModule } from './modules/gateways/unified-endpoint.module';
@@ -141,7 +139,6 @@ import { databaseConfig } from './config/database.config';
       Memory,
       Conversation,
       Message,
-      AgentInterface,
       AgentFile,
       AuditLog,
       ToolTemplate,
@@ -205,7 +202,6 @@ import { databaseConfig } from './config/database.config';
     AgentsModule,
     MemoryModule,
     FilesModule,
-    InterfacesModule,
     AuditLogModule,
     VersionsModule,
     ToolHubModule,

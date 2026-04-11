@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 
@@ -12,6 +12,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
 
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
@@ -22,6 +23,22 @@ import { GatewaysController } from './gateways.controller';
 // controllers in mcp.module.ts: /mcp/:orgId/, /a2a/:orgId/, /utcp/:orgId/
 
 import { ToolsModule } from '../tools/tools.module';
+import { AgentsModule } from '../agents/agents.module';
+
+// Channel adapters (migrated from interfaces module)
+import { ChatWidgetAdapter } from './channels/adapters/chat-widget.adapter';
+import { SlackAdapter } from './channels/adapters/slack.adapter';
+import { DiscordAdapter } from './channels/adapters/discord.adapter';
+import { TelegramAdapter } from './channels/adapters/telegram.adapter';
+import { WhatsAppAdapter } from './channels/adapters/whatsapp.adapter';
+import { EmailAdapter } from './channels/adapters/email.adapter';
+import { WebhookAdapter } from './channels/adapters/webhook.adapter';
+import { GoogleChatAdapter } from './channels/adapters/google-chat.adapter';
+import { MicrosoftTeamsAdapter } from './channels/adapters/microsoft-teams.adapter';
+import { SignalAdapter } from './channels/adapters/signal.adapter';
+import { MatrixAdapter } from './channels/adapters/matrix.adapter';
+import { IrcAdapter } from './channels/adapters/irc.adapter';
+import { ChannelGatewayService } from './channels/channel-gateway.service';
 
 @Module({
   imports: [
@@ -36,15 +53,31 @@ import { ToolsModule } from '../tools/tools.module';
       UsageMetric,
       ApiKey,
       OAuthAccessToken,
+      AgentRun,
     ]),
     JwtModule,
     ToolsModule,
+    forwardRef(() => AgentsModule),
   ],
   providers: [
     GatewaysService,
     GatewayProtocolService,
     GatewayAuthService,
     GatewayToolService,
+    // Channel adapters
+    ChannelGatewayService,
+    ChatWidgetAdapter,
+    SlackAdapter,
+    DiscordAdapter,
+    TelegramAdapter,
+    WhatsAppAdapter,
+    EmailAdapter,
+    WebhookAdapter,
+    GoogleChatAdapter,
+    MicrosoftTeamsAdapter,
+    SignalAdapter,
+    MatrixAdapter,
+    IrcAdapter,
   ],
   controllers: [
     GatewaysController,
@@ -54,6 +87,7 @@ import { ToolsModule } from '../tools/tools.module';
     GatewayProtocolService,
     GatewayAuthService,
     GatewayToolService,
+    ChannelGatewayService,
   ],
 })
 export class GatewaysModule {}

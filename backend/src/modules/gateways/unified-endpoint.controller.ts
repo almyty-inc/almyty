@@ -258,6 +258,8 @@ export class UnifiedEndpointController {
         return this.delegateA2A(gateway, organization, orgSlug, resourceSlug, action, req, res, body);
       case GatewayType.UTCP:
         return this.delegateUtcp(gateway, organization, action, req, res, body);
+      // TODO (Phase 5): Channel gateway types (slack, discord, telegram, etc.)
+      // will be routed to ChannelGatewayService.handleInboundMessage here.
       default:
         // Skills gateways don't have a runtime endpoint
         throw new HttpException(
