@@ -56,36 +56,6 @@ export interface MCPToolDefinition {
   inputSchema: Record<string, any>;
 }
 
-// A2A (Agent-to-Agent) interfaces
-export interface A2AMessage {
-  messageId: string;
-  conversationId?: string;
-  agentId: string;
-  intent: string;
-  content: {
-    type: 'text' | 'tool_call' | 'tool_result' | 'capability_request';
-    data: any;
-  };
-  metadata?: {
-    timestamp: string;
-    priority?: 'low' | 'normal' | 'high';
-    capabilities?: string[];
-    context?: Record<string, any>;
-  };
-}
-
-export interface A2AResponse {
-  messageId: string;
-  conversationId?: string;
-  responseToId: string;
-  agentId: string;
-  content: {
-    type: 'text' | 'tool_result' | 'capability_response' | 'error';
-    data: any;
-  };
-  metadata?: Record<string, any>;
-}
-
 // UTCP (Universal Tool Call Protocol) interfaces
 export interface UTCPRequest {
   version: '1.0';
@@ -162,9 +132,6 @@ export class GatewayProtocolService {
         case GatewayType.MCP:
           response = await this.handleMCPRequest(gateway, request);
           break;
-        case GatewayType.A2A:
-          response = await this.handleA2ARequest(gateway, request);
-          break;
         case GatewayType.UTCP:
           response = await this.handleUTCPRequest(gateway, request);
           break;
@@ -234,45 +201,6 @@ export class GatewayProtocolService {
       }
     } catch (error) {
       return this.createMCPErrorResponse(null, -32603, 'Internal error', error.message);
-    }
-  }
-
-  private async handleA2ARequest(gateway: Gateway, request: ProtocolRequest): Promise<ProtocolResponse> {
-    try {
-      const a2aMessage = request.body as A2AMessage;
-      
-      if (!a2aMessage.messageId || !a2aMessage.agentId) {
-        return {
-          success: false,
-          error: {
-            code: 'INVALID_MESSAGE',
-            message: 'Missing required fields: messageId or agentId',
-          },
-        };
-      }
-
-      switch (a2aMessage.content.type) {
-        case 'tool_call':
-          return this.handleA2AToolCall(gateway, a2aMessage, request);
-        case 'capability_request':
-          return this.handleA2ACapabilityRequest(gateway, a2aMessage);
-        default:
-          return {
-            success: false,
-            error: {
-              code: 'UNSUPPORTED_CONTENT_TYPE',
-              message: `Unsupported content type: ${a2aMessage.content.type}`,
-            },
-          };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: {
-          code: 'A2A_PROCESSING_ERROR',
-          message: error.message,
-        },
-      };
     }
   }
 
@@ -443,89 +371,6 @@ export class GatewayProtocolService {
     return { success: true, data: mcpResponse };
   }
 
-  private async handleA2AToolCall(gateway: Gateway, a2aMessage: A2AMessage, request: ProtocolRequest): Promise<ProtocolResponse> {
-    const { toolName, parameters } = a2aMessage.content.data;
-    
-    if (!toolName) {
-      return this.createA2AErrorResponse(a2aMessage, 'MISSING_TOOL_NAME', 'Tool name is required');
-    }
-
-    const gatewayTool = gateway.tools.find(gt => gt.getEffectiveName() === toolName && gt.isActive);
-    
-    if (!gatewayTool) {
-      return this.createA2AErrorResponse(a2aMessage, 'TOOL_NOT_FOUND', `Tool '${toolName}' not found`);
-    }
-
-    try {
-      const executionOptions: ToolExecutionOptions = {
-        userId: request.userId || a2aMessage.agentId,
-        organizationId: gateway.organizationId,
-        timeout: gatewayTool.getEffectiveTimeout(),
-        retries: gatewayTool.getEffectiveRetries(),
-      };
-
-      const result = await this.toolExecutorService.executeTool(
-        gatewayTool.toolId,
-        parameters || {},
-        executionOptions
-      );
-
-      const a2aResponse: A2AResponse = {
-        messageId: this.generateMessageId(),
-        conversationId: a2aMessage.conversationId,
-        responseToId: a2aMessage.messageId,
-        agentId: 'tool-gateway',
-        content: {
-          type: 'tool_result',
-          data: {
-            success: result.success,
-            result: result.data,
-            error: result.error,
-            executionTime: result.executionTime,
-          },
-        },
-        metadata: {
-          timestamp: new Date().toISOString(),
-          cached: result.cached,
-          retryCount: result.retryCount,
-        },
-      };
-
-      return { success: true, data: a2aResponse };
-    } catch (error) {
-      return this.createA2AErrorResponse(a2aMessage, 'EXECUTION_ERROR', error.message);
-    }
-  }
-
-  private async handleA2ACapabilityRequest(gateway: Gateway, a2aMessage: A2AMessage): Promise<ProtocolResponse> {
-    const capabilities = {
-      tools: gateway.getActiveTools().map(gt => ({
-        name: gt.getEffectiveName(),
-        description: gt.getEffectiveDescription(),
-        inputSchema: gt.getEffectiveParameters(),
-      })),
-      conversationMemory: gateway.configuration.conversationMemory || false,
-      maxConcurrentCalls: gateway.configuration.maxConcurrentCalls || 10,
-      ...gateway.configuration.agentCapabilities,
-    };
-
-    const a2aResponse: A2AResponse = {
-      messageId: this.generateMessageId(),
-      conversationId: a2aMessage.conversationId,
-      responseToId: a2aMessage.messageId,
-      agentId: 'tool-gateway',
-      content: {
-        type: 'capability_response',
-        data: capabilities,
-      },
-      metadata: {
-        timestamp: new Date().toISOString(),
-      },
-    };
-
-    return { success: true, data: a2aResponse };
-  }
-
   private createMCPErrorResponse(id: string | number | null, code: number, message: string, data?: any): ProtocolResponse {
     const mcpResponse: MCPResponse = {
       jsonrpc: '2.0',
@@ -536,32 +381,11 @@ export class GatewayProtocolService {
     return { success: true, data: mcpResponse };
   }
 
-  private createA2AErrorResponse(originalMessage: A2AMessage, errorCode: string, errorMessage: string): ProtocolResponse {
-    const a2aResponse: A2AResponse = {
-      messageId: this.generateMessageId(),
-      conversationId: originalMessage.conversationId,
-      responseToId: originalMessage.messageId,
-      agentId: 'tool-gateway',
-      content: {
-        type: 'error',
-        data: {
-          code: errorCode,
-          message: errorMessage,
-        },
-      },
-      metadata: {
-        timestamp: new Date().toISOString(),
-      },
-    };
-
-    return { success: true, data: a2aResponse };
-  }
-
   private generateMessageId(): string {
     return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  // WebSocket support for MCP and A2A
+  // WebSocket support for MCP
   async handleWebSocketConnection(gatewayId: string, ws: WebSocket, query: Record<string, string>): Promise<void> {
     try {
       const gateway = await this.gatewayRepository.findOne({
