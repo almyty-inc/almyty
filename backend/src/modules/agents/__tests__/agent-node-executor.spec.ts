@@ -7,6 +7,8 @@ import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
 import { Agent, AgentPipelineNode, AgentPipelineEdge } from '../../../entities/agent.entity';
+import { A2AClientService } from '../../a2a/a2a-client.service';
+import { ExternalAgentsService } from '../../a2a/external-agents.service';
 
 /**
  * Unit tests for AgentNodeExecutor — every node type × multiple input shapes,
@@ -26,6 +28,8 @@ describe('AgentNodeExecutor', () => {
   let agentRepo: { findOne: jest.Mock };
   let executionEngine: jest.Mocked<AgentExecutionEngine>;
   let templateResolver: AgentTemplateResolver;
+  let a2aClientService: jest.Mocked<A2AClientService>;
+  let externalAgentsService: jest.Mocked<ExternalAgentsService>;
 
   const buildContext = (over: Partial<ExecutionContext> = {}): ExecutionContext => ({
     input: { name: 'world' },
@@ -50,6 +54,21 @@ describe('AgentNodeExecutor', () => {
     executionEngine = {
       execute: jest.fn(),
     } as any;
+    a2aClientService = {
+      sendMessage: jest.fn(),
+      getTask: jest.fn(),
+      cancelTask: jest.fn(),
+      buildHeaders: jest.fn(),
+    } as any;
+    externalAgentsService = {
+      findById: jest.fn(),
+      findAll: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      refreshCard: jest.fn(),
+      importFromUrl: jest.fn(),
+    } as any;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -59,6 +78,8 @@ describe('AgentNodeExecutor', () => {
         { provide: ToolExecutorService, useValue: toolExecutorService },
         { provide: getRepositoryToken(Agent), useValue: agentRepo },
         { provide: AgentExecutionEngine, useValue: executionEngine },
+        { provide: A2AClientService, useValue: a2aClientService },
+        { provide: ExternalAgentsService, useValue: externalAgentsService },
       ],
     }).compile();
 
@@ -669,7 +690,7 @@ describe('AgentNodeExecutor', () => {
     it('throws when agentId is missing', async () => {
       await expect(
         executor.execute(node('sub_agent', {}), buildContext(), 'org-1'),
-      ).rejects.toThrow(/missing 'agentId'/);
+      ).rejects.toThrow(/missing 'target' or 'agentId'/);
     });
 
     it('throws when nesting depth has been exceeded', async () => {

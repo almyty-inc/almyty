@@ -41,6 +41,7 @@ import { Message } from './entities/message.entity';
 import { AgentFile } from './entities/file.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { ToolTemplate } from './entities/tool-template.entity';
+import { ExternalAgent } from './entities/external-agent.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -143,6 +144,7 @@ import { databaseConfig } from './config/database.config';
       AgentFile,
       AuditLog,
       ToolTemplate,
+      ExternalAgent,
     ]),
 
     // Rate limiting
