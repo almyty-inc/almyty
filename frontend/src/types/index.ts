@@ -108,9 +108,12 @@ export interface Gateway {
   id: string
   name: string
   description?: string
+  kind: GatewayKind
   type: GatewayType
   status: GatewayStatus
   organizationId: string
+  agentId?: string
+  agent?: Agent
   endpoint: string
   configuration: Record<string, any>
   rateLimitConfig?: RateLimitConfig
@@ -135,11 +138,29 @@ export interface Gateway {
   usageMetrics: UsageMetric[]
 }
 
+export enum GatewayKind {
+  TOOL = 'tool',
+  AGENT = 'agent',
+}
+
 export enum GatewayType {
   MCP = 'mcp',
   A2A = 'a2a',
   UTCP = 'utcp',
   SKILLS = 'skills',
+  OPENAI_CHAT = 'openai_chat',
+  SLACK = 'slack',
+  DISCORD = 'discord',
+  TELEGRAM = 'telegram',
+  WHATSAPP = 'whatsapp',
+  EMAIL = 'email',
+  WEBHOOK = 'webhook',
+  GOOGLE_CHAT = 'google_chat',
+  MICROSOFT_TEAMS = 'microsoft_teams',
+  SIGNAL = 'signal',
+  MATRIX = 'matrix',
+  IRC = 'irc',
+  CHAT_WIDGET = 'chat_widget',
 }
 
 export enum GatewayStatus {
@@ -1187,4 +1208,25 @@ export interface SdkType {
   enumValues?: string[]
   className?: string
   rawType?: string
+}
+
+// ── External Agents (imported A2A) ──
+
+export type ExternalAgentStatus = 'active' | 'error' | 'card_stale'
+
+export interface ExternalAgent {
+  id: string
+  organizationId: string
+  name: string
+  description?: string
+  agentCardUrl: string
+  cachedCard?: any
+  cardLastFetchedAt?: string
+  baseRpcUrl?: string
+  credentialId?: string
+  status: ExternalAgentStatus
+  totalRequests: number
+  successfulRequests: number
+  createdAt: string
+  updatedAt: string
 }

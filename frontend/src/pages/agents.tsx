@@ -19,6 +19,7 @@ import {
   Zap,
   Brain,
   Wrench,
+  Globe,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -54,10 +55,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { agentsApi } from '@/lib/api'
+import { agentsApi, externalAgentsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import type { Agent } from '@/types'
+import { ImportExternalA2ADialog } from '@/components/agents/import-external-a2a-dialog'
+import type { Agent, ExternalAgent } from '@/types'
 
 interface AgentTemplate {
   id: string
@@ -110,6 +112,7 @@ export function AgentsPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [importExternalOpen, setImportExternalOpen] = useState(false)
   const [importJson, setImportJson] = useState('')
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -136,6 +139,18 @@ export function AgentsPage() {
     },
     enabled: !!currentOrganization,
   })
+
+  // Fetch external agents
+  const { data: externalAgentsData } = useQuery({
+    queryKey: ['external-agents', currentOrganization?.id],
+    queryFn: () => externalAgentsApi.getAll(),
+    enabled: !!currentOrganization,
+  })
+
+  const externalAgents: ExternalAgent[] = (() => {
+    const raw = externalAgentsData?.externalAgents || (Array.isArray(externalAgentsData) ? externalAgentsData : [])
+    return Array.isArray(raw) ? raw : []
+  })()
 
   const templates: AgentTemplate[] = Array.isArray(templatesData) ? templatesData : []
 
@@ -282,14 +297,28 @@ export function AgentsPage() {
         <div>
           <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Agents</h1>
           <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${agents.length} agents (${activeCount} active)`}
+            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${agents.length} agents (${activeCount} active)${externalAgents.length > 0 ? ` + ${externalAgents.length} external` : ''}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setImportDialogOpen(true)} disabled={!currentOrganization}>
-            <FileUp className="h-4 w-4 mr-2" />
-            Import
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={!currentOrganization}>
+                <FileUp className="h-4 w-4 mr-2" />
+                Import
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
+                <FileUp className="h-4 w-4 mr-2" />
+                Import from JSON
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setImportExternalOpen(true)}>
+                <Globe className="h-4 w-4 mr-2" />
+                Import External A2A Agent
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button onClick={() => navigate('/agents/new')} disabled={!currentOrganization}>
             <Plus className="h-4 w-4 mr-2" />
             Create Agent
@@ -415,7 +444,10 @@ export function AgentsPage() {
                 >
                   <td className="py-3 px-4">
                     <div>
-                      <span className="font-medium text-primary hover:underline">{agent.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-primary hover:underline">{agent.name}</span>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">Native</Badge>
+                      </div>
                       <div className="text-xs text-muted-foreground truncate max-w-[300px]">
                         {agent.description || 'No description'}
                       </div>
@@ -472,6 +504,35 @@ export function AgentsPage() {
                 </tr>
               )
             })}
+            {externalAgents
+              .filter((ea) => !searchQuery || ea.name.toLowerCase().includes(searchQuery.toLowerCase()) || (ea.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
+              .map((ea) => (
+              <tr
+                key={`ext-${ea.id}`}
+                className="border-b border-border/50 hover:bg-accent/30 transition-colors"
+              >
+                <td className="py-3 px-4">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Globe className="h-3.5 w-3.5 text-cyan-500 shrink-0" />
+                      <span className="font-medium">{ea.name}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-cyan-300 text-cyan-600 dark:border-cyan-500/40 dark:text-cyan-400">External A2A</Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate max-w-[300px]">
+                      {ea.description || ea.agentCardUrl}
+                    </div>
+                  </div>
+                </td>
+                <td className="py-3 px-4">
+                  <Badge variant={ea.status === 'active' ? 'success' : ea.status === 'error' ? 'destructive' : 'secondary'}>
+                    {ea.status === 'card_stale' ? 'Stale' : ea.status}
+                  </Badge>
+                </td>
+                <td className="py-3 px-4 text-sm text-muted-foreground">-</td>
+                <td className="py-3 px-4 text-sm text-muted-foreground">{ea.totalRequests || 0}</td>
+                <td className="py-3 px-4 text-right" />
+              </tr>
+            ))}
                 </tbody>
               </table>
             </CardContent>
@@ -582,6 +643,12 @@ export function AgentsPage() {
         className="hidden"
         onChange={handleImportFile}
       />
+      {/* Import External A2A Dialog */}
+      <ImportExternalA2ADialog
+        open={importExternalOpen}
+        onOpenChange={setImportExternalOpen}
+      />
+
       <Dialog open={importDialogOpen} onOpenChange={(open) => {
         setImportDialogOpen(open)
         if (!open) setImportJson('')

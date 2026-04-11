@@ -21,6 +21,9 @@ vi.mock('../../lib/api', () => ({
   toolsApi: {
     getAll: vi.fn(),
   },
+  agentsApi: {
+    getAll: vi.fn().mockResolvedValue([]),
+  },
 }))
 
 // Mock the organization store (component imports from @/store/organization)
@@ -200,7 +203,7 @@ describe('GatewaysPage', () => {
       expect(screen.getByLabelText('Gateway Type')).toBeInTheDocument()
     })
 
-    it('should show 4 gateway types including Skills', async () => {
+    it('should show tool-kind gateway types by default (MCP, UTCP, Skills)', async () => {
       const user = userEvent.setup()
       renderGatewaysPage()
 
@@ -210,16 +213,20 @@ describe('GatewaysPage', () => {
 
       await user.click(screen.getByText('Create Gateway'))
 
-      // Click on the select trigger
+      // The dialog now has a kind selector defaulting to "Tools"
+      expect(screen.getByText('Tools')).toBeInTheDocument()
+      expect(screen.getByText('Agent')).toBeInTheDocument()
+
+      // Click on the select trigger for type
       const selectTrigger = screen.getByRole('combobox')
       await user.click(selectTrigger)
 
-      // Radix Select renders both native <option> elements and portal items,
-      // so we use getAllByText and check they exist
+      // Tool-kind types should be visible (Radix Select renders portal items)
       expect(screen.getAllByText('MCP - Model Context Protocol').length).toBeGreaterThan(0)
-      expect(screen.getAllByText('A2A - Agent-to-Agent').length).toBeGreaterThan(0)
       expect(screen.getAllByText('UTCP - Universal Tool Call Protocol').length).toBeGreaterThan(0)
       expect(screen.getAllByText('Skills - Agent Skills (SKILL.md)').length).toBeGreaterThan(0)
+      // A2A is agent-kind only, should NOT appear in the tool-kind dropdown
+      expect(screen.queryByText('A2A - Agent-to-Agent Protocol')).not.toBeInTheDocument()
     })
 
     it('should show create gateway dialog with form fields', async () => {

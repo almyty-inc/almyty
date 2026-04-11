@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { UseFormReturn } from 'react-hook-form'
-import { UseMutationResult } from '@tanstack/react-query'
+import { UseMutationResult, useQuery } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { agentsApi } from '@/lib/api'
+import { useOrganizationStore } from '@/store/organization'
+import type { Agent } from '@/types'
 
 interface CreateGatewayDialogProps {
   open: boolean
@@ -29,6 +32,29 @@ interface CreateGatewayDialogProps {
   createGatewayMutation: UseMutationResult<any, any, any, any>
 }
 
+const TOOL_TYPES = [
+  { value: 'mcp', label: 'MCP - Model Context Protocol' },
+  { value: 'utcp', label: 'UTCP - Universal Tool Call Protocol' },
+  { value: 'skills', label: 'Skills - Agent Skills (SKILL.md)' },
+]
+
+const AGENT_TYPES = [
+  { value: 'a2a', label: 'A2A - Agent-to-Agent Protocol' },
+  { value: 'openai_chat', label: 'OpenAI Chat - Chat Completions API' },
+  { value: 'slack', label: 'Slack' },
+  { value: 'discord', label: 'Discord' },
+  { value: 'telegram', label: 'Telegram' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'email', label: 'Email' },
+  { value: 'webhook', label: 'Webhook' },
+  { value: 'google_chat', label: 'Google Chat' },
+  { value: 'microsoft_teams', label: 'Microsoft Teams' },
+  { value: 'signal', label: 'Signal' },
+  { value: 'matrix', label: 'Matrix' },
+  { value: 'irc', label: 'IRC' },
+  { value: 'chat_widget', label: 'Chat Widget' },
+]
+
 export function CreateGatewayDialog({
   open,
   onOpenChange,
@@ -36,21 +62,91 @@ export function CreateGatewayDialog({
   onSubmit,
   createGatewayMutation,
 }: CreateGatewayDialogProps) {
+  const [kind, setKind] = useState<'tool' | 'agent'>('tool')
+  const { currentOrganization } = useOrganizationStore()
+
+  // Fetch agents for agent-kind gateways
+  const { data: agentsData } = useQuery({
+    queryKey: ['agents', currentOrganization?.id],
+    queryFn: async () => {
+      const d = await agentsApi.getAll()
+      const result = d?.agents || (Array.isArray(d) ? d : [])
+      return Array.isArray(result) ? result : []
+    },
+    enabled: !!currentOrganization && kind === 'agent' && open,
+  })
+
+  const agents: Agent[] = Array.isArray(agentsData) ? agentsData : []
+  const typeOptions = kind === 'tool' ? TOOL_TYPES : AGENT_TYPES
+
+  const handleOpenChange = (openVal: boolean) => {
+    onOpenChange(openVal)
+    if (!openVal) {
+      createForm.reset()
+      setKind('tool')
+    }
+  }
+
+  const handleSubmit = (data: any) => {
+    onSubmit({
+      ...data,
+      kind,
+      agentId: kind === 'agent' ? createForm.getValues('agentId') : undefined,
+    })
+  }
+
   return (
-    <Dialog open={open} onOpenChange={(openVal) => {
-      onOpenChange(openVal)
-      if (!openVal) {
-        createForm.reset()
-      }
-    }}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create New Gateway</DialogTitle>
           <DialogDescription>
-            Create a new gateway to expose your tools via different protocols.
+            Create a new gateway to expose your tools or agents via different protocols.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={createForm.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={createForm.handleSubmit(handleSubmit)} className="space-y-6">
+          {/* Kind selector */}
+          <div>
+            <Label>Gateway Kind</Label>
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              <button
+                type="button"
+                className={`p-3 rounded-lg border text-left transition-colors ${
+                  kind === 'tool'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'hover:border-muted-foreground/30'
+                }`}
+                onClick={() => {
+                  setKind('tool')
+                  createForm.setValue('type', '')
+                  createForm.setValue('agentId', undefined)
+                }}
+              >
+                <div className="font-medium text-sm">Tools</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Expose tools via MCP, UTCP, or Agent Skills
+                </div>
+              </button>
+              <button
+                type="button"
+                className={`p-3 rounded-lg border text-left transition-colors ${
+                  kind === 'agent'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'hover:border-muted-foreground/30'
+                }`}
+                onClick={() => {
+                  setKind('agent')
+                  createForm.setValue('type', '')
+                }}
+              >
+                <div className="font-medium text-sm">Agent</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Serve an agent via A2A, OpenAI Chat, Slack, and more
+                </div>
+              </button>
+            </div>
+          </div>
+
           <div>
             <Label htmlFor="name">Gateway Name</Label>
             <Input
@@ -84,10 +180,11 @@ export function CreateGatewayDialog({
                 <SelectValue placeholder="Select gateway type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="mcp">MCP - Model Context Protocol</SelectItem>
-                <SelectItem value="a2a">A2A - Agent-to-Agent</SelectItem>
-                <SelectItem value="utcp">UTCP - Universal Tool Call Protocol</SelectItem>
-                <SelectItem value="skills">Skills - Agent Skills (SKILL.md)</SelectItem>
+                {typeOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             {createForm.formState.errors.type && (
@@ -96,6 +193,36 @@ export function CreateGatewayDialog({
               </p>
             )}
           </div>
+
+          {/* Agent picker for agent-kind gateways */}
+          {kind === 'agent' && (
+            <div>
+              <Label htmlFor="agentId">Agent</Label>
+              <Select
+                onValueChange={(value) => createForm.setValue('agentId', value)}
+                value={createForm.watch('agentId') || ''}
+              >
+                <SelectTrigger id="agentId" aria-label="Agent">
+                  <SelectValue placeholder="Select an agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </SelectItem>
+                  ))}
+                  {agents.length === 0 && (
+                    <SelectItem value="__none" disabled>
+                      No agents available
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                The agent that will handle requests on this gateway.
+              </p>
+            </div>
+          )}
 
           <div>
             <Label htmlFor="endpoint">Endpoint Path</Label>
@@ -124,7 +251,7 @@ export function CreateGatewayDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleOpenChange(false)}
             >
               Cancel
             </Button>
