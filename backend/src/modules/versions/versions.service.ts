@@ -6,7 +6,6 @@ import { Gateway } from '../../entities/gateway.entity';
 import { Tool } from '../../entities/tool.entity';
 import { Credential } from '../../entities/credential.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
-import { AgentInterface } from '../../entities/interface.entity';
 import { Agent } from '../../entities/agent.entity';
 
 /**
@@ -29,7 +28,6 @@ const SUPPORTED_ENTITIES: Record<string, new () => any> = {
   Tool,
   Credential,
   LlmProvider,
-  AgentInterface,
   Agent,
 };
 
