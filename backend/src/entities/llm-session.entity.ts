@@ -139,7 +139,7 @@ export class LlmSession {
   @JoinColumn({ name: 'providerId' })
   provider: LlmProvider;
 
-  @ManyToOne(() => Gateway, gateway => gateway.llmSessions, {
+  @ManyToOne(() => Gateway, gateway => gateway.conversations, {
     nullable: true,
     onDelete: 'SET NULL',
   })
@@ -153,7 +153,7 @@ export class LlmSession {
   @JoinColumn({ name: 'userId' })
   user: User;
 
-  @ManyToOne(() => Organization, org => org.llmSessions, {
+  @ManyToOne(() => Organization, org => org.conversations, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'organizationId' })
