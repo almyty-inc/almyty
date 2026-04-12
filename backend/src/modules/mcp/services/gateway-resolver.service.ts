@@ -72,6 +72,19 @@ export class GatewayResolverService {
    * Find an active gateway by endpoint path within an organization.
    */
   async resolveGateway(organizationId: string, endpoint: string): Promise<Gateway> {
+    // Virtual gateway for the almyty platform management endpoint.
+    if (endpoint === 'almyty' || endpoint === '/almyty') {
+      const virtual = new Gateway();
+      virtual.id = 'almyty-platform';
+      virtual.name = 'almyty';
+      virtual.endpoint = '/almyty';
+      virtual.type = GatewayType.MCP;
+      virtual.status = GatewayStatus.ACTIVE;
+      virtual.organizationId = organizationId;
+      virtual.authConfigs = [];
+      return virtual;
+    }
+
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const gateway = await this.gatewayRepository.findOne({
       where: {

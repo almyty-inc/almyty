@@ -99,13 +99,13 @@ export class McpController {
     if (!body.client_name || !body.redirect_uris?.length) {
       throw new HttpException({ error: 'invalid_client_metadata', error_description: 'client_name and redirect_uris required' }, HttpStatus.BAD_REQUEST);
     }
-    const client = await this.mcpOAuthService.registerClient({
-      clientName: body.client_name,
-      redirectUris: body.redirect_uris,
-      grantTypes: body.grant_types || ['authorization_code'],
-      responseTypes: body.response_types || ['code'],
-      tokenEndpointAuthMethod: body.token_endpoint_auth_method || 'none',
-      gatewayId: 'almyty-platform',
+    const org = await this.resolveOrg(orgSlug);
+    const client = await this.mcpOAuthService.registerClient('almyty-platform', org.id, {
+      client_name: body.client_name,
+      redirect_uris: body.redirect_uris,
+      grant_types: body.grant_types || ['authorization_code'],
+      response_types: body.response_types || ['code'],
+      token_endpoint_auth_method: body.token_endpoint_auth_method || 'none',
     });
     return res.status(201).json(client);
   }
@@ -136,16 +136,10 @@ export class McpController {
       const params = new URLSearchParams({ response_type: responseType, client_id: clientId, redirect_uri: redirectUri, code_challenge: codeChallenge, code_challenge_method: codeChallengeMethod || 'S256', ...(scope ? { scope } : {}), ...(state ? { state } : {}) });
       return res.redirect(302, `${frontendUrl}/auth/login?returnTo=${encodeURIComponent(`${baseUrl}/mcp/${orgSlug}/almyty/authorize?${params}`)}`);
     }
-    const code = await this.mcpOAuthService.createAuthorizationCode({
-      organizationId: org.id,
-      gatewayId: 'almyty-platform',
-      userId: user.id,
-      clientId,
-      redirectUri,
-      codeChallenge,
-      codeChallengeMethod: codeChallengeMethod || 'S256',
-      scope: scope || 'mcp:*',
-    });
+    const code = await this.mcpOAuthService.createAuthorizationCode(
+      clientId, user.id, 'almyty-platform', org.id,
+      { redirectUri, codeChallenge, codeChallengeMethod: codeChallengeMethod || 'S256', scope: scope || 'mcp:*' },
+    );
     const url = new URL(redirectUri);
     url.searchParams.set('code', code);
     if (state) url.searchParams.set('state', state);
@@ -159,22 +153,14 @@ export class McpController {
   @Header('Cache-Control', 'no-store')
   async almytyToken(@Param('orgSlug') orgSlug: string, @Body() body: any) {
     if (body.grant_type === 'authorization_code') {
-      return this.mcpOAuthService.exchangeCode({
-        gatewayId: 'almyty-platform',
-        code: body.code,
-        redirectUri: body.redirect_uri,
-        codeVerifier: body.code_verifier,
-        clientId: body.client_id,
-        clientSecret: body.client_secret,
-      });
+      return this.mcpOAuthService.exchangeCode(
+        body.code, body.client_id, body.code_verifier, body.redirect_uri, 'almyty-platform', body.client_secret,
+      );
     }
     if (body.grant_type === 'refresh_token') {
-      return this.mcpOAuthService.refreshToken({
-        gatewayId: 'almyty-platform',
-        refreshToken: body.refresh_token,
-        clientId: body.client_id,
-        clientSecret: body.client_secret,
-      });
+      return this.mcpOAuthService.refreshToken(
+        body.refresh_token, body.client_id, 'almyty-platform', body.client_secret,
+      );
     }
     throw new HttpException({ error: 'unsupported_grant_type' }, HttpStatus.BAD_REQUEST);
   }
