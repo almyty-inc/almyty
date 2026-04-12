@@ -18,7 +18,7 @@ import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
+import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { McpOAuthService } from '../services/mcp-oauth.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -107,6 +107,20 @@ export class McpOAuthController {
     organizationId: string,
     gatewaySlug: string,
   ): Promise<Gateway> {
+    // Virtual gateway for the almyty platform management endpoint.
+    // No DB entry — returns a synthetic Gateway object so the entire
+    // OAuth + MCP flow works without special-casing every route.
+    if (gatewaySlug === 'almyty') {
+      const virtual = new Gateway();
+      virtual.id = 'almyty-platform';
+      virtual.name = 'almyty';
+      virtual.endpoint = '/almyty';
+      virtual.type = GatewayType.MCP;
+      virtual.status = GatewayStatus.ACTIVE;
+      virtual.organizationId = organizationId;
+      return virtual;
+    }
+
     const endpoint = gatewaySlug.startsWith('/')
       ? gatewaySlug
       : `/${gatewaySlug}`;
