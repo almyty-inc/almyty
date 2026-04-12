@@ -1,7 +1,7 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
+import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { GatewayAuthService, AuthenticationResult } from '../../gateways/gateway-auth.service';
