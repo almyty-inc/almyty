@@ -32,37 +32,43 @@ jobs:
       - name: Save kubeconfig
         run: doctl kubernetes cluster kubeconfig save ${{ secrets.DIGITALOCEAN_CLUSTER_NAME }}
 
+      - name: Set env vars
+        id: vars
+        run: |
+          case "${{ inputs.environment }}" in
+            production)  echo "ns=almyty-production" >> $GITHUB_OUTPUT; echo "prefix=prod" >> $GITHUB_OUTPUT ;;
+            development) echo "ns=almyty-dev" >> $GITHUB_OUTPUT;        echo "prefix=dev" >> $GITHUB_OUTPUT ;;
+            *)           echo "ns=almyty-staging" >> $GITHUB_OUTPUT;    echo "prefix=staging" >> $GITHUB_OUTPUT ;;
+          esac
+
       - name: Restart pods
         run: |
-          ENV="${{ inputs.environment }}"
-          NAMESPACE="almyty-${ENV}"
-          PREFIX="${ENV == 'production' && 'prod' || ENV == 'development' && 'dev' || 'staging'}"
+          NS="${{ steps.vars.outputs.ns }}"
+          PFX="${{ steps.vars.outputs.prefix }}"
 
           if [ "${{ inputs.component }}" = "all" ] || [ "${{ inputs.component }}" = "api" ]; then
-            echo "Restarting ${PREFIX}-api..."
-            kubectl rollout restart deployment/${PREFIX}-api -n ${NAMESPACE}
-            kubectl rollout status deployment/${PREFIX}-api -n ${NAMESPACE} --timeout=5m
+            echo "Restarting ${PFX}-api..."
+            kubectl rollout restart deployment/${PFX}-api -n ${NS}
+            kubectl rollout status deployment/${PFX}-api -n ${NS} --timeout=5m
           fi
 
           if [ "${{ inputs.component }}" = "all" ] || [ "${{ inputs.component }}" = "frontend" ]; then
-            echo "Restarting ${PREFIX}-frontend..."
-            kubectl rollout restart deployment/${PREFIX}-frontend -n ${NAMESPACE}
-            kubectl rollout status deployment/${PREFIX}-frontend -n ${NAMESPACE} --timeout=5m
+            echo "Restarting ${PFX}-frontend..."
+            kubectl rollout restart deployment/${PFX}-frontend -n ${NS}
+            kubectl rollout status deployment/${PFX}-frontend -n ${NS} --timeout=5m
           fi
 
       - name: Show pod status
         if: always()
         run: |
-          ENV="${{ inputs.environment }}"
-          NAMESPACE="almyty-${ENV}"
-          PREFIX="${ENV == 'production' && 'prod' || ENV == 'development' && 'dev' || 'staging'}"
-          kubectl get pods -n ${NAMESPACE} -l "app in (${PREFIX}-api,${PREFIX}-frontend)"
+          NS="${{ steps.vars.outputs.ns }}"
+          PFX="${{ steps.vars.outputs.prefix }}"
+          kubectl get pods -n ${NS} -l "app in (${PFX}-api,${PFX}-frontend)"
 
       - name: Show logs on failure
         if: failure()
         run: |
-          ENV="${{ inputs.environment }}"
-          NAMESPACE="almyty-${ENV}"
-          PREFIX="${ENV == 'production' && 'prod' || ENV == 'development' && 'dev' || 'staging'}"
+          NS="${{ steps.vars.outputs.ns }}"
+          PFX="${{ steps.vars.outputs.prefix }}"
           echo "=== API pod logs ==="
-          kubectl logs -n ${NAMESPACE} -l app=${PREFIX}-api --tail=50 --all-containers 2>&1 || true
+          kubectl logs -n ${NS} -l app=${PFX}-api --tail=50 --all-containers 2>&1 || true
