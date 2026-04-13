@@ -36,7 +36,10 @@ import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 import { McpOAuthService } from '../../modules/mcp/services/mcp-oauth.service';
 import { AuthService } from '../../modules/auth/auth.service';
 
-const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
+// Requires both RUN_DB_INTEGRATION=1 AND RUN_E2E_INTEGRATION=1 because
+// this test bootstraps the full AppModule (heavy, can hang from BullMQ/Redis).
+// The standard DB integration tests only need RUN_DB_INTEGRATION.
+const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1' && process.env.RUN_E2E_INTEGRATION === '1';
 const describeIfDb = SHOULD_RUN ? describe : describe.skip;
 
 jest.setTimeout(120_000);
