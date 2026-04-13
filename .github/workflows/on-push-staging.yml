@@ -1,0 +1,25 @@
+name: Staging
+
+on:
+  push:
+    branches: [staging]
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      environment: staging
+      sha: ${{ github.sha }}
+      push: true
+    secrets: inherit
+
+  deploy:
+    needs: build
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+    secrets: inherit

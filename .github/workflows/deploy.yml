@@ -1,0 +1,250 @@
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: string
+      image_tag:
+        description: 'Deploy a specific existing image tag (skip build)'
+        required: false
+        type: string
+        default: ''
+      component:
+        description: 'Which component to deploy (all, api, frontend)'
+        required: false
+        type: string
+        default: 'all'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      image_tag:
+        description: 'Deploy a specific existing image tag (skip build)'
+        required: false
+        type: string
+        default: ''
+      component:
+        description: 'Which component to deploy'
+        required: true
+        type: choice
+        options:
+          - all
+          - api
+          - frontend
+        default: 'all'
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve environment config
+        id: env
+        run: |
+          case "${{ inputs.environment }}" in
+            production)
+              echo "namespace=almyty-production" >> $GITHUB_OUTPUT
+              echo "prefix=prod" >> $GITHUB_OUTPUT
+              echo "overlay=production" >> $GITHUB_OUTPUT
+              echo "tag_prefix=production" >> $GITHUB_OUTPUT
+              ;;
+            development)
+              echo "namespace=almyty-dev" >> $GITHUB_OUTPUT
+              echo "prefix=dev" >> $GITHUB_OUTPUT
+              echo "overlay=development" >> $GITHUB_OUTPUT
+              echo "tag_prefix=dev" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "namespace=almyty-staging" >> $GITHUB_OUTPUT
+              echo "prefix=staging" >> $GITHUB_OUTPUT
+              echo "overlay=staging" >> $GITHUB_OUTPUT
+              echo "tag_prefix=staging" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ steps.env.outputs.tag_prefix }}-${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save DigitalOcean kubeconfig
+        run: doctl kubernetes cluster kubeconfig save ${{ secrets.DIGITALOCEAN_CLUSTER_NAME }}
+
+      - name: Create namespace and pull secret
+        run: |
+          NS="${{ steps.env.outputs.namespace }}"
+          kubectl create namespace $NS --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret docker-registry ghcr-secret \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GHCR_PAT }} \
+            --namespace=$NS \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create application secrets (development)
+        if: inputs.environment == 'development'
+        run: |
+          kubectl create secret generic almyty-secrets \
+            --from-literal=DATABASE_USERNAME=${{ secrets.STAGING_DATABASE_USERNAME }} \
+            --from-literal=DATABASE_PASSWORD=${{ secrets.STAGING_DATABASE_PASSWORD }} \
+            --from-literal=DATABASE_URL=${{ secrets.DEV_DATABASE_URL }} \
+            --from-literal=REDIS_PASSWORD="" \
+            --from-literal=REDIS_URL="redis://dev-almyty-redis:6379" \
+            --from-literal=JWT_SECRET=${{ secrets.STAGING_JWT_SECRET }} \
+            --from-literal=ENCRYPTION_KEY=${{ secrets.DEV_ENCRYPTION_KEY }} \
+            --from-literal=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
+            --namespace=${{ steps.env.outputs.namespace }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create application secrets (staging)
+        if: inputs.environment == 'staging'
+        run: |
+          kubectl create secret generic almyty-secrets \
+            --from-literal=DATABASE_USERNAME=${{ secrets.STAGING_DATABASE_USERNAME }} \
+            --from-literal=DATABASE_PASSWORD=${{ secrets.STAGING_DATABASE_PASSWORD }} \
+            --from-literal=DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }} \
+            --from-literal=REDIS_PASSWORD="" \
+            --from-literal=REDIS_URL="redis://staging-almyty-redis:6379" \
+            --from-literal=JWT_SECRET=${{ secrets.STAGING_JWT_SECRET }} \
+            --from-literal=ENCRYPTION_KEY=${{ secrets.STAGING_ENCRYPTION_KEY }} \
+            --from-literal=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
+            --namespace=${{ steps.env.outputs.namespace }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create application secrets (production)
+        if: inputs.environment == 'production'
+        run: |
+          kubectl create secret generic prod-almyty-secrets \
+            --from-literal=DATABASE_USERNAME=${{ secrets.PROD_DATABASE_USERNAME }} \
+            --from-literal=DATABASE_PASSWORD=${{ secrets.PROD_DATABASE_PASSWORD }} \
+            --from-literal=REDIS_PASSWORD="" \
+            --from-literal=JWT_SECRET=${{ secrets.PROD_JWT_SECRET }} \
+            --from-literal=ENCRYPTION_KEY=${{ secrets.PROD_ENCRYPTION_KEY }} \
+            --from-literal=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
+            --namespace=${{ steps.env.outputs.namespace }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Update image tags
+        run: |
+          cd k8s/overlays/${{ steps.env.outputs.overlay }}
+          sed -i "s/newTag: ${{ steps.env.outputs.tag_prefix }}-.*/newTag: ${{ steps.tag.outputs.tag }}/g" kustomization.yaml
+          cat kustomization.yaml
+
+      - name: Apply kustomize manifests
+        run: |
+          kubectl apply -k k8s/overlays/${{ steps.env.outputs.overlay }}
+          if [ "${{ steps.env.outputs.overlay }}" = "staging" ]; then
+            kubectl apply -f k8s/redirect-ingress.yaml
+          fi
+
+      - name: Run migrations (development only)
+        if: inputs.environment == 'development'
+        run: |
+          NS="${{ steps.env.outputs.namespace }}"
+          PFX="${{ steps.env.outputs.prefix }}"
+          TAG="${{ steps.tag.outputs.tag }}"
+
+          kubectl delete job ${PFX}-db-migration -n $NS --ignore-not-found
+
+          cat k8s/base/migration-job.yaml | \
+            sed "s|image: ghcr.io/frane/almyty/api:latest|image: ghcr.io/frane/almyty/api:${TAG}|g" | \
+            sed "s|name: db-migration|name: ${PFX}-db-migration|g" | \
+            sed "s|name: almyty-config|name: ${PFX}-almyty-config|g" | \
+            kubectl apply -n $NS -f -
+
+          echo "Waiting for migration..."
+          kubectl wait --for=condition=complete job/${PFX}-db-migration -n $NS --timeout=120s || true
+
+          STATUS=$(kubectl get job ${PFX}-db-migration -n $NS -o jsonpath='{.status.succeeded}')
+          if [ "$STATUS" = "1" ]; then
+            echo "Migration completed"
+          else
+            echo "Migration failed — check logs:"
+            kubectl logs job/${PFX}-db-migration -n $NS || true
+            echo "Continuing deploy anyway (migration may not be needed)"
+          fi
+
+      - name: Restart deployments
+        run: |
+          NS="${{ steps.env.outputs.namespace }}"
+          PFX="${{ steps.env.outputs.prefix }}"
+          COMPONENT="${{ inputs.component }}"
+
+          if [ "$COMPONENT" = "all" ] || [ "$COMPONENT" = "api" ]; then
+            kubectl rollout restart deployment/${PFX}-api -n $NS
+          fi
+          if [ "$COMPONENT" = "all" ] || [ "$COMPONENT" = "frontend" ]; then
+            kubectl rollout restart deployment/${PFX}-frontend -n $NS
+          fi
+
+      - name: Wait for rollout
+        run: |
+          NS="${{ steps.env.outputs.namespace }}"
+          PFX="${{ steps.env.outputs.prefix }}"
+          COMPONENT="${{ inputs.component }}"
+
+          if [ "$COMPONENT" = "all" ] || [ "$COMPONENT" = "api" ]; then
+            kubectl rollout status deployment/${PFX}-api -n $NS --timeout=5m || true
+          fi
+          if [ "$COMPONENT" = "all" ] || [ "$COMPONENT" = "frontend" ]; then
+            kubectl rollout status deployment/${PFX}-frontend -n $NS --timeout=5m || true
+          fi
+
+      - name: Debug on failure
+        if: failure()
+        run: |
+          NS="${{ steps.env.outputs.namespace }}"
+          PFX="${{ steps.env.outputs.prefix }}"
+          echo "=== Pod status ==="
+          kubectl get pods -n $NS -l "app in (${PFX}-api,${PFX}-frontend)" --sort-by=.metadata.creationTimestamp
+          echo ""
+          echo "=== API pod logs ==="
+          kubectl logs -n $NS -l app=${PFX}-api --tail=80 --all-containers 2>&1 || true
+          echo ""
+          echo "=== Pod describe ==="
+          kubectl describe pods -n $NS -l app=${PFX}-api | tail -40
+
+      - name: Deployment summary
+        run: |
+          echo "Deployed to ${{ inputs.environment }}"
+          echo "Image tag: ${{ steps.tag.outputs.tag }}"
+          case "${{ inputs.environment }}" in
+            production)
+              echo "API: https://api.almyty.com"
+              echo "App: https://app.almyty.com"
+              ;;
+            development)
+              echo "API: https://api.dev.almyty.com"
+              echo "App: https://app.dev.almyty.com"
+              ;;
+            *)
+              echo "API: https://api.staging.almyty.com"
+              echo "App: https://app.staging.almyty.com"
+              ;;
+          esac
