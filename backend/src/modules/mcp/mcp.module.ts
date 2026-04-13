@@ -69,6 +69,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
     WebSocketTransport,
   ],
   exports: [
+    AlmytyMcpService,
     McpService,
     McpGatewayService,
     McpSessionService,

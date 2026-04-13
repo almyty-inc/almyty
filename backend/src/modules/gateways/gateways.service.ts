@@ -481,6 +481,10 @@ export class GatewaysService {
   ): Promise<void> {
     const gateway = await this.getGateway(gatewayId, organizationId, false);
 
+    if (gateway.isSystem) {
+      throw new BadRequestException('System gateways cannot be deleted');
+    }
+
     // Check permissions
     const user = await this.userRepository.findOne({
       where: { id: userId },
@@ -497,6 +501,55 @@ export class GatewaysService {
 
     // Audit log (fire-and-forget)
     this.auditLogService.logDelete(organizationId, userId, AuditResource.GATEWAY, gatewayId, gateway.name);
+  }
+
+  /**
+   * Ensure the system gateway exists for an organization. Upserts the
+   * gateway row and its OAuth auth config. Called during org creation
+   * and (via the migration) for all existing orgs.
+   */
+  async ensureSystemGateway(organizationId: string): Promise<Gateway> {
+    const existing = await this.gatewayRepository.findOne({
+      where: { organizationId, isSystem: true, endpoint: '/almyty' },
+      relations: ['authConfigs'],
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const gateway = this.gatewayRepository.create({
+      name: 'almyty',
+      description: 'almyty platform management tools',
+      type: GatewayType.MCP,
+      kind: GatewayKind.TOOL,
+      endpoint: '/almyty',
+      configuration: { transport: 'http' },
+      organizationId,
+      status: GatewayStatus.ACTIVE,
+      isSystem: true,
+      requestTimeout: 30000,
+      maxRetries: 3,
+      isHealthy: true,
+    });
+
+    const saved = await this.gatewayRepository.save(gateway);
+
+    // Create OAuth auth config so the gateway auth pipeline uses OAuth
+    const oauthAuth = this.gatewayAuthRepository.create({
+      gatewayId: saved.id,
+      type: GatewayAuthType.OAUTH2,
+      isRequired: true,
+      isActive: true,
+      configuration: {},
+      validationRules: {},
+      errorResponses: {},
+    });
+    await this.gatewayAuthRepository.save(oauthAuth);
+
+    this.logger.log(`System gateway created for organization ${organizationId}`);
+
+    return saved;
   }
 
   async getGatewayStats(

@@ -21,6 +21,7 @@ import { Gateway, GatewayStatus, GatewayType } from '../../entities/gateway.enti
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { McpService } from '../mcp/mcp.service';
+import { AlmytyMcpService } from '../mcp/almyty-mcp.service';
 import { UtcpService } from '../mcp/utcp.service';
 import { GatewayResolverService } from '../mcp/services/gateway-resolver.service';
 import { AgentsService } from '../agents/agents.service';
@@ -54,6 +55,7 @@ export class UnifiedEndpointController {
     @InjectRepository(ApiKey)
     private apiKeyRepository: Repository<ApiKey>,
     private readonly mcpService: McpService,
+    private readonly almytyMcpService: AlmytyMcpService,
     private readonly utcpService: UtcpService,
     private readonly gatewayResolver: GatewayResolverService,
     private readonly agentsService: AgentsService,
@@ -261,7 +263,7 @@ export class UnifiedEndpointController {
 
     switch (gateway.type) {
       case GatewayType.MCP:
-        return this.delegateMcp(gateway, body, res);
+        return this.delegateMcp(gateway, auth, body, res);
       case GatewayType.UTCP:
         return this.delegateUtcp(gateway, organization, action, req, res, body);
       case GatewayType.A2A:
@@ -279,7 +281,17 @@ export class UnifiedEndpointController {
     }
   }
 
-  private async delegateMcp(gateway: Gateway, body: any, res: Response) {
+  private async delegateMcp(gateway: Gateway, auth: any, body: any, res: Response) {
+    // System gateways serve almyty platform management tools via AlmytyMcpService
+    if (gateway.isSystem) {
+      const result = await this.almytyMcpService.handleJsonRpc(
+        body,
+        gateway.organizationId,
+        auth?.userId,
+      );
+      return res.json(result);
+    }
+
     const result = await this.mcpService.handleJsonRpc(
       body,
       gateway.organizationId,

@@ -4,28 +4,15 @@ import {
   Body,
   Request,
   UseGuards,
-  Headers,
   HttpException,
   HttpStatus,
-  HttpCode,
-  Header,
   Logger,
   Get,
-  Param,
-  Query,
-  Req,
-  Res,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Organization } from '../../entities/organization.entity';
-import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { McpService } from './mcp.service';
-import { AlmytyMcpService } from './almyty-mcp.service';
-import { McpOAuthService } from './services/mcp-oauth.service';
-import { JsonRpcRequest, JsonRpcResponse } from './types/mcp.types';
+import { JsonRpcResponse } from './types/mcp.types';
 
 @Controller('mcp')
 export class McpController {
@@ -33,142 +20,7 @@ export class McpController {
 
   constructor(
     private readonly mcpService: McpService,
-    private readonly almytyMcpService: AlmytyMcpService,
-    private readonly mcpOAuthService: McpOAuthService,
-    @InjectRepository(Organization) private readonly orgRepo: Repository<Organization>,
   ) {}
-
-  private async resolveOrg(slug: string): Promise<Organization> {
-    const org = await this.orgRepo.findOne({ where: [{ slug }, { id: slug }] });
-    if (!org) throw new HttpException(`Organization not found: ${slug}`, HttpStatus.NOT_FOUND);
-    return org;
-  }
-
-  // almyty platform MCP — management tools are now real Tool rows
-  // served by the standard MCP infrastructure via the system gateway
-  // (see SystemGatewayService). This endpoint forwards to McpService
-  // for backward compatibility.
-  @Post(':orgSlug/almyty')
-  @UseGuards(JwtAuthGuard)
-  async handleAlmytyMcp(@Param('orgSlug') orgSlug: string, @Request() req, @Body() body: any): Promise<JsonRpcResponse> {
-    const org = await this.resolveOrg(orgSlug);
-    return this.almytyMcpService.handleJsonRpc(body, org.id, req.user?.id);
-  }
-
-  @Get(':orgSlug/almyty/.well-known/mcp')
-  @Throttle({ default: { limit: 60, ttl: 60000 } })
-  async almytyWellKnown(@Param('orgSlug') orgSlug: string): Promise<any> {
-    const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
-    return {
-      protocol: 'mcp',
-      version: '2024-11-05',
-      server: { name: 'almyty', version: '1.0.0' },
-      capabilities: { tools: { listChanged: false } },
-      transports: { http: `${baseUrl}/mcp/${orgSlug}/almyty` },
-    };
-  }
-
-  @Get(':orgSlug/almyty/.well-known/oauth-protected-resource')
-  @Throttle({ default: { limit: 60, ttl: 60000 } })
-  async almytyOAuthResource(@Param('orgSlug') orgSlug: string): Promise<any> {
-    const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
-    return {
-      resource: `${baseUrl}/mcp/${orgSlug}/almyty`,
-      authorization_servers: [`${baseUrl}/mcp/${orgSlug}/almyty`],
-    };
-  }
-
-  @Get(':orgSlug/almyty/.well-known/oauth-authorization-server')
-  @Throttle({ default: { limit: 60, ttl: 60000 } })
-  async almytyOAuthMetadata(@Param('orgSlug') orgSlug: string): Promise<any> {
-    const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
-    const prefix = `${baseUrl}/mcp/${orgSlug}/almyty`;
-    return {
-      issuer: prefix,
-      authorization_endpoint: `${prefix}/authorize`,
-      token_endpoint: `${prefix}/token`,
-      registration_endpoint: `${prefix}/register`,
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
-      code_challenge_methods_supported: ['S256'],
-    };
-  }
-
-  // OAuth for /mcp/${orgSlug}/almyty — dynamic client registration
-  @Post(':orgSlug/almyty/register')
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
-  @HttpCode(HttpStatus.CREATED)
-  @Header('Content-Type', 'application/json')
-  async almytyRegister(@Param('orgSlug') orgSlug: string, @Body() body: any, @Res() res: Response) {
-    if (!body.client_name || !body.redirect_uris?.length) {
-      throw new HttpException({ error: 'invalid_client_metadata', error_description: 'client_name and redirect_uris required' }, HttpStatus.BAD_REQUEST);
-    }
-    const org = await this.resolveOrg(orgSlug);
-    const client = await this.mcpOAuthService.registerClient('almyty-platform', org.id, {
-      client_name: body.client_name,
-      redirect_uris: body.redirect_uris,
-      grant_types: body.grant_types || ['authorization_code'],
-      response_types: body.response_types || ['code'],
-      token_endpoint_auth_method: body.token_endpoint_auth_method || 'none',
-    });
-    return res.status(201).json(client);
-  }
-
-  // OAuth for /mcp/${orgSlug}/almyty — authorize (browser redirect)
-  @Get(':orgSlug/almyty/authorize')
-  @Header('Cache-Control', 'no-store')
-  async almytyAuthorize(
-    @Param('orgSlug') orgSlug: string,
-    @Query('response_type') responseType: string,
-    @Query('client_id') clientId: string,
-    @Query('redirect_uri') redirectUri: string,
-    @Query('code_challenge') codeChallenge: string,
-    @Query('code_challenge_method') codeChallengeMethod: string,
-    @Query('scope') scope: string,
-    @Query('state') state: string,
-    @Req() req: any,
-    @Res() res: Response,
-  ) {
-    if (!responseType || !clientId || !redirectUri || !codeChallenge) {
-      throw new HttpException({ error: 'invalid_request' }, HttpStatus.BAD_REQUEST);
-    }
-    const org = await this.resolveOrg(orgSlug);
-    const user = req.user;
-    if (!user) {
-      const baseUrl = process.env.BASE_URL || 'http://localhost:4000';
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
-      const params = new URLSearchParams({ response_type: responseType, client_id: clientId, redirect_uri: redirectUri, code_challenge: codeChallenge, code_challenge_method: codeChallengeMethod || 'S256', ...(scope ? { scope } : {}), ...(state ? { state } : {}) });
-      return res.redirect(302, `${frontendUrl}/auth/login?returnTo=${encodeURIComponent(`${baseUrl}/mcp/${orgSlug}/almyty/authorize?${params}`)}`);
-    }
-    const code = await this.mcpOAuthService.createAuthorizationCode(
-      clientId, user.id, 'almyty-platform', org.id,
-      { redirectUri, codeChallenge, codeChallengeMethod: codeChallengeMethod || 'S256', scope: scope || 'mcp:*' },
-    );
-    const url = new URL(redirectUri);
-    url.searchParams.set('code', code);
-    if (state) url.searchParams.set('state', state);
-    return res.redirect(302, url.toString());
-  }
-
-  // OAuth for /mcp/${orgSlug}/almyty — token exchange
-  @Post(':orgSlug/almyty/token')
-  @HttpCode(HttpStatus.OK)
-  @Header('Content-Type', 'application/json')
-  @Header('Cache-Control', 'no-store')
-  async almytyToken(@Param('orgSlug') orgSlug: string, @Body() body: any) {
-    if (body.grant_type === 'authorization_code') {
-      return this.mcpOAuthService.exchangeCode(
-        body.code, body.client_id, body.code_verifier, body.redirect_uri, 'almyty-platform', body.client_secret,
-      );
-    }
-    if (body.grant_type === 'refresh_token') {
-      return this.mcpOAuthService.refreshToken(
-        body.refresh_token, body.client_id, 'almyty-platform', body.client_secret,
-      );
-    }
-    throw new HttpException({ error: 'unsupported_grant_type' }, HttpStatus.BAD_REQUEST);
-  }
 
   // Main MCP JSON-RPC Endpoint
   @Post()

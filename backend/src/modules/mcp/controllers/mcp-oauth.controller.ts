@@ -18,7 +18,7 @@ import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
+import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { McpOAuthService } from '../services/mcp-oauth.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -101,29 +101,13 @@ export class McpOAuthController {
   /**
    * Resolve an active gateway by its endpoint slug within an organization.
    * The gatewaySlug is expected to match the gateway endpoint (e.g. "my-gateway"
-   * maps to endpoint "/my-gateway").
+   * maps to endpoint "/my-gateway"). The system gateway (almyty) is a real DB
+   * row now, so no special-casing is needed.
    */
   private async resolveGateway(
     organizationId: string,
     gatewaySlug: string,
   ): Promise<Gateway> {
-    // Virtual gateway for the almyty platform management endpoint.
-    // No DB entry — returns a synthetic Gateway object so the entire
-    // OAuth + MCP flow works without special-casing every route.
-    if (gatewaySlug === 'almyty') {
-      // Virtual gateway for the almyty platform management endpoint.
-      // No DB row — id is null so FK-constrained columns (oauth_clients.gatewayId)
-      // get NULL instead of a non-existent UUID.
-      const virtual = new Gateway();
-      virtual.id = null;
-      virtual.name = 'almyty';
-      virtual.endpoint = '/almyty';
-      virtual.type = GatewayType.MCP;
-      virtual.status = GatewayStatus.ACTIVE;
-      virtual.organizationId = organizationId;
-      return virtual;
-    }
-
     const endpoint = gatewaySlug.startsWith('/')
       ? gatewaySlug
       : `/${gatewaySlug}`;

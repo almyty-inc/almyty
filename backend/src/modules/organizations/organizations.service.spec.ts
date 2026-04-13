@@ -8,6 +8,7 @@ import { UserOrganization, OrganizationRole } from '../../entities/user-organiza
 import { Team } from '../../entities/team.entity';
 import { UserTeam } from '../../entities/user-team.entity';
 import { MailService } from '../mail/mail.service';
+import { GatewaysService } from '../gateways/gateways.service';
 
 describe('OrganizationsService', () => {
   let service: OrganizationsService;
@@ -77,6 +78,12 @@ describe('OrganizationsService', () => {
           useValue: {
             send: jest.fn().mockResolvedValue(true),
             sendInvitation: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: GatewaysService,
+          useValue: {
+            ensureSystemGateway: jest.fn().mockResolvedValue({}),
           },
         },
       ],
@@ -727,6 +734,10 @@ describe('OrganizationsService', () => {
             provide: MailService,
             useValue: { send: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true) },
           },
+          {
+            provide: GatewaysService,
+            useValue: { ensureSystemGateway: jest.fn().mockResolvedValue({}) },
+          },
         ],
       }).compile();
 
@@ -760,6 +771,10 @@ describe('OrganizationsService', () => {
             provide: MailService,
             useValue: { send: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true) },
           },
+          {
+            provide: GatewaysService,
+            useValue: { ensureSystemGateway: jest.fn().mockResolvedValue({}) },
+          },
         ],
       }).compile();
 
@@ -792,6 +807,10 @@ describe('OrganizationsService', () => {
           {
             provide: MailService,
             useValue: { send: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true) },
+          },
+          {
+            provide: GatewaysService,
+            useValue: { ensureSystemGateway: jest.fn().mockResolvedValue({}) },
           },
         ],
       }).compile();
@@ -853,6 +872,10 @@ describe('OrganizationsService', () => {
           {
             provide: MailService,
             useValue: { send: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true) },
+          },
+          {
+            provide: GatewaysService,
+            useValue: { ensureSystemGateway: jest.fn().mockResolvedValue({}) },
           },
         ],
       }).compile();
