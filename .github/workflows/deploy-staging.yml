@@ -112,6 +112,11 @@ jobs:
           kubectl apply -k k8s/overlays/staging
           kubectl apply -f k8s/redirect-ingress.yaml
 
+      - name: Restart deployments to clear stuck rollouts
+        run: |
+          kubectl rollout restart deployment/staging-api -n almyty-staging
+          kubectl rollout restart deployment/staging-frontend -n almyty-staging
+
       - name: Wait for rollout
         run: |
           kubectl rollout status deployment/staging-api -n almyty-staging --timeout=5m
