@@ -78,8 +78,9 @@ export class McpOAuthDiscoveryController {
   }
 
   private async resolveOrgAndGateway(orgSlug: string, gatewaySlug: string): Promise<void> {
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgSlug);
     const org = await this.organizationRepository.findOne({
-      where: [{ slug: orgSlug }, { id: orgSlug }],
+      where: isUUID ? [{ slug: orgSlug }, { id: orgSlug }] : { slug: orgSlug },
     });
     if (!org) {
       throw new HttpException('Organization not found', HttpStatus.NOT_FOUND);
