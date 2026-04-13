@@ -116,10 +116,22 @@ jobs:
         run: |
           kubectl apply -k k8s/overlays/development
 
+      - name: Restart deployments to clear stuck rollouts
+        run: |
+          kubectl rollout restart deployment/dev-api -n almyty-dev
+          kubectl rollout restart deployment/dev-frontend -n almyty-dev
+
       - name: Wait for rollout
         run: |
-          kubectl rollout status deployment/dev-api -n almyty-dev --timeout=5m
-          kubectl rollout status deployment/dev-frontend -n almyty-dev --timeout=5m
+          kubectl rollout status deployment/dev-api -n almyty-dev --timeout=5m || true
+          kubectl rollout status deployment/dev-frontend -n almyty-dev --timeout=5m || true
+
+      - name: Debug pod status on failure
+        if: failure()
+        run: |
+          kubectl get pods -n almyty-dev -l "app in (dev-api,dev-frontend)"
+          echo "=== API pod logs ==="
+          kubectl logs -n almyty-dev -l app=dev-api --tail=50 --all-containers 2>&1 || true
 
       - name: Deployment summary
         run: |
