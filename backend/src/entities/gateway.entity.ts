@@ -29,6 +29,7 @@ export enum GatewayType {
   SKILLS = 'skills',
   // Agent-kind types
   A2A = 'a2a',
+  ACP = 'acp',
   OPENAI_CHAT = 'openai_chat',
   // Channel types (agent-kind)
   SLACK = 'slack',
@@ -260,6 +261,8 @@ export class Gateway {
         return ['http', 'sse', 'websocket'].includes(protocol);
       case GatewayType.A2A:
         return ['http', 'jsonrpc'].includes(protocol);
+      case GatewayType.ACP:
+        return ['http', 'jsonrpc'].includes(protocol);
       case GatewayType.UTCP:
         return ['http', 'tcp'].includes(protocol);
       case GatewayType.SKILLS:
@@ -296,6 +299,12 @@ export class Gateway {
         return {
           ...baseConfig,
           a2aVersion: this.configuration.a2aVersion || '0.3.0',
+        };
+
+      case GatewayType.ACP:
+        return {
+          ...baseConfig,
+          acpVersion: this.configuration.acpVersion || '1.0.0',
         };
 
       case GatewayType.UTCP:

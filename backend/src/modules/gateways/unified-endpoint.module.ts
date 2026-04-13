@@ -11,6 +11,7 @@ import { GatewaysModule } from './gateways.module';
 import { McpModule } from '../mcp/mcp.module';
 import { AgentsModule } from '../agents/agents.module';
 import { A2AModule } from '../a2a/a2a.module';
+import { AcpModule } from '../acp/acp.module';
 
 /**
  * Unified endpoint module — MUST be imported LAST in AppModule
@@ -23,6 +24,7 @@ import { A2AModule } from '../a2a/a2a.module';
     forwardRef(() => McpModule),
     forwardRef(() => AgentsModule),
     forwardRef(() => A2AModule),
+    forwardRef(() => AcpModule),
     GatewaysModule,
   ],
   controllers: [UnifiedEndpointController],

@@ -40,6 +40,7 @@ const TOOL_TYPES = [
 
 const AGENT_TYPES = [
   { value: 'a2a', label: 'A2A - Agent-to-Agent Protocol' },
+  { value: 'acp', label: 'ACP - Agent Communication Protocol' },
   { value: 'openai_chat', label: 'OpenAI Chat - Chat Completions API' },
   { value: 'slack', label: 'Slack' },
   { value: 'discord', label: 'Discord' },

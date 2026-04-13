@@ -27,6 +27,8 @@ import { AgentsService } from '../agents/agents.service';
 import { AgentExecutionEngine, StreamEvent } from '../agents/agent-execution.engine';
 import { A2AServerService } from '../a2a/a2a-server.service';
 import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
+import { AcpServerService } from '../acp/acp-server.service';
+import { AcpDiscoveryService } from '../acp/acp-discovery.service';
 
 /**
  * Unified endpoint controller that provides GitHub-style URLs:
@@ -58,6 +60,8 @@ export class UnifiedEndpointController {
     private readonly executionEngine: AgentExecutionEngine,
     private readonly a2aServerService: A2AServerService,
     private readonly a2aAgentCardService: A2AAgentCardService,
+    private readonly acpServerService: AcpServerService,
+    private readonly acpDiscoveryService: AcpDiscoveryService,
   ) {}
 
   /**
@@ -262,6 +266,8 @@ export class UnifiedEndpointController {
         return this.delegateUtcp(gateway, organization, action, req, res, body);
       case GatewayType.A2A:
         return this.delegateA2A(gateway, organization, action, req, res, body);
+      case GatewayType.ACP:
+        return this.delegateACP(gateway, organization, action, req, res, body);
       // TODO: Channel gateway types (slack, discord, telegram, etc.)
       // will be routed to ChannelGatewayService.handleInboundMessage here.
       default:
@@ -311,6 +317,36 @@ export class UnifiedEndpointController {
     }
 
     await this.a2aServerService.handleJsonRpc(gateway, req, body, res);
+  }
+
+  private async delegateACP(
+    gateway: Gateway,
+    organization: Organization,
+    action: string,
+    req: Request,
+    res: Response,
+    body: any,
+  ) {
+    // Discovery: .well-known/acp
+    if (action === '.well-known/acp') {
+      const agent = await this.agentRepository.findOne({
+        where: { id: gateway.agentId, organizationId: organization.id },
+      });
+      if (!agent) {
+        throw new HttpException('Agent not found for this ACP gateway', HttpStatus.NOT_FOUND);
+      }
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const doc = this.acpDiscoveryService.buildDiscoveryDocument(gateway, agent, organization, baseUrl);
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      return res.json(doc);
+    }
+
+    // All other ACP requests are JSON-RPC POSTs to the gateway root
+    if (req.method !== 'POST') {
+      throw new HttpException('ACP gateways only accept POST for JSON-RPC', HttpStatus.METHOD_NOT_ALLOWED);
+    }
+
+    await this.acpServerService.handleJsonRpc(gateway, req, body, res);
   }
 
   private async delegateUtcp(
