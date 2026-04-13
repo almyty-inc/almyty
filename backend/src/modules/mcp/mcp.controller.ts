@@ -16,6 +16,7 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Organization } from '../../entities/organization.entity';
@@ -55,6 +56,7 @@ export class McpController {
   }
 
   @Get(':orgSlug/almyty/.well-known/mcp')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   async almytyWellKnown(@Param('orgSlug') orgSlug: string): Promise<any> {
     const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
     return {
@@ -67,6 +69,7 @@ export class McpController {
   }
 
   @Get(':orgSlug/almyty/.well-known/oauth-protected-resource')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   async almytyOAuthResource(@Param('orgSlug') orgSlug: string): Promise<any> {
     const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
     return {
@@ -76,6 +79,7 @@ export class McpController {
   }
 
   @Get(':orgSlug/almyty/.well-known/oauth-authorization-server')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   async almytyOAuthMetadata(@Param('orgSlug') orgSlug: string): Promise<any> {
     const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
     const prefix = `${baseUrl}/mcp/${orgSlug}/almyty`;
@@ -93,6 +97,7 @@ export class McpController {
 
   // OAuth for /mcp/${orgSlug}/almyty — dynamic client registration
   @Post(':orgSlug/almyty/register')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
   @Header('Content-Type', 'application/json')
   async almytyRegister(@Param('orgSlug') orgSlug: string, @Body() body: any, @Res() res: Response) {
@@ -352,6 +357,7 @@ export class McpController {
 
   // MCP server information
   @Get('/.well-known/mcp')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   async wellKnown(): Promise<any> {
     return {
       protocol: 'mcp',

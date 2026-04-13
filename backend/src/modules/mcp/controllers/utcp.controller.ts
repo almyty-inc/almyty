@@ -11,6 +11,7 @@ import {
   Logger,
   Header,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { UtcpService } from '../utcp.service';
 import { 
@@ -27,6 +28,7 @@ export class UtcpController {
 
   // UTCP Discovery endpoint
   @Get('/.well-known/utcp')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   @Header('Content-Type', 'application/json')
   async discovery(): Promise<UtcpDiscoveryInfo> {
     return this.utcpService.getDiscoveryInfo('global');
