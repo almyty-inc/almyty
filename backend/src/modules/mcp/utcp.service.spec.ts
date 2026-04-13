@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { UtcpService } from './utcp.service';
 import { Tool } from '../../entities/tool.entity';
 import { Api } from '../../entities/api.entity';
@@ -59,6 +60,16 @@ describe('UtcpService', () => {
           provide: ToolExecutorService,
           useValue: {
             executeTool: jest.fn(),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string, defaultVal?: any) => {
+              if (key === 'BASE_URL') return 'http://localhost:3000';
+              if (key === 'NODE_ENV') return 'test';
+              return defaultVal;
+            }),
           },
         },
         {
