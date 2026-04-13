@@ -249,6 +249,7 @@ describe('OrganizationsService.getInviteDetails — email privacy', () => {
       { findOne: jest.fn() } as any, // UserTeam
       { findOne: jest.fn() } as any, // User
       { sendInvitation: jest.fn() } as any, // MailService
+      { ensureSystemGateway: jest.fn() } as any, // GatewaysService
     );
 
     const result = await service.getInviteDetails('valid-token');
@@ -311,18 +312,25 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
     const a2aServerStub: any = { handleJsonRpc: jest.fn() };
     const a2aAgentCardStub: any = { buildAgentCard: jest.fn() };
 
+    const almytyMcpStub: any = { handleJsonRpc: jest.fn() };
+    const acpServerStub: any = { handleJsonRpc: jest.fn() };
+    const acpDiscoveryStub: any = { buildDiscovery: jest.fn() };
+
     return new UnifiedEndpointController(
       orgRepo,
       gatewayRepo,
       agentRepo,
       apiKeyRepo,
       mcpServiceStub,
+      almytyMcpStub,
       utcpServiceStub,
       gatewayResolverStub,
       agentsServiceStub,
       executionEngineStub,
       a2aServerStub,
       a2aAgentCardStub,
+      acpServerStub,
+      acpDiscoveryStub,
     );
   }
 
