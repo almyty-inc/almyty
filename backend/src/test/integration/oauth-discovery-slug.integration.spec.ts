@@ -26,7 +26,7 @@ describeIfDb('OAuth discovery org slug resolution (real DB)', () => {
       password: process.env.DATABASE_PASSWORD || 'password',
       database: process.env.DATABASE_NAME || 'almyty_test',
       entities: [path.join(__dirname, '../../entities/*.entity{.ts,.js}')],
-      synchronize: false,
+      synchronize: true,
     });
     await ds.initialize();
   });
