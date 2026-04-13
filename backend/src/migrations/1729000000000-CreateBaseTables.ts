@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateBaseTables1744900000000 implements MigrationInterface {
-  name = 'CreateBaseTables1744900000000';
+export class CreateBaseTables1729000000000 implements MigrationInterface {
+  name = 'CreateBaseTables1729000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Ensure uuid-ossp extension exists
