@@ -764,6 +764,7 @@ export class GatewaysService {
         break;
 
       case GatewayType.A2A:
+      case GatewayType.ACP:
       case GatewayType.OPENAI_CHAT:
         // Agent-kind protocol types — no special config required
         break;

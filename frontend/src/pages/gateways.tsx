@@ -154,6 +154,8 @@ export function GatewaysPage() {
       configuration = { transport: 'http' }
     } else if (data.type === 'a2a') {
       configuration = { agentCapabilities: {} }
+    } else if (data.type === 'acp') {
+      configuration = { agentCapabilities: {} }
     } else if (data.type === 'utcp') {
       configuration = { protocol: 'http' }
     } else if (data.type === 'skills') {
@@ -368,7 +370,7 @@ export function GatewaysPage() {
             <EmptyState
               icon={Zap}
               title="No gateways yet"
-              description="Gateways expose your tools and agents via MCP, UTCP, Agent Skills, A2A, and more. Create one to give Claude, Cursor, or any MCP-compatible client access to your tools."
+              description="Gateways expose your tools and agents via MCP, UTCP, Agent Skills, A2A, ACP, and more. Create one to give Claude, Cursor, or any MCP-compatible client access to your tools."
               action={
                 <Button onClick={() => setCreateDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
@@ -403,6 +405,7 @@ export function GatewaysPage() {
                   <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="mcp">MCP</SelectItem>
                   <SelectItem value="a2a">A2A</SelectItem>
+                  <SelectItem value="acp">ACP</SelectItem>
                   <SelectItem value="utcp">UTCP</SelectItem>
                   <SelectItem value="skills">Skills</SelectItem>
                   <SelectItem value="openai_chat">OpenAI Chat</SelectItem>

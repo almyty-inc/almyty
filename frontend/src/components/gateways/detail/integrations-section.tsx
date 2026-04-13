@@ -302,6 +302,107 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
     )
   }
 
+  // ACP gateway
+  if (gatewayType === 'acp') {
+    const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
+    const acpBase = `${backendUrl}/${orgSlug}/${gwSlug}`
+    const discoveryUrl = `${backendUrl}/${orgSlug}/${gwSlug}/.well-known/acp`
+    const acpServerCmd = `npx @almyty/acp-server --url ${acpBase}`
+
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Router className="h-5 w-5 text-amber-500" />
+              ACP Endpoints
+            </CardTitle>
+            <CardDescription>Agent Communication Protocol for session-based agent interactions</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">JSON-RPC Endpoint</Label>
+              <p className="text-xs text-muted-foreground mb-1">POST with JSON-RPC 2.0 payloads (initialize, session/new, session/prompt, etc.)</p>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{acpBase}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(acpBase, 'acp-endpoint')}>
+                  {copiedField === 'acp-endpoint' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Discovery</Label>
+              <p className="text-xs text-muted-foreground mb-1">GET to retrieve agent capabilities, auth methods, and skills</p>
+              <div className="flex gap-2 mt-1">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{discoveryUrl}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'acp-discovery')}>
+                  {copiedField === 'acp-discovery' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground bg-muted p-3 rounded">
+              <strong>Auth:</strong> Include <code className="font-mono">Authorization: Bearer &lt;jwt&gt;</code> header. Discovery is public.
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Quick Setup</CardTitle>
+            <CardDescription>Connect to this ACP gateway from your IDE or agent</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Zed</h4>
+              <p className="text-xs text-muted-foreground">Add to your Zed settings.json:</p>
+              <CodeBlock
+                value={JSON.stringify({
+                  agent: {
+                    providers: {
+                      [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
+                        url: acpBase,
+                        protocol: 'acp',
+                      }
+                    }
+                  }
+                }, null, 2)}
+                language="json"
+                maxHeight="160px"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">JetBrains</h4>
+              <p className="text-xs text-muted-foreground">Add to your IDE agent configuration:</p>
+              <CodeBlock
+                value={JSON.stringify({
+                  agents: [{
+                    name: (gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-'),
+                    url: acpBase,
+                    protocol: 'acp',
+                  }]
+                }, null, 2)}
+                language="json"
+                maxHeight="160px"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">ACP Server (CLI)</h4>
+              <p className="text-xs text-muted-foreground">Run in your terminal:</p>
+              <div className="flex gap-2">
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{acpServerCmd}</code>
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(acpServerCmd, 'acp-server-cmd')}>
+                  {copiedField === 'acp-server-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   // UTCP gateway
   if (gatewayType === 'utcp') {
     const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
