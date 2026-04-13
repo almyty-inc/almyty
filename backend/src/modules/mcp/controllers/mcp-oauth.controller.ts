@@ -16,12 +16,14 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { McpOAuthService } from '../services/mcp-oauth.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { getBaseUrl, getFrontendUrl } from '../../../common/config/base-url';
 
 /**
  * MCP OAuth 2.1 Controller
@@ -43,6 +45,7 @@ export class McpOAuthController {
     @InjectRepository(Organization)
     private readonly organizationRepository: Repository<Organization>,
     private readonly mcpOAuthService: McpOAuthService,
+    private readonly configService: ConfigService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -144,11 +147,11 @@ export class McpOAuthController {
   }
 
   private getBaseUrl(): string {
-    return process.env.BASE_URL || 'http://localhost:4000';
+    return getBaseUrl(this.configService);
   }
 
   private getFrontendUrl(): string {
-    return process.env.FRONTEND_URL || 'http://localhost:3002';
+    return getFrontendUrl(this.configService);
   }
 
   // ---------------------------------------------------------------------------
@@ -292,7 +295,7 @@ export class McpOAuthController {
         ...(resource ? { resource } : {}),
       }).toString()}`;
 
-      const loginUrl = `${this.getFrontendUrl()}/login?returnTo=${encodeURIComponent(currentUrl)}`;
+      const loginUrl = `${this.getFrontendUrl()}/auth/login?returnTo=${encodeURIComponent(currentUrl)}`;
       return res.redirect(302, loginUrl);
     }
 
