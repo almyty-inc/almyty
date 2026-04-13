@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class InitialSchema0000000000000 implements MigrationInterface {
-  name = 'InitialSchema0000000000000';
+export class InitialSchema1700000000000 implements MigrationInterface {
+  name = 'InitialSchema1700000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Enable uuid-ossp extension
