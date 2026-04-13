@@ -97,20 +97,9 @@ jobs:
             *)           echo "ns=almyty-dev" >> $GITHUB_OUTPUT; echo "pfx=dev" >> $GITHUB_OUTPUT; echo "overlay=development" >> $GITHUB_OUTPUT; echo "tag_pfx=dev" >> $GITHUB_OUTPUT ;;
           esac
 
-      - name: Resolve image tag
-        id: tag
+      - name: Apply kustomize manifests
         run: |
-          if [ -n "${{ inputs.image_tag }}" ]; then
-            echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=${{ steps.env.outputs.tag_pfx }}-${{ github.sha }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Update kustomize and deploy
-        run: |
-          cd k8s/overlays/${{ steps.env.outputs.overlay }}
-          sed -i "s|newTag: .*|newTag: ${{ steps.tag.outputs.tag }}|g" kustomization.yaml
-          kubectl apply -k .
+          kubectl apply -k k8s/overlays/${{ steps.env.outputs.overlay }}
 
       - name: Restart API
         run: |
