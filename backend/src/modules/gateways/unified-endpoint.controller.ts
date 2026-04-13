@@ -10,6 +10,7 @@ import {
   HttpStatus,
   Header,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Response, Request } from 'express';
@@ -186,6 +187,7 @@ export class UnifiedEndpointController {
    * Needed for A2A discovery, UTCP manual, etc.
    */
   @All(':orgSlug/:resourceSlug/*')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   async handleSubPathRequest(
     @Param('orgSlug') orgSlug: string,
     @Param('resourceSlug') resourceSlug: string,
@@ -299,6 +301,7 @@ export class UnifiedEndpointController {
       }
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const card = this.a2aAgentCardService.buildAgentCard(gateway, agent, organization, baseUrl);
+      res.setHeader('Cache-Control', 'public, max-age=300');
       return res.json(card);
     }
 

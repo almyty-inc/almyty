@@ -11,6 +11,7 @@ import {
   Logger,
   Header,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { UtcpService } from '../utcp.service';
 import { GatewayResolverService } from '../services/gateway-resolver.service';
@@ -148,6 +149,7 @@ export class GatewayUtcpController {
   }
 
   @Get('*')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   @Header('Content-Type', 'application/json')
   async handleGetRequest(
     @Param('orgId') orgSlugOrId: string,

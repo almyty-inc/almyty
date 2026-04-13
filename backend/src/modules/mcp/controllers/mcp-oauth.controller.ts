@@ -169,6 +169,7 @@ export class McpOAuthController {
   // GET /:orgSlug/:gatewaySlug/.well-known/oauth-authorization-server
   // ---------------------------------------------------------------------------
   @Get(':orgSlug/:gatewaySlug/.well-known/oauth-authorization-server')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   @Header('Content-Type', 'application/json')
   async getAuthorizationServerMetadata(
     @Param('orgSlug') orgSlug: string,
@@ -205,6 +206,7 @@ export class McpOAuthController {
   // GET /:orgSlug/:gatewaySlug/.well-known/oauth-protected-resource
   // ---------------------------------------------------------------------------
   @Get(':orgSlug/:gatewaySlug/.well-known/oauth-protected-resource')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   @Header('Content-Type', 'application/json')
   async getProtectedResourceMetadata(
     @Param('orgSlug') orgSlug: string,
@@ -519,7 +521,7 @@ export class McpOAuthController {
   // integrator onboarding workflow.
   // ---------------------------------------------------------------------------
   @Post(':orgSlug/:gatewaySlug/register')
-  @Throttle({ default: { limit: 10, ttl: 5 * 60 * 1000 } })
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Header('Content-Type', 'application/json')
   async register(
     @Param('orgSlug') orgSlug: string,
