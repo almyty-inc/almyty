@@ -12,106 +12,18 @@ concurrency:
   group: deploy-staging
   cancel-in-progress: true
 
-env:
-  REGISTRY: ghcr.io/frane/almyty
-  TAG: staging-${{ github.sha }}
-
 jobs:
   build:
-    name: Build and Push Images
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
-
-      - uses: docker/setup-buildx-action@v4
-
-      - name: Build and push API
-        uses: docker/build-push-action@v7
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          target: production
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/api:${{ env.TAG }}
-            ${{ env.REGISTRY }}/api:staging-latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push Frontend
-        uses: docker/build-push-action@v7
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          target: production
-          push: true
-          build-args: |
-            VITE_API_BASE_URL=https://api.staging.almyty.com
-          tags: |
-            ${{ env.REGISTRY }}/frontend:${{ env.TAG }}
-            ${{ env.REGISTRY }}/frontend:staging-latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+    uses: ./.github/workflows/build.yml
+    with:
+      environment: staging
+      sha: ${{ github.sha }}
+      push: true
+    secrets: inherit
 
   deploy:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
     needs: build
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-      - run: doctl kubernetes cluster kubeconfig save ${{ secrets.DIGITALOCEAN_CLUSTER_NAME }}
-
-      - name: Create namespace and pull secret
-        run: |
-          kubectl create namespace almyty-staging --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create secret docker-registry ghcr-secret \
-            --docker-server=ghcr.io \
-            --docker-username=${{ github.actor }} \
-            --docker-password=${{ secrets.GHCR_PAT }} \
-            --namespace=almyty-staging \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Create application secrets
-        run: |
-          kubectl create secret generic almyty-secrets \
-            --from-literal=DATABASE_USERNAME=${{ secrets.STAGING_DATABASE_USERNAME }} \
-            --from-literal=DATABASE_PASSWORD=${{ secrets.STAGING_DATABASE_PASSWORD }} \
-            --from-literal=DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }} \
-            --from-literal=REDIS_PASSWORD="" \
-            --from-literal=REDIS_URL="redis://staging-almyty-redis:6379" \
-            --from-literal=JWT_SECRET=${{ secrets.STAGING_JWT_SECRET }} \
-            --from-literal=ENCRYPTION_KEY=${{ secrets.STAGING_ENCRYPTION_KEY }} \
-            --from-literal=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
-            --namespace=almyty-staging \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Update image tags and deploy
-        run: |
-          cd k8s/overlays/staging
-          sed -i "s/newTag: staging-.*/newTag: ${{ env.TAG }}/g" kustomization.yaml
-          kubectl apply -k .
-          kubectl apply -f ../../redirect-ingress.yaml
-
-      - name: Restart and wait
-        run: |
-          kubectl rollout restart deployment/staging-api -n almyty-staging
-          kubectl rollout restart deployment/staging-frontend -n almyty-staging
-          kubectl rollout status deployment/staging-api -n almyty-staging --timeout=5m || true
-          kubectl rollout status deployment/staging-frontend -n almyty-staging --timeout=5m || true
-
-      - name: Debug on failure
-        if: failure()
-        run: |
-          kubectl get pods -n almyty-staging -l "app in (staging-api,staging-frontend)"
-          kubectl logs -n almyty-staging -l app=staging-api --tail=50 --all-containers 2>&1 || true
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+    secrets: inherit
