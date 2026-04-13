@@ -25,7 +25,7 @@ Twenty years of better APIs, better protocols, better tooling. Computers still d
 
 ## What almyty does
 
-Point it at an API schema — OpenAPI, GraphQL, SOAP, Protobuf. Each operation becomes a tool. Write custom tools in JavaScript if the API doesn't have a schema, or if you need something that doesn't exist yet.
+Point it at an API schema — OpenAPI, GraphQL, SOAP, Protobuf. Each operation becomes a tool. Write custom tools in sandboxed JavaScript that can import npm packages (`pg`, `stripe`, `@aws-sdk/*`, etc.) — the sandbox runs in a Node 24 worker thread with filesystem, process, and network restrictions enforced.
 
 Build agents with a visual pipeline builder. Chain LLM calls, tool calls, conditions, loops, parallel fan-out, sub-agents. Or skip the pipeline and run autonomous agents that figure out the steps themselves. Either way, you get scheduling, webhooks, human-in-the-loop, and an OpenAI-compatible chat API.
 
