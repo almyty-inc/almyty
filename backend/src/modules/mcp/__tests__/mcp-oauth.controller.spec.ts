@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { HttpException, HttpStatus } from '@nestjs/common';
@@ -90,6 +91,13 @@ describe('McpOAuthController', () => {
               if (key === 'NODE_ENV') return 'test';
               return defaultValue;
             }),
+          },
+        },
+        {
+          provide: JwtService,
+          useValue: {
+            verify: jest.fn().mockReturnValue(null),
+            sign: jest.fn().mockReturnValue('mock-token'),
           },
         },
       ],
