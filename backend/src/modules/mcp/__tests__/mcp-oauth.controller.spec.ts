@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { HttpException, HttpStatus } from '@nestjs/common';
@@ -78,6 +79,17 @@ describe('McpOAuthController', () => {
             refreshToken: jest.fn(),
             registerClient: jest.fn(),
             revokeToken: jest.fn(),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string, defaultValue?: string) => {
+              if (key === 'BASE_URL') return 'http://localhost:4000';
+              if (key === 'FRONTEND_URL') return 'http://localhost:3002';
+              if (key === 'NODE_ENV') return 'test';
+              return defaultValue;
+            }),
           },
         },
       ],
@@ -913,7 +925,7 @@ describe('McpOAuthController', () => {
         res,
       );
 
-      expect(res.redirect).toHaveBeenCalledWith(302, expect.stringContaining('http://localhost:3002/login'));
+      expect(res.redirect).toHaveBeenCalledWith(302, expect.stringContaining('http://localhost:3002/auth/login'));
       expect(res.redirect).toHaveBeenCalledWith(302, expect.stringContaining('returnTo='));
     });
 
