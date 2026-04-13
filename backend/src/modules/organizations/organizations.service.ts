@@ -5,6 +5,8 @@ import {
   ForbiddenException,
   ConflictException,
   Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -20,6 +22,7 @@ import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { MailService } from '../mail/mail.service';
+import { GatewaysService } from '../gateways/gateways.service';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -38,6 +41,8 @@ export class OrganizationsService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private readonly mailService: MailService,
+    @Inject(forwardRef(() => GatewaysService))
+    private readonly gatewaysService: GatewaysService,
   ) {}
 
   async create(createOrganizationDto: CreateOrganizationDto, ownerId: string): Promise<Organization> {
@@ -71,6 +76,13 @@ export class OrganizationsService {
     });
 
     await this.userOrganizationRepository.save(membership);
+
+    // Provision the system gateway so MCP OAuth works out of the box
+    try {
+      await this.gatewaysService.ensureSystemGateway(savedOrganization.id);
+    } catch (err) {
+      this.logger.warn(`Failed to provision system gateway for org ${savedOrganization.id}: ${err.message}`);
+    }
 
     return this.findOne(savedOrganization.id);
   }

@@ -1,7 +1,7 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
+import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { GatewayAuthService, AuthenticationResult } from '../../gateways/gateway-auth.service';
@@ -70,21 +70,9 @@ export class GatewayResolverService {
 
   /**
    * Find an active gateway by endpoint path within an organization.
+   * The system gateway (almyty) is a real DB row, so no special-casing needed.
    */
   async resolveGateway(organizationId: string, endpoint: string): Promise<Gateway> {
-    // Virtual gateway for the almyty platform management endpoint.
-    if (endpoint === 'almyty' || endpoint === '/almyty') {
-      const virtual = new Gateway();
-      virtual.id = 'almyty-platform';
-      virtual.name = 'almyty';
-      virtual.endpoint = '/almyty';
-      virtual.type = GatewayType.MCP;
-      virtual.status = GatewayStatus.ACTIVE;
-      virtual.organizationId = organizationId;
-      virtual.authConfigs = [];
-      return virtual;
-    }
-
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const gateway = await this.gatewayRepository.findOne({
       where: {
@@ -135,7 +123,7 @@ export class GatewayResolverService {
       (ac) => ac.type === GatewayAuthType.API_KEY,
     );
 
-    const baseUrl = process.env.BASE_URL || process.env.API_URL || 'https://api.staging.almyty.com';
+    const baseUrl = process.env.BASE_URL || process.env.API_URL || 'http://localhost:4000';
     const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || '';
 
     if (hasOAuthAuth) {

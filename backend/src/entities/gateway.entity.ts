@@ -161,6 +161,9 @@ export class Gateway {
   @Column({ default: true })
   isHealthy: boolean;
 
+  @Column({ default: false })
+  isSystem: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

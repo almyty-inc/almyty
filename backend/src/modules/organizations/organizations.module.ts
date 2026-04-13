@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Organization } from '../../entities/organization.entity';
@@ -10,6 +10,7 @@ import { User } from '../../entities/user.entity';
 import { OrganizationsService } from './organizations.service';
 import { OrganizationsController } from './organizations.controller';
 import { InvitesController } from './invites.controller';
+import { GatewaysModule } from '../gateways/gateways.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { InvitesController } from './invites.controller';
       UserTeam,
       User,
     ]),
+    forwardRef(() => GatewaysModule),
   ],
   providers: [OrganizationsService],
   controllers: [OrganizationsController, InvitesController],
