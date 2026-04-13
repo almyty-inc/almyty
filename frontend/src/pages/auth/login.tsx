@@ -42,10 +42,15 @@ export function LoginPage() {
   const returnTo = (() => {
     const raw = new URLSearchParams(location.search).get('returnTo')
     if (!raw) return null
-    // Must be a relative path starting with `/` and NOT `//` (which is a
-    // protocol-relative URL that would point off-origin).
-    if (!raw.startsWith('/') || raw.startsWith('//')) return null
-    return raw
+    // Allow relative paths (same-origin navigation)
+    if (raw.startsWith('/') && !raw.startsWith('//')) return raw
+    // Allow absolute URLs to the API domain (OAuth authorize callbacks)
+    try {
+      const url = new URL(raw)
+      const apiBase = import.meta.env.VITE_API_BASE_URL || ''
+      if (apiBase && url.origin === new URL(apiBase).origin) return raw
+    } catch {}
+    return null
   })()
 
   const onSubmit = async (data: LoginFormData) => {
@@ -53,7 +58,11 @@ export function LoginPage() {
     try {
       await login(data.email, data.password)
       success('Login successful', 'Welcome back!')
-      navigate(returnTo ?? '/dashboard')
+      if (returnTo?.startsWith('http')) {
+        window.location.href = returnTo
+      } else {
+        navigate(returnTo ?? '/dashboard')
+      }
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || 'Invalid credentials. Please check your email and password.'
       setLoginError(errorMessage)
