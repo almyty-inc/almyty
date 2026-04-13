@@ -69,6 +69,24 @@ describe('McpOAuthDiscoveryController', () => {
         .rejects.toThrow(HttpException);
     });
 
+    it('queries by slug only when orgSlug is not a UUID', async () => {
+      await controller.authServerMetadata('acme', 'my-gateway');
+
+      // Non-UUID slug: should query { slug: 'acme' } only, not { id: 'acme' }
+      expect(orgRepo.findOne).toHaveBeenCalledWith({
+        where: { slug: 'acme' },
+      });
+    });
+
+    it('queries by both slug and id when orgSlug is a UUID', async () => {
+      const uuid = '550e8400-e29b-41d4-a716-446655440000';
+      await controller.authServerMetadata(uuid, 'my-gateway');
+
+      expect(orgRepo.findOne).toHaveBeenCalledWith({
+        where: [{ slug: uuid }, { id: uuid }],
+      });
+    });
+
     it('returns 404 for non-existent gateway', async () => {
       gatewayRepo.findOne.mockResolvedValue(null);
 
