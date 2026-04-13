@@ -1,0 +1,181 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment (development, staging, production)'
+        required: true
+        type: string
+      sha:
+        description: 'Git SHA for image tagging'
+        required: true
+        type: string
+      push:
+        description: 'Push images to GHCR (false for PR validation builds)'
+        required: true
+        type: boolean
+    outputs:
+      api_changed:
+        description: 'Whether the API image was built'
+        value: ${{ jobs.detect.outputs.backend }}
+      frontend_changed:
+        description: 'Whether the frontend image was built'
+        value: ${{ jobs.detect.outputs.frontend }}
+      docs_changed:
+        description: 'Whether the docs image was built'
+        value: ${{ jobs.detect.outputs.docs }}
+
+env:
+  REGISTRY: ghcr.io/frane/almyty
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  detect:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      docs: ${{ steps.changes.outputs.docs }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+            docs:
+              - 'docs-site/**'
+
+  build-api:
+    name: Build API
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve tag prefix
+        id: prefix
+        run: |
+          case "${{ inputs.environment }}" in
+            production)  echo "prefix=production" >> $GITHUB_OUTPUT ;;
+            development) echo "prefix=dev" >> $GITHUB_OUTPUT ;;
+            *)           echo "prefix=staging" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Build and push API
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: production
+          push: ${{ inputs.push }}
+          tags: |
+            ${{ env.REGISTRY }}/api:${{ steps.prefix.outputs.prefix }}-${{ inputs.sha }}
+            ${{ env.REGISTRY }}/api:${{ steps.prefix.outputs.prefix }}-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve environment config
+        id: config
+        run: |
+          case "${{ inputs.environment }}" in
+            production)
+              echo "prefix=production" >> $GITHUB_OUTPUT
+              echo "api_url=https://api.almyty.com" >> $GITHUB_OUTPUT
+              ;;
+            development)
+              echo "prefix=dev" >> $GITHUB_OUTPUT
+              echo "api_url=https://api.dev.almyty.com" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "prefix=staging" >> $GITHUB_OUTPUT
+              echo "api_url=https://api.staging.almyty.com" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: production
+          push: ${{ inputs.push }}
+          build-args: |
+            VITE_API_BASE_URL=${{ steps.config.outputs.api_url }}
+          tags: |
+            ${{ env.REGISTRY }}/frontend:${{ steps.config.outputs.prefix }}-${{ inputs.sha }}
+            ${{ env.REGISTRY }}/frontend:${{ steps.config.outputs.prefix }}-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-docs:
+    name: Build Docs
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.docs == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docs
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docs-site
+          push: ${{ inputs.push }}
+          tags: |
+            ${{ env.REGISTRY }}/docs:${{ inputs.sha }}
+            ${{ env.REGISTRY }}/docs:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

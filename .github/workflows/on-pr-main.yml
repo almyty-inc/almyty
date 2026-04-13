@@ -1,0 +1,22 @@
+name: Production PR
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-main-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      environment: production
+      sha: ${{ github.sha }}
+      push: false
+    secrets: inherit

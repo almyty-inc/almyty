@@ -25,11 +25,10 @@ name: CI
 
 on:
   push:
-    branches-ignore:
-      - master
+    branches-ignore: []
   pull_request:
-    branches:
-      - master
+    branches: [staging, main]
+  workflow_call:
   workflow_dispatch:
 
 # Cancel in-flight runs on the same ref — saves CI minutes on rapid
