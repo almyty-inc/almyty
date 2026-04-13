@@ -17,6 +17,7 @@ import {
 import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
@@ -46,7 +47,25 @@ export class McpOAuthController {
     private readonly organizationRepository: Repository<Organization>,
     private readonly mcpOAuthService: McpOAuthService,
     private readonly configService: ConfigService,
+    private readonly jwtService: JwtService,
   ) {}
+
+  /**
+   * Try to extract and verify the user from the JWT cookie or Authorization header.
+   * Returns the JWT payload if valid, null otherwise. Never throws.
+   */
+  private async tryExtractUser(req: any): Promise<any | null> {
+    // If a guard already ran (e.g. tests or middleware), use req.user
+    if (req.user) return req.user;
+    const token = req.cookies?.access_token
+      || (req.headers?.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null);
+    if (!token) return null;
+    try {
+      return this.jwtService.verify(token);
+    } catch {
+      return null;
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -280,7 +299,9 @@ export class McpOAuthController {
     }
 
     // --- Check if user is authenticated (JWT cookie or Bearer token) ---
-    const user = req.user;
+    // Read JWT from cookie or Authorization header, verify, and attach user.
+    // Don't use @UseGuards — we need to redirect to login on failure, not 401.
+    const user = await this.tryExtractUser(req);
 
     if (!user) {
       // Redirect to frontend login page with a return URL back to this authorize endpoint

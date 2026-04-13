@@ -1,5 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 
 import { McpController } from './mcp.controller';
 import { GatewayMcpController } from './gateway-mcp.controller';
@@ -55,6 +57,15 @@ import { GatewaysModule } from '../gateways/gateways.module';
     ]),
     forwardRef(() => ToolsModule),
     GatewaysModule,
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get('JWT_SECRET', 'dev-jwt-secret'),
+        signOptions: { issuer: 'almyty', audience: 'almyty-api' },
+        verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
+      }),
+    }),
   ],
   controllers: [McpOAuthDiscoveryController, McpOAuthController, McpController, GatewayMcpController, McpTransportController, UtcpController, GatewayUtcpController],
   providers: [
