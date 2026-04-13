@@ -29,10 +29,6 @@ on:
 env:
   REGISTRY: ghcr.io/frane/almyty
 
-permissions:
-  contents: read
-  packages: write
-
 jobs:
   detect:
     name: Detect changes
