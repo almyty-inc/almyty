@@ -39,7 +39,7 @@ jobs:
 
       - name: Ensure pull secret exists
         run: |
-          NAMESPACE="almyty-${{ inputs.environment }}"
+          NAMESPACE="almyty-${{ inputs.environment == 'development' && 'dev' || inputs.environment }}"
           kubectl create secret docker-registry ghcr-secret \
             --docker-server=ghcr.io \
             --docker-username=frane \
