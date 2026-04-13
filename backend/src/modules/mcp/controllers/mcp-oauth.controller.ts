@@ -111,8 +111,11 @@ export class McpOAuthController {
     // No DB entry — returns a synthetic Gateway object so the entire
     // OAuth + MCP flow works without special-casing every route.
     if (gatewaySlug === 'almyty') {
+      // Virtual gateway for the almyty platform management endpoint.
+      // No DB row — id is null so FK-constrained columns (oauth_clients.gatewayId)
+      // get NULL instead of a non-existent UUID.
       const virtual = new Gateway();
-      virtual.id = 'almyty-platform';
+      virtual.id = null;
       virtual.name = 'almyty';
       virtual.endpoint = '/almyty';
       virtual.type = GatewayType.MCP;
