@@ -9,7 +9,7 @@
  * Gated behind RUN_DB_INTEGRATION=1.
  */
 import { DataSource } from 'typeorm';
-import { Organization } from '../../entities/organization.entity';
+import * as path from 'path';
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
 const describeIfDb = SHOULD_RUN ? describe : describe.skip;
@@ -25,7 +25,7 @@ describeIfDb('OAuth discovery org slug resolution (real DB)', () => {
       username: process.env.DATABASE_USERNAME || 'postgres',
       password: process.env.DATABASE_PASSWORD || 'password',
       database: process.env.DATABASE_NAME || 'almyty_test',
-      entities: [Organization],
+      entities: [path.join(__dirname, '../../entities/*.entity{.ts,.js}')],
       synchronize: false,
     });
     await ds.initialize();
@@ -36,7 +36,7 @@ describeIfDb('OAuth discovery org slug resolution (real DB)', () => {
   });
 
   it('does not throw when querying with a non-UUID slug', async () => {
-    const repo = ds.getRepository(Organization);
+    const repo = ds.getRepository('Organization');
 
     // This is the exact query pattern that caused the bug.
     // With the old code: findOne({ where: [{ slug: 'frane-test' }, { id: 'frane-test' }] })
@@ -55,7 +55,7 @@ describeIfDb('OAuth discovery org slug resolution (real DB)', () => {
   });
 
   it('works with a valid UUID too', async () => {
-    const repo = ds.getRepository(Organization);
+    const repo = ds.getRepository('Organization');
     const uuid = '00000000-0000-4000-a000-000000000099';
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
     const where = isUUID
@@ -67,7 +67,7 @@ describeIfDb('OAuth discovery org slug resolution (real DB)', () => {
   });
 
   it('proves the old query crashes with non-UUID on a real DB', async () => {
-    const repo = ds.getRepository(Organization);
+    const repo = ds.getRepository('Organization');
 
     // The OLD broken query — this MUST throw on real Postgres
     await expect(
