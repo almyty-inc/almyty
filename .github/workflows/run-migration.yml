@@ -9,6 +9,7 @@ on:
         type: choice
         options:
           - staging
+          - development
           - production
       confirm:
         description: 'Type the environment name to confirm'
@@ -48,9 +49,12 @@ jobs:
 
       - name: Run migration job
         run: |
-          NAMESPACE="almyty-${{ inputs.environment }}"
-          PREFIX="${{ inputs.environment == 'production' && 'prod-' || 'staging-' }}"
-          IMAGE_TAG="${{ inputs.environment == 'production' && 'production-latest' || 'staging-latest' }}"
+          NAMESPACE="almyty-${{ inputs.environment == 'development' && 'dev' || inputs.environment }}"
+          case "${{ inputs.environment }}" in
+            production)  PREFIX="prod-";    IMAGE_TAG="production-latest" ;;
+            development) PREFIX="dev-";     IMAGE_TAG="dev-latest" ;;
+            *)           PREFIX="staging-"; IMAGE_TAG="staging-latest" ;;
+          esac
 
           # Delete old job if exists
           kubectl delete job ${PREFIX}db-migration -n $NAMESPACE --ignore-not-found
