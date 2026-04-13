@@ -33,12 +33,24 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as request from 'supertest';
 
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { PassportStrategy } from '@nestjs/passport';
+import { Strategy as CustomStrategy } from 'passport-custom';
 import { JwtAuthGuard } from '../../modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../modules/auth/guards/roles.guard';
 import { Roles } from '../../modules/auth/decorators/roles.decorator';
 import { JwtStrategy } from '../../modules/auth/strategies/jwt.strategy';
 import { User } from '../../entities/user.entity';
 import { OrganizationRole } from '../../entities/user-organization.entity';
+
+// Stub api-key strategy that always rejects — JwtAuthGuard tries
+// ['jwt', 'api-key'] and Passport needs both registered.
+@Injectable()
+class StubApiKeyStrategy extends PassportStrategy(CustomStrategy, 'api-key') {
+  async validate(): Promise<any> {
+    throw new UnauthorizedException('api-key not supported in test');
+  }
+}
 
 const TEST_SECRET = 'rbac-integration-test-secret';
 
@@ -114,6 +126,7 @@ async function buildApp(user: any): Promise<{ app: INestApplication; jwt: JwtSer
     controllers: [TestController],
     providers: [
       JwtStrategy,
+      StubApiKeyStrategy,
       Reflector,
       { provide: getRepositoryToken(User), useValue: userRepoStub },
       { provide: APP_GUARD, useClass: JwtAuthGuard },
