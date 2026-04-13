@@ -178,7 +178,7 @@ Keep commit messages concise and human-readable:
 
 ## Deploy Pins (do not change)
 
-- `.github/workflows/deploy-*.yml`: `docker/build-push-action@v5` and `docker/setup-buildx-action@v3` are pinned. `@v7` requires a newer runner and breaks every deploy.
+- `.github/workflows/*.yml`: All GitHub Actions pinned to latest major — `docker/build-push-action@v7`, `docker/setup-buildx-action@v4`, `docker/login-action@v4`, `actions/checkout@v6`, `actions/setup-node@v6`, `dorny/paths-filter@v4`.
 - `frontend/Dockerfile`: `nginx:1.25-alpine` is pinned.
 
 ---
