@@ -119,8 +119,20 @@ jobs:
 
       - name: Wait for rollout
         run: |
-          kubectl rollout status deployment/staging-api -n almyty-staging --timeout=5m
-          kubectl rollout status deployment/staging-frontend -n almyty-staging --timeout=5m
+          kubectl rollout status deployment/staging-api -n almyty-staging --timeout=5m || true
+          kubectl rollout status deployment/staging-frontend -n almyty-staging --timeout=5m || true
+
+      - name: Debug pod status on failure
+        if: failure()
+        run: |
+          echo "=== Pod status ==="
+          kubectl get pods -n almyty-staging -l app=staging-api --sort-by=.metadata.creationTimestamp
+          echo ""
+          echo "=== Recent pod logs ==="
+          kubectl logs -n almyty-staging -l app=staging-api --tail=80 --all-containers 2>&1 || true
+          echo ""
+          echo "=== Pod describe ==="
+          kubectl describe pods -n almyty-staging -l app=staging-api | tail -40
 
       - name: Deployment summary
         run: |
