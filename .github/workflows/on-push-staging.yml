@@ -23,6 +23,7 @@ jobs:
 
   deploy:
     needs: build
+    if: always() && !failure()
     uses: ./.github/workflows/deploy.yml
     with:
       environment: staging
