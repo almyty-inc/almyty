@@ -1,0 +1,39 @@
+{
+  "name": "@almyty/acp-server",
+  "version": "1.0.0",
+  "description": "ACP agent server for almyty — expose any almyty agent via the Agent Client Protocol",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "almyty-acp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "acp",
+    "agent-client-protocol",
+    "ai-agents",
+    "almyty",
+    "zed",
+    "jetbrains"
+  ],
+  "author": "almyty",
+  "license": "BSL-1.1",
+  "dependencies": {
+    "eventsource-parser": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.0"
+  }
+}
