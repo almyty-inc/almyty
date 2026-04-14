@@ -242,9 +242,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
         })
         .expect(302);
 
-      expect(res.headers.location).toContain('/auth/login');
       // Must be /auth/login, not bare /login (the bug we fixed)
-      expect(res.headers.location).not.toMatch(/\/login\?(?!.*\/auth\/)/);
       expect(res.headers.location).toMatch(/\/auth\/login\?/);
     });
 
