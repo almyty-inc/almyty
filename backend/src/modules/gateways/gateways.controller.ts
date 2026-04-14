@@ -28,6 +28,7 @@ import { ToolExecutorService } from '../tools/tool-executor.service';
 import { CliGeneratorService } from '../tools/cli-generator.service';
 import { CodegenService } from '../tools/codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { batchAsync } from '../../common/utils/batch-async';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GatewayKind, GatewayType, GatewayStatus } from '../../entities/gateway.entity';
@@ -576,20 +577,18 @@ export class GatewaysController {
 
       const gateways = await this.gatewaysService.getAllUserGateways(organizationId);
 
-      const result = await Promise.all(
-        gateways.map(async (gateway) => {
-          const orgSlug = gateway.organization?.slug || gateway.organization?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
-          const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || gateway.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-          const skills = await this.skillGeneratorService.generateIndividualSkills(gateway.id, organizationId, { orgSlug, gatewaySlug });
-          return {
-            gatewayId: gateway.id,
-            gatewayName: gateway.name,
-            orgSlug,
-            gatewaySlug,
-            skills,
-          };
-        }),
-      );
+      const result = await batchAsync(gateways, 5, async (gateway) => {
+        const orgSlug = gateway.organization?.slug || gateway.organization?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
+        const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || gateway.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const skills = await this.skillGeneratorService.generateIndividualSkills(gateway.id, organizationId, { orgSlug, gatewaySlug });
+        return {
+          gatewayId: gateway.id,
+          gatewayName: gateway.name,
+          orgSlug,
+          gatewaySlug,
+          skills,
+        };
+      });
 
       return {
         success: true,

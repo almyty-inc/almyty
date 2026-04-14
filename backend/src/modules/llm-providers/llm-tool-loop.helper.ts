@@ -14,6 +14,7 @@ import { Logger } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Tool } from '../../entities/tool.entity';
 import { ToolExecutorService } from '../tools/tool-executor.service';
+import { batchAsyncSettled } from '../../common/utils/batch-async';
 
 const logger = new Logger('LlmToolLoop');
 
@@ -74,39 +75,37 @@ export async function executeToolCalls(
   toolRepository: Repository<Tool>,
   toolExecutorService: ToolExecutorService,
 ): Promise<ToolCallResult[]> {
-  const results = await Promise.allSettled(
-    toolCalls.map(async (tc) => {
-      const tool = await toolRepository.findOne({
-        where: { name: tc.name, organizationId, status: 'active' as any },
-      });
+  const results = await batchAsyncSettled(toolCalls, 3, async (tc) => {
+    const tool = await toolRepository.findOne({
+      where: { name: tc.name, organizationId, status: 'active' as any },
+    });
 
-      if (!tool) {
-        return { id: tc.id, name: tc.name, result: null, error: `Tool '${tc.name}' not found` };
-      }
+    if (!tool) {
+      return { id: tc.id, name: tc.name, result: null, error: `Tool '${tc.name}' not found` };
+    }
 
-      try {
-        const execResult = await toolExecutorService.executeTool(
-          tool.id,
-          tc.arguments,
-          { userId: null, organizationId, skipRateLimit: false },
-        );
-        return {
-          id: tc.id,
-          name: tc.name,
-          result: execResult.success ? execResult.data : null,
-          error: execResult.error,
-        };
-      } catch (err) {
-        logger.error(`Tool execution failed for ${tc.name}: ${err.message}`);
-        return { id: tc.id, name: tc.name, result: null, error: err.message };
-      }
-    }),
-  );
+    try {
+      const execResult = await toolExecutorService.executeTool(
+        tool.id,
+        tc.arguments,
+        { userId: null, organizationId, skipRateLimit: false },
+      );
+      return {
+        id: tc.id,
+        name: tc.name,
+        result: execResult.success ? execResult.data : null,
+        error: execResult.error,
+      };
+    } catch (err) {
+      logger.error(`Tool execution failed for ${tc.name}: ${err.message}`);
+      return { id: tc.id, name: tc.name, result: null, error: err.message };
+    }
+  });
 
   return results.map((r) =>
-    r.status === 'fulfilled'
-      ? r.value
-      : { id: '', name: '', result: null, error: (r.reason as Error).message },
+    r != null
+      ? r
+      : { id: '', name: '', result: null, error: 'Tool call failed' },
   );
 }
 
