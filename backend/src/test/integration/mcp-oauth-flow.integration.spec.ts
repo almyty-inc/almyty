@@ -117,8 +117,48 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     const setCookie = loginRes.headers['set-cookie'];
     const cookieStr = Array.isArray(setCookie) ? setCookie[0] : setCookie;
     accessTokenCookie = cookieStr?.split(';')[0] || '';
-    // Extract raw JWT for Bearer auth on MCP endpoints
-    bearerToken = accessTokenCookie.replace('access_token=', '');
+    // Get an OAuth access token via the full flow: register → authorize → token
+    const regRes = await request(app.getHttpServer())
+      .post(`/mcp/${ORG_SLUG}/almyty/register`)
+      .send({
+        client_name: 'test-flow',
+        redirect_uris: ['http://localhost:12345/callback'],
+        token_endpoint_auth_method: 'none',
+      })
+      .expect(201);
+
+    const clientId = regRes.body.client_id;
+    const codeVerifier = crypto.randomBytes(32).toString('base64url');
+    const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+
+    const authRes = await request(app.getHttpServer())
+      .get(`/mcp/${ORG_SLUG}/almyty/authorize`)
+      .set('Cookie', accessTokenCookie)
+      .query({
+        response_type: 'code',
+        client_id: clientId,
+        redirect_uri: 'http://localhost:12345/callback',
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+        state: 'setup',
+      })
+      .expect(302);
+
+    const callbackUrl = new URL(authRes.headers.location);
+    const authCode = callbackUrl.searchParams.get('code');
+
+    const tokenRes = await request(app.getHttpServer())
+      .post(`/mcp/${ORG_SLUG}/almyty/token`)
+      .send({
+        grant_type: 'authorization_code',
+        code: authCode,
+        redirect_uri: 'http://localhost:12345/callback',
+        client_id: clientId,
+        code_verifier: codeVerifier,
+      })
+      .expect(200);
+
+    bearerToken = tokenRes.body.access_token;
   }, 30000);
 
   afterAll(async () => {
