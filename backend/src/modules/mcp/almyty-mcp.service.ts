@@ -16,7 +16,8 @@ import { LlmProvidersService } from '../llm-providers/llm-providers.service';
 const TOOLS = [
   { name: 'list_apis', description: 'List all connected APIs', inputSchema: { type: 'object', properties: {} } },
   { name: 'create_api', description: 'Connect a new API', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] }, baseUrl: { type: 'string' } }, required: ['name', 'type'] } },
-  { name: 'import_schema', description: 'Import schema + generate tools', inputSchema: { type: 'object', properties: { apiId: { type: 'string' }, schemaUrl: { type: 'string' }, generateTools: { type: 'boolean' } }, required: ['apiId', 'schemaUrl'] } },
+  { name: 'import_schema', description: 'Import schema + generate tools (async — returns a jobId)', inputSchema: { type: 'object', properties: { apiId: { type: 'string' }, schemaUrl: { type: 'string' }, generateTools: { type: 'boolean' } }, required: ['apiId', 'schemaUrl'] } },
+  { name: 'check_import_status', description: 'Check the status of a schema import job', inputSchema: { type: 'object', properties: { jobId: { type: 'string', description: 'Job ID returned by import_schema' } }, required: ['jobId'] } },
   { name: 'delete_api', description: 'Delete an API by ID', inputSchema: { type: 'object', properties: { apiId: { type: 'string', description: 'API ID to delete' } }, required: ['apiId'] } },
   { name: 'list_tools', description: 'List all tools', inputSchema: { type: 'object', properties: {} } },
   { name: 'delete_tool', description: 'Delete a tool by ID', inputSchema: { type: 'object', properties: { toolId: { type: 'string', description: 'Tool ID to delete' } }, required: ['toolId'] } },
@@ -88,6 +89,13 @@ export class AlmytyMcpService {
           options: { generateTools: args.generateTools !== false },
         }, { timeout: 5 * 60 * 1000, removeOnComplete: 100, removeOnFail: 50 });
         return { jobId: job.id, status: 'queued', message: `Schema import queued (job ${job.id}). Tools will be generated in the background.` };
+      }
+      case 'check_import_status': {
+        const queue = this.moduleRef.get('BullQueue_schema-import', { strict: false });
+        const job = await queue.getJob(args.jobId);
+        if (!job) return { error: `Job ${args.jobId} not found` };
+        const state = await job.getState();
+        return { jobId: args.jobId, state, failedReason: job.failedReason || null, progress: job.progress || 0 };
       }
       case 'delete_api': return get(ApisService).remove(args.apiId, orgId);
       case 'list_tools': return get(ToolsService).getTools({ organizationId: orgId });
