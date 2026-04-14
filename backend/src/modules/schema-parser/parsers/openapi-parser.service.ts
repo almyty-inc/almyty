@@ -43,7 +43,13 @@ export class OpenAPIParserService implements SchemaParser {
       try {
         schemaObject = JSON.parse(rawSchema);
       } catch (jsonError) {
-        schemaObject = rawSchema;
+        // Not JSON — try YAML
+        try {
+          const yaml = require('js-yaml');
+          schemaObject = yaml.load(rawSchema);
+        } catch (yamlError) {
+          schemaObject = rawSchema;
+        }
       }
       // Dereference $refs but do NOT resolve external URLs/files.
       // See SAFE_PARSER_OPTIONS comment above.
@@ -90,7 +96,12 @@ export class OpenAPIParserService implements SchemaParser {
       try {
         schemaObject = JSON.parse(schema);
       } catch (jsonError) {
-        schemaObject = schema;
+        try {
+          const yaml = require('js-yaml');
+          schemaObject = yaml.load(schema);
+        } catch (yamlError) {
+          schemaObject = schema;
+        }
       }
       await SwaggerParser.validate(schemaObject, SAFE_PARSER_OPTIONS as any);
       return { isValid: true, errors: [] };

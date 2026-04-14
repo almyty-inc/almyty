@@ -153,7 +153,7 @@ describe('AlmytyMcpService', () => {
         arguments: { apiId: 'api-1', schemaUrl: 'https://example.com/openapi.json', generateTools: true },
       });
       // Verifies the bug fix: URL is fetched first, content passed to importSchema
-      expect(mockAxiosGet).toHaveBeenCalledWith('https://example.com/openapi.json', { timeout: 15000 });
+      expect(mockAxiosGet).toHaveBeenCalledWith('https://example.com/openapi.json', { timeout: 30000 });
       expect(mockApisService.importSchema).toHaveBeenCalledWith(
         'api-1',
         expect.any(String), // schema content, not URL
