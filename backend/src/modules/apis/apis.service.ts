@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere } from 'typeorm';
+import { Repository, FindOptionsWhere, DataSource } from 'typeorm';
 import axios from 'axios';
 
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
@@ -89,6 +89,7 @@ export class ApisService {
     private schemaParserService: SchemaParserService,
     private toolsService: ToolsService,
     private readonly auditLogService: AuditLogService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(createApiData: CreateApiData): Promise<Api> {
@@ -349,6 +350,14 @@ export class ApisService {
       throw new BadRequestException(`Schema too large: ${(schemaSizeBytes / 1024 / 1024).toFixed(2)}MB (max ${maxSizeBytes / 1024 / 1024}MB)`);
     }
 
+    // Use a QueryRunner transaction so all DB writes commit or roll back
+    // as a unit. Without this, a failure partway through (e.g. during tool
+    // generation) leaks "idle in transaction" connections and eventually
+    // exhausts the pool.
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
       // Parse the schema
       const parsedSchema = await this.schemaParserService.parseApiSchema(
@@ -372,7 +381,7 @@ export class ApisService {
         },
       });
 
-      const savedSchema = await this.apiSchemaRepository.save(apiSchema);
+      const savedSchema = await queryRunner.manager.save(apiSchema);
 
       // Extract operations and resources in parallel for better performance
       const parser = this.schemaParserService.getParserForApiType(api.type);
@@ -387,8 +396,8 @@ export class ApisService {
 
       // Save operations and resources in parallel
       const [savedOperations, savedResources] = await Promise.all([
-        this.operationRepository.save(operations),
-        this.resourceRepository.save(resources),
+        queryRunner.manager.save(operations),
+        queryRunner.manager.save(resources),
       ]);
 
       // Update API status if it was draft
@@ -403,6 +412,8 @@ export class ApisService {
         generatedTools = await this.generateToolsFromApi(apiId, organizationId);
       }
 
+      await queryRunner.commitTransaction();
+
       // Reload the API with updated relations
       const updatedApi = await this.findOne(apiId, organizationId);
 
@@ -414,8 +425,11 @@ export class ApisService {
         tools: generatedTools.length > 0 ? generatedTools : undefined,
       };
     } catch (error) {
+      await queryRunner.rollbackTransaction();
       this.logger.error(`Failed to import schema for API ${apiId}: ${error.message}`);
       throw new BadRequestException(`Schema import failed: ${error.message}`);
+    } finally {
+      await queryRunner.release();
     }
   }
 
