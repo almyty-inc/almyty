@@ -41,7 +41,7 @@ export class AlmytyMcpService {
       case 'prompts/list':
         return { jsonrpc: '2.0', id, result: { prompts: [] } };
       case 'prompts/get':
-        return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Prompt not found' } };
+        return { jsonrpc: '2.0', id, result: { messages: [{ role: 'user', content: { type: 'text', text: params?.name || '' } }] } };
       case 'ping':
         return { jsonrpc: '2.0', id, result: {} };
       case 'notifications/initialized':
