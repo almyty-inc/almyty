@@ -6,6 +6,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { JsonRpcResponse } from './types/mcp.types';
+import { ApisService } from '../apis/apis.service';
+import { ToolsService } from '../tools/tools.service';
+import { GatewaysService } from '../gateways/gateways.service';
+import { AgentsService } from '../agents/agents.service';
+import { LlmProvidersService } from '../llm-providers/llm-providers.service';
 
 const TOOLS = [
   { name: 'list_apis', description: 'List all connected APIs', inputSchema: { type: 'object', properties: {} } },
@@ -61,18 +66,18 @@ export class AlmytyMcpService {
   }
 
   private async exec(name: string, args: any, orgId: string, userId: string): Promise<any> {
-    const svc = (token: string) => this.moduleRef.get(token, { strict: false });
+    const get = <T>(cls: new (...a: any[]) => T): T => this.moduleRef.get(cls, { strict: false });
     switch (name) {
-      case 'list_apis': return svc('ApisService').findAllByOrganization(orgId);
-      case 'create_api': return svc('ApisService').create({ ...args, organizationId: orgId, userId });
-      case 'import_schema': return svc('ApisService').importSchema(args.apiId, args.schemaUrl, orgId, userId, { generateTools: args.generateTools !== false });
-      case 'list_tools': return svc('ToolsService').getTools({ organizationId: orgId });
-      case 'list_gateways': return svc('GatewaysService').getGateways({ organizationId: orgId });
-      case 'create_gateway': return svc('GatewaysService').createGateway({ ...args, kind: 'tool', configuration: { transport: 'http' } }, orgId, userId);
-      case 'list_agents': return svc('AgentsService').getAgents({ organizationId: orgId });
-      case 'create_agent': return svc('AgentsService').createAgent({ ...args, organizationId: orgId }, userId);
-      case 'list_providers': return svc('LlmProvidersService').getProviders({ organizationId: orgId });
-      case 'add_provider': return svc('LlmProvidersService').createProvider({ name: args.name, type: args.type, configuration: { apiKey: args.apiKey } }, orgId, userId);
+      case 'list_apis': return get(ApisService).findAllByOrganization(orgId);
+      case 'create_api': return get(ApisService).create({ ...args, organizationId: orgId, userId });
+      case 'import_schema': return get(ApisService).importSchema(args.apiId, args.schemaUrl, orgId, { generateTools: args.generateTools !== false });
+      case 'list_tools': return get(ToolsService).getTools({ organizationId: orgId });
+      case 'list_gateways': return get(GatewaysService).getGateways({ organizationId: orgId });
+      case 'create_gateway': return get(GatewaysService).createGateway({ ...args, kind: 'tool', configuration: { transport: 'http' } }, orgId, userId);
+      case 'list_agents': return get(AgentsService).getAgents({ organizationId: orgId });
+      case 'create_agent': return get(AgentsService).createAgent({ ...args }, orgId, userId);
+      case 'list_providers': return get(LlmProvidersService).getProviders({ organizationId: orgId });
+      case 'add_provider': return get(LlmProvidersService).createProvider({ name: args.name, type: args.type, configuration: { apiKey: args.apiKey } }, orgId, userId);
       default: throw new Error(`Unknown tool: ${name}`);
     }
   }
