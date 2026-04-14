@@ -504,47 +504,45 @@ export class ApisService {
       return true;
     });
 
-    // Process all operations in parallel
-    const toolPromises = activeOperations.map(async (operation) => {
-      this.logger.log(`[TOOL-GEN] Processing operation: ${operation.name}`);
+    // Process operations in batches to avoid exhausting the DB connection pool.
+    // The old code fired all operations in parallel (Promise.all on the full
+    // array), which on a 438-operation API grabbed 438 connections simultaneously
+    // and killed the DB.
+    const BATCH_SIZE = 3;
+    const generatedTools: Tool[] = [];
 
-      const toolName = this.generateSemanticToolName(api.name, operation);
-      const toolDescription = operation.description || `${(operation.method || 'GET').toUpperCase()} ${operation.endpoint || ''} operation`;
+    for (let i = 0; i < activeOperations.length; i += BATCH_SIZE) {
+      const batch = activeOperations.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (operation) => {
+          const toolName = this.generateSemanticToolName(api.name, operation);
+          const toolDescription = operation.description || `${(operation.method || 'GET').toUpperCase()} ${operation.endpoint || ''} operation`;
 
-      // Check if tool already exists
-      const existingTool = await this.toolsService.findByName(toolName, api.organizationId);
+          const existingTool = await this.toolsService.findByName(toolName, api.organizationId);
 
-      try {
-        if (existingTool) {
-          // Update existing tool with regenerated schemas
-          this.logger.log(`[TOOL-GEN] Updating existing tool: ${toolName}`);
-          const updatedTool = await this.toolsService.updateFromOperation(existingTool.id, operation, {
-            name: toolName,
-            description: toolDescription,
-            organizationId: api.organizationId,
-          });
-          this.logger.log(`[TOOL-GEN] Successfully updated tool: ${toolName}`);
-          return updatedTool;
-        } else {
-          this.logger.log(`[TOOL-GEN] Creating tool from operation: ${operation.name}`);
-          const tool = await this.toolsService.createFromOperation(operation, {
-            name: toolName,
-            description: toolDescription,
-            organizationId: api.organizationId,
-          });
-          this.logger.log(`[TOOL-GEN] Successfully created tool: ${toolName}`);
-          return tool;
-        }
-      } catch (error) {
-        errorCount++;
-        this.logger.error(`[TOOL-GEN] Failed to process tool from operation ${operation.name}: ${error.message}`, error.stack);
-        return null;
-      }
-    });
-
-    // Wait for all tools to be generated in parallel
-    const results = await Promise.all(toolPromises);
-    const generatedTools = results.filter(tool => tool !== null) as Tool[];
+          try {
+            if (existingTool) {
+              return await this.toolsService.updateFromOperation(existingTool.id, operation, {
+                name: toolName,
+                description: toolDescription,
+                organizationId: api.organizationId,
+              });
+            } else {
+              return await this.toolsService.createFromOperation(operation, {
+                name: toolName,
+                description: toolDescription,
+                organizationId: api.organizationId,
+              });
+            }
+          } catch (error) {
+            errorCount++;
+            this.logger.error(`[TOOL-GEN] Failed: ${operation.name}: ${error.message}`);
+            return null;
+          }
+        }),
+      );
+      generatedTools.push(...batchResults.filter(Boolean) as Tool[]);
+    }
 
     this.logger.log(`[TOOL-GEN] Parallel tool generation complete for API ${api.name}:`);
     this.logger.log(`[TOOL-GEN]   - Total operations: ${api.operations.length}`);
