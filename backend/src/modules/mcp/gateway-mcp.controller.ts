@@ -42,7 +42,9 @@ export class GatewayMcpController {
     );
 
     if (gateway.isSystem) {
-      return this.almytyMcpService.handleJsonRpc(body, gateway.organizationId, req.user?.sub || req.user?.id);
+      const result = await this.almytyMcpService.handleJsonRpc(body, gateway.organizationId, req.user?.sub || req.user?.id);
+      this.logger.log(`System MCP response: method=${body?.method}, hasResult=${!!result?.result}, hasError=${!!result?.error}, toolCount=${result?.result?.tools?.length ?? 'n/a'}`);
+      return result;
     }
 
     return this.mcpService.handleJsonRpc(
