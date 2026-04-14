@@ -16,6 +16,7 @@ import { Gateway } from '../../entities/gateway.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { batchAsync } from '../../common/utils/batch-async';
 
 @Injectable()
 export class CredentialsService {
@@ -241,33 +242,31 @@ export class CredentialsService {
     });
 
     // Enrich with agent info where applicable
-    const enriched = await Promise.all(
-      keys.map(async (key) => {
-        let agent = null;
-        if (key.agentId) {
-          agent = await this.agentRepository.findOne({
-            where: { id: key.agentId },
-            select: ['id', 'name'],
-          });
-        }
+    const enriched = await batchAsync(keys, 5, async (key) => {
+      let agent = null;
+      if (key.agentId) {
+        agent = await this.agentRepository.findOne({
+          where: { id: key.agentId },
+          select: ['id', 'name'],
+        });
+      }
 
-        return {
-          id: key.id,
-          name: key.name,
-          keyPrefix: key.keyPrefix,
-          isActive: key.isActive,
-          scopes: key.scopes,
-          expiresAt: key.expiresAt,
-          lastUsedAt: key.lastUsedAt,
-          rateLimits: key.rateLimits,
-          createdAt: key.createdAt,
-          gateway: key.gateway
-            ? { id: key.gateway.id, name: key.gateway.name }
-            : null,
-          agent: agent ? { id: agent.id, name: agent.name } : null,
-        };
-      }),
-    );
+      return {
+        id: key.id,
+        name: key.name,
+        keyPrefix: key.keyPrefix,
+        isActive: key.isActive,
+        scopes: key.scopes,
+        expiresAt: key.expiresAt,
+        lastUsedAt: key.lastUsedAt,
+        rateLimits: key.rateLimits,
+        createdAt: key.createdAt,
+        gateway: key.gateway
+          ? { id: key.gateway.id, name: key.gateway.name }
+          : null,
+        agent: agent ? { id: agent.id, name: agent.name } : null,
+      };
+    });
 
     return enriched;
   }

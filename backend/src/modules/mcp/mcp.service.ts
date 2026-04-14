@@ -39,6 +39,7 @@ import { ToolCategory } from '../../entities/tool-category.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService, ToolExecutionResult } from '../tools/tool-executor.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
+import { batchAsync } from '../../common/utils/batch-async';
 
 @Injectable()
 export class McpService {
@@ -902,15 +903,13 @@ export class McpService {
     // Otherwise, list skills for all active tools in the org
     const tools = await this.getToolsForScope(organizationId);
 
-    const skills = await Promise.all(
-      tools.slice(0, params?.limit || 50).map(async (tool) => {
-        try {
-          return await this.skillGeneratorService.generateToolSkill(tool.id, organizationId);
-        } catch {
-          return null;
-        }
-      }),
-    );
+    const skills = await batchAsync(tools.slice(0, params?.limit || 50), 5, async (tool) => {
+      try {
+        return await this.skillGeneratorService.generateToolSkill(tool.id, organizationId);
+      } catch {
+        return null;
+      }
+    });
 
     return {
       skills: skills.filter(Boolean),

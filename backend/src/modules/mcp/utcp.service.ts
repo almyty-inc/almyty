@@ -21,6 +21,7 @@ import { Operation } from '../../entities/operation.entity';
 import { Organization } from '../../entities/organization.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService, ToolExecutionResult } from '../tools/tool-executor.service';
+import { batchAsyncSettled } from '../../common/utils/batch-async';
 
 @Injectable()
 export class UtcpService {
@@ -65,25 +66,23 @@ export class UtcpService {
       status: ToolStatus.ACTIVE,
     });
 
-    // Process all tools in parallel instead of sequentially
-    const toolResults = await Promise.allSettled(
-      tools.map(async (tool) => {
-        const [utcpTool, callTemplate, authScheme] = await Promise.all([
-          this.convertToolToUtcp(tool),
-          this.generateCallTemplate(tool),
-          this.extractAuthenticationScheme(tool),
-        ]);
-        return { utcpTool, callTemplate, authScheme };
-      }),
-    );
+    // Process tools in batches to avoid pool exhaustion
+    const toolResults = await batchAsyncSettled(tools, 5, async (tool) => {
+      const [utcpTool, callTemplate, authScheme] = await Promise.all([
+        this.convertToolToUtcp(tool),
+        this.generateCallTemplate(tool),
+        this.extractAuthenticationScheme(tool),
+      ]);
+      return { utcpTool, callTemplate, authScheme };
+    });
 
     const utcpTools: UtcpTool[] = [];
     const callTemplates: UtcpCallTemplate[] = [];
     const authSchemeMap = new Map<string, UtcpAuthenticationScheme>();
 
     for (const r of toolResults) {
-      if (r.status !== 'fulfilled') continue;
-      const { utcpTool, callTemplate, authScheme } = r.value;
+      if (!r) continue;
+      const { utcpTool, callTemplate, authScheme } = r;
       utcpTools.push(utcpTool);
       if (callTemplate) callTemplates.push(callTemplate);
       if (authScheme && !authSchemeMap.has(authScheme.id)) {

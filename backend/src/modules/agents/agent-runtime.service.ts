@@ -15,6 +15,7 @@ import { MemoryType, MemoryScope } from '../../entities/memory.entity';
 import { MessageRole } from '../../entities/message.entity';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
+import { batchAsync } from '../../common/utils/batch-async';
 
 /**
  * Built-in tool definitions that the agent runtime injects for autonomous agents.
@@ -1140,8 +1141,8 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
 
       const debateInput = `Original question: "${inputText}"\n\n${priorRoundsContext}`;
 
-      // Start every debater for this round in parallel.
-      const subRunPromises = collab.agents.map((agentDef) =>
+      // Start every debater for this round in batches to avoid pool exhaustion.
+      const subRuns = await batchAsync(collab.agents, 3, async (agentDef) =>
         this.startRun(
           agentDef.agentId,
           run.organizationId,
@@ -1150,12 +1151,9 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
           { parentRunId: run.id, maxSteps: 10, maxCostCents: 25 },
         ),
       );
-      const subRuns = await Promise.all(subRunPromises);
 
       // Wait for all of this round's debaters to finish before recording.
-      const results = await Promise.all(
-        subRuns.map((sr) => this.waitForRun(sr.id, 120000)),
-      );
+      const results = await batchAsync(subRuns, 3, async (sr) => this.waitForRun(sr.id, 120000));
 
       results.forEach((result, i) => {
         const agentDef = collab.agents[i];
