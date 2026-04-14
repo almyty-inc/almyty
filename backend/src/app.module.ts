@@ -102,6 +102,7 @@ import { databaseConfig } from './config/database.config';
             logging: configService.get('NODE_ENV') === 'development',
             ssl: dbSsl ? { rejectUnauthorized: false } : false,
             extra: {
+              max: parseInt(configService.get<string>('DB_POOL_SIZE', '5')),
               ...(dbSsl && { ssl: { rejectUnauthorized: false } }),
             },
           });
