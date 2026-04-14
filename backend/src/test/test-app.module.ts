@@ -73,6 +73,9 @@ import { OrganizationsService } from '../modules/organizations/organizations.ser
 // Audit
 import { AuditLogService } from '../modules/audit-log/audit-log.service';
 
+// Mail
+import { MailService } from '../modules/mail/mail.service';
+
 // Mock Redis
 const mockRedis = {
   get: () => null,
@@ -162,9 +165,17 @@ const mockRedis = {
     McpOAuthService,
     GatewayResolverService,
     GatewayAuthService,
-    McpService,
     AlmytyMcpService,
     McpSessionService,
+
+    // McpService has deep dependency chain (ToolsService, ToolExecutorService, etc.)
+    // Mock it — system gateway uses AlmytyMcpService instead.
+    {
+      provide: McpService,
+      useValue: {
+        handleJsonRpc: () => ({ jsonrpc: '2.0', id: 0, error: { code: -32601, message: 'Not available in test' } }),
+      },
+    },
 
     // Gateways
     GatewaysService,
@@ -185,7 +196,7 @@ const mockRedis = {
 
     // Mail (mock)
     {
-      provide: 'MailService',
+      provide: MailService,
       useValue: { sendInvitation: () => {}, sendEmail: () => {} },
     },
 
