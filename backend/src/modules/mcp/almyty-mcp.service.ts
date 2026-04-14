@@ -75,10 +75,19 @@ export class AlmytyMcpService {
       case 'list_apis': return get(ApisService).findAllByOrganization(orgId);
       case 'create_api': return get(ApisService).create({ ...args, organizationId: orgId, userId });
       case 'import_schema': {
-        // Fetch schema content from URL, then pass to importSchema
+        // Fetch schema content from URL
         const schemaRes = await axios.get(args.schemaUrl, { timeout: 30000 });
         const content = typeof schemaRes.data === 'string' ? schemaRes.data : JSON.stringify(schemaRes.data);
-        return get(ApisService).importSchema(args.apiId, content, orgId, { generateTools: args.generateTools !== false });
+        // Queue async import via BullMQ (same as the REST API does)
+        const { Queue } = require('bull');
+        const queue = this.moduleRef.get('BullQueue_schema-import', { strict: false });
+        const job = await queue.add('import', {
+          apiId: args.apiId,
+          organizationId: orgId,
+          schemaContent: content,
+          options: { generateTools: args.generateTools !== false },
+        }, { timeout: 5 * 60 * 1000, removeOnComplete: 100, removeOnFail: 50 });
+        return { jobId: job.id, status: 'queued', message: `Schema import queued (job ${job.id}). Tools will be generated in the background.` };
       }
       case 'delete_api': return get(ApisService).remove(args.apiId, orgId);
       case 'list_tools': return get(ToolsService).getTools({ organizationId: orgId });

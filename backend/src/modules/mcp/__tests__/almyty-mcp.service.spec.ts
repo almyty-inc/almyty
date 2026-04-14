@@ -27,6 +27,7 @@ describe('AlmytyMcpService', () => {
   const mockGatewaysService = { getGateways: jest.fn().mockResolvedValue({ gateways: [], total: 0 }), createGateway: jest.fn().mockResolvedValue({ id: 'gw-1' }) };
   const mockAgentsService = { getAgents: jest.fn().mockResolvedValue({ agents: [], total: 0 }), createAgent: jest.fn().mockResolvedValue({ id: 'agent-1' }) };
   const mockLlmProvidersService = { getProviders: jest.fn().mockResolvedValue([]), createProvider: jest.fn().mockResolvedValue({ id: 'prov-1' }) };
+  const mockSchemaImportQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
 
   const mockModuleRef = {
     get: jest.fn((cls: any) => {
@@ -35,7 +36,8 @@ describe('AlmytyMcpService', () => {
       if (cls === GatewaysService) return mockGatewaysService;
       if (cls === AgentsService) return mockAgentsService;
       if (cls === LlmProvidersService) return mockLlmProvidersService;
-      throw new Error(`Unknown service: ${cls?.name}`);
+      if (typeof cls === 'string' && cls === 'BullQueue_schema-import') return mockSchemaImportQueue;
+      throw new Error(`Unknown service: ${typeof cls === 'string' ? cls : cls?.name}`);
     }),
   };
 
@@ -152,15 +154,21 @@ describe('AlmytyMcpService', () => {
         name: 'import_schema',
         arguments: { apiId: 'api-1', schemaUrl: 'https://example.com/openapi.json', generateTools: true },
       });
-      // Verifies the bug fix: URL is fetched first, content passed to importSchema
+      // Verifies: URL is fetched, then job is queued (not sync import)
       expect(mockAxiosGet).toHaveBeenCalledWith('https://example.com/openapi.json', { timeout: 30000 });
-      expect(mockApisService.importSchema).toHaveBeenCalledWith(
-        'api-1',
-        expect.any(String), // schema content, not URL
-        'org-1',
-        { generateTools: true },
+      expect(mockSchemaImportQueue.add).toHaveBeenCalledWith(
+        'import',
+        expect.objectContaining({
+          apiId: 'api-1',
+          organizationId: 'org-1',
+          schemaContent: expect.any(String),
+          options: { generateTools: true },
+        }),
+        expect.any(Object),
       );
-      expect(res.result.isError).toBeUndefined();
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed.jobId).toBe('job-1');
+      expect(parsed.status).toBe('queued');
     });
 
     it('list_gateways calls GatewaysService.getGateways', async () => {
