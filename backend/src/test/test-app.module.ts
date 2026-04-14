@@ -45,6 +45,19 @@ import { LlmProvider } from '../entities/llm-provider.entity';
 import { Conversation } from '../entities/conversation.entity';
 import { Message } from '../entities/message.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import { UsageMetric } from '../entities/usage-metric.entity';
+import { RequestLog } from '../entities/request-log.entity';
+import { ToolVersion } from '../entities/tool-version.entity';
+import { ToolExecution } from '../entities/tool-execution.entity';
+import { Agent } from '../entities/agent.entity';
+import { AgentExecution } from '../entities/agent-execution.entity';
+import { AgentRun } from '../entities/agent-run.entity';
+import { Memory } from '../entities/memory.entity';
+import { AgentFile } from '../entities/file.entity';
+import { ExternalAgent } from '../entities/external-agent.entity';
+import { ToolTemplate } from '../entities/tool-template.entity';
+import { JsonSchema } from '../entities/json-schema.entity';
+import { ApiSchema } from '../entities/api-schema.entity';
 
 // Auth
 import { AuthController } from '../modules/auth/auth.controller';
@@ -114,12 +127,7 @@ const mockRedis = {
           username: config.get<string>('DATABASE_USERNAME', 'postgres'),
           password: config.get<string>('DATABASE_PASSWORD', 'password'),
           database: config.get<string>('DATABASE_NAME', 'almyty_test'),
-          entities: [
-            User, Organization, UserOrganization, Team, UserTeam, ApiKey,
-            Gateway, GatewayTool, GatewayAuth, Tool, Api, Operation, Resource,
-            ToolCategory, OAuthClient, OAuthAuthorizationCode, OAuthAccessToken,
-            Credential, LlmProvider, Conversation, Message, AuditLog,
-          ],
+          entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
           synchronize: true,
           logging: false,
         } as any;
@@ -131,6 +139,9 @@ const mockRedis = {
       Gateway, GatewayTool, GatewayAuth, Tool, Api, Operation, Resource,
       ToolCategory, OAuthClient, OAuthAuthorizationCode, OAuthAccessToken,
       Credential, LlmProvider, Conversation, Message, AuditLog,
+      UsageMetric, RequestLog, ToolVersion, ToolExecution,
+      Agent, AgentExecution, AgentRun, Memory, AgentFile, ExternalAgent,
+      ToolTemplate, JsonSchema, ApiSchema,
     ]),
 
     ThrottlerModule.forRoot({ throttlers: [{ ttl: 60, limit: 1000 }] }),
