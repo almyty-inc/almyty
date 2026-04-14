@@ -73,7 +73,7 @@ export class AlmytyMcpService {
       case 'create_api': return get(ApisService).create({ ...args, organizationId: orgId, userId });
       case 'import_schema': {
         // Fetch schema content from URL, then pass to importSchema
-        const schemaRes = await axios.get(args.schemaUrl, { timeout: 15000 });
+        const schemaRes = await axios.get(args.schemaUrl, { timeout: 30000 });
         const content = typeof schemaRes.data === 'string' ? schemaRes.data : JSON.stringify(schemaRes.data);
         return get(ApisService).importSchema(args.apiId, content, orgId, { generateTools: args.generateTools !== false });
       }

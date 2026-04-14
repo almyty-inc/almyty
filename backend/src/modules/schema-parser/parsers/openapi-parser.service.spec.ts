@@ -640,4 +640,42 @@ describe('OpenAPIParserService', () => {
       expect(result).toBeUndefined();
     });
   });
+
+  describe('YAML schema parsing', () => {
+    it('should parse a valid YAML OpenAPI schema', async () => {
+      const yamlSchema = `
+openapi: "3.0.0"
+info:
+  title: YAML Test API
+  version: "1.0.0"
+paths:
+  /hello:
+    get:
+      operationId: getHello
+      summary: Say hello
+      responses:
+        "200":
+          description: OK
+`;
+      const result = await service.parseSchema(yamlSchema);
+      expect(result.info.title).toBe('YAML Test API');
+      expect(result.info.version).toBe('1.0.0');
+      expect(result.operations.length).toBe(1);
+      expect(result.operations[0].operationId).toBe('getHello');
+    });
+
+    it('should not treat YAML content as a file $ref', async () => {
+      const yamlSchema = `
+openapi: "3.0.0"
+info:
+  title: Not A Ref
+  version: "1.0.0"
+paths: {}
+`;
+      // This was the bug: YAML string was passed to SwaggerParser.dereference
+      // as a string, which treated it as a file path reference
+      const result = await service.parseSchema(yamlSchema);
+      expect(result.info.title).toBe('Not A Ref');
+    });
+  });
 });
