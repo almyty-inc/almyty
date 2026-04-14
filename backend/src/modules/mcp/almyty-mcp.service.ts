@@ -5,6 +5,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
+import axios from 'axios';
 import { JsonRpcResponse } from './types/mcp.types';
 import { ApisService } from '../apis/apis.service';
 import { ToolsService } from '../tools/tools.service';
@@ -70,7 +71,12 @@ export class AlmytyMcpService {
     switch (name) {
       case 'list_apis': return get(ApisService).findAllByOrganization(orgId);
       case 'create_api': return get(ApisService).create({ ...args, organizationId: orgId, userId });
-      case 'import_schema': return get(ApisService).importSchema(args.apiId, args.schemaUrl, orgId, { generateTools: args.generateTools !== false });
+      case 'import_schema': {
+        // Fetch schema content from URL, then pass to importSchema
+        const schemaRes = await axios.get(args.schemaUrl, { timeout: 15000 });
+        const content = typeof schemaRes.data === 'string' ? schemaRes.data : JSON.stringify(schemaRes.data);
+        return get(ApisService).importSchema(args.apiId, content, orgId, { generateTools: args.generateTools !== false });
+      }
       case 'list_tools': return get(ToolsService).getTools({ organizationId: orgId });
       case 'list_gateways': return get(GatewaysService).getGateways({ organizationId: orgId });
       case 'create_gateway': return get(GatewaysService).createGateway({ ...args, kind: 'tool', configuration: { transport: 'http' } }, orgId, userId);

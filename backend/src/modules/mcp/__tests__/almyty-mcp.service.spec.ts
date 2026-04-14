@@ -1,18 +1,50 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
 import { AlmytyMcpService } from '../almyty-mcp.service';
+import { ApisService } from '../../apis/apis.service';
+import { ToolsService } from '../../tools/tools.service';
+import { GatewaysService } from '../../gateways/gateways.service';
+import { AgentsService } from '../../agents/agents.service';
+import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
+
+// Mock axios for import_schema URL fetching
+const mockAxiosGet = jest.fn().mockResolvedValue({ data: '{"openapi":"3.0.0","info":{"title":"Test","version":"1.0"},"paths":{}}' });
+jest.mock('axios', () => ({
+  __esModule: true,
+  default: { get: (...args: any[]) => mockAxiosGet(...args) },
+  get: (...args: any[]) => mockAxiosGet(...args),
+}));
 
 describe('AlmytyMcpService', () => {
   let service: AlmytyMcpService;
 
+  const mockApisService = {
+    findAllByOrganization: jest.fn().mockResolvedValue([]),
+    create: jest.fn().mockResolvedValue({ id: 'api-1', name: 'Test' }),
+    importSchema: jest.fn().mockResolvedValue({ api: {}, schema: {}, operations: [], resources: [], tools: [] }),
+  };
+  const mockToolsService = { getTools: jest.fn().mockResolvedValue({ tools: [], total: 0 }) };
+  const mockGatewaysService = { getGateways: jest.fn().mockResolvedValue({ gateways: [], total: 0 }), createGateway: jest.fn().mockResolvedValue({ id: 'gw-1' }) };
+  const mockAgentsService = { getAgents: jest.fn().mockResolvedValue({ agents: [], total: 0 }), createAgent: jest.fn().mockResolvedValue({ id: 'agent-1' }) };
+  const mockLlmProvidersService = { getProviders: jest.fn().mockResolvedValue([]), createProvider: jest.fn().mockResolvedValue({ id: 'prov-1' }) };
+
+  const mockModuleRef = {
+    get: jest.fn((cls: any) => {
+      if (cls === ApisService) return mockApisService;
+      if (cls === ToolsService) return mockToolsService;
+      if (cls === GatewaysService) return mockGatewaysService;
+      if (cls === AgentsService) return mockAgentsService;
+      if (cls === LlmProvidersService) return mockLlmProvidersService;
+      throw new Error(`Unknown service: ${cls?.name}`);
+    }),
+  };
+
   beforeEach(async () => {
+    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AlmytyMcpService,
-        {
-          provide: ModuleRef,
-          useValue: { get: jest.fn() },
-        },
+        { provide: ModuleRef, useValue: mockModuleRef },
       ],
     }).compile();
 
@@ -107,6 +139,42 @@ describe('AlmytyMcpService', () => {
       const res = await call('tools/call', { name: 'nonexistent_tool', arguments: {} });
       expect(res.result.content[0].text).toContain('Unknown tool');
       expect(res.result.isError).toBe(true);
+    });
+
+    it('list_apis calls ApisService.findAllByOrganization', async () => {
+      const res = await call('tools/call', { name: 'list_apis', arguments: {} });
+      expect(mockApisService.findAllByOrganization).toHaveBeenCalledWith('org-1');
+      expect(res.result.isError).toBeUndefined();
+    });
+
+    it('import_schema fetches URL and passes content to ApisService', async () => {
+      const res = await call('tools/call', {
+        name: 'import_schema',
+        arguments: { apiId: 'api-1', schemaUrl: 'https://example.com/openapi.json', generateTools: true },
+      });
+      // Verifies the bug fix: URL is fetched first, content passed to importSchema
+      expect(mockAxiosGet).toHaveBeenCalledWith('https://example.com/openapi.json', { timeout: 15000 });
+      expect(mockApisService.importSchema).toHaveBeenCalledWith(
+        'api-1',
+        expect.any(String), // schema content, not URL
+        'org-1',
+        { generateTools: true },
+      );
+      expect(res.result.isError).toBeUndefined();
+    });
+
+    it('list_gateways calls GatewaysService.getGateways', async () => {
+      await call('tools/call', { name: 'list_gateways', arguments: {} });
+      expect(mockGatewaysService.getGateways).toHaveBeenCalledWith({ organizationId: 'org-1' });
+    });
+
+    it('create_agent calls AgentsService.createAgent with correct args', async () => {
+      await call('tools/call', { name: 'create_agent', arguments: { name: 'My Agent' } });
+      expect(mockAgentsService.createAgent).toHaveBeenCalledWith(
+        { name: 'My Agent' },
+        'org-1',
+        'user-1',
+      );
     });
   });
 });
