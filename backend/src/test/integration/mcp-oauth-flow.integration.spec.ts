@@ -42,6 +42,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
   let user: any;
   let gateway: Gateway;
   let accessTokenCookie: string;
+  let bearerToken: string;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -116,6 +117,8 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     const setCookie = loginRes.headers['set-cookie'];
     const cookieStr = Array.isArray(setCookie) ? setCookie[0] : setCookie;
     accessTokenCookie = cookieStr?.split(';')[0] || '';
+    // Extract raw JWT for Bearer auth on MCP endpoints
+    bearerToken = accessTokenCookie.replace('access_token=', '');
   }, 30000);
 
   afterAll(async () => {
@@ -200,7 +203,9 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
         .expect(302);
 
       expect(res.headers.location).toContain('/auth/login');
-      expect(res.headers.location).not.toMatch(/\/login\?/); // not bare /login
+      // Must be /auth/login, not bare /login (the bug we fixed)
+      expect(res.headers.location).not.toMatch(/\/login\?(?!.*\/auth\/)/);
+      expect(res.headers.location).toMatch(/\/auth\/login\?/);
     });
 
     it('issues auth code when user has JWT cookie', async () => {
@@ -243,7 +248,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     it('tools/list returns almyty management tools', async () => {
       const res = await request(app.getHttpServer())
         .post(`/mcp/${ORG_SLUG}/almyty`)
-        .set('Cookie', accessTokenCookie)
+        .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
         .expect(200);
 
@@ -258,7 +263,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     it('initialize returns server info', async () => {
       const res = await request(app.getHttpServer())
         .post(`/mcp/${ORG_SLUG}/almyty`)
-        .set('Cookie', accessTokenCookie)
+        .set('Authorization', `Bearer ${bearerToken}`)
         .send({
           jsonrpc: '2.0', id: 1, method: 'initialize',
           params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1.0' } },
@@ -275,7 +280,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     it('prompts/list returns empty array', async () => {
       const res = await request(app.getHttpServer())
         .post(`/mcp/${ORG_SLUG}/almyty`)
-        .set('Cookie', accessTokenCookie)
+        .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'prompts/list', params: {} })
         .expect(200);
 
@@ -285,7 +290,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     it('prompts/get returns valid message (not error)', async () => {
       const res = await request(app.getHttpServer())
         .post(`/mcp/${ORG_SLUG}/almyty`)
-        .set('Cookie', accessTokenCookie)
+        .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'prompts/get', params: { name: 'test' } })
         .expect(200);
 
@@ -296,7 +301,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     it('resources/list returns empty array', async () => {
       const res = await request(app.getHttpServer())
         .post(`/mcp/${ORG_SLUG}/almyty`)
-        .set('Cookie', accessTokenCookie)
+        .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'resources/list', params: {} })
         .expect(200);
 
@@ -306,7 +311,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     it('unknown method returns -32601', async () => {
       const res = await request(app.getHttpServer())
         .post(`/mcp/${ORG_SLUG}/almyty`)
-        .set('Cookie', accessTokenCookie)
+        .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'bogus/method', params: {} })
         .expect(200);
 
