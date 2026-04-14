@@ -34,7 +34,17 @@ export class AlmytyMcpService {
         return { jsonrpc: '2.0', id, result: { tools: TOOLS } };
       case 'tools/call':
         return this.callTool(id, params?.name, params?.arguments || {}, organizationId, userId);
+      case 'resources/list':
+        return { jsonrpc: '2.0', id, result: { resources: [] } };
+      case 'resources/read':
+        return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Resource not found' } };
+      case 'prompts/list':
+        return { jsonrpc: '2.0', id, result: { prompts: [] } };
+      case 'prompts/get':
+        return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Prompt not found' } };
       case 'ping':
+        return { jsonrpc: '2.0', id, result: {} };
+      case 'notifications/initialized':
         return { jsonrpc: '2.0', id, result: {} };
       default:
         return { jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } };
