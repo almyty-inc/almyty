@@ -17,8 +17,11 @@ const TOOLS = [
   { name: 'list_apis', description: 'List all connected APIs', inputSchema: { type: 'object', properties: {} } },
   { name: 'create_api', description: 'Connect a new API', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] }, baseUrl: { type: 'string' } }, required: ['name', 'type'] } },
   { name: 'import_schema', description: 'Import schema + generate tools', inputSchema: { type: 'object', properties: { apiId: { type: 'string' }, schemaUrl: { type: 'string' }, generateTools: { type: 'boolean' } }, required: ['apiId', 'schemaUrl'] } },
+  { name: 'delete_api', description: 'Delete an API by ID', inputSchema: { type: 'object', properties: { apiId: { type: 'string', description: 'API ID to delete' } }, required: ['apiId'] } },
   { name: 'list_tools', description: 'List all tools', inputSchema: { type: 'object', properties: {} } },
+  { name: 'delete_tool', description: 'Delete a tool by ID', inputSchema: { type: 'object', properties: { toolId: { type: 'string', description: 'Tool ID to delete' } }, required: ['toolId'] } },
   { name: 'list_gateways', description: 'List all gateways', inputSchema: { type: 'object', properties: {} } },
+  { name: 'delete_gateway', description: 'Delete a gateway by ID', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string', description: 'Gateway ID to delete' } }, required: ['gatewayId'] } },
   { name: 'create_gateway', description: 'Create a gateway (MCP/A2A/UTCP/Skills)', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'a2a', 'utcp', 'skills'] }, endpoint: { type: 'string' } }, required: ['name', 'type', 'endpoint'] } },
   { name: 'list_agents', description: 'List all agents', inputSchema: { type: 'object', properties: {} } },
   { name: 'create_agent', description: 'Create an agent', inputSchema: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, mode: { type: 'string', enum: ['workflow', 'autonomous'] }, instructions: { type: 'string' } }, required: ['name'] } },
@@ -77,8 +80,11 @@ export class AlmytyMcpService {
         const content = typeof schemaRes.data === 'string' ? schemaRes.data : JSON.stringify(schemaRes.data);
         return get(ApisService).importSchema(args.apiId, content, orgId, { generateTools: args.generateTools !== false });
       }
+      case 'delete_api': return get(ApisService).remove(args.apiId, orgId);
       case 'list_tools': return get(ToolsService).getTools({ organizationId: orgId });
+      case 'delete_tool': return get(ToolsService).deleteTool(args.toolId, orgId, userId);
       case 'list_gateways': return get(GatewaysService).getGateways({ organizationId: orgId });
+      case 'delete_gateway': return get(GatewaysService).deleteGateway(args.gatewayId, orgId, userId);
       case 'create_gateway': return get(GatewaysService).createGateway({ ...args, kind: 'tool', configuration: { transport: 'http' } }, orgId, userId);
       case 'list_agents': return get(AgentsService).getAgents({ organizationId: orgId });
       case 'create_agent': return get(AgentsService).createAgent({ ...args }, orgId, userId);
