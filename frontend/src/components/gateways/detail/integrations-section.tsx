@@ -142,7 +142,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
   // MCP gateway
   if (gatewayType === 'mcp') {
     const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
-    const mcpEndpoint = `${backendUrl}/${orgSlug}/${gwSlug}`
+    const mcpEndpoint = `${backendUrl}/mcp/${orgSlug}/${gwSlug}`
     const sseEndpoint = `${mcpEndpoint}/sse`
     const discoveryUrl = `${mcpEndpoint}/.well-known/mcp`
 
