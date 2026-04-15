@@ -1620,6 +1620,11 @@ export class GatewaysController {
         { userId, organizationId },
       );
 
+      // Increment gateway request counter
+      try {
+        await this.gatewaysService.incrementRequestCount(gatewayId, result.success);
+      } catch {}
+
       return {
         success: true,
         data: result,
