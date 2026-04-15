@@ -28,6 +28,7 @@ describe('AlmytyMcpService', () => {
   const mockAgentsService = { getAgents: jest.fn().mockResolvedValue({ agents: [], total: 0 }), createAgent: jest.fn().mockResolvedValue({ id: 'agent-1' }) };
   const mockLlmProvidersService = { getProviders: jest.fn().mockResolvedValue([]), createProvider: jest.fn().mockResolvedValue({ id: 'prov-1' }) };
   const mockSchemaImportQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
+  const mockGatewayAuthService = { createGatewayAuth: jest.fn().mockResolvedValue({ id: 'auth-1', type: 'oauth2' }), deleteGatewayAuth: jest.fn().mockResolvedValue(undefined) };
 
   const mockModuleRef = {
     get: jest.fn((cls: any) => {
@@ -37,6 +38,9 @@ describe('AlmytyMcpService', () => {
       if (cls === AgentsService) return mockAgentsService;
       if (cls === LlmProvidersService) return mockLlmProvidersService;
       if (typeof cls === 'string' && cls === 'BullQueue_schema-import') return mockSchemaImportQueue;
+      // Dynamic require() imports resolve by class name
+      if (cls?.name === 'GatewayAuthService') return mockGatewayAuthService;
+      if (cls?.name === 'GatewayToolService') return { bulkAssociateTools: jest.fn().mockResolvedValue({}) };
       throw new Error(`Unknown service: ${typeof cls === 'string' ? cls : cls?.name}`);
     }),
   };
@@ -183,6 +187,43 @@ describe('AlmytyMcpService', () => {
         'org-1',
         'user-1',
       );
+    });
+
+    it('add_auth_to_gateway passes (gatewayId, dto, orgId) not a single object', async () => {
+      const res = await call('tools/call', {
+        name: 'add_auth_to_gateway',
+        arguments: { gatewayId: 'gw-1', type: 'oauth2' },
+      });
+      // Bug: was passing entire DTO as first arg, causing "invalid uuid" error
+      expect(mockGatewayAuthService.createGatewayAuth).toHaveBeenCalledWith(
+        'gw-1', // gatewayId as separate string arg
+        { type: 'oauth2', configuration: {} },
+        'org-1',
+      );
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed.id).toBe('auth-1');
+    });
+
+    it('add_auth_to_gateway sets api_key config defaults', async () => {
+      await call('tools/call', {
+        name: 'add_auth_to_gateway',
+        arguments: { gatewayId: 'gw-1', type: 'api_key' },
+      });
+      expect(mockGatewayAuthService.createGatewayAuth).toHaveBeenCalledWith(
+        'gw-1',
+        { type: 'api_key', configuration: { keyHeader: 'x-api-key', keyQuery: 'api_key' } },
+        'org-1',
+      );
+    });
+
+    it('remove_auth_from_gateway passes (authId, orgId)', async () => {
+      const res = await call('tools/call', {
+        name: 'remove_auth_from_gateway',
+        arguments: { gatewayId: 'gw-1', authId: 'auth-99' },
+      });
+      expect(mockGatewayAuthService.deleteGatewayAuth).toHaveBeenCalledWith('auth-99', 'org-1');
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed.deleted).toBe(true);
     });
   });
 });
