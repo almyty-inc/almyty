@@ -57,7 +57,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
     const gatewaySlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
     const installCommand = `npx @almyty/skills install @${orgSlug}/${gatewaySlug}`
     const watchCommand = `npx @almyty/skills watch @${orgSlug}/${gatewaySlug}`
-    const loginCommand = `npx @almyty/skills login`
+    const loginCommand = `npx @almyty/auth login`
 
     // Extract the actual SKILL.md markdown content
     const skillMarkdown = (() => {
