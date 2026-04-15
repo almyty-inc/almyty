@@ -82,11 +82,12 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 async function cmdLogin(args: ParsedArgs): Promise<void> {
-  const apiUrl = (args.flags.api as string) || process.env.ALMYTY_URL || 'https://api.almyty.com';
-  const frontendUrl =
-    (args.flags.frontend as string) ||
-    process.env.ALMYTY_FRONTEND_URL ||
-    'https://app.almyty.com';
+  const { resolveApiUrl, resolveFrontendUrl, saveConfig } = require('./config');
+  const apiUrl = resolveApiUrl(args.flags.api as string);
+  const frontendUrl = resolveFrontendUrl(args.flags.frontend as string);
+
+  // Persist URL config so future commands don't need env vars
+  saveConfig({ apiUrl, frontendUrl });
 
   // Direct token paste — skips the browser entirely.
   if (typeof args.flags.token === 'string') {
