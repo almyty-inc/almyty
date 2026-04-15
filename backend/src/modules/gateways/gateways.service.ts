@@ -474,6 +474,19 @@ export class GatewaysService {
     return updatedGateway;
   }
 
+  async incrementRequestCount(gatewayId: string, success: boolean): Promise<void> {
+    await this.gatewayRepository
+      .createQueryBuilder()
+      .update(Gateway)
+      .set({
+        totalRequests: () => '"totalRequests" + 1',
+        successfulRequests: success ? () => '"successfulRequests" + 1' : () => '"successfulRequests"',
+        lastRequestAt: new Date(),
+      })
+      .where('id = :id', { id: gatewayId })
+      .execute();
+  }
+
   async deleteGateway(
     gatewayId: string,
     organizationId: string,
