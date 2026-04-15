@@ -59,9 +59,11 @@ export function GatewayDetailsSheet({
         </SheetHeader>
         <div className="mt-6">
           <Tabs defaultValue="info">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className={`grid w-full ${selectedGateway?.isSystem ? 'grid-cols-1' : 'grid-cols-2'}`}>
               <TabsTrigger value="info">Information</TabsTrigger>
-              <TabsTrigger value="tools">Tools</TabsTrigger>
+              {!selectedGateway?.isSystem && (
+                <TabsTrigger value="tools">Tools</TabsTrigger>
+              )}
             </TabsList>
             <TabsContent value="info" className="space-y-4 mt-4">
               <div>
@@ -82,6 +84,7 @@ export function GatewayDetailsSheet({
                 </div>
               </div>
             </TabsContent>
+            {!selectedGateway?.isSystem && (
             <TabsContent value="tools" className="space-y-4 mt-4">
               <div>
                 <h3 className="font-semibold mb-2">Tool Scoping</h3>
@@ -152,6 +155,7 @@ export function GatewayDetailsSheet({
                 </div>
               </div>
             </TabsContent>
+            )}
           </Tabs>
         </div>
       </SheetContent>

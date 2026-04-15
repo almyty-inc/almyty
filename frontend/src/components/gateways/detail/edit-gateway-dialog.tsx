@@ -48,6 +48,7 @@ export interface EditGatewayDialogProps {
   gateway: any
   isSaving: boolean
   onSubmit: (data: EditGatewayForm) => void
+  isSystem?: boolean
 }
 
 export function EditGatewayDialog({
@@ -56,6 +57,7 @@ export function EditGatewayDialog({
   gateway,
   isSaving,
   onSubmit,
+  isSystem,
 }: EditGatewayDialogProps) {
   const editForm = useForm<EditGatewayForm>({
     resolver: zodResolver(editGatewaySchema),
@@ -99,6 +101,7 @@ export function EditGatewayDialog({
             <Input
               id="edit-endpoint"
               placeholder="my-gateway"
+              disabled={isSystem}
               {...editForm.register('endpoint')}
             />
             {editForm.formState.errors.endpoint && (
@@ -107,7 +110,9 @@ export function EditGatewayDialog({
               </p>
             )}
             <p className="text-xs text-muted-foreground mt-1">
-              The path for your gateway (slash is added automatically)
+              {isSystem
+                ? 'System gateway endpoint cannot be changed'
+                : 'The path for your gateway (slash is added automatically)'}
             </p>
           </div>
 

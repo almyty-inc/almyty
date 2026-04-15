@@ -250,6 +250,9 @@ export function GatewaysPage() {
             {gateway.kind === 'agent' && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0">Agent</Badge>
             )}
+            {gateway.isSystem && (
+              <Badge className="text-[10px] px-1.5 py-0 border-transparent bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">System</Badge>
+            )}
           </div>
         )
       },
@@ -279,7 +282,15 @@ export function GatewaysPage() {
       accessorKey: 'tools',
       header: 'Tools',
       cell: ({ row }) => {
-        const toolCount = row.original.tools?.length || 0
+        const gateway = row.original
+        if (gateway.isSystem) {
+          return (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Built-in tools</span>
+            </div>
+          )
+        }
+        const toolCount = gateway.tools?.length || 0
         return (
           <div className="text-center text-sm">
             <span className="font-medium">{toolCount}</span>{' '}
@@ -310,6 +321,7 @@ export function GatewaysPage() {
         setGatewayDetailsOpen(true)
       },
       (gateway) => {
+        if (gateway.isSystem) return
         setGatewayToDelete(gateway)
         setDeleteGatewayDialogOpen(true)
       },
@@ -343,7 +355,7 @@ export function GatewaysPage() {
         <div>
           <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Gateways</h1>
           <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${gateways.length} gateways (${gateways.filter((g: Gateway) => g.status === 'active').length} active) \u00B7 ${gateways.reduce((sum: number, g: Gateway) => sum + (g.tools?.length || 0), 0)} tool assignments`}
+            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${gateways.length} gateways (${gateways.filter((g: Gateway) => g.status === 'active').length} active) \u00B7 ${gateways.filter((g: Gateway) => !g.isSystem).reduce((sum: number, g: Gateway) => sum + (g.tools?.length || 0), 0)} tool assignments`}
           </p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>

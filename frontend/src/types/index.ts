@@ -129,6 +129,7 @@ export interface Gateway {
   lastRequestAt?: string
   lastHealthCheckAt?: string
   isHealthy: boolean
+  isSystem?: boolean
   createdAt: string
   updatedAt: string
   organization: Organization
