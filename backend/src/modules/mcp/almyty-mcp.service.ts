@@ -73,7 +73,10 @@ export class AlmytyMcpService {
   private async exec(name: string, args: any, orgId: string, userId: string): Promise<any> {
     const get = <T>(cls: new (...a: any[]) => T): T => this.moduleRef.get(cls, { strict: false });
     switch (name) {
-      case 'list_apis': return get(ApisService).findAllByOrganization(orgId);
+      case 'list_apis': {
+        const { apis, total } = await get(ApisService).findAllByOrganization(orgId, { limit: 50 });
+        return { total, apis: apis.map(a => ({ id: a.id, name: a.name, type: a.type, status: a.status, baseUrl: a.baseUrl })) };
+      }
       case 'create_api': return get(ApisService).create({ ...args, organizationId: orgId, userId });
       case 'import_schema': {
         // Fetch schema content from URL
@@ -98,12 +101,23 @@ export class AlmytyMcpService {
         return { jobId: args.jobId, state, failedReason: job.failedReason || null, progress: job.progress || 0 };
       }
       case 'delete_api': return get(ApisService).remove(args.apiId, orgId);
-      case 'list_tools': return get(ToolsService).getTools({ organizationId: orgId });
+      case 'list_tools': {
+        const toolResult = await get(ToolsService).getTools({ organizationId: orgId, limit: 100 });
+        const tools = Array.isArray(toolResult) ? toolResult : (toolResult as any).tools || [];
+        return { total: (toolResult as any).total || tools.length, tools: tools.map((t: any) => ({ id: t.id, name: t.name, type: t.type, status: t.status, description: t.description?.substring(0, 100) })) };
+      }
       case 'delete_tool': return get(ToolsService).deleteTool(args.toolId, orgId, userId);
-      case 'list_gateways': return get(GatewaysService).getGateways({ organizationId: orgId });
+      case 'list_gateways': {
+        const gwResult = await get(GatewaysService).getGateways({ organizationId: orgId, limit: 50 });
+        return { total: gwResult.total, gateways: gwResult.gateways.map(g => ({ id: g.id, name: g.name, type: g.type, kind: g.kind, status: g.status, endpoint: g.endpoint, isSystem: g.isSystem })) };
+      }
       case 'delete_gateway': return get(GatewaysService).deleteGateway(args.gatewayId, orgId, userId);
       case 'create_gateway': return get(GatewaysService).createGateway({ ...args, kind: 'tool', configuration: { transport: 'http' } }, orgId, userId);
-      case 'list_agents': return get(AgentsService).getAgents({ organizationId: orgId });
+      case 'list_agents': {
+        const agResult = await get(AgentsService).getAgents({ organizationId: orgId, limit: 50 });
+        const agents = Array.isArray(agResult) ? agResult : (agResult as any).agents || [];
+        return { total: (agResult as any).total || agents.length, agents: agents.map((a: any) => ({ id: a.id, name: a.name, mode: a.mode, status: a.status })) };
+      }
       case 'create_agent': return get(AgentsService).createAgent({ ...args }, orgId, userId);
       case 'list_providers': return get(LlmProvidersService).getProviders({ organizationId: orgId });
       case 'add_provider': return get(LlmProvidersService).createProvider({ name: args.name, type: args.type, configuration: { apiKey: args.apiKey } }, orgId, userId);
