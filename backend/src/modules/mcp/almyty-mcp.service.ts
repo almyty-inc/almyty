@@ -172,13 +172,13 @@ export class AlmytyMcpService {
         const gwAuthService = this.moduleRef.get(GatewayAuthService, { strict: false });
         const config: Record<string, any> = {};
         if (args.type === 'api_key') { config.keyHeader = 'x-api-key'; config.keyQuery = 'api_key'; }
-        const auth = await gwAuthService.createGatewayAuth({ gatewayId: args.gatewayId, type: args.type, isRequired: true, isActive: true, configuration: config }, orgId, userId);
+        const auth = await gwAuthService.createGatewayAuth(args.gatewayId, { type: args.type, configuration: config }, orgId);
         return { id: auth.id, type: auth.type, gatewayId: args.gatewayId };
       }
       case 'remove_auth_from_gateway': {
         const GatewayAuthService = require('../gateways/gateway-auth.service').GatewayAuthService;
         const gwAuthService = this.moduleRef.get(GatewayAuthService, { strict: false });
-        await gwAuthService.deleteGatewayAuth(args.authId, args.gatewayId, orgId, userId);
+        await gwAuthService.deleteGatewayAuth(args.authId, orgId);
         return { deleted: true, authId: args.authId };
       }
       case 'list_agents': {
