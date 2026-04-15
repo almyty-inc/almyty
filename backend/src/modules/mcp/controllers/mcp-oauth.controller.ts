@@ -325,7 +325,7 @@ export class McpOAuthController {
     const authorizationCode = await this.generateAuthorizationCode({
       organizationId: organization.id,
       gatewayId: gateway.id,
-      userId: user.sub || user.id,
+      userId: user.sub || user.id, // sub from JWT payload, id from User entity (guard)
       clientId,
       redirectUri,
       codeChallenge,
@@ -416,7 +416,7 @@ export class McpOAuthController {
     const authorizationCode = await this.generateAuthorizationCode({
       organizationId: organization.id,
       gatewayId: gateway.id,
-      userId: user.sub || user.id,
+      userId: user.sub || user.id, // sub from JWT payload, id from User entity (guard)
       clientId,
       redirectUri,
       codeChallenge,

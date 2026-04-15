@@ -45,6 +45,7 @@ export class GatewayMcpController {
 
     if (gateway.isSystem) {
       // Resolve userId from OAuth bearer token
+      // sub from JWT payload, id from User entity (if guard ran)
       let userId = req.user?.sub || req.user?.id;
       if (!userId) {
         const token = req.headers?.authorization?.startsWith('Bearer ')
