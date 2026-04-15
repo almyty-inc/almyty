@@ -508,7 +508,7 @@ export class ApisService {
     // The old code fired all operations in parallel (Promise.all on the full
     // array), which on a 438-operation API grabbed 438 connections simultaneously
     // and killed the DB.
-    const BATCH_SIZE = 3;
+    const BATCH_SIZE = 5;
     const generatedTools: Tool[] = [];
 
     for (let i = 0; i < activeOperations.length; i += BATCH_SIZE) {
