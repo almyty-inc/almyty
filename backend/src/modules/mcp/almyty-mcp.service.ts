@@ -142,7 +142,7 @@ export class AlmytyMcpService {
             }
 
             if (toolIds.length > 0) {
-              await gwToolService.bulkAssociateTools({ gatewayId: gateway.id, toolIds }, orgId, userId);
+              await gwToolService.bulkAssociateTools(gateway.id, { toolIds }, orgId, userId);
               assignedCount = toolIds.length;
             }
           } catch (e) {
@@ -164,7 +164,7 @@ export class AlmytyMcpService {
           toolIds = apiTools.map((t: any) => t.id);
         }
         if (toolIds.length === 0) return { error: 'No tools found to assign' };
-        const result = await gwToolService.bulkAssociateTools({ gatewayId: args.gatewayId, toolIds }, orgId, userId);
+        const result = await gwToolService.bulkAssociateTools(args.gatewayId, { toolIds }, orgId, userId);
         return { assigned: toolIds.length, gatewayId: args.gatewayId };
       }
       case 'add_auth_to_gateway': {

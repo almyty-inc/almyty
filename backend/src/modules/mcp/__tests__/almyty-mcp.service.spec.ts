@@ -29,6 +29,7 @@ describe('AlmytyMcpService', () => {
   const mockLlmProvidersService = { getProviders: jest.fn().mockResolvedValue([]), createProvider: jest.fn().mockResolvedValue({ id: 'prov-1' }) };
   const mockSchemaImportQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
   const mockGatewayAuthService = { createGatewayAuth: jest.fn().mockResolvedValue({ id: 'auth-1', type: 'oauth2' }), deleteGatewayAuth: jest.fn().mockResolvedValue(undefined) };
+  const mockGatewayToolService = { bulkAssociateTools: jest.fn().mockResolvedValue({ associated: [], skipped: [] }) };
 
   const mockModuleRef = {
     get: jest.fn((cls: any) => {
@@ -40,7 +41,7 @@ describe('AlmytyMcpService', () => {
       if (typeof cls === 'string' && cls === 'BullQueue_schema-import') return mockSchemaImportQueue;
       // Dynamic require() imports resolve by class name
       if (cls?.name === 'GatewayAuthService') return mockGatewayAuthService;
-      if (cls?.name === 'GatewayToolService') return { bulkAssociateTools: jest.fn().mockResolvedValue({}) };
+      if (cls?.name === 'GatewayToolService') return mockGatewayToolService;
       throw new Error(`Unknown service: ${typeof cls === 'string' ? cls : cls?.name}`);
     }),
   };
@@ -184,6 +185,19 @@ describe('AlmytyMcpService', () => {
       await call('tools/call', { name: 'create_agent', arguments: { name: 'My Agent' } });
       expect(mockAgentsService.createAgent).toHaveBeenCalledWith(
         { name: 'My Agent' },
+        'org-1',
+        'user-1',
+      );
+    });
+
+    it('assign_tools_to_gateway passes (gatewayId, {toolIds}, orgId, userId)', async () => {
+      await call('tools/call', {
+        name: 'assign_tools_to_gateway',
+        arguments: { gatewayId: 'gw-1', toolIds: ['tool-1', 'tool-2'] },
+      });
+      expect(mockGatewayToolService.bulkAssociateTools).toHaveBeenCalledWith(
+        'gw-1',
+        { toolIds: ['tool-1', 'tool-2'] },
         'org-1',
         'user-1',
       );
