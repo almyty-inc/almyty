@@ -39,7 +39,18 @@ function loadCredentials(): StoredCredentials | null {
  */
 export function resolveAuth(): { url: string; token: string } {
   const envToken = process.env.ALMYTY_TOKEN;
-  const envUrl = process.env.ALMYTY_URL || 'https://api.almyty.com';
+  // Read URL from: env > config file > default
+  let configUrl: string | undefined;
+  try {
+    const { readFileSync, existsSync } = require('fs');
+    const { join } = require('path');
+    const { homedir } = require('os');
+    const configPath = join(homedir(), '.almyty', 'config.json');
+    if (existsSync(configPath)) {
+      configUrl = JSON.parse(readFileSync(configPath, 'utf-8')).apiUrl;
+    }
+  } catch {}
+  const envUrl = process.env.ALMYTY_URL || configUrl || 'https://api.almyty.com';
 
   if (envToken) {
     return { url: envUrl, token: envToken };

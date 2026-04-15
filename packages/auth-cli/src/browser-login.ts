@@ -168,7 +168,8 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      server.close();
+      // Keep server alive briefly so the /success page renders in the browser
+      setTimeout(() => server.close(), 3000);
       resolve(value);
     };
     const settleReject = (err: Error) => {
