@@ -25,6 +25,8 @@ const TOOLS = [
   { name: 'delete_gateway', description: 'Delete a gateway by ID', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string', description: 'Gateway ID to delete' } }, required: ['gatewayId'] } },
   { name: 'create_gateway', description: 'Create a gateway with auth and tools. Endpoint and auth (API key) are auto-configured. By default assigns ALL tools unless you specify toolIds or apiIds to scope it.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'a2a', 'utcp', 'skills'] }, endpoint: { type: 'string', description: 'URL slug. Auto-generated from name if omitted.' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Specific tool IDs to assign' }, apiIds: { type: 'array', items: { type: 'string' }, description: 'Assign all tools from these API IDs' }, assignTools: { type: 'boolean', description: 'Auto-assign all org tools if no toolIds/apiIds given. Default: true' } }, required: ['name', 'type'] } },
   { name: 'assign_tools_to_gateway', description: 'Assign tools to a gateway by tool IDs or by API name (assigns all tools from that API)', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Tool IDs to assign' }, apiName: { type: 'string', description: 'Assign all tools from this API (by name)' } }, required: ['gatewayId'] } },
+  { name: 'add_auth_to_gateway', description: 'Add an auth method to a gateway', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, type: { type: 'string', enum: ['api_key', 'bearer_token', 'basic_auth', 'oauth2', 'jwt', 'none'], description: 'Auth type to add' } }, required: ['gatewayId', 'type'] } },
+  { name: 'remove_auth_from_gateway', description: 'Remove an auth method from a gateway', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, authId: { type: 'string', description: 'Auth config ID to remove' } }, required: ['gatewayId', 'authId'] } },
   { name: 'list_agents', description: 'List all agents', inputSchema: { type: 'object', properties: {} } },
   { name: 'create_agent', description: 'Create an agent', inputSchema: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, mode: { type: 'string', enum: ['workflow', 'autonomous'] }, instructions: { type: 'string' } }, required: ['name'] } },
   { name: 'list_providers', description: 'List LLM providers', inputSchema: { type: 'object', properties: {} } },
@@ -164,6 +166,20 @@ export class AlmytyMcpService {
         if (toolIds.length === 0) return { error: 'No tools found to assign' };
         const result = await gwToolService.bulkAssociateTools({ gatewayId: args.gatewayId, toolIds }, orgId, userId);
         return { assigned: toolIds.length, gatewayId: args.gatewayId };
+      }
+      case 'add_auth_to_gateway': {
+        const GatewayAuthService = require('../gateways/gateway-auth.service').GatewayAuthService;
+        const gwAuthService = this.moduleRef.get(GatewayAuthService, { strict: false });
+        const config: Record<string, any> = {};
+        if (args.type === 'api_key') { config.keyHeader = 'x-api-key'; config.keyQuery = 'api_key'; }
+        const auth = await gwAuthService.createGatewayAuth({ gatewayId: args.gatewayId, type: args.type, isRequired: true, isActive: true, configuration: config }, orgId, userId);
+        return { id: auth.id, type: auth.type, gatewayId: args.gatewayId };
+      }
+      case 'remove_auth_from_gateway': {
+        const GatewayAuthService = require('../gateways/gateway-auth.service').GatewayAuthService;
+        const gwAuthService = this.moduleRef.get(GatewayAuthService, { strict: false });
+        await gwAuthService.deleteGatewayAuth(args.authId, args.gatewayId, orgId, userId);
+        return { deleted: true, authId: args.authId };
       }
       case 'list_agents': {
         const agResult = await get(AgentsService).getAgents({ organizationId: orgId, limit: 50 });
