@@ -313,6 +313,37 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     });
   });
 
+    it('tools/call with OAuth token has userId for permission checks', async () => {
+      // Bug: create_gateway returned "User does not have permission" because
+      // the OAuth bearer token wasn't resolved to a userId. The controller
+      // now extracts userId from the oauth_access_tokens table.
+      const res = await request(app.getHttpServer())
+        .post(`/mcp/${ORG_SLUG}/almyty`)
+        .set('Authorization', `Bearer ${bearerToken}`)
+        .send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_apis', arguments: {} } })
+        .expect(200);
+
+      // list_apis should succeed (not return permission error)
+      expect(res.body.result.isError).toBeUndefined();
+      expect(res.body.result.content).toBeDefined();
+    });
+
+    it('create_gateway succeeds with OAuth token (userId resolved)', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/mcp/${ORG_SLUG}/almyty`)
+        .set('Authorization', `Bearer ${bearerToken}`)
+        .send({
+          jsonrpc: '2.0', id: 1, method: 'tools/call',
+          params: { name: 'create_gateway', arguments: { name: 'test-gw', type: 'mcp', endpoint: '/test-gw' } },
+        })
+        .expect(200);
+
+      // Should succeed, not "User does not have permission"
+      const content = JSON.parse(res.body.result.content[0].text);
+      expect(content.id).toBeDefined();
+      expect(res.body.result.isError).toBeUndefined();
+    });
+
   // --- Bug #5: prompts/get and resources/list return valid responses ---
   describe('MCP auxiliary methods', () => {
     it('prompts/list returns empty array', async () => {

@@ -89,6 +89,12 @@ import { AuditLogService } from '../modules/audit-log/audit-log.service';
 // Mail
 import { MailService } from '../modules/mail/mail.service';
 
+// Services needed by AlmytyMcpService via ModuleRef.get
+import { ApisService } from '../modules/apis/apis.service';
+import { ToolsService } from '../modules/tools/tools.service';
+import { AgentsService } from '../modules/agents/agents.service';
+import { LlmProvidersService } from '../modules/llm-providers/llm-providers.service';
+
 // Mock Redis
 const mockRedis = {
   get: () => null,
@@ -210,6 +216,12 @@ const mockRedis = {
       provide: MailService,
       useValue: { sendInvitation: () => {}, sendEmail: () => {} },
     },
+
+    // Services used by AlmytyMcpService via ModuleRef.get({ strict: false })
+    { provide: ApisService, useValue: { findAllByOrganization: () => [], create: () => ({ id: 'api-1' }), remove: () => {} } },
+    { provide: ToolsService, useValue: { getTools: () => ({ tools: [], total: 0 }), deleteTool: () => {} } },
+    { provide: AgentsService, useValue: { getAgents: () => ({ agents: [], total: 0 }), createAgent: () => ({ id: 'agent-1' }) } },
+    { provide: LlmProvidersService, useValue: { getProviders: () => [], createProvider: () => ({ id: 'prov-1' }) } },
 
     // Redis mock
     { provide: 'default_IORedisModuleConnectionToken', useValue: mockRedis },
