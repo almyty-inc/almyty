@@ -332,6 +332,9 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
         ) : (
           <div className="space-y-2">
             <p className="text-sm font-medium text-muted-foreground">Active Auth Methods</p>
+            {authConfigs.length > 1 && (
+              <p className="text-xs text-muted-foreground">Clients can authenticate with any of the methods below.</p>
+            )}
             {authConfigs.map((config: any) => (
               <div key={config.id} className="flex items-center justify-between px-3 py-2 bg-muted rounded-lg">
                 <div className="flex items-center gap-3">
