@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Router, Settings, Shield, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Info, Router, Settings, Shield, ChevronRight } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -248,8 +248,24 @@ export function GatewayDetailPage() {
           <Badge variant="outline">
             {gateway.type?.toUpperCase()}
           </Badge>
+          {gateway.isSystem && (
+            <Badge className="border-transparent bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">System</Badge>
+          )}
         </div>
       </div>
+
+      {/* System gateway banner */}
+      {gateway.isSystem && (
+        <div className="flex items-start gap-3 rounded-lg border border-violet-200 bg-violet-50 p-4 dark:border-violet-800 dark:bg-violet-950/30">
+          <Info className="h-5 w-5 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium text-violet-900 dark:text-violet-200">This is a system gateway</p>
+            <p className="text-sm text-violet-700 dark:text-violet-400">
+              It provides almyty platform management tools. The endpoint, tools, and deletion are managed automatically.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Gateway Configuration — type-specific */}
       <GatewayConfigurationCard
@@ -265,13 +281,16 @@ export function GatewayDetailPage() {
       )}
 
       {/* Main Content */}
-      <Tabs defaultValue="tools" className="space-y-4">
+      <Tabs defaultValue={gateway.isSystem ? 'metrics' : 'tools'} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="tools">Tool Scoping ({gatewayTools.length}/{allTools.length})</TabsTrigger>
+          {!gateway.isSystem && (
+            <TabsTrigger value="tools">Tool Scoping ({gatewayTools.length}/{allTools.length})</TabsTrigger>
+          )}
           <TabsTrigger value="metrics">Metrics</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
 
+        {!gateway.isSystem && (
         <TabsContent value="tools" className="space-y-6">
           <GatewayToolsTab
             gatewayTools={gatewayTools}
@@ -291,6 +310,7 @@ export function GatewayDetailPage() {
             }}
           />
         </TabsContent>
+        )}
 
         <TabsContent value="metrics" className="space-y-4">
           <Card>
@@ -338,6 +358,7 @@ export function GatewayDetailPage() {
         gateway={gateway}
         isSaving={editGatewayMutation.isPending}
         onSubmit={(data) => editGatewayMutation.mutate(data)}
+        isSystem={gateway.isSystem}
       />
 
       {/* Remove All Tools Confirmation */}
