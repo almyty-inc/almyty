@@ -218,7 +218,7 @@ const mockRedis = {
     },
 
     // Services used by AlmytyMcpService via ModuleRef.get({ strict: false })
-    { provide: ApisService, useValue: { findAllByOrganization: () => [], create: () => ({ id: 'api-1' }), remove: () => {} } },
+    { provide: ApisService, useValue: { findAllByOrganization: () => ({ apis: [], total: 0 }), create: () => ({ id: 'api-1' }), remove: () => {} } },
     { provide: ToolsService, useValue: { getTools: () => ({ tools: [], total: 0 }), deleteTool: () => {} } },
     { provide: AgentsService, useValue: { getAgents: () => ({ agents: [], total: 0 }), createAgent: () => ({ id: 'agent-1' }) } },
     { provide: LlmProvidersService, useValue: { getProviders: () => [], createProvider: () => ({ id: 'prov-1' }) } },
