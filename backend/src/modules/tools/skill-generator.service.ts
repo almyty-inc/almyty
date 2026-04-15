@@ -229,22 +229,17 @@ export class SkillGeneratorService {
     // Invocation section (only if context with slugs is provided)
     if (context?.orgSlug && context?.gatewaySlug) {
       const skillSlug = this.slugify(tool.name);
+      const requiredFlags = required.map(p => `--${p} <${p}>`).join(' ');
       lines.push('## Invocation');
       lines.push('');
       lines.push('Run this tool directly:');
       lines.push('```bash');
-      lines.push(`npx @almyty/skills run @${context.orgSlug}/${context.gatewaySlug}/${skillSlug} --param1 value1`);
+      lines.push(`npx @almyty/skills run @${context.orgSlug}/${context.gatewaySlug}/${skillSlug}${requiredFlags ? ' ' + requiredFlags : ''}`);
       lines.push('```');
       lines.push('');
     }
 
-    // Error handling (for API tools)
-    if (isApiTool) {
-      lines.push('## Error handling');
-      lines.push('');
-      lines.push(this.generateErrorHandling(tool));
-      lines.push('');
-    }
+    // Skip generic error handling section — adds no value
 
     return lines.join('\n');
   }
@@ -346,58 +341,21 @@ export class SkillGeneratorService {
   }
 
   private buildDescription(tool: Tool): string {
-    const base = tool.description || `Use the ${tool.name} tool`;
-
-    // Add trigger phrase per Agent Skills best practice
-    let trigger: string;
-    switch (tool.type) {
-      case ToolType.QUERY:
-        trigger = 'Use when you need to retrieve this data.';
-        break;
-      case ToolType.MUTATION:
-        trigger = 'Use when you need to create or modify this data.';
-        break;
-      case ToolType.ACTION:
-        trigger = 'Use when you need to perform this action.';
-        break;
-      default:
-        trigger = 'Use when you need to call this API.';
-    }
-
-    const combined = `${base}. ${trigger}`;
-    // Spec allows up to 1024 chars; keep concise for token efficiency
-    if (combined.length > 300) {
-      return combined.substring(0, 297) + '...';
-    }
-    return combined;
+    const desc = tool.description || tool.name;
+    if (desc.length > 300) return desc.substring(0, 297) + '...';
+    return desc;
   }
 
   private generateWhenToUse(tool: Tool): string {
-    const type = tool.type;
     const desc = tool.description || '';
+    const method = tool.operation?.method?.toUpperCase() || '';
+    const endpoint = tool.operation?.endpoint || '';
 
     const lines: string[] = [];
+    if (desc) lines.push(`- ${desc}`);
+    if (method && endpoint) lines.push(`- ${method} requests to ${endpoint}`);
 
-    switch (type) {
-      case ToolType.QUERY:
-        lines.push(`- User wants to retrieve or look up data`);
-        break;
-      case ToolType.MUTATION:
-        lines.push(`- User wants to create, update, or modify data`);
-        break;
-      case ToolType.ACTION:
-        lines.push(`- User wants to perform an action or trigger a workflow`);
-        break;
-      default:
-        lines.push(`- User needs to interact with this API endpoint`);
-    }
-
-    // Add context from the description
-    if (desc) {
-      lines.push(`- Request relates to: ${desc.substring(0, 100)}`);
-    }
-
-    return lines.join('\n');
+    return lines.length > 0 ? lines.join('\n') : '- Use this tool when relevant to the user\'s request';
   }
 
   /**
