@@ -23,7 +23,8 @@ const TOOLS = [
   { name: 'delete_tool', description: 'Delete a tool by ID', inputSchema: { type: 'object', properties: { toolId: { type: 'string', description: 'Tool ID to delete' } }, required: ['toolId'] } },
   { name: 'list_gateways', description: 'List all gateways', inputSchema: { type: 'object', properties: {} } },
   { name: 'delete_gateway', description: 'Delete a gateway by ID', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string', description: 'Gateway ID to delete' } }, required: ['gatewayId'] } },
-  { name: 'create_gateway', description: 'Create a gateway (MCP/A2A/UTCP/Skills)', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'a2a', 'utcp', 'skills'] }, endpoint: { type: 'string' } }, required: ['name', 'type', 'endpoint'] } },
+  { name: 'create_gateway', description: 'Create a gateway (MCP/A2A/UTCP/Skills). Endpoint is auto-generated from name if not provided.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'a2a', 'utcp', 'skills'] }, endpoint: { type: 'string', description: 'Optional URL slug (e.g. /my-gateway). Auto-generated from name if omitted.' } }, required: ['name', 'type'] } },
+  { name: 'assign_tools_to_gateway', description: 'Assign tools to a gateway by tool IDs or by API name (assigns all tools from that API)', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Tool IDs to assign' }, apiName: { type: 'string', description: 'Assign all tools from this API (by name)' } }, required: ['gatewayId'] } },
   { name: 'list_agents', description: 'List all agents', inputSchema: { type: 'object', properties: {} } },
   { name: 'create_agent', description: 'Create an agent', inputSchema: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, mode: { type: 'string', enum: ['workflow', 'autonomous'] }, instructions: { type: 'string' } }, required: ['name'] } },
   { name: 'list_providers', description: 'List LLM providers', inputSchema: { type: 'object', properties: {} } },
@@ -112,7 +113,25 @@ export class AlmytyMcpService {
         return { total: gwResult.total, gateways: gwResult.gateways.map(g => ({ id: g.id, name: g.name, type: g.type, kind: g.kind, status: g.status, endpoint: g.endpoint, isSystem: g.isSystem })) };
       }
       case 'delete_gateway': return get(GatewaysService).deleteGateway(args.gatewayId, orgId, userId);
-      case 'create_gateway': return get(GatewaysService).createGateway({ ...args, kind: 'tool', configuration: { transport: 'http' } }, orgId, userId);
+      case 'create_gateway': {
+        const endpoint = args.endpoint || `/${args.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+        return get(GatewaysService).createGateway({ ...args, endpoint, kind: 'tool', configuration: { transport: 'http' } }, orgId, userId);
+      }
+      case 'assign_tools_to_gateway': {
+        const GatewayToolService = require('../gateways/gateway-tool.service').GatewayToolService;
+        const gwToolService = this.moduleRef.get(GatewayToolService, { strict: false });
+        let toolIds: string[] = args.toolIds || [];
+        if (args.apiName && toolIds.length === 0) {
+          // Find all tools from this API by name
+          const toolResult = await get(ToolsService).getTools({ organizationId: orgId, limit: 500 });
+          const tools = Array.isArray(toolResult) ? toolResult : (toolResult as any).tools || [];
+          const apiTools = tools.filter((t: any) => t.api?.name?.toLowerCase() === args.apiName.toLowerCase() || t.name?.toLowerCase().startsWith(args.apiName.toLowerCase().replace(/[^a-z0-9]/g, '_')));
+          toolIds = apiTools.map((t: any) => t.id);
+        }
+        if (toolIds.length === 0) return { error: 'No tools found to assign' };
+        const result = await gwToolService.bulkAssociateTools({ gatewayId: args.gatewayId, toolIds }, orgId, userId);
+        return { assigned: toolIds.length, gatewayId: args.gatewayId };
+      }
       case 'list_agents': {
         const agResult = await get(AgentsService).getAgents({ organizationId: orgId, limit: 50 });
         const agents = Array.isArray(agResult) ? agResult : (agResult as any).agents || [];
