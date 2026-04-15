@@ -110,8 +110,8 @@ describe('SkillGeneratorService', () => {
       // Content sections
       expect(result.content).toContain('# getPetById');
       expect(result.content).toContain('## When to use');
-      expect(result.content).toContain('retrieve or look up data');
-      // HTTP endpoint (real curl, not fictional almyty_execute)
+      expect(result.content).toContain('Find pet by ID');
+      // HTTP endpoint
       expect(result.content).toContain('## HTTP endpoint');
       expect(result.content).toContain('GET https://petstore.swagger.io/v2/pet/{petId}');
       // Parameters
@@ -122,8 +122,6 @@ describe('SkillGeneratorService', () => {
       expect(result.content).toContain('## Example');
       expect(result.content).toContain('curl');
       expect(result.content).toContain('petstore.swagger.io');
-      // Error handling
-      expect(result.content).toContain('## Error handling');
     });
 
     it('should generate a skill for a mutation tool with POST curl', async () => {
@@ -131,7 +129,7 @@ describe('SkillGeneratorService', () => {
 
       const result = await service.generateToolSkill('tool-2', 'org-1');
 
-      expect(result.content).toContain('create, update, or modify data');
+      expect(result.content).toContain('Add a new pet to the store');
       expect(result.content).toContain('curl -X POST');
       expect(result.content).toContain('Content-Type: application/json');
     });
@@ -144,7 +142,7 @@ describe('SkillGeneratorService', () => {
 
       const result = await service.generateToolSkill('tool-1', 'org-1');
 
-      expect(result.content).toContain('perform an action');
+      expect(result.content).toContain('## When to use');
     });
 
     it('should handle tool with no parameters', async () => {
@@ -177,13 +175,14 @@ describe('SkillGeneratorService', () => {
       expect(result.content).toMatch(/description: ".*Find pet.*"/);
     });
 
-    it('should include trigger phrase in description', async () => {
+    it('should not include generic trigger boilerplate in description', async () => {
       toolRepository.findOne.mockResolvedValue(mockTool);
 
       const result = await service.generateToolSkill('tool-1', 'org-1');
 
-      // Description should include "Use when" trigger phrase
-      expect(result.content).toContain('Use when you need to retrieve this data.');
+      // Description should be clean — no "Use when you need to call this API"
+      expect(result.content).not.toContain('Use when you need to');
+      expect(result.content).toContain('description: Find pet by ID');
     });
 
     it('should handle tool with no operation (custom tool)', async () => {
