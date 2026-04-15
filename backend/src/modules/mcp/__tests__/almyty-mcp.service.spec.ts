@@ -19,7 +19,7 @@ describe('AlmytyMcpService', () => {
   let service: AlmytyMcpService;
 
   const mockApisService = {
-    findAllByOrganization: jest.fn().mockResolvedValue([]),
+    findAllByOrganization: jest.fn().mockResolvedValue({ apis: [], total: 0 }),
     create: jest.fn().mockResolvedValue({ id: 'api-1', name: 'Test' }),
     importSchema: jest.fn().mockResolvedValue({ api: {}, schema: {}, operations: [], resources: [], tools: [] }),
   };
@@ -145,7 +145,7 @@ describe('AlmytyMcpService', () => {
 
     it('list_apis calls ApisService.findAllByOrganization', async () => {
       const res = await call('tools/call', { name: 'list_apis', arguments: {} });
-      expect(mockApisService.findAllByOrganization).toHaveBeenCalledWith('org-1');
+      expect(mockApisService.findAllByOrganization).toHaveBeenCalledWith('org-1', { limit: 50 });
       expect(res.result.isError).toBeUndefined();
     });
 
@@ -173,7 +173,7 @@ describe('AlmytyMcpService', () => {
 
     it('list_gateways calls GatewaysService.getGateways', async () => {
       await call('tools/call', { name: 'list_gateways', arguments: {} });
-      expect(mockGatewaysService.getGateways).toHaveBeenCalledWith({ organizationId: 'org-1' });
+      expect(mockGatewaysService.getGateways).toHaveBeenCalledWith({ organizationId: 'org-1', limit: 50 });
     });
 
     it('create_agent calls AgentsService.createAgent with correct args', async () => {
