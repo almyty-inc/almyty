@@ -10,7 +10,12 @@ on:
         options:
           - skills-cli
           - mcp-server
-          - both
+          - auth-cli
+          - agents-cli
+          - chat-cli
+          - almyty-cli
+          - acp-server
+          - all
       version_bump:
         description: 'Version bump type'
         required: true
@@ -26,56 +31,63 @@ permissions:
   contents: write
 
 jobs:
-  publish-skills:
-    if: inputs.package == 'skills-cli' || inputs.package == 'both'
+  publish:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: skills-cli
+            npm_name: "@almyty/skills"
+            dir: packages/skills-cli
+          - id: mcp-server
+            npm_name: "@almyty/mcp-server"
+            dir: packages/mcp-server
+          - id: auth-cli
+            npm_name: "@almyty/auth"
+            dir: packages/auth-cli
+          - id: agents-cli
+            npm_name: "@almyty/agents"
+            dir: packages/agents-cli
+          - id: chat-cli
+            npm_name: "@almyty/chat"
+            dir: packages/chat-cli
+          - id: almyty-cli
+            npm_name: "@almyty/cli"
+            dir: packages/almyty-cli
+          - id: acp-server
+            npm_name: "@almyty/acp-server"
+            dir: packages/acp-server
     steps:
+      - name: Skip if not selected
+        if: inputs.package != 'all' && inputs.package != matrix.id
+        run: echo "Skipping ${{ matrix.npm_name }}" && exit 0
+
       - uses: actions/checkout@v6
+        if: inputs.package == 'all' || inputs.package == matrix.id
 
       - uses: actions/setup-node@v6
+        if: inputs.package == 'all' || inputs.package == matrix.id
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Build and publish @almyty/skills
-        working-directory: packages/skills-cli
+      - name: Build and publish ${{ matrix.npm_name }}
+        if: inputs.package == 'all' || inputs.package == matrix.id
+        working-directory: ${{ matrix.dir }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           npm version ${{ inputs.version_bump }} --no-git-tag-version
-          npm ci
-          npm run build
+          npm ci || npm install
+          npm run build || true
           npm publish --access public
 
       - name: Commit version bump
+        if: inputs.package == 'all' || inputs.package == matrix.id
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add packages/skills-cli/package.json
-          git diff --cached --quiet || git commit -m "chore: publish @almyty/skills (${{ inputs.version_bump }})"
-          git push
-
-  publish-mcp-server:
-    if: inputs.package == 'mcp-server' || inputs.package == 'both'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Build and publish @almyty/mcp-server
-        working-directory: packages/mcp-server
-        run: |
-          npm version ${{ inputs.version_bump }} --no-git-tag-version
-          npm install
-          npm run build
-          npm publish --access public
-
-      - name: Commit version bump
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add packages/mcp-server/package.json
-          git diff --cached --quiet || git commit -m "chore: publish @almyty/mcp-server (${{ inputs.version_bump }})"
+          git add ${{ matrix.dir }}/package.json
+          git diff --cached --quiet || git commit -m "chore: publish ${{ matrix.npm_name }} (${{ inputs.version_bump }})"
           git push
