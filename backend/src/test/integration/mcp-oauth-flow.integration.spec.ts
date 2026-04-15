@@ -12,6 +12,10 @@
  *   5. System gateway routes to AlmytyMcpService (returns tools)
  *   6. prompts/get, resources/list return valid (not error) responses
  */
+// Undo global mocks from test/setup.ts — this test needs real JWT + bcrypt
+jest.unmock('jsonwebtoken');
+jest.unmock('bcryptjs');
+
 import * as crypto from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
