@@ -1050,7 +1050,7 @@ describe('All Parser Types — Full Pipeline E2E (Live Backend)', () => {
       const endpoint = createdGateways.mcp.endpoint;
       const res = await api(
         'POST',
-        `/mcp/${orgSlug}${endpoint}`,
+        `/${orgSlug}${endpoint}`,
         { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
       );
       // May need session init first
@@ -1067,7 +1067,7 @@ describe('All Parser Types — Full Pipeline E2E (Live Backend)', () => {
       const endpoint = createdGateways.mcp.endpoint;
       const res = await api(
         'POST',
-        `/mcp/${orgSlug}${endpoint}`,
+        `/${orgSlug}${endpoint}`,
         { jsonrpc: '2.0', id: 2, method: 'prompts/list', params: {} },
       );
       // The bug was a 500 error from TypeORM relation issue

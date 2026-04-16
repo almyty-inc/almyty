@@ -98,14 +98,14 @@ Keys are stored as SHA-256 hashes. The raw key is only shown once.
 
 ```bash
 # Via custom header
-curl /mcp/acme/my-tools \
+curl /acme/my-tools \
   -H "X-API-Key: almyty_gw_abc123..."
 
 # Via query parameter
-curl "/mcp/acme/my-tools?api_key=almyty_gw_abc123..."
+curl "/acme/my-tools?api_key=almyty_gw_abc123..."
 
 # Via Bearer header
-curl /mcp/acme/my-tools \
+curl /acme/my-tools \
   -H "Authorization: Bearer almyty_gw_abc123..."
 ```
 
@@ -116,7 +116,7 @@ Keys support optional expiry, scopes, and `lastUsedAt` tracking.
 Decodes the `Authorization: Basic` header, looks up the user by email, and verifies the password with bcrypt.
 
 ```bash
-curl /mcp/acme/my-tools \
+curl /acme/my-tools \
   -H "Authorization: Basic $(echo -n 'user@example.com:password' | base64)"
 ```
 
@@ -150,14 +150,14 @@ almyty implements a full OAuth 2.1 authorization server per the MCP specificatio
 ### Discovery
 
 ```bash
-curl /mcp/acme/my-tools/.well-known/oauth-authorization-server
-curl /mcp/acme/my-tools/.well-known/oauth-protected-resource
+curl /acme/my-tools/.well-known/oauth-authorization-server
+curl /acme/my-tools/.well-known/oauth-protected-resource
 ```
 
 ### Client registration
 
 ```bash
-curl -X POST /mcp/acme/my-tools/register \
+curl -X POST /acme/my-tools/register \
   -H "Content-Type: application/json" \
   -d '{
     "client_name": "My MCP Client",
@@ -173,7 +173,7 @@ curl -X POST /mcp/acme/my-tools/register \
 **Step 1** -- Redirect user to authorize:
 
 ```
-GET /mcp/acme/my-tools/authorize
+GET /acme/my-tools/authorize
   ?response_type=code
   &client_id=mcp_client_abc123...
   &redirect_uri=http://localhost:3000/callback
@@ -186,7 +186,7 @@ GET /mcp/acme/my-tools/authorize
 **Step 2** -- Exchange code for tokens:
 
 ```bash
-curl -X POST /mcp/acme/my-tools/token \
+curl -X POST /acme/my-tools/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code\
   &code=auth_code_here\
@@ -198,7 +198,7 @@ curl -X POST /mcp/acme/my-tools/token \
 **Step 3** -- Use the access token:
 
 ```bash
-curl -X POST /mcp/acme/my-tools \
+curl -X POST /acme/my-tools \
   -H "Authorization: Bearer almyty_at_..." \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'

@@ -69,7 +69,6 @@ import { LocalStrategy } from '../modules/auth/strategies/local.strategy';
 // MCP
 import { McpOAuthController } from '../modules/mcp/controllers/mcp-oauth.controller';
 import { McpOAuthDiscoveryController } from '../modules/mcp/controllers/mcp-oauth-discovery.controller';
-import { GatewayMcpController } from '../modules/mcp/gateway-mcp.controller';
 import { McpOAuthService } from '../modules/mcp/services/mcp-oauth.service';
 import { GatewayResolverService } from '../modules/mcp/services/gateway-resolver.service';
 import { GatewayAuthService } from '../modules/gateways/gateway-auth.service';
@@ -88,6 +87,15 @@ import { AuditLogService } from '../modules/audit-log/audit-log.service';
 
 // Mail
 import { MailService } from '../modules/mail/mail.service';
+
+// Unified endpoint
+import { UnifiedEndpointController } from '../modules/gateways/unified-endpoint.controller';
+import { AgentExecutionEngine } from '../modules/agents/agent-execution.engine';
+import { A2AServerService } from '../modules/a2a/a2a-server.service';
+import { A2AAgentCardService } from '../modules/a2a/a2a-agent-card.service';
+import { AcpServerService } from '../modules/acp/acp-server.service';
+import { AcpDiscoveryService } from '../modules/acp/acp-discovery.service';
+import { UtcpService } from '../modules/mcp/utcp.service';
 
 // Services needed by AlmytyMcpService via ModuleRef.get
 import { ApisService } from '../modules/apis/apis.service';
@@ -168,7 +176,7 @@ const mockRedis = {
     AuthController,
     McpOAuthDiscoveryController,
     McpOAuthController,
-    GatewayMcpController,
+    UnifiedEndpointController,
   ],
 
   providers: [
@@ -222,6 +230,14 @@ const mockRedis = {
     { provide: ToolsService, useValue: { getTools: () => ({ tools: [], total: 0 }), deleteTool: () => {} } },
     { provide: AgentsService, useValue: { getAgents: () => ({ agents: [], total: 0 }), createAgent: () => ({ id: 'agent-1' }) } },
     { provide: LlmProvidersService, useValue: { getProviders: () => [], createProvider: () => ({ id: 'prov-1' }) } },
+
+    // Unified endpoint deps
+    { provide: AgentExecutionEngine, useValue: { execute: () => ({}) } },
+    { provide: A2AServerService, useValue: { handleJsonRpc: () => ({}) } },
+    { provide: A2AAgentCardService, useValue: { buildAgentCard: () => ({}) } },
+    { provide: AcpServerService, useValue: { handleJsonRpc: () => ({}) } },
+    { provide: AcpDiscoveryService, useValue: { buildDiscovery: () => ({}) } },
+    { provide: UtcpService, useValue: { handleRequest: () => ({}) } },
 
     // Redis mock
     { provide: 'default_IORedisModuleConnectionToken', useValue: mockRedis },

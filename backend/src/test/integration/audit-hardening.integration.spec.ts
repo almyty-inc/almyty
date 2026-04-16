@@ -316,6 +316,8 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
     const acpServerStub: any = { handleJsonRpc: jest.fn() };
     const acpDiscoveryStub: any = { buildDiscovery: jest.fn() };
 
+    const mcpOAuthStub: any = { validateAccessToken: jest.fn() };
+
     return new UnifiedEndpointController(
       orgRepo,
       gatewayRepo,
@@ -323,6 +325,7 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
       apiKeyRepo,
       mcpServiceStub,
       almytyMcpStub,
+      mcpOAuthStub,
       utcpServiceStub,
       gatewayResolverStub,
       agentsServiceStub,

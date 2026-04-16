@@ -22,6 +22,7 @@ import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { McpService } from '../mcp/mcp.service';
 import { AlmytyMcpService } from '../mcp/almyty-mcp.service';
+import { McpOAuthService } from '../mcp/services/mcp-oauth.service';
 import { UtcpService } from '../mcp/utcp.service';
 import { GatewayResolverService } from '../mcp/services/gateway-resolver.service';
 import { AgentsService } from '../agents/agents.service';
@@ -56,6 +57,7 @@ export class UnifiedEndpointController {
     private apiKeyRepository: Repository<ApiKey>,
     private readonly mcpService: McpService,
     private readonly almytyMcpService: AlmytyMcpService,
+    private readonly mcpOAuthService: McpOAuthService,
     private readonly utcpService: UtcpService,
     private readonly gatewayResolver: GatewayResolverService,
     private readonly agentsService: AgentsService,
@@ -263,7 +265,7 @@ export class UnifiedEndpointController {
 
     switch (gateway.type) {
       case GatewayType.MCP:
-        return this.delegateMcp(gateway, auth, body, res);
+        return this.delegateMcp(gateway, auth, body, req, res);
       case GatewayType.UTCP:
         return this.delegateUtcp(gateway, organization, action, req, res, body);
       case GatewayType.A2A:
@@ -281,13 +283,24 @@ export class UnifiedEndpointController {
     }
   }
 
-  private async delegateMcp(gateway: Gateway, auth: any, body: any, res: Response) {
+  private async delegateMcp(gateway: Gateway, auth: any, body: any, req: Request, res: Response) {
     // System gateways serve almyty platform management tools via AlmytyMcpService
     if (gateway.isSystem) {
+      // Resolve userId from auth result, req.user, or OAuth bearer token
+      let userId = auth?.userId || (req as any).user?.sub || (req as any).user?.id;
+      if (!userId) {
+        const token = req.headers?.authorization?.startsWith('Bearer ')
+          ? (req.headers.authorization as string).slice(7).trim()
+          : null;
+        if (token) {
+          const validation = await this.mcpOAuthService.validateAccessToken(token);
+          if (validation.valid) userId = validation.userId;
+        }
+      }
       const result = await this.almytyMcpService.handleJsonRpc(
         body,
         gateway.organizationId,
-        auth?.userId,
+        userId,
       );
       return res.json(result);
     }

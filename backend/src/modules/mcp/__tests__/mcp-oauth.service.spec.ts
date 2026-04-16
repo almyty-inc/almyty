@@ -907,7 +907,7 @@ describe('McpOAuthService', () => {
       );
 
       // gatewayId MUST be part of the where clause — without it a code
-      // issued at /mcp/orgA/gwA could be redeemed at /mcp/orgB/gwB.
+      // issued at /orgA/gwA could be redeemed at /orgB/gwB.
       expect(oauthCodeRepository.findOne).toHaveBeenCalledWith({
         where: { codeHash, clientId: 'mcp_client_abc123', gatewayId: 'gateway-1' },
       });

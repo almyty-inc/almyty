@@ -24,7 +24,7 @@ The Model Context Protocol (MCP) gateway exposes your tools via JSON-RPC 2.0 to 
 Your MCP endpoint is available at:
 
 ```
-/mcp/{org-slug}/{gateway-slug}
+/{org-slug}/{gateway-slug}
 ```
 
 ## Via the API
@@ -48,7 +48,7 @@ curl -X POST /gateways \
 ### List tools (JSON-RPC)
 
 ```bash
-curl -X POST /mcp/acme/my-tools \
+curl -X POST /acme/my-tools \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -61,7 +61,7 @@ curl -X POST /mcp/acme/my-tools \
 ### Call a tool (JSON-RPC)
 
 ```bash
-curl -X POST /mcp/acme/my-tools \
+curl -X POST /acme/my-tools \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -79,9 +79,9 @@ curl -X POST /mcp/acme/my-tools \
 
 | Transport | URL pattern | Use case |
 |-----------|-------------|----------|
-| **HTTP** | `POST /mcp/{org}/{slug}` | Standard request-response |
-| **SSE** | `GET /mcp/{org}/{slug}/sse` | Streaming, long-running tools |
-| **WebSocket** | `WS /mcp/{org}/{slug}/ws` | Bidirectional, real-time |
+| **HTTP** | `POST /{org}/{slug}` | Standard request-response |
+| **SSE** | `GET /{org}/{slug}/sse` | Streaming, long-running tools |
+| **WebSocket** | `WS /{org}/{slug}/ws` | Bidirectional, real-time |
 
 ## Connecting clients
 
@@ -93,7 +93,7 @@ Add to `claude_desktop_config.json`:
 {
   "mcpServers": {
     "my-tools": {
-      "url": "https://your-instance/mcp/acme/my-tools",
+      "url": "https://your-instance/acme/my-tools",
       "headers": {
         "Authorization": "Bearer your-api-key"
       }
@@ -109,7 +109,7 @@ In Cursor settings, add:
 ```json
 {
   "name": "my-tools",
-  "url": "https://your-instance/mcp/acme/my-tools",
+  "url": "https://your-instance/acme/my-tools",
   "apiKey": "your-api-key"
 }
 ```
@@ -139,10 +139,10 @@ MCP gateways with OAuth enabled expose discovery endpoints automatically:
 
 ```bash
 # Authorization server metadata
-curl /mcp/acme/my-tools/.well-known/oauth-authorization-server
+curl /acme/my-tools/.well-known/oauth-authorization-server
 
 # Protected resource metadata
-curl /mcp/acme/my-tools/.well-known/oauth-protected-resource
+curl /acme/my-tools/.well-known/oauth-protected-resource
 ```
 
 On 401 responses, the gateway returns a `WWW-Authenticate` header linking to the protected resource metadata so MCP clients can initiate the OAuth flow automatically. See [Gateway Authentication](/gateways/authentication) for the full OAuth 2.1 walkthrough.

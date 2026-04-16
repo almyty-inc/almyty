@@ -123,7 +123,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     accessTokenCookie = cookieStr?.split(';')[0] || '';
     // Get an OAuth access token via the full flow: register → authorize → token
     const regRes = await request(app.getHttpServer())
-      .post(`/mcp/${ORG_SLUG}/almyty/register`)
+      .post(`/${ORG_SLUG}/almyty/register`)
       .send({
         client_name: 'test-flow',
         redirect_uris: ['http://localhost:12345/callback'],
@@ -136,7 +136,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
 
     const authRes = await request(app.getHttpServer())
-      .get(`/mcp/${ORG_SLUG}/almyty/authorize`)
+      .get(`/${ORG_SLUG}/almyty/authorize`)
       .set('Cookie', accessTokenCookie)
       .query({
         response_type: 'code',
@@ -152,7 +152,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     const authCode = callbackUrl.searchParams.get('code');
 
     const tokenRes = await request(app.getHttpServer())
-      .post(`/mcp/${ORG_SLUG}/almyty/token`)
+      .post(`/${ORG_SLUG}/almyty/token`)
       .send({
         grant_type: 'authorization_code',
         code: authCode,
@@ -183,10 +183,10 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
   describe('OAuth discovery', () => {
     it('returns metadata at RFC 8414 path (non-UUID slug)', async () => {
       const res = await request(app.getHttpServer())
-        .get(`/.well-known/oauth-authorization-server/mcp/${ORG_SLUG}/almyty`)
+        .get(`/.well-known/oauth-authorization-server/${ORG_SLUG}/almyty`)
         .expect(200);
 
-      expect(res.body.issuer).toContain(`/mcp/${ORG_SLUG}/almyty`);
+      expect(res.body.issuer).toContain(`/${ORG_SLUG}/almyty`);
       expect(res.body.registration_endpoint).toContain('/register');
       expect(res.body.authorization_endpoint).toContain('/authorize');
       expect(res.body.token_endpoint).toContain('/token');
@@ -194,16 +194,16 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
 
     it('returns protected resource metadata', async () => {
       const res = await request(app.getHttpServer())
-        .get(`/.well-known/oauth-protected-resource/mcp/${ORG_SLUG}/almyty`)
+        .get(`/.well-known/oauth-protected-resource/${ORG_SLUG}/almyty`)
         .expect(200);
 
-      expect(res.body.resource).toContain(`/mcp/${ORG_SLUG}/almyty`);
+      expect(res.body.resource).toContain(`/${ORG_SLUG}/almyty`);
       expect(res.body.authorization_servers).toHaveLength(1);
     });
 
     it('returns 404 for non-existent org', async () => {
       await request(app.getHttpServer())
-        .get('/.well-known/oauth-authorization-server/mcp/nonexistent-org/almyty')
+        .get('/.well-known/oauth-authorization-server/nonexistent-org/almyty')
         .expect(404);
     });
   });
@@ -212,7 +212,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
   describe('OAuth registration', () => {
     it('registers a client successfully', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${ORG_SLUG}/almyty/register`)
+        .post(`/${ORG_SLUG}/almyty/register`)
         .send({
           client_name: 'test-client',
           redirect_uris: ['http://localhost:3000/callback'],
@@ -226,7 +226,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
 
     it('rejects registration without client_name', async () => {
       await request(app.getHttpServer())
-        .post(`/mcp/${ORG_SLUG}/almyty/register`)
+        .post(`/${ORG_SLUG}/almyty/register`)
         .send({ redirect_uris: ['http://localhost/cb'] })
         .expect(400);
     });
@@ -236,7 +236,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
   describe('OAuth authorize', () => {
     it('redirects unauthenticated users to /auth/login', async () => {
       const res = await request(app.getHttpServer())
-        .get(`/mcp/${ORG_SLUG}/almyty/authorize`)
+        .get(`/${ORG_SLUG}/almyty/authorize`)
         .query({
           response_type: 'code',
           client_id: 'test',
@@ -253,7 +253,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     it('issues auth code when user has JWT cookie', async () => {
       // First register a real client
       const regRes = await request(app.getHttpServer())
-        .post(`/mcp/${ORG_SLUG}/almyty/register`)
+        .post(`/${ORG_SLUG}/almyty/register`)
         .send({
           client_name: 'auth-test',
           redirect_uris: ['http://localhost:9999/callback'],
@@ -266,7 +266,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
       const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
 
       const res = await request(app.getHttpServer())
-        .get(`/mcp/${ORG_SLUG}/almyty/authorize`)
+        .get(`/${ORG_SLUG}/almyty/authorize`)
         .set('Cookie', accessTokenCookie)
         .query({
           response_type: 'code',
@@ -289,7 +289,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
   describe('MCP tools via system gateway', () => {
     it('tools/list returns almyty management tools', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${ORG_SLUG}/almyty`)
+        .post(`/${ORG_SLUG}/almyty`)
         .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
         .expect(200);
@@ -304,7 +304,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
 
     it('initialize returns server info', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${ORG_SLUG}/almyty`)
+        .post(`/${ORG_SLUG}/almyty`)
         .set('Authorization', `Bearer ${bearerToken}`)
         .send({
           jsonrpc: '2.0', id: 1, method: 'initialize',
@@ -322,7 +322,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
       // the OAuth bearer token wasn't resolved to a userId. The controller
       // now extracts userId from the oauth_access_tokens table.
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${ORG_SLUG}/almyty`)
+        .post(`/${ORG_SLUG}/almyty`)
         .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_apis', arguments: {} } })
         .expect(200);
@@ -334,7 +334,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
 
     it('create_gateway succeeds with OAuth token (userId resolved)', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${ORG_SLUG}/almyty`)
+        .post(`/${ORG_SLUG}/almyty`)
         .set('Authorization', `Bearer ${bearerToken}`)
         .send({
           jsonrpc: '2.0', id: 1, method: 'tools/call',
@@ -352,7 +352,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
   describe('MCP auxiliary methods', () => {
     it('prompts/list returns empty array', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${ORG_SLUG}/almyty`)
+        .post(`/${ORG_SLUG}/almyty`)
         .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'prompts/list', params: {} })
         .expect(200);
@@ -362,7 +362,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
 
     it('prompts/get returns valid message (not error)', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${ORG_SLUG}/almyty`)
+        .post(`/${ORG_SLUG}/almyty`)
         .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'prompts/get', params: { name: 'test' } })
         .expect(200);
@@ -373,7 +373,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
 
     it('resources/list returns empty array', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${ORG_SLUG}/almyty`)
+        .post(`/${ORG_SLUG}/almyty`)
         .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'resources/list', params: {} })
         .expect(200);
@@ -383,7 +383,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
 
     it('unknown method returns -32601', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${ORG_SLUG}/almyty`)
+        .post(`/${ORG_SLUG}/almyty`)
         .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'bogus/method', params: {} })
         .expect(200);
