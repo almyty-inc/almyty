@@ -127,7 +127,7 @@ export class GatewayResolverService {
     const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || '';
 
     if (hasOAuthAuth) {
-      const resourceMetadataUrl = `${baseUrl}/mcp/${orgSlug}/${gatewaySlug}/.well-known/oauth-protected-resource`;
+      const resourceMetadataUrl = `${baseUrl}/${orgSlug}/${gatewaySlug}/.well-known/oauth-protected-resource`;
       return `Bearer resource_metadata="${resourceMetadataUrl}"`;
     }
 

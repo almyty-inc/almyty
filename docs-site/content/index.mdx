@@ -210,12 +210,12 @@ This gives your AI assistant tools to manage almyty: create APIs, import schemas
 Each gateway has its own MCP endpoint. Find it on the gateway's **Integrations** tab, or construct it as:
 
 ```
-https://api.almyty.com/mcp/{org}/{gateway-slug}
+https://api.almyty.com/{org}/{gateway-slug}
 ```
 
 Claude Code:
 ```bash
-claude mcp add petstore --url https://api.almyty.com/mcp/acme/petstore
+claude mcp add petstore --url https://api.almyty.com/acme/petstore
 ```
 
 ### Discovery

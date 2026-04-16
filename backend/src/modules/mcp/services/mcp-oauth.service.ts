@@ -125,7 +125,7 @@ export class McpOAuthService {
     gateway: Gateway,
     baseUrl: string,
   ): AuthorizationServerMetadata {
-    const gatewayBase = `${baseUrl}/mcp/${gateway.organizationId}/${gateway.id}`;
+    const gatewayBase = `${baseUrl}/${gateway.organizationId}/${gateway.id}`;
     const scopes =
       (gateway.configuration?.oauth?.scopes as string[] | undefined) ??
       DEFAULT_SCOPES;
@@ -152,7 +152,7 @@ export class McpOAuthService {
     gateway: Gateway,
     baseUrl: string,
   ): ProtectedResourceMetadata {
-    const gatewayBase = `${baseUrl}/mcp/${gateway.organizationId}/${gateway.id}`;
+    const gatewayBase = `${baseUrl}/${gateway.organizationId}/${gateway.id}`;
     const scopes =
       (gateway.configuration?.oauth?.scopes as string[] | undefined) ??
       DEFAULT_SCOPES;
@@ -378,8 +378,8 @@ export class McpOAuthService {
     redirectUri: string,
     /** Gateway id from the URL path. Required — the service used to
      *  look up codes by (hash, clientId) with no gateway filter, which
-     *  let a code issued at `/mcp/orgA/gwA/...` be redeemed at
-     *  `/mcp/orgB/gwB/token`. Cross-gateway code replay. */
+     *  let a code issued at `/orgA/gwA/...` be redeemed at
+     *  `/orgB/gwB/token`. Cross-gateway code replay. */
     gatewayId: string,
     /** Only required for clients registered with `client_secret_post`.
      *  Previously the service ignored client secrets entirely — every

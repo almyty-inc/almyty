@@ -21,7 +21,7 @@ export interface GatewayConfigurationCardProps {
 function buildEndpoint(gateway: any, orgSlug: string): string {
   const backendUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin
   const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
-  if (gateway.type === 'mcp') return `${backendUrl}/mcp/${orgSlug}/${gwSlug}`
+  if (gateway.type === 'mcp') return `${backendUrl}/${orgSlug}/${gwSlug}`
   if (gateway.type === 'utcp') return `${backendUrl}/${orgSlug}/${gwSlug}`
   if (gateway.type === 'a2a') return `${backendUrl}/${orgSlug}/${gwSlug}`
   if (gateway.type === 'skills') {

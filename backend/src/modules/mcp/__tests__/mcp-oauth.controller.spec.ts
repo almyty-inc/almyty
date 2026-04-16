@@ -208,12 +208,12 @@ describe('McpOAuthController', () => {
     it('should have correct issuer based on base URL and path segments', async () => {
       const result = await controller.getAuthorizationServerMetadata(orgSlug, gatewaySlug);
 
-      expect(result.issuer).toBe(`http://localhost:4000/mcp/${orgSlug}/${gatewaySlug}`);
+      expect(result.issuer).toBe(`http://localhost:4000/${orgSlug}/${gatewaySlug}`);
     });
 
     it('should have correct endpoint URLs', async () => {
       const result = await controller.getAuthorizationServerMetadata(orgSlug, gatewaySlug);
-      const prefix = `http://localhost:4000/mcp/${orgSlug}/${gatewaySlug}`;
+      const prefix = `http://localhost:4000/${orgSlug}/${gatewaySlug}`;
 
       expect(result.authorization_endpoint).toBe(`${prefix}/authorize`);
       expect(result.token_endpoint).toBe(`${prefix}/token`);
@@ -274,7 +274,7 @@ describe('McpOAuthController', () => {
       const result = await controller.getProtectedResourceMetadata(orgSlug, gatewaySlug);
 
       expect(result).toHaveProperty('resource');
-      expect(result.resource).toBe(`http://localhost:4000/mcp/${orgSlug}/${gatewaySlug}`);
+      expect(result.resource).toBe(`http://localhost:4000/${orgSlug}/${gatewaySlug}`);
     });
 
     it('should contain authorization_servers array', async () => {
@@ -287,7 +287,7 @@ describe('McpOAuthController', () => {
 
     it('should have authorization_servers referencing the same gateway prefix', async () => {
       const result = await controller.getProtectedResourceMetadata(orgSlug, gatewaySlug);
-      const prefix = `http://localhost:4000/mcp/${orgSlug}/${gatewaySlug}`;
+      const prefix = `http://localhost:4000/${orgSlug}/${gatewaySlug}`;
 
       expect(result.authorization_servers).toContain(prefix);
     });

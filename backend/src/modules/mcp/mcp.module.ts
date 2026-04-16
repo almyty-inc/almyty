@@ -4,7 +4,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
 import { McpController } from './mcp.controller';
-import { GatewayMcpController } from './gateway-mcp.controller';
 import { McpTransportController } from './controllers/mcp-transport.controller';
 import { UtcpController } from './controllers/utcp.controller';
 import { GatewayUtcpController } from './controllers/gateway-utcp.controller';
@@ -67,7 +66,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
       }),
     }),
   ],
-  controllers: [McpOAuthDiscoveryController, McpOAuthController, McpController, GatewayMcpController, McpTransportController, UtcpController, GatewayUtcpController],
+  controllers: [McpOAuthDiscoveryController, McpOAuthController, McpController, McpTransportController, UtcpController, GatewayUtcpController],
   providers: [
     AlmytyMcpService,
     McpService,
@@ -85,6 +84,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
     McpService,
     McpGatewayService,
     McpSessionService,
+    McpOAuthService,
     UtcpService,
     RealtimeExecutorService,
     GatewayResolverService,

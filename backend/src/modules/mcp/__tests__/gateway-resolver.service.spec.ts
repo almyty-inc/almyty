@@ -290,7 +290,7 @@ describe('GatewayResolverService', () => {
         fail('Expected HttpException');
       } catch (e) {
         expect(e.wwwAuthenticate).toMatch(
-          /^Bearer resource_metadata=".*\/mcp\/test-org\/my-gateway\/\.well-known\/oauth-protected-resource"$/,
+          /^Bearer resource_metadata=".*\/test-org\/my-gateway\/\.well-known\/oauth-protected-resource"$/,
         );
       }
     });
