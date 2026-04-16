@@ -1,7 +1,7 @@
 /**
  * AlmytyMcpService — serves almyty platform management as native MCP tools.
  * Pure code. No DB entries. Tool definitions are inline. Execution calls
- * existing NestJS services via ModuleRef. Mounted at POST /mcp/almyty.
+ * existing NestJS services via ModuleRef. Mounted at POST /:org/almyty.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';

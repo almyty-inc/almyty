@@ -34,9 +34,9 @@ import { getBaseUrl, getFrontendUrl } from '../../../common/config/base-url';
  * org + gateway via /:orgSlug/:gatewaySlug path segments.
  *
  * Route registration: NestJS resolves explicit routes before catch-all (*),
- * so these routes take priority over the GatewayMcpController @All('*').
+ * so these routes take priority over the UnifiedEndpointController @All('*').
  */
-@Controller('mcp')
+@Controller()
 export class McpOAuthController {
   private readonly logger = new Logger(McpOAuthController.name);
 
@@ -186,7 +186,7 @@ export class McpOAuthController {
   ) {
     const { gateway } = await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
     const base = this.getBaseUrl();
-    const prefix = `${base}/mcp/${orgSlug}/${gatewaySlug}`;
+    const prefix = `${base}/${orgSlug}/${gatewaySlug}`;
 
     this.logger.log(
       `OAuth metadata request: org=${orgSlug}, gateway=${gateway.name}`,
@@ -223,7 +223,7 @@ export class McpOAuthController {
   ) {
     const { gateway } = await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
     const base = this.getBaseUrl();
-    const prefix = `${base}/mcp/${orgSlug}/${gatewaySlug}`;
+    const prefix = `${base}/${orgSlug}/${gatewaySlug}`;
 
     this.logger.log(
       `OAuth protected resource metadata: org=${orgSlug}, gateway=${gateway.name}`,
@@ -305,7 +305,7 @@ export class McpOAuthController {
 
     if (!user) {
       // Redirect to frontend login page with a return URL back to this authorize endpoint
-      const currentUrl = `${this.getBaseUrl()}/mcp/${orgSlug}/${gatewaySlug}/authorize?${new URLSearchParams({
+      const currentUrl = `${this.getBaseUrl()}/${orgSlug}/${gatewaySlug}/authorize?${new URLSearchParams({
         response_type: responseType,
         client_id: clientId,
         redirect_uri: redirectUri,

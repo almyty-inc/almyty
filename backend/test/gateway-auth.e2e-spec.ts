@@ -268,7 +268,7 @@ describe('Gateway Authentication (e2e)', () => {
       const mcpSlug = gatewayEndpointMcp.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${mcpSlug}`)
+        .post(`/${orgSlugA}/${mcpSlug}`)
         .set('x-api-key', apiKey)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
         .expect(200);
@@ -282,7 +282,7 @@ describe('Gateway Authentication (e2e)', () => {
       const mcpSlug = gatewayEndpointMcp.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${mcpSlug}`)
+        .post(`/${orgSlugA}/${mcpSlug}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
         .expect(401);
 
@@ -294,7 +294,7 @@ describe('Gateway Authentication (e2e)', () => {
       const mcpSlug = gatewayEndpointMcp.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${mcpSlug}`)
+        .post(`/${orgSlugA}/${mcpSlug}`)
         .set('x-api-key', 'gw_totally-made-up-key-value')
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
@@ -313,7 +313,7 @@ describe('Gateway Authentication (e2e)', () => {
       const mcpSlug = gatewayEndpointMcp.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${mcpSlug}`)
+        .post(`/${orgSlugA}/${mcpSlug}`)
         .set('x-api-key', apiKey)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
@@ -540,7 +540,7 @@ describe('Gateway Authentication (e2e)', () => {
       const gwSlug = oauthGatewayEndpoint.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .get(`/mcp/${orgSlugA}/${gwSlug}/.well-known/oauth-authorization-server`)
+        .get(`/${orgSlugA}/${gwSlug}/.well-known/oauth-authorization-server`)
         .expect(200);
 
       expect(res.body.issuer).toBeDefined();
@@ -558,7 +558,7 @@ describe('Gateway Authentication (e2e)', () => {
       const gwSlug = oauthGatewayEndpoint.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .get(`/mcp/${orgSlugA}/${gwSlug}/.well-known/oauth-protected-resource`)
+        .get(`/${orgSlugA}/${gwSlug}/.well-known/oauth-protected-resource`)
         .expect(200);
 
       expect(res.body.resource).toBeDefined();
@@ -570,7 +570,7 @@ describe('Gateway Authentication (e2e)', () => {
       const gwSlug = oauthGatewayEndpoint.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${gwSlug}/register`)
+        .post(`/${orgSlugA}/${gwSlug}/register`)
         .send({
           client_name: 'E2E Test MCP Client',
           redirect_uris: ['http://localhost:3000/callback'],
@@ -601,7 +601,7 @@ describe('Gateway Authentication (e2e)', () => {
       // POST /authorize with Bearer JWT to identify the resource owner
       // (RFC 6749 §3.1 — POST variant for programmatic clients)
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${gwSlug}/authorize`)
+        .post(`/${orgSlugA}/${gwSlug}/authorize`)
         .set('Authorization', `Bearer ${tokenA}`)
         .send({
           client_id: clientId,
@@ -621,7 +621,7 @@ describe('Gateway Authentication (e2e)', () => {
 
       // Exchange for tokens
       const tokenRes = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${gwSlug}/token`)
+        .post(`/${orgSlugA}/${gwSlug}/token`)
         .send({
           grant_type: 'authorization_code',
           code: authorizationCode,
@@ -645,7 +645,7 @@ describe('Gateway Authentication (e2e)', () => {
       const gwSlug = oauthGatewayEndpoint.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${gwSlug}`)
+        .post(`/${orgSlugA}/${gwSlug}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
         .expect(200);
@@ -657,7 +657,7 @@ describe('Gateway Authentication (e2e)', () => {
       const gwSlug = oauthGatewayEndpoint.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${gwSlug}`)
+        .post(`/${orgSlugA}/${gwSlug}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
         .expect(401);
 
@@ -671,7 +671,7 @@ describe('Gateway Authentication (e2e)', () => {
       const gwSlug = oauthGatewayEndpoint.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${gwSlug}/token`)
+        .post(`/${orgSlugA}/${gwSlug}/token`)
         .send({
           grant_type: 'refresh_token',
           refresh_token: refreshToken,
@@ -689,7 +689,7 @@ describe('Gateway Authentication (e2e)', () => {
 
       // New access token should work
       await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${gwSlug}`)
+        .post(`/${orgSlugA}/${gwSlug}`)
         .set('Authorization', `Bearer ${newAccessToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
         .expect(200);
@@ -703,7 +703,7 @@ describe('Gateway Authentication (e2e)', () => {
       const gwSlug = oauthGatewayEndpoint.replace(/^\//, '');
 
       await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${gwSlug}/revoke`)
+        .post(`/${orgSlugA}/${gwSlug}/revoke`)
         .send({
           token: accessToken,
           client_id: clientId,
@@ -712,7 +712,7 @@ describe('Gateway Authentication (e2e)', () => {
 
       // Revoked token should no longer work
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${gwSlug}`)
+        .post(`/${orgSlugA}/${gwSlug}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
@@ -724,7 +724,7 @@ describe('Gateway Authentication (e2e)', () => {
 
       // Try to reuse the same authorization code — must fail
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${gwSlug}/token`)
+        .post(`/${orgSlugA}/${gwSlug}/token`)
         .send({
           grant_type: 'authorization_code',
           code: authorizationCode,
@@ -758,7 +758,7 @@ describe('Gateway Authentication (e2e)', () => {
       const mcpSlug = gatewayEndpointMcp.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .post(`/mcp/does-not-exist-org/${mcpSlug}`)
+        .post(`/does-not-exist-org/${mcpSlug}`)
         .set('x-api-key', orgAKey)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
@@ -819,7 +819,7 @@ describe('Gateway Authentication (e2e)', () => {
       // Now try to access — should be denied (no auth = deny by default)
       const mcpSlug = endpoint.replace(/^\//, '');
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${mcpSlug}`)
+        .post(`/${orgSlugA}/${mcpSlug}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
       expect([401, 403]).toContain(res.status);
@@ -868,7 +868,7 @@ describe('Gateway Authentication (e2e)', () => {
       // Access without any credentials — should succeed
       const mcpSlug = endpoint.replace(/^\//, '');
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/${mcpSlug}`)
+        .post(`/${orgSlugA}/${mcpSlug}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
         .expect(200);
 
@@ -877,7 +877,7 @@ describe('Gateway Authentication (e2e)', () => {
 
     it('should return 404 for non-existent gateway endpoint', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/mcp/${orgSlugA}/definitely-not-a-gateway`)
+        .post(`/${orgSlugA}/definitely-not-a-gateway`)
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
       expect([400, 404]).toContain(res.status);
@@ -885,7 +885,7 @@ describe('Gateway Authentication (e2e)', () => {
 
     it('should return 404 for non-existent organization', async () => {
       const res = await request(app.getHttpServer())
-        .post('/mcp/ghost-org-that-does-not-exist/some-gateway')
+        .post('/ghost-org-that-does-not-exist/some-gateway')
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
       expect([400, 404]).toContain(res.status);
