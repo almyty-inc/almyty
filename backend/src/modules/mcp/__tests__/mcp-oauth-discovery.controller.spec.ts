@@ -49,15 +49,15 @@ describe('McpOAuthDiscoveryController', () => {
     controller = module.get(McpOAuthDiscoveryController);
   });
 
-  describe('GET /.well-known/oauth-authorization-server/mcp/:org/:gw', () => {
+  describe('GET /.well-known/oauth-authorization-server/:org/:gw', () => {
     it('returns RFC 8414 metadata with correct endpoints', async () => {
       const result = await controller.authServerMetadata('acme', 'my-gateway');
 
-      expect(result.issuer).toBe('https://api.example.com/mcp/acme/my-gateway');
-      expect(result.authorization_endpoint).toBe('https://api.example.com/mcp/acme/my-gateway/authorize');
-      expect(result.token_endpoint).toBe('https://api.example.com/mcp/acme/my-gateway/token');
-      expect(result.registration_endpoint).toBe('https://api.example.com/mcp/acme/my-gateway/register');
-      expect(result.revocation_endpoint).toBe('https://api.example.com/mcp/acme/my-gateway/revoke');
+      expect(result.issuer).toBe('https://api.example.com/acme/my-gateway');
+      expect(result.authorization_endpoint).toBe('https://api.example.com/acme/my-gateway/authorize');
+      expect(result.token_endpoint).toBe('https://api.example.com/acme/my-gateway/token');
+      expect(result.registration_endpoint).toBe('https://api.example.com/acme/my-gateway/register');
+      expect(result.revocation_endpoint).toBe('https://api.example.com/acme/my-gateway/revoke');
       expect(result.response_types_supported).toEqual(['code']);
       expect(result.code_challenge_methods_supported).toEqual(['S256']);
     });
@@ -95,12 +95,12 @@ describe('McpOAuthDiscoveryController', () => {
     });
   });
 
-  describe('GET /.well-known/oauth-protected-resource/mcp/:org/:gw', () => {
+  describe('GET /.well-known/oauth-protected-resource/:org/:gw', () => {
     it('returns RFC 9728 resource metadata', async () => {
       const result = await controller.protectedResourceMetadata('acme', 'my-gateway');
 
-      expect(result.resource).toBe('https://api.example.com/mcp/acme/my-gateway');
-      expect(result.authorization_servers).toEqual(['https://api.example.com/mcp/acme/my-gateway']);
+      expect(result.resource).toBe('https://api.example.com/acme/my-gateway');
+      expect(result.authorization_servers).toEqual(['https://api.example.com/acme/my-gateway']);
       expect(result.bearer_methods_supported).toEqual(['header']);
       expect(result.resource_name).toBe('my-gateway');
     });

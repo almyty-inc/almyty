@@ -178,7 +178,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
   }
 
   private extractGatewayId(path: string): string | null {
-    // Match gateway protocol paths: /gateways/:endpoint, /mcp/:org/:gateway, etc.
+    // Match gateway protocol paths: /gateways/:endpoint, /:org/:gateway, etc.
     const gatewayMatch = path.match(/\/gateways\/([^/]+)/);
     if (gatewayMatch) return null; // Endpoint, not ID — let the controller resolve it
     return null;

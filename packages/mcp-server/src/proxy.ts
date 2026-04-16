@@ -42,11 +42,11 @@ export class AlmytyProxy {
   }
 
   private endpoint(): string {
-    // Per-gateway scoping uses the slug-based MCP route (/mcp/:orgSlug/:gatewaySlug),
+    // Per-gateway scoping uses the GitHub-style route (/:orgSlug/:gatewaySlug),
     // which the caller must encode into ALMYTY_GATEWAY_ID as "orgSlug/gatewaySlug".
     // The unscoped route is the universal /mcp JSON-RPC endpoint.
     return this.gatewayId
-      ? `${this.baseUrl}/mcp/${this.gatewayId}`
+      ? `${this.baseUrl}/${this.gatewayId}`
       : `${this.baseUrl}/mcp`;
   }
 

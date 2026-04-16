@@ -13,8 +13,8 @@ import { getBaseUrl } from '../../../common/config/base-url';
  * RFC 8414 specifies that authorization server metadata lives at:
  *   {scheme}://{authority}/.well-known/oauth-authorization-server{path}
  *
- * So for server URL https://api.almyty.com/mcp/org/gateway, the metadata is at:
- *   https://api.almyty.com/.well-known/oauth-authorization-server/mcp/org/gateway
+ * So for server URL https://api.almyty.com/org/gateway, the metadata is at:
+ *   https://api.almyty.com/.well-known/oauth-authorization-server/org/gateway
  *
  * MCP clients (Claude Code, Claude Desktop) follow this convention.
  */
@@ -30,7 +30,7 @@ export class McpOAuthDiscoveryController {
     private readonly configService: ConfigService,
   ) {}
 
-  @Get('oauth-authorization-server/mcp/:orgSlug/:gatewaySlug')
+  @Get('oauth-authorization-server/:orgSlug/:gatewaySlug')
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   @Header('Content-Type', 'application/json')
   async authServerMetadata(
@@ -39,7 +39,7 @@ export class McpOAuthDiscoveryController {
   ) {
     await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
     const base = getBaseUrl(this.configService);
-    const prefix = `${base}/mcp/${orgSlug}/${gatewaySlug}`;
+    const prefix = `${base}/${orgSlug}/${gatewaySlug}`;
 
     return {
       issuer: prefix,
@@ -56,7 +56,7 @@ export class McpOAuthDiscoveryController {
     };
   }
 
-  @Get('oauth-protected-resource/mcp/:orgSlug/:gatewaySlug')
+  @Get('oauth-protected-resource/:orgSlug/:gatewaySlug')
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   @Header('Content-Type', 'application/json')
   async protectedResourceMetadata(
@@ -65,7 +65,7 @@ export class McpOAuthDiscoveryController {
   ) {
     await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
     const base = getBaseUrl(this.configService);
-    const prefix = `${base}/mcp/${orgSlug}/${gatewaySlug}`;
+    const prefix = `${base}/${orgSlug}/${gatewaySlug}`;
 
     return {
       resource: prefix,
