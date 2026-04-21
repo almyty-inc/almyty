@@ -59,7 +59,9 @@ export class AlmytyProxy {
 
   async listAgents(): Promise<AgentInfo[]> {
     const data: any = await this.get('/agents', DISCOVERY_TIMEOUT_MS);
-    return data?.agents || data?.data?.agents || (Array.isArray(data) ? data : []);
+    // Backend returns { success, data: [...], pagination } or { agents: [...] }
+    const list = Array.isArray(data?.data) ? data.data : (data?.agents || (Array.isArray(data) ? data : []));
+    return list;
   }
 
   async getAgent(id: string): Promise<AgentInfo> {
