@@ -515,20 +515,21 @@ export class AlmytyAcpAgent {
       if (finalRun.status === 'running') {
         process.stderr.write(`[acp] Run still running after stream ended, polling...\n`);
         finalRun = await this.pollRunToCompletion(session.agentId, run.id, signal);
+      }
 
-        if (finalRun.output) {
-          const text = typeof finalRun.output === 'string'
-            ? finalRun.output
-            : JSON.stringify(finalRun.output, null, 2);
-          if (!collectedText.includes(text)) {
-            collectedText.push(text);
-            this.sendSessionUpdate(session.id, { type: 'agent_message_chunk', text });
-          }
-        }
-        if (finalRun.error) {
-          const errText = typeof finalRun.error === 'string'
-            ? finalRun.error
-            : JSON.stringify(finalRun.error);
+      // Send output if streaming didn't capture it
+      if (collectedText.length === 0 && finalRun.output) {
+        const text = typeof finalRun.output === 'string'
+          ? finalRun.output
+          : JSON.stringify(finalRun.output, null, 2);
+        collectedText.push(text);
+        this.sendSessionUpdate(session.id, { type: 'agent_message_chunk', text });
+      }
+      if (finalRun.error) {
+        const errText = typeof finalRun.error === 'string'
+          ? finalRun.error
+          : JSON.stringify(finalRun.error);
+        if (!collectedText.includes(`Error: ${errText}`)) {
           collectedText.push(`Error: ${errText}`);
         }
       }
