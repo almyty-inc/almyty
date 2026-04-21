@@ -29,45 +29,19 @@ if (args.some((a) => HELP_FLAGS.includes(a)) || args.length === 0) {
   const text = `
 @almyty/acp-server — Expose any almyty agent via the Agent Client Protocol
 
-Connects an almyty agent to ACP-compatible clients (Zed, JetBrains AI,
-Toad, and others) over ndjson stdio. The server proxies all requests to
-the almyty backend REST API.
-
 Usage:
-  npx @almyty/acp-server <agent>
-  npx @almyty/acp-server my-agent
-  npx @almyty/acp-server 550e8400-e29b-41d4-a716-446655440000
+  almyty-acp <agent>
+  almyty-acp my-agent
+  almyty-acp acme/my-agent
 
 Authentication:
-  npx @almyty/auth login              Browser-based login (one-time setup)
+  npx @almyty/auth login
 
 Environment:
-  ALMYTY_URL         Base URL (default: https://api.almyty.com)
-  ALMYTY_TOKEN       API key (auto-read from ~/.almyty/credentials.json)
+  ALMYTY_URL    Backend URL (default: https://api.almyty.com)
+  ALMYTY_TOKEN  API key (or auto-read from ~/.almyty/credentials.json)
 
-Client configuration:
-
-  Zed (settings.json):
-    {
-      "agent": {
-        "profiles": {
-          "almyty": {
-            "provider": "agent-client-protocol",
-            "binary": {
-              "name": "npx",
-              "args": ["-y", "@almyty/acp-server", "my-agent"]
-            }
-          }
-        }
-      }
-    }
-
-  JetBrains (AI Assistant settings):
-    Binary path:  npx
-    Arguments:    -y @almyty/acp-server my-agent
-
-  Custom / stdio:
-    echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1}}' | npx @almyty/acp-server my-agent
+Docs: https://docs.almyty.com/cli/acp-server
 `;
   // Write help to stdout (not stderr) so piping works
   process.stdout.write(text.trimStart());
@@ -78,7 +52,7 @@ Client configuration:
 const agentArg = args.find((a) => !a.startsWith('-'));
 
 if (!agentArg) {
-  process.stderr.write('Error: Agent name or ID is required.\nUsage: npx @almyty/acp-server <agent>\n');
+  process.stderr.write('Error: Agent name or slug is required.\nUsage: almyty-acp <agent>\n');
   process.exit(1);
 }
 
@@ -97,35 +71,50 @@ async function main(): Promise<void> {
 
   const proxy = new AlmytyProxy(creds.url, creds.token);
 
-  // Resolve agent: try as ID first, then search by name/slug
-  let agentId = agentArg!;
-  try {
-    const agent = await proxy.getAgent(agentId);
-    agentId = agent.id;
-    process.stderr.write(`[acp] Agent resolved: ${agent.name} (${agent.id}, mode: ${agent.mode})\n`);
-  } catch {
-    // If direct lookup fails, try listing agents and matching by name/slug
+  // Resolve agent. Accepts:
+  //   my-agent              slug
+  //   acme/my-agent         org/slug
+  //   My Agent              display name
+  //   550e8400-...          UUID
+  let agentId: string | undefined;
+  const ref = agentArg!;
+  const hasSlash = ref.includes('/');
+  const orgPrefix = hasSlash ? ref.split('/')[0] : undefined;
+  const agentRef = hasSlash ? ref.split('/').slice(1).join('/') : ref;
+
+  // 1. Try UUID direct lookup
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentRef);
+  if (isUUID) {
+    try {
+      const agent = await proxy.getAgent(agentRef);
+      agentId = agent.id;
+      process.stderr.write(`[acp] ${agent.name} (${agent.mode})\n`);
+    } catch {
+      process.stderr.write(`Error: Agent not found: ${agentRef}\n`);
+      process.exit(1);
+    }
+  }
+
+  // 2. List agents and match by slug, name, or slug-ified name
+  if (!agentId) {
     try {
       const agents = await proxy.listAgents();
-      const match = agents.find(
-        (a) =>
-          a.name === agentArg ||
-          a.slug === agentArg ||
-          a.name.toLowerCase() === agentArg!.toLowerCase() ||
-          a.slug?.toLowerCase() === agentArg!.toLowerCase(),
-      );
+      const slugify = (s: string) => s.toLowerCase().replace(/\s+/g, '-');
+      const needle = slugify(agentRef);
+      const match = agents.find((a) => {
+        const aSlug = a.slug || slugify(a.name);
+        return aSlug === needle || a.name === agentRef || slugify(a.name) === needle || a.id === agentRef;
+      });
       if (match) {
         agentId = match.id;
-        process.stderr.write(`[acp] Agent resolved by name: ${match.name} (${match.id}, mode: ${match.mode})\n`);
+        process.stderr.write(`[acp] ${match.name} (${match.mode})\n`);
       } else {
-        process.stderr.write(
-          `Error: Agent "${agentArg}" not found.\n` +
-          `Available agents: ${agents.map((a) => a.name).join(', ') || '(none)'}\n`,
-        );
+        const available = agents.map((a) => a.slug || a.name.toLowerCase().replace(/\s+/g, '-')).join(', ');
+        process.stderr.write(`Error: Agent "${ref}" not found.\nAvailable: ${available || '(none)'}\n`);
         process.exit(1);
       }
-    } catch (listErr) {
-      process.stderr.write(`Error: Could not resolve agent "${agentArg}": ${listErr}\n`);
+    } catch (err) {
+      process.stderr.write(`Error: Could not resolve agent "${ref}": ${err}\n`);
       process.exit(1);
     }
   }
