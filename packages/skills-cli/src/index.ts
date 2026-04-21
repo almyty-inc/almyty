@@ -31,8 +31,8 @@ Authentication:
   are shared across every almyty CLI.
 
 References:
-  @org/gateway                   All skills from a gateway
-  @org/gateway/skill             A specific skill
+  org/gateway                   All skills from a gateway
+  org/gateway/skill             A specific skill
   skill-name                     Search by name
   <uuid>                         Direct ID reference
 
@@ -51,9 +51,9 @@ Options:
 
 Examples:
   npx @almyty/skills daemon
-  npx @almyty/skills install @myorg/petstore/get-pet
+  npx @almyty/skills install myorg/petstore/get-pet
   npx @almyty/skills search "weather"
-  npx @almyty/skills run @myorg/petstore/get-pet --petId 123
+  npx @almyty/skills run myorg/petstore/get-pet --petId 123
 `);
 }
 
@@ -83,7 +83,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       result.flags.help = true;
     } else if (arg === '--version' || arg === '-v') {
       result.flags.version = true;
-    } else if (arg.startsWith('@')) {
+    } else if (arg.includes('/')) {
       result.ref = arg;
     } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
@@ -319,7 +319,7 @@ async function main(): Promise<void> {
             const desc = r.toolDescription ? ` — ${r.toolDescription}` : '';
             console.log(`  ${label}${desc}`);
           }
-          console.log(`\nBe more specific: npx @almyty/skills install @org/gateway/skill`);
+          console.log(`\nBe more specific: npx @almyty/skills install org/gateway/skill`);
           return;
         }
       }
@@ -374,7 +374,7 @@ async function main(): Promise<void> {
         gatewayId = results[0].gatewayId;
         toolId = results[0].toolId;
       } else {
-        console.error('Error: run requires a skill reference (@org/gateway/skill or skill-name)');
+        console.error('Error: run requires a skill reference (org/gateway/skill or skill-name)');
         process.exit(1);
       }
 

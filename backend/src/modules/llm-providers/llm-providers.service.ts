@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 
-import { callOpenAI, callAnthropic, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
+import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
@@ -15,6 +15,8 @@ import { Gateway } from '../../entities/gateway.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ToolExecutorService, ToolExecutionOptions } from '../tools/tool-executor.service';
 import { callLlmProviderHttp } from './providers/safe-request';
+
+export type StreamChunk = { content?: string; toolCalls?: any[] };
 
 export interface CreateLlmProviderDto {
   name: string;
@@ -572,6 +574,189 @@ export class LlmProvidersService {
       // old path loaded the provider, mutated it, and called
       // save(provider) — racing with any concurrent writer on the
       // same row. Use a scoped partial UPDATE instead.
+      try {
+        await this.bumpProviderStats(providerId, {
+          tokens: 0,
+          cost: 0,
+          success: false,
+        });
+        await this.llmProviderRepository.update(
+          { id: providerId, organizationId },
+          { lastError: safeMsg },
+        );
+      } catch (updateError: any) {
+        this.logger.warn(`Failed to update provider error stats: ${updateError.message}`);
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Streaming variant of chat(). Calls the LLM provider with
+   * streaming enabled, invoking `onChunk` for each content delta.
+   * Returns the same ChatResponse as chat() with the full
+   * accumulated response.
+   *
+   * Falls back to non-streaming chat() for providers that don't
+   * support streaming (Google, Cohere, HuggingFace, Custom).
+   *
+   * The onChunk callback is optional — if omitted, this behaves
+   * identically to chat() but uses the streaming transport where
+   * available. The agent runtime uses onChunk to emit llm.chunk
+   * SSE events in real time.
+   */
+  async chatStream(
+    providerId: string,
+    request: ChatRequest,
+    organizationId: string,
+    userId?: string,
+    onChunk?: (chunk: StreamChunk) => void,
+  ): Promise<ChatResponse> {
+    // If no chunk callback, or skipToolExecution is false (agentic loop),
+    // fall through to the non-streaming path to avoid complexity.
+    if (!onChunk) {
+      return this.chat(providerId, request, organizationId, userId);
+    }
+
+    const startTime = Date.now();
+
+    try {
+      const provider = await this.getProvider(providerId, organizationId, true);
+
+      if (!provider.isHealthy) {
+        throw new BadRequestException('LLM provider is not healthy');
+      }
+
+      // Determine if the provider supports streaming
+      const supportsStreaming = [
+        LlmProviderType.OPENAI,
+        LlmProviderType.AZURE_OPENAI,
+        LlmProviderType.MISTRAL,
+        LlmProviderType.XAI,
+        LlmProviderType.DEEPSEEK,
+        LlmProviderType.GROQ,
+        LlmProviderType.TOGETHER,
+        LlmProviderType.OPENROUTER,
+        LlmProviderType.ANTHROPIC,
+      ].includes(provider.type);
+
+      if (!supportsStreaming) {
+        // Fall back to non-streaming for unsupported providers
+        return this.chat(providerId, request, organizationId, userId);
+      }
+
+      // Get or create session
+      let session: Conversation;
+      if (request.sessionId) {
+        session = await this.conversationRepository.findOne({
+          where: { id: request.sessionId, organizationId },
+        });
+        if (!session) {
+          throw new NotFoundException('Session not found');
+        }
+      } else {
+        session = Conversation.createConversation({
+          providerId: provider.id,
+          organizationId,
+          gatewayId: request.gatewayId,
+          userId,
+          context: {
+            model: request.model || provider.configuration.model,
+            maxTokens: request.maxTokens || provider.configuration.maxTokens,
+            temperature: request.temperature ?? provider.configuration.temperature,
+            topP: request.topP ?? provider.configuration.topP,
+            topK: request.topK ?? provider.configuration.topK,
+            frequencyPenalty: request.frequencyPenalty ?? provider.configuration.frequencyPenalty,
+            presencePenalty: request.presencePenalty ?? provider.configuration.presencePenalty,
+            stopSequences: request.stopSequences,
+            toolsEnabled: (request.tools && request.tools.length > 0) || (request.toolIds && request.toolIds.length > 0),
+          },
+        });
+        session = await this.conversationRepository.save(session);
+      }
+
+      // Resolve tools
+      let tools: Tool[] = [];
+      if (request.toolIds && request.toolIds.length > 0) {
+        tools = await this.toolRepository.find({
+          where: request.toolIds.map(id => ({ id, organizationId })),
+        });
+      } else {
+        tools = await this.prepareTools(request.tools || [], organizationId);
+      }
+
+      const costFn = this.calculateProviderCost.bind(this);
+      let response: ChatResponse;
+
+      switch (provider.type) {
+        case LlmProviderType.OPENAI:
+        case LlmProviderType.AZURE_OPENAI:
+        case LlmProviderType.MISTRAL:
+        case LlmProviderType.XAI:
+        case LlmProviderType.DEEPSEEK:
+        case LlmProviderType.GROQ:
+        case LlmProviderType.TOGETHER:
+        case LlmProviderType.OPENROUTER:
+          response = await callOpenAIStream(provider, request, session, tools, startTime, costFn, onChunk);
+          break;
+        case LlmProviderType.ANTHROPIC:
+          response = await callAnthropicStream(provider, request, session, tools, startTime, costFn, onChunk);
+          break;
+        default:
+          // Should not reach here due to supportsStreaming check, but safety net
+          return this.chat(providerId, request, organizationId, userId);
+      }
+
+      // Save final message to database
+      const message = this.messageRepository.create({
+        conversationId: session.id,
+        role: response.message.role,
+        type: response.message.toolCalls?.length > 0 ? MessageType.TOOL_CALL : MessageType.TEXT,
+        content: response.message.content,
+        toolCalls: response.message.toolCalls,
+        inputTokens: response.usage.inputTokens,
+        outputTokens: response.usage.outputTokens,
+        cost: response.cost * 100,
+        responseTime: response.responseTime,
+        model: response.model,
+        finishReason: response.message.finishReason,
+        status: MessageStatus.COMPLETED,
+      });
+
+      const savedMessage = await this.messageRepository.save(message);
+
+      // Update session stats atomically
+      const hasToolCalls = (response.message.toolCalls?.length || 0) > 0;
+      await this.bumpSessionStats(session.id, {
+        inputTokens: response.usage.inputTokens,
+        outputTokens: response.usage.outputTokens,
+        cost: response.cost * 100,
+        toolCall: hasToolCalls,
+        toolCallSuccess: hasToolCalls,
+      });
+
+      // Update provider stats atomically
+      await this.bumpProviderStats(provider.id, {
+        tokens: response.usage.totalTokens,
+        cost: response.cost * 100,
+        success: true,
+      });
+
+      return {
+        ...response,
+        conversationId: session.id,
+        messageId: savedMessage.id,
+      };
+    } catch (error) {
+      const safeBody = safeErrorBody(error.response?.data);
+      const safeMsg = safeErrorMessage(error);
+      this.logger.error(
+        `Chat stream request failed: ${safeMsg}` +
+        (safeBody ? ` response_body=${safeBody}` : ''),
+        error.stack,
+      );
+
       try {
         await this.bumpProviderStats(providerId, {
           tokens: 0,

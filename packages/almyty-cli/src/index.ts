@@ -56,6 +56,7 @@ const SUBCOMMANDS: Record<string, Subcommand> = {
   chat: { pkg: '@almyty/chat', help: 'Interactive chat REPL with an agent' },
   skills: { pkg: '@almyty/skills', help: 'Install API skills into AI coding agents' },
   mcp: { pkg: '@almyty/mcp-server', help: 'Run the MCP server proxy' },
+  acp: { pkg: '@almyty/acp-server', help: 'Run the ACP agent server' },
 };
 
 function printHelp(): void {

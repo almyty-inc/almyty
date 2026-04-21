@@ -54,3 +54,4 @@ logs/
 _internal/
 .playwright-mcp/
 test-results/
+backend/.env
