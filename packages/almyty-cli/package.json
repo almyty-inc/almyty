@@ -1,6 +1,6 @@
 {
   "name": "@almyty/cli",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Single installable almyty CLI — login, agents, chat, skills, mcp under one binary",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,8 @@
     "@almyty/agents": "^0.1.0",
     "@almyty/chat": "^0.1.0",
     "@almyty/skills": "^1.0.2",
-    "@almyty/mcp-server": "^1.0.0"
+    "@almyty/mcp-server": "^1.0.0",
+    "@almyty/acp-server": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",
