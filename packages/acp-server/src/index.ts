@@ -58,130 +58,89 @@ if (!agentArg) {
 
 // ── Main ─────────────────────────────────────────────────────────
 
-async function main(): Promise<void> {
-  // Resolve credentials
+async function resolveAgent(ref: string, send: (msg: any) => void): Promise<AlmytyAcpAgent> {
   const creds = resolveCredentials();
-  if (!creds) {
-    process.stderr.write(
-      'Error: No authentication token found.\n' +
-      'Set ALMYTY_TOKEN environment variable or run: npx @almyty/auth login\n',
-    );
-    process.exit(1);
-  }
+  if (!creds) throw new Error('No auth token. Run: npx @almyty/auth login');
 
   const proxy = new AlmytyProxy(creds.url, creds.token);
+  const agentRef = ref.includes('/') ? ref.split('/').slice(1).join('/') : ref;
 
-  // Resolve agent. Accepts:
-  //   my-agent              slug
-  //   acme/my-agent         org/slug
-  //   My Agent              display name
-  //   550e8400-...          UUID
-  let agentId: string | undefined;
-  const ref = agentArg!;
-  const hasSlash = ref.includes('/');
-  const orgPrefix = hasSlash ? ref.split('/')[0] : undefined;
-  const agentRef = hasSlash ? ref.split('/').slice(1).join('/') : ref;
-
-  // 1. Try UUID direct lookup
-  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentRef);
-  if (isUUID) {
-    try {
-      const agent = await proxy.getAgent(agentRef);
-      agentId = agent.id;
-      process.stderr.write(`[acp] ${agent.name} (${agent.mode})\n`);
-    } catch {
-      process.stderr.write(`Error: Agent not found: ${agentRef}\n`);
-      process.exit(1);
-    }
+  // UUID
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentRef)) {
+    const a = await proxy.getAgent(agentRef);
+    process.stderr.write(`[acp] ${a.name} (${a.mode})\n`);
+    return new AlmytyAcpAgent(proxy, a.id, send);
   }
 
-  // 2. List agents and match by slug, name, or slug-ified name
-  if (!agentId) {
-    try {
-      const agents = await proxy.listAgents();
-      const slugify = (s: string) => s.toLowerCase().replace(/\s+/g, '-');
-      const needle = slugify(agentRef);
-      const match = agents.find((a) => {
-        const aSlug = a.slug || slugify(a.name);
-        return aSlug === needle || a.name === agentRef || slugify(a.name) === needle || a.id === agentRef;
-      });
-      if (match) {
-        agentId = match.id;
-        process.stderr.write(`[acp] ${match.name} (${match.mode})\n`);
-      } else {
-        const available = agents.map((a) => a.slug || a.name.toLowerCase().replace(/\s+/g, '-')).join(', ');
-        process.stderr.write(`Error: Agent "${ref}" not found.\nAvailable: ${available || '(none)'}\n`);
-        process.exit(1);
-      }
-    } catch (err) {
-      process.stderr.write(`Error: Could not resolve agent "${ref}": ${err}\n`);
-      process.exit(1);
-    }
+  // Name/slug lookup
+  const agents = await proxy.listAgents();
+  const slugify = (s: string) => s.toLowerCase().replace(/\s+/g, '-');
+  const needle = slugify(agentRef);
+  const match = agents.find((a) => {
+    const aSlug = a.slug || slugify(a.name);
+    return aSlug === needle || a.name === agentRef || slugify(a.name) === needle;
+  });
+  if (match) {
+    process.stderr.write(`[acp] ${match.name} (${match.mode})\n`);
+    return new AlmytyAcpAgent(proxy, match.id, send);
   }
 
-  // Create the send function: write ndjson to stdout
+  const available = agents.map((a) => a.slug || slugify(a.name)).join(', ');
+  throw new Error(`Agent "${ref}" not found. Available: ${available || '(none)'}`);
+}
+
+async function main(): Promise<void> {
+  // Send function: write ndjson to stdout
   const send = (msg: JsonRpcResponse | JsonRpcNotification): void => {
     try {
-      const line = JSON.stringify(msg);
-      process.stdout.write(line + '\n');
+      process.stdout.write(JSON.stringify(msg) + '\n');
     } catch (err) {
-      process.stderr.write(`[acp] Failed to serialize message: ${err}\n`);
+      process.stderr.write(`[acp] Failed to serialize: ${err}\n`);
     }
   };
 
-  // Create the ACP agent handler
-  const agent = new AlmytyAcpAgent(proxy, agentId, send);
+  // Start listening on stdin IMMEDIATELY — Zed expects the process
+  // to be ready for JSON-RPC as soon as it spawns. Agent resolution
+  // and auth happen lazily on first `initialize` message.
+  let agent: AlmytyAcpAgent | null = null;
 
-  // Set up ndjson readline on stdin
-  const rl = readline.createInterface({
-    input: process.stdin,
-    terminal: false,
-  });
-
-  process.stderr.write(`[acp] Server ready. Listening for JSON-RPC messages on stdin.\n`);
+  const rl = readline.createInterface({ input: process.stdin, terminal: false });
 
   rl.on('line', async (line: string) => {
-    // Skip empty lines
     const trimmed = line.trim();
     if (!trimmed) return;
 
-    // Parse JSON-RPC message
     let msg: JsonRpcRequest;
     try {
       msg = JSON.parse(trimmed);
     } catch {
-      // Malformed JSON — send parse error if it looks like it had an id
-      send({
-        jsonrpc: '2.0',
-        id: null,
-        error: { code: -32700, message: 'Parse error: invalid JSON' },
-      });
+      send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
       return;
     }
 
-    // Validate basic JSON-RPC structure
     if (!msg.jsonrpc || msg.jsonrpc !== '2.0' || !msg.method) {
       if (msg.id !== undefined) {
-        send({
-          jsonrpc: '2.0',
-          id: msg.id,
-          error: { code: -32600, message: 'Invalid JSON-RPC 2.0 request' },
-        });
+        send({ jsonrpc: '2.0', id: msg.id, error: { code: -32600, message: 'Invalid request' } });
       }
       return;
     }
 
-    // Dispatch to agent handler
+    // Lazy init: resolve credentials + agent on first message
+    if (!agent) {
+      try {
+        agent = await resolveAgent(agentArg!, send);
+      } catch (err: any) {
+        send({ jsonrpc: '2.0', id: msg.id ?? null, error: { code: -32603, message: err.message } });
+        return;
+      }
+    }
+
     try {
       await agent.handleMessage(msg);
     } catch (err) {
-      process.stderr.write(`[acp] Unhandled error in message handler: ${err}\n`);
+      process.stderr.write(`[acp] Error: ${err}\n`);
       if (msg.id !== undefined && msg.id !== null) {
-        send({
-          jsonrpc: '2.0',
-          id: msg.id,
-          error: { code: -32603, message: 'Internal error' },
-        });
+        send({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'Internal error' } });
       }
     }
   });
