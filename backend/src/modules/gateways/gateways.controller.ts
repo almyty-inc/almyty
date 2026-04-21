@@ -42,10 +42,6 @@ class CreateGatewayBodyDto {
   @IsString()
   description?: string;
 
-  @IsOptional()
-  @IsEnum(GatewayKind)
-  kind?: GatewayKind;
-
   @IsEnum(GatewayType)
   type: GatewayType;
 
