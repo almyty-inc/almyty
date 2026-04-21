@@ -382,7 +382,6 @@ export class AlmytyAcpAgent {
           if (event.event === 'execution.error' || event.event === 'run.error') {
             return {
               stopReason: 'end_turn',
-              content: [{ type: 'text', text: collectedText.join('') || 'Execution failed.' }],
             };
           }
         }
@@ -405,13 +404,11 @@ export class AlmytyAcpAgent {
 
         return {
           stopReason: 'end_turn',
-          content: [{ type: 'text', text }],
         };
       } catch (invokeErr) {
         const errMsg = invokeErr instanceof Error ? invokeErr.message : String(invokeErr);
         return {
           stopReason: 'end_turn',
-          content: [{ type: 'text', text: `Error: ${errMsg}` }],
         };
       }
     }
@@ -559,7 +556,6 @@ export class AlmytyAcpAgent {
       const errMsg = err instanceof Error ? err.message : String(err);
       return {
         stopReason: 'end_turn',
-        content: [{ type: 'text', text: `Error: ${errMsg}` }],
       };
     }
   }
