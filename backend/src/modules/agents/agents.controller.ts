@@ -1178,7 +1178,7 @@ export class AgentsController {
   @ApiResponse({ status: 201, description: 'Run started, returns runId' })
   async startRun(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { input: any; maxSteps?: number; maxCostCents?: number; maxDurationMs?: number },
+    @Body() body: { input: any; maxSteps?: number; maxCostCents?: number; maxDurationMs?: number; conversationId?: string },
     @Request() req: any,
   ) {
     try {
@@ -1195,6 +1195,7 @@ export class AgentsController {
         maxSteps: body.maxSteps,
         maxCostCents: body.maxCostCents,
         maxDurationMs: body.maxDurationMs,
+        conversationId: body.conversationId,
       });
 
       return {
