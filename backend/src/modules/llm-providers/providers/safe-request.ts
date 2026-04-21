@@ -71,3 +71,38 @@ export async function callLlmProviderHttp<T = any>(
 
   return axios({ ...LLM_HTTP_DEFAULTS, ...config });
 }
+
+/**
+ * Streaming variant of callLlmProviderHttp. Same SSRF validation
+ * and redirect policy, but returns the raw response with
+ * `responseType: 'stream'` so the caller can consume SSE chunks
+ * incrementally. The caller is responsible for parsing the SSE
+ * format and closing the stream.
+ */
+export async function callLlmProviderHttpStream<T = any>(
+  config: AxiosRequestConfig,
+): Promise<AxiosResponse<T>> {
+  if (!config.url) {
+    throw new BadRequestException('LLM provider URL is missing');
+  }
+
+  let target: string;
+  try {
+    target = new URL(config.url, config.baseURL || undefined).toString();
+  } catch {
+    throw new BadRequestException(`Invalid LLM provider URL: ${config.url}`);
+  }
+
+  const validation = validateUrl(target);
+  if (!validation.valid) {
+    throw new BadRequestException(
+      `Refused to reach LLM provider URL: ${validation.error}`,
+    );
+  }
+
+  return axios({
+    ...LLM_HTTP_DEFAULTS,
+    ...config,
+    responseType: 'stream',
+  });
+}
