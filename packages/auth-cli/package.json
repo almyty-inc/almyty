@@ -1,6 +1,6 @@
 {
   "name": "@almyty/auth",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Browser-based login for almyty CLIs (skills, agents, chat, mcp-server)",
   "type": "module",
   "main": "dist/index.js",

@@ -325,7 +325,8 @@ export class AlmytyAcpAgent {
     }
 
     // Extract text from ContentBlock array
-    const content = params.content as ContentBlock[] | undefined;
+    // ACP spec uses "prompt", some clients send "content"
+    const content = (params.prompt || params.content) as ContentBlock[] | undefined;
     const inputText = extractTextFromContent(content);
 
     if (!inputText) {
