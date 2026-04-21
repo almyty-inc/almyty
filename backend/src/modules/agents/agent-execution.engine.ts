@@ -7,6 +7,11 @@ import { AgentExecution, AgentExecutionStatus } from '../../entities/agent-execu
 import { AgentNodeExecutor, NodeExecutionResult } from './agent-node-executor';
 import { AgentWebhookService } from './agent-webhook.service';
 import { ExecutionContext } from './agent-template-resolver';
+import { StreamEvent } from './stream-event.types';
+
+// Re-export so existing `import { StreamEvent } from './agent-execution.engine'`
+// continues to work without changing every consumer in one shot.
+export { StreamEvent } from './stream-event.types';
 
 export interface ExecuteAgentOptions {
   input?: Record<string, any>;
@@ -33,14 +38,6 @@ export interface ExecuteAgentOptions {
    * the post-layer abort check fires, and the run marks CANCELLED.
    */
   signal?: AbortSignal;
-}
-
-export interface StreamEvent {
-  type: 'execution.started' | 'node.started' | 'node.output' | 'node.completed' | 'node.skipped' | 'execution.completed' | 'execution.failed';
-  nodeId?: string;
-  nodeType?: string;
-  data?: any;
-  timestamp: number;
 }
 
 export interface EngineInternalOptions {
