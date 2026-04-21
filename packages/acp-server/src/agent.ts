@@ -325,7 +325,8 @@ export class AlmytyAcpAgent {
     }
 
     // Extract text from ContentBlock array
-    const content = params.content as ContentBlock[] | undefined;
+    // ACP spec uses "prompt", some clients send "content"
+    const content = (params.prompt || params.content) as ContentBlock[] | undefined;
     const inputText = extractTextFromContent(content);
 
     if (!inputText) {
@@ -381,7 +382,6 @@ export class AlmytyAcpAgent {
           if (event.event === 'execution.error' || event.event === 'run.error') {
             return {
               stopReason: 'end_turn',
-              content: [{ type: 'text', text: collectedText.join('') || 'Execution failed.' }],
             };
           }
         }
@@ -404,13 +404,11 @@ export class AlmytyAcpAgent {
 
         return {
           stopReason: 'end_turn',
-          content: [{ type: 'text', text }],
         };
       } catch (invokeErr) {
         const errMsg = invokeErr instanceof Error ? invokeErr.message : String(invokeErr);
         return {
           stopReason: 'end_turn',
-          content: [{ type: 'text', text: `Error: ${errMsg}` }],
         };
       }
     }
@@ -511,8 +509,29 @@ export class AlmytyAcpAgent {
         }
       }
 
-      // Check final run status
-      const finalRun = await this.proxy.getRun(session.agentId, run.id).catch(() => run);
+      // Check final run status — if still running, poll until complete
+      let finalRun = await this.proxy.getRun(session.agentId, run.id).catch(() => run);
+
+      if (finalRun.status === 'running') {
+        process.stderr.write(`[acp] Run still running after stream ended, polling...\n`);
+        finalRun = await this.pollRunToCompletion(session.agentId, run.id, signal);
+
+        if (finalRun.output) {
+          const text = typeof finalRun.output === 'string'
+            ? finalRun.output
+            : JSON.stringify(finalRun.output, null, 2);
+          if (!collectedText.includes(text)) {
+            collectedText.push(text);
+            this.sendSessionUpdate(session.id, { type: 'agent_message_chunk', text });
+          }
+        }
+        if (finalRun.error) {
+          const errText = typeof finalRun.error === 'string'
+            ? finalRun.error
+            : JSON.stringify(finalRun.error);
+          collectedText.push(`Error: ${errText}`);
+        }
+      }
 
       if (finalRun.status === 'waiting_input') {
         this.sessions.update(session.id, { activeRunId: finalRun.id });
@@ -525,7 +544,7 @@ export class AlmytyAcpAgent {
       }
 
       return {
-        stopReason: 'end_turn',
+        stopReason: finalRun.status === 'failed' ? 'refusal' : 'end_turn',
         content: collectedText.length > 0
           ? [{ type: 'text', text: collectedText.join('') }]
           : undefined,
@@ -537,7 +556,6 @@ export class AlmytyAcpAgent {
       const errMsg = err instanceof Error ? err.message : String(err);
       return {
         stopReason: 'end_turn',
-        content: [{ type: 'text', text: `Error: ${errMsg}` }],
       };
     }
   }
@@ -627,9 +645,24 @@ export class AlmytyAcpAgent {
   }
 
   private sendSessionUpdate(sessionId: string, update: SessionUpdatePayload): void {
+    // Transform internal format to ACP spec format:
+    // - "type" -> "sessionUpdate"
+    // - text content wrapped in { type: 'text', text }
+    const specUpdate: Record<string, unknown> = { ...update };
+    if ('type' in specUpdate) {
+      specUpdate.sessionUpdate = specUpdate.type;
+      delete specUpdate.type;
+    }
+    // Wrap bare text in content object for message/thought chunks
+    if (specUpdate.sessionUpdate === 'agent_message_chunk' || specUpdate.sessionUpdate === 'agent_thought_chunk') {
+      if ('text' in specUpdate && !('content' in specUpdate)) {
+        specUpdate.content = { type: 'text', text: specUpdate.text };
+        delete specUpdate.text;
+      }
+    }
     this.sendNotification('session/update', {
       sessionId,
-      update,
+      update: specUpdate,
     });
   }
 

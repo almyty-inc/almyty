@@ -375,11 +375,19 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
 
       // Call the LLM
       this.logger.debug(`Run ${runId} step ${run.currentStep}: calling LLM with ${messages.length} messages, ${allToolDefs.length} tools`);
-      const llmResponse: ChatResponse = await this.llmProvidersService.chat(
+
+      this.emitEvent(runId, 'llm.started', { step: run.currentStep });
+
+      const llmResponse: ChatResponse = await this.llmProvidersService.chatStream(
         providerId,
         chatRequest,
         run.organizationId,
         run.userId,
+        (chunk) => {
+          if (chunk.content) {
+            this.emitEvent(runId, 'llm.chunk', { step: run.currentStep, content: chunk.content });
+          }
+        },
       );
 
       // Track cost and tokens
@@ -392,6 +400,14 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
       run.totalTokens += stepTotalTokens;
 
       const responseMessage = llmResponse.message;
+
+      this.emitEvent(runId, 'llm.response', {
+        step: run.currentStep,
+        content: responseMessage.content,
+        toolCalls: responseMessage.toolCalls?.map(tc => ({ id: tc.id, name: tc.name })),
+        usage: { inputTokens: stepInputTokens, outputTokens: stepOutputTokens },
+        cost: stepCost,
+      });
 
       // Check if the LLM returned tool calls
       if (responseMessage.toolCalls && responseMessage.toolCalls.length > 0) {
@@ -408,12 +424,22 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
           const toolExecStart = Date.now();
 
           // Check for built-in tools first
+          this.emitEvent(runId, 'tool.started', { step: run.currentStep, toolCallId: toolCall.id, tool: toolCall.name });
+
           const builtInResult = await this.executeBuiltInTool(toolCall.name, toolCall.parameters || {}, run, agent);
           if (builtInResult) {
             // Built-in tool was handled
             toolCall.result = builtInResult.result;
             toolCall.error = builtInResult.error;
             toolCall.executionTime = Date.now() - toolExecStart;
+
+            this.emitEvent(runId, 'tool.result', {
+              step: run.currentStep,
+              toolCallId: toolCall.id,
+              tool: toolCall.name,
+              success: !builtInResult.error,
+              executionTime: toolCall.executionTime,
+            });
 
             // Persist tool result message
             if (run.conversationId) {
@@ -477,6 +503,7 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
           // Check for sub-agent calls
           const subAgentId = subAgentMap.get(toolCall.name);
           if (subAgentId) {
+            // tool.started was already emitted above (before built-in check)
             try {
               const subRun = await this.startRun(
                 subAgentId,
@@ -503,6 +530,14 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
               await this.messageRepository.save(subMsg);
             }
 
+            this.emitEvent(runId, 'tool.result', {
+              step: run.currentStep,
+              toolCallId: toolCall.id,
+              tool: toolCall.name,
+              success: !toolCall.error,
+              executionTime: toolCall.executionTime,
+            });
+
             run.steps.push({
               type: 'sub_agent_call',
               input: { agentId: subAgentId, input: toolCall.parameters?.input },
@@ -523,6 +558,14 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
           if (!matchingTool) {
             toolCall.error = `Tool '${toolCall.name}' not found`;
             toolCall.executionTime = Date.now() - toolExecStart;
+
+            this.emitEvent(runId, 'tool.result', {
+              step: run.currentStep,
+              toolCallId: toolCall.id,
+              tool: toolCall.name,
+              success: false,
+              executionTime: toolCall.executionTime,
+            });
 
             if (run.conversationId) {
               const errMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, `Error: Tool '${toolCall.name}' not found`, toolCall.error);
@@ -558,6 +601,14 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
             toolCall.executionTime = toolResult.executionTime;
             toolCall.cached = toolResult.cached;
 
+            this.emitEvent(runId, 'tool.result', {
+              step: run.currentStep,
+              toolCallId: toolCall.id,
+              tool: matchingTool.name,
+              success: toolResult.success,
+              executionTime: toolResult.executionTime,
+            });
+
             if (run.conversationId) {
               const toolContent = toolResult.success
                 ? (typeof toolResult.data === 'string' ? toolResult.data : JSON.stringify(toolResult.data))
@@ -579,6 +630,14 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
           } catch (err) {
             toolCall.error = err.message;
             toolCall.executionTime = Date.now() - toolExecStart;
+
+            this.emitEvent(runId, 'tool.result', {
+              step: run.currentStep,
+              toolCallId: toolCall.id,
+              tool: matchingTool.name,
+              success: false,
+              executionTime: toolCall.executionTime,
+            });
 
             if (run.conversationId) {
               const errMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, `Error executing tool: ${err.message}`, err.message);

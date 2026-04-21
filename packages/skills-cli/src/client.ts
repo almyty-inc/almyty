@@ -25,14 +25,14 @@ export function parseRef(ref: string): ParsedRef {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (uuidRegex.test(ref)) return { type: 'uuid', uuid: ref, raw: ref };
 
-  if (ref.startsWith('@')) {
-    const parts = ref.slice(1).split('/');
-    if (parts.length === 3) {
-      return { type: 'skill', orgSlug: parts[0], gatewaySlug: parts[1], skillName: parts[2], raw: ref };
-    }
-    if (parts.length === 2) {
-      return { type: 'gateway', orgSlug: parts[0], gatewaySlug: parts[1], raw: ref };
-    }
+  // Accept both @org/gateway and org/gateway (@ is optional)
+  const normalized = ref.startsWith('@') ? ref.slice(1) : ref;
+  const parts = normalized.split('/');
+  if (parts.length === 3) {
+    return { type: 'skill', orgSlug: parts[0], gatewaySlug: parts[1], skillName: parts[2], raw: ref };
+  }
+  if (parts.length === 2) {
+    return { type: 'gateway', orgSlug: parts[0], gatewaySlug: parts[1], raw: ref };
   }
 
   return { type: 'search', raw: ref };
@@ -101,7 +101,7 @@ export class AlmytyClient {
   }
 
   async fetchGateway(gatewayIdOrRef: string): Promise<GatewayInfo> {
-    if (gatewayIdOrRef.startsWith('@')) {
+    if (gatewayIdOrRef.includes('/')) {
       const parsed = parseRef(gatewayIdOrRef);
       if (parsed.orgSlug && parsed.gatewaySlug) {
         return this.resolveGateway(parsed.orgSlug, parsed.gatewaySlug);
@@ -169,7 +169,7 @@ export class AlmytyClient {
   }
 
   private async resolveRef(ref: string): Promise<string> {
-    if (ref.startsWith('@')) {
+    if (ref.includes('/')) {
       const parsed = parseRef(ref);
       if (parsed.orgSlug && parsed.gatewaySlug) {
         const gw = await this.resolveGateway(parsed.orgSlug, parsed.gatewaySlug);

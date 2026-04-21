@@ -29,45 +29,19 @@ if (args.some((a) => HELP_FLAGS.includes(a)) || args.length === 0) {
   const text = `
 @almyty/acp-server — Expose any almyty agent via the Agent Client Protocol
 
-Connects an almyty agent to ACP-compatible clients (Zed, JetBrains AI,
-Toad, and others) over ndjson stdio. The server proxies all requests to
-the almyty backend REST API.
-
 Usage:
-  npx @almyty/acp-server <agent>
-  npx @almyty/acp-server my-agent
-  npx @almyty/acp-server 550e8400-e29b-41d4-a716-446655440000
+  almyty-acp <agent>
+  almyty-acp my-agent
+  almyty-acp acme/my-agent
 
 Authentication:
-  npx @almyty/auth login              Browser-based login (one-time setup)
+  npx @almyty/auth login
 
 Environment:
-  ALMYTY_URL         Base URL (default: https://api.almyty.com)
-  ALMYTY_TOKEN       API key (auto-read from ~/.almyty/credentials.json)
+  ALMYTY_URL    Backend URL (default: https://api.almyty.com)
+  ALMYTY_TOKEN  API key (or auto-read from ~/.almyty/credentials.json)
 
-Client configuration:
-
-  Zed (settings.json):
-    {
-      "agent": {
-        "profiles": {
-          "almyty": {
-            "provider": "agent-client-protocol",
-            "binary": {
-              "name": "npx",
-              "args": ["-y", "@almyty/acp-server", "my-agent"]
-            }
-          }
-        }
-      }
-    }
-
-  JetBrains (AI Assistant settings):
-    Binary path:  npx
-    Arguments:    -y @almyty/acp-server my-agent
-
-  Custom / stdio:
-    echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1}}' | npx @almyty/acp-server my-agent
+Docs: https://docs.almyty.com/cli/acp-server
 `;
   // Write help to stdout (not stderr) so piping works
   process.stdout.write(text.trimStart());
@@ -78,121 +52,95 @@ Client configuration:
 const agentArg = args.find((a) => !a.startsWith('-'));
 
 if (!agentArg) {
-  process.stderr.write('Error: Agent name or ID is required.\nUsage: npx @almyty/acp-server <agent>\n');
+  process.stderr.write('Error: Agent name or slug is required.\nUsage: almyty-acp <agent>\n');
   process.exit(1);
 }
 
 // ── Main ─────────────────────────────────────────────────────────
 
-async function main(): Promise<void> {
-  // Resolve credentials
+async function resolveAgent(ref: string, send: (msg: any) => void): Promise<AlmytyAcpAgent> {
   const creds = resolveCredentials();
-  if (!creds) {
-    process.stderr.write(
-      'Error: No authentication token found.\n' +
-      'Set ALMYTY_TOKEN environment variable or run: npx @almyty/auth login\n',
-    );
-    process.exit(1);
-  }
+  if (!creds) throw new Error('No auth token. Run: npx @almyty/auth login');
 
   const proxy = new AlmytyProxy(creds.url, creds.token);
+  const agentRef = ref.includes('/') ? ref.split('/').slice(1).join('/') : ref;
 
-  // Resolve agent: try as ID first, then search by name/slug
-  let agentId = agentArg!;
-  try {
-    const agent = await proxy.getAgent(agentId);
-    agentId = agent.id;
-    process.stderr.write(`[acp] Agent resolved: ${agent.name} (${agent.id}, mode: ${agent.mode})\n`);
-  } catch {
-    // If direct lookup fails, try listing agents and matching by name/slug
-    try {
-      const agents = await proxy.listAgents();
-      const match = agents.find(
-        (a) =>
-          a.name === agentArg ||
-          a.slug === agentArg ||
-          a.name.toLowerCase() === agentArg!.toLowerCase() ||
-          a.slug?.toLowerCase() === agentArg!.toLowerCase(),
-      );
-      if (match) {
-        agentId = match.id;
-        process.stderr.write(`[acp] Agent resolved by name: ${match.name} (${match.id}, mode: ${match.mode})\n`);
-      } else {
-        process.stderr.write(
-          `Error: Agent "${agentArg}" not found.\n` +
-          `Available agents: ${agents.map((a) => a.name).join(', ') || '(none)'}\n`,
-        );
-        process.exit(1);
-      }
-    } catch (listErr) {
-      process.stderr.write(`Error: Could not resolve agent "${agentArg}": ${listErr}\n`);
-      process.exit(1);
-    }
+  // UUID
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentRef)) {
+    const a = await proxy.getAgent(agentRef);
+    process.stderr.write(`[acp] ${a.name} (${a.mode})\n`);
+    return new AlmytyAcpAgent(proxy, a.id, send);
   }
 
-  // Create the send function: write ndjson to stdout
+  // Name/slug lookup
+  const agents = await proxy.listAgents();
+  const slugify = (s: string) => s.toLowerCase().replace(/\s+/g, '-');
+  const needle = slugify(agentRef);
+  const match = agents.find((a) => {
+    const aSlug = a.slug || slugify(a.name);
+    return aSlug === needle || a.name === agentRef || slugify(a.name) === needle;
+  });
+  if (match) {
+    process.stderr.write(`[acp] ${match.name} (${match.mode})\n`);
+    return new AlmytyAcpAgent(proxy, match.id, send);
+  }
+
+  const available = agents.map((a) => a.slug || slugify(a.name)).join(', ');
+  throw new Error(`Agent "${ref}" not found. Available: ${available || '(none)'}`);
+}
+
+async function main(): Promise<void> {
+  // Send function: write ndjson to stdout
   const send = (msg: JsonRpcResponse | JsonRpcNotification): void => {
     try {
-      const line = JSON.stringify(msg);
-      process.stdout.write(line + '\n');
+      process.stdout.write(JSON.stringify(msg) + '\n');
     } catch (err) {
-      process.stderr.write(`[acp] Failed to serialize message: ${err}\n`);
+      process.stderr.write(`[acp] Failed to serialize: ${err}\n`);
     }
   };
 
-  // Create the ACP agent handler
-  const agent = new AlmytyAcpAgent(proxy, agentId, send);
+  // Start listening on stdin IMMEDIATELY — Zed expects the process
+  // to be ready for JSON-RPC as soon as it spawns. Agent resolution
+  // and auth happen lazily on first `initialize` message.
+  let agent: AlmytyAcpAgent | null = null;
 
-  // Set up ndjson readline on stdin
-  const rl = readline.createInterface({
-    input: process.stdin,
-    terminal: false,
-  });
-
-  process.stderr.write(`[acp] Server ready. Listening for JSON-RPC messages on stdin.\n`);
+  const rl = readline.createInterface({ input: process.stdin, terminal: false });
 
   rl.on('line', async (line: string) => {
-    // Skip empty lines
     const trimmed = line.trim();
     if (!trimmed) return;
 
-    // Parse JSON-RPC message
     let msg: JsonRpcRequest;
     try {
       msg = JSON.parse(trimmed);
     } catch {
-      // Malformed JSON — send parse error if it looks like it had an id
-      send({
-        jsonrpc: '2.0',
-        id: null,
-        error: { code: -32700, message: 'Parse error: invalid JSON' },
-      });
+      send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
       return;
     }
 
-    // Validate basic JSON-RPC structure
     if (!msg.jsonrpc || msg.jsonrpc !== '2.0' || !msg.method) {
       if (msg.id !== undefined) {
-        send({
-          jsonrpc: '2.0',
-          id: msg.id,
-          error: { code: -32600, message: 'Invalid JSON-RPC 2.0 request' },
-        });
+        send({ jsonrpc: '2.0', id: msg.id, error: { code: -32600, message: 'Invalid request' } });
       }
       return;
     }
 
-    // Dispatch to agent handler
+    // Lazy init: resolve credentials + agent on first message
+    if (!agent) {
+      try {
+        agent = await resolveAgent(agentArg!, send);
+      } catch (err: any) {
+        send({ jsonrpc: '2.0', id: msg.id ?? null, error: { code: -32603, message: err.message } });
+        return;
+      }
+    }
+
     try {
       await agent.handleMessage(msg);
     } catch (err) {
-      process.stderr.write(`[acp] Unhandled error in message handler: ${err}\n`);
+      process.stderr.write(`[acp] Error: ${err}\n`);
       if (msg.id !== undefined && msg.id !== null) {
-        send({
-          jsonrpc: '2.0',
-          id: msg.id,
-          error: { code: -32603, message: 'Internal error' },
-        });
+        send({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'Internal error' } });
       }
     }
   });
@@ -200,14 +148,14 @@ async function main(): Promise<void> {
   // Handle stdin close (client disconnected)
   rl.on('close', () => {
     process.stderr.write('[acp] Client disconnected. Shutting down.\n');
-    agent.shutdown();
+    agent?.shutdown();
     process.exit(0);
   });
 
   // Handle process signals
   const shutdown = (): void => {
     process.stderr.write('[acp] Shutting down.\n');
-    agent.shutdown();
+    agent?.shutdown();
     process.exit(0);
   };
 

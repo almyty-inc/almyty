@@ -58,11 +58,15 @@ export class AlmytyProxy {
   // ── Agent discovery ────────────────────────────────────────────
 
   async listAgents(): Promise<AgentInfo[]> {
-    return this.get('/agents', DISCOVERY_TIMEOUT_MS);
+    const data: any = await this.get('/agents', DISCOVERY_TIMEOUT_MS);
+    // Backend returns { success, data: [...], pagination } or { agents: [...] }
+    const list = Array.isArray(data?.data) ? data.data : (data?.agents || (Array.isArray(data) ? data : []));
+    return list;
   }
 
   async getAgent(id: string): Promise<AgentInfo> {
-    return this.get(`/agents/${encodeURIComponent(id)}`, DISCOVERY_TIMEOUT_MS);
+    const data: any = await this.get(`/agents/${encodeURIComponent(id)}`, DISCOVERY_TIMEOUT_MS);
+    return data?.data || data;
   }
 
   // ── Workflow invocation ────────────────────────────────────────
@@ -91,14 +95,16 @@ export class AlmytyProxy {
   // ── Autonomous run management ──────────────────────────────────
 
   async startRun(id: string, input: Record<string, unknown>): Promise<AgentRun> {
-    return this.post(`/agents/${encodeURIComponent(id)}/runs`, input, INVOKE_TIMEOUT_MS);
+    const data: any = await this.post(`/agents/${encodeURIComponent(id)}/runs`, { input }, INVOKE_TIMEOUT_MS);
+    return data?.data || data;
   }
 
   async getRun(agentId: string, runId: string): Promise<AgentRun> {
-    return this.get(
+    const data: any = await this.get(
       `/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(runId)}`,
       DISCOVERY_TIMEOUT_MS,
     );
+    return data?.data || data;
   }
 
   async sendRunInput(agentId: string, runId: string, input: Record<string, unknown>): Promise<AgentRun> {
