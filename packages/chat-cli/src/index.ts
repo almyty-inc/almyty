@@ -4,6 +4,7 @@
  *
  *   npx @almyty/chat                       # pick from a menu
  *   npx @almyty/chat <agent>               # start chatting with that agent
+ *   npx @almyty/chat <agent> --resume <id> # resume a conversation
  *
  * Reads credentials from ~/.almyty/credentials.json (created by
  * `npx @almyty/auth login`).
@@ -18,8 +19,7 @@
  */
 
 import { createInterface, Interface as ReadlineInterface } from 'readline';
-import { AlmytyClient, AgentInfo, AgentRun } from './client.js';
-import { resolveCredentialsOrExit } from './credentials.js';
+import { AlmytyClient, AgentInfo, AgentRun, resolveCredentialsOrExit } from '@almyty/client';
 
 const VERSION = '0.1.0';
 
@@ -39,6 +39,8 @@ function printHelp(): void {
 Usage:
   npx @almyty/chat                       Pick an agent from a menu
   npx @almyty/chat <name|id>             Start chatting with that agent
+  npx @almyty/chat <name|id> --resume <conversation-id>
+                                         Resume an existing conversation
 
 Inside the REPL:
   /switch <agent>   switch to a different agent
@@ -184,7 +186,9 @@ async function handleAutonomousTurn(state: ChatState, message: string): Promise<
     runId = state.pendingRunId;
     state.pendingRunId = null;
   } else {
-    const run = await state.client.startAgentRun(state.agent.id, message, state.conversationId ?? undefined);
+    const run = await state.client.startRun(state.agent.id, message, {
+      conversationId: state.conversationId ?? undefined,
+    });
     runId = run.id;
     if (run.conversationId) {
       state.conversationId = run.conversationId;
@@ -243,8 +247,11 @@ async function handleUserTurn(state: ChatState, message: string): Promise<void> 
   return handleWorkflowTurn(state, message);
 }
 
-async function startChat(client: AlmytyClient, agent: AgentInfo): Promise<void> {
-  const state: ChatState = { client, agent, pendingRunId: null, conversationId: null };
+async function startChat(client: AlmytyClient, agent: AgentInfo, resumeConversationId?: string): Promise<void> {
+  const state: ChatState = { client, agent, pendingRunId: null, conversationId: resumeConversationId ?? null };
+  if (resumeConversationId) {
+    console.log(`  Resuming conversation ${resumeConversationId}`);
+  }
   printAgentBanner(state.agent);
 
   const rl: ReadlineInterface = createInterface({
@@ -307,8 +314,20 @@ async function main(): Promise<void> {
   const creds = resolveCredentialsOrExit();
   const client = new AlmytyClient(creds.url, creds.token);
 
+  // Parse --resume <conversation-id>
+  let resumeConversationId: string | undefined;
+  const resumeIdx = argv.indexOf('--resume');
+  if (resumeIdx !== -1) {
+    const nextArg = argv[resumeIdx + 1];
+    if (!nextArg || nextArg.startsWith('-')) {
+      console.error('Usage: --resume <conversation-id>');
+      process.exit(1);
+    }
+    resumeConversationId = nextArg;
+  }
+
   let agent: AgentInfo | null = null;
-  const ref = argv.find((a) => !a.startsWith('-'));
+  const ref = argv.find((a) => !a.startsWith('-') && a !== resumeConversationId);
   if (ref) {
     agent = await client.findAgentByNameOrId(ref);
     if (!agent) {
@@ -320,7 +339,7 @@ async function main(): Promise<void> {
     if (!agent) process.exit(1);
   }
 
-  await startChat(client, agent);
+  await startChat(client, agent, resumeConversationId);
 }
 
 main().catch((err) => {
