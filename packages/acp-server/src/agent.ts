@@ -649,9 +649,24 @@ export class AlmytyAcpAgent {
   }
 
   private sendSessionUpdate(sessionId: string, update: SessionUpdatePayload): void {
+    // Transform internal format to ACP spec format:
+    // - "type" -> "sessionUpdate"
+    // - text content wrapped in { type: 'text', text }
+    const specUpdate: Record<string, unknown> = { ...update };
+    if ('type' in specUpdate) {
+      specUpdate.sessionUpdate = specUpdate.type;
+      delete specUpdate.type;
+    }
+    // Wrap bare text in content object for message/thought chunks
+    if (specUpdate.sessionUpdate === 'agent_message_chunk' || specUpdate.sessionUpdate === 'agent_thought_chunk') {
+      if ('text' in specUpdate && !('content' in specUpdate)) {
+        specUpdate.content = { type: 'text', text: specUpdate.text };
+        delete specUpdate.text;
+      }
+    }
     this.sendNotification('session/update', {
       sessionId,
-      update,
+      update: specUpdate,
     });
   }
 
