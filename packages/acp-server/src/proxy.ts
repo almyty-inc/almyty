@@ -94,8 +94,10 @@ export class AlmytyProxy {
 
   // ── Autonomous run management ──────────────────────────────────
 
-  async startRun(id: string, input: Record<string, unknown>): Promise<AgentRun> {
-    const data: any = await this.post(`/agents/${encodeURIComponent(id)}/runs`, { input }, INVOKE_TIMEOUT_MS);
+  async startRun(id: string, input: Record<string, unknown>, conversationId?: string): Promise<AgentRun> {
+    const body: Record<string, unknown> = { input };
+    if (conversationId) body.conversationId = conversationId;
+    const data: any = await this.post(`/agents/${encodeURIComponent(id)}/runs`, body, INVOKE_TIMEOUT_MS);
     return data?.data || data;
   }
 

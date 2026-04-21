@@ -14,6 +14,7 @@ export interface AgentInfo {
 export interface AgentRun {
   id: string;
   status: string;
+  conversationId?: string;
   output?: any;
   error?: string;
   steps?: any[];
@@ -92,13 +93,15 @@ export class AlmytyClient {
     return data?.data ?? data;
   }
 
-  async startAgentRun(agentId: string, input: any): Promise<AgentRun> {
+  async startAgentRun(agentId: string, input: any, conversationId?: string): Promise<AgentRun> {
+    const body: Record<string, any> = { input };
+    if (conversationId) body.conversationId = conversationId;
     const data: any = await this.request(`/agents/${agentId}/runs`, {
       method: 'POST',
-      body: JSON.stringify({ input }),
+      body: JSON.stringify(body),
     });
     const run = data?.data ?? data;
-    return { id: run.id, status: run.status };
+    return { id: run.id, status: run.status, conversationId: run.conversationId };
   }
 
   async getRun(agentId: string, runId: string): Promise<AgentRun> {
