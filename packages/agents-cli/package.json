@@ -1,6 +1,6 @@
 {
   "name": "@almyty/agents",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "List, run, and manage almyty agents from the command line",
   "type": "module",
   "main": "dist/index.js",
@@ -25,7 +25,7 @@
   "author": "almyty",
   "license": "BSL-1.1",
   "dependencies": {
-    "@almyty/client": "file:../client"
+    "@almyty/client": "^0.1.0"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",
