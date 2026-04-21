@@ -58,11 +58,13 @@ export class AlmytyProxy {
   // ── Agent discovery ────────────────────────────────────────────
 
   async listAgents(): Promise<AgentInfo[]> {
-    return this.get('/agents', DISCOVERY_TIMEOUT_MS);
+    const data: any = await this.get('/agents', DISCOVERY_TIMEOUT_MS);
+    return data?.agents || data?.data?.agents || (Array.isArray(data) ? data : []);
   }
 
   async getAgent(id: string): Promise<AgentInfo> {
-    return this.get(`/agents/${encodeURIComponent(id)}`, DISCOVERY_TIMEOUT_MS);
+    const data: any = await this.get(`/agents/${encodeURIComponent(id)}`, DISCOVERY_TIMEOUT_MS);
+    return data?.data || data;
   }
 
   // ── Workflow invocation ────────────────────────────────────────
