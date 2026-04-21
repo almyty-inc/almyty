@@ -98,10 +98,11 @@ export class AlmytyProxy {
   }
 
   async getRun(agentId: string, runId: string): Promise<AgentRun> {
-    return this.get(
+    const data: any = await this.get(
       `/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(runId)}`,
       DISCOVERY_TIMEOUT_MS,
     );
+    return data?.data || data;
   }
 
   async sendRunInput(agentId: string, runId: string, input: Record<string, unknown>): Promise<AgentRun> {
