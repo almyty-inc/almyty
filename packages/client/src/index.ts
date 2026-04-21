@@ -1,4 +1,4 @@
-export { AlmytyClient } from './client.js';
+export { AlmytyClient, GatewayClient } from './client.js';
 export type { AgentInfo, AgentRun, PipelineNode, RunLimits } from './client.js';
 export {
   loadCredentials,

@@ -128,7 +128,17 @@ export class AlmytyClient {
     );
   }
 
-  // ── Workflow invocation ───────────────────────���─────────────────
+  // ── Gateway-scoped client ───────────────────────────────────────
+
+  /**
+   * Return a gateway-scoped client that routes all calls through
+   * /:orgSlug/:agentSlug instead of /agents/:id.
+   */
+  gateway(orgSlug: string, agentSlug: string): GatewayClient {
+    return new GatewayClient(this, orgSlug, agentSlug);
+  }
+
+  // ── Workflow invocation ────────────────────────────────────────
 
   async invokeAgent(agentId: string, input: Record<string, any>): Promise<any> {
     const data = await this.request(`/agents/${encodeURIComponent(agentId)}/invoke`, {
@@ -219,6 +229,113 @@ export class AlmytyClient {
 
     while (Date.now() < deadline) {
       const run = await this.getRun(agentId, runId);
+      if (Array.isArray(run.steps) && run.steps.length !== lastStepCount) {
+        lastStepCount = run.steps.length;
+        options.onStep?.(run);
+      }
+      if (run.status && (TERMINAL_STATUSES.has(run.status) || run.status === 'waiting_input')) {
+        return run;
+      }
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    throw new Error(`Run ${runId} did not finish within ${Math.round(timeoutMs / 1000)}s`);
+  }
+}
+
+// ── Gateway-scoped client ───────────────────────────────────────
+
+/**
+ * Routes all agent calls through the gateway unified endpoint
+ * (/:orgSlug/:agentSlug/...) instead of /agents/:id/...
+ *
+ * Authenticates via API key (same Bearer token).
+ */
+export class GatewayClient {
+  private readonly client: AlmytyClient;
+  private readonly prefix: string;
+  readonly orgSlug: string;
+  readonly agentSlug: string;
+
+  constructor(client: AlmytyClient, orgSlug: string, agentSlug: string) {
+    this.client = client;
+    this.orgSlug = orgSlug;
+    this.agentSlug = agentSlug;
+    this.prefix = `/${encodeURIComponent(orgSlug)}/${encodeURIComponent(agentSlug)}`;
+  }
+
+  async getInfo(): Promise<AgentInfo> {
+    const data = await this.client.request(this.prefix);
+    return data?.data ?? data;
+  }
+
+  async invoke(input: Record<string, any>): Promise<any> {
+    const data = await this.client.request(`${this.prefix}/invoke`, {
+      method: 'POST',
+      body: JSON.stringify({ input }),
+    });
+    return data?.data ?? data;
+  }
+
+  async startRun(
+    input: any,
+    options?: RunLimits & { conversationId?: string },
+  ): Promise<AgentRun> {
+    const body: Record<string, any> = { input };
+    if (options?.maxSteps) body.maxSteps = options.maxSteps;
+    if (options?.maxCostCents) body.maxCostCents = options.maxCostCents;
+    if (options?.maxDurationMs) body.maxDurationMs = options.maxDurationMs;
+    if (options?.conversationId) body.conversationId = options.conversationId;
+
+    const data = await this.client.request(`${this.prefix}/runs`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    const run = data?.data ?? data;
+    return {
+      id: run.id,
+      agentId: run.agentId,
+      status: run.status,
+      conversationId: run.conversationId,
+      output: run.output,
+      error: run.error,
+      steps: run.steps,
+    };
+  }
+
+  async getRun(runId: string): Promise<AgentRun> {
+    const data = await this.client.request(`${this.prefix}/runs/${encodeURIComponent(runId)}`);
+    return (data?.data ?? data) as AgentRun;
+  }
+
+  async sendRunInput(runId: string, input: string): Promise<void> {
+    await this.client.request(
+      `${this.prefix}/runs/${encodeURIComponent(runId)}/input`,
+      { method: 'POST', body: JSON.stringify({ input }) },
+    );
+  }
+
+  async cancelRun(runId: string): Promise<void> {
+    await this.client.request(
+      `${this.prefix}/runs/${encodeURIComponent(runId)}/cancel`,
+      { method: 'POST' },
+    );
+  }
+
+  async pollRun(
+    runId: string,
+    options: {
+      intervalMs?: number;
+      timeoutMs?: number;
+      onStep?: (run: AgentRun) => void;
+    } = {},
+  ): Promise<AgentRun> {
+    const intervalMs = options.intervalMs ?? 1500;
+    const timeoutMs = options.timeoutMs ?? 5 * 60_000;
+    const deadline = Date.now() + timeoutMs;
+    let lastStepCount = -1;
+
+    while (Date.now() < deadline) {
+      const run = await this.getRun(runId);
       if (Array.isArray(run.steps) && run.steps.length !== lastStepCount) {
         lastStepCount = run.steps.length;
         options.onStep?.(run);

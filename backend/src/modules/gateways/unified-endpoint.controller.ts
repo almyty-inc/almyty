@@ -27,6 +27,7 @@ import { UtcpService } from '../mcp/utcp.service';
 import { GatewayResolverService } from '../mcp/services/gateway-resolver.service';
 import { AgentsService } from '../agents/agents.service';
 import { AgentExecutionEngine, StreamEvent } from '../agents/agent-execution.engine';
+import { AgentRuntimeService } from '../agents/agent-runtime.service';
 import { A2AServerService } from '../a2a/a2a-server.service';
 import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
 import { AcpServerService } from '../acp/acp-server.service';
@@ -66,6 +67,7 @@ export class UnifiedEndpointController {
     private readonly a2aAgentCardService: A2AAgentCardService,
     private readonly acpServerService: AcpServerService,
     private readonly acpDiscoveryService: AcpDiscoveryService,
+    private readonly runtimeService: AgentRuntimeService,
   ) {}
 
   /**
@@ -439,6 +441,17 @@ export class UnifiedEndpointController {
       return this.streamAgent(agent, organization, body, res, apiKey);
     }
 
+    // ── Autonomous run endpoints ──────────────────────────────────
+    // POST /:org/:agent/runs         — start a run
+    // GET  /:org/:agent/runs/:runId  — get run status
+    // GET  /:org/:agent/runs/:runId/stream — SSE stream
+    // POST /:org/:agent/runs/:runId/input  — send input
+    // POST /:org/:agent/runs/:runId/cancel — cancel run
+
+    if (action === 'runs' || action.startsWith('runs/')) {
+      return this.handleAgentRuns(agent, organization, body, req, res, apiKey, action);
+    }
+
     throw new HttpException(`Unknown agent action: ${action}`, HttpStatus.NOT_FOUND);
   }
 
@@ -519,6 +532,87 @@ export class UnifiedEndpointController {
 
     res.write(`event: done\ndata: ${JSON.stringify({ executionId: execution.id, status: execution.status })}\n\n`);
     res.end();
+  }
+
+  // ─── Autonomous Runs ─────────────────────────────────────────────────
+
+  private async handleAgentRuns(
+    agent: Agent,
+    organization: Organization,
+    body: any,
+    req: Request,
+    res: Response,
+    apiKey: ApiKey,
+    action: string,
+  ) {
+    const userId = apiKey.userId ?? null;
+    const parts = action.split('/'); // ['runs'] or ['runs', runId] or ['runs', runId, 'stream']
+    const runId = parts[1];
+    const subAction = parts[2];
+
+    // POST /runs — start a new run
+    if (req.method === 'POST' && !runId) {
+      if (agent.mode !== 'autonomous') {
+        throw new HttpException('Agent is not autonomous. Use /invoke or /stream.', HttpStatus.BAD_REQUEST);
+      }
+      const run = await this.runtimeService.startRun(
+        agent.id, organization.id, userId, body.input,
+        { conversationId: body.conversationId },
+      );
+      return res.status(201).json({ success: true, data: run });
+    }
+
+    if (!runId) {
+      // GET /runs — list runs
+      const runs = await this.runtimeService.listRuns(agent.id, organization.id);
+      return res.json({ success: true, data: runs });
+    }
+
+    // GET /runs/:runId
+    if (req.method === 'GET' && !subAction) {
+      const run = await this.runtimeService.getRun(runId, organization.id);
+      return res.json({ success: true, data: run });
+    }
+
+    // GET /runs/:runId/stream — SSE
+    if (req.method === 'GET' && subAction === 'stream') {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+
+      const emitter = this.runtimeService.getRunEmitter(runId);
+      if (!emitter) {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: 'Run not found or already completed' })}\n\n`);
+        res.end();
+        return;
+      }
+
+      const onEvent = (event: any) => {
+        res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+        if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled') {
+          res.end();
+        }
+      };
+
+      emitter.on('event', onEvent);
+      req.on('close', () => emitter.removeListener('event', onEvent));
+      return;
+    }
+
+    // POST /runs/:runId/input
+    if (req.method === 'POST' && subAction === 'input') {
+      await this.runtimeService.sendInput(runId, organization.id, body.input || body.message);
+      return res.json({ success: true });
+    }
+
+    // POST /runs/:runId/cancel
+    if (req.method === 'POST' && subAction === 'cancel') {
+      await this.runtimeService.cancelRun(runId, organization.id);
+      return res.json({ success: true });
+    }
+
+    throw new HttpException(`Unknown runs action: ${subAction}`, HttpStatus.NOT_FOUND);
   }
 
   // ─── Agent Resolution ───────────────────────────────────────────────
