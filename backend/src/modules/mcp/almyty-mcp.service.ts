@@ -182,9 +182,9 @@ export class AlmytyMcpService {
         return { deleted: true, authId: args.authId };
       }
       case 'list_agents': {
-        const agResult = await get(AgentsService).getAgents({ organizationId: orgId, limit: 50 });
-        const agents = Array.isArray(agResult) ? agResult : (agResult as any).agents || [];
-        return { total: (agResult as any).total || agents.length, agents: agents.map((a: any) => ({ id: a.id, name: a.name, mode: a.mode, status: a.status })) };
+        const agResult: any = await get(AgentsService).getAgents({ organizationId: orgId, limit: 50 });
+        const agents = Array.isArray(agResult) ? agResult : (agResult?.data || agResult?.agents || []);
+        return { total: agResult?.total || agResult?.pagination?.total || agents.length, agents: agents.map((a: any) => ({ id: a.id, name: a.name, mode: a.mode, status: a.status, slug: a.name?.toLowerCase().replace(/\s+/g, '-') })) };
       }
       case 'create_agent': return get(AgentsService).createAgent({ ...args }, orgId, userId);
       case 'list_providers': return get(LlmProvidersService).getProviders({ organizationId: orgId });
