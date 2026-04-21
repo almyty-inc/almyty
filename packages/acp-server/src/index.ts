@@ -148,14 +148,14 @@ async function main(): Promise<void> {
   // Handle stdin close (client disconnected)
   rl.on('close', () => {
     process.stderr.write('[acp] Client disconnected. Shutting down.\n');
-    agent.shutdown();
+    agent?.shutdown();
     process.exit(0);
   });
 
   // Handle process signals
   const shutdown = (): void => {
     process.stderr.write('[acp] Shutting down.\n');
-    agent.shutdown();
+    agent?.shutdown();
     process.exit(0);
   };
 
