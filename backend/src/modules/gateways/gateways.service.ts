@@ -14,7 +14,6 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 export interface CreateGatewayDto {
   name: string;
   description?: string;
-  kind?: GatewayKind;
   type: GatewayType;
   agentId?: string;
   endpoint: string;
@@ -186,7 +185,7 @@ export class GatewaysService {
       }
 
       // Infer kind from type if not provided
-      const kind = createGatewayDto.kind || this.inferKind(createGatewayDto.type);
+      const kind = Gateway.kindForType(createGatewayDto.type);
 
       // Validate kind/type exclusivity
       if (kind === GatewayKind.AGENT && !createGatewayDto.agentId) {
@@ -368,7 +367,12 @@ export class GatewaysService {
     }
 
     if (filters.kind) {
-      queryBuilder.andWhere('gateway.kind = :kind', { kind: filters.kind });
+      const toolTypes = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS];
+      if (filters.kind === GatewayKind.TOOL) {
+        queryBuilder.andWhere('gateway.type IN (:...toolTypes)', { toolTypes });
+      } else {
+        queryBuilder.andWhere('gateway.type NOT IN (:...toolTypes)', { toolTypes });
+      }
     }
 
     if (filters.type) {
@@ -804,10 +808,7 @@ export class GatewaysService {
     });
   }
 
-  private inferKind(type: GatewayType): GatewayKind {
-    const toolTypes: GatewayType[] = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS];
-    return toolTypes.includes(type) ? GatewayKind.TOOL : GatewayKind.AGENT;
-  }
+  // kind is now derived from type via Gateway.kindForType()
 
   private validateGatewayConfiguration(type: GatewayType, configuration: Record<string, any>): void {
     switch (type) {
