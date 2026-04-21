@@ -12,8 +12,7 @@
  * `npx @almyty/auth login`).
  */
 
-import { AlmytyClient, AgentInfo, AgentRun } from './client.js';
-import { resolveCredentialsOrExit } from './credentials.js';
+import { AlmytyClient, type AgentInfo, type AgentRun, type RunLimits, resolveCredentialsOrExit } from '@almyty/client';
 
 const VERSION = '0.1.0';
 
@@ -34,6 +33,7 @@ Commands:
 
 Run options:
   --input '<json>'              Input payload (workflow: object; autonomous: string or object)
+  --resume <conversation-id>    Resume a previous conversation
   --max-steps <n>               Autonomous: max steps (default 50)
   --max-cost-cents <n>          Autonomous: max cost in cents (default 100)
   --max-duration-ms <ms>        Autonomous: max wall time in ms (default 3600000)
@@ -187,12 +187,13 @@ async function cmdRun(args: ParsedArgs): Promise<void> {
   const rawInput = parseInputFlag(args.flags.input);
 
   if (agent.mode === 'autonomous') {
-    const limits: any = {};
+    const limits: RunLimits & { conversationId?: string } = {};
     if (args.flags['max-steps']) limits.maxSteps = Number(args.flags['max-steps']);
     if (args.flags['max-cost-cents']) limits.maxCostCents = Number(args.flags['max-cost-cents']);
     if (args.flags['max-duration-ms']) limits.maxDurationMs = Number(args.flags['max-duration-ms']);
+    if (typeof args.flags.resume === 'string') limits.conversationId = args.flags.resume;
 
-    const runStub = await client.startAgentRun(agent.id, rawInput ?? '', limits);
+    const runStub = await client.startRun(agent.id, rawInput ?? '', limits);
     if (!args.flags.watch) {
       if (args.flags.json) {
         console.log(JSON.stringify(runStub, null, 2));
