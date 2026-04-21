@@ -440,11 +440,11 @@ export class AlmytyAcpAgent {
         // Continue an existing run that is waiting for input
         run = await this.proxy.sendRunInput(session.agentId, session.activeRunId, { message: input });
       } else {
-        // Start a new run
-        run = await this.proxy.startRun(session.agentId, { message: input });
+        // Start a new run, reusing the session's conversation for history
+        run = await this.proxy.startRun(session.agentId, { message: input }, session.conversationId);
         this.sessions.update(session.id, {
           activeRunId: run.id,
-          conversationId: run.conversationId,
+          conversationId: run.conversationId || session.conversationId,
         });
       }
 

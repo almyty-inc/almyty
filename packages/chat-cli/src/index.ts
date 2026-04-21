@@ -28,6 +28,8 @@ interface ChatState {
   agent: AgentInfo;
   // For autonomous agents: a run that's parked in waiting_input state.
   pendingRunId: string | null;
+  // Conversation ID for multi-turn history across runs.
+  conversationId: string | null;
 }
 
 function printHelp(): void {
@@ -164,6 +166,7 @@ async function handleSlashCommand(
       }
       state.agent = next;
       state.pendingRunId = null;
+      state.conversationId = null;
       printAgentBanner(state.agent);
       return {};
     }
@@ -181,8 +184,11 @@ async function handleAutonomousTurn(state: ChatState, message: string): Promise<
     runId = state.pendingRunId;
     state.pendingRunId = null;
   } else {
-    const run = await state.client.startAgentRun(state.agent.id, message);
+    const run = await state.client.startAgentRun(state.agent.id, message, state.conversationId ?? undefined);
     runId = run.id;
+    if (run.conversationId) {
+      state.conversationId = run.conversationId;
+    }
   }
 
   let printed = 0;
@@ -238,7 +244,7 @@ async function handleUserTurn(state: ChatState, message: string): Promise<void> 
 }
 
 async function startChat(client: AlmytyClient, agent: AgentInfo): Promise<void> {
-  const state: ChatState = { client, agent, pendingRunId: null };
+  const state: ChatState = { client, agent, pendingRunId: null, conversationId: null };
   printAgentBanner(state.agent);
 
   const rl: ReadlineInterface = createInterface({

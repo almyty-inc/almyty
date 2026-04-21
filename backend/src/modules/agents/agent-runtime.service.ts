@@ -138,6 +138,7 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
       maxCostCents?: number;
       maxDurationMs?: number;
       parentRunId?: string;
+      conversationId?: string;
     },
   ): Promise<AgentRun> {
     const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
@@ -189,13 +190,24 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // Create a conversation for this run
-    const conversation = Conversation.createConversation({
-      agentId,
-      organizationId,
-      userId,
-    });
-    const savedConversation = await this.conversationRepository.save(conversation);
+    // Reuse an existing conversation or create a new one
+    let savedConversation: Conversation;
+    if (options?.conversationId) {
+      const existing = await this.conversationRepository.findOne({
+        where: { id: options.conversationId, organizationId },
+      } as any);
+      if (!existing) {
+        throw new BadRequestException('Conversation not found');
+      }
+      savedConversation = existing;
+    } else {
+      const conversation = Conversation.createConversation({
+        agentId,
+        organizationId,
+        userId,
+      });
+      savedConversation = await this.conversationRepository.save(conversation);
+    }
 
     // Persist initial user message
     const userMessage = Message.createUserMessage(
