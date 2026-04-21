@@ -8,6 +8,8 @@ import {
   OneToMany,
   JoinColumn,
   Index,
+  BeforeInsert,
+  BeforeUpdate,
 } from 'typeorm';
 import { VersionedEntity } from 'typeorm-versions';
 import { Organization } from './organization.entity';
@@ -250,12 +252,25 @@ export class Gateway {
     return `${baseUrl.replace(/\/$/, '')}${this.endpoint}`;
   }
 
+  static kindForType(type: GatewayType): GatewayKind {
+    const toolTypes: GatewayType[] = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS];
+    return toolTypes.includes(type) ? GatewayKind.TOOL : GatewayKind.AGENT;
+  }
+
+  @BeforeInsert()
+  @BeforeUpdate()
+  syncKind(): void {
+    if (this.type) {
+      this.kind = Gateway.kindForType(this.type);
+    }
+  }
+
   isToolKind(): boolean {
-    return this.kind === GatewayKind.TOOL;
+    return Gateway.kindForType(this.type) === GatewayKind.TOOL;
   }
 
   isAgentKind(): boolean {
-    return this.kind === GatewayKind.AGENT;
+    return Gateway.kindForType(this.type) === GatewayKind.AGENT;
   }
 
   supportsProtocol(protocol: string): boolean {
