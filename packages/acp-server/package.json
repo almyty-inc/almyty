@@ -28,7 +28,7 @@
   "author": "almyty",
   "license": "BSL-1.1",
   "dependencies": {
-    "@almyty/client": "file:../client",
+    "@almyty/client": "^0.1.0",
     "eventsource-parser": "^3.0.0"
   },
   "devDependencies": {
