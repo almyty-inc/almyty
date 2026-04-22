@@ -44,8 +44,11 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     getRunEmitter: jest.Mock;
   };
 
-  const ORG_SLUG = `gw-runs-${Date.now()}`;
-  const TEST_EMAIL = `gw-runs-${Date.now()}@test.com`;
+  const SUFFIX = Date.now();
+  const ORG_SLUG = `gw-runs-${SUFFIX}`;
+  const TEST_EMAIL = `gw-runs-${SUFFIX}@test.com`;
+  const AGENT_NAME = `Run Test Agent ${SUFFIX}`;
+  const AGENT_SLUG = AGENT_NAME.toLowerCase().replace(/\s+/g, '-');
 
   beforeAll(async () => {
     runtimeMock = {
@@ -107,7 +110,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     // Seed an autonomous agent
     const agentRepo = ds.getRepository(Agent);
     agent = agentRepo.create({
-      name: 'Run Test Agent',
+      name: AGENT_NAME,
       description: 'Integration test agent',
       organizationId: org.id,
       status: AgentStatus.ACTIVE,
@@ -137,7 +140,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
   it('should reject unauthenticated requests', async () => {
     const res = await request(app.getHttpServer())
-      .post(`/${ORG_SLUG}/run-test-agent/runs`)
+      .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
       .send({ input: 'hello' });
 
     expect(res.status).toBe(401);
@@ -152,7 +155,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     });
 
     const res = await request(app.getHttpServer())
-      .post(`/${ORG_SLUG}/run-test-agent/runs`)
+      .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
       .set('Authorization', `Bearer ${wrongJwt}`)
       .send({ input: 'hello' });
 
@@ -170,10 +173,13 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     });
 
     const res = await request(app.getHttpServer())
-      .post(`/${ORG_SLUG}/run-test-agent/runs`)
+      .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
       .set('Authorization', `Bearer ${jwt}`)
       .send({ input: 'Hello agent' });
 
+    if (res.status !== 201) {
+      console.error('[DEBUG] start run response:', res.status, JSON.stringify(res.body));
+    }
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.id).toBe('run-1');
@@ -198,7 +204,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     });
 
     const res = await request(app.getHttpServer())
-      .post(`/${ORG_SLUG}/run-test-agent/runs`)
+      .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
       .set('Authorization', `Bearer ${jwt}`)
       .send({ input: 'Follow-up', conversationId: 'conv-existing' });
 
@@ -225,7 +231,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     });
 
     const res = await request(app.getHttpServer())
-      .get(`/${ORG_SLUG}/run-test-agent/runs/run-1`)
+      .get(`/${ORG_SLUG}/${AGENT_SLUG}/runs/run-1`)
       .set('Authorization', `Bearer ${jwt}`);
 
     expect(res.status).toBe(200);
@@ -245,7 +251,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     });
 
     const res = await request(app.getHttpServer())
-      .post(`/${ORG_SLUG}/run-test-agent/runs/run-1/cancel`)
+      .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs/run-1/cancel`)
       .set('Authorization', `Bearer ${jwt}`)
       .send({});
 
@@ -264,7 +270,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     });
 
     const res = await request(app.getHttpServer())
-      .post(`/${ORG_SLUG}/run-test-agent/runs/run-1/input`)
+      .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs/run-1/input`)
       .set('Authorization', `Bearer ${jwt}`)
       .send({ input: 'More context' });
 
@@ -282,9 +288,9 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
       status: 'running',
     });
 
-    // "run-test-agent" should resolve to "Run Test Agent"
+    // slug should resolve to agent name via deslugification
     const res = await request(app.getHttpServer())
-      .post(`/${ORG_SLUG}/run-test-agent/runs`)
+      .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
       .set('Authorization', `Bearer ${jwt}`)
       .send({ input: 'test' });
 
@@ -309,7 +315,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
   it('should 404 for unknown org slug', async () => {
     const res = await request(app.getHttpServer())
-      .post(`/nonexistent-org/run-test-agent/runs`)
+      .post(`/nonexistent-org/${AGENT_SLUG}/runs`)
       .set('Authorization', `Bearer ${jwt}`)
       .send({ input: 'test' });
 
@@ -320,8 +326,10 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
   it('should reject /runs on a workflow agent', async () => {
     const agentRepo = ds.getRepository(Agent);
+    const wfName = `Workflow Agent ${SUFFIX}`;
+    const wfSlug = wfName.toLowerCase().replace(/\s+/g, '-');
     const workflowAgent = await agentRepo.save(agentRepo.create({
-      name: 'Workflow Agent',
+      name: wfName,
       organizationId: org.id,
       status: AgentStatus.ACTIVE,
       mode: 'workflow',
@@ -330,7 +338,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     }));
 
     const res = await request(app.getHttpServer())
-      .post(`/${ORG_SLUG}/workflow-agent/runs`)
+      .post(`/${ORG_SLUG}/${wfSlug}/runs`)
       .set('Authorization', `Bearer ${jwt}`)
       .send({ input: 'test' });
 
