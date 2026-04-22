@@ -148,6 +148,7 @@ export interface AgentCard {
   securitySchemes?: Record<string, SecurityScheme>;
   security?: Array<Record<string, string[]>>;
   capabilities?: AgentCapabilities;
+  supportedInterfaces?: Array<{ protocolBinding: string; endpoint: string }>;
   defaultInputModes?: string[];
   defaultOutputModes?: string[];
 }
