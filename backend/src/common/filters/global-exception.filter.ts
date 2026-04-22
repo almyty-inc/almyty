@@ -18,6 +18,34 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
+    // JSON-RPC -32700 parse error for malformed JSON on A2A/gateway POST requests.
+    // Only applies to paths that serve JSON-RPC (root /, gateway sub-paths).
+    // Internal API endpoints (/auth, /agents, /gateways, etc.) keep normal HTTP errors.
+    if (request.method === 'POST') {
+      const path = request.path || '';
+      const isInternalApi = path.startsWith('/auth') || path.startsWith('/agents')
+        || path.startsWith('/gateways') || path.startsWith('/apis')
+        || path.startsWith('/tools') || path.startsWith('/health')
+        || path.startsWith('/users') || path.startsWith('/organizations')
+        || path.startsWith('/credentials') || path.startsWith('/mcp');
+      const ct = request.headers?.['content-type'] || '';
+      const errMsg = (exception as any)?.message || '';
+      const isParseError = !isInternalApi && ct.includes('application/json') && (
+        exception instanceof SyntaxError
+        || errMsg.includes('JSON at position')
+        || errMsg.includes('Unexpected token')
+        || errMsg.includes('Expected')
+      );
+      if (isParseError) {
+        response.status(200).json({
+          jsonrpc: '2.0',
+          id: null,
+          error: { code: -32700, message: 'Parse error: invalid JSON' },
+        });
+        return;
+      }
+    }
+
     let status: number;
     let message: string;
     let code: string;
