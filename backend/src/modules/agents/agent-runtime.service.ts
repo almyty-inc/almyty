@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
 import { Agent } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -123,6 +125,7 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
     private readonly toolExecutorService: ToolExecutorService,
     @Inject(forwardRef(() => MemoryService))
     private readonly memoryService: MemoryService,
+    @InjectRedis() private readonly redis: Redis,
   ) {}
 
   /**
@@ -1739,17 +1742,82 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
    * The onModuleInit sweeper below handles that case.
    */
   private emitEvent(runId: string, type: string, data: any) {
+    const event = { type, data, timestamp: new Date().toISOString() };
+
+    // Local emitter (same-pod fast path)
     const emitter = this.runEmitters.get(runId);
     if (emitter) {
-      emitter.emit('event', { type, data, timestamp: new Date().toISOString() });
+      emitter.emit('event', event);
 
-      // Clean up emitter and temporary agents if run is done
       if (['run.completed', 'run.failed', 'run.cancelled'].includes(type)) {
         emitter.emit('done');
         this.runEmitters.delete(runId);
-        // Clean up any temporary agents spawned by this run
         this.cleanupTemporaryAgents(runId).catch(() => {});
       }
+    }
+
+    // Redis Stream (cross-pod distribution)
+    const streamKey = `run:${runId}:events`;
+    this.redis.xadd(streamKey, '*', 'event', JSON.stringify(event)).catch(err => {
+      this.logger.warn(`Failed to write event to Redis stream ${streamKey}: ${err.message}`);
+    });
+
+    // Set TTL on the stream after terminal events so it auto-cleans
+    if (['run.completed', 'run.failed', 'run.cancelled'].includes(type)) {
+      this.redis.expire(streamKey, 300).catch(() => {}); // 5 min TTL
+    }
+  }
+
+  /**
+   * Subscribe to run events via Redis Streams. Works across pods.
+   * Calls handler for each event. Resolves when a terminal event
+   * is received or the timeout expires.
+   *
+   * Used by SSE endpoints instead of getRunEmitter() for cross-pod support.
+   */
+  async subscribeRunEvents(
+    runId: string,
+    handler: (event: { type: string; data: any; timestamp: string }) => void,
+    signal?: AbortSignal,
+    timeoutMs = 300_000,
+  ): Promise<void> {
+    const streamKey = `run:${runId}:events`;
+    const deadline = Date.now() + timeoutMs;
+    let lastId = '0'; // Start from beginning to replay missed events
+
+    // Use a duplicate connection for blocking reads
+    const subscriber = this.redis.duplicate();
+
+    try {
+      while (Date.now() < deadline) {
+        if (signal?.aborted) break;
+
+        const blockMs = Math.min(2000, deadline - Date.now());
+        if (blockMs <= 0) break;
+
+        const results = await (subscriber as any).xread(
+          'BLOCK', blockMs, 'COUNT', 100,
+          'STREAMS', streamKey, lastId,
+        ) as Array<[string, Array<[string, string[]]>]> | null;
+
+        if (!results) continue;
+
+        for (const [, messages] of results) {
+          for (const [id, fields] of messages) {
+            lastId = id;
+            const raw = fields[1]; // fields = ['event', jsonString]
+            try {
+              const event = JSON.parse(raw);
+              handler(event);
+              if (['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)) {
+                return;
+              }
+            } catch { /* skip malformed */ }
+          }
+        }
+      }
+    } finally {
+      subscriber.disconnect();
     }
   }
 

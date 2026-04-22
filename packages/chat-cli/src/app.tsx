@@ -212,16 +212,22 @@ export function ChatApp({ client, initialAgent, gw }: { client: AlmytyClient; in
 
         setState(s => ({ ...s, loading: false }));
 
+        // If still running after stream, poll to completion
+        let finalResult = result;
+        if (result.status === 'running') {
+          finalResult = await gw.pollRun(runId);
+        }
+
         // Show final output
-        if (result.status === 'completed') {
+        if (finalResult.status === 'completed') {
           const text = streamedContent
-            || (result.output != null ? (typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2)) : '');
+            || (finalResult.output != null ? (typeof finalResult.output === 'string' ? finalResult.output : JSON.stringify(finalResult.output, null, 2)) : '');
           if (text) addMessage({ role: 'agent', text });
-        } else if (result.status === 'waiting_input') {
+        } else if (finalResult.status === 'waiting_input') {
           setState(s => ({ ...s, pendingRunId: runId }));
           addMessage({ role: 'info', text: 'Waiting for your input' });
-        } else if (result.status === 'failed' && !streamedContent) {
-          addMessage({ role: 'error', text: result.error || 'Run failed' });
+        } else if (finalResult.status === 'failed' && !streamedContent) {
+          addMessage({ role: 'error', text: finalResult.error || 'Run failed' });
         }
       } else {
         // Workflow: synchronous invoke

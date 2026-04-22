@@ -390,11 +390,12 @@ export class GatewayClient {
         handler,
         signal,
       );
+      // Stream ended — get final state
+      return this.getRun(runId);
     } catch {
-      // SSE failed — fall back to polling
+      // SSE failed — fall back to polling until completion
+      return this.pollRun(runId);
     }
-    // Get final state
-    return this.getRun(runId);
   }
 
   async sendRunInput(runId: string, input: string): Promise<void> {

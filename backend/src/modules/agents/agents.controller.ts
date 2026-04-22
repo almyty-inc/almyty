@@ -1306,32 +1306,24 @@ export class AgentsController {
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders();
 
-      const emitter = this.runtimeService.getRunEmitter(runId);
-      if (!emitter) {
-        // Run already completed, send current state
-        const run = await this.runtimeService.getRun(runId, organizationId, id);
-        res.write(`event: state\ndata: ${JSON.stringify({ status: run.status, output: run.output })}\n\n`);
-        res.write(`event: done\ndata: {}\n\n`);
-        res.end();
-        return;
+      // Stream events via Redis Streams (cross-pod)
+      const abortController = new AbortController();
+      req.on('close', () => abortController.abort());
+
+      try {
+        await this.runtimeService.subscribeRunEvents(
+          runId,
+          (event) => {
+            res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+          },
+          abortController.signal,
+        );
+      } catch {
+        // Stream ended or aborted
       }
 
-      const onEvent = (event: any) => {
-        res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-      };
-      const onDone = () => {
-        res.write(`event: done\ndata: {}\n\n`);
-        res.end();
-      };
-
-      emitter.on('event', onEvent);
-      emitter.on('done', onDone);
-
-      // Cleanup on client disconnect
-      req.on('close', () => {
-        emitter.off('event', onEvent);
-        emitter.off('done', onDone);
-      });
+      res.write(`event: done\ndata: {}\n\n`);
+      if (!res.writableEnded) res.end();
     } catch (error) {
       if (!res.headersSent) {
         res.status(error.status || HttpStatus.BAD_REQUEST).json({ success: false, message: error.message });

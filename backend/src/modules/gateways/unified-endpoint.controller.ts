@@ -606,29 +606,32 @@ export class UnifiedEndpointController {
       return res.json({ success: true, data: run });
     }
 
-    // GET /runs/:runId/stream — SSE
+    // GET /runs/:runId/stream — SSE via Redis Streams (cross-pod)
     if (req.method === 'GET' && subAction === 'stream') {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders();
 
-      const emitter = this.runtimeService.getRunEmitter(runId);
-      if (!emitter) {
-        res.write(`event: error\ndata: ${JSON.stringify({ error: 'Run not found or already completed' })}\n\n`);
-        res.end();
-        return;
+      const abortController = new AbortController();
+      req.on('close', () => abortController.abort());
+
+      try {
+        await this.runtimeService.subscribeRunEvents(
+          runId,
+          (event) => {
+            res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+            if (['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)) {
+              res.end();
+            }
+          },
+          abortController.signal,
+        );
+      } catch {
+        // Stream ended or aborted
       }
 
-      const onEvent = (event: any) => {
-        res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-        if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled') {
-          res.end();
-        }
-      };
-
-      emitter.on('event', onEvent);
-      req.on('close', () => emitter.removeListener('event', onEvent));
+      if (!res.writableEnded) res.end();
       return;
     }
 
