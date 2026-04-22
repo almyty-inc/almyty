@@ -405,6 +405,11 @@ export class GatewayClient {
     }
   }
 
+  async getConversationMessages(conversationId: string): Promise<Array<{ id: string; role: string; content: string; createdAt: string }>> {
+    const data = await this.client.request(`${this.prefix}/conversations/${encodeURIComponent(conversationId)}/messages`);
+    return data?.data ?? [];
+  }
+
   async sendRunInput(runId: string, input: string): Promise<void> {
     await this.client.request(
       `${this.prefix}/runs/${encodeURIComponent(runId)}/input`,
