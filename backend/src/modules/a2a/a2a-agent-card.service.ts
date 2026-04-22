@@ -28,7 +28,7 @@ export class A2AAgentCardService {
       gateway.authConfigs || [],
     );
     const capabilities = this.buildCapabilities();
-    const provider = this.buildProvider(org);
+    const provider = this.buildProvider(org, baseUrl);
     const url = `${baseUrl}/${org.slug}/${gateway.endpoint.replace(/^\//, '')}`;
 
     return {
@@ -71,10 +71,10 @@ export class A2AAgentCardService {
     };
   }
 
-  private buildProvider(org: Organization): AgentProvider {
+  private buildProvider(org: Organization, baseUrl: string): AgentProvider {
     return {
       organization: org.name,
-      url: org.website || undefined,
+      url: org.website || `${baseUrl}/${org.slug}`,
     };
   }
 
