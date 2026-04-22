@@ -9,10 +9,8 @@ import {
   HttpException,
   HttpStatus,
   Header,
-  UseFilters,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JsonRpcParseErrorFilter } from '../a2a/json-rpc-parse-error.filter';
 import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -50,7 +48,6 @@ import { AcpDiscoveryService } from '../acp/acp-discovery.service';
  * existing routes like /auth/login, /apis, /health, etc.
  */
 @Controller()
-@UseFilters(JsonRpcParseErrorFilter)
 export class UnifiedEndpointController {
   private readonly logger = new Logger(UnifiedEndpointController.name);
 
