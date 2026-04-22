@@ -15,7 +15,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Response, Request } from 'express';
 import * as crypto from 'crypto';
-import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 import { Organization } from '../../entities/organization.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../entities/gateway.entity';
@@ -69,7 +69,7 @@ export class UnifiedEndpointController {
     private readonly acpServerService: AcpServerService,
     private readonly acpDiscoveryService: AcpDiscoveryService,
     private readonly runtimeService: AgentRuntimeService,
-    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -148,7 +148,9 @@ export class UnifiedEndpointController {
 
     // Try JWT
     try {
-      const payload = this.jwtService.verify(rawToken);
+      const jwt = require('jsonwebtoken');
+      const secret = this.configService.get<string>('JWT_SECRET', 'dev-jwt-secret-unsafe');
+      const payload = jwt.verify(rawToken, secret, { issuer: 'almyty', audience: 'almyty-api' });
       const userId = payload.sub;
       const userOrgs: Array<{ id: string }> = payload.organizations || [];
       const hasAccess = userOrgs.some(o => o.id === agent.organizationId);
