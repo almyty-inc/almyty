@@ -99,6 +99,6 @@ import { UserOrganization } from '../../entities/user-organization.entity';
     RolesGuard,
   ],
   controllers: [AuthController],
-  exports: [AuthService, JwtAuthGuard, ApiKeyAuthGuard, RolesGuard],
+  exports: [AuthService, JwtAuthGuard, ApiKeyAuthGuard, RolesGuard, JwtModule],
 })
 export class AuthModule {}
