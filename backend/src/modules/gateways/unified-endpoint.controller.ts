@@ -287,16 +287,23 @@ export class UnifiedEndpointController {
     res: Response,
     body: any,
   ) {
-    // Authenticate the request against the gateway's auth config
-    const { auth } = await this.gatewayResolver.resolveAndAuthenticate(
-      orgSlug,
-      `/${resourceSlug}`,
-      req,
-    );
-
     // Extract action from sub-path (e.g., /:org/:gw/.well-known/a2a -> .well-known/a2a)
     const afterGateway = req.path.replace(`/${orgSlug}/${resourceSlug}`, '');
     const action = afterGateway.replace(/^\//, '') || '';
+
+    // Discovery endpoints are public (A2A agent card, ACP discovery, UTCP manual)
+    const isDiscovery = action.startsWith('.well-known/');
+
+    // Authenticate the request (skip for discovery)
+    let auth: any = null;
+    if (!isDiscovery) {
+      const result = await this.gatewayResolver.resolveAndAuthenticate(
+        orgSlug,
+        `/${resourceSlug}`,
+        req,
+      );
+      auth = result.auth;
+    }
 
     switch (gateway.type) {
       case GatewayType.MCP:

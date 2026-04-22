@@ -27,8 +27,12 @@ $ npx @almyty/agents run my-agent --input '{"text": "hello"}' --watch
 | Flag | Description |
 |------|-------------|
 | `--input '<json>'` | Input payload (object for workflow, string or object for autonomous) |
+| `--resume <conversation-id>` | Resume a previous autonomous conversation |
 | `--watch` | Stream steps as they arrive |
 | `--json` | Print raw JSON output |
+| `--max-steps <n>` | Autonomous: max steps (default 50) |
+| `--max-cost-cents <n>` | Autonomous: max cost in cents (default 100) |
+| `--max-duration-ms <ms>` | Autonomous: max wall time in ms (default 3600000) |
 
 ## Environment variables
 

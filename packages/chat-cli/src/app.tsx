@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Text, useApp, useInput, useStdout } from 'ink';
+import { Box, Text, useApp, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { AlmytyClient, GatewayClient, AgentInfo, StreamEvent } from '@almyty/client';
 
@@ -30,7 +30,6 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
   resumeConversationId?: string;
 }) {
   const { exit } = useApp();
-  const { stdout } = useStdout();
   const [state, setState] = useState<AppState>({
     agent: initialAgent,
     messages: [],
@@ -61,7 +60,8 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
   }, [resumeConversationId]);
   const [input, setInput] = useState('');
   const [paletteCursor, setPaletteCursor] = useState(0);
-  const [inputHistory, setInputHistory] = useState<string[]>([]);
+  // Input history derived from conversation — includes resumed messages
+  const inputHistory = state.messages.filter(m => m.role === 'user').map(m => m.text);
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerAgents, setPickerAgents] = useState<AgentInfo[]>([]);
@@ -93,23 +93,19 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
       return;
     }
 
-    // Input history: Ctrl+P (previous) / Ctrl+N (next) — works reliably
-    // Also up/down arrows when input is empty
-    const wantPrev = (key.upArrow && input === '') || (key.ctrl && ch === 'p');
-    const wantNext = (key.downArrow && input === '') || (key.ctrl && ch === 'n');
-
-    if (wantPrev && inputHistory.length > 0) {
+    // Input history — up/down arrows always, like Claude Code
+    if (key.upArrow && inputHistory.length > 0) {
       const newIdx = Math.min(historyIdx + 1, inputHistory.length - 1);
       setHistoryIdx(newIdx);
       setInput(inputHistory[inputHistory.length - 1 - newIdx]);
       return;
     }
-    if (wantNext && historyIdx >= 0) {
+    if (key.downArrow) {
       if (historyIdx > 0) {
         const newIdx = historyIdx - 1;
         setHistoryIdx(newIdx);
         setInput(inputHistory[inputHistory.length - 1 - newIdx]);
-      } else {
+      } else if (historyIdx === 0) {
         setHistoryIdx(-1);
         setInput('');
       }
@@ -131,7 +127,6 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
     const trimmed = value.trim();
     if (!trimmed) return;
     setInput('');
-    setInputHistory(h => [...h, trimmed]);
     setHistoryIdx(-1);
 
     // Slash commands
@@ -331,11 +326,10 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
   }, [state.agent.id]);
 
   const suggestion = getSuggestion(input);
-  const rows = stdout?.rows || 24;
 
   if (showPicker) {
     return (
-      <Box flexDirection="column" height={rows}>
+      <Box flexDirection="column">
         <Header agent={state.agent} conversationId={state.conversationId} />
         <AgentSelector agents={pickerAgents} onSelect={handlePickerSelect} />
       </Box>
@@ -343,7 +337,7 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
   }
 
   return (
-    <Box flexDirection="column" height={rows}>
+    <Box flexDirection="column">
       {/* Header */}
       <Header agent={state.agent} conversationId={state.conversationId} />
 
@@ -355,26 +349,22 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
         {state.loading && <LoadingIndicator label={state.loadingLabel} />}
       </Box>
 
-      {/* Command palette (above input) */}
+      {/* Command palette */}
       {paletteOpen && (
         <Box flexDirection="column" paddingLeft={2}>
           {slashMatches.map((cmd, i) => {
             const active = i === paletteCursor;
+            const padded = `/${cmd}`.padEnd(10);
             const desc = COMMAND_DESCS[cmd] ?? '';
-            return (
-              <Box key={cmd} flexDirection="row">
-                <Text color={active ? '#8b5cf6' : undefined}>{active ? '❯ ' : '  '}</Text>
-                <Text color="#8b5cf6" bold={active}>/{cmd}</Text>
-                <Text dimColor>{'  '}{desc}</Text>
-              </Box>
-            );
+            const line = `${active ? '❯' : ' '} ${padded} ${desc}`;
+            return <Text key={cmd} color={active ? '#8b5cf6' : undefined} bold={active} wrap="truncate">{line}</Text>;
           })}
         </Box>
       )}
 
       {/* Separator */}
       <Box>
-        <Text dimColor>{'─'.repeat(Math.min(stdout?.columns || 80, 120))}</Text>
+        <Text dimColor>{'─'.repeat(Math.min(process.stdout.columns || 80, 120))}</Text>
       </Box>
 
       {/* Input */}
