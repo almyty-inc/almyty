@@ -12,6 +12,9 @@
  * Requires: RUN_DB_INTEGRATION=1 and a running PostgreSQL.
  */
 
+jest.unmock('jsonwebtoken');
+jest.unmock('bcryptjs');
+
 const SKIP = !process.env.RUN_DB_INTEGRATION;
 
 import { Test, TestingModule } from '@nestjs/testing';
@@ -32,7 +35,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 (SKIP ? describe.skip : describe)('Gateway agent runs (integration)', () => {
   let app: INestApplication;
   let ds: DataSource;
-  let jwt: string;
+  let authToken: string;
   let org: Organization;
   let agent: Agent;
   let runtimeMock: {
@@ -101,7 +104,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     }));
 
     // Create JWT for this user+org
-    jwt = jwtService.sign({
+    authToken = jwtService.sign({
       sub: user!.id,
       email: TEST_EMAIL,
       organizations: [{ id: org.id, name: org.name, role: 'owner' }],
@@ -174,18 +177,9 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
     const res = await request(app.getHttpServer())
       .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
-      .set('Authorization', `Bearer ${jwt}`)
+      .set('Authorization', `Bearer ${authToken}`)
       .send({ input: 'Hello agent' });
 
-    if (res.status !== 201) {
-      // Debug: verify the JWT ourselves
-      const jwtService = app.get(JwtService);
-      const decoded = jwtService.verify(jwt);
-      console.error('[DEBUG] JWT payload:', JSON.stringify(decoded));
-      console.error('[DEBUG] agent.organizationId:', agent.organizationId);
-      console.error('[DEBUG] org.id:', org.id);
-      console.error('[DEBUG] response:', res.status, JSON.stringify(res.body));
-    }
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.id).toBe('run-1');
@@ -211,7 +205,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
     const res = await request(app.getHttpServer())
       .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
-      .set('Authorization', `Bearer ${jwt}`)
+      .set('Authorization', `Bearer ${authToken}`)
       .send({ input: 'Follow-up', conversationId: 'conv-existing' });
 
     expect(res.status).toBe(201);
@@ -238,7 +232,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
     const res = await request(app.getHttpServer())
       .get(`/${ORG_SLUG}/${AGENT_SLUG}/runs/run-1`)
-      .set('Authorization', `Bearer ${jwt}`);
+      .set('Authorization', `Bearer ${authToken}`);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -258,7 +252,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
     const res = await request(app.getHttpServer())
       .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs/run-1/cancel`)
-      .set('Authorization', `Bearer ${jwt}`)
+      .set('Authorization', `Bearer ${authToken}`)
       .send({});
 
     expect(res.status).toBe(200);
@@ -277,7 +271,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
     const res = await request(app.getHttpServer())
       .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs/run-1/input`)
-      .set('Authorization', `Bearer ${jwt}`)
+      .set('Authorization', `Bearer ${authToken}`)
       .send({ input: 'More context' });
 
     expect(res.status).toBe(200);
@@ -297,7 +291,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     // slug should resolve to agent name via deslugification
     const res = await request(app.getHttpServer())
       .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
-      .set('Authorization', `Bearer ${jwt}`)
+      .set('Authorization', `Bearer ${authToken}`)
       .send({ input: 'test' });
 
     expect(res.status).toBe(201);
@@ -313,7 +307,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
   it('should 404 for unknown agent slug', async () => {
     const res = await request(app.getHttpServer())
       .post(`/${ORG_SLUG}/nonexistent-agent/runs`)
-      .set('Authorization', `Bearer ${jwt}`)
+      .set('Authorization', `Bearer ${authToken}`)
       .send({ input: 'test' });
 
     expect(res.status).toBe(404);
@@ -322,7 +316,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
   it('should 404 for unknown org slug', async () => {
     const res = await request(app.getHttpServer())
       .post(`/nonexistent-org/${AGENT_SLUG}/runs`)
-      .set('Authorization', `Bearer ${jwt}`)
+      .set('Authorization', `Bearer ${authToken}`)
       .send({ input: 'test' });
 
     expect(res.status).toBe(404);
@@ -345,7 +339,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
     const res = await request(app.getHttpServer())
       .post(`/${ORG_SLUG}/${wfSlug}/runs`)
-      .set('Authorization', `Bearer ${jwt}`)
+      .set('Authorization', `Bearer ${authToken}`)
       .send({ input: 'test' });
 
     expect(res.status).toBe(400);
