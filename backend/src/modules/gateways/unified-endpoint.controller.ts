@@ -9,7 +9,9 @@ import {
   HttpException,
   HttpStatus,
   Header,
+  UseFilters,
 } from '@nestjs/common';
+import { JsonRpcParseErrorFilter } from '../a2a/json-rpc-parse-error.filter';
 import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -47,6 +49,7 @@ import { AcpDiscoveryService } from '../acp/acp-discovery.service';
  * existing routes like /auth/login, /apis, /health, etc.
  */
 @Controller()
+@UseFilters(JsonRpcParseErrorFilter)
 export class UnifiedEndpointController {
   private readonly logger = new Logger(UnifiedEndpointController.name);
 
@@ -239,6 +242,69 @@ export class UnifiedEndpointController {
     const card = this.a2aAgentCardService.buildAgentCard(gateway, agent, organization, baseUrl);
     res.setHeader('Cache-Control', 'public, max-age=300');
     return res.json(card);
+  }
+
+  /**
+   * Root-level JSON-RPC POST: handles A2A message/send etc. at domain root.
+   *
+   * The A2A TCK and SDKs send JSON-RPC POSTs to the base URL (domain root).
+   * API key in the request determines which gateway to route to.
+   */
+  @All('/')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  async handleRootJsonRpc(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Body() body: any,
+  ) {
+    if (req.method === 'GET') {
+      // GET / is not agent card — that's at /.well-known/agent-card.json
+      throw new HttpException('Not Found', HttpStatus.NOT_FOUND);
+    }
+
+    // Resolve gateway from API key
+    const apiKeyHeader = (req.headers?.['x-api-key'] as string) || '';
+    const authHeader = (req.headers?.authorization as string) || '';
+    const rawKey = apiKeyHeader || (authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '');
+
+    if (!rawKey) {
+      return res.json({
+        jsonrpc: '2.0',
+        id: body?.id ?? null,
+        error: { code: -32600, message: 'API key required' },
+      });
+    }
+
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const apiKey = await this.apiKeyRepository.findOne({
+      where: { keyHash, isActive: true },
+    });
+
+    if (!apiKey) {
+      return res.json({
+        jsonrpc: '2.0',
+        id: body?.id ?? null,
+        error: { code: -32600, message: 'Invalid API key' },
+      });
+    }
+
+    const gateway = await this.gatewayRepository.findOne({
+      where: apiKey.gatewayId
+        ? { id: apiKey.gatewayId, status: GatewayStatus.ACTIVE }
+        : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
+      relations: ['authConfigs'],
+    });
+
+    if (!gateway?.agentId) {
+      return res.json({
+        jsonrpc: '2.0',
+        id: body?.id ?? null,
+        error: { code: -32600, message: 'No agent gateway found for this key' },
+      });
+    }
+
+    // Delegate to A2A server
+    return this.a2aServerService.handleJsonRpc(gateway, req, body, res);
   }
 
   /**
