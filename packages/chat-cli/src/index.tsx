@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { render, Box, Text, useApp, useInput, useStdout } from 'ink';
 import TextInput from 'ink-text-input';
 import Spinner from 'ink-spinner';
-import { AlmytyClient, GatewayClient, AgentInfo, AgentRun, resolveCredentialsOrExit } from '@almyty/client';
+import { AlmytyClient, GatewayClient, AgentInfo, AgentRun, resolveCredentialsOrExit, getOrgSlugFromToken } from '@almyty/client';
 
 const VERSION = '0.1.5';
 
@@ -600,19 +600,62 @@ async function main(): Promise<void> {
 
   const ref = argv.find(arg => !arg.startsWith('-') && arg !== resumeId);
 
-  if (!ref || !ref.includes('/')) {
-    console.error('Usage: npx @almyty/chat <org>/<agent-slug> [--resume <id>]');
-    process.exit(1);
+  // Resolve org slug — from ref (org/slug) or JWT token
+  const defaultOrg = getOrgSlugFromToken(creds.token);
+
+  let orgSlug: string;
+  let agentSlug: string;
+
+  if (ref && ref.includes('/')) {
+    [orgSlug, agentSlug] = ref.split('/', 2);
+  } else if (ref) {
+    // Bare slug — use org from JWT
+    if (!defaultOrg) {
+      console.error('Cannot determine org. Use org/agent-slug format or log in: npx @almyty/auth login');
+      process.exit(1);
+    }
+    orgSlug = defaultOrg;
+    agentSlug = ref;
+  } else {
+    // No arg — interactive picker
+    if (!defaultOrg) {
+      console.error('Usage: npx @almyty/chat <org>/<agent-slug>');
+      process.exit(1);
+    }
+    orgSlug = defaultOrg;
+
+    const agents = await client.listAgents();
+    if (!agents.length) {
+      console.error('No agents found. Create one at https://app.almyty.com/agents');
+      process.exit(1);
+    }
+    if (agents.length === 1) {
+      agentSlug = agents[0].slug || agents[0].name.toLowerCase().replace(/\s+/g, '-');
+    } else {
+      const picked = await new Promise<AgentInfo | null>((resolve) => {
+        const { unmount } = render(
+          <Box flexDirection="column">
+            <Box paddingTop={1} paddingLeft={2}>
+              <Text color="#22d3ee">⚡</Text>
+              <Text color="#8b5cf6" bold> almyty chat</Text>
+            </Box>
+            <AgentSelector agents={agents} onSelect={(a) => { unmount(); resolve(a); }} />
+          </Box>,
+          { exitOnCtrlC: true },
+        );
+      });
+      if (!picked) process.exit(0);
+      agentSlug = picked.slug || picked.name.toLowerCase().replace(/\s+/g, '-');
+    }
   }
 
-  const [orgSlug, agentSlug] = ref.split('/', 2);
   const gw = client.gateway(orgSlug, agentSlug);
 
   let agent: AgentInfo;
   try {
     agent = await gw.getInfo();
   } catch {
-    console.error(`Agent not found: ${ref}`);
+    console.error(`Agent not found: ${orgSlug}/${agentSlug}`);
     process.exit(1);
   }
 

@@ -15,6 +15,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Response, Request } from 'express';
 import * as crypto from 'crypto';
+import { JwtService } from '@nestjs/jwt';
 
 import { Organization } from '../../entities/organization.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../entities/gateway.entity';
@@ -68,6 +69,7 @@ export class UnifiedEndpointController {
     private readonly acpServerService: AcpServerService,
     private readonly acpDiscoveryService: AcpDiscoveryService,
     private readonly runtimeService: AgentRuntimeService,
+    private readonly jwtService: JwtService,
   ) {}
 
   /**
@@ -93,29 +95,39 @@ export class UnifiedEndpointController {
    * `gatewayResolver.resolveAndAuthenticate` which enforces the
    * gateway's own auth config (API key / OAuth / JWT).
    */
+  /**
+   * Authenticate an agent request via API key or JWT.
+   *
+   * Tries API key first (SHA-256 hash lookup). If that fails,
+   * tries JWT verification — this allows CLI users authenticated
+   * via `npx @almyty/auth login` to use the unified endpoint
+   * without a separate API key.
+   *
+   * Returns an ApiKey object for API key auth, or a synthetic
+   * ApiKey-like object for JWT auth with the user's ID and org.
+   */
   private async authenticateAgentRequest(req: Request, agent: Agent): Promise<ApiKey> {
     const authHeader = (req.headers?.authorization as string) || '';
     if (!authHeader.startsWith('Bearer ')) {
       throw new HttpException(
         {
           success: false,
-          message: 'Agent execution requires an API key. Send it as `Authorization: Bearer <key>`.',
+          message: 'Authentication required. Send `Authorization: Bearer <key-or-jwt>`.',
           error: 'AGENT_AUTH_REQUIRED',
         },
         HttpStatus.UNAUTHORIZED,
       );
     }
-    const rawKey = authHeader.slice(7).trim();
-    if (!rawKey) {
+    const rawToken = authHeader.slice(7).trim();
+    if (!rawToken) {
       throw new HttpException(
-        { success: false, message: 'Empty API key', error: 'AGENT_AUTH_REQUIRED' },
+        { success: false, message: 'Empty token', error: 'AGENT_AUTH_REQUIRED' },
         HttpStatus.UNAUTHORIZED,
       );
     }
 
-    // Scope the lookup to the agent's own org so a valid key
-    // from another org can't be used to execute this agent.
-    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    // Try API key first
+    const keyHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const apiKey = await this.apiKeyRepository.findOne({
       where: {
         keyHash,
@@ -124,21 +136,39 @@ export class UnifiedEndpointController {
       },
     });
 
-    if (!apiKey) {
+    if (apiKey) {
+      if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
+        throw new HttpException(
+          { success: false, message: 'API key expired', error: 'AGENT_AUTH_EXPIRED' },
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+      return apiKey;
+    }
+
+    // Try JWT
+    try {
+      const payload = this.jwtService.verify(rawToken);
+      const userId = payload.sub;
+      const userOrgs: Array<{ id: string }> = payload.organizations || [];
+      const hasAccess = userOrgs.some(o => o.id === agent.organizationId);
+
+      if (!hasAccess) {
+        throw new HttpException(
+          { success: false, message: 'No access to this agent\'s organization', error: 'AGENT_AUTH_FORBIDDEN' },
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      // Return a synthetic ApiKey-like object for downstream code
+      return { userId, organizationId: agent.organizationId } as ApiKey;
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
       throw new HttpException(
-        { success: false, message: 'Invalid API key for this agent', error: 'AGENT_AUTH_INVALID' },
+        { success: false, message: 'Invalid API key or JWT', error: 'AGENT_AUTH_INVALID' },
         HttpStatus.UNAUTHORIZED,
       );
     }
-
-    if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
-      throw new HttpException(
-        { success: false, message: 'API key expired', error: 'AGENT_AUTH_EXPIRED' },
-        HttpStatus.UNAUTHORIZED,
-      );
-    }
-
-    return apiKey;
   }
 
   /**
