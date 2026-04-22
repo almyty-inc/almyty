@@ -29,6 +29,7 @@ import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
+import { Tool, ToolType } from '../../entities/tool.entity';
 import { AuthService } from '../../modules/auth/auth.service';
 import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service';
 
@@ -468,5 +469,48 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     expect(runtimeMock.startRun).toHaveBeenCalledTimes(2);
     const secondCall = runtimeMock.startRun.mock.calls[1];
     expect(secondCall[4]).toEqual(expect.objectContaining({ conversationId: convId }));
+  });
+
+  // ── Agent info with tools ──────────────────────────────────────
+
+  it('should return agent tools in GET /:org/:agent info', async () => {
+    const toolRepo = ds.getRepository(Tool);
+    const tool = await toolRepo.save(toolRepo.create({
+      name: `test-tool-${SUFFIX}`,
+      description: 'A test tool for integration testing',
+      organizationId: org.id,
+      type: ToolType.API,
+      parameters: { type: 'object', properties: {} },
+    } as any)) as unknown as Tool;
+
+    // Update agent to reference this tool
+    const agentRepo = ds.getRepository(Agent);
+    agent.toolIds = [tool.id];
+    await agentRepo.save(agent);
+
+    const res = await request(app.getHttpServer())
+      .get(`/${ORG_SLUG}/${AGENT_SLUG}`)
+      .set('Authorization', `Bearer ${authToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.tools).toHaveLength(1);
+    expect(res.body.data.tools[0].name).toBe(`test-tool-${SUFFIX}`);
+    expect(res.body.data.tools[0].description).toBe('A test tool for integration testing');
+    expect(res.body.data.mode).toBe('autonomous');
+
+    // Cleanup
+    agent.toolIds = [];
+    await agentRepo.save(agent);
+    await toolRepo.delete({ id: tool.id });
+  });
+
+  it('should return empty tools array when agent has no tools', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/${ORG_SLUG}/${AGENT_SLUG}`)
+      .set('Authorization', `Bearer ${authToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.tools).toEqual([]);
+    expect(res.body.data.name).toBe(AGENT_NAME);
   });
 });

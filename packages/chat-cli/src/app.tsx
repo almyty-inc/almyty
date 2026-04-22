@@ -103,11 +103,25 @@ export function ChatApp({ client, initialAgent, gw }: { client: AlmytyClient; in
           return;
         case 'help':
           addMessage({ role: 'info', text: '/agents  browse and switch agents' });
+          addMessage({ role: 'info', text: '/tools   show available tools' });
           addMessage({ role: 'info', text: '/clear   clear conversation' });
           addMessage({ role: 'info', text: '/help    show this help' });
           addMessage({ role: 'info', text: '/quit    exit' });
           addMessage({ role: 'info', text: 'Tab to autocomplete commands.' });
           return;
+        case 'tools': {
+          const tools = state.agent.tools;
+          if (!tools?.length) {
+            addMessage({ role: 'info', text: 'No tools configured for this agent.' });
+            return;
+          }
+          addMessage({ role: 'info', text: `${tools.length} tool${tools.length > 1 ? 's' : ''} available:` });
+          for (const tool of tools) {
+            const desc = tool.description ? ` — ${tool.description}` : '';
+            addMessage({ role: 'tool', text: `${tool.name}${desc}` });
+          }
+          return;
+        }
         case 'agents': {
           const target = args.join(' ').trim();
           if (target) {

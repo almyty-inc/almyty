@@ -20,6 +20,8 @@ import { JwtService } from '@nestjs/jwt';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../entities/gateway.entity';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
+import { Tool } from '../../entities/tool.entity';
+import { In } from 'typeorm';
 import { ApiKey } from '../../entities/api-key.entity';
 import { McpService } from '../mcp/mcp.service';
 import { AlmytyMcpService } from '../mcp/almyty-mcp.service';
@@ -452,7 +454,13 @@ export class UnifiedEndpointController {
     const action = pathParts.slice(2).join('/') || '';
 
     if (req.method === 'GET' && !action) {
-      // GET /:org/:agent — return agent info
+      // GET /:org/:agent — return agent info with tools
+      let tools: Array<{ id: string; name: string; description?: string }> = [];
+      if (agent.toolIds?.length) {
+        const toolRepo = this.agentRepository.manager.getRepository(Tool);
+        const toolEntities = await toolRepo.find({ where: { id: In(agent.toolIds) }, select: ['id', 'name', 'description'] }).catch(() => []);
+        tools = toolEntities.map(t => ({ id: t.id, name: t.name, description: t.description }));
+      }
       return res.json({
         success: true,
         data: {
@@ -461,6 +469,7 @@ export class UnifiedEndpointController {
           description: agent.description,
           mode: agent.mode,
           status: agent.status,
+          tools,
         },
       });
     }

@@ -6,6 +6,12 @@
  * autonomous run management, and polling.
  */
 
+export interface AgentTool {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export interface AgentInfo {
   id: string;
   name: string;
@@ -15,6 +21,7 @@ export interface AgentInfo {
   status?: string;
   pipeline?: { nodes?: PipelineNode[] };
   modelConfig?: Record<string, unknown>;
+  tools?: AgentTool[];
 }
 
 export interface PipelineNode {
