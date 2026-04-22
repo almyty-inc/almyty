@@ -47,12 +47,12 @@ export interface A2AMessage {
 // ---------------------------------------------------------------------------
 
 export type TaskStatus =
-  | 'submitted'
-  | 'working'
-  | 'input-required'
-  | 'completed'
-  | 'failed'
-  | 'canceled';
+  | 'TASK_STATE_SUBMITTED'
+  | 'TASK_STATE_WORKING'
+  | 'TASK_STATE_INPUT_REQUIRED'
+  | 'TASK_STATE_COMPLETED'
+  | 'TASK_STATE_FAILED'
+  | 'TASK_STATE_CANCELED';
 
 export interface TaskState {
   state: TaskStatus;
