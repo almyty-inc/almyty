@@ -1,6 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AuthModule } from '../auth/auth.module';
+import { JwtModule } from '@nestjs/jwt';
 
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
@@ -55,7 +55,7 @@ import { ChannelGatewayService } from './channels/channel-gateway.service';
       OAuthAccessToken,
       AgentRun,
     ]),
-    forwardRef(() => AuthModule),
+    JwtModule,
     ToolsModule,
     forwardRef(() => AgentsModule),
   ],
