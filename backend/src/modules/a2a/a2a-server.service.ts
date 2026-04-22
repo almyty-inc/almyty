@@ -393,6 +393,11 @@ export class A2AServerService {
           code: A2A_ERROR_CODES.TASK_NOT_CANCELABLE,
         });
       }
+      if (error.message?.includes('not found') || error.status === 404) {
+        throw Object.assign(new Error('Task not found'), {
+          code: A2A_ERROR_CODES.TASK_NOT_FOUND,
+        });
+      }
       throw error;
     }
   }
@@ -460,8 +465,13 @@ export class A2AServerService {
       .orderBy('run.createdAt', 'DESC')
       .take(pageSize + 1); // +1 to detect next page
 
-    // Filter by contextId (conversationId)
+    // Filter by contextId (conversationId) — must be valid UUID or skip
     if (params?.contextId) {
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRe.test(params.contextId)) {
+        // Non-UUID contextId — no matches, return empty
+        return { tasks: [], totalSize: 0, pageSize };
+      }
       qb.andWhere('run.conversationId = :convId', { convId: params.contextId });
     }
 
@@ -504,8 +514,14 @@ export class A2AServerService {
       qb.andWhere('run.updatedAt > :after', { after: ts });
     }
 
-    // Cursor pagination
+    // Cursor pagination — validate UUID format
     if (pageToken) {
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRe.test(pageToken)) {
+        throw Object.assign(new Error('Invalid pageToken'), {
+          code: A2A_ERROR_CODES.INVALID_PARAMS,
+        });
+      }
       qb.andWhere('run.id < :cursor', { cursor: pageToken });
     }
 
