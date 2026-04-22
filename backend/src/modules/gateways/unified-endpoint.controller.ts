@@ -292,7 +292,9 @@ export class UnifiedEndpointController {
     const action = afterGateway.replace(/^\//, '') || '';
 
     // Discovery endpoints are public (A2A agent card, ACP discovery, UTCP manual)
-    const isDiscovery = action.startsWith('.well-known/');
+    // GET on A2A/ACP root is also discovery (agent card / capability doc)
+    const isDiscovery = action.startsWith('.well-known/')
+      || (action === '' && req.method === 'GET' && [GatewayType.A2A, GatewayType.ACP].includes(gateway.type));
 
     // Authenticate the request (skip for discovery)
     let auth: any = null;
@@ -364,8 +366,8 @@ export class UnifiedEndpointController {
     res: Response,
     body: any,
   ) {
-    // Discovery: .well-known/agent-card.json
-    if (action === '.well-known/agent-card.json' || action === '.well-known/agent.json') {
+    // Discovery: GET on root or .well-known/agent-card.json returns agent card
+    if (action === '.well-known/agent-card.json' || action === '.well-known/agent.json' || (action === '' && req.method === 'GET')) {
       const agent = await this.agentRepository.findOne({
         where: { id: gateway.agentId, organizationId: organization.id },
       });
