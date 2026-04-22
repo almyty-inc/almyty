@@ -11,6 +11,7 @@ import {
   Header,
   UseFilters,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JsonRpcParseErrorFilter } from '../a2a/json-rpc-parse-error.filter';
 import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -75,6 +76,7 @@ export class UnifiedEndpointController {
     private readonly acpDiscoveryService: AcpDiscoveryService,
     private readonly runtimeService: AgentRuntimeService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -238,7 +240,7 @@ export class UnifiedEndpointController {
       throw new HttpException('Organization not found', HttpStatus.NOT_FOUND);
     }
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
     const card = this.a2aAgentCardService.buildAgentCard(gateway, agent, organization, baseUrl);
     res.setHeader('Cache-Control', 'public, max-age=300');
     return res.json(card);
@@ -507,7 +509,7 @@ export class UnifiedEndpointController {
       if (!agent) {
         throw new HttpException('Agent not found for this A2A gateway', HttpStatus.NOT_FOUND);
       }
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const baseUrl = this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
       const card = this.a2aAgentCardService.buildAgentCard(gateway, agent, organization, baseUrl);
       res.setHeader('Cache-Control', 'public, max-age=300');
       return res.json(card);
@@ -537,7 +539,7 @@ export class UnifiedEndpointController {
       if (!agent) {
         throw new HttpException('Agent not found for this ACP gateway', HttpStatus.NOT_FOUND);
       }
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const baseUrl = this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
       const doc = this.acpDiscoveryService.buildDiscoveryDocument(gateway, agent, organization, baseUrl);
       res.setHeader('Cache-Control', 'public, max-age=300');
       return res.json(doc);
