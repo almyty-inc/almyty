@@ -191,10 +191,11 @@ export class UnifiedEndpointController {
     // Resolve gateway from API key
     const authHeader = (req.headers?.authorization as string) || '';
     const apiKeyHeader = (req.headers?.['x-api-key'] as string) || '';
-    const rawKey = apiKeyHeader || (authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '');
+    const queryKey = (req.query?.key as string) || '';
+    const rawKey = apiKeyHeader || (authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '') || queryKey;
 
     if (!rawKey) {
-      throw new HttpException('API key required for agent card discovery', HttpStatus.UNAUTHORIZED);
+      throw new HttpException('API key required. Pass as x-api-key header, Bearer token, or ?key= query param.', HttpStatus.UNAUTHORIZED);
     }
 
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
