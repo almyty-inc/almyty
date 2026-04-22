@@ -151,7 +151,10 @@ async function bootstrap() {
   }
 
   // Global exception filter — standardized error responses, no internal leaks
-  app.useGlobalFilters(new GlobalExceptionFilter());
+  // JSON-RPC parse error filter runs first — catches malformed JSON on A2A/root endpoints
+  // and returns proper JSON-RPC -32700 instead of HTTP 400
+  const { JsonRpcParseErrorFilter } = require('./modules/a2a/json-rpc-parse-error.filter');
+  app.useGlobalFilters(new JsonRpcParseErrorFilter(), new GlobalExceptionFilter());
 
   // Request logging — records every request to RequestLog + UsageMetric tables
   const requestLogRepo = app.get(getRepositoryToken(RequestLog));
