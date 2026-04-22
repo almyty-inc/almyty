@@ -141,9 +141,12 @@ export class A2AServerService {
           return;
       }
     } catch (error: any) {
-      this.logger.error(`A2A JSON-RPC error [${rpcReq.method}]: ${error.message}`, error.stack);
+      const errorCode = error.code && typeof error.code === 'number'
+        ? error.code
+        : A2A_ERROR_CODES.INTERNAL_ERROR;
+      this.logger.error(`A2A JSON-RPC error [${rpcReq.method}] (${errorCode}): ${error.message}`, error.stack);
       res.json(
-        this.jsonRpcError(rpcReq.id, A2A_ERROR_CODES.INTERNAL_ERROR, error.message),
+        this.jsonRpcError(rpcReq.id, errorCode, error.message),
       );
     }
   }
