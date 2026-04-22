@@ -150,11 +150,25 @@ async function bootstrap() {
     logger.log(`Swagger documentation: http://localhost:${port}/docs`);
   }
 
+  // Express-level JSON parse error handler — catches SyntaxError from body-parser
+  // BEFORE NestJS filters. Returns JSON-RPC -32700 for POST with JSON content type.
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.use((err: any, req: any, res: any, next: any) => {
+    if (err instanceof SyntaxError && (err as any).status === 400 && req.method === 'POST') {
+      const ct = req.headers?.['content-type'] || '';
+      if (ct.includes('application/json')) {
+        return res.status(200).json({
+          jsonrpc: '2.0',
+          id: null,
+          error: { code: -32700, message: 'Parse error: invalid JSON' },
+        });
+      }
+    }
+    next(err);
+  });
+
   // Global exception filter — standardized error responses, no internal leaks
-  // JSON-RPC parse error filter runs first — catches malformed JSON on A2A/root endpoints
-  // and returns proper JSON-RPC -32700 instead of HTTP 400
-  const { JsonRpcParseErrorFilter } = require('./modules/a2a/json-rpc-parse-error.filter');
-  app.useGlobalFilters(new JsonRpcParseErrorFilter(), new GlobalExceptionFilter());
+  app.useGlobalFilters(new GlobalExceptionFilter());
 
   // Request logging — records every request to RequestLog + UsageMetric tables
   const requestLogRepo = app.get(getRepositoryToken(RequestLog));
