@@ -181,23 +181,28 @@ export class A2AServerService {
 
       if (existingRun) {
         if (existingRun.status === AgentRunStatus.WAITING_INPUT) {
-          // Resume the waiting run with new input
           await this.agentRuntimeService.sendInput(
             existingRun.id,
             gateway.organizationId,
             text,
           );
-          return this.pollForCompletion(existingRun.id, gateway.organizationId);
+          if (params.configuration?.blocking) {
+            return this.pollForCompletion(existingRun.id, gateway.organizationId);
+          }
+          const refreshed = await this.agentRuntimeService.getRun(existingRun.id, gateway.organizationId);
+          const msgs = await this.getRunMessages(refreshed);
+          return agentRunToTask(refreshed, msgs);
         }
 
-        // Run exists but is still processing — just return current state
+        // Run exists but is still processing — return current state
         if (!existingRun.isDone()) {
-          return this.pollForCompletion(existingRun.id, gateway.organizationId);
+          const msgs = await this.getRunMessages(existingRun);
+          return agentRunToTask(existingRun, msgs);
         }
       }
     }
 
-    // Start a new run
+    // Start a new run — return immediately, client polls via GetTask
     const run = await this.agentRuntimeService.startRun(
       gateway.agentId,
       gateway.organizationId,
@@ -205,7 +210,14 @@ export class A2AServerService {
       text,
     );
 
-    return this.pollForCompletion(run.id, gateway.organizationId);
+    // If configuration.blocking is true, wait for completion (v0.2 behavior)
+    if (params.configuration?.blocking) {
+      return this.pollForCompletion(run.id, gateway.organizationId);
+    }
+
+    // Return task in initial state — client uses GetTask to poll
+    const messages = await this.getRunMessages(run);
+    return agentRunToTask(run, messages);
   }
 
   // ─── message/stream ────────────────────────────────────────────────
