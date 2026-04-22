@@ -12,7 +12,7 @@ export interface Message {
 
 // ── Simple markdown rendering ───────────────────────────────────
 
-export function MarkdownText({ children }: { children: string }) {
+export function MarkdownText({ children, prefix, prefixColor }: { children: string; prefix?: string; prefixColor?: string }) {
   const lines = children.split('\n');
   const elements: React.ReactElement[] = [];
   let inCode = false;
@@ -68,6 +68,19 @@ export function MarkdownText({ children }: { children: string }) {
     }
 
     elements.push(<Text key={i}><InlineFormat text={line} /></Text>);
+  }
+
+  if (prefix) {
+    return (
+      <Box flexDirection="column">
+        {elements.map((el, idx) => (
+          <Box key={idx}>
+            <Text color={prefixColor}>{prefix}</Text>
+            {el}
+          </Box>
+        ))}
+      </Box>
+    );
   }
 
   return <Box flexDirection="column">{elements}</Box>;
@@ -159,7 +172,7 @@ export function MessageWindow({ messages, loading, loadingLabel, maxRows, scroll
     <Box flexDirection="column">
       {hasEarlier && (
         <Box paddingLeft={2}>
-          <Text dimColor>↑ {startIdx} earlier · Shift+↑ to scroll</Text>
+          <Text dimColor>↑ {startIdx} earlier · scroll to see more</Text>
         </Box>
       )}
       {visible.map((msg, i) => (
@@ -168,7 +181,7 @@ export function MessageWindow({ messages, loading, loadingLabel, maxRows, scroll
       {loading && scrollOffset === 0 && <LoadingIndicator label={loadingLabel} />}
       {hasLater && (
         <Box paddingLeft={2}>
-          <Text dimColor>↓ {messages.length - endIdx} newer · Shift+↓ to scroll</Text>
+          <Text dimColor>↓ {messages.length - endIdx} newer · scroll to see more</Text>
         </Box>
       )}
     </Box>
@@ -204,11 +217,8 @@ export function MessageView({ msg }: { msg: Message }) {
       );
     case 'agent':
       return (
-        <Box marginTop={1} paddingLeft={2} flexDirection="row">
-          <Box flexShrink={0}><Text color="#8b5cf6">│ </Text></Box>
-          <Box flexDirection="column" flexGrow={1}>
-            <MarkdownText>{msg.text}</MarkdownText>
-          </Box>
+        <Box marginTop={1} paddingLeft={2} flexDirection="column">
+          <MarkdownText prefix="│ " prefixColor="#8b5cf6">{msg.text}</MarkdownText>
         </Box>
       );
     case 'tool':
