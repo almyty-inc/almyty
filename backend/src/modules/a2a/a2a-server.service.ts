@@ -101,16 +101,14 @@ export class A2AServerService {
         case 'tasks/get':
         case 'GetTask': {
           const task = await this.handleTasksGet(gateway, rpcReq.params, rpcReq.id);
-          const result = method === 'GetTask' ? { task } : task;
-          res.json(this.jsonRpcSuccess(rpcReq.id, result));
+          res.json(this.jsonRpcSuccess(rpcReq.id, task));
           return;
         }
 
         case 'tasks/cancel':
         case 'CancelTask': {
           const task = await this.handleTasksCancel(gateway, rpcReq.params, rpcReq.id);
-          const result = method === 'CancelTask' ? { task } : task;
-          res.json(this.jsonRpcSuccess(rpcReq.id, result));
+          res.json(this.jsonRpcSuccess(rpcReq.id, task));
           return;
         }
 
