@@ -42,6 +42,9 @@ export class A2AAgentCardService {
         Object.keys(securitySchemes).length > 0 ? securitySchemes : undefined,
       security: security.length > 0 ? security : undefined,
       capabilities,
+      supportedInterfaces: [
+        { protocolBinding: 'jsonrpc', endpoint: url },
+      ],
       defaultInputModes: ['text'],
       defaultOutputModes: ['text'],
     };
