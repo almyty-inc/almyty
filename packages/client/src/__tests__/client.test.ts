@@ -6,7 +6,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AlmytyClient } from '../client.js';
+import { AlmytyClient, GatewayClient } from '../client.js';
+import type { StreamEvent } from '../client.js';
 
 const BASE = 'https://api.test.almyty.com';
 const TOKEN = 'test-token-123';
@@ -353,5 +354,172 @@ describe('AlmytyClient', () => {
       const body = JSON.parse(call[1].body);
       expect(body.input.message).toBe('Hello');
     });
+  });
+
+  describe('streamSSE', () => {
+    function mockSSEResponse(chunks: string[]) {
+      let idx = 0;
+      const reader = {
+        read: vi.fn().mockImplementation(() => {
+          if (idx >= chunks.length) return Promise.resolve({ done: true, value: undefined });
+          const value = new TextEncoder().encode(chunks[idx++]);
+          return Promise.resolve({ done: false, value });
+        }),
+        releaseLock: vi.fn(),
+      };
+      return vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { getReader: () => reader },
+      });
+    }
+
+    it('should parse SSE events and call handler', async () => {
+      const sseData = [
+        'event: llm.started\ndata: {"type":"llm.started","data":{"step":0}}\n\n',
+        'event: llm.chunk\ndata: {"type":"llm.chunk","data":{"content":"Hello"}}\n\n',
+        'event: run.completed\ndata: {"type":"run.completed","data":{"output":"Hello world"}}\n\n',
+      ];
+      globalThis.fetch = mockSSEResponse(sseData);
+      const client = new AlmytyClient(BASE, TOKEN);
+
+      const events: StreamEvent[] = [];
+      await client.streamSSE('/test/stream', (e) => events.push(e));
+
+      expect(events).toHaveLength(3);
+      expect(events[0].type).toBe('llm.started');
+      expect(events[1].type).toBe('llm.chunk');
+      expect((events[1].data as any).data?.content ?? (events[1].data as any).content).toBe('Hello');
+      expect(events[2].type).toBe('run.completed');
+    });
+
+    it('should stop on terminal events', async () => {
+      const sseData = [
+        'event: run.completed\ndata: {"type":"run.completed","data":{"output":"done"}}\n\n',
+        'event: extra\ndata: {"type":"extra"}\n\n',
+      ];
+      globalThis.fetch = mockSSEResponse(sseData);
+      const client = new AlmytyClient(BASE, TOKEN);
+
+      const events: StreamEvent[] = [];
+      await client.streamSSE('/test/stream', (e) => events.push(e));
+
+      // Should stop after run.completed, not process 'extra'
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('run.completed');
+    });
+
+    it('should handle stream errors', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('Server error'),
+      });
+      const client = new AlmytyClient(BASE, TOKEN);
+
+      await expect(client.streamSSE('/test/stream', () => {})).rejects.toThrow('SSE 500');
+    });
+  });
+});
+
+describe('GatewayClient', () => {
+  let origFetch: typeof globalThis.fetch;
+
+  beforeEach(() => { origFetch = globalThis.fetch; });
+  afterEach(() => { globalThis.fetch = origFetch; });
+
+  it('should route requests through /:org/:slug prefix', async () => {
+    globalThis.fetch = mockFetch(200, { data: { id: 'a1', name: 'Test', mode: 'autonomous' } });
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('myorg', 'my-agent');
+
+    await gw.getInfo();
+    expect((globalThis.fetch as any).mock.calls[0][0]).toBe(`${BASE}/myorg/my-agent`);
+  });
+
+  it('should POST to /runs for startRun', async () => {
+    globalThis.fetch = mockFetch(201, { data: { id: 'run-1', status: 'running', conversationId: 'conv-1' } });
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('myorg', 'my-agent');
+
+    const run = await gw.startRun('Hello');
+    expect(run.id).toBe('run-1');
+    expect(run.conversationId).toBe('conv-1');
+
+    const url = (globalThis.fetch as any).mock.calls[0][0];
+    expect(url).toBe(`${BASE}/myorg/my-agent/runs`);
+  });
+
+  it('should pass conversationId in startRun body', async () => {
+    globalThis.fetch = mockFetch(201, { data: { id: 'run-2', status: 'running' } });
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('myorg', 'my-agent');
+
+    await gw.startRun('Follow-up', { conversationId: 'conv-existing' });
+    const body = JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
+    expect(body.conversationId).toBe('conv-existing');
+  });
+
+  it('should GET /runs/:id for getRun', async () => {
+    globalThis.fetch = mockFetch(200, { data: { id: 'run-1', status: 'completed', output: 'done' } });
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('myorg', 'my-agent');
+
+    const run = await gw.getRun('run-1');
+    expect(run.status).toBe('completed');
+    expect((globalThis.fetch as any).mock.calls[0][0]).toBe(`${BASE}/myorg/my-agent/runs/run-1`);
+  });
+
+  it('should POST to /runs/:id/cancel', async () => {
+    globalThis.fetch = mockFetch(200, {});
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('myorg', 'my-agent');
+
+    await gw.cancelRun('run-1');
+    const url = (globalThis.fetch as any).mock.calls[0][0];
+    expect(url).toBe(`${BASE}/myorg/my-agent/runs/run-1/cancel`);
+  });
+
+  it('should POST to /runs/:id/input', async () => {
+    globalThis.fetch = mockFetch(200, {});
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('myorg', 'my-agent');
+
+    await gw.sendRunInput('run-1', 'more context');
+    const body = JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
+    expect(body.input).toBe('more context');
+  });
+
+  it('should streamRun and fall back to getRun', async () => {
+    let callIdx = 0;
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      callIdx++;
+      if (url.includes('/stream')) {
+        // SSE stream that ends immediately
+        const reader = {
+          read: vi.fn().mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('event: run.completed\ndata: {"type":"run.completed","data":{"output":"streamed"}}\n\n'),
+          }).mockResolvedValue({ done: true, value: undefined }),
+          releaseLock: vi.fn(),
+        };
+        return Promise.resolve({ ok: true, status: 200, body: { getReader: () => reader } });
+      }
+      // getRun fallback
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: { id: 'run-1', status: 'completed', output: 'streamed' } }),
+        text: () => Promise.resolve(''),
+      });
+    });
+
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('myorg', 'my-agent');
+    const events: StreamEvent[] = [];
+
+    const result = await gw.streamRun('run-1', (e) => events.push(e));
+    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(result.status).toBe('completed');
   });
 });
