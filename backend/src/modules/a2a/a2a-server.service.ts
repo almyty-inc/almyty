@@ -86,7 +86,9 @@ export class A2AServerService {
         case 'message/send':
         case 'SendMessage': {
           const task = await this.handleMessageSend(gateway, rpcReq.params, rpcReq.id);
-          res.json(this.jsonRpcSuccess(rpcReq.id, task));
+          // v1.0 (PascalCase) wraps in { task }, v0.2.x returns task directly
+          const result = method === 'SendMessage' ? { task } : task;
+          res.json(this.jsonRpcSuccess(rpcReq.id, result));
           return;
         }
 
@@ -99,14 +101,16 @@ export class A2AServerService {
         case 'tasks/get':
         case 'GetTask': {
           const task = await this.handleTasksGet(gateway, rpcReq.params, rpcReq.id);
-          res.json(this.jsonRpcSuccess(rpcReq.id, task));
+          const result = method === 'GetTask' ? { task } : task;
+          res.json(this.jsonRpcSuccess(rpcReq.id, result));
           return;
         }
 
         case 'tasks/cancel':
         case 'CancelTask': {
           const task = await this.handleTasksCancel(gateway, rpcReq.params, rpcReq.id);
-          res.json(this.jsonRpcSuccess(rpcReq.id, task));
+          const result = method === 'CancelTask' ? { task } : task;
+          res.json(this.jsonRpcSuccess(rpcReq.id, result));
           return;
         }
 
@@ -398,7 +402,7 @@ export class A2AServerService {
     gateway: Gateway,
     params: any,
     _rpcId: string | number,
-  ): Promise<{ tasks: Task[]; nextPageToken?: string; totalSize?: number }> {
+  ): Promise<{ tasks: Task[]; nextPageToken?: string; totalSize?: number; pageSize?: number }> {
     const agentId = gateway.agentId;
     const orgId = gateway.organizationId;
 
@@ -483,6 +487,7 @@ export class A2AServerService {
       tasks,
       ...(hasMore ? { nextPageToken: pageRuns[pageRuns.length - 1].id } : {}),
       totalSize,
+      pageSize,
     };
   }
 
