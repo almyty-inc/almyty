@@ -161,10 +161,9 @@ function boldify(text: string): React.ReactElement {
 // ── Message window (manual scroll) ──────────────────────────────
 
 function estimateLines(msg: Message, cols: number): number {
-  // Conservative estimate — account for borders, padding, word wrapping
   const textWidth = Math.max(cols - 10, 20);
   const lines = msg.text.split('\n');
-  let total = 2; // margins above/below
+  let total = 1; // margin
   for (const line of lines) {
     total += Math.max(1, Math.ceil(Math.max(line.length, 1) / textWidth));
   }
@@ -178,15 +177,15 @@ function MessageWindow({ messages, loading, loadingLabel, maxRows }: {
   maxRows: number;
 }) {
   const cols = process.stdout.columns || 80;
-  const available = Math.max(maxRows, 3);
+  const available = Math.max(maxRows, 5);
 
-  // Walk backwards to find how many messages fit
+  // Walk backwards — always show at least the last message
   let usedRows = loading ? 2 : 0;
   let startIdx = messages.length;
 
   for (let i = messages.length - 1; i >= 0; i--) {
     const est = estimateLines(messages[i], cols);
-    if (usedRows + est > available) break;
+    if (usedRows + est > available && i < messages.length - 1) break;
     usedRows += est;
     startIdx = i;
   }

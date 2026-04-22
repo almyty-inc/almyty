@@ -459,6 +459,7 @@ export class UnifiedEndpointController {
           id: agent.id,
           name: agent.name,
           description: agent.description,
+          mode: agent.mode,
           status: agent.status,
         },
       });
