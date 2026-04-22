@@ -96,7 +96,7 @@ export class A2AAgentCardService {
 
       switch (auth.type) {
         case GatewayAuthType.API_KEY: {
-          const schemeName = `apiKey_${auth.id.slice(0, 8)}`;
+          const schemeName = `key_${auth.id.slice(0, 8)}`;
           securitySchemes[schemeName] = {
             type: 'apiKey',
             name: auth.configuration?.keyHeader || 'x-api-key',
