@@ -270,7 +270,11 @@ export class UnifiedEndpointController {
     const rawKey = apiKeyHeader || (authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '');
 
     if (!rawKey) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return res.status(401).json({
+        jsonrpc: '2.0',
+        id: body?.id ?? null,
+        error: { code: -32600, message: 'Authentication required. Pass API key via x-api-key header.' },
+      });
     }
 
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
@@ -279,7 +283,11 @@ export class UnifiedEndpointController {
     });
 
     if (!apiKey) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({
+        jsonrpc: '2.0',
+        id: body?.id ?? null,
+        error: { code: -32600, message: 'Invalid API key' },
+      });
     }
 
     const gateway = await this.gatewayRepository.findOne({
