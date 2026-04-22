@@ -46,14 +46,33 @@ export class A2AServerService {
     body: any,
     res: Response,
   ): Promise<void> {
-    // Validate JSON-RPC envelope
-    if (!body || body.jsonrpc !== '2.0' || !body.method || body.id == null) {
-      const errorResponse = this.jsonRpcError(
-        body?.id ?? null,
-        A2A_ERROR_CODES.INVALID_REQUEST,
-        'Invalid JSON-RPC request: must include jsonrpc "2.0", method, and id',
-      );
-      res.json(errorResponse);
+    // Malformed / empty body
+    if (!body || typeof body !== 'object') {
+      res.json(this.jsonRpcError(null, A2A_ERROR_CODES.PARSE_ERROR, 'Parse error: invalid JSON'));
+      return;
+    }
+
+    // Missing or wrong jsonrpc version
+    if (body.jsonrpc !== '2.0') {
+      res.json(this.jsonRpcError(body.id ?? null, A2A_ERROR_CODES.INVALID_REQUEST, 'Invalid Request: jsonrpc must be "2.0"'));
+      return;
+    }
+
+    // Missing method
+    if (!body.method || typeof body.method !== 'string') {
+      res.json(this.jsonRpcError(body.id ?? null, A2A_ERROR_CODES.INVALID_REQUEST, 'Invalid Request: method is required'));
+      return;
+    }
+
+    // Missing id (notifications not supported)
+    if (body.id == null) {
+      res.json(this.jsonRpcError(null, A2A_ERROR_CODES.INVALID_REQUEST, 'Invalid Request: id is required'));
+      return;
+    }
+
+    // Invalid params type
+    if (body.params !== undefined && typeof body.params !== 'object') {
+      res.json(this.jsonRpcError(body.id, A2A_ERROR_CODES.INVALID_PARAMS, 'Invalid params: must be an object'));
       return;
     }
 
