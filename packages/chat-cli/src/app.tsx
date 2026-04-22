@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import TextInput from 'ink-text-input';
 import type { AlmytyClient, GatewayClient, AgentInfo, StreamEvent } from '@almyty/client';
@@ -23,7 +23,12 @@ export let exitMessage = '';
 
 // ── Chat app ────────────────────────────────────────────────────
 
-export function ChatApp({ client, initialAgent, gw }: { client: AlmytyClient; initialAgent: AgentInfo; gw: GatewayClient }) {
+export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
+  client: AlmytyClient;
+  initialAgent: AgentInfo;
+  gw: GatewayClient;
+  resumeConversationId?: string;
+}) {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [state, setState] = useState<AppState>({
@@ -31,11 +36,32 @@ export function ChatApp({ client, initialAgent, gw }: { client: AlmytyClient; in
     messages: [],
     loading: false,
     loadingLabel: 'Thinking',
-    conversationId: null,
+    conversationId: resumeConversationId ?? null,
     pendingRunId: null,
   });
+
+  // Load conversation history on resume
+  useEffect(() => {
+    if (!resumeConversationId) return;
+    (async () => {
+      setState(s => ({ ...s, loading: true, loadingLabel: 'Loading history' }));
+      try {
+        const history = await gw.getConversationMessages(resumeConversationId);
+        const msgs: Message[] = history
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({
+            role: m.role === 'user' ? 'user' as const : 'agent' as const,
+            text: m.content,
+          }));
+        setState(s => ({ ...s, messages: msgs, loading: false }));
+      } catch {
+        setState(s => ({ ...s, loading: false }));
+      }
+    })();
+  }, [resumeConversationId]);
   const [input, setInput] = useState('');
   const [paletteCursor, setPaletteCursor] = useState(0);
+  const [scrollOffset, setScrollOffset] = useState(0);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerAgents, setPickerAgents] = useState<AgentInfo[]>([]);
 
@@ -45,9 +71,22 @@ export function ChatApp({ client, initialAgent, gw }: { client: AlmytyClient; in
     : [];
   const paletteOpen = input.startsWith('/') && slashMatches.length > 0;
 
-  // Arrow key navigation for command palette
+  // Arrow key navigation for command palette + scroll
   useInput((ch, key) => {
-    if (!paletteOpen || state.loading) return;
+    if (state.loading) return;
+
+    // Shift+Up/Down for scrolling message history
+    if (key.shift && key.upArrow) {
+      setScrollOffset(o => Math.min(o + 1, state.messages.length - 1));
+      return;
+    }
+    if (key.shift && key.downArrow) {
+      setScrollOffset(o => Math.max(o - 1, 0));
+      return;
+    }
+
+    // Command palette navigation
+    if (!paletteOpen) return;
     if (key.upArrow) {
       setPaletteCursor(c => (c - 1 + slashMatches.length) % slashMatches.length);
     }
@@ -68,6 +107,7 @@ export function ChatApp({ client, initialAgent, gw }: { client: AlmytyClient; in
 
   const addMessage = useCallback((msg: Message) => {
     setState(s => ({ ...s, messages: [...s.messages, msg] }));
+    setScrollOffset(0); // snap to bottom on new messages
   }, []);
 
   const handleSubmit = useCallback(async (value: string) => {
@@ -295,6 +335,7 @@ export function ChatApp({ client, initialAgent, gw }: { client: AlmytyClient; in
           loading={state.loading}
           loadingLabel={state.loadingLabel}
           maxRows={rows - 7 - (paletteOpen ? slashMatches.length + 1 : 0)}
+          scrollOffset={scrollOffset}
         />
       </Box>
 

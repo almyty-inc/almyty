@@ -127,39 +127,50 @@ export function estimateLines(msg: Message, cols: number): number {
   return total;
 }
 
-export function MessageWindow({ messages, loading, loadingLabel, maxRows }: {
+export function MessageWindow({ messages, loading, loadingLabel, maxRows, scrollOffset = 0 }: {
   messages: Message[];
   loading: boolean;
   loadingLabel: string;
   maxRows: number;
+  scrollOffset?: number;
 }) {
   const cols = process.stdout.columns || 80;
   const available = Math.max(maxRows, 5);
 
-  // Walk backwards — always show at least the last message
-  let usedRows = loading ? 2 : 0;
-  let startIdx = messages.length;
+  // Calculate the end of the visible window (shifted by scrollOffset)
+  const endIdx = Math.max(0, messages.length - scrollOffset);
 
-  for (let i = messages.length - 1; i >= 0; i--) {
+  // Walk backwards from endIdx to find how many messages fit
+  let usedRows = loading && scrollOffset === 0 ? 2 : 0;
+  let startIdx = endIdx;
+
+  for (let i = endIdx - 1; i >= 0; i--) {
     const est = estimateLines(messages[i], cols);
-    if (usedRows + est > available && i < messages.length - 1) break;
+    if (usedRows + est > available && i < endIdx - 1) break;
     usedRows += est;
     startIdx = i;
   }
 
-  const visible = messages.slice(startIdx);
+  const visible = messages.slice(startIdx, endIdx);
+  const hasEarlier = startIdx > 0;
+  const hasLater = endIdx < messages.length;
 
   return (
     <Box flexDirection="column">
-      {startIdx > 0 && (
+      {hasEarlier && (
         <Box paddingLeft={2}>
-          <Text dimColor>↑ {startIdx} earlier message{startIdx > 1 ? 's' : ''}</Text>
+          <Text dimColor>↑ {startIdx} earlier · Shift+↑ to scroll</Text>
         </Box>
       )}
       {visible.map((msg, i) => (
         <MessageView key={startIdx + i} msg={msg} />
       ))}
-      {loading && <LoadingIndicator label={loadingLabel} />}
+      {loading && scrollOffset === 0 && <LoadingIndicator label={loadingLabel} />}
+      {hasLater && (
+        <Box paddingLeft={2}>
+          <Text dimColor>↓ {messages.length - endIdx} newer · Shift+↓ to scroll</Text>
+        </Box>
+      )}
     </Box>
   );
 }

@@ -493,6 +493,16 @@ export class UnifiedEndpointController {
       return this.handleAgentRuns(agent, organization, body, req, res, apiKey, action);
     }
 
+    // GET /conversations/:convId/messages — conversation history
+    if (req.method === 'GET' && action.startsWith('conversations/')) {
+      const parts = action.split('/');
+      const convId = parts[1];
+      const sub = parts[2];
+      if (convId && (!sub || sub === 'messages')) {
+        return this.getConversationMessages(convId, organization.id, res);
+      }
+    }
+
     throw new HttpException(`Unknown agent action: ${action}`, HttpStatus.NOT_FOUND);
   }
 
@@ -660,6 +670,34 @@ export class UnifiedEndpointController {
   }
 
   // ─── Agent Resolution ───────────────────────────────────────────────
+
+  private async getConversationMessages(convId: string, organizationId: string, res: Response) {
+    const Conversation = (await import('../../entities/conversation.entity')).Conversation;
+    const Message = (await import('../../entities/message.entity')).Message;
+    const convRepo = this.agentRepository.manager.getRepository(Conversation);
+    const msgRepo = this.agentRepository.manager.getRepository(Message);
+
+    const conv = await convRepo.findOne({ where: { id: convId, organizationId } as any });
+    if (!conv) {
+      throw new HttpException('Conversation not found', HttpStatus.NOT_FOUND);
+    }
+
+    const messages = await msgRepo.find({
+      where: { conversationId: convId },
+      order: { createdAt: 'ASC' },
+      select: ['id', 'role', 'content', 'createdAt'],
+    });
+
+    return res.json({
+      success: true,
+      data: messages.map(m => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt,
+      })),
+    });
+  }
 
   private async resolveAgent(slugOrName: string, organizationId: string): Promise<Agent | null> {
     // Try exact name match
