@@ -443,6 +443,14 @@ export class A2AServerService {
     // Filter by status
     if (params?.status) {
       const statusMap: Record<string, string> = {
+        // v1.0 TASK_STATE_* names
+        TASK_STATE_SUBMITTED: 'pending',
+        TASK_STATE_WORKING: 'running',
+        TASK_STATE_INPUT_REQUIRED: 'waiting_input',
+        TASK_STATE_COMPLETED: 'completed',
+        TASK_STATE_FAILED: 'failed',
+        TASK_STATE_CANCELED: 'cancelled',
+        // v0.2 lowercase names (backwards compat)
         submitted: 'pending',
         working: 'running',
         'input-required': 'waiting_input',

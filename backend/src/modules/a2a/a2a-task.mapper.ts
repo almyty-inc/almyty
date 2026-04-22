@@ -12,25 +12,26 @@ import type {
  * Map an AgentRunStatus to the corresponding A2A TaskStatus.
  */
 export function mapRunStatusToTaskState(status: AgentRunStatus): TaskStatus {
+  // A2A v1.0 uses TASK_STATE_* enum values
   switch (status) {
     case AgentRunStatus.PENDING:
-      return 'submitted';
+      return 'TASK_STATE_SUBMITTED';
     case AgentRunStatus.RUNNING:
-      return 'working';
+      return 'TASK_STATE_WORKING';
     case AgentRunStatus.WAITING_INPUT:
-      return 'input-required';
+      return 'TASK_STATE_INPUT_REQUIRED';
     case AgentRunStatus.COMPLETED:
-      return 'completed';
+      return 'TASK_STATE_COMPLETED';
     case AgentRunStatus.FAILED:
-      return 'failed';
+      return 'TASK_STATE_FAILED';
     case AgentRunStatus.CANCELLED:
-      return 'canceled';
+      return 'TASK_STATE_CANCELED';
     case AgentRunStatus.TIMEOUT:
-      return 'failed';
+      return 'TASK_STATE_FAILED';
     case AgentRunStatus.SLEEPING:
-      return 'working';
+      return 'TASK_STATE_WORKING';
     default:
-      return 'working';
+      return 'TASK_STATE_WORKING';
   }
 }
 
@@ -50,7 +51,7 @@ function messagesToHistory(messages: Message[]): TaskState[] {
     const a2aMsg: A2AMessage = { role, parts };
 
     return {
-      state: 'completed' as TaskStatus,
+      state: 'TASK_STATE_COMPLETED' as TaskStatus,
       message: a2aMsg,
       timestamp: msg.createdAt?.toISOString(),
     };
@@ -65,7 +66,7 @@ export function agentRunToTask(run: AgentRun, messages: Message[]): Task {
 
   // Build the latest status message from the run's output or error
   const statusParts: Part[] = [];
-  if (state === 'failed' && run.error) {
+  if (state === 'TASK_STATE_FAILED' && run.error) {
     statusParts.push({ type: 'text', text: run.error });
   } else if (run.output) {
     const text = typeof run.output === 'string' ? run.output : JSON.stringify(run.output);
@@ -95,7 +96,7 @@ export function agentRunToTask(run: AgentRun, messages: Message[]): Task {
   };
 
   // If the run completed with output, surface it as an artifact
-  if (state === 'completed' && run.output) {
+  if (state === 'TASK_STATE_COMPLETED' && run.output) {
     const outputText = typeof run.output === 'string' ? run.output : JSON.stringify(run.output);
     task.artifacts = [
       {
