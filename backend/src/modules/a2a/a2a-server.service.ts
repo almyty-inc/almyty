@@ -79,31 +79,39 @@ export class A2AServerService {
     const rpcReq = body as JsonRpcRequest;
 
     try {
-      switch (rpcReq.method) {
-        case 'message/send': {
+      // Normalize method names: support both v0.2.x (message/send) and v1.0 (SendMessage)
+      const method = rpcReq.method;
+
+      switch (method) {
+        case 'message/send':
+        case 'SendMessage': {
           const task = await this.handleMessageSend(gateway, rpcReq.params, rpcReq.id);
           res.json(this.jsonRpcSuccess(rpcReq.id, task));
           return;
         }
 
-        case 'message/stream': {
+        case 'message/stream':
+        case 'StreamMessage': {
           await this.handleMessageStream(gateway, rpcReq.params, rpcReq.id, req, res);
           return;
         }
 
-        case 'tasks/get': {
+        case 'tasks/get':
+        case 'GetTask': {
           const task = await this.handleTasksGet(gateway, rpcReq.params, rpcReq.id);
           res.json(this.jsonRpcSuccess(rpcReq.id, task));
           return;
         }
 
-        case 'tasks/cancel': {
+        case 'tasks/cancel':
+        case 'CancelTask': {
           const task = await this.handleTasksCancel(gateway, rpcReq.params, rpcReq.id);
           res.json(this.jsonRpcSuccess(rpcReq.id, task));
           return;
         }
 
-        case 'tasks/list': {
+        case 'tasks/list':
+        case 'ListTasks': {
           const result = await this.handleTasksList(gateway, rpcReq.params, rpcReq.id);
           res.json(this.jsonRpcSuccess(rpcReq.id, result));
           return;
@@ -114,6 +122,10 @@ export class A2AServerService {
         case 'tasks/pushNotification/get':
         case 'tasks/pushNotification/list':
         case 'tasks/pushNotification/delete':
+        case 'SetTaskPushNotificationConfig':
+        case 'GetTaskPushNotificationConfig':
+        case 'ListTaskPushNotificationConfigs':
+        case 'DeleteTaskPushNotificationConfig':
           res.json(
             this.jsonRpcError(rpcReq.id, A2A_ERROR_CODES.PUSH_NOTIFICATIONS_NOT_SUPPORTED,
               'Push notifications are not supported. Use message/stream for real-time updates.'),
