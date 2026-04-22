@@ -422,8 +422,32 @@ export class A2AServerService {
       });
     }
 
-    // Pagination
-    const pageSize = Math.min(Math.max(params?.pageSize ?? 50, 1), 100);
+    // Validate pagination params
+    if (params?.pageSize !== undefined) {
+      if (typeof params.pageSize !== 'number' || params.pageSize < 0) {
+        throw Object.assign(new Error('Invalid pageSize: must be a non-negative integer'), {
+          code: A2A_ERROR_CODES.INVALID_PARAMS,
+        });
+      }
+      if (params.pageSize === 0) {
+        throw Object.assign(new Error('Invalid pageSize: must be greater than 0'), {
+          code: A2A_ERROR_CODES.INVALID_PARAMS,
+        });
+      }
+      if (params.pageSize > 100) {
+        throw Object.assign(new Error('Invalid pageSize: maximum is 100'), {
+          code: A2A_ERROR_CODES.INVALID_PARAMS,
+        });
+      }
+    }
+
+    if (params?.historyLength !== undefined && typeof params.historyLength === 'number' && params.historyLength < 0) {
+      throw Object.assign(new Error('Invalid historyLength: must be non-negative'), {
+        code: A2A_ERROR_CODES.INVALID_PARAMS,
+      });
+    }
+
+    const pageSize = params?.pageSize ?? 50;
     const pageToken = params?.pageToken;
 
     // Build query
@@ -488,11 +512,17 @@ export class A2AServerService {
     const hasMore = runs.length > pageSize;
     const pageRuns = hasMore ? runs.slice(0, pageSize) : runs;
 
-    // Map to A2A Tasks
+    // Map to A2A Tasks (with optional history length limiting)
+    const historyLength = params?.historyLength;
     const tasks: Task[] = [];
     for (const run of pageRuns) {
       const messages = await this.getRunMessages(run);
-      tasks.push(agentRunToTask(run, messages));
+      const task = agentRunToTask(run, messages);
+      // Limit history if requested
+      if (historyLength !== undefined && typeof historyLength === 'number' && task.history) {
+        task.history = historyLength === 0 ? [] : task.history.slice(-historyLength);
+      }
+      tasks.push(task);
     }
 
     // Get total count
