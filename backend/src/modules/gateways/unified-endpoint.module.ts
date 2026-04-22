@@ -1,5 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
@@ -21,6 +23,13 @@ import { AcpModule } from '../acp/acp.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Organization, Gateway, Agent, ApiKey]),
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get<string>('JWT_SECRET', 'dev-only-jwt-secret-change-me-in-production'),
+        verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
+      }),
+    }),
     forwardRef(() => McpModule),
     forwardRef(() => AgentsModule),
     forwardRef(() => A2AModule),
