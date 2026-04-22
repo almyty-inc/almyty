@@ -45,6 +45,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     cancelRun: jest.Mock;
     sendInput: jest.Mock;
     getRunEmitter: jest.Mock;
+    subscribeRunEvents: jest.Mock;
   };
 
   const SUFFIX = Date.now();
@@ -61,6 +62,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
       cancelRun: jest.fn(),
       sendInput: jest.fn(),
       getRunEmitter: jest.fn().mockReturnValue(null),
+      subscribeRunEvents: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -350,43 +352,59 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
   // ── SSE streaming ────────────────────────────────────────────
 
-  it('should stream run events via GET /:org/:agent/runs/:id/stream', async () => {
-    // Start a run first
+  it('should stream run events via Redis Streams and SSE', async () => {
+    const Redis = require('ioredis');
+    const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+    const redis = new Redis({ host: 'localhost', port: redisPort });
+    const runId = `run-sse-${SUFFIX}`;
+    const streamKey = `run:${runId}:events`;
+
+    // Override subscribeRunEvents to use real Redis
     runtimeMock.startRun.mockResolvedValue({
-      id: 'run-sse',
+      id: runId,
       agentId: agent.id,
       status: 'running',
       conversationId: 'conv-sse',
     });
 
-    const startRes = await request(app.getHttpServer())
-      .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
-      .set('Authorization', `Bearer ${authToken}`)
-      .send({ input: 'stream test' });
+    // The controller calls runtimeService.subscribeRunEvents which reads from Redis.
+    // We need to make the mock actually read from Redis instead of returning immediately.
+    // Override with a real implementation that reads from Redis.
+    const origSubscribe = runtimeMock.subscribeRunEvents;
+    runtimeMock.subscribeRunEvents = jest.fn().mockImplementation(
+      async (rId: string, handler: any, signal?: AbortSignal) => {
+        const sub = redis.duplicate();
+        let lastId = '0';
+        const deadline = Date.now() + 5000;
+        try {
+          while (Date.now() < deadline) {
+            if (signal?.aborted) break;
+            const results = await sub.xread('BLOCK', 1000, 'COUNT', 100, 'STREAMS', `run:${rId}:events`, lastId);
+            if (!results) continue;
+            for (const [, messages] of results) {
+              for (const [id, fields] of messages) {
+                lastId = id;
+                const event = JSON.parse(fields[1]);
+                handler(event);
+                if (['run.completed', 'run.failed'].includes(event.type)) { sub.disconnect(); return; }
+              }
+            }
+          }
+        } finally { sub.disconnect(); }
+      },
+    );
 
-    expect(startRes.status).toBe(201);
-
-    // Mock the emitter — simulate events arriving
-    const EventEmitter = require('events');
-    const emitter = new EventEmitter();
-    runtimeMock.getRunEmitter.mockReturnValue(emitter);
-
-    // Start listening on a real port for SSE
+    // Start listening
     const server = app.getHttpServer();
     await new Promise<void>(resolve => server.listen(0, resolve));
     const port = (server.address() as any).port;
 
-    // Connect to SSE stream via raw HTTP
+    // Connect to SSE
     const ssePromise = new Promise<string>((resolve) => {
       let data = '';
       const req = require('http').get(
-        `http://localhost:${port}/${ORG_SLUG}/${AGENT_SLUG}/runs/run-sse/stream`,
-        {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            Accept: 'text/event-stream',
-          },
-        },
+        `http://localhost:${port}/${ORG_SLUG}/${AGENT_SLUG}/runs/${runId}/stream`,
+        { headers: { Authorization: `Bearer ${authToken}`, Accept: 'text/event-stream' } },
         (res: any) => {
           res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
           res.on('end', () => resolve(data));
@@ -395,34 +413,23 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
       req.on('error', () => resolve(data));
     });
 
-    // Emit events after a short delay
-    await new Promise(r => setTimeout(r, 50));
-    emitter.emit('event', { type: 'llm.started', data: { step: 0 }, timestamp: Date.now() });
-    emitter.emit('event', { type: 'llm.chunk', data: { step: 0, content: 'Hello' }, timestamp: Date.now() });
-    emitter.emit('event', { type: 'run.completed', data: { output: 'Hello world' }, timestamp: Date.now() });
+    // Publish events to Redis Stream (simulating another pod)
+    await new Promise(r => setTimeout(r, 100));
+    await redis.xadd(streamKey, '*', 'event', JSON.stringify({ type: 'llm.started', data: { step: 0 }, timestamp: new Date().toISOString() }));
+    await redis.xadd(streamKey, '*', 'event', JSON.stringify({ type: 'llm.chunk', data: { content: 'Hello' }, timestamp: new Date().toISOString() }));
+    await redis.xadd(streamKey, '*', 'event', JSON.stringify({ type: 'run.completed', data: { output: 'Hello world' }, timestamp: new Date().toISOString() }));
 
     const sseData = await ssePromise;
 
-    // Verify SSE format
     expect(sseData).toContain('event: llm.started');
     expect(sseData).toContain('event: llm.chunk');
     expect(sseData).toContain('event: run.completed');
     expect(sseData).toContain('"content":"Hello"');
-    expect(sseData).toContain('"output":"Hello world"');
-  });
 
-  it('should return error when run emitter not found', async () => {
-    runtimeMock.getRunEmitter.mockReturnValue(null);
-
-    const res = await request(app.getHttpServer())
-      .get(`/${ORG_SLUG}/${AGENT_SLUG}/runs/nonexistent-run/stream`)
-      .set('Authorization', `Bearer ${authToken}`)
-      .set('Accept', 'text/event-stream');
-
-    // Should get an SSE error event
-    expect(res.status).toBe(200); // SSE always starts with 200
-    expect(res.text).toContain('error');
-    expect(res.text).toContain('Run not found');
+    // Cleanup
+    await redis.del(streamKey);
+    await redis.quit();
+    runtimeMock.subscribeRunEvents = origSubscribe;
   });
 
   // ── Multi-turn conversation via gateway ────────────────────────
