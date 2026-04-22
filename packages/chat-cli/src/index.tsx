@@ -99,7 +99,7 @@ async function main(): Promise<void> {
   }
 
   const { waitUntilExit } = render(
-    <ChatApp client={client} initialAgent={agent} gw={gw} />,
+    <ChatApp client={client} initialAgent={agent} gw={gw} resumeConversationId={resumeId} />,
     { exitOnCtrlC: true },
   );
 
