@@ -23,7 +23,7 @@ const TOOLS = [
   { name: 'delete_tool', description: 'Delete a tool by ID', inputSchema: { type: 'object', properties: { toolId: { type: 'string', description: 'Tool ID to delete' } }, required: ['toolId'] } },
   { name: 'list_gateways', description: 'List all gateways', inputSchema: { type: 'object', properties: {} } },
   { name: 'delete_gateway', description: 'Delete a gateway by ID', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string', description: 'Gateway ID to delete' } }, required: ['gatewayId'] } },
-  { name: 'create_gateway', description: 'Create a gateway with auth and tools. Endpoint and auth (API key) are auto-configured. By default assigns ALL tools unless you specify toolIds or apiIds to scope it.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'a2a', 'acp', 'utcp', 'skills'] }, endpoint: { type: 'string', description: 'URL slug. Auto-generated from name if omitted.' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Specific tool IDs to assign' }, apiIds: { type: 'array', items: { type: 'string' }, description: 'Assign all tools from these API IDs' }, assignTools: { type: 'boolean', description: 'Auto-assign all org tools if no toolIds/apiIds given. Default: true' } }, required: ['name', 'type'] } },
+  { name: 'create_gateway', description: 'Create a gateway. For agent-kind types (a2a, acp, openai_chat), pass agentId. For tool-kind types (mcp, utcp, skills), tools are auto-assigned.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'a2a', 'acp', 'utcp', 'skills', 'openai_chat'] }, endpoint: { type: 'string', description: 'URL slug. Auto-generated from name if omitted.' }, agentId: { type: 'string', description: 'Agent ID for agent-kind gateways (a2a, acp, openai_chat)' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Specific tool IDs to assign (tool-kind only)' }, apiIds: { type: 'array', items: { type: 'string' }, description: 'Assign all tools from these API IDs (tool-kind only)' }, assignTools: { type: 'boolean', description: 'Auto-assign all org tools if no toolIds/apiIds given. Default: true for tool-kind.' } }, required: ['name', 'type'] } },
   { name: 'assign_tools_to_gateway', description: 'Assign tools to a gateway by tool IDs or by API name (assigns all tools from that API)', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Tool IDs to assign' }, apiName: { type: 'string', description: 'Assign all tools from this API (by name)' } }, required: ['gatewayId'] } },
   { name: 'add_auth_to_gateway', description: 'Add an auth method to a gateway', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, type: { type: 'string', enum: ['api_key', 'bearer_token', 'basic_auth', 'oauth2', 'jwt', 'none'], description: 'Auth type to add' } }, required: ['gatewayId', 'type'] } },
   { name: 'remove_auth_from_gateway', description: 'Remove an auth method from a gateway', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, authId: { type: 'string', description: 'Auth config ID to remove' } }, required: ['gatewayId', 'authId'] } },
@@ -117,11 +117,15 @@ export class AlmytyMcpService {
       case 'delete_gateway': return get(GatewaysService).deleteGateway(args.gatewayId, orgId, userId);
       case 'create_gateway': {
         const endpoint = args.endpoint || `/${args.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
-        const gateway = await get(GatewaysService).createGateway({ ...args, endpoint, kind: 'tool', configuration: { transport: 'http' } }, orgId, userId);
+        const toolTypes = ['mcp', 'utcp', 'skills'];
+        const isToolKind = toolTypes.includes(args.type);
+        const gatewayData: any = { ...args, endpoint, configuration: args.configuration || { transport: 'http' } };
+        if (!isToolKind && args.agentId) gatewayData.agentId = args.agentId;
+        const gateway = await get(GatewaysService).createGateway(gatewayData, orgId, userId);
 
-        // Assign tools
+        // Assign tools (only for tool-kind gateways)
         let assignedCount = 0;
-        const shouldAssign = args.assignTools !== false; // default true
+        const shouldAssign = isToolKind && args.assignTools !== false;
         if (shouldAssign) {
           try {
             const GatewayToolService = require('../gateways/gateway-tool.service').GatewayToolService;
