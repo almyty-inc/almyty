@@ -243,6 +243,7 @@ describe('Agent Streaming (integration)', () => {
             getResourceHistory: jest.fn().mockResolvedValue([]),
           },
         },
+        { provide: 'default_IORedisModuleConnectionToken', useValue: { xadd: jest.fn().mockResolvedValue('id'), expire: jest.fn().mockResolvedValue(1), duplicate: jest.fn().mockReturnValue({ xread: jest.fn().mockResolvedValue(null), disconnect: jest.fn() }) } },
       ],
     }).compile();
 
