@@ -1,33 +1,40 @@
 # @almyty/chat
 
-Interactive chat REPL for almyty agents. Supports both workflow and autonomous agent modes.
+Interactive chat REPL for almyty agents. Built with [ink](https://github.com/vadimdemedes/ink) (React for CLI).
 
 ## Quick start
 
 ```bash
 $ npx @almyty/auth login
-$ npx @almyty/chat
-$ npx @almyty/chat my-research-bot
+$ npx @almyty/chat acme/support-bot
 ```
 
 ## Usage
 
-Run without arguments to pick an agent from an interactive menu, or pass a name or ID to connect directly.
+```
+Usage:
+  npx @almyty/chat <org>/<agent-slug>
+  npx @almyty/chat <org>/<agent-slug> --resume <conversation-id>
+  npx @almyty/chat                    # interactive agent picker
 
-```bash
-$ npx @almyty/chat              # interactive agent picker
-$ npx @almyty/chat <name|id>    # connect to a specific agent
+Commands:
+  /agents   browse and switch agents
+  /tools    show available tools
+  /help     show commands
+  /clear    clear conversation
+  /quit     exit (shows resume command)
 ```
 
-## REPL commands
+## Features
 
-| Command | Description |
-|---------|-------------|
-| `/switch <agent>` | Switch to a different agent |
-| `/agents` | List agents (current one marked) |
-| `/clear` | Clear the screen |
-| `/help` | Show available commands |
-| `/quit` | Exit the REPL |
+- **Gateway routing** -- agents addressed as `<org>/<agent-slug>`
+- **Resume conversations** -- `--resume <conversation-id>` picks up where you left off; `/quit` prints the resume command
+- **Arrow-key agent picker** -- run without arguments to browse and select
+- **Slash commands** -- tab autocomplete with fuzzy prefix matching
+- **Command palette** -- arrow-key navigation through matching commands
+- **Input history** -- up/down arrows cycle through previous messages (derived from conversation, including resumed history)
+- **SSE streaming** -- real-time tool calls and agent responses via server-sent events
+- **Markdown rendering** -- bold, inline code, code blocks, lists, headers
 
 ## Authentication
 

@@ -1,6 +1,6 @@
 {
   "name": "@almyty/mcp-server",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Skill-first API proxy for any LLM — turns APIs into AI skills via MCP with minimal token overhead",
   "type": "module",
   "main": "dist/index.js",
