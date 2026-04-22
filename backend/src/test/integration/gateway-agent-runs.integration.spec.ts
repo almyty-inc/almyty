@@ -608,5 +608,61 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
       expect([401, 403]).toContain(res.status);
     });
+
+    // ── Root-level .well-known/agent-card.json (API key scoped) ────
+
+    describe('Root agent card', () => {
+    let gwApiKey: string;
+
+    beforeAll(async () => {
+      // Create an API key for the A2A gateway
+      const crypto = require('crypto');
+      gwApiKey = `gw_test_${SUFFIX}`;
+      const keyHash = crypto.createHash('sha256').update(gwApiKey).digest('hex');
+      const ApiKey = (await import('../../entities/api-key.entity')).ApiKey;
+      const apiKeyRepo = ds.getRepository(ApiKey);
+      await apiKeyRepo.save(apiKeyRepo.create({
+        name: `Test Key ${SUFFIX}`,
+        keyHash,
+        keyPrefix: gwApiKey.slice(0, 8),
+        gatewayId: a2aGatewayId,
+        organizationId: org.id,
+        userId: (await ds.getRepository(User).findOne({ where: { email: TEST_EMAIL } }))!.id,
+        isActive: true,
+      } as any));
+    });
+
+    it('should return 200 at /.well-known/agent-card.json with x-api-key', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/.well-known/agent-card.json')
+        .set('x-api-key', gwApiKey);
+
+      // A2AAgentCardService is mocked — verify route works (200, not 401/404/500)
+      expect(res.status).toBe(200);
+    });
+
+    it('should return 200 at /.well-known/agent-card.json with Bearer auth', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/.well-known/agent-card.json')
+        .set('Authorization', `Bearer ${gwApiKey}`);
+
+      expect(res.status).toBe(200);
+    });
+
+    it('should reject without API key', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/.well-known/agent-card.json');
+
+      expect(res.status).toBe(401);
+    });
+
+    it('should reject with invalid API key', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/.well-known/agent-card.json')
+        .set('x-api-key', 'invalid-key');
+
+      expect(res.status).toBe(401);
+    });
+    });
   });
 });
