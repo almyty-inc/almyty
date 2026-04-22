@@ -43,7 +43,7 @@ export class A2AAgentCardService {
       security: security.length > 0 ? security : undefined,
       capabilities,
       supportedInterfaces: [
-        { protocolBinding: 'jsonrpc', endpoint: url },
+        { protocolBinding: 'jsonrpc', url },
       ],
       defaultInputModes: ['text'],
       defaultOutputModes: ['text'],
