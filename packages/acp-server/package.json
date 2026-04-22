@@ -1,6 +1,6 @@
 {
   "name": "@almyty/acp-server",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "ACP agent server for almyty — expose any almyty agent via the Agent Client Protocol",
   "type": "module",
   "main": "dist/index.js",
