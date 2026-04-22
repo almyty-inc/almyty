@@ -4,6 +4,7 @@ export {
   loadCredentials,
   resolveCredentials,
   resolveCredentialsOrExit,
+  getOrgSlugFromToken,
   CREDENTIALS_FILE,
 } from './credentials.js';
 export type { StoredCredentials } from './credentials.js';

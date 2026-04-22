@@ -335,6 +335,7 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
       acpServerStub,
       acpDiscoveryStub,
       { startRun: jest.fn(), getRun: jest.fn(), listRuns: jest.fn(), getRunEmitter: jest.fn(), sendInput: jest.fn(), cancelRun: jest.fn() } as any,
+      { verify: jest.fn() } as any,
     );
   }
 

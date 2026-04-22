@@ -53,3 +53,26 @@ export function resolveCredentialsOrExit(): StoredCredentials {
   console.error('  export ALMYTY_TOKEN=<your-token>');
   process.exit(1);
 }
+
+/**
+ * Extract the default org slug from a JWT token.
+ * Returns null if the token isn't a JWT or has no orgs.
+ */
+export function getOrgSlugFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    let payload = parts[1];
+    payload += '='.repeat((4 - payload.length % 4) % 4);
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    const orgs = decoded.organizations;
+    if (!Array.isArray(orgs) || !orgs.length) return null;
+    // Use slug if available, otherwise derive from name
+    const org = orgs[0];
+    if (org.slug) return org.slug;
+    if (org.name) return org.name.toLowerCase().replace(/\s+/g, '-');
+    return null;
+  } catch {
+    return null;
+  }
+}
