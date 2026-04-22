@@ -1,29 +1,42 @@
-import { ExceptionFilter, Catch, ArgumentsHost, BadRequestException } from '@nestjs/common';
-import { Response } from 'express';
+import { ExceptionFilter, Catch, ArgumentsHost } from '@nestjs/common';
+import { Response, Request } from 'express';
 
 /**
- * Catches NestJS BadRequestException (thrown for malformed JSON body)
- * and returns a proper JSON-RPC -32700 Parse Error response.
+ * Catches JSON parse errors on A2A endpoints and returns proper
+ * JSON-RPC -32700 Parse Error instead of HTTP 400.
  *
- * Applied to A2A endpoints so TCK compliance tests pass.
+ * Must be registered BEFORE the GlobalExceptionFilter so it
+ * intercepts first. Only handles parse errors on JSON content-type
+ * POST requests — all other errors pass through.
  */
-@Catch(BadRequestException)
+@Catch()
 export class JsonRpcParseErrorFilter implements ExceptionFilter {
-  catch(exception: BadRequestException, host: ArgumentsHost) {
+  catch(exception: any, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest();
+    const request = ctx.getRequest<Request>();
 
-    // Only intercept on A2A-like paths (root POST or gateway POST with JSON-RPC content type)
+    // Only intercept POST requests with JSON content type
+    if (request.method !== 'POST') {
+      this.passThrough(exception, response);
+      return;
+    }
+
     const contentType = request.headers?.['content-type'] || '';
-    const isJsonRpc = contentType.includes('application/json');
-    const exceptionResponse = exception.getResponse();
-    const isParseError = typeof exceptionResponse === 'object'
-      && (exceptionResponse as any)?.message?.includes?.('JSON')
-      || exception.message.includes('JSON')
-      || exception.message.includes('Unexpected');
+    if (!contentType.includes('application/json')) {
+      this.passThrough(exception, response);
+      return;
+    }
 
-    if (isJsonRpc && isParseError) {
+    // Check if this is a JSON parse error
+    const message = exception?.message || '';
+    const isParseError = exception instanceof SyntaxError
+      || message.includes('JSON')
+      || message.includes('Unexpected')
+      || message.includes('position')
+      || (exception?.status === 400 && message.includes('at position'));
+
+    if (isParseError) {
       response.status(200).json({
         jsonrpc: '2.0',
         id: null,
@@ -32,7 +45,11 @@ export class JsonRpcParseErrorFilter implements ExceptionFilter {
       return;
     }
 
-    // Not a JSON-RPC parse error — rethrow as normal HTTP error
-    response.status(exception.getStatus()).json(exceptionResponse);
+    this.passThrough(exception, response);
+  }
+
+  private passThrough(exception: any, _response: Response): void {
+    // Re-throw so the next filter (GlobalExceptionFilter) handles it
+    throw exception;
   }
 }
