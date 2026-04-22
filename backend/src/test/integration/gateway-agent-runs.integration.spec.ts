@@ -178,7 +178,13 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
       .send({ input: 'Hello agent' });
 
     if (res.status !== 201) {
-      console.error('[DEBUG] start run response:', res.status, JSON.stringify(res.body));
+      // Debug: verify the JWT ourselves
+      const jwtService = app.get(JwtService);
+      const decoded = jwtService.verify(jwt);
+      console.error('[DEBUG] JWT payload:', JSON.stringify(decoded));
+      console.error('[DEBUG] agent.organizationId:', agent.organizationId);
+      console.error('[DEBUG] org.id:', org.id);
+      console.error('[DEBUG] response:', res.status, JSON.stringify(res.body));
     }
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
