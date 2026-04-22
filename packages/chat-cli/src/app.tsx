@@ -4,7 +4,7 @@ import TextInput from 'ink-text-input';
 import type { AlmytyClient, GatewayClient, AgentInfo, StreamEvent } from '@almyty/client';
 
 import type { Message } from './components.js';
-import { Header, MessageWindow, AgentSelector } from './components.js';
+import { Header, MessageView, LoadingIndicator, AgentSelector } from './components.js';
 import { SLASH_COMMANDS, COMMAND_DESCS, resolveSlash, getSuggestion, ALIASES } from './commands.js';
 
 // ── App state ──────────────────────────────────────────────────
@@ -61,7 +61,8 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
   }, [resumeConversationId]);
   const [input, setInput] = useState('');
   const [paletteCursor, setPaletteCursor] = useState(0);
-  const [scrollOffset, setScrollOffset] = useState(0);
+  const [inputHistory, setInputHistory] = useState<string[]>([]);
+  const [historyIdx, setHistoryIdx] = useState(-1);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerAgents, setPickerAgents] = useState<AgentInfo[]>([]);
 
@@ -71,31 +72,48 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
     : [];
   const paletteOpen = input.startsWith('/') && slashMatches.length > 0;
 
-  // Arrow key navigation for command palette + scroll
   useInput((ch, key) => {
     if (state.loading) return;
 
-    // Shift+Up/Down for scrolling message history
-    if (key.shift && key.upArrow) {
-      setScrollOffset(o => Math.min(o + 1, state.messages.length - 1));
-      return;
-    }
-    if (key.shift && key.downArrow) {
-      setScrollOffset(o => Math.max(o - 1, 0));
+    // Command palette navigation
+    if (paletteOpen) {
+      if (key.upArrow) {
+        setPaletteCursor(c => (c - 1 + slashMatches.length) % slashMatches.length);
+        return;
+      }
+      if (key.downArrow) {
+        setPaletteCursor(c => (c + 1) % slashMatches.length);
+        return;
+      }
+      if (key.tab) {
+        setInput(`/${slashMatches[paletteCursor]}`);
+        setPaletteCursor(0);
+        return;
+      }
       return;
     }
 
-    // Command palette navigation
-    if (!paletteOpen) return;
-    if (key.upArrow) {
-      setPaletteCursor(c => (c - 1 + slashMatches.length) % slashMatches.length);
+    // Input history: Ctrl+P (previous) / Ctrl+N (next) — works reliably
+    // Also up/down arrows when input is empty
+    const wantPrev = (key.upArrow && input === '') || (key.ctrl && ch === 'p');
+    const wantNext = (key.downArrow && input === '') || (key.ctrl && ch === 'n');
+
+    if (wantPrev && inputHistory.length > 0) {
+      const newIdx = Math.min(historyIdx + 1, inputHistory.length - 1);
+      setHistoryIdx(newIdx);
+      setInput(inputHistory[inputHistory.length - 1 - newIdx]);
+      return;
     }
-    if (key.downArrow) {
-      setPaletteCursor(c => (c + 1) % slashMatches.length);
-    }
-    if (key.tab) {
-      setInput(`/${slashMatches[paletteCursor]}`);
-      setPaletteCursor(0);
+    if (wantNext && historyIdx >= 0) {
+      if (historyIdx > 0) {
+        const newIdx = historyIdx - 1;
+        setHistoryIdx(newIdx);
+        setInput(inputHistory[inputHistory.length - 1 - newIdx]);
+      } else {
+        setHistoryIdx(-1);
+        setInput('');
+      }
+      return;
     }
   });
 
@@ -107,13 +125,14 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
 
   const addMessage = useCallback((msg: Message) => {
     setState(s => ({ ...s, messages: [...s.messages, msg] }));
-    setScrollOffset(0); // snap to bottom on new messages
   }, []);
 
   const handleSubmit = useCallback(async (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return;
     setInput('');
+    setInputHistory(h => [...h, trimmed]);
+    setHistoryIdx(-1);
 
     // Slash commands
     if (trimmed.startsWith('/')) {
@@ -328,46 +347,44 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
       {/* Header */}
       <Header agent={state.agent} conversationId={state.conversationId} />
 
-      {/* Messages — manually windowed to prevent overflow */}
-      <Box flexDirection="column" flexGrow={1} paddingRight={2}>
-        <MessageWindow
-          messages={state.messages}
-          loading={state.loading}
-          loadingLabel={state.loadingLabel}
-          maxRows={rows - 7 - (paletteOpen ? slashMatches.length + 1 : 0)}
-          scrollOffset={scrollOffset}
-        />
+      {/* Messages */}
+      <Box flexDirection="column" flexGrow={1} paddingRight={2} overflow="hidden">
+        {state.messages.map((msg, i) => (
+          <MessageView key={i} msg={msg} />
+        ))}
+        {state.loading && <LoadingIndicator label={state.loadingLabel} />}
       </Box>
 
       {/* Command palette (above input) */}
       {paletteOpen && (
-        <Box flexDirection="column" paddingLeft={2} marginBottom={0}>
+        <Box flexDirection="column" paddingLeft={2}>
           {slashMatches.map((cmd, i) => {
             const active = i === paletteCursor;
+            const desc = COMMAND_DESCS[cmd] ?? '';
             return (
-              <Text key={cmd}>
-                <Text color={active ? '#8b5cf6' : '#555'}>{active ? '❯' : ' '} </Text>
+              <Box key={cmd} flexDirection="row">
+                <Text color={active ? '#8b5cf6' : undefined}>{active ? '❯ ' : '  '}</Text>
                 <Text color="#8b5cf6" bold={active}>/{cmd}</Text>
-                <Text dimColor>  {COMMAND_DESCS[cmd] ?? ''}</Text>
-              </Text>
+                <Text dimColor>{'  '}{desc}</Text>
+              </Box>
             );
           })}
         </Box>
       )}
 
-      {/* Input bar */}
-      <Box
-        borderStyle="round"
-        borderColor={paletteOpen ? '#8b5cf6' : '#555'}
-        paddingX={1}
-      >
+      {/* Separator */}
+      <Box>
+        <Text dimColor>{'─'.repeat(Math.min(stdout?.columns || 80, 120))}</Text>
+      </Box>
+
+      {/* Input */}
+      <Box paddingX={1} paddingY={1}>
         <Text color="#8b5cf6">❯ </Text>
         <Box flexGrow={1}>
           <TextInput
             value={input}
             onChange={handleInputChange}
             onSubmit={(val) => {
-              // If palette is open, select the highlighted command
               if (paletteOpen && slashMatches.length > 0) {
                 const selected = `/${slashMatches[paletteCursor]}`;
                 setInput('');
@@ -380,6 +397,15 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
             placeholder="Type a message or / for commands"
           />
         </Box>
+      </Box>
+
+      {/* Status */}
+      <Box paddingX={1}>
+        <Text dimColor>
+          {state.agent.name}
+          {state.agent.tools?.length ? ` · ${state.agent.tools.length} tools` : ''}
+          {state.conversationId ? ` · ${state.conversationId.slice(0, 8)}` : ''}
+        </Text>
       </Box>
     </Box>
   );
