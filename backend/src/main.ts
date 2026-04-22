@@ -150,22 +150,9 @@ async function bootstrap() {
     logger.log(`Swagger documentation: http://localhost:${port}/docs`);
   }
 
-  // Express-level JSON parse error handler — catches SyntaxError from body-parser
-  // BEFORE NestJS filters. Returns JSON-RPC -32700 for POST with JSON content type.
-  const expressApp = app.getHttpAdapter().getInstance();
-  expressApp.use((err: any, req: any, res: any, next: any) => {
-    if (err instanceof SyntaxError && (err as any).status === 400 && req.method === 'POST') {
-      const ct = req.headers?.['content-type'] || '';
-      if (ct.includes('application/json')) {
-        return res.status(200).json({
-          jsonrpc: '2.0',
-          id: null,
-          error: { code: -32700, message: 'Parse error: invalid JSON' },
-        });
-      }
-    }
-    next(err);
-  });
+  // JSON parse error handler at Express level.
+  // NestJS body parser catches SyntaxError internally, so we intercept
+  // via the GlobalExceptionFilter instead. See GlobalExceptionFilter.
 
   // Global exception filter — standardized error responses, no internal leaks
   app.useGlobalFilters(new GlobalExceptionFilter());
