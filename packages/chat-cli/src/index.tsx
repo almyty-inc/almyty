@@ -8,7 +8,7 @@ import type { AgentInfo } from '@almyty/client';
 import { AgentSelector } from './components.js';
 import { ChatApp, exitMessage } from './app.js';
 
-export const VERSION = '0.1.5';
+export const VERSION = '0.2.0';
 
 // ── Entry point ─────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 {
   "name": "@almyty/cli",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Single installable almyty CLI — login, agents, chat, skills, mcp under one binary",
   "type": "module",
   "main": "dist/index.js",

@@ -70,19 +70,6 @@ export function MarkdownText({ children, prefix, prefixColor }: { children: stri
     elements.push(<Text key={i}><InlineFormat text={line} /></Text>);
   }
 
-  if (prefix) {
-    return (
-      <Box flexDirection="column">
-        {elements.map((el, idx) => (
-          <Box key={idx}>
-            <Text color={prefixColor}>{prefix}</Text>
-            {el}
-          </Box>
-        ))}
-      </Box>
-    );
-  }
-
   return <Box flexDirection="column">{elements}</Box>;
 }
 
@@ -191,17 +178,11 @@ export function MessageWindow({ messages, loading, loadingLabel, maxRows, scroll
 // ── Components ──────────────────────────────────────────────────
 
 export function Header({ agent, conversationId }: { agent: AgentInfo; conversationId?: string | null }) {
+  const convSuffix = conversationId ? `  ${conversationId.slice(0, 8)}` : '';
   return (
     <Box borderStyle="round" borderColor="#555" paddingX={1} flexDirection="column">
-      <Text>
-        <Text color="#22d3ee">⚡</Text>
-        <Text color="#8b5cf6" bold> almyty</Text>
-        <Text dimColor> · </Text>
-        <Text bold>{agent.name}</Text>
-        <Text dimColor>  {agent.mode}</Text>
-        {conversationId && <Text dimColor>  {conversationId.slice(0, 8)}</Text>}
-      </Text>
-      {agent.description && <Text dimColor>{agent.description}</Text>}
+      <Text wrap="truncate">{`⚡ almyty · ${agent.name}  ${agent.mode || ''}${convSuffix}`}</Text>
+      {agent.description && <Text dimColor wrap="truncate">{agent.description}</Text>}
     </Box>
   );
 }
@@ -211,29 +192,26 @@ export function MessageView({ msg }: { msg: Message }) {
     case 'user':
       return (
         <Box marginTop={1}>
-          <Text dimColor>❯ </Text>
-          <Text>{msg.text}</Text>
+          <Text>❯ {msg.text}</Text>
         </Box>
       );
     case 'agent':
       return (
         <Box marginTop={1} paddingLeft={2} flexDirection="column">
-          <MarkdownText prefix="│ " prefixColor="#8b5cf6">{msg.text}</MarkdownText>
+          <Text color="#8b5cf6">│</Text>
+          <Box paddingLeft={2}><MarkdownText>{msg.text}</MarkdownText></Box>
         </Box>
       );
     case 'tool':
       return (
         <Box paddingLeft={2}>
-          <Text dimColor>│ </Text>
-          <Text dimColor>▸ </Text>
-          <Text color="cyan">{msg.text}</Text>
+          <Text dimColor>│ ▸ {msg.text}</Text>
         </Box>
       );
     case 'error':
       return (
         <Box marginTop={1} paddingLeft={2}>
-          <Text color="red">│ </Text>
-          <Text>{msg.text}</Text>
+          <Text color="red">│ {msg.text}</Text>
         </Box>
       );
     case 'info':

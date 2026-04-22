@@ -18,7 +18,7 @@ $ almyty agents list
 | `almyty logout` | `@almyty/auth` | Remove stored credentials |
 | `almyty whoami` | `@almyty/auth` | Show current identity |
 | `almyty agents <cmd>` | `@almyty/agents` | List, run, inspect agents |
-| `almyty chat [name\|id]` | `@almyty/chat` | Interactive chat REPL |
+| `almyty chat [org/slug]` | `@almyty/chat` | Interactive chat REPL |
 | `almyty skills <cmd>` | `@almyty/skills` | Install and manage skills |
 | `almyty mcp <args>` | `@almyty/mcp-server` | Start MCP server |
 
@@ -28,7 +28,7 @@ Every subcommand is also available as a standalone package via `npx`:
 
 ```bash
 $ npx @almyty/agents list
-$ npx @almyty/chat my-bot
+$ npx @almyty/chat myorg/my-bot
 $ npx @almyty/skills install @org/gateway
 ```
 
