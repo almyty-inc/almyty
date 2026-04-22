@@ -103,6 +103,23 @@ export class A2AServerService {
           return;
         }
 
+        case 'tasks/list': {
+          const result = await this.handleTasksList(gateway, rpcReq.params, rpcReq.id);
+          res.json(this.jsonRpcSuccess(rpcReq.id, result));
+          return;
+        }
+
+        // Push notification methods — not supported, return proper A2A error
+        case 'tasks/pushNotification/set':
+        case 'tasks/pushNotification/get':
+        case 'tasks/pushNotification/list':
+        case 'tasks/pushNotification/delete':
+          res.json(
+            this.jsonRpcError(rpcReq.id, A2A_ERROR_CODES.PUSH_NOTIFICATIONS_NOT_SUPPORTED,
+              'Push notifications are not supported. Use message/stream for real-time updates.'),
+          );
+          return;
+
         default:
           res.json(
             this.jsonRpcError(rpcReq.id, A2A_ERROR_CODES.METHOD_NOT_FOUND, `Unknown method: ${rpcReq.method}`),
@@ -349,6 +366,112 @@ export class A2AServerService {
       }
       throw error;
     }
+  }
+
+  // ─── tasks/list ────────────────────────────────────────────────────
+
+  /**
+   * List tasks (agent runs) with optional filtering and pagination.
+   *
+   * A2A v0.3.0 §7.4: tasks/list
+   *
+   * Params:
+   *   - contextId?: string — filter by conversation
+   *   - status?: string — filter by task state
+   *   - pageSize?: number — max results (default 50, max 100)
+   *   - pageToken?: string — opaque cursor for next page (run ID)
+   *   - lastUpdatedAfter?: string — ISO8601 timestamp filter
+   */
+  private async handleTasksList(
+    gateway: Gateway,
+    params: any,
+    _rpcId: string | number,
+  ): Promise<{ tasks: Task[]; nextPageToken?: string; totalSize?: number }> {
+    const agentId = gateway.agentId;
+    const orgId = gateway.organizationId;
+
+    if (!agentId) {
+      throw Object.assign(new Error('Gateway has no agent'), {
+        code: A2A_ERROR_CODES.INTERNAL_ERROR,
+      });
+    }
+
+    // Pagination
+    const pageSize = Math.min(Math.max(params?.pageSize ?? 50, 1), 100);
+    const pageToken = params?.pageToken;
+
+    // Build query
+    const qb = this.runRepository.createQueryBuilder('run')
+      .where('run.agentId = :agentId', { agentId })
+      .andWhere('run.organizationId = :orgId', { orgId })
+      .orderBy('run.createdAt', 'DESC')
+      .take(pageSize + 1); // +1 to detect next page
+
+    // Filter by contextId (conversationId)
+    if (params?.contextId) {
+      qb.andWhere('run.conversationId = :convId', { convId: params.contextId });
+    }
+
+    // Filter by status
+    if (params?.status) {
+      const statusMap: Record<string, string> = {
+        submitted: 'pending',
+        working: 'running',
+        'input-required': 'waiting_input',
+        completed: 'completed',
+        failed: 'failed',
+        canceled: 'cancelled',
+      };
+      const dbStatus = statusMap[params.status];
+      if (dbStatus) {
+        qb.andWhere('run.status = :status', { status: dbStatus });
+      } else {
+        throw Object.assign(new Error(`Invalid status filter: ${params.status}`), {
+          code: A2A_ERROR_CODES.INVALID_PARAMS,
+        });
+      }
+    }
+
+    // Filter by lastUpdatedAfter
+    if (params?.lastUpdatedAfter) {
+      const ts = new Date(params.lastUpdatedAfter);
+      if (isNaN(ts.getTime())) {
+        throw Object.assign(new Error('Invalid timestamp format for lastUpdatedAfter'), {
+          code: A2A_ERROR_CODES.INVALID_PARAMS,
+        });
+      }
+      qb.andWhere('run.updatedAt > :after', { after: ts });
+    }
+
+    // Cursor pagination
+    if (pageToken) {
+      qb.andWhere('run.id < :cursor', { cursor: pageToken });
+    }
+
+    const runs = await qb.getMany();
+
+    // Check for next page
+    const hasMore = runs.length > pageSize;
+    const pageRuns = hasMore ? runs.slice(0, pageSize) : runs;
+
+    // Map to A2A Tasks
+    const tasks: Task[] = [];
+    for (const run of pageRuns) {
+      const messages = await this.getRunMessages(run);
+      tasks.push(agentRunToTask(run, messages));
+    }
+
+    // Get total count
+    const totalQb = this.runRepository.createQueryBuilder('run')
+      .where('run.agentId = :agentId', { agentId })
+      .andWhere('run.organizationId = :orgId', { orgId });
+    const totalSize = await totalQb.getCount();
+
+    return {
+      tasks,
+      ...(hasMore ? { nextPageToken: pageRuns[pageRuns.length - 1].id } : {}),
+      totalSize,
+    };
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────
