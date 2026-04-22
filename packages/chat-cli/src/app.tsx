@@ -1,0 +1,325 @@
+import React, { useState, useCallback } from 'react';
+import { Box, Text, useApp, useInput, useStdout } from 'ink';
+import TextInput from 'ink-text-input';
+import type { AlmytyClient, GatewayClient, AgentInfo, StreamEvent } from '@almyty/client';
+
+import type { Message } from './components.js';
+import { Header, MessageWindow, AgentSelector } from './components.js';
+import { SLASH_COMMANDS, COMMAND_DESCS, resolveSlash, getSuggestion, ALIASES } from './commands.js';
+
+// ── App state ──────────────────────────────────────────────────
+
+export interface AppState {
+  agent: AgentInfo;
+  messages: Message[];
+  loading: boolean;
+  loadingLabel: string;
+  conversationId: string | null;
+  pendingRunId: string | null;
+}
+
+// Mutable module-level variable; written by ChatApp, read by main() after exit
+export let exitMessage = '';
+
+// ── Chat app ────────────────────────────────────────────────────
+
+export function ChatApp({ client, initialAgent, gw }: { client: AlmytyClient; initialAgent: AgentInfo; gw: GatewayClient }) {
+  const { exit } = useApp();
+  const { stdout } = useStdout();
+  const [state, setState] = useState<AppState>({
+    agent: initialAgent,
+    messages: [],
+    loading: false,
+    loadingLabel: 'Thinking',
+    conversationId: null,
+    pendingRunId: null,
+  });
+  const [input, setInput] = useState('');
+  const [paletteCursor, setPaletteCursor] = useState(0);
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerAgents, setPickerAgents] = useState<AgentInfo[]>([]);
+
+  // Command palette matches
+  const slashMatches = input.startsWith('/') && !input.includes(' ')
+    ? SLASH_COMMANDS.filter(c => c.startsWith(input.slice(1).toLowerCase()))
+    : [];
+  const paletteOpen = input.startsWith('/') && slashMatches.length > 0;
+
+  // Arrow key navigation for command palette
+  useInput((ch, key) => {
+    if (!paletteOpen || state.loading) return;
+    if (key.upArrow) {
+      setPaletteCursor(c => (c - 1 + slashMatches.length) % slashMatches.length);
+    }
+    if (key.downArrow) {
+      setPaletteCursor(c => (c + 1) % slashMatches.length);
+    }
+    if (key.tab) {
+      setInput(`/${slashMatches[paletteCursor]}`);
+      setPaletteCursor(0);
+    }
+  });
+
+  // Reset palette cursor when input changes
+  const handleInputChange = useCallback((val: string) => {
+    setInput(val);
+    setPaletteCursor(0);
+  }, []);
+
+  const addMessage = useCallback((msg: Message) => {
+    setState(s => ({ ...s, messages: [...s.messages, msg] }));
+  }, []);
+
+  const handleSubmit = useCallback(async (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setInput('');
+
+    // Slash commands
+    if (trimmed.startsWith('/')) {
+      const [raw, ...args] = trimmed.slice(1).split(/\s+/);
+      const cmd = resolveSlash(raw);
+
+      if (!cmd) {
+        addMessage({ role: 'error', text: `Unknown command: /${raw}` });
+        addMessage({ role: 'info', text: `Commands: /help /agents /clear /quit` });
+        return;
+      }
+
+      if (cmd !== raw.toLowerCase() && !Object.entries(ALIASES).some(([k, v]) => k === raw.toLowerCase() && v === cmd)) {
+        addMessage({ role: 'info', text: `→ /${cmd}` });
+      }
+
+      switch (cmd) {
+        case 'quit':
+          const agentRef = `${gw.orgSlug}/${gw.agentSlug}`;
+          exitMessage = state.conversationId
+            ? `\nTo resume: npx @almyty/chat ${agentRef} --resume ${state.conversationId}\n`
+            : '';
+          exit();
+          return;
+        case 'clear':
+          setState(s => ({ ...s, messages: [] }));
+          return;
+        case 'help':
+          addMessage({ role: 'info', text: '/agents  browse and switch agents' });
+          addMessage({ role: 'info', text: '/clear   clear conversation' });
+          addMessage({ role: 'info', text: '/help    show this help' });
+          addMessage({ role: 'info', text: '/quit    exit' });
+          addMessage({ role: 'info', text: 'Tab to autocomplete commands.' });
+          return;
+        case 'agents': {
+          const target = args.join(' ').trim();
+          if (target) {
+            setState(s => ({ ...s, loading: true, loadingLabel: 'Switching' }));
+            const found = await client.findAgentByNameOrId(target);
+            setState(s => ({ ...s, loading: false }));
+            if (!found) {
+              addMessage({ role: 'error', text: `Agent "${target}" not found` });
+              return;
+            }
+            setState(s => ({
+              ...s,
+              agent: found,
+              messages: [],
+              conversationId: null,
+              pendingRunId: null,
+            }));
+            return;
+          }
+          setState(s => ({ ...s, loading: true, loadingLabel: 'Loading' }));
+          const agents = await client.listAgents();
+          setState(s => ({ ...s, loading: false }));
+          setPickerAgents(agents);
+          setShowPicker(true);
+          return;
+        }
+      }
+      return;
+    }
+
+    // Regular message
+    addMessage({ role: 'user', text: trimmed });
+    setState(s => ({ ...s, loading: true, loadingLabel: 'Thinking' }));
+
+    try {
+      if (state.agent.mode === 'autonomous') {
+        let runId: string;
+
+        if (state.pendingRunId) {
+          await gw.sendRunInput(state.pendingRunId, trimmed);
+          runId = state.pendingRunId;
+          setState(s => ({ ...s, pendingRunId: null }));
+        } else {
+          const run = await gw.startRun(trimmed, {
+            conversationId: state.conversationId ?? undefined,
+          });
+          runId = run.id;
+          if (run.conversationId) {
+            setState(s => ({ ...s, conversationId: run.conversationId! }));
+          }
+        }
+
+        // Stream events — show tool calls, sub-agents, chunks in real time
+        let streamedContent = '';
+        const result = await gw.streamRun(runId, (event: StreamEvent) => {
+          switch (event.type) {
+            case 'llm.started':
+              setState(s => ({ ...s, loadingLabel: 'Thinking' }));
+              break;
+            case 'llm.chunk': {
+              const chunk = (event.data as any).content;
+              if (chunk) streamedContent += chunk;
+              break;
+            }
+            case 'llm.response':
+              setState(s => ({ ...s, loadingLabel: 'Processing' }));
+              break;
+            case 'tool.started': {
+              const toolName = (event.data as any).tool;
+              if (toolName) {
+                setState(s => ({ ...s, loading: false }));
+                addMessage({ role: 'tool', text: toolName });
+                setState(s => ({ ...s, loading: true, loadingLabel: `Running ${toolName}` }));
+              }
+              break;
+            }
+            case 'tool.result': {
+              const tool = (event.data as any).tool;
+              const success = (event.data as any).success;
+              if (tool) {
+                addMessage({ role: 'info', text: `${tool} ${success ? 'completed' : 'failed'}` });
+              }
+              break;
+            }
+            case 'step.completed':
+              break;
+            case 'run.completed': {
+              const output = (event.data as any).output;
+              if (output) {
+                const text = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
+                streamedContent = text;
+              }
+              break;
+            }
+            case 'run.failed': {
+              const error = (event.data as any).error;
+              addMessage({ role: 'error', text: error || 'Run failed' });
+              break;
+            }
+          }
+        });
+
+        setState(s => ({ ...s, loading: false }));
+
+        // Show final output
+        if (result.status === 'completed') {
+          const text = streamedContent
+            || (result.output != null ? (typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2)) : '');
+          if (text) addMessage({ role: 'agent', text });
+        } else if (result.status === 'waiting_input') {
+          setState(s => ({ ...s, pendingRunId: runId }));
+          addMessage({ role: 'info', text: 'Waiting for your input' });
+        } else if (result.status === 'failed' && !streamedContent) {
+          addMessage({ role: 'error', text: result.error || 'Run failed' });
+        }
+      } else {
+        // Workflow: synchronous invoke
+        const result = await gw.invoke({ message: trimmed });
+        setState(s => ({ ...s, loading: false }));
+        const output = result?.output ?? result?.data?.output ?? result;
+        if (output != null) {
+          const text = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
+          addMessage({ role: 'agent', text });
+        }
+      }
+    } catch (err: any) {
+      setState(s => ({ ...s, loading: false }));
+      addMessage({ role: 'error', text: err.message });
+    }
+  }, [state.agent, state.conversationId, state.pendingRunId, client, addMessage, exit]);
+
+  const handlePickerSelect = useCallback((agent: AgentInfo) => {
+    setShowPicker(false);
+    if (agent.id === state.agent.id) return;
+    setState(s => ({
+      ...s,
+      agent,
+      messages: [],
+      conversationId: null,
+      pendingRunId: null,
+    }));
+  }, [state.agent.id]);
+
+  const suggestion = getSuggestion(input);
+  const rows = stdout?.rows || 24;
+
+  if (showPicker) {
+    return (
+      <Box flexDirection="column" height={rows}>
+        <Header agent={state.agent} conversationId={state.conversationId} />
+        <AgentSelector agents={pickerAgents} onSelect={handlePickerSelect} />
+      </Box>
+    );
+  }
+
+  return (
+    <Box flexDirection="column" height={rows}>
+      {/* Header */}
+      <Header agent={state.agent} conversationId={state.conversationId} />
+
+      {/* Messages — manually windowed to prevent overflow */}
+      <Box flexDirection="column" flexGrow={1} paddingRight={2}>
+        <MessageWindow
+          messages={state.messages}
+          loading={state.loading}
+          loadingLabel={state.loadingLabel}
+          maxRows={rows - 7 - (paletteOpen ? slashMatches.length + 1 : 0)}
+        />
+      </Box>
+
+      {/* Command palette (above input) */}
+      {paletteOpen && (
+        <Box flexDirection="column" paddingLeft={2} marginBottom={0}>
+          {slashMatches.map((cmd, i) => {
+            const active = i === paletteCursor;
+            return (
+              <Text key={cmd}>
+                <Text color={active ? '#8b5cf6' : '#555'}>{active ? '❯' : ' '} </Text>
+                <Text color="#8b5cf6" bold={active}>/{cmd}</Text>
+                <Text dimColor>  {COMMAND_DESCS[cmd] ?? ''}</Text>
+              </Text>
+            );
+          })}
+        </Box>
+      )}
+
+      {/* Input bar */}
+      <Box
+        borderStyle="round"
+        borderColor={paletteOpen ? '#8b5cf6' : '#555'}
+        paddingX={1}
+      >
+        <Text color="#8b5cf6">❯ </Text>
+        <Box flexGrow={1}>
+          <TextInput
+            value={input}
+            onChange={handleInputChange}
+            onSubmit={(val) => {
+              // If palette is open, select the highlighted command
+              if (paletteOpen && slashMatches.length > 0) {
+                const selected = `/${slashMatches[paletteCursor]}`;
+                setInput('');
+                setPaletteCursor(0);
+                handleSubmit(selected);
+                return;
+              }
+              handleSubmit(val);
+            }}
+            placeholder="Type a message or / for commands"
+          />
+        </Box>
+      </Box>
+    </Box>
+  );
+}

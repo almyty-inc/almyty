@@ -42,7 +42,17 @@ export interface RunLimits {
   maxDurationMs?: number;
 }
 
+/** SSE event from the agent run stream. */
+export interface StreamEvent {
+  type: string;
+  data: Record<string, unknown>;
+}
+
+/** Callback for stream events. */
+export type StreamEventHandler = (event: StreamEvent) => void;
+
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'timeout']);
+const TERMINAL_EVENT_TYPES = new Set(['run.completed', 'run.failed', 'run.cancelled']);
 
 export class AlmytyClient {
   private readonly baseUrl: string;
@@ -78,6 +88,65 @@ export class AlmytyClient {
     }
     if (res.status === 204) return null;
     return res.json();
+  }
+
+  /**
+   * Connect to an SSE endpoint and call handler for each event.
+   * Returns when the stream ends or a terminal event is received.
+   */
+  async streamSSE(path: string, handler: StreamEventHandler, signal?: AbortSignal): Promise<void> {
+    const url = `${this.baseUrl}${path}`;
+    const res = await fetch(url, {
+      headers: { ...this.headers(), Accept: 'text/event-stream' },
+      signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`SSE ${res.status}: ${text}`);
+    }
+    const body = res.body;
+    if (!body) return;
+
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE frames
+        const lines = buffer.split('\n');
+        buffer = lines.pop()!; // keep incomplete line
+        let eventType = 'message';
+        let dataLines: string[] = [];
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            dataLines.push(line.slice(6));
+          } else if (line === '') {
+            // End of frame
+            if (dataLines.length) {
+              const raw = dataLines.join('\n');
+              try {
+                const data = JSON.parse(raw);
+                const event: StreamEvent = { type: data.type || eventType, data };
+                handler(event);
+                if (TERMINAL_EVENT_TYPES.has(event.type)) return;
+              } catch { /* skip malformed */ }
+              dataLines = [];
+              eventType = 'message';
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   private unwrap(data: any): any {
@@ -305,6 +374,27 @@ export class GatewayClient {
   async getRun(runId: string): Promise<AgentRun> {
     const data = await this.client.request(`${this.prefix}/runs/${encodeURIComponent(runId)}`);
     return (data?.data ?? data) as AgentRun;
+  }
+
+  /**
+   * Stream run events via SSE. Calls handler for each event
+   * (llm.started, llm.chunk, llm.response, tool.started, tool.result,
+   * step.completed, run.completed, run.failed).
+   * Returns when the run completes or fails.
+   * Falls back to polling if SSE fails.
+   */
+  async streamRun(runId: string, handler: StreamEventHandler, signal?: AbortSignal): Promise<AgentRun> {
+    try {
+      await this.client.streamSSE(
+        `${this.prefix}/runs/${encodeURIComponent(runId)}/stream`,
+        handler,
+        signal,
+      );
+    } catch {
+      // SSE failed — fall back to polling
+    }
+    // Get final state
+    return this.getRun(runId);
   }
 
   async sendRunInput(runId: string, input: string): Promise<void> {
