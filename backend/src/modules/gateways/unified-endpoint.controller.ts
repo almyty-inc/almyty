@@ -175,6 +175,72 @@ export class UnifiedEndpointController {
   }
 
   /**
+   * Domain-root agent card: /.well-known/agent-card.json
+   *
+   * Returns the agent card for the gateway that owns the API key
+   * in the request. This allows A2A SDKs and the TCK (which strip
+   * the path and only use the domain root) to discover agents on
+   * a multi-tenant platform.
+   */
+  @All('.well-known/agent-card.json')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  async handleRootAgentCard(
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    // Resolve gateway from API key
+    const authHeader = (req.headers?.authorization as string) || '';
+    const apiKeyHeader = (req.headers?.['x-api-key'] as string) || '';
+    const rawKey = apiKeyHeader || (authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '');
+
+    if (!rawKey) {
+      throw new HttpException('API key required for agent card discovery', HttpStatus.UNAUTHORIZED);
+    }
+
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const apiKey = await this.apiKeyRepository.findOne({
+      where: { keyHash, isActive: true },
+    });
+
+    if (!apiKey) {
+      throw new HttpException('Invalid API key', HttpStatus.UNAUTHORIZED);
+    }
+
+    // Find the gateway this key belongs to
+    const gateway = await this.gatewayRepository.findOne({
+      where: apiKey.gatewayId
+        ? { id: apiKey.gatewayId, status: GatewayStatus.ACTIVE }
+        : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
+      relations: ['authConfigs'],
+    });
+
+    if (!gateway || !gateway.agentId) {
+      throw new HttpException('No agent gateway found for this key', HttpStatus.NOT_FOUND);
+    }
+
+    const agent = await this.agentRepository.findOne({
+      where: { id: gateway.agentId, organizationId: apiKey.organizationId },
+    });
+
+    if (!agent) {
+      throw new HttpException('Agent not found', HttpStatus.NOT_FOUND);
+    }
+
+    const organization = await this.organizationRepository.findOne({
+      where: { id: apiKey.organizationId },
+    });
+
+    if (!organization) {
+      throw new HttpException('Organization not found', HttpStatus.NOT_FOUND);
+    }
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const card = this.a2aAgentCardService.buildAgentCard(gateway, agent, organization, baseUrl);
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    return res.json(card);
+  }
+
+  /**
    * Catch-all handler for /:orgSlug/:resourceSlug and sub-paths.
    * Resolves org, then finds gateway or agent by slug/name.
    */
