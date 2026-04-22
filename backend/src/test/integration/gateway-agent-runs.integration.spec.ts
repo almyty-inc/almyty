@@ -347,4 +347,119 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 
     await agentRepo.delete({ id: workflowAgent.id });
   });
+
+  // ── SSE streaming ────────────────────────────────────────────
+
+  it('should stream run events via GET /:org/:agent/runs/:id/stream', async () => {
+    // Start a run first
+    runtimeMock.startRun.mockResolvedValue({
+      id: 'run-sse',
+      agentId: agent.id,
+      status: 'running',
+      conversationId: 'conv-sse',
+    });
+
+    const startRes = await request(app.getHttpServer())
+      .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ input: 'stream test' });
+
+    expect(startRes.status).toBe(201);
+
+    // Mock the emitter — simulate events arriving
+    const EventEmitter = require('events');
+    const emitter = new EventEmitter();
+    runtimeMock.getRunEmitter.mockReturnValue(emitter);
+
+    // Start listening on a real port for SSE
+    const server = app.getHttpServer();
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const port = (server.address() as any).port;
+
+    // Connect to SSE stream via raw HTTP
+    const ssePromise = new Promise<string>((resolve) => {
+      let data = '';
+      const req = require('http').get(
+        `http://localhost:${port}/${ORG_SLUG}/${AGENT_SLUG}/runs/run-sse/stream`,
+        {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+            Accept: 'text/event-stream',
+          },
+        },
+        (res: any) => {
+          res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+          res.on('end', () => resolve(data));
+        },
+      );
+      req.on('error', () => resolve(data));
+    });
+
+    // Emit events after a short delay
+    await new Promise(r => setTimeout(r, 50));
+    emitter.emit('event', { type: 'llm.started', data: { step: 0 }, timestamp: Date.now() });
+    emitter.emit('event', { type: 'llm.chunk', data: { step: 0, content: 'Hello' }, timestamp: Date.now() });
+    emitter.emit('event', { type: 'run.completed', data: { output: 'Hello world' }, timestamp: Date.now() });
+
+    const sseData = await ssePromise;
+
+    // Verify SSE format
+    expect(sseData).toContain('event: llm.started');
+    expect(sseData).toContain('event: llm.chunk');
+    expect(sseData).toContain('event: run.completed');
+    expect(sseData).toContain('"content":"Hello"');
+    expect(sseData).toContain('"output":"Hello world"');
+  });
+
+  it('should return error when run emitter not found', async () => {
+    runtimeMock.getRunEmitter.mockReturnValue(null);
+
+    const res = await request(app.getHttpServer())
+      .get(`/${ORG_SLUG}/${AGENT_SLUG}/runs/nonexistent-run/stream`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .set('Accept', 'text/event-stream');
+
+    // Should get an SSE error event
+    expect(res.status).toBe(200); // SSE always starts with 200
+    expect(res.text).toContain('error');
+    expect(res.text).toContain('Run not found');
+  });
+
+  // ── Multi-turn conversation via gateway ────────────────────────
+
+  it('should maintain conversation across multiple runs', async () => {
+    let callCount = 0;
+    runtimeMock.startRun.mockImplementation(async (agentId: string, orgId: string, userId: string, input: string, opts: any) => {
+      callCount++;
+      return {
+        id: `run-multi-${callCount}`,
+        agentId,
+        status: 'running',
+        conversationId: opts?.conversationId || `conv-new-${callCount}`,
+      };
+    });
+
+    // First message — no conversationId
+    const res1 = await request(app.getHttpServer())
+      .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ input: 'Hello' });
+
+    expect(res1.status).toBe(201);
+    const convId = res1.body.data.conversationId;
+    expect(convId).toBeTruthy();
+
+    // Second message — pass conversationId
+    const res2 = await request(app.getHttpServer())
+      .post(`/${ORG_SLUG}/${AGENT_SLUG}/runs`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ input: 'Follow-up', conversationId: convId });
+
+    expect(res2.status).toBe(201);
+
+    // Verify second call received the conversationId
+    expect(runtimeMock.startRun).toHaveBeenCalledTimes(2);
+    const secondCall = runtimeMock.startRun.mock.calls[1];
+    expect(secondCall[4]).toEqual(expect.objectContaining({ conversationId: convId }));
+  });
 });
