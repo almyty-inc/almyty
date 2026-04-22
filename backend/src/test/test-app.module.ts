@@ -96,6 +96,7 @@ import { A2AAgentCardService } from '../modules/a2a/a2a-agent-card.service';
 import { AcpServerService } from '../modules/acp/acp-server.service';
 import { AcpDiscoveryService } from '../modules/acp/acp-discovery.service';
 import { UtcpService } from '../modules/mcp/utcp.service';
+import { AgentRuntimeService } from '../modules/agents/agent-runtime.service';
 
 // Services needed by AlmytyMcpService via ModuleRef.get
 import { ApisService } from '../modules/apis/apis.service';
@@ -238,6 +239,7 @@ const mockRedis = {
     { provide: AcpServerService, useValue: { handleJsonRpc: () => ({}) } },
     { provide: AcpDiscoveryService, useValue: { buildDiscovery: () => ({}) } },
     { provide: UtcpService, useValue: { handleRequest: () => ({}) } },
+    { provide: AgentRuntimeService, useValue: { startRun: () => ({}), getRun: () => ({}), listRuns: () => ([]), getRunEmitter: () => null, sendInput: () => ({}), cancelRun: () => ({}) } },
 
     // Redis mock
     { provide: 'default_IORedisModuleConnectionToken', useValue: mockRedis },
