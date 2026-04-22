@@ -154,8 +154,9 @@ export class UnifiedEndpointController {
       const hasAccess = userOrgs.some(o => o.id === agent.organizationId);
 
       if (!hasAccess) {
+        this.logger.warn(`JWT org mismatch: agent.orgId=${agent.organizationId}, JWT orgs=${JSON.stringify(userOrgs.map(o => o.id))}`);
         throw new HttpException(
-          { success: false, message: 'No access to this agent\'s organization', error: 'AGENT_AUTH_FORBIDDEN' },
+          { success: false, message: `No access to this agent's organization`, error: 'AGENT_AUTH_FORBIDDEN' },
           HttpStatus.FORBIDDEN,
         );
       }
