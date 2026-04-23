@@ -118,4 +118,122 @@ describe('A2A JSON-RPC compliance', () => {
       expect(lastResponse.error.message).toBeDefined();
     });
   });
+
+  describe('Invalid id type (-32600)', () => {
+    it('should reject object id', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'SendMessage', id: { bad: 'type' }, params: {} }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INVALID_REQUEST);
+    });
+
+    it('should reject array id', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'SendMessage', id: [1], params: {} }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INVALID_REQUEST);
+    });
+
+    it('should accept string id', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'bogus', id: 'abc', params: {} }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.METHOD_NOT_FOUND);
+    });
+
+    it('should accept number id', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'bogus', id: 42, params: {} }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.METHOD_NOT_FOUND);
+    });
+  });
+
+  describe('V1.0 PascalCase methods', () => {
+    it('should accept SendMessage', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'SendMessage', id: 1, params: { message: { parts: [{ type: 'text', text: 'hi' }] } } }, mockRes);
+      // Will fail at runtime (no real agent), but should NOT return METHOD_NOT_FOUND
+      expect(lastResponse.error?.code).not.toBe(A2A_ERROR_CODES.METHOD_NOT_FOUND);
+    });
+
+    it('should accept GetTask', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'GetTask', id: 1, params: {} }, mockRes);
+      expect(lastResponse.error?.code).not.toBe(A2A_ERROR_CODES.METHOD_NOT_FOUND);
+    });
+
+    it('should accept CancelTask', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'CancelTask', id: 1, params: {} }, mockRes);
+      expect(lastResponse.error?.code).not.toBe(A2A_ERROR_CODES.METHOD_NOT_FOUND);
+    });
+
+    it('should accept ListTasks', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'ListTasks', id: 1, params: {} }, mockRes);
+      expect(lastResponse.error?.code).not.toBe(A2A_ERROR_CODES.METHOD_NOT_FOUND);
+    });
+  });
+
+  describe('Push notification methods (-32003)', () => {
+    const pushMethods = [
+      'tasks/pushNotification/set', 'tasks/pushNotification/get',
+      'tasks/pushNotification/list', 'tasks/pushNotification/delete',
+      'SetTaskPushNotificationConfig', 'GetTaskPushNotificationConfig',
+      'ListTaskPushNotificationConfigs', 'DeleteTaskPushNotificationConfig',
+    ];
+
+    it.each(pushMethods)('should return -32003 for %s', async (method) => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method, id: 1, params: {} }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.PUSH_NOTIFICATIONS_NOT_SUPPORTED);
+    });
+  });
+
+  describe('Invalid params for SendMessage (-32602)', () => {
+    it('should reject missing message.parts', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'SendMessage', id: 1, params: {} }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INVALID_PARAMS);
+    });
+
+    it('should reject non-array parts', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'SendMessage', id: 1, params: { message: { parts: 'string' } } }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INVALID_PARAMS);
+    });
+  });
+
+  describe('GetTask / CancelTask validation', () => {
+    it('should return -32602 for GetTask without id', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'GetTask', id: 1, params: {} }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INVALID_PARAMS);
+    });
+
+    it('should return -32001 for GetTask with nonexistent id', async () => {
+      const mockRunRepo = { findOne: jest.fn().mockResolvedValue(null), createQueryBuilder: jest.fn() };
+      const svc = new A2AServerService(
+        { startRun: jest.fn(), getRun: jest.fn(), cancelRun: jest.fn() } as any,
+        new A2AAgentCardService(),
+        mockRunRepo as any,
+        { findOne: jest.fn() } as any,
+        { find: jest.fn().mockResolvedValue([]) } as any,
+      );
+      await svc.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'GetTask', id: 1, params: { id: 'nonexistent-uuid' } }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.TASK_NOT_FOUND);
+    });
+
+    it('should return -32602 for CancelTask without id', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'CancelTask', id: 1, params: {} }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INVALID_PARAMS);
+    });
+
+    it('should return -32001 for CancelTask with nonexistent id', async () => {
+      const mockRunRepo = { findOne: jest.fn().mockResolvedValue(null), createQueryBuilder: jest.fn() };
+      const svc = new A2AServerService(
+        { startRun: jest.fn(), getRun: jest.fn(), cancelRun: jest.fn() } as any,
+        new A2AAgentCardService(),
+        mockRunRepo as any,
+        { findOne: jest.fn() } as any,
+        { find: jest.fn().mockResolvedValue([]) } as any,
+      );
+      await svc.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'CancelTask', id: 1, params: { id: 'nonexistent-uuid' } }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.TASK_NOT_FOUND);
+    });
+  });
+
+  describe('Error code propagation', () => {
+    it('should propagate custom error codes from handlers', async () => {
+      // GetTask with missing params should return INVALID_PARAMS (-32602), not INTERNAL_ERROR (-32603)
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'tasks/get', id: 1, params: {} }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INVALID_PARAMS);
+      expect(lastResponse.error.code).not.toBe(A2A_ERROR_CODES.INTERNAL_ERROR);
+    });
+  });
 });
