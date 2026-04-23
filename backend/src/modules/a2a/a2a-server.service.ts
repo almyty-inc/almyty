@@ -526,11 +526,12 @@ export class A2AServerService {
       }
     }
 
-    // Filter by lastUpdatedAfter
-    if (params?.lastUpdatedAfter) {
-      const ts = new Date(params.lastUpdatedAfter);
+    // Filter by timestamp (accept both v0.2 lastUpdatedAfter and v1.0 statusTimestampAfter)
+    const timestampFilter = params?.statusTimestampAfter || params?.lastUpdatedAfter;
+    if (timestampFilter) {
+      const ts = new Date(timestampFilter);
       if (isNaN(ts.getTime())) {
-        throw Object.assign(new Error('Invalid timestamp format for lastUpdatedAfter'), {
+        throw Object.assign(new Error('Invalid timestamp format'), {
           code: A2A_ERROR_CODES.INVALID_PARAMS,
         });
       }
