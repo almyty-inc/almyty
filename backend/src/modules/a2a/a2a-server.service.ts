@@ -527,8 +527,15 @@ export class A2AServerService {
     }
 
     // Filter by timestamp (accept both v0.2 lastUpdatedAfter and v1.0 statusTimestampAfter)
-    const timestampFilter = params?.statusTimestampAfter || params?.lastUpdatedAfter;
-    if (timestampFilter) {
+    const timestampFilter = params?.statusTimestampAfter ?? params?.lastUpdatedAfter;
+    if (timestampFilter !== undefined && timestampFilter !== null) {
+      // Reject obviously invalid values (negative numbers, non-date strings)
+      const tsNum = Number(timestampFilter);
+      if (!isNaN(tsNum) && tsNum < 0) {
+        throw Object.assign(new Error('Invalid timestamp: must be non-negative'), {
+          code: A2A_ERROR_CODES.INVALID_PARAMS,
+        });
+      }
       const ts = new Date(timestampFilter);
       if (isNaN(ts.getTime())) {
         throw Object.assign(new Error('Invalid timestamp format'), {
