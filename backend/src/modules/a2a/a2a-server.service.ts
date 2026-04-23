@@ -357,6 +357,14 @@ export class A2AServerService {
       });
     }
 
+    // Validate UUID format to prevent Postgres errors
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRe.test(params.id)) {
+      throw Object.assign(new Error('Task not found'), {
+        code: A2A_ERROR_CODES.TASK_NOT_FOUND,
+      });
+    }
+
     const run = await this.runRepository.findOne({
       where: { id: params.id, organizationId: gateway.organizationId },
     });
@@ -384,7 +392,13 @@ export class A2AServerService {
       });
     }
 
-    // Verify task exists first
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRe.test(params.id)) {
+      throw Object.assign(new Error('Task not found'), {
+        code: A2A_ERROR_CODES.TASK_NOT_FOUND,
+      });
+    }
+
     const existing = await this.runRepository.findOne({
       where: { id: params.id, organizationId: gateway.organizationId },
     });
