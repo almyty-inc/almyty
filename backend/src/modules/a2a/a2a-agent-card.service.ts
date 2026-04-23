@@ -97,13 +97,15 @@ export class A2AAgentCardService {
     for (const auth of authConfigs) {
       if (!auth.isActive) continue;
 
+      // A2A v1.0 uses typed scheme objects, not OpenAPI format
       switch (auth.type) {
         case GatewayAuthType.API_KEY: {
           const schemeName = `key_${auth.id.slice(0, 8)}`;
           securitySchemes[schemeName] = {
-            type: 'apiKey',
-            name: auth.configuration?.keyHeader || 'x-api-key',
-            in: 'header',
+            apiKeySecurityScheme: {
+              name: auth.configuration?.keyHeader || 'x-api-key',
+              in: 'header',
+            },
           };
           security.push({ [schemeName]: [] });
           break;
@@ -112,8 +114,9 @@ export class A2AAgentCardService {
         case GatewayAuthType.BEARER_TOKEN: {
           const schemeName = `bearer_${auth.id.slice(0, 8)}`;
           securitySchemes[schemeName] = {
-            type: 'http',
-            scheme: 'bearer',
+            httpAuthSecurityScheme: {
+              scheme: 'bearer',
+            },
           };
           security.push({ [schemeName]: [] });
           break;
@@ -122,9 +125,10 @@ export class A2AAgentCardService {
         case GatewayAuthType.JWT: {
           const schemeName = `jwt_${auth.id.slice(0, 8)}`;
           securitySchemes[schemeName] = {
-            type: 'http',
-            scheme: 'bearer',
-            bearerFormat: 'JWT',
+            httpAuthSecurityScheme: {
+              scheme: 'bearer',
+              bearerFormat: 'JWT',
+            },
           };
           security.push({ [schemeName]: [] });
           break;
@@ -133,8 +137,9 @@ export class A2AAgentCardService {
         case GatewayAuthType.BASIC_AUTH: {
           const schemeName = `basic_${auth.id.slice(0, 8)}`;
           securitySchemes[schemeName] = {
-            type: 'http',
-            scheme: 'basic',
+            httpAuthSecurityScheme: {
+              scheme: 'basic',
+            },
           };
           security.push({ [schemeName]: [] });
           break;
@@ -143,8 +148,9 @@ export class A2AAgentCardService {
         case GatewayAuthType.OAUTH2: {
           const schemeName = `oauth2_${auth.id.slice(0, 8)}`;
           securitySchemes[schemeName] = {
-            type: 'oauth2',
-            flows: auth.configuration?.flows || {},
+            oauth2SecurityScheme: {
+              flows: auth.configuration?.flows || {},
+            },
           };
           security.push({ [schemeName]: [] });
           break;

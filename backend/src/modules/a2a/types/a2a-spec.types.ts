@@ -123,16 +123,20 @@ export interface AgentCapabilities {
   stateTransitionHistory?: boolean;
 }
 
+// A2A v1.0 uses typed scheme objects (one key per scheme)
 export interface SecurityScheme {
-  type: 'apiKey' | 'http' | 'oauth2' | 'openIdConnect';
+  apiKeySecurityScheme?: { name?: string; in?: string };
+  httpAuthSecurityScheme?: { scheme?: string; bearerFormat?: string };
+  oauth2SecurityScheme?: { flows?: any };
+  openIdConnectSecurityScheme?: { openIdConnectUrl?: string };
+  mtlsSecurityScheme?: Record<string, unknown>;
+  // Legacy OpenAPI format fields (for backwards compat)
+  type?: 'apiKey' | 'http' | 'oauth2' | 'openIdConnect';
   description?: string;
-  // apiKey
   name?: string;
   in?: 'header' | 'query' | 'cookie';
-  // http
   scheme?: string;
   bearerFormat?: string;
-  // oauth2
   flows?: Record<string, any>;
   // openIdConnect
   openIdConnectUrl?: string;
