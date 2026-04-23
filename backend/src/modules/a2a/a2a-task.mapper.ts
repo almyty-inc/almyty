@@ -83,9 +83,13 @@ export function agentRunToTask(run: AgentRun, messages: Message[]): Task {
     timestamp: run.updatedAt?.toISOString() || new Date().toISOString(),
   };
 
+  // Prefer the external A2A contextId (set via SendMessage message.contextId)
+  // over the internal conversationId so round-trip filtering works.
+  const contextId = run.metadata?.a2aContextId || run.conversationId || undefined;
+
   const task: Task = {
     id: run.id,
-    contextId: run.conversationId || undefined,
+    contextId,
     status: taskState,
     history: messagesToHistory(messages),
     metadata: {
