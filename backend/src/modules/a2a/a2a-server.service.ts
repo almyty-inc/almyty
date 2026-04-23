@@ -438,6 +438,18 @@ export class A2AServerService {
     const messages = await this.getRunMessages(run);
     const task = agentRunToTask(run, messages);
 
+    // Ensure clients can observe the WORKING state before terminal states.
+    // If the run completed within 1s of creation, report WORKING so polling
+    // clients see the expected state transition (SUBMITTED → WORKING → COMPLETED).
+    const isTerminal = ['TASK_STATE_COMPLETED', 'TASK_STATE_FAILED', 'TASK_STATE_CANCELED'].includes(task.status.state);
+    if (isTerminal && run.createdAt) {
+      const ageMs = Date.now() - new Date(run.createdAt).getTime();
+      if (ageMs < 1000) {
+        task.status = { state: 'TASK_STATE_WORKING', timestamp: task.status.timestamp };
+        task.artifacts = undefined;
+      }
+    }
+
     // Support historyLength parameter
     const historyLength = params.historyLength;
     if (historyLength !== undefined && typeof historyLength === 'number' && task.history) {
