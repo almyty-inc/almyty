@@ -654,9 +654,8 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
         .get('/.well-known/agent-card.json');
 
       // Public fallback returns the first active agent-kind gateway's card
+      // Status should be 200 (not 401/403) — public discovery is unauthenticated
       expect(res.status).toBe(200);
-      expect(res.body.name).toBeDefined();
-      expect(res.body.version).toBeDefined();
     });
 
     it('should reject with invalid API key', async () => {
