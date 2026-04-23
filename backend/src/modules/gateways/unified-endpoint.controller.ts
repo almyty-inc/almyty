@@ -200,7 +200,10 @@ export class UnifiedEndpointController {
       // No auth — try to return a default agent card (first active agent gateway)
       // This satisfies A2A spec requirement for public agent card access
       const defaultGw = await this.gatewayRepository.findOne({
-        where: { status: GatewayStatus.ACTIVE },
+        where: {
+          status: GatewayStatus.ACTIVE,
+          type: In([GatewayType.A2A, GatewayType.ACP, GatewayType.OPENAI_CHAT]),
+        },
         relations: ['authConfigs'],
         order: { createdAt: 'ASC' },
       });
@@ -210,6 +213,9 @@ export class UnifiedEndpointController {
         if (agent && org) {
           const baseUrl = this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
           const card = this.a2aAgentCardService.buildAgentCard(defaultGw, agent, org, baseUrl);
+          // Public card omits security details — clients get full card via authenticated request
+          delete card.securitySchemes;
+          delete card.security;
           res.setHeader('Cache-Control', 'public, max-age=300');
           return res.json(card);
         }
