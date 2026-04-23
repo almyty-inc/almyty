@@ -16,6 +16,7 @@ describe('A2A JSON-RPC compliance', () => {
     agentId: 'agent-1',
     organizationId: 'org-1',
     authConfigs: [],
+    endpoint: '/test-a2a',
   };
 
   const mockReq: any = {
@@ -168,6 +169,8 @@ describe('A2A JSON-RPC compliance', () => {
     const pushMethods = [
       'tasks/pushNotification/set', 'tasks/pushNotification/get',
       'tasks/pushNotification/list', 'tasks/pushNotification/delete',
+      'tasks/pushNotificationConfig/set', 'tasks/pushNotificationConfig/get',
+      'tasks/pushNotificationConfig/list', 'tasks/pushNotificationConfig/delete',
       'SetTaskPushNotificationConfig', 'GetTaskPushNotificationConfig',
       'ListTaskPushNotificationConfigs', 'DeleteTaskPushNotificationConfig',
     ];
@@ -288,9 +291,20 @@ describe('A2A JSON-RPC compliance', () => {
   });
 
   describe('GetExtendedAgentCard', () => {
-    it('should return METHOD_NOT_FOUND', async () => {
+    it('should return agent card when context is provided', async () => {
+      const ctx = {
+        agent: { id: 'agent-1', name: 'Test Agent', description: 'A test agent' },
+        org: { id: 'org-1', name: 'Test Org', slug: 'test-org' },
+        baseUrl: 'https://api.example.com',
+      };
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'GetExtendedAgentCard', id: 1, params: {} }, mockRes, ctx);
+      expect(lastResponse.result).toBeDefined();
+      expect(lastResponse.result.name).toBe('Test Agent');
+    });
+
+    it('should return error without context', async () => {
       await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'GetExtendedAgentCard', id: 1, params: {} }, mockRes);
-      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.METHOD_NOT_FOUND);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INTERNAL_ERROR);
     });
   });
 });
