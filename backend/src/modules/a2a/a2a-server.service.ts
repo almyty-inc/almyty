@@ -578,17 +578,19 @@ export class A2AServerService {
 
     // Filter by status
     if (params?.status) {
-      const statusMap: Record<string, string> = {
+      // Map A2A task states to internal DB statuses
+      // TASK_STATE_WORKING covers both pending and running (agent accepted the task)
+      const statusMap: Record<string, string | string[]> = {
         // v1.0 TASK_STATE_* names
         TASK_STATE_SUBMITTED: 'pending',
-        TASK_STATE_WORKING: 'running',
+        TASK_STATE_WORKING: ['pending', 'running'],
         TASK_STATE_INPUT_REQUIRED: 'waiting_input',
         TASK_STATE_COMPLETED: 'completed',
         TASK_STATE_FAILED: 'failed',
         TASK_STATE_CANCELED: 'cancelled',
         // v0.2 lowercase names (backwards compat)
         submitted: 'pending',
-        working: 'running',
+        working: ['pending', 'running'],
         'input-required': 'waiting_input',
         completed: 'completed',
         failed: 'failed',
@@ -596,7 +598,11 @@ export class A2AServerService {
       };
       const dbStatus = statusMap[params.status];
       if (dbStatus) {
-        qb.andWhere('run.status = :status', { status: dbStatus });
+        if (Array.isArray(dbStatus)) {
+          qb.andWhere('run.status IN (:...statuses)', { statuses: dbStatus });
+        } else {
+          qb.andWhere('run.status = :status', { status: dbStatus });
+        }
       } else {
         throw Object.assign(new Error(`Invalid status filter: ${params.status}`), {
           code: A2A_ERROR_CODES.INVALID_PARAMS,
