@@ -22,7 +22,7 @@ import { Organization } from '../../entities/organization.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../entities/gateway.entity';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Tool } from '../../entities/tool.entity';
-import { In } from 'typeorm';
+import { In, Not, IsNull } from 'typeorm';
 import { ApiKey } from '../../entities/api-key.entity';
 import { McpService } from '../mcp/mcp.service';
 import { AlmytyMcpService } from '../mcp/almyty-mcp.service';
@@ -203,11 +203,12 @@ export class UnifiedEndpointController {
         where: {
           status: GatewayStatus.ACTIVE,
           type: In([GatewayType.A2A, GatewayType.ACP, GatewayType.OPENAI_CHAT]),
+          agentId: Not(IsNull()),
         },
         relations: ['authConfigs'],
         order: { createdAt: 'ASC' },
       });
-      if (defaultGw?.agentId) {
+      if (defaultGw) {
         const agent = await this.agentRepository.findOne({ where: { id: defaultGw.agentId } });
         const org = await this.organizationRepository.findOne({ where: { id: defaultGw.organizationId } });
         if (agent && org) {
