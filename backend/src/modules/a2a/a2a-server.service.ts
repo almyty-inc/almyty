@@ -611,7 +611,17 @@ export class A2AServerService {
       const dbStatus = statusMap[params.status];
       if (dbStatus) {
         if (Array.isArray(dbStatus)) {
-          qb.andWhere('run.status IN (:...statuses)', { statuses: dbStatus });
+          // WORKING also includes recently completed tasks (within 1s buffer)
+          const isWorkingFilter = params.status === 'TASK_STATE_WORKING' || params.status === 'working';
+          if (isWorkingFilter) {
+            const cutoff = new Date(Date.now() - 1000);
+            qb.andWhere(
+              '(run.status IN (:...statuses) OR (run.status IN (:...terminalStatuses) AND run."createdAt" > :cutoff))',
+              { statuses: dbStatus, terminalStatuses: ['completed', 'failed', 'cancelled'], cutoff },
+            );
+          } else {
+            qb.andWhere('run.status IN (:...statuses)', { statuses: dbStatus });
+          }
         } else {
           qb.andWhere('run.status = :status', { status: dbStatus });
         }
@@ -669,6 +679,15 @@ export class A2AServerService {
     for (const run of pageRuns) {
       const messages = await this.getRunMessages(run);
       const task = agentRunToTask(run, messages);
+      // Apply same WORKING state buffer as GetTask
+      const isTerminal = ['TASK_STATE_COMPLETED', 'TASK_STATE_FAILED', 'TASK_STATE_CANCELED'].includes(task.status.state);
+      if (isTerminal && run.createdAt) {
+        const ageMs = Date.now() - new Date(run.createdAt).getTime();
+        if (ageMs < 1000) {
+          task.status = { state: 'TASK_STATE_WORKING', timestamp: task.status.timestamp };
+          task.artifacts = undefined;
+        }
+      }
       // Limit history if requested
       if (historyLength !== undefined && typeof historyLength === 'number' && task.history) {
         task.history = historyLength === 0 ? [] : task.history.slice(-historyLength);
