@@ -623,15 +623,20 @@ export class A2AServerService {
       qb.andWhere('run.updatedAt > :after', { after: ts });
     }
 
-    // Cursor pagination — validate UUID format
+    // Cursor pagination — pageToken is a base64-encoded createdAt timestamp
     if (pageToken) {
-      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRe.test(pageToken)) {
+      try {
+        const decoded = Buffer.from(pageToken, 'base64').toString('utf-8');
+        const cursorDate = new Date(decoded);
+        if (isNaN(cursorDate.getTime())) {
+          throw new Error('invalid date');
+        }
+        qb.andWhere('run.createdAt < :cursorDate', { cursorDate });
+      } catch {
         throw Object.assign(new Error('Invalid pageToken'), {
           code: A2A_ERROR_CODES.INVALID_PARAMS,
         });
       }
-      qb.andWhere('run.id < :cursor', { cursor: pageToken });
     }
 
     const runs = await qb.getMany();
@@ -676,7 +681,9 @@ export class A2AServerService {
     // nextPageToken = empty string when no more results
     return {
       tasks,
-      nextPageToken: hasMore ? pageRuns[pageRuns.length - 1].id : '',
+      nextPageToken: hasMore
+        ? Buffer.from(pageRuns[pageRuns.length - 1].createdAt.toISOString()).toString('base64')
+        : '',
       totalSize,
       pageSize: tasks.length,
     };
