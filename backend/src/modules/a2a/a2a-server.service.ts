@@ -45,6 +45,7 @@ export class A2AServerService {
     req: Request,
     body: any,
     res: Response,
+    context?: { agent?: any; org?: any; baseUrl?: string },
   ): Promise<void> {
     // Malformed / empty body
     if (!body || typeof body !== 'object') {
@@ -125,20 +126,32 @@ export class A2AServerService {
 
         case 'GetExtendedAgentCard':
         case 'agent/getAuthenticatedExtendedCard': {
-          // Extended agent card — return METHOD_NOT_FOUND for now
-          // (requires authentication infrastructure not yet wired here)
-          res.json(
-            this.jsonRpcError(rpcReq.id, A2A_ERROR_CODES.METHOD_NOT_FOUND,
-              'GetExtendedAgentCard is not supported'),
-          );
+          // Return the full agent card with security schemes (authenticated access)
+          if (context?.agent && context?.org && context?.baseUrl) {
+            const card = this.agentCardService.buildAgentCard(
+              gateway, context.agent, context.org, context.baseUrl,
+            );
+            res.json(this.jsonRpcSuccess(rpcReq.id, card));
+          } else {
+            res.json(
+              this.jsonRpcError(rpcReq.id, A2A_ERROR_CODES.INTERNAL_ERROR,
+                'Unable to build extended agent card'),
+            );
+          }
           return;
         }
 
         // Push notification methods — not supported, return proper A2A error
+        // Covers both v0.2.x (tasks/pushNotification/...) and v1.0 (PascalCase)
+        // and TCK variant (tasks/pushNotificationConfig/...)
         case 'tasks/pushNotification/set':
         case 'tasks/pushNotification/get':
         case 'tasks/pushNotification/list':
         case 'tasks/pushNotification/delete':
+        case 'tasks/pushNotificationConfig/set':
+        case 'tasks/pushNotificationConfig/get':
+        case 'tasks/pushNotificationConfig/list':
+        case 'tasks/pushNotificationConfig/delete':
         case 'SetTaskPushNotificationConfig':
         case 'GetTaskPushNotificationConfig':
         case 'ListTaskPushNotificationConfigs':
