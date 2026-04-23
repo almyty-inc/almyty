@@ -178,6 +178,7 @@ export class A2AServerService {
         case 'tasks/pushNotificationConfig/list':
         case 'tasks/pushNotificationConfig/delete':
         case 'SetTaskPushNotificationConfig':
+        case 'CreateTaskPushNotificationConfig':
         case 'GetTaskPushNotificationConfig':
         case 'ListTaskPushNotificationConfigs':
         case 'DeleteTaskPushNotificationConfig':
