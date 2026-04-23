@@ -121,6 +121,7 @@ export interface AgentCapabilities {
   streaming?: boolean;
   pushNotifications?: boolean;
   stateTransitionHistory?: boolean;
+  extendedAgentCard?: boolean;
 }
 
 // A2A v1.0 uses typed scheme objects (one key per scheme)

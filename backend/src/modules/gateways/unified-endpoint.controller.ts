@@ -541,7 +541,14 @@ export class UnifiedEndpointController {
       throw new HttpException('A2A gateways only accept POST for JSON-RPC', HttpStatus.METHOD_NOT_ALLOWED);
     }
 
-    await this.a2aServerService.handleJsonRpc(gateway, req, body, res);
+    // Load agent + org for extended card support
+    const agent = await this.agentRepository.findOne({
+      where: { id: gateway.agentId, organizationId: organization.id },
+    });
+    const baseUrl = this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
+    await this.a2aServerService.handleJsonRpc(gateway, req, body, res, {
+      agent, org: organization, baseUrl,
+    });
   }
 
   private async delegateACP(

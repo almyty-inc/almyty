@@ -71,6 +71,7 @@ export class A2AAgentCardService {
       streaming: true,
       pushNotifications: false,
       stateTransitionHistory: true,
+      extendedAgentCard: true,
     };
   }
 
