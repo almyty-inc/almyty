@@ -649,11 +649,14 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
       expect(res.status).toBe(200);
     });
 
-    it('should reject without API key', async () => {
+    it('should return public agent card without API key', async () => {
       const res = await request(app.getHttpServer())
         .get('/.well-known/agent-card.json');
 
-      expect(res.status).toBe(401);
+      // Public fallback returns the first active agent-kind gateway's card
+      expect(res.status).toBe(200);
+      expect(res.body.name).toBeDefined();
+      expect(res.body.version).toBeDefined();
     });
 
     it('should reject with invalid API key', async () => {
