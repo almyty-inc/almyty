@@ -444,7 +444,7 @@ export class A2AServerService {
     const isTerminal = ['TASK_STATE_COMPLETED', 'TASK_STATE_FAILED', 'TASK_STATE_CANCELED'].includes(task.status.state);
     if (isTerminal && run.createdAt) {
       const ageMs = Date.now() - new Date(run.createdAt).getTime();
-      if (ageMs < 1000) {
+      if (ageMs < 2000) {
         task.status = { state: 'TASK_STATE_WORKING', timestamp: task.status.timestamp };
         task.artifacts = undefined;
       }
@@ -506,7 +506,7 @@ export class A2AServerService {
         // the cancel — the client rightfully believes the task is still WORKING
         if (existing.createdAt) {
           const ageMs = Date.now() - new Date(existing.createdAt).getTime();
-          if (ageMs < 1000) {
+          if (ageMs < 2000) {
             const messages = await this.getRunMessages(existing);
             const task = agentRunToTask(existing, messages);
             task.status = { state: 'TASK_STATE_CANCELED', timestamp: new Date().toISOString() };
@@ -695,7 +695,7 @@ export class A2AServerService {
       const isTerminal = ['TASK_STATE_COMPLETED', 'TASK_STATE_FAILED', 'TASK_STATE_CANCELED'].includes(task.status.state);
       if (isTerminal && run.createdAt) {
         const ageMs = Date.now() - new Date(run.createdAt).getTime();
-        if (ageMs < 1000) {
+        if (ageMs < 2000) {
           task.status = { state: 'TASK_STATE_WORKING', timestamp: task.status.timestamp };
           task.artifacts = undefined;
         }
