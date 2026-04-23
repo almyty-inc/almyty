@@ -123,6 +123,17 @@ export class A2AServerService {
           return;
         }
 
+        case 'GetExtendedAgentCard':
+        case 'agent/getAuthenticatedExtendedCard': {
+          // Extended agent card — return METHOD_NOT_FOUND for now
+          // (requires authentication infrastructure not yet wired here)
+          res.json(
+            this.jsonRpcError(rpcReq.id, A2A_ERROR_CODES.METHOD_NOT_FOUND,
+              'GetExtendedAgentCard is not supported'),
+          );
+          return;
+        }
+
         // Push notification methods — not supported, return proper A2A error
         case 'tasks/pushNotification/set':
         case 'tasks/pushNotification/get':
@@ -214,6 +225,16 @@ export class A2AServerService {
       null, // no user context in A2A calls
       text,
     );
+
+    // If the A2A message carries a contextId, store it so we can round-trip
+    // it in ListTasks / GetTask responses and filter by it later.
+    const externalContextId = params.message?.contextId;
+    if (externalContextId) {
+      await this.runRepository.update(run.id, {
+        metadata: { ...run.metadata, a2aContextId: externalContextId },
+      });
+      run.metadata = { ...run.metadata, a2aContextId: externalContextId };
+    }
 
     // If configuration.blocking is true, wait for completion (v0.2 behavior)
     if (params.configuration?.blocking) {
@@ -488,14 +509,19 @@ export class A2AServerService {
       .orderBy('run.createdAt', 'DESC')
       .take(pageSize + 1); // +1 to detect next page
 
-    // Filter by contextId (conversationId) — must be valid UUID or skip
+    // Filter by contextId — try conversationId (UUID) first, then external a2aContextId
     if (params?.contextId) {
       const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRe.test(params.contextId)) {
-        // Non-UUID contextId — no matches, return empty
-        return { tasks: [], totalSize: 0, pageSize };
+      if (uuidRe.test(params.contextId)) {
+        // Could be a conversationId OR an a2aContextId that happens to be a UUID
+        qb.andWhere(
+          `(run.conversationId = :convId OR run.metadata->>'a2aContextId' = :extCtx)`,
+          { convId: params.contextId, extCtx: params.contextId },
+        );
+      } else {
+        // Non-UUID — can only be an external a2aContextId stored in metadata
+        qb.andWhere(`run.metadata->>'a2aContextId' = :extCtx`, { extCtx: params.contextId });
       }
-      qb.andWhere('run.conversationId = :convId', { convId: params.contextId });
     }
 
     // Filter by status
@@ -575,17 +601,32 @@ export class A2AServerService {
       tasks.push(task);
     }
 
-    // Get total count
+    // Get total count — scoped to the same filters as the main query
     const totalQb = this.runRepository.createQueryBuilder('run')
       .where('run.agentId = :agentId', { agentId })
       .andWhere('run.organizationId = :orgId', { orgId });
+
+    if (params?.contextId) {
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRe.test(params.contextId)) {
+        totalQb.andWhere(
+          `(run.conversationId = :convId OR run.metadata->>'a2aContextId' = :extCtx)`,
+          { convId: params.contextId, extCtx: params.contextId },
+        );
+      } else {
+        totalQb.andWhere(`run.metadata->>'a2aContextId' = :extCtx`, { extCtx: params.contextId });
+      }
+    }
+
     const totalSize = await totalQb.getCount();
 
+    // Per A2A spec: pageSize = actual number of tasks returned,
+    // nextPageToken = empty string when no more results
     return {
       tasks,
-      ...(hasMore ? { nextPageToken: pageRuns[pageRuns.length - 1].id } : {}),
+      nextPageToken: hasMore ? pageRuns[pageRuns.length - 1].id : '',
       totalSize,
-      pageSize,
+      pageSize: tasks.length,
     };
   }
 
