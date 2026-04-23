@@ -64,9 +64,13 @@ export class A2AServerService {
       return;
     }
 
-    // Missing id (notifications not supported)
+    // Missing or invalid id (notifications not supported, id must be string or number)
     if (body.id == null) {
       res.json(this.jsonRpcError(null, A2A_ERROR_CODES.INVALID_REQUEST, 'Invalid Request: id is required'));
+      return;
+    }
+    if (typeof body.id !== 'string' && typeof body.id !== 'number') {
+      res.json(this.jsonRpcError(null, A2A_ERROR_CODES.INVALID_REQUEST, 'Invalid Request: id must be a string or number'));
       return;
     }
 
@@ -165,8 +169,8 @@ export class A2AServerService {
     params: any,
     rpcId: string | number,
   ): Promise<Task> {
-    if (!params?.message?.parts) {
-      throw Object.assign(new Error('Missing message.parts in params'), {
+    if (!params?.message?.parts || !Array.isArray(params.message.parts)) {
+      throw Object.assign(new Error('Invalid params: message.parts must be an array'), {
         code: A2A_ERROR_CODES.INVALID_PARAMS,
       });
     }
@@ -380,6 +384,16 @@ export class A2AServerService {
       });
     }
 
+    // Verify task exists first
+    const existing = await this.runRepository.findOne({
+      where: { id: params.id, organizationId: gateway.organizationId },
+    });
+    if (!existing) {
+      throw Object.assign(new Error('Task not found'), {
+        code: A2A_ERROR_CODES.TASK_NOT_FOUND,
+      });
+    }
+
     try {
       const run = await this.agentRuntimeService.cancelRun(
         params.id,
@@ -388,14 +402,9 @@ export class A2AServerService {
       const messages = await this.getRunMessages(run);
       return agentRunToTask(run, messages);
     } catch (error: any) {
-      if (error.message?.includes('already completed')) {
+      if (error.message?.includes('already completed') || error.message?.includes('not cancelable')) {
         throw Object.assign(new Error('Task is not cancelable'), {
           code: A2A_ERROR_CODES.TASK_NOT_CANCELABLE,
-        });
-      }
-      if (error.message?.includes('not found') || error.status === 404) {
-        throw Object.assign(new Error('Task not found'), {
-          code: A2A_ERROR_CODES.TASK_NOT_FOUND,
         });
       }
       throw error;
