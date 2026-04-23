@@ -15,7 +15,7 @@ export function mapRunStatusToTaskState(status: AgentRunStatus): TaskStatus {
   // A2A v1.0 uses TASK_STATE_* enum values
   switch (status) {
     case AgentRunStatus.PENDING:
-      return 'TASK_STATE_WORKING';
+      return 'TASK_STATE_SUBMITTED';
     case AgentRunStatus.RUNNING:
       return 'TASK_STATE_WORKING';
     case AgentRunStatus.WAITING_INPUT:
