@@ -263,6 +263,10 @@ export class UnifiedEndpointController {
 
     const baseUrl = this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
     const card = this.a2aAgentCardService.buildAgentCard(gateway, agent, organization, baseUrl);
+    // Root discovery card omits security details — use GetExtendedAgentCard
+    // or per-gateway /:org/:slug/.well-known/agent-card.json for full schemes
+    delete card.securitySchemes;
+    delete card.security;
     res.setHeader('Cache-Control', 'public, max-age=300');
     return res.json(card);
   }
