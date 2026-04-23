@@ -230,10 +230,67 @@ describe('A2A JSON-RPC compliance', () => {
 
   describe('Error code propagation', () => {
     it('should propagate custom error codes from handlers', async () => {
-      // GetTask with missing params should return INVALID_PARAMS (-32602), not INTERNAL_ERROR (-32603)
       await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'tasks/get', id: 1, params: {} }, mockRes);
       expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INVALID_PARAMS);
       expect(lastResponse.error.code).not.toBe(A2A_ERROR_CODES.INTERNAL_ERROR);
+    });
+  });
+
+  describe('Non-UUID task IDs', () => {
+    it('should return -32001 for GetTask with non-UUID id', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'GetTask', id: 1, params: { id: 'nonexistent-task-id' } }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.TASK_NOT_FOUND);
+    });
+
+    it('should return -32001 for CancelTask with non-UUID id', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'CancelTask', id: 1, params: { id: 'not-a-uuid' } }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.TASK_NOT_FOUND);
+    });
+  });
+
+  describe('GetTask historyLength', () => {
+    it('should reject negative historyLength', async () => {
+      const mockRunRepo = {
+        findOne: jest.fn().mockResolvedValue({ id: '00000000-0000-0000-0000-000000000001', organizationId: 'org-1', conversationId: 'conv-1', status: 'completed', output: 'test', metadata: {} }),
+        createQueryBuilder: jest.fn(),
+      };
+      const svc = new A2AServerService(
+        { startRun: jest.fn(), getRun: jest.fn(), cancelRun: jest.fn() } as any,
+        new A2AAgentCardService(),
+        mockRunRepo as any,
+        { findOne: jest.fn() } as any,
+        { find: jest.fn().mockResolvedValue([]) } as any,
+      );
+      await svc.handleJsonRpc(mockGateway, mockReq, {
+        jsonrpc: '2.0', method: 'GetTask', id: 1,
+        params: { id: '00000000-0000-0000-0000-000000000001', historyLength: -1 },
+      }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INVALID_PARAMS);
+    });
+  });
+
+  describe('SendMessage with message.taskId (continue task)', () => {
+    it('should return -32001 for taskId that does not exist', async () => {
+      const mockRunRepo = { findOne: jest.fn().mockResolvedValue(null), createQueryBuilder: jest.fn() };
+      const svc = new A2AServerService(
+        { startRun: jest.fn(), getRun: jest.fn(), cancelRun: jest.fn() } as any,
+        new A2AAgentCardService(),
+        mockRunRepo as any,
+        { findOne: jest.fn() } as any,
+        { find: jest.fn().mockResolvedValue([]) } as any,
+      );
+      await svc.handleJsonRpc(mockGateway, mockReq, {
+        jsonrpc: '2.0', method: 'SendMessage', id: 1,
+        params: { message: { taskId: '00000000-0000-0000-0000-000000000099', parts: [{ type: 'text', text: 'continue' }] } },
+      }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.TASK_NOT_FOUND);
+    });
+  });
+
+  describe('GetExtendedAgentCard', () => {
+    it('should return METHOD_NOT_FOUND', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'GetExtendedAgentCard', id: 1, params: {} }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.METHOD_NOT_FOUND);
     });
   });
 });

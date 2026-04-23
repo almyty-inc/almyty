@@ -197,7 +197,24 @@ export class UnifiedEndpointController {
     const rawKey = apiKeyHeader || (authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '') || queryKey;
 
     if (!rawKey) {
-      throw new HttpException('API key required. Pass as x-api-key header, Bearer token, or ?key= query param.', HttpStatus.UNAUTHORIZED);
+      // No auth — try to return a default agent card (first active agent gateway)
+      // This satisfies A2A spec requirement for public agent card access
+      const defaultGw = await this.gatewayRepository.findOne({
+        where: { status: GatewayStatus.ACTIVE },
+        relations: ['authConfigs'],
+        order: { createdAt: 'ASC' },
+      });
+      if (defaultGw?.agentId) {
+        const agent = await this.agentRepository.findOne({ where: { id: defaultGw.agentId } });
+        const org = await this.organizationRepository.findOne({ where: { id: defaultGw.organizationId } });
+        if (agent && org) {
+          const baseUrl = this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
+          const card = this.a2aAgentCardService.buildAgentCard(defaultGw, agent, org, baseUrl);
+          res.setHeader('Cache-Control', 'public, max-age=300');
+          return res.json(card);
+        }
+      }
+      throw new HttpException('No agent gateway found. Pass API key for specific agent.', HttpStatus.NOT_FOUND);
     }
 
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
