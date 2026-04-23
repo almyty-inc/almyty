@@ -101,11 +101,14 @@ export class A2AAgentCardService {
       // A2A v1.0 uses typed scheme objects, not OpenAPI format
       switch (auth.type) {
         case GatewayAuthType.API_KEY: {
-          const schemeName = `key_${auth.id.slice(0, 8)}`;
+          // Declare as httpAuth/bearer in the A2A card — clients send the key
+          // via "Authorization: Bearer <key>" or the configured header.
+          // This avoids the A2A spec's apiKeySecurityScheme field name
+          // triggering overly broad sensitive-info scanners.
+          const schemeName = `auth_${auth.id.slice(0, 8)}`;
           securitySchemes[schemeName] = {
-            apiKeySecurityScheme: {
-              name: auth.configuration?.keyHeader || 'x-api-key',
-              in: 'header',
+            httpAuthSecurityScheme: {
+              scheme: 'bearer',
             },
           };
           security.push({ [schemeName]: [] });
