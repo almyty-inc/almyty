@@ -280,18 +280,9 @@ export class A2AServerService {
       return this.pollForCompletion(run.id, gateway.organizationId);
     }
 
-    // Return task immediately without re-querying — client polls via GetTask.
-    // Avoids race where the run completes before we can return SUBMITTED state.
-    const contextId = run.metadata?.a2aContextId || run.conversationId || undefined;
-    return {
-      id: run.id,
-      contextId,
-      status: {
-        state: 'TASK_STATE_SUBMITTED' as const,
-        timestamp: new Date().toISOString(),
-      },
-      history: [],
-    };
+    // Return task in initial state — client uses GetTask to poll
+    const messages = await this.getRunMessages(run);
+    return agentRunToTask(run, messages);
   }
 
   // ─── message/stream ────────────────────────────────────────────────
