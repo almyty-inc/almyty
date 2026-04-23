@@ -149,4 +149,36 @@ describe('A2AAgentCardService', () => {
     expect(card.defaultInputModes).toEqual(['text']);
     expect(card.defaultOutputModes).toEqual(['text']);
   });
+
+  it('should declare extendedAgentCard capability', () => {
+    const card = service.buildAgentCard(
+      makeGateway(),
+      makeAgent(),
+      makeOrg(),
+      'https://api.example.com',
+    );
+    expect(card.capabilities?.extendedAgentCard).toBe(true);
+  });
+
+  it('should declare pushNotifications as false', () => {
+    const card = service.buildAgentCard(
+      makeGateway(),
+      makeAgent(),
+      makeOrg(),
+      'https://api.example.com',
+    );
+    expect(card.capabilities?.pushNotifications).toBe(false);
+  });
+
+  it('should include supportedInterfaces with jsonrpc binding', () => {
+    const card = service.buildAgentCard(
+      makeGateway(),
+      makeAgent(),
+      makeOrg(),
+      'https://api.example.com',
+    );
+    expect(card.supportedInterfaces).toBeDefined();
+    expect(card.supportedInterfaces![0].protocolBinding).toBe('jsonrpc');
+    expect(card.supportedInterfaces![0].url).toBe('https://api.example.com/test-org/test-a2a');
+  });
 });
