@@ -349,4 +349,88 @@ describe('A2A JSON-RPC compliance', () => {
       expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.PUSH_NOTIFICATIONS_NOT_SUPPORTED);
     });
   });
+
+  describe('ListTasks pagination', () => {
+    it('should reject invalid pageToken', async () => {
+      const mockQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+        getCount: jest.fn().mockResolvedValue(0),
+      };
+      const mockRunRepo = {
+        findOne: jest.fn(),
+        createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+      };
+      const svc = new A2AServerService(
+        { startRun: jest.fn(), getRun: jest.fn(), cancelRun: jest.fn() } as any,
+        new A2AAgentCardService(),
+        mockRunRepo as any,
+        { findOne: jest.fn() } as any,
+        { find: jest.fn().mockResolvedValue([]) } as any,
+      );
+      await svc.handleJsonRpc(mockGateway, mockReq, {
+        jsonrpc: '2.0', method: 'ListTasks', id: 1,
+        params: { pageToken: 'not-valid-base64-date' },
+      }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INVALID_PARAMS);
+    });
+
+    it('should accept valid base64-encoded pageToken', async () => {
+      const validToken = Buffer.from(new Date().toISOString()).toString('base64');
+      const mockQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+        getCount: jest.fn().mockResolvedValue(0),
+      };
+      const mockRunRepo = {
+        findOne: jest.fn(),
+        createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+      };
+      const svc = new A2AServerService(
+        { startRun: jest.fn(), getRun: jest.fn(), cancelRun: jest.fn() } as any,
+        new A2AAgentCardService(),
+        mockRunRepo as any,
+        { findOne: jest.fn() } as any,
+        { find: jest.fn().mockResolvedValue([]) } as any,
+      );
+      await svc.handleJsonRpc(mockGateway, mockReq, {
+        jsonrpc: '2.0', method: 'ListTasks', id: 1,
+        params: { pageToken: validToken },
+      }, mockRes);
+      expect(lastResponse.error).toBeUndefined();
+      expect(lastResponse.result.tasks).toBeDefined();
+    });
+
+    it('should return empty nextPageToken when no more results', async () => {
+      const mockQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+        getCount: jest.fn().mockResolvedValue(0),
+      };
+      const mockRunRepo = {
+        findOne: jest.fn(),
+        createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+      };
+      const svc = new A2AServerService(
+        { startRun: jest.fn(), getRun: jest.fn(), cancelRun: jest.fn() } as any,
+        new A2AAgentCardService(),
+        mockRunRepo as any,
+        { findOne: jest.fn() } as any,
+        { find: jest.fn().mockResolvedValue([]) } as any,
+      );
+      await svc.handleJsonRpc(mockGateway, mockReq, {
+        jsonrpc: '2.0', method: 'ListTasks', id: 1, params: {},
+      }, mockRes);
+      expect(lastResponse.result.nextPageToken).toBe('');
+    });
+  });
 });
