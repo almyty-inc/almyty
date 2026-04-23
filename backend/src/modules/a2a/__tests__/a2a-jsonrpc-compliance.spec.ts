@@ -291,20 +291,62 @@ describe('A2A JSON-RPC compliance', () => {
   });
 
   describe('GetExtendedAgentCard', () => {
+    const ctx = {
+      agent: { id: 'agent-1', name: 'Test Agent', description: 'A test agent' },
+      org: { id: 'org-1', name: 'Test Org', slug: 'test-org' },
+      baseUrl: 'https://api.example.com',
+    };
+
     it('should return agent card when context is provided', async () => {
-      const ctx = {
-        agent: { id: 'agent-1', name: 'Test Agent', description: 'A test agent' },
-        org: { id: 'org-1', name: 'Test Org', slug: 'test-org' },
-        baseUrl: 'https://api.example.com',
-      };
       await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'GetExtendedAgentCard', id: 1, params: {} }, mockRes, ctx);
       expect(lastResponse.result).toBeDefined();
       expect(lastResponse.result.name).toBe('Test Agent');
     });
 
+    it('should also work via agent/getAuthenticatedExtendedCard alias', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'agent/getAuthenticatedExtendedCard', id: 1, params: {} }, mockRes, ctx);
+      expect(lastResponse.result).toBeDefined();
+      expect(lastResponse.result.name).toBe('Test Agent');
+    });
+
+    it('should include security schemes in extended card', async () => {
+      const gwWithAuth: any = {
+        ...mockGateway,
+        authConfigs: [{ id: 'auth-1', type: 'api_key', isActive: true, configuration: { keyHeader: 'x-api-key' } }],
+      };
+      const svc = new A2AServerService(
+        { startRun: jest.fn(), getRun: jest.fn(), cancelRun: jest.fn() } as any,
+        new A2AAgentCardService(),
+        { findOne: jest.fn() } as any,
+        { findOne: jest.fn() } as any,
+        { find: jest.fn().mockResolvedValue([]) } as any,
+      );
+      await svc.handleJsonRpc(gwWithAuth, mockReq, { jsonrpc: '2.0', method: 'GetExtendedAgentCard', id: 1, params: {} }, mockRes, ctx);
+      expect(lastResponse.result.securitySchemes).toBeDefined();
+    });
+
+    it('should include capabilities with extendedAgentCard', async () => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'GetExtendedAgentCard', id: 1, params: {} }, mockRes, ctx);
+      expect(lastResponse.result.capabilities.extendedAgentCard).toBe(true);
+    });
+
     it('should return error without context', async () => {
       await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method: 'GetExtendedAgentCard', id: 1, params: {} }, mockRes);
       expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.INTERNAL_ERROR);
+    });
+  });
+
+  describe('Push notification config method aliases', () => {
+    const configMethods = [
+      'tasks/pushNotificationConfig/set',
+      'tasks/pushNotificationConfig/get',
+      'tasks/pushNotificationConfig/list',
+      'tasks/pushNotificationConfig/delete',
+    ];
+
+    it.each(configMethods)('should return -32003 for %s', async (method) => {
+      await service.handleJsonRpc(mockGateway, mockReq, { jsonrpc: '2.0', method, id: 1, params: {} }, mockRes);
+      expect(lastResponse.error.code).toBe(A2A_ERROR_CODES.PUSH_NOTIFICATIONS_NOT_SUPPORTED);
     });
   });
 });
