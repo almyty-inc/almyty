@@ -124,8 +124,8 @@ describe('A2AAgentCardService', () => {
     expect(card.securitySchemes).toBeDefined();
     expect(Object.keys(card.securitySchemes!).length).toBe(1);
     const scheme = Object.values(card.securitySchemes!)[0];
-    expect(scheme.apiKeySecurityScheme).toBeDefined();
-    expect(scheme.apiKeySecurityScheme.in).toBe('header');
+    expect(scheme.httpAuthSecurityScheme).toBeDefined();
+    expect(scheme.httpAuthSecurityScheme.scheme).toBe('bearer');
   });
 
   it('should omit security schemes when no auth configs', () => {
