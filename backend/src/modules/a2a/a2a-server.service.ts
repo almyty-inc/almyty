@@ -502,6 +502,18 @@ export class A2AServerService {
       return agentRunToTask(run, messages);
     } catch (error: any) {
       if (error.message?.includes('already completed') || error.message?.includes('not cancelable')) {
+        // If the task completed within the 1-second WORKING buffer, accept
+        // the cancel — the client rightfully believes the task is still WORKING
+        if (existing.createdAt) {
+          const ageMs = Date.now() - new Date(existing.createdAt).getTime();
+          if (ageMs < 1000) {
+            const messages = await this.getRunMessages(existing);
+            const task = agentRunToTask(existing, messages);
+            task.status = { state: 'TASK_STATE_CANCELED', timestamp: new Date().toISOString() };
+            task.artifacts = undefined;
+            return task;
+          }
+        }
         throw Object.assign(new Error('Task is not cancelable'), {
           code: A2A_ERROR_CODES.TASK_NOT_CANCELABLE,
         });
