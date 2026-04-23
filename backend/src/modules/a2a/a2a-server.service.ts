@@ -188,6 +188,32 @@ export class A2AServerService {
 
     const { text } = a2aPartsToAgentInput(params.message.parts);
 
+    // If message.taskId is provided, continue that specific task
+    if (params.message?.taskId) {
+      const taskId = params.message.taskId;
+      const existingRun = await this.runRepository.findOne({
+        where: { id: taskId, organizationId: gateway.organizationId },
+      });
+      if (!existingRun) {
+        throw Object.assign(new Error('Task not found'), {
+          code: A2A_ERROR_CODES.TASK_NOT_FOUND,
+        });
+      }
+      // Start a new run in the same conversation, returning the original task ID
+      const newRun = await this.agentRuntimeService.startRun(
+        gateway.agentId,
+        gateway.organizationId,
+        null,
+        text,
+        existingRun.conversationId ? { conversationId: existingRun.conversationId } : undefined,
+      );
+      // Return task with the ORIGINAL task ID (the one the client sent)
+      const messages = await this.getRunMessages(newRun);
+      const task = agentRunToTask(newRun, messages);
+      task.id = taskId; // preserve the task ID the client expects
+      return task;
+    }
+
     // If contextId is provided, look for an existing conversation/run
     if (params.contextId) {
       const existingRun = await this.findActiveRunByConversationId(
@@ -397,7 +423,20 @@ export class A2AServerService {
     }
 
     const messages = await this.getRunMessages(run);
-    return agentRunToTask(run, messages);
+    const task = agentRunToTask(run, messages);
+
+    // Support historyLength parameter
+    const historyLength = params.historyLength;
+    if (historyLength !== undefined && typeof historyLength === 'number' && task.history) {
+      if (historyLength < 0) {
+        throw Object.assign(new Error('Invalid historyLength: must be non-negative'), {
+          code: A2A_ERROR_CODES.INVALID_PARAMS,
+        });
+      }
+      task.history = historyLength === 0 ? [] : task.history.slice(-historyLength);
+    }
+
+    return task;
   }
 
   // ─── tasks/cancel ──────────────────────────────────────────────────
