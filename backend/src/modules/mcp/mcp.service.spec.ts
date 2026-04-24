@@ -523,46 +523,40 @@ describe('McpService', () => {
       expect(result.result).toBeDefined();
     });
 
-    it('should handle notifications/initialized without error', async () => {
-      const request = {
+    it('should return null for notifications (no response per JSON-RPC 2.0)', async () => {
+      // Notifications have no id per JSON-RPC 2.0 spec
+      const result = await service.handleJsonRpc({
         jsonrpc: '2.0',
-        id: '21',
         method: 'notifications/initialized',
-      };
+      }, 'org-1');
 
-      const result = await service.handleJsonRpc(request, 'org-1');
-
-      expect(result.jsonrpc).toBe('2.0');
-      expect(result.id).toBe('21');
-      expect(result.error).toBeUndefined();
-      expect(result.result).toBeDefined();
+      expect(result).toBeNull();
     });
 
-    it('should handle notifications/cancelled without error', async () => {
+    it('should handle notifications/cancelled as fire-and-forget', async () => {
       const result = await service.handleJsonRpc({
-        jsonrpc: '2.0', id: '22', method: 'notifications/cancelled',
+        jsonrpc: '2.0', method: 'notifications/cancelled',
         params: { requestId: 'req-1', reason: 'user cancelled' },
       }, 'org-1');
 
-      expect(result.error).toBeUndefined();
-      expect(result.result).toBeDefined();
+      expect(result).toBeNull();
     });
 
-    it('should handle notifications/progress without error', async () => {
+    it('should handle notifications/progress as fire-and-forget', async () => {
       const result = await service.handleJsonRpc({
-        jsonrpc: '2.0', id: '23', method: 'notifications/progress',
+        jsonrpc: '2.0', method: 'notifications/progress',
         params: { progressToken: 'tok-1', progress: 50, total: 100 },
       }, 'org-1');
 
-      expect(result.error).toBeUndefined();
+      expect(result).toBeNull();
     });
 
-    it('should handle notifications/roots/list_changed without error', async () => {
+    it('should handle notifications/roots/list_changed as fire-and-forget', async () => {
       const result = await service.handleJsonRpc({
-        jsonrpc: '2.0', id: '24', method: 'notifications/roots/list_changed',
+        jsonrpc: '2.0', method: 'notifications/roots/list_changed',
       }, 'org-1');
 
-      expect(result.error).toBeUndefined();
+      expect(result).toBeNull();
     });
 
     it('should handle resources/subscribe without error', async () => {
@@ -885,6 +879,108 @@ describe('McpService', () => {
 
       // Should not throw
       expect(service).toBeDefined();
+    });
+  });
+
+  describe('resources/templates/list', () => {
+    it('should return empty resourceTemplates array', async () => {
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'resources/templates/list',
+        params: {},
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      expect(result.result).toEqual({ resourceTemplates: [] });
+    });
+  });
+
+  describe('resources/list null descriptions', () => {
+    it('should omit description when null', async () => {
+      const mockResources = [
+        { id: 'r-1', name: 'Pet', description: 'A pet model', api: { organizationId: 'org-1' } },
+        { id: 'r-2', name: 'Order', description: null, api: { organizationId: 'org-1' } },
+      ];
+
+      resourceRepository.find.mockResolvedValue(mockResources);
+
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'resources/list',
+        params: {},
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      expect(result.result.resources[0].description).toBe('A pet model');
+      expect(result.result.resources[1]).not.toHaveProperty('description');
+    });
+  });
+
+  describe('prompts/list with JSON schema parameters', () => {
+    it('should extract arguments from inputSchema properties', async () => {
+      const mockTools = [
+        {
+          name: 'get_forecast',
+          description: 'Get weather forecast',
+          status: 'active',
+          parameters: {
+            type: 'object',
+            properties: {
+              latitude: { type: 'number', description: 'WGS84 latitude' },
+              longitude: { type: 'number', description: 'WGS84 longitude' },
+            },
+            required: ['latitude', 'longitude'],
+          },
+        },
+      ];
+
+      toolRepository.find.mockResolvedValue(mockTools);
+
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'prompts/list',
+        params: {},
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      const forecastPrompt = result.result.prompts.find((p: any) => p.name === 'use-get_forecast');
+      expect(forecastPrompt).toBeDefined();
+      expect(forecastPrompt.arguments).toHaveLength(2);
+      expect(forecastPrompt.arguments[0].name).toBe('latitude');
+      expect(forecastPrompt.arguments[0].description).toBe('WGS84 latitude');
+      expect(forecastPrompt.arguments[0].required).toBe(true);
+    });
+
+    it('should handle tools with no properties', async () => {
+      const mockTools = [
+        {
+          name: 'ping',
+          description: 'Ping service',
+          status: 'active',
+          parameters: { type: 'object' },
+        },
+      ];
+
+      toolRepository.find.mockResolvedValue(mockTools);
+
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'prompts/list',
+        params: {},
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      const pingPrompt = result.result.prompts.find((p: any) => p.name === 'use-ping');
+      expect(pingPrompt).toBeDefined();
+      expect(pingPrompt.arguments).toHaveLength(0);
     });
   });
 

@@ -505,6 +505,10 @@ export class UnifiedEndpointController {
         gateway.organizationId,
         userId,
       );
+      // Notifications return null — no response body per JSON-RPC 2.0
+      if (result === null) {
+        return res.status(204).end();
+      }
       // Return session ID from initialize response
       if (result?.result?.sessionId || incomingSessionId) {
         res.setHeader('Mcp-Session-Id', result?.result?.sessionId || incomingSessionId);
@@ -518,6 +522,11 @@ export class UnifiedEndpointController {
       null,
       gateway.id,
     );
+
+    // Notifications return null — no response body per JSON-RPC 2.0
+    if (result === null) {
+      return res.status(204).end();
+    }
 
     // Expose session ID on initialize, echo it on subsequent requests
     if (body?.method === 'initialize' && result?.result) {

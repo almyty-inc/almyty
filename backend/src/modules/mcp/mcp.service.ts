@@ -131,6 +131,10 @@ export class McpService {
           result = await this.handleSkillGet(request.params, organizationId);
           break;
 
+        case 'resources/templates/list':
+          result = await this.handleResourceTemplatesList(organizationId);
+          break;
+
         case 'resources/subscribe':
           result = {};
           break;
@@ -147,13 +151,12 @@ export class McpService {
           result = await this.handleCompletionComplete(request.params, organizationId, gatewayId);
           break;
 
-        // Client→server notifications (fire-and-forget, return empty)
+        // Client→server notifications (fire-and-forget, no response per JSON-RPC 2.0)
         case 'notifications/initialized':
         case 'notifications/cancelled':
         case 'notifications/progress':
         case 'notifications/roots/list_changed':
-          result = {};
-          break;
+          return null;
 
         default:
           throw this.createJsonRpcError(
@@ -355,14 +358,23 @@ export class McpService {
 
     const mcpTools: McpTool[] = tools.map(tool => ({
       name: this.sanitizeToolName(tool.name),
-      description: tool.description,
+      ...(tool.description ? { description: tool.description } : {}),
       inputSchema: tool.parameters || {
         type: 'object',
         properties: {},
       },
     }));
 
-    const result = { tools: mcpTools };
+    // Cursor-based pagination
+    const cursor = params?.cursor ? parseInt(params.cursor, 10) : 0;
+    const pageSize = 100;
+    const paged = mcpTools.slice(cursor, cursor + pageSize);
+    const nextCursor = cursor + pageSize < mcpTools.length ? String(cursor + pageSize) : undefined;
+
+    const result: any = { tools: paged };
+    if (nextCursor) {
+      result.nextCursor = nextCursor;
+    }
 
     // Cache for 60 seconds
     try {
@@ -685,13 +697,24 @@ export class McpService {
     const mcpResources: McpResource[] = resources.map(resource => ({
       uri: `almyty://resources/${resource.id}`,
       name: resource.name,
-      description: resource.description,
+      ...(resource.description ? { description: resource.description } : {}),
       mimeType: 'application/json',
     }));
 
-    return {
-      resources: mcpResources,
-    };
+    // Cursor-based pagination
+    const cursor = params?.cursor ? parseInt(params.cursor, 10) : 0;
+    const pageSize = 100;
+    const paged = mcpResources.slice(cursor, cursor + pageSize);
+    const result: any = { resources: paged };
+    if (cursor + pageSize < mcpResources.length) {
+      result.nextCursor = String(cursor + pageSize);
+    }
+
+    return result;
+  }
+
+  private async handleResourceTemplatesList(organizationId: string): Promise<{ resourceTemplates: any[] }> {
+    return { resourceTemplates: [] };
   }
 
   private async handleResourceRead(
@@ -747,14 +770,17 @@ export class McpService {
 
     // Create a prompt for each tool that has parameters
     for (const tool of tools) {
-      const parameters = (tool.parameters as any[]) || [];
+      const schema = tool.parameters as any;
+      const props = schema?.properties || {};
+      const requiredSet = new Set<string>(schema?.required || []);
+
       prompts.push({
-        name: `use-${tool.name}`,
+        name: `use-${this.sanitizeToolName(tool.name)}`,
         description: `Execute the ${tool.name} tool${tool.description ? ': ' + tool.description : ''}`,
-        arguments: parameters.map((p) => ({
-          name: p.name,
-          description: p.description || `Parameter: ${p.name}`,
-          required: p.required || false,
+        arguments: Object.entries(props).map(([name, prop]: [string, any]) => ({
+          name,
+          description: prop.description || `Parameter: ${name}`,
+          required: requiredSet.has(name),
         })),
       });
     }
@@ -766,7 +792,16 @@ export class McpService {
       arguments: [],
     });
 
-    return { prompts };
+    // Cursor-based pagination
+    const cursor = params?.cursor ? parseInt(params.cursor, 10) : 0;
+    const pageSize = 100;
+    const paged = prompts.slice(cursor, cursor + pageSize);
+    const result: any = { prompts: paged };
+    if (cursor + pageSize < prompts.length) {
+      result.nextCursor = String(cursor + pageSize);
+    }
+
+    return result;
   }
 
   private async handlePromptGet(
@@ -808,10 +843,11 @@ export class McpService {
         );
       }
 
-      const parameters = (tool.parameters as any[]) || [];
-      const argsList = parameters.map((p) => {
-        const value = params.arguments?.[p.name] || `<${p.name}>`;
-        return `- ${p.name}: ${value}`;
+      const schema = tool.parameters as any;
+      const props = schema?.properties || {};
+      const argsList = Object.entries(props).map(([name, prop]: [string, any]) => {
+        const value = params.arguments?.[name] || `<${name}>`;
+        return `- ${name}: ${value}`;
       }).join('\n');
 
       return {
@@ -857,7 +893,10 @@ export class McpService {
       );
     }
 
-    if (body.id === undefined) {
+    // JSON-RPC 2.0 notifications have no id and expect no response.
+    // Only require id for non-notification methods.
+    const isNotification = body.method.startsWith('notifications/');
+    if (!isNotification && body.id === undefined) {
       throw this.createJsonRpcError(
         JsonRpcErrorCode.INVALID_REQUEST,
         'Missing request ID',
