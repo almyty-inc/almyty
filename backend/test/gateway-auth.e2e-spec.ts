@@ -17,10 +17,11 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import * as crypto from 'crypto';
 import { AppModule } from '../src/app.module';
+import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import { GatewayType } from '../src/entities/gateway.entity';
 import { GatewayAuthType } from '../src/entities/gateway-auth.entity';
 
@@ -31,6 +32,7 @@ describe('Gateway Authentication (e2e)', () => {
   let tokenA: string;
   let orgIdA: string;
   let orgSlugA: string;
+  let agentIdA: string;
   let gatewayIdMcp: string;
   let gatewayEndpointMcp: string;
   let gatewayIdA2a: string;
@@ -76,6 +78,8 @@ describe('Gateway Authentication (e2e)', () => {
       allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Retry-Count', 'X-Organization-Id', 'Mcp-Protocol-Version', 'Mcp-Session-Id'],
       exposedHeaders: ['Mcp-Session-Id'],
     });
+    app.useGlobalFilters(new GlobalExceptionFilter());
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
   }, 30000);
 
@@ -126,6 +130,21 @@ describe('Gateway Authentication (e2e)', () => {
       expect(orgIdA).toMatch(/^[0-9a-f]{8}-/); // UUID prefix
     });
 
+    it('should create an agent for A2A gateway tests', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/agents')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          name: `E2E Auth Agent ${ts}`,
+          description: 'Test agent for A2A gateway auth e2e tests',
+          status: 'active',
+        })
+        .expect(201);
+
+      agentIdA = res.body.data?.id || res.body.id;
+      expect(agentIdA).toBeDefined();
+    });
+
     it('should register user B in a separate org', async () => {
       const ctx = await registerAndGetContext(userB);
       tokenB = ctx.token;
@@ -161,6 +180,7 @@ describe('Gateway Authentication (e2e)', () => {
           name: 'E2E A2A Gateway',
           type: GatewayType.A2A,
           endpoint,
+          agentId: agentIdA,
           configuration: { agentCapabilities: ['tool-use'] },
         })
         .expect(201);
@@ -345,40 +365,56 @@ describe('Gateway Authentication (e2e)', () => {
       a2aApiKey = res.body.data?.key;
     });
 
-    it('should serve Agent Card (.well-known/agent.json) WITHOUT auth', async () => {
+    it('should serve Agent Card via unified endpoint WITHOUT auth (GET is discovery)', async () => {
       const a2aSlug = gatewayEndpointA2a.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .get(`/a2a/${orgSlugA}/${a2aSlug}/.well-known/agent.json`)
+        .get(`/${orgSlugA}/${a2aSlug}`)
         .expect(200);
 
-      expect(res.body.protocol).toBe('a2a');
+      // A2A Agent Card spec fields
+      expect(res.body.name).toBeDefined();
+      expect(res.body.url).toBeDefined();
       expect(res.body.version).toBeDefined();
-      expect(res.body.gateway.id).toBe(gatewayIdA2a);
+    });
+
+    it('should serve Agent Card at .well-known/agent-card.json WITHOUT auth', async () => {
+      const a2aSlug = gatewayEndpointA2a.replace(/^\//, '');
+
+      const res = await request(app.getHttpServer())
+        .get(`/${orgSlugA}/${a2aSlug}/.well-known/agent-card.json`)
+        .expect(200);
+
+      expect(res.body.name).toBeDefined();
+      expect(res.body.url).toBeDefined();
     });
 
     it('should include securitySchemes in Agent Card for API_KEY auth', async () => {
       const a2aSlug = gatewayEndpointA2a.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .get(`/a2a/${orgSlugA}/${a2aSlug}/.well-known/agent.json`)
+        .get(`/${orgSlugA}/${a2aSlug}`)
         .expect(200);
 
       expect(res.body.securitySchemes).toBeDefined();
-      expect(res.body.securitySchemes.apiKey).toBeDefined();
-      expect(res.body.securitySchemes.apiKey.type).toBe('apiKey');
-      expect(res.body.securitySchemes.apiKey.name).toBe('x-api-key');
-      expect(res.body.securitySchemes.apiKey.location).toBe('header');
+      // A2A spec uses dynamic scheme names (auth_<id-prefix>)
+      const schemeNames = Object.keys(res.body.securitySchemes);
+      expect(schemeNames.length).toBeGreaterThanOrEqual(1);
+      // Each scheme should be httpAuthSecurityScheme with bearer
+      const firstScheme = res.body.securitySchemes[schemeNames[0]];
+      expect(firstScheme.httpAuthSecurityScheme).toBeDefined();
+      expect(firstScheme.httpAuthSecurityScheme.scheme).toBe('bearer');
 
       expect(res.body.security).toBeDefined();
-      expect(res.body.security).toEqual(expect.arrayContaining([{ apiKey: [] }]));
+      expect(res.body.security.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should reject GET /agents without auth', async () => {
+    it('should reject POST (JSON-RPC) without auth', async () => {
       const a2aSlug = gatewayEndpointA2a.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .get(`/a2a/${orgSlugA}/${a2aSlug}/agents`);
+        .post(`/${orgSlugA}/${a2aSlug}`)
+        .send({ jsonrpc: '2.0', id: 1, method: 'message/send', params: {} });
 
       expect([401, 403]).toContain(res.status);
     });
@@ -387,7 +423,8 @@ describe('Gateway Authentication (e2e)', () => {
       const a2aSlug = gatewayEndpointA2a.replace(/^\//, '');
 
       const res = await request(app.getHttpServer())
-        .get(`/a2a/${orgSlugA}/${a2aSlug}/agents`);
+        .post(`/${orgSlugA}/${a2aSlug}`)
+        .send({ jsonrpc: '2.0', id: 1, method: 'message/send', params: {} });
 
       if (res.status === 401) {
         const wwwAuth = res.headers['www-authenticate'];
@@ -396,17 +433,20 @@ describe('Gateway Authentication (e2e)', () => {
       }
     });
 
-    it('should allow GET /agents WITH valid API key', async () => {
-      if (!a2aApiKey) return; // key generation may have failed if auto-created
+    it('should allow POST with valid API key', async () => {
+      if (!a2aApiKey) return; // key generation may have failed
 
       const a2aSlug = gatewayEndpointA2a.replace(/^\//, '');
 
+      // Send a valid JSON-RPC request — the agent may not handle it
+      // fully but we should get past auth (not 401/403)
       const res = await request(app.getHttpServer())
-        .get(`/a2a/${orgSlugA}/${a2aSlug}/agents`)
+        .post(`/${orgSlugA}/${a2aSlug}`)
         .set('x-api-key', a2aApiKey)
-        .expect(200);
+        .send({ jsonrpc: '2.0', id: 1, method: 'message/send', params: { message: { role: 'user', parts: [{ type: 'text', text: 'hi' }] } } });
 
-      expect(Array.isArray(res.body)).toBe(true);
+      // Should NOT be auth error — could be 200 or a JSON-RPC error for missing agent config
+      expect([401, 403]).not.toContain(res.status);
     });
   });
 
