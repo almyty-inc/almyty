@@ -17,6 +17,8 @@ import { UtcpService } from './utcp.service';
 import { RealtimeExecutorService } from './realtime-executor.service';
 import { GatewayResolverService } from './services/gateway-resolver.service';
 import { McpOAuthService } from './services/mcp-oauth.service';
+import { McpToolHandler } from './services/mcp-tool.handler';
+import { McpContentHandler } from './services/mcp-content.handler';
 import { SseTransport } from './transports/sse.transport';
 import { WebSocketTransport } from './transports/websocket.transport';
 
@@ -68,6 +70,8 @@ import { GatewaysModule } from '../gateways/gateways.module';
   ],
   controllers: [McpOAuthDiscoveryController, McpOAuthController, McpController, McpTransportController, UtcpController, GatewayUtcpController],
   providers: [
+    McpToolHandler,
+    McpContentHandler,
     AlmytyMcpService,
     McpService,
     McpGatewayService,
