@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { McpService } from './mcp.service';
+import { McpToolHandler } from './services/mcp-tool.handler';
+import { McpContentHandler } from './services/mcp-content.handler';
 import { Tool } from '../../entities/tool.entity';
 import { Resource } from '../../entities/resource.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -14,6 +16,7 @@ import { SkillGeneratorService } from '../tools/skill-generator.service';
 
 describe('MCP Gateway Tool Scoping', () => {
   let mcpService: McpService;
+  let toolHandler: McpToolHandler;
   let gatewayToolRepository: Repository<GatewayTool>;
   let module: TestingModule;
 
@@ -36,6 +39,8 @@ describe('MCP Gateway Tool Scoping', () => {
   beforeEach(async () => {
     module = await Test.createTestingModule({
       providers: [
+        McpToolHandler,
+        McpContentHandler,
         McpService,
         {
           provide: getRepositoryToken(Tool),
@@ -90,11 +95,12 @@ describe('MCP Gateway Tool Scoping', () => {
     }).compile();
 
     mcpService = module.get<McpService>(McpService);
+    toolHandler = module.get<McpToolHandler>(McpToolHandler);
     gatewayToolRepository = module.get(getRepositoryToken(GatewayTool));
   });
 
   it('should return only gateway-assigned tools when gatewayId provided', async () => {
-    const result = await mcpService['handleToolsList']({}, 'org-1', 'gateway-1');
+    const result = await toolHandler.handleToolsList({}, 'org-1', 'gateway-1');
 
     expect(result.tools).toHaveLength(1);
     expect(result.tools[0].name).toBe('Petstore_Place_an_order');
@@ -113,7 +119,7 @@ describe('MCP Gateway Tool Scoping', () => {
       ]
     });
 
-    const result = await mcpService['handleToolsList']({}, 'org-1');
+    const result = await toolHandler.handleToolsList({}, 'org-1');
 
     expect(result.tools).toHaveLength(2);
     expect(gatewayToolRepository.find).not.toHaveBeenCalled();
