@@ -484,6 +484,9 @@ export class UnifiedEndpointController {
   }
 
   private async delegateMcp(gateway: Gateway, auth: any, body: any, req: Request, res: Response) {
+    // Streamable HTTP: track session via Mcp-Session-Id header
+    const incomingSessionId = req.headers['mcp-session-id'] as string;
+
     // System gateways serve almyty platform management tools via AlmytyMcpService
     if (gateway.isSystem) {
       // Resolve userId from auth result, req.user, or OAuth bearer token
@@ -502,6 +505,10 @@ export class UnifiedEndpointController {
         gateway.organizationId,
         userId,
       );
+      // Return session ID from initialize response
+      if (result?.result?.sessionId || incomingSessionId) {
+        res.setHeader('Mcp-Session-Id', result?.result?.sessionId || incomingSessionId);
+      }
       return res.json(result);
     }
 
@@ -511,6 +518,16 @@ export class UnifiedEndpointController {
       null,
       gateway.id,
     );
+
+    // Expose session ID on initialize, echo it on subsequent requests
+    if (body?.method === 'initialize' && result?.result) {
+      // Generate a session ID for Streamable HTTP clients
+      const sessionId = result.result.sessionId || crypto.randomUUID();
+      res.setHeader('Mcp-Session-Id', sessionId);
+    } else if (incomingSessionId) {
+      res.setHeader('Mcp-Session-Id', incomingSessionId);
+    }
+
     return res.json(result);
   }
 
