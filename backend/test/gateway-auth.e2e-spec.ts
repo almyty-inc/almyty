@@ -69,6 +69,13 @@ describe('Gateway Authentication (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.enableCors({
+      origin: true,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Retry-Count', 'X-Organization-Id', 'Mcp-Protocol-Version', 'Mcp-Session-Id'],
+      exposedHeaders: ['Mcp-Session-Id'],
+    });
     await app.init();
   }, 30000);
 
@@ -889,6 +896,132 @@ describe('Gateway Authentication (e2e)', () => {
         .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
       expect([400, 404]).toContain(res.status);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // 9. CORS: MCP protocol headers allowed in preflight
+  // --------------------------------------------------------------------------
+
+  describe('CORS — MCP protocol headers', () => {
+    it('should allow mcp-protocol-version in preflight response', async () => {
+      const mcpSlug = gatewayEndpointMcp.replace(/^\//, '');
+
+      const res = await request(app.getHttpServer())
+        .options(`/${orgSlugA}/${mcpSlug}`)
+        .set('Origin', 'http://localhost:6274')
+        .set('Access-Control-Request-Method', 'POST')
+        .set('Access-Control-Request-Headers', 'content-type, authorization, mcp-protocol-version')
+        .expect(204);
+
+      const allowedHeaders = res.headers['access-control-allow-headers'];
+      expect(allowedHeaders).toBeDefined();
+      expect(allowedHeaders.toLowerCase()).toContain('mcp-protocol-version');
+    });
+
+    it('should allow mcp-session-id in preflight response', async () => {
+      const mcpSlug = gatewayEndpointMcp.replace(/^\//, '');
+
+      const res = await request(app.getHttpServer())
+        .options(`/${orgSlugA}/${mcpSlug}`)
+        .set('Origin', 'http://localhost:6274')
+        .set('Access-Control-Request-Method', 'POST')
+        .set('Access-Control-Request-Headers', 'content-type, mcp-session-id')
+        .expect(204);
+
+      const allowedHeaders = res.headers['access-control-allow-headers'];
+      expect(allowedHeaders).toBeDefined();
+      expect(allowedHeaders.toLowerCase()).toContain('mcp-session-id');
+    });
+
+    it('should expose mcp-session-id header in responses', async () => {
+      const mcpSlug = gatewayEndpointMcp.replace(/^\//, '');
+
+      const res = await request(app.getHttpServer())
+        .options(`/${orgSlugA}/${mcpSlug}`)
+        .set('Origin', 'http://localhost:6274')
+        .set('Access-Control-Request-Method', 'POST')
+        .set('Access-Control-Request-Headers', 'content-type')
+        .expect(204);
+
+      const exposedHeaders = res.headers['access-control-expose-headers'];
+      expect(exposedHeaders).toBeDefined();
+      expect(exposedHeaders.toLowerCase()).toContain('mcp-session-id');
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // 10. MCP protocol methods: logging/setLevel, notifications/initialized
+  // --------------------------------------------------------------------------
+
+  describe('MCP protocol methods — spec compliance', () => {
+    let mcpApiKey: string;
+
+    beforeAll(async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/gateways/${gatewayIdMcp}/auth/api-keys`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: 'MCP Protocol Test Key' })
+        .expect(201);
+
+      mcpApiKey = res.body.data.key;
+    });
+
+    it('should accept logging/setLevel without METHOD_NOT_FOUND', async () => {
+      const mcpSlug = gatewayEndpointMcp.replace(/^\//, '');
+
+      const res = await request(app.getHttpServer())
+        .post(`/${orgSlugA}/${mcpSlug}`)
+        .set('x-api-key', mcpApiKey)
+        .send({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'logging/setLevel',
+          params: { level: 'info' },
+        })
+        .expect(200);
+
+      expect(res.body.jsonrpc).toBe('2.0');
+      expect(res.body.id).toBe(1);
+      expect(res.body.error).toBeUndefined();
+      expect(res.body.result).toBeDefined();
+    });
+
+    it('should accept notifications/initialized without METHOD_NOT_FOUND', async () => {
+      const mcpSlug = gatewayEndpointMcp.replace(/^\//, '');
+
+      const res = await request(app.getHttpServer())
+        .post(`/${orgSlugA}/${mcpSlug}`)
+        .set('x-api-key', mcpApiKey)
+        .send({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'notifications/initialized',
+        })
+        .expect(200);
+
+      expect(res.body.jsonrpc).toBe('2.0');
+      expect(res.body.id).toBe(2);
+      expect(res.body.error).toBeUndefined();
+      expect(res.body.result).toBeDefined();
+    });
+
+    it('should still reject truly unknown methods', async () => {
+      const mcpSlug = gatewayEndpointMcp.replace(/^\//, '');
+
+      const res = await request(app.getHttpServer())
+        .post(`/${orgSlugA}/${mcpSlug}`)
+        .set('x-api-key', mcpApiKey)
+        .send({
+          jsonrpc: '2.0',
+          id: 3,
+          method: 'completions/complete',
+        })
+        .expect(200);
+
+      expect(res.body.jsonrpc).toBe('2.0');
+      expect(res.body.error).toBeDefined();
+      expect(res.body.error.code).toBe(-32601);
     });
   });
 });
