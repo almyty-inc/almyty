@@ -88,7 +88,8 @@ async function bootstrap() {
     origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Retry-Count', 'X-Organization-Id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Retry-Count', 'X-Organization-Id', 'Mcp-Protocol-Version', 'Mcp-Session-Id'],
+    exposedHeaders: ['Mcp-Session-Id'],
   });
 
   // No API prefix - this is a pure API backend
