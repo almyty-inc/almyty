@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { McpService } from './mcp.service';
+import { McpToolHandler } from './services/mcp-tool.handler';
+import { McpContentHandler } from './services/mcp-content.handler';
 import { Tool } from '../../entities/tool.entity';
 import { Resource } from '../../entities/resource.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -19,6 +21,8 @@ describe('McpService - Tool Execution', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        McpToolHandler,
+        McpContentHandler,
         McpService,
         {
           provide: getRepositoryToken(Tool),
