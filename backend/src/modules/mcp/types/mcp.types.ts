@@ -220,6 +220,78 @@ export interface McpLogEntry {
   logger?: string;
 }
 
+// Server-to-Client Request Types
+
+// sampling/createMessage — ask the client's LLM to generate text
+export interface McpSamplingMessage {
+  role: 'user' | 'assistant';
+  content: McpTextContent | McpImageContent;
+}
+
+export interface McpSamplingCreateMessageRequest {
+  messages: McpSamplingMessage[];
+  modelPreferences?: {
+    hints?: Array<{ name?: string }>;
+    costPriority?: number;
+    speedPriority?: number;
+    intelligencePriority?: number;
+  };
+  systemPrompt?: string;
+  includeContext?: 'none' | 'thisServer' | 'allServers';
+  temperature?: number;
+  maxTokens: number;
+  stopSequences?: string[];
+  metadata?: Record<string, any>;
+}
+
+export interface McpSamplingCreateMessageResult {
+  role: 'assistant';
+  content: McpTextContent | McpImageContent;
+  model: string;
+  stopReason?: 'endTurn' | 'stopSequence' | 'maxTokens' | string;
+}
+
+// elicitation/create — ask the client for user input
+export interface McpElicitationCreateRequest {
+  message: string;
+  requestedSchema: {
+    type: 'object';
+    properties: Record<string, {
+      type: 'string' | 'number' | 'integer' | 'boolean';
+      title?: string;
+      description?: string;
+      default?: any;
+      enum?: any[];
+      enumNames?: string[];
+    }>;
+    required?: string[];
+  };
+}
+
+export interface McpElicitationCreateResult {
+  action: 'accept' | 'decline' | 'cancel';
+  content?: Record<string, any>;
+}
+
+// roots/list — ask the client for its root URIs
+export interface McpRoot {
+  uri: string;
+  name?: string;
+}
+
+export interface McpRootsListResult {
+  roots: McpRoot[];
+}
+
+// Client capabilities for server-to-client features
+export interface McpClientCapabilities {
+  sampling?: {};
+  elicitation?: {};
+  roots?: {
+    listChanged?: boolean;
+  };
+}
+
 // Error Codes (JSON-RPC 2.0)
 export enum JsonRpcErrorCode {
   PARSE_ERROR = -32700,
@@ -241,6 +313,7 @@ export interface McpSession {
   id: string;
   clientInfo: McpClientInfo;
   capabilities: McpCapabilities;
+  clientCapabilities?: McpClientCapabilities;
   transport: McpTransport;
   isInitialized: boolean;
   createdAt: Date;

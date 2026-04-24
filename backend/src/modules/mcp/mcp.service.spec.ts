@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { McpService } from './mcp.service';
 import { McpToolHandler } from './services/mcp-tool.handler';
 import { McpContentHandler } from './services/mcp-content.handler';
+import { McpServerRequestService } from './services/mcp-server-request.service';
 import { Tool } from '../../entities/tool.entity';
 import { Resource } from '../../entities/resource.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -28,6 +29,7 @@ describe('McpService', () => {
       providers: [
         McpToolHandler,
         McpContentHandler,
+        McpServerRequestService,
         McpService,
         {
           provide: getRepositoryToken(Tool),
@@ -137,6 +139,42 @@ describe('McpService', () => {
       expect(result.result.protocolVersion).toBe('2024-11-05');
       expect(result.result.serverInfo).toBeDefined();
       expect(result.result.capabilities).toBeDefined();
+    });
+
+    it('should use gateway name in serverInfo when gatewayId is provided', async () => {
+      gatewayRepository.findOne = jest.fn().mockResolvedValue({ id: 'gw-1', name: 'Open-Meteo Forecast', organizationId: 'org-1' });
+
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          clientInfo: { name: 'Test Client', version: '1.0' },
+          capabilities: {},
+        },
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1', 'gw-1');
+
+      expect(result.result.serverInfo.name).toBe('Open-Meteo Forecast');
+    });
+
+    it('should fall back to almyty when no gatewayId', async () => {
+      const request = {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          clientInfo: { name: 'Test Client', version: '1.0' },
+          capabilities: {},
+        },
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
+
+      expect(result.result.serverInfo.name).toBe('almyty');
     });
 
     it('should reject initialize with unsupported protocol version', async () => {

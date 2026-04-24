@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { McpService } from './mcp.service';
 import { McpToolHandler } from './services/mcp-tool.handler';
 import { McpContentHandler } from './services/mcp-content.handler';
+import { McpServerRequestService } from './services/mcp-server-request.service';
 import { Tool } from '../../entities/tool.entity';
 import { Resource } from '../../entities/resource.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -23,6 +24,7 @@ describe('McpService - Tool Execution', () => {
       providers: [
         McpToolHandler,
         McpContentHandler,
+        McpServerRequestService,
         McpService,
         {
           provide: getRepositoryToken(Tool),
