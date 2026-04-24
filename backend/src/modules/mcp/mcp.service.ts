@@ -24,6 +24,7 @@ import { Organization } from '../../entities/organization.entity';
 import { ToolsService } from '../tools/tools.service';
 import { McpToolHandler } from './services/mcp-tool.handler';
 import { McpContentHandler } from './services/mcp-content.handler';
+import { McpServerRequestService } from './services/mcp-server-request.service';
 
 @Injectable()
 export class McpService {
@@ -42,6 +43,7 @@ export class McpService {
     private toolsService: ToolsService,
     private toolHandler: McpToolHandler,
     private contentHandler: McpContentHandler,
+    private serverRequestService: McpServerRequestService,
   ) {}
 
   async handleJsonRpc(requestBody: any, organizationId: string, userId?: string, gatewayId?: string): Promise<JsonRpcResponse> {
@@ -54,7 +56,7 @@ export class McpService {
 
       switch (request.method) {
         case 'initialize':
-          result = await this.handleInitialize(request.params as McpInitializeRequest, organizationId, userId);
+          result = await this.handleInitialize(request.params as McpInitializeRequest, organizationId, userId, gatewayId);
           break;
 
         case 'ping':
@@ -207,6 +209,7 @@ export class McpService {
     params: McpInitializeRequest,
     organizationId: string,
     userId?: string,
+    gatewayId?: string,
   ): Promise<McpInitializeResult> {
     const SUPPORTED_VERSIONS = ['2024-11-05', '2025-03-26'];
     if (!params.protocolVersion || params.protocolVersion < '2024-11-05') {
@@ -221,6 +224,7 @@ export class McpService {
       id: sessionId,
       clientInfo: params.clientInfo,
       capabilities: params.capabilities,
+      clientCapabilities: params.capabilities as any,
       transport: 'http',
       isInitialized: true,
       createdAt: new Date(),
@@ -231,6 +235,17 @@ export class McpService {
 
     this.sessions.set(sessionId, session);
     this.logger.log(`MCP session initialized: ${sessionId} for org: ${organizationId}`);
+
+    // Resolve gateway name for serverInfo
+    let serverName = 'almyty';
+    if (gatewayId) {
+      const gateway = await this.gatewayRepository.findOne({
+        where: { id: gatewayId, organizationId },
+      });
+      if (gateway) {
+        serverName = gateway.name;
+      }
+    }
 
     const serverCapabilities: McpCapabilities = {
       tools: { listChanged: false },
@@ -262,7 +277,7 @@ export class McpService {
     return {
       protocolVersion: negotiatedVersion,
       capabilities: serverCapabilities,
-      serverInfo: this.serverInfo,
+      serverInfo: { name: serverName, version: '1.0.0' },
     };
   }
 
@@ -334,6 +349,11 @@ export class McpService {
         description: tool.description,
       },
     }));
+  }
+
+  // Server-to-client requests
+  get serverRequests(): McpServerRequestService {
+    return this.serverRequestService;
   }
 
   async healthCheck(): Promise<{
