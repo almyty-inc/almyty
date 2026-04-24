@@ -49,8 +49,8 @@ logs/
 .playwright-mcp/
 .playwright-cli/
 
-# Claude worktrees
-.claude/worktrees/
+# Claude Code
+.claude/
 _internal/
 .playwright-mcp/
 test-results/
