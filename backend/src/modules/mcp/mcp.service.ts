@@ -131,6 +131,14 @@ export class McpService {
           result = await this.handleSkillGet(request.params, organizationId);
           break;
 
+        case 'logging/setLevel':
+          result = {};
+          break;
+
+        case 'notifications/initialized':
+          result = {};
+          break;
+
         default:
           throw this.createJsonRpcError(
             JsonRpcErrorCode.METHOD_NOT_FOUND,
