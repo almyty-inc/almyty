@@ -507,6 +507,128 @@ describe('McpService', () => {
       expect(result.error.code).toBe(-32601);
     });
 
+    it('should handle logging/setLevel without error', async () => {
+      const request = {
+        jsonrpc: '2.0',
+        id: '20',
+        method: 'logging/setLevel',
+        params: { level: 'debug' },
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1');
+
+      expect(result.jsonrpc).toBe('2.0');
+      expect(result.id).toBe('20');
+      expect(result.error).toBeUndefined();
+      expect(result.result).toBeDefined();
+    });
+
+    it('should handle notifications/initialized without error', async () => {
+      const request = {
+        jsonrpc: '2.0',
+        id: '21',
+        method: 'notifications/initialized',
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1');
+
+      expect(result.jsonrpc).toBe('2.0');
+      expect(result.id).toBe('21');
+      expect(result.error).toBeUndefined();
+      expect(result.result).toBeDefined();
+    });
+
+    it('should handle notifications/cancelled without error', async () => {
+      const result = await service.handleJsonRpc({
+        jsonrpc: '2.0', id: '22', method: 'notifications/cancelled',
+        params: { requestId: 'req-1', reason: 'user cancelled' },
+      }, 'org-1');
+
+      expect(result.error).toBeUndefined();
+      expect(result.result).toBeDefined();
+    });
+
+    it('should handle notifications/progress without error', async () => {
+      const result = await service.handleJsonRpc({
+        jsonrpc: '2.0', id: '23', method: 'notifications/progress',
+        params: { progressToken: 'tok-1', progress: 50, total: 100 },
+      }, 'org-1');
+
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should handle notifications/roots/list_changed without error', async () => {
+      const result = await service.handleJsonRpc({
+        jsonrpc: '2.0', id: '24', method: 'notifications/roots/list_changed',
+      }, 'org-1');
+
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should handle resources/subscribe without error', async () => {
+      const result = await service.handleJsonRpc({
+        jsonrpc: '2.0', id: '25', method: 'resources/subscribe',
+        params: { uri: 'file:///test.txt' },
+      }, 'org-1');
+
+      expect(result.error).toBeUndefined();
+      expect(result.result).toBeDefined();
+    });
+
+    it('should handle resources/unsubscribe without error', async () => {
+      const result = await service.handleJsonRpc({
+        jsonrpc: '2.0', id: '26', method: 'resources/unsubscribe',
+        params: { uri: 'file:///test.txt' },
+      }, 'org-1');
+
+      expect(result.error).toBeUndefined();
+      expect(result.result).toBeDefined();
+    });
+
+    it('should handle completion/complete and return values', async () => {
+      toolRepository.find.mockResolvedValue([]);
+
+      const result = await service.handleJsonRpc({
+        jsonrpc: '2.0', id: '27', method: 'completion/complete',
+        params: {
+          ref: { type: 'ref/prompt', name: 'test' },
+          argument: { name: 'toolName', value: '' },
+        },
+      }, 'org-1');
+
+      expect(result.error).toBeUndefined();
+      expect(result.result).toBeDefined();
+      expect(result.result.completion).toBeDefined();
+      expect(Array.isArray(result.result.completion.values)).toBe(true);
+    });
+
+    it('should advertise completions capability in initialize', async () => {
+      const result = await service.handleJsonRpc({
+        jsonrpc: '2.0', id: '28', method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          clientInfo: { name: 'Test', version: '1.0' },
+          capabilities: {},
+        },
+      }, 'org-1');
+
+      expect(result.result.capabilities.completions).toBeDefined();
+      expect(result.result.protocolVersion).toBe('2025-03-26');
+    });
+
+    it('should negotiate protocol version to 2024-11-05 for older clients', async () => {
+      const result = await service.handleJsonRpc({
+        jsonrpc: '2.0', id: '29', method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          clientInfo: { name: 'Test', version: '1.0' },
+          capabilities: {},
+        },
+      }, 'org-1');
+
+      expect(result.result.protocolVersion).toBe('2024-11-05');
+    });
+
     it('should handle invalid JSON-RPC request with error', async () => {
       const request = {
         id: '9',

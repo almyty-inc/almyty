@@ -131,11 +131,27 @@ export class McpService {
           result = await this.handleSkillGet(request.params, organizationId);
           break;
 
+        case 'resources/subscribe':
+          result = {};
+          break;
+
+        case 'resources/unsubscribe':
+          result = {};
+          break;
+
         case 'logging/setLevel':
           result = {};
           break;
 
+        case 'completion/complete':
+          result = await this.handleCompletionComplete(request.params, organizationId, gatewayId);
+          break;
+
+        // Client→server notifications (fire-and-forget, return empty)
         case 'notifications/initialized':
+        case 'notifications/cancelled':
+        case 'notifications/progress':
+        case 'notifications/roots/list_changed':
           result = {};
           break;
 
@@ -235,11 +251,12 @@ export class McpService {
     organizationId: string,
     userId?: string,
   ): Promise<McpInitializeResult> {
-    // Validate protocol version
+    // Validate protocol version (minimum 2024-11-05, support up to 2025-03-26)
+    const SUPPORTED_VERSIONS = ['2024-11-05', '2025-03-26'];
     if (!params.protocolVersion || params.protocolVersion < '2024-11-05') {
       throw this.createJsonRpcError(
         JsonRpcErrorCode.INVALID_PARAMS,
-        'Unsupported protocol version',
+        `Unsupported protocol version: ${params.protocolVersion}. Supported: ${SUPPORTED_VERSIONS.join(', ')}`,
       );
     }
 
@@ -264,15 +281,16 @@ export class McpService {
     // Return server capabilities
     const serverCapabilities: McpCapabilities = {
       tools: {
-        listChanged: true,
+        listChanged: false,
       },
       resources: {
         subscribe: false,
-        listChanged: true,
+        listChanged: false,
       },
       prompts: {
-        listChanged: true,
+        listChanged: false,
       },
+      completions: {},
       logging: {},
       experimental: {
         almyty: {
@@ -291,8 +309,13 @@ export class McpService {
       },
     };
 
+    // Negotiate protocol version — use the highest we both support
+    const negotiatedVersion = params.protocolVersion >= '2025-03-26'
+      ? '2025-03-26'
+      : '2024-11-05';
+
     return {
-      protocolVersion: '2024-11-05',
+      protocolVersion: negotiatedVersion,
       capabilities: serverCapabilities,
       serverInfo: this.serverInfo,
     };
@@ -939,6 +962,59 @@ export class McpService {
       JsonRpcErrorCode.INVALID_PARAMS,
       'Either toolId or gatewayId is required',
     );
+  }
+
+  /**
+   * completion/complete — return completions for prompt argument values
+   * or resource URI templates. Provides tool/resource name completions.
+   */
+  private async handleCompletionComplete(
+    params: any,
+    organizationId: string,
+    gatewayId?: string,
+  ): Promise<{ completion: { values: string[]; hasMore?: boolean; total?: number } }> {
+    const ref = params?.ref;
+    const argument = params?.argument;
+
+    if (!ref || !argument) {
+      return { completion: { values: [] } };
+    }
+
+    const prefix = (argument.value || '').toLowerCase();
+
+    // Complete tool names for prompts/get arguments
+    if (ref.type === 'ref/prompt' || ref.type === 'ref/resource') {
+      const tools = await this.getToolsForGateway(organizationId, gatewayId);
+      const matches = tools
+        .map((t) => t.name)
+        .filter((name) => name.toLowerCase().startsWith(prefix))
+        .slice(0, 20);
+
+      return {
+        completion: {
+          values: matches,
+          hasMore: false,
+          total: matches.length,
+        },
+      };
+    }
+
+    return { completion: { values: [] } };
+  }
+
+  private async getToolsForGateway(organizationId: string, gatewayId?: string): Promise<Tool[]> {
+    if (gatewayId) {
+      const gatewayTools = await this.gatewayToolRepository.find({
+        where: { gatewayId },
+        relations: ['tool'],
+      });
+      return gatewayTools
+        .map((gt) => gt.tool)
+        .filter((t) => t && t.status === ToolStatus.ACTIVE);
+    }
+    return this.toolRepository.find({
+      where: { organization: { id: organizationId }, status: ToolStatus.ACTIVE },
+    });
   }
 
   // Health check

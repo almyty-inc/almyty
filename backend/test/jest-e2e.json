@@ -6,6 +6,9 @@
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
+  "transformIgnorePatterns": [
+    "node_modules/(?!uuid)"
+  ],
   "setupFiles": ["./setup-e2e.ts"],
   "testTimeout": 60000,
   "maxWorkers": 1
