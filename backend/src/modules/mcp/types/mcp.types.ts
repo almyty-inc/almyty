@@ -30,6 +30,7 @@ export interface JsonRpcNotification {
 export interface McpCapabilities {
   experimental?: Record<string, any>;
   logging?: {};
+  completions?: {};
   prompts?: {
     listChanged?: boolean;
   };
