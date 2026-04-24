@@ -19,6 +19,7 @@ import { GatewayResolverService } from './services/gateway-resolver.service';
 import { McpOAuthService } from './services/mcp-oauth.service';
 import { McpToolHandler } from './services/mcp-tool.handler';
 import { McpContentHandler } from './services/mcp-content.handler';
+import { McpServerRequestService } from './services/mcp-server-request.service';
 import { SseTransport } from './transports/sse.transport';
 import { WebSocketTransport } from './transports/websocket.transport';
 
@@ -72,6 +73,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
   providers: [
     McpToolHandler,
     McpContentHandler,
+    McpServerRequestService,
     AlmytyMcpService,
     McpService,
     McpGatewayService,
@@ -89,6 +91,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
     McpGatewayService,
     McpSessionService,
     McpOAuthService,
+    McpServerRequestService,
     UtcpService,
     RealtimeExecutorService,
     GatewayResolverService,
