@@ -507,6 +507,37 @@ describe('McpService', () => {
       expect(result.error.code).toBe(-32601);
     });
 
+    it('should handle logging/setLevel without error', async () => {
+      const request = {
+        jsonrpc: '2.0',
+        id: '20',
+        method: 'logging/setLevel',
+        params: { level: 'debug' },
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1');
+
+      expect(result.jsonrpc).toBe('2.0');
+      expect(result.id).toBe('20');
+      expect(result.error).toBeUndefined();
+      expect(result.result).toBeDefined();
+    });
+
+    it('should handle notifications/initialized without error', async () => {
+      const request = {
+        jsonrpc: '2.0',
+        id: '21',
+        method: 'notifications/initialized',
+      };
+
+      const result = await service.handleJsonRpc(request, 'org-1');
+
+      expect(result.jsonrpc).toBe('2.0');
+      expect(result.id).toBe('21');
+      expect(result.error).toBeUndefined();
+      expect(result.result).toBeDefined();
+    });
+
     it('should handle invalid JSON-RPC request with error', async () => {
       const request = {
         id: '9',
