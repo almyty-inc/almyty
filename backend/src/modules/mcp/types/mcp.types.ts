@@ -135,8 +135,15 @@ export interface McpReadResourceRequest {
   uri: string;
 }
 
+export interface McpResourceContents {
+  uri: string;
+  mimeType?: string;
+  text?: string;
+  blob?: string;
+}
+
 export interface McpReadResourceResult {
-  contents: McpContent[];
+  contents: McpResourceContents[];
 }
 
 // MCP Prompt Types
