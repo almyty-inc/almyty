@@ -90,7 +90,7 @@ export class McpService {
 
         // Resource methods
         case 'resources/list':
-          result = await this.contentHandler.handleResourcesList(request.params, organizationId);
+          result = await this.contentHandler.handleResourcesList(request.params, organizationId, gatewayId);
           break;
 
         case 'resources/read':
@@ -108,7 +108,7 @@ export class McpService {
 
         // Prompt methods
         case 'prompts/list':
-          result = await this.contentHandler.handlePromptsList(request.params, organizationId);
+          result = await this.contentHandler.handlePromptsList(request.params, organizationId, gatewayId);
           break;
 
         case 'prompts/get':

@@ -15,6 +15,7 @@ import {
 
 import { Tool, ToolStatus } from '../../../entities/tool.entity';
 import { Resource } from '../../../entities/resource.entity';
+import { GatewayTool } from '../../../entities/gateway-tool.entity';
 import { SkillGeneratorService } from '../../tools/skill-generator.service';
 import { McpToolHandler } from './mcp-tool.handler';
 import { batchAsync } from '../../../common/utils/batch-async';
@@ -28,15 +29,37 @@ export class McpContentHandler {
     private toolRepository: Repository<Tool>,
     @InjectRepository(Resource)
     private resourceRepository: Repository<Resource>,
+    @InjectRepository(GatewayTool)
+    private gatewayToolRepository: Repository<GatewayTool>,
     private skillGeneratorService: SkillGeneratorService,
     private toolHandler: McpToolHandler,
   ) {}
 
-  async handleResourcesList(params: any, organizationId: string): Promise<any> {
-    const resources = await this.resourceRepository.find({
-      where: { api: { organizationId } },
-      relations: ['api'],
-    });
+  async handleResourcesList(params: any, organizationId: string, gatewayId?: string): Promise<any> {
+    let resources: Resource[];
+
+    if (gatewayId) {
+      // Scope to APIs that have tools assigned to this gateway
+      const gatewayTools = await this.gatewayToolRepository.find({
+        where: { gatewayId, isActive: true },
+        relations: ['tool'],
+      });
+      const apiIds = [...new Set(gatewayTools.map(gt => gt.tool?.apiId).filter(Boolean))];
+      if (apiIds.length === 0) {
+        resources = [];
+      } else {
+        const allResources = await this.resourceRepository.find({
+          where: { api: { organizationId } },
+          relations: ['api'],
+        });
+        resources = allResources.filter(r => apiIds.includes(r.api?.id));
+      }
+    } else {
+      resources = await this.resourceRepository.find({
+        where: { api: { organizationId } },
+        relations: ['api'],
+      });
+    }
 
     const mcpResources: McpResource[] = resources.map(resource => ({
       uri: `almyty://resources/${resource.id}`,
@@ -90,10 +113,16 @@ export class McpContentHandler {
     };
   }
 
-  async handlePromptsList(params: any, organizationId: string): Promise<any> {
-    const tools = await this.toolRepository.find({
-      where: { organization: { id: organizationId }, status: ToolStatus.ACTIVE },
-    });
+  async handlePromptsList(params: any, organizationId: string, gatewayId?: string): Promise<any> {
+    let tools: Tool[];
+
+    if (gatewayId) {
+      tools = await this.toolHandler.getToolsForScope(organizationId, gatewayId);
+    } else {
+      tools = await this.toolRepository.find({
+        where: { organization: { id: organizationId }, status: ToolStatus.ACTIVE },
+      });
+    }
 
     const prompts: McpPrompt[] = [];
 

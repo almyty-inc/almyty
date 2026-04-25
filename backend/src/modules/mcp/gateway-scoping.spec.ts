@@ -15,10 +15,13 @@ import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
 
-describe('MCP Gateway Tool Scoping', () => {
+describe('MCP Gateway Scoping', () => {
   let mcpService: McpService;
   let toolHandler: McpToolHandler;
-  let gatewayToolRepository: Repository<GatewayTool>;
+  let contentHandler: McpContentHandler;
+  let gatewayToolRepository: any;
+  let resourceRepository: any;
+  let toolRepository: any;
   let module: TestingModule;
 
   const mockGatewayTools = [
@@ -29,12 +32,26 @@ describe('MCP Gateway Tool Scoping', () => {
       isActive: true,
       tool: {
         id: 'tool-1',
-        name: 'Petstore_Place an order',
-        description: 'Place order tool',
-        parameters: { type: 'object', properties: {} },
-        status: 'active'
-      }
-    }
+        name: 'open_meteo_forecast',
+        description: 'Weather forecast',
+        parameters: { type: 'object', properties: { latitude: { type: 'number' } }, required: ['latitude'] },
+        status: 'active',
+        apiId: 'api-weather',
+      },
+    },
+  ];
+
+  const mockAllOrgTools = [
+    { id: 'tool-1', name: 'open_meteo_forecast', description: 'Weather', parameters: { type: 'object', properties: {} }, status: 'active', apiId: 'api-weather' },
+    { id: 'tool-2', name: 'petstore_get_pet', description: 'Get pet', parameters: { type: 'object', properties: {} }, status: 'active', apiId: 'api-petstore' },
+    { id: 'tool-3', name: 'httpbin_get', description: 'Httpbin', parameters: { type: 'object', properties: {} }, status: 'active', apiId: 'api-httpbin' },
+  ];
+
+  const mockAllResources = [
+    { id: 'r-1', name: 'HourlyResponse', description: 'Weather hourly', api: { id: 'api-weather', organizationId: 'org-1' } },
+    { id: 'r-2', name: 'Pet', description: null, api: { id: 'api-petstore', organizationId: 'org-1' } },
+    { id: 'r-3', name: 'Order', description: null, api: { id: 'api-petstore', organizationId: 'org-1' } },
+    { id: 'r-4', name: 'HttpbinResponse', description: 'Httpbin resp', api: { id: 'api-httpbin', organizationId: 'org-1' } },
   ];
 
   beforeEach(async () => {
@@ -46,19 +63,19 @@ describe('MCP Gateway Tool Scoping', () => {
         McpService,
         {
           provide: getRepositoryToken(Tool),
-          useClass: Repository,
+          useValue: { find: jest.fn().mockResolvedValue([]), findOne: jest.fn() },
         },
         {
           provide: getRepositoryToken(Resource),
-          useClass: Repository,
+          useValue: { find: jest.fn().mockResolvedValue([]), findOne: jest.fn() },
         },
         {
           provide: getRepositoryToken(Organization),
-          useClass: Repository,
+          useValue: { findOne: jest.fn() },
         },
         {
           provide: getRepositoryToken(Gateway),
-          useClass: Repository,
+          useValue: { findOne: jest.fn(), createQueryBuilder: jest.fn().mockReturnValue({ update: jest.fn().mockReturnThis(), set: jest.fn().mockReturnThis(), where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis(), execute: jest.fn().mockResolvedValue({}) }) },
         },
         {
           provide: getRepositoryToken(GatewayTool),
@@ -98,32 +115,130 @@ describe('MCP Gateway Tool Scoping', () => {
 
     mcpService = module.get<McpService>(McpService);
     toolHandler = module.get<McpToolHandler>(McpToolHandler);
+    contentHandler = module.get<McpContentHandler>(McpContentHandler);
     gatewayToolRepository = module.get(getRepositoryToken(GatewayTool));
+    resourceRepository = module.get(getRepositoryToken(Resource));
+    toolRepository = module.get(getRepositoryToken(Tool));
   });
 
-  it('should return only gateway-assigned tools when gatewayId provided', async () => {
-    const result = await toolHandler.handleToolsList({}, 'org-1', 'gateway-1');
+  describe('tools/list scoping', () => {
+    it('should return only gateway-assigned tools when gatewayId provided', async () => {
+      const result = await toolHandler.handleToolsList({}, 'org-1', 'gateway-1');
 
-    expect(result.tools).toHaveLength(1);
-    expect(result.tools[0].name).toBe('Petstore_Place_an_order');
-    expect(gatewayToolRepository.find).toHaveBeenCalledWith({
-      where: { gatewayId: 'gateway-1', isActive: true },
-      relations: ['tool'],
+      expect(result.tools).toHaveLength(1);
+      expect(result.tools[0].name).toBe('open_meteo_forecast');
+    });
+
+    it('should return all organization tools when no gatewayId', async () => {
+      const toolsService = module.get(ToolsService);
+      (toolsService.getTools as jest.Mock).mockResolvedValue({ tools: mockAllOrgTools });
+
+      const result = await toolHandler.handleToolsList({}, 'org-1');
+
+      expect(result.tools).toHaveLength(3);
     });
   });
 
-  it('should return all organization tools when no gatewayId', async () => {
-    const toolsService = module.get(ToolsService);
-    (toolsService.getTools as jest.Mock).mockResolvedValue({
-      tools: [
-        { id: 'tool-1', name: 'Tool 1' },
-        { id: 'tool-2', name: 'Tool 2' },
-      ]
+  describe('resources/list scoping', () => {
+    beforeEach(() => {
+      resourceRepository.find.mockResolvedValue(mockAllResources);
     });
 
-    const result = await toolHandler.handleToolsList({}, 'org-1');
+    it('should return only resources from gateway tool APIs when gatewayId provided', async () => {
+      const result = await contentHandler.handleResourcesList({}, 'org-1', 'gateway-1');
 
-    expect(result.tools).toHaveLength(2);
-    expect(gatewayToolRepository.find).not.toHaveBeenCalled();
+      expect(result.resources).toHaveLength(1);
+      expect(result.resources[0].name).toBe('HourlyResponse');
+    });
+
+    it('should not leak resources from other APIs', async () => {
+      const result = await contentHandler.handleResourcesList({}, 'org-1', 'gateway-1');
+
+      const names = result.resources.map((r: any) => r.name);
+      expect(names).not.toContain('Pet');
+      expect(names).not.toContain('Order');
+      expect(names).not.toContain('HttpbinResponse');
+    });
+
+    it('should return all org resources when no gatewayId', async () => {
+      const result = await contentHandler.handleResourcesList({}, 'org-1');
+
+      expect(result.resources).toHaveLength(4);
+    });
+
+    it('should return empty resources when gateway has no tools', async () => {
+      gatewayToolRepository.find.mockResolvedValueOnce([]);
+
+      const result = await contentHandler.handleResourcesList({}, 'org-1', 'gateway-empty');
+
+      expect(result.resources).toHaveLength(0);
+    });
+  });
+
+  describe('prompts/list scoping', () => {
+    it('should return only prompts for gateway tools when gatewayId provided', async () => {
+      // getToolsForScope uses gatewayToolRepository.find which returns mockGatewayTools
+      const result = await contentHandler.handlePromptsList({}, 'org-1', 'gateway-1');
+
+      // 1 tool prompt + 1 discovery prompt
+      expect(result.prompts).toHaveLength(2);
+      expect(result.prompts[0].name).toBe('use-open_meteo_forecast');
+      expect(result.prompts[1].name).toBe('list-available-tools');
+    });
+
+    it('should not leak prompts from other tools', async () => {
+      const result = await contentHandler.handlePromptsList({}, 'org-1', 'gateway-1');
+
+      const names = result.prompts.map((p: any) => p.name);
+      expect(names).not.toContain('use-petstore_get_pet');
+      expect(names).not.toContain('use-httpbin_get');
+    });
+
+    it('should return all org prompts when no gatewayId', async () => {
+      toolRepository.find.mockResolvedValue(mockAllOrgTools);
+
+      const result = await contentHandler.handlePromptsList({}, 'org-1');
+
+      // 3 tool prompts + 1 discovery prompt
+      expect(result.prompts).toHaveLength(4);
+    });
+
+    it('should extract prompt arguments from gateway tool schema', async () => {
+      const result = await contentHandler.handlePromptsList({}, 'org-1', 'gateway-1');
+
+      const forecastPrompt = result.prompts[0];
+      expect(forecastPrompt.arguments).toHaveLength(1);
+      expect(forecastPrompt.arguments[0].name).toBe('latitude');
+      expect(forecastPrompt.arguments[0].required).toBe(true);
+    });
+  });
+
+  describe('end-to-end via handleJsonRpc', () => {
+    it('should scope tools, resources, and prompts when gatewayId passed', async () => {
+      resourceRepository.find.mockResolvedValue(mockAllResources);
+      const gatewayRepository = module.get(getRepositoryToken(Gateway));
+      (gatewayRepository as any).findOne = jest.fn().mockResolvedValue({ id: 'gateway-1', name: 'Open-Meteo', organizationId: 'org-1' });
+
+      // tools/list
+      const toolsResult = await mcpService.handleJsonRpc(
+        { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+        'org-1', null, 'gateway-1',
+      );
+      expect(toolsResult.result.tools).toHaveLength(1);
+
+      // resources/list
+      const resourcesResult = await mcpService.handleJsonRpc(
+        { jsonrpc: '2.0', id: 2, method: 'resources/list', params: {} },
+        'org-1', null, 'gateway-1',
+      );
+      expect(resourcesResult.result.resources).toHaveLength(1);
+
+      // prompts/list
+      const promptsResult = await mcpService.handleJsonRpc(
+        { jsonrpc: '2.0', id: 3, method: 'prompts/list', params: {} },
+        'org-1', null, 'gateway-1',
+      );
+      expect(promptsResult.result.prompts).toHaveLength(2);
+    });
   });
 });
