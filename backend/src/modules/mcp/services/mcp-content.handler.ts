@@ -5,14 +5,11 @@ import { Repository } from 'typeorm';
 import {
   JsonRpcErrorCode,
   McpResource,
-  McpResourcesListResult,
   McpReadResourceRequest,
   McpReadResourceResult,
   McpPrompt,
-  McpPromptsListResult,
   McpGetPromptRequest,
   McpGetPromptResult,
-  McpContent,
   McpTextContent,
 } from '../types/mcp.types';
 
@@ -82,14 +79,15 @@ export class McpContentHandler {
       throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, 'Resource not found');
     }
 
-    const content: McpContent[] = [
-      {
-        type: 'text',
-        text: JSON.stringify(resource.schema || resource.properties, null, 2),
-      } as McpTextContent,
-    ];
-
-    return { contents: content };
+    return {
+      contents: [
+        {
+          uri: params.uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(resource.schema || resource.properties, null, 2),
+        },
+      ],
+    };
   }
 
   async handlePromptsList(params: any, organizationId: string): Promise<any> {
