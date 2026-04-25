@@ -473,7 +473,9 @@ describe('McpService', () => {
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('6');
       expect(result.result.contents).toBeDefined();
-      expect(result.result.contents[0].type).toBe('text');
+      expect(result.result.contents[0].uri).toBe('almyty://resources/resource-1');
+      expect(result.result.contents[0].mimeType).toBe('application/json');
+      expect(result.result.contents[0].text).toBeDefined();
     });
 
     it('should handle prompts/list request successfully', async () => {
