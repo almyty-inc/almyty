@@ -78,6 +78,22 @@ interface TwoOrgFixture {
 }
 
 async function setupTwoOrgFixture(): Promise<TwoOrgFixture> {
+  // TypeORM's dropSchema+synchronize flow tries to CREATE TABLE in
+  // the named schema before re-creating the schema itself, so on a
+  // fresh DB the spec dies with `schema "cross_tenant_test" does
+  // not exist`. Pre-create via a throwaway connection.
+  const bootstrap = new DataSource({
+    type: 'postgres',
+    host: process.env.DATABASE_HOST || '127.0.0.1',
+    port: Number(process.env.DATABASE_PORT || 5432),
+    username: process.env.DATABASE_USERNAME || 'postgres',
+    password: process.env.DATABASE_PASSWORD || '',
+    database: process.env.DATABASE_NAME || 'almyty_test',
+  });
+  await bootstrap.initialize();
+  await bootstrap.query('CREATE SCHEMA IF NOT EXISTS cross_tenant_test');
+  await bootstrap.destroy();
+
   // Each integration spec uses its own Postgres schema so that
   // parallel Jest workers running different DB specs at the same
   // time don't step on each other's table creation / drop cycles.
