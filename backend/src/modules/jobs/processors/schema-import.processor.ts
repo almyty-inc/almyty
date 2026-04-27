@@ -56,12 +56,16 @@ export class SchemaImportProcessor {
       // Update job progress
       await job.progress(10);
 
-      // Import schema (this is the long-running operation)
+      // Import schema (this is the long-running operation). Pass a
+      // progress callback so each tool-gen batch can refresh the
+      // BullMQ lock — without this, large specs (Stripe ~7.7 MB,
+      // 600+ ops) trigger the stalled-job watchdog mid-run.
       const result = await this.apisService.importSchema(
         apiId,
         schemaContent,
         organizationId,
         options,
+        (pct) => job.progress(Math.max(10, Math.min(99, pct))),
       );
 
       await job.progress(100);
