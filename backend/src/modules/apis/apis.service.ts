@@ -396,11 +396,39 @@ export class ApisService {
       operations.forEach(op => op.apiId = apiId);
       resources.forEach(res => res.apiId = apiId);
 
-      // Save operations and resources in parallel
-      const [savedOperations, savedResources] = await Promise.all([
-        queryRunner.manager.save(operations),
-        queryRunner.manager.save(resources),
-      ]);
+      // Chunked save. A whole-array `manager.save(operations)` on a
+      // 600-operation schema (Stripe / GitHub REST) holds every
+      // entity + every TypeORM working object in memory at once
+      // and pushed the V8 heap past 1.5GB on staging — the pod
+      // OOM-killed mid-import. Save in chunks so each batch can
+      // be GC'd before the next is loaded. ~50 keeps each pg
+      // INSERT under the libpq parameter cap (16k params) for any
+      // realistic operation row width.
+      const SAVE_CHUNK = 50;
+      const savedOperations: Operation[] = [];
+      for (let i = 0; i < operations.length; i += SAVE_CHUNK) {
+        const slice = operations.slice(i, i + SAVE_CHUNK);
+        const saved = await queryRunner.manager.save(slice);
+        savedOperations.push(...(saved as Operation[]));
+        // Periodic heartbeat so the host BullMQ job can refresh
+        // its lock during a long save phase.
+        if (onProgress) {
+          try {
+            await onProgress(10 + Math.floor((i / Math.max(operations.length, 1)) * 30));
+          } catch { /* progress is best-effort */ }
+        }
+      }
+      const savedResources: Resource[] = [];
+      for (let i = 0; i < resources.length; i += SAVE_CHUNK) {
+        const slice = resources.slice(i, i + SAVE_CHUNK);
+        const saved = await queryRunner.manager.save(slice);
+        savedResources.push(...(saved as Resource[]));
+      }
+      // The unparsed source arrays are no longer needed; let GC
+      // reclaim the entity instances we just persisted before tool
+      // generation also allocates heavily.
+      operations.length = 0;
+      resources.length = 0;
 
       // Update API status if it was draft
       if (api.status === ApiStatus.DRAFT) {

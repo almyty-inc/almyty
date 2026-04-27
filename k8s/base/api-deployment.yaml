@@ -219,6 +219,15 @@ spec:
               name: almyty-config
               key: CORS_ALLOWED_ORIGINS
               optional: true
+        # V8 old-space defaults to ~1.5GB regardless of the cgroup
+        # memory limit. A real-world OpenAPI import (Stripe ~7.7 MB,
+        # 600+ ops) blew the default heap and OOM-killed the pod
+        # (Exit 137) even though the container limit was 2GB —
+        # Node never asked for more than 1.5GB. Pin Node's heap
+        # ceiling close to the container limit (3500 MB inside a
+        # 4GB limit, leaving headroom for native + buffers).
+        - name: NODE_OPTIONS
+          value: "--max-old-space-size=3500"
         # Writable tmp dir for the sandbox workers, dependency
         # cache, etc. — readOnlyRootFilesystem above denies every
         # other write. Mounted as an emptyDir so it's tied to the
@@ -248,7 +257,14 @@ spec:
             memory: "512Mi"
             cpu: "250m"
           limits:
-            memory: "2Gi"
+            # Bumped 2Gi → 4Gi to handle real-world schema imports.
+            # Stripe's OpenAPI (7.7 MB, 600+ operations) needs the
+            # parsed object + entity arrays + transaction context
+            # in memory simultaneously and reproducibly OOM-killed
+            # the pod at 2GB. The chunked import refactor in
+            # apis.service reduces the peak, but big specs still
+            # need the headroom; 4GB is the safe ceiling.
+            memory: "4Gi"
             cpu: "1000m"
       # emptyDir tmp volume — see the volumeMounts above for why.
       volumes:
