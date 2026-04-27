@@ -222,10 +222,10 @@ describe('GatewayResolverService', () => {
     it('should throw 401 with WWW-Authenticate for missing auth', async () => {
       const gatewayWithOAuth = {
         ...mockGateway,
-        authConfigs: [{ type: GatewayAuthType.OAUTH2 }],
+        authConfigs: [{ type: GatewayAuthType.OAUTH2, isActive: true }],
       };
       jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(mockOrganization as Organization);
-      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(gatewayWithOAuth as Gateway);
+      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(gatewayWithOAuth as unknown as Gateway);
       jest.spyOn(gatewayAuthService, 'authenticateRequest').mockResolvedValue({
         isValid: false,
         error: 'Authentication required',
@@ -275,7 +275,7 @@ describe('GatewayResolverService', () => {
       const gatewayWithOAuth = {
         ...mockGateway,
         endpoint: '/my-gateway',
-        authConfigs: [{ type: GatewayAuthType.OAUTH2 }],
+        authConfigs: [{ type: GatewayAuthType.OAUTH2, isActive: true }],
       };
       jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(mockOrganization as Organization);
       jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(gatewayWithOAuth as Gateway);
@@ -299,10 +299,10 @@ describe('GatewayResolverService', () => {
       const gatewayWithApiKey = {
         ...mockGateway,
         name: 'My Gateway',
-        authConfigs: [{ type: GatewayAuthType.API_KEY }],
+        authConfigs: [{ type: GatewayAuthType.API_KEY, isActive: true, configuration: { keyHeader: 'x-api-key' } }],
       };
       jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(mockOrganization as Organization);
-      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(gatewayWithApiKey as Gateway);
+      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(gatewayWithApiKey as unknown as Gateway);
       jest.spyOn(gatewayAuthService, 'authenticateRequest').mockResolvedValue({
         isValid: false,
         error: 'API key missing',
@@ -321,7 +321,7 @@ describe('GatewayResolverService', () => {
       const gatewayWithBearer = {
         ...mockGateway,
         name: 'My Gateway',
-        authConfigs: [{ type: GatewayAuthType.BEARER_TOKEN }],
+        authConfigs: [{ type: GatewayAuthType.BEARER_TOKEN, isActive: true }],
       };
       jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(mockOrganization as Organization);
       jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(gatewayWithBearer as Gateway);
@@ -336,6 +336,54 @@ describe('GatewayResolverService', () => {
         fail('Expected HttpException');
       } catch (e) {
         expect(e.wwwAuthenticate).toBe('Bearer realm="My Gateway"');
+      }
+    });
+
+    it('returns Basic challenge — not Bearer — for a BASIC_AUTH gateway (RFC 7617)', async () => {
+      const gatewayWithBasic = {
+        ...mockGateway,
+        name: 'My Gateway',
+        authConfigs: [{ type: GatewayAuthType.BASIC_AUTH, isActive: true }],
+      };
+      jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(mockOrganization as Organization);
+      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(gatewayWithBasic as unknown as Gateway);
+      jest.spyOn(gatewayAuthService, 'authenticateRequest').mockResolvedValue({
+        isValid: false,
+        error: 'Basic missing',
+        errorCode: 'BASIC_AUTH_MISSING',
+      });
+
+      try {
+        await service.resolveAndAuthenticate('test-org', '/my-gateway', mockReq);
+        fail('Expected HttpException');
+      } catch (e) {
+        expect(e.wwwAuthenticate).toBe('Basic realm="My Gateway"');
+      }
+    });
+
+    it('emits multiple challenges for a gateway carrying both API_KEY and BASIC_AUTH (RFC 7235)', async () => {
+      const multi = {
+        ...mockGateway,
+        name: 'Multi',
+        authConfigs: [
+          { type: GatewayAuthType.API_KEY, isActive: true, configuration: { keyHeader: 'x-api-key' } },
+          { type: GatewayAuthType.BASIC_AUTH, isActive: true },
+        ],
+      };
+      jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(mockOrganization as Organization);
+      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(multi as unknown as Gateway);
+      jest.spyOn(gatewayAuthService, 'authenticateRequest').mockResolvedValue({
+        isValid: false,
+        error: 'auth missing',
+        errorCode: 'AUTH_MISSING',
+      });
+
+      try {
+        await service.resolveAndAuthenticate('test-org', '/my-gateway', mockReq);
+        fail('Expected HttpException');
+      } catch (e) {
+        expect(e.wwwAuthenticate).toContain('ApiKey realm="Multi", header="x-api-key"');
+        expect(e.wwwAuthenticate).toContain('Basic realm="Multi"');
       }
     });
   });

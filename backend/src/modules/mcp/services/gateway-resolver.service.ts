@@ -116,26 +116,38 @@ export class GatewayResolverService {
    * Tells MCP clients where to discover OAuth authorization server.
    */
   private buildWwwAuthenticateHeader(gateway: Gateway, orgSlug: string): string | null {
-    const hasOAuthAuth = gateway.authConfigs?.some(
-      (ac) => ac.type === GatewayAuthType.OAUTH2,
-    );
-    const hasApiKeyAuth = gateway.authConfigs?.some(
-      (ac) => ac.type === GatewayAuthType.API_KEY,
-    );
-
+    const active = gateway.authConfigs?.filter((a) => a.isActive) || [];
+    const types = new Set(active.map((a) => a.type));
     const baseUrl = process.env.BASE_URL || process.env.API_URL || 'http://localhost:4000';
     const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || '';
 
-    if (hasOAuthAuth) {
+    // RFC 7235: a 401 may carry multiple challenges. Emit one per
+    // active scheme so clients can pick what they support; previously
+    // a BASIC-only gateway sent `Bearer realm=...`, which RFC 7617
+    // forbids and which makes browsers skip the credential prompt.
+    const challenges: string[] = [];
+
+    if (types.has(GatewayAuthType.OAUTH2)) {
       const resourceMetadataUrl = `${baseUrl}/${orgSlug}/${gatewaySlug}/.well-known/oauth-protected-resource`;
-      return `Bearer resource_metadata="${resourceMetadataUrl}"`;
+      challenges.push(`Bearer resource_metadata="${resourceMetadataUrl}"`);
+    }
+    if (types.has(GatewayAuthType.BEARER_TOKEN) || types.has(GatewayAuthType.JWT)) {
+      challenges.push(`Bearer realm="${gateway.name}"`);
+    }
+    if (types.has(GatewayAuthType.API_KEY)) {
+      const cfg = active.find((a) => a.type === GatewayAuthType.API_KEY)?.configuration;
+      const header = cfg?.keyHeader || 'x-api-key';
+      challenges.push(`ApiKey realm="${gateway.name}", header="${header}"`);
+    }
+    if (types.has(GatewayAuthType.BASIC_AUTH)) {
+      challenges.push(`Basic realm="${gateway.name}"`);
     }
 
-    if (hasApiKeyAuth) {
-      return `ApiKey realm="${gateway.name}", header="x-api-key"`;
-    }
-
-    return `Bearer realm="${gateway.name}"`;
+    // Dedupe, preserve insertion order
+    const seen = new Set<string>();
+    const dedup = challenges.filter((c) => (seen.has(c) ? false : (seen.add(c), true)));
+    if (dedup.length === 0) return `Bearer realm="${gateway.name}"`;
+    return dedup.join(', ');
   }
 
   /**
