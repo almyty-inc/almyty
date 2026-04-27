@@ -405,23 +405,33 @@ export class ApisService {
         await this.updateStatus(apiId, ApiStatus.ACTIVE, organizationId);
       }
 
-      let generatedTools: Tool[] = [];
-
-      // Generate tools if requested. Pass the just-saved operations
-      // explicitly: generateToolsFromApi otherwise re-queries via
-      // findOne on a connection from the default pool, which can't
-      // see this transaction's uncommitted operation rows and would
-      // throw 'No operations found'. Wrapping the import in a
-      // transaction (commit 3a7988b) introduced this regression.
-      if (options.generateTools) {
-        generatedTools = await this.generateToolsFromApi(
-          apiId,
-          organizationId,
-          savedOperations as Operation[],
-        );
-      }
-
+      // Commit schema + operations BEFORE generating tools.
+      //
+      // Tool generation calls into ToolsService, which queries
+      // operations and tools through the default repository pool —
+      // a different connection than this queryRunner. Inside the
+      // open transaction those queries can't see the uncommitted
+      // operations, so every createFromOperation throws "Operation
+      // not found" and zero tools come back. Decouple: commit the
+      // structural import first, then run tool generation against
+      // the now-visible rows. If tool gen fails, the operations
+      // are still persisted and `generateToolsFromApi(apiId)` can
+      // be retried — that's the same shape the standalone endpoint
+      // already provides.
       await queryRunner.commitTransaction();
+
+      let generatedTools: Tool[] = [];
+      if (options.generateTools) {
+        try {
+          generatedTools = await this.generateToolsFromApi(apiId, organizationId);
+        } catch (toolErr: any) {
+          this.logger.error(
+            `Tool generation failed after schema import for API ${apiId} (operations are committed; retry via /apis/${apiId}/generate-tools): ${toolErr.message}`,
+          );
+          // Re-throw so the caller knows tool gen didn't run.
+          throw toolErr;
+        }
+      }
 
       // Reload the API with updated relations
       const updatedApi = await this.findOne(apiId, organizationId);
@@ -434,7 +444,13 @@ export class ApisService {
         tools: generatedTools.length > 0 ? generatedTools : undefined,
       };
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      // Only roll back if we haven't already committed. Once the
+      // transaction is committed, the queryRunner is in a state
+      // where rollback is a no-op error; checking isTransactionActive
+      // keeps the catch idempotent.
+      if (queryRunner.isTransactionActive) {
+        await queryRunner.rollbackTransaction();
+      }
       this.logger.error(`Failed to import schema for API ${apiId}: ${error.message}`);
       throw new BadRequestException(`Schema import failed: ${error.message}`);
     } finally {
