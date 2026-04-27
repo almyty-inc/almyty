@@ -615,11 +615,25 @@ export class UnifiedEndpointController {
     res: Response,
     body: any,
   ) {
-    if (action === '.well-known/utcp' || action === 'manual') {
-      if (action === '.well-known/utcp') {
-        return res.json(this.utcpService.getDiscoveryInfo(organization.id));
-      }
-      return res.json(await this.utcpService.generateManual(organization.id));
+    if (action === '.well-known/utcp') {
+      const baseUrl = this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
+      return res.json(
+        this.utcpService.getDiscoveryInfo({
+          organizationId: organization.id,
+          gateway,
+          baseUrl,
+          orgSlug: organization.slug || organization.id,
+        }),
+      );
+    }
+
+    if (action === 'manual') {
+      return res.json(
+        await this.utcpService.generateManual({
+          organizationId: organization.id,
+          gateway,
+        }),
+      );
     }
 
     if (action === 'execute' && req.method === 'POST') {

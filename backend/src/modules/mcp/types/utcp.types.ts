@@ -1,168 +1,73 @@
 // Universal Tool Calling Protocol (UTCP) Types
-// Based on https://www.utcp.io specifications
+// Spec: https://utcp.io — RFC: https://github.com/universal-tool-calling-protocol/utcp-specification
+//
+// Field names are snake_case per the spec. UTCP clients (python-utcp,
+// typescript-utcp, go-utcp) parse the manual against these exact fields,
+// so renaming or wrapping them breaks SDK compatibility.
 
 export interface UtcpManual {
-  version: string;
-  info: {
-    title: string;
-    description?: string;
-    version: string;
-    contact?: {
-      name?: string;
-      email?: string;
-      url?: string;
-    };
-    license?: {
-      name: string;
-      url?: string;
-    };
-  };
+  utcp_version: string;
+  manual_version: string;
   tools: UtcpTool[];
-  callTemplates: UtcpCallTemplate[];
-  authentication?: UtcpAuthenticationScheme[];
-  metadata?: Record<string, any>;
 }
 
 export interface UtcpTool {
-  id: string;
   name: string;
   description: string;
-  version: string;
-  inputSchema: any; // JSON Schema
-  outputSchema?: any; // JSON Schema
-  tags?: string[];
-  examples?: UtcpToolExample[];
-  deprecationNotice?: string;
-  metadata?: {
-    sourceApi?: {
-      name: string;
-      type: string;
-      endpoint: string;
-      operation: string;
-    };
-    performance?: {
-      averageResponseTime?: number;
-      successRate?: number;
-    };
-    [key: string]: any;
-  };
+  inputs: any;  // JsonSchema
+  outputs: any; // JsonSchema
+  tags: string[];
+  average_response_size?: number;
+  tool_call_template: UtcpCallTemplate;
 }
 
-export interface UtcpToolExample {
-  name: string;
-  description?: string;
-  input: Record<string, any>;
-  expectedOutput?: any;
-  notes?: string;
+export type UtcpCallTemplate = UtcpHttpCallTemplate;
+
+export interface UtcpHttpCallTemplate {
+  call_template_type: 'http';
+  url: string;
+  http_method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  content_type?: string;
+  headers?: Record<string, string>;
+  body_field?: string;
+  header_fields?: string[];
+  auth?: UtcpAuth;
 }
 
-export interface UtcpCallTemplate {
-  id: string;
-  name: string;
-  description?: string;
-  protocol: 'http' | 'websocket' | 'cli' | 'grpc' | 'custom';
-  endpoint: {
-    url: string;
-    method?: string;
-    headers?: Record<string, string>;
-    timeout?: number;
-    retries?: number;
-  };
-  authentication?: {
-    scheme: string;
-    location: 'header' | 'query' | 'body';
-    parameter?: string;
-    value?: string;
-    template?: string;
-  };
-  requestMapping: {
-    parameters: Record<string, UtcpParameterMapping>;
-    body?: UtcpBodyMapping;
-  };
-  responseMapping: {
-    successCodes: number[];
-    dataPath?: string;
-    errorPath?: string;
-    transform?: string; // JSONPath or transformation script
-  };
-  rateLimit?: {
-    requestsPerSecond?: number;
-    requestsPerMinute?: number;
-    requestsPerHour?: number;
-  };
-  metadata?: Record<string, any>;
+export type UtcpAuth = UtcpApiKeyAuth | UtcpBasicAuth | UtcpOAuth2Auth;
+
+export interface UtcpApiKeyAuth {
+  auth_type: 'api_key';
+  api_key: string;
+  var_name: string;
+  location: 'header' | 'query' | 'cookie';
 }
 
-export interface UtcpParameterMapping {
-  type: 'path' | 'query' | 'header' | 'body';
-  name: string;
-  required?: boolean;
-  default?: any;
-  transform?: string;
-  validation?: any; // JSON Schema fragment
+export interface UtcpBasicAuth {
+  auth_type: 'basic';
+  username: string;
+  password: string;
 }
 
-export interface UtcpBodyMapping {
-  contentType: string;
-  template?: string;
-  schema?: any;
+export interface UtcpOAuth2Auth {
+  auth_type: 'oauth2';
+  client_id: string;
+  client_secret: string;
+  token_url: string;
+  scope?: string;
 }
 
-export interface UtcpAuthenticationScheme {
-  id: string;
-  name: string;
-  type: 'none' | 'api_key' | 'bearer' | 'basic' | 'oauth2' | 'custom';
-  description?: string;
-  configuration: {
-    location?: 'header' | 'query' | 'body';
-    parameter?: string;
-    scheme?: string;
-    flows?: Record<string, any>; // For OAuth2
-    custom?: Record<string, any>; // For custom schemes
-  };
-  examples?: Array<{
-    name: string;
-    description?: string;
-    value: string;
-  }>;
-}
-
-// UTCP Client Configuration
-export interface UtcpClient {
-  version: string;
-  name: string;
-  capabilities: {
-    protocols: string[];
-    authentication: string[];
-    formats: string[];
-    experimental?: Record<string, any>;
-  };
-  preferences?: {
-    timeout: number;
-    retries: number;
-    caching: boolean;
-    compression: boolean;
-  };
-}
-
-// UTCP Execution Context
+// UTCP execution (proxy mode — almyty extension; not part of the spec)
 export interface UtcpExecutionContext {
   toolId: string;
-  callTemplateId: string;
   parameters: Record<string, any>;
-  authentication?: {
-    scheme: string;
-    credentials: Record<string, any>;
-  };
   options?: {
     timeout?: number;
     retries?: number;
     skipCache?: boolean;
   };
-  metadata?: Record<string, any>;
 }
 
-// UTCP Response Format
 export interface UtcpExecutionResult {
   success: boolean;
   data?: any;
@@ -174,7 +79,6 @@ export interface UtcpExecutionResult {
   metadata: {
     executionTime: number;
     toolId: string;
-    callTemplateId: string;
     requestId: string;
     timestamp: string;
     cached?: boolean;
@@ -183,37 +87,18 @@ export interface UtcpExecutionResult {
   };
 }
 
-// UTCP Discovery
+// Discovery descriptor served at /.well-known/utcp.
+// almyty extension — the spec doesn't mandate a discovery endpoint, but
+// SDKs and tooling expect a stable surface that points to the manual
+// and surfaces the gateway's auth requirements.
 export interface UtcpDiscoveryInfo {
-  protocol: 'utcp';
-  version: string;
+  utcp_version: string;
+  manual_version: string;
+  manual_url: string;
+  auth?: UtcpAuth | UtcpAuth[];
   server: {
     name: string;
     version: string;
     description?: string;
-    contact?: {
-      name?: string;
-      email?: string;
-      url?: string;
-    };
-  };
-  endpoints: {
-    manual: string; // GET endpoint for the tool manual
-    execute: string; // POST endpoint for tool execution (optional - for proxy mode)
-    health: string; // Health check endpoint
-  };
-  capabilities: {
-    directCalling: boolean;
-    proxyMode: boolean;
-    authentication: string[];
-    protocols: string[];
-    formats: string[];
-  };
-  experimental?: {
-    almyty?: {
-      universalApiTranslation: boolean;
-      supportedApiFormats: string[];
-      autoGeneration: boolean;
-    };
   };
 }

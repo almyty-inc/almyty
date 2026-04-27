@@ -1,15 +1,14 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
 
 import {
   UtcpManual,
   UtcpTool,
-  UtcpCallTemplate,
-  UtcpAuthenticationScheme,
-  UtcpParameterMapping,
+  UtcpHttpCallTemplate,
+  UtcpAuth,
   UtcpDiscoveryInfo,
   UtcpExecutionContext,
   UtcpExecutionResult,
@@ -19,14 +18,30 @@ import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { Api } from '../../entities/api.entity';
 import { Operation } from '../../entities/operation.entity';
 import { Organization } from '../../entities/organization.entity';
+import { Gateway } from '../../entities/gateway.entity';
+import { GatewayTool } from '../../entities/gateway-tool.entity';
+import { GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService, ToolExecutionResult } from '../tools/tool-executor.service';
 import { batchAsyncSettled } from '../../common/utils/batch-async';
 
+const UTCP_VERSION = '1.0.0';
+
+interface ManualOptions {
+  organizationId: string;
+  gateway?: Gateway;
+}
+
+interface DiscoveryOptions {
+  organizationId: string;
+  gateway?: Gateway;
+  baseUrl: string;
+  orgSlug: string;
+}
+
 @Injectable()
 export class UtcpService {
   private readonly logger = new Logger(UtcpService.name);
-  private readonly version = '1.0.0';
 
   constructor(
     @InjectRepository(Tool)
@@ -37,386 +52,369 @@ export class UtcpService {
     private operationRepository: Repository<Operation>,
     @InjectRepository(Organization)
     private organizationRepository: Repository<Organization>,
+    @InjectRepository(GatewayTool)
+    private gatewayToolRepository: Repository<GatewayTool>,
     private toolsService: ToolsService,
     private toolExecutorService: ToolExecutorService,
     @InjectRedis() private readonly redis: Redis.Redis,
   ) {}
 
-  // Generate UTCP Manual for Organization (cached + parallelized)
-  async generateManual(organizationId: string): Promise<UtcpManual> {
-    // Check Redis cache (5 min TTL)
-    const cacheKey = `utcp:manual:${organizationId}`;
+  /**
+   * Build a spec-compliant UTCP manual.
+   *
+   * Spec: https://utcp.io — top-level fields are `utcp_version`,
+   * `manual_version`, `tools`. Each tool carries an inline
+   * `tool_call_template`. Snake_case throughout — UTCP SDKs (python,
+   * typescript, go) parse against these exact field names.
+   *
+   * When a gateway is supplied, the manual is scoped to that gateway's
+   * assigned tools — without it, the manual leaks every tool in the
+   * org regardless of which gateway the request came through.
+   */
+  async generateManual(opts: ManualOptions): Promise<UtcpManual> {
+    const { organizationId, gateway } = opts;
+    const cacheKey = gateway
+      ? `utcp:manual:gw:${gateway.id}`
+      : `utcp:manual:org:${organizationId}`;
+
     try {
       const cached = await this.redis.get(cacheKey);
       if (cached) return JSON.parse(cached);
-    } catch (e) { /* cache miss */ }
+    } catch {
+      // cache miss is non-fatal
+    }
 
     const organization = await this.organizationRepository.findOne({
       where: { id: organizationId },
-      relations: ['tools', 'apis'],
     });
-
     if (!organization) {
       throw new NotFoundException('Organization not found');
     }
 
-    // Get all active tools for this organization
-    const { tools } = await this.toolsService.getTools({
-      organizationId,
-      status: ToolStatus.ACTIVE,
+    const tools = await this.resolveTools(organizationId, gateway);
+
+    const utcpToolResults = await batchAsyncSettled(tools, 5, async (tool) => {
+      return this.convertToolToUtcp(tool);
     });
 
-    // Process tools in batches to avoid pool exhaustion
-    const toolResults = await batchAsyncSettled(tools, 5, async (tool) => {
-      const [utcpTool, callTemplate, authScheme] = await Promise.all([
-        this.convertToolToUtcp(tool),
-        this.generateCallTemplate(tool),
-        this.extractAuthenticationScheme(tool),
-      ]);
-      return { utcpTool, callTemplate, authScheme };
-    });
-
-    const utcpTools: UtcpTool[] = [];
-    const callTemplates: UtcpCallTemplate[] = [];
-    const authSchemeMap = new Map<string, UtcpAuthenticationScheme>();
-
-    for (const r of toolResults) {
-      if (!r) continue;
-      const { utcpTool, callTemplate, authScheme } = r;
-      utcpTools.push(utcpTool);
-      if (callTemplate) callTemplates.push(callTemplate);
-      if (authScheme && !authSchemeMap.has(authScheme.id)) {
-        authSchemeMap.set(authScheme.id, authScheme);
-      }
-    }
+    const utcpTools: UtcpTool[] = utcpToolResults.filter((t): t is UtcpTool => !!t);
 
     const manual: UtcpManual = {
-      version: this.version,
-      info: {
-        title: `${organization.name} API Tools`,
-        description: `UTCP manual for ${organization.name}'s API tools, automatically generated by almyty`,
-        version: '1.0.0',
-        contact: {
-          name: 'almyty',
-          url: 'https://almyty.com',
-        },
-        license: {
-          name: 'Generated by almyty',
-          url: 'https://almyty.com/license',
-        },
-      },
+      utcp_version: UTCP_VERSION,
+      manual_version: gateway
+        ? `${gateway.id}:${gateway.updatedAt?.toISOString?.() || ''}`
+        : `${organizationId}:${organization.updatedAt?.toISOString?.() || ''}`,
       tools: utcpTools,
-      callTemplates,
-      authentication: Array.from(authSchemeMap.values()),
-      metadata: {
-        generatedAt: new Date().toISOString(),
-        organizationId,
-        toolCount: utcpTools.length,
-        apiCount: organization.apis?.length || 0,
-        generator: {
-          name: 'almyty',
-          version: '1.0.0',
-          description: 'Universal API-to-AI Tool Translation Platform',
-        },
-      },
     };
 
-    // Cache for 5 minutes
     try {
       await this.redis.setex(cacheKey, 300, JSON.stringify(manual));
-    } catch (e) { /* non-critical */ }
+    } catch {
+      // non-critical
+    }
 
     return manual;
   }
 
-  // Convert our Tool entity to UTCP format
-  private async convertToolToUtcp(tool: Tool): Promise<UtcpTool> {
+  /**
+   * Resolve tools for the manual. With a gateway, scope to that
+   * gateway's active assignments. Without one, fall back to all
+   * active tools in the org (legacy global manual at /utcp/global).
+   */
+  private async resolveTools(organizationId: string, gateway?: Gateway): Promise<Tool[]> {
+    if (gateway) {
+      const assignments = await this.gatewayToolRepository.find({
+        where: { gatewayId: gateway.id, isActive: true },
+        relations: ['tool'],
+      });
+      return assignments
+        .map((a) => a.tool)
+        .filter((t): t is Tool => !!t && t.status === ToolStatus.ACTIVE);
+    }
+    const { tools } = await this.toolsService.getTools({
+      organizationId,
+      status: ToolStatus.ACTIVE,
+    });
+    return tools;
+  }
+
+  /**
+   * Convert a Tool to a spec-compliant UtcpTool, with the
+   * `tool_call_template` inlined per UTCP spec.
+   */
+  private async convertToolToUtcp(tool: Tool): Promise<UtcpTool | null> {
+    const callTemplate = await this.buildCallTemplate(tool);
+    if (!callTemplate) {
+      return null;
+    }
+
     return {
-      id: tool.id,
       name: tool.name,
-      description: tool.description || 'AI tool automatically generated from API operation',
-      version: tool.version,
-      inputSchema: tool.parameters || {
-        type: 'object',
-        properties: {},
-      },
-      outputSchema: tool.outputSchema || {
-        type: 'object',
-        description: 'API response data',
-      },
+      description: tool.description || `Tool ${tool.name}`,
+      inputs: tool.parameters || { type: 'object', properties: {}, required: [] },
+      outputs: tool.outputSchema || { type: 'object' },
       tags: this.extractToolTags(tool),
-      examples: await this.generateToolExamples(tool),
-      metadata: {
-        sourceApi: tool.metadata?.sourceApi ? {
-          name: tool.metadata.sourceApi.name,
-          type: tool.metadata.sourceApi.type,
-          endpoint: tool.metadata.sourceApi.baseUrl,
-          operation: tool.metadata.sourceOperation?.name,
-        } : undefined,
-        performance: {
-          // TODO: Get actual metrics from usage stats
-          averageResponseTime: 1500,
-          successRate: 0.95,
-        },
-        autoGenerated: tool.metadata?.autoGenerated || false,
-        createdAt: tool.createdAt.toISOString(),
-        updatedAt: tool.updatedAt.toISOString(),
-      },
+      tool_call_template: callTemplate,
     };
   }
 
-  // Generate call template for direct API access
-  private async generateCallTemplate(tool: Tool): Promise<UtcpCallTemplate | null> {
+  /**
+   * Build an HttpCallTemplate from the underlying API + operation.
+   * Returns null if the tool is not backed by an API operation
+   * (manual JS / LLM tools — no http target).
+   */
+  private async buildCallTemplate(tool: Tool): Promise<UtcpHttpCallTemplate | null> {
     if (!tool.operationId) {
-      return null; // Can't generate direct call template without operation
+      return null;
     }
 
     const operation = await this.operationRepository.findOne({
       where: { id: tool.operationId },
       relations: ['api'],
     });
-
     if (!operation || !operation.api) {
       return null;
     }
 
     const api = operation.api;
+    const httpMethod = (operation.method || 'GET').toUpperCase() as UtcpHttpCallTemplate['http_method'];
+    const headerFields = Object.keys(operation.parameters?.header || {});
+    const hasBody = !!operation.parameters?.body && ['POST', 'PUT', 'PATCH'].includes(httpMethod);
 
-    return {
-      id: `template_${tool.id}`,
-      name: `Direct ${tool.name} Call`,
-      description: `Direct API call template for ${tool.name} - bypasses almyty proxy`,
-      protocol: 'http',
-      endpoint: {
-        url: `${api.baseUrl}${operation.endpoint}`,
-        method: operation.method,
-        headers: {
-          'Content-Type': this.getContentType(operation),
-          'User-Agent': 'almyty-utcp-client/1.0.0',
-          ...api.headers,
-        },
-        timeout: api.timeoutMs || 30000,
-        retries: api.retryAttempts || 3,
-      },
-      authentication: api.authentication ? {
-        scheme: api.authentication.type,
-        location: 'header',
-        parameter: this.getAuthParameter(api.authentication),
-        template: this.getAuthTemplate(api.authentication),
-      } : undefined,
-      requestMapping: {
-        parameters: this.generateParameterMappings(operation),
-        body: this.generateBodyMapping(operation),
-      },
-      responseMapping: {
-        successCodes: [200, 201, 202, 204],
-        dataPath: '$', // Root of response
-        errorPath: '$.error',
-      },
-      rateLimit: api.rateLimits,
-      metadata: {
-        toolId: tool.id,
-        operationId: operation.id,
-        apiId: api.id,
-        directAccess: true,
-        bypassProxy: true,
-      },
+    const template: UtcpHttpCallTemplate = {
+      call_template_type: 'http',
+      url: `${api.baseUrl}${operation.endpoint}`,
+      http_method: httpMethod,
+      content_type: this.getContentType(operation),
+      headers: { ...(api.headers || {}) },
     };
+
+    if (hasBody) {
+      template.body_field = 'body';
+    }
+    if (headerFields.length > 0) {
+      template.header_fields = headerFields;
+    }
+
+    const auth = this.buildApiAuth(api);
+    if (auth) {
+      template.auth = auth;
+    }
+
+    return template;
   }
 
-  // Generate parameter mappings from operation
-  private generateParameterMappings(operation: Operation): Record<string, UtcpParameterMapping> {
-    const mappings: Record<string, UtcpParameterMapping> = {};
-
-    // Path parameters
-    if (operation.parameters?.path) {
-      Object.entries(operation.parameters.path).forEach(([name, param]: [string, any]) => {
-        mappings[name] = {
-          type: 'path',
-          name,
-          required: param.required || true,
-          validation: {
-            type: param.type || 'string',
-            description: param.description,
-          },
-        };
-      });
-    }
-
-    // Query parameters
-    if (operation.parameters?.query) {
-      Object.entries(operation.parameters.query).forEach(([name, param]: [string, any]) => {
-        mappings[name] = {
-          type: 'query',
-          name,
-          required: param.required || false,
-          default: param.default,
-          validation: {
-            type: param.type || 'string',
-            description: param.description,
-          },
-        };
-      });
-    }
-
-    // Header parameters
-    if (operation.parameters?.header) {
-      Object.entries(operation.parameters.header).forEach(([name, param]: [string, any]) => {
-        mappings[name] = {
-          type: 'header',
-          name,
-          required: param.required || false,
-          validation: {
-            type: param.type || 'string',
-            description: param.description,
-          },
-        };
-      });
-    }
-
-    // Body parameters
-    if (operation.parameters?.body) {
-      Object.entries(operation.parameters.body).forEach(([name, param]: [string, any]) => {
-        mappings[name] = {
-          type: 'body',
-          name,
-          required: param.required || false,
-          validation: param,
-        };
-      });
-    }
-
-    return mappings;
-  }
-
-  private generateBodyMapping(operation: Operation): any {
-    if (!operation.parameters?.body) {
+  /**
+   * Map the API's stored auth into a UTCP-spec auth descriptor.
+   *
+   * Returns the auth shape only — the API key, password, or client
+   * secret is replaced with a `{{...}}` template placeholder. The
+   * manual is served to anyone with gateway access, so leaking the
+   * raw secret would be a privilege-escalation path.
+   */
+  private buildApiAuth(api: Api): UtcpAuth | undefined {
+    const auth = api.authentication;
+    if (!auth || auth.type === 'none') {
       return undefined;
     }
 
-    return {
-      contentType: this.getContentType(operation),
-      template: JSON.stringify(operation.parameters.body, null, 2),
-      schema: {
-        type: 'object',
-        properties: operation.parameters.body,
-      },
-    };
+    switch (auth.type) {
+      case 'api_key': {
+        const varName = auth.config?.parameter || 'X-API-Key';
+        const location = (auth.config?.location || 'header') as 'header' | 'query' | 'cookie';
+        return {
+          auth_type: 'api_key',
+          api_key: `{{${api.id.toUpperCase()}_API_KEY}}`,
+          var_name: varName,
+          location,
+        };
+      }
+      case 'bearer':
+        return {
+          auth_type: 'api_key',
+          api_key: `Bearer {{${api.id.toUpperCase()}_TOKEN}}`,
+          var_name: 'Authorization',
+          location: 'header',
+        };
+      case 'basic':
+        return {
+          auth_type: 'basic',
+          username: `{{${api.id.toUpperCase()}_USERNAME}}`,
+          password: `{{${api.id.toUpperCase()}_PASSWORD}}`,
+        };
+      case 'oauth2':
+        return {
+          auth_type: 'oauth2',
+          client_id: `{{${api.id.toUpperCase()}_CLIENT_ID}}`,
+          client_secret: `{{${api.id.toUpperCase()}_CLIENT_SECRET}}`,
+          token_url: auth.config?.tokenUrl || '',
+          scope: auth.config?.scope,
+        };
+      default:
+        return undefined;
+    }
   }
 
-  // Extract authentication schemes
-  private async extractAuthenticationScheme(tool: Tool): Promise<UtcpAuthenticationScheme | null> {
-    if (!tool.operationId) {
-      return null;
+  /**
+   * Build a UTCP auth descriptor from a gateway's auth configuration.
+   * This is what the gateway requires from clients (NOT the API's auth)
+   * — used in the discovery payload so clients know how to call /execute.
+   */
+  buildGatewayAuth(gateway: Gateway): UtcpAuth[] {
+    const configs = gateway.authConfigs?.filter((a) => a.isActive) || [];
+    const result: UtcpAuth[] = [];
+    for (const cfg of configs) {
+      switch (cfg.type) {
+        case GatewayAuthType.API_KEY: {
+          const varName = cfg.configuration?.keyHeader || 'x-api-key';
+          result.push({
+            auth_type: 'api_key',
+            api_key: `{{GATEWAY_${gateway.id.toUpperCase()}_API_KEY}}`,
+            var_name: varName,
+            location: 'header',
+          });
+          break;
+        }
+        case GatewayAuthType.BEARER_TOKEN:
+        case GatewayAuthType.JWT:
+          result.push({
+            auth_type: 'api_key',
+            api_key: `Bearer {{GATEWAY_${gateway.id.toUpperCase()}_TOKEN}}`,
+            var_name: 'Authorization',
+            location: 'header',
+          });
+          break;
+        case GatewayAuthType.BASIC_AUTH:
+          result.push({
+            auth_type: 'basic',
+            username: `{{GATEWAY_${gateway.id.toUpperCase()}_USERNAME}}`,
+            password: `{{GATEWAY_${gateway.id.toUpperCase()}_PASSWORD}}`,
+          });
+          break;
+        case GatewayAuthType.OAUTH2:
+          result.push({
+            auth_type: 'oauth2',
+            client_id: `{{GATEWAY_${gateway.id.toUpperCase()}_CLIENT_ID}}`,
+            client_secret: `{{GATEWAY_${gateway.id.toUpperCase()}_CLIENT_SECRET}}`,
+            token_url: cfg.configuration?.tokenUrl || '',
+            scope: cfg.configuration?.scope,
+          });
+          break;
+        case GatewayAuthType.NONE:
+        default:
+          break;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Discovery descriptor served at `.well-known/utcp`.
+   * Points clients at the manual and surfaces the gateway's auth
+   * requirements so they know what to send to /execute.
+   */
+  getDiscoveryInfo(opts: DiscoveryOptions): UtcpDiscoveryInfo {
+    const { gateway, baseUrl, orgSlug } = opts;
+    const manualUrl = gateway
+      ? `${baseUrl}/${orgSlug}${gateway.endpoint}/manual`
+      : `${baseUrl}/utcp/global/manual`;
+
+    const info: UtcpDiscoveryInfo = {
+      utcp_version: UTCP_VERSION,
+      manual_version: gateway
+        ? `${gateway.id}:${gateway.updatedAt?.toISOString?.() || ''}`
+        : 'global',
+      manual_url: manualUrl,
+      server: {
+        name: 'almyty',
+        version: UTCP_VERSION,
+        description: 'almyty UTCP gateway',
+      },
+    };
+
+    if (gateway) {
+      const auths = this.buildGatewayAuth(gateway);
+      if (auths.length === 1) {
+        info.auth = auths[0];
+      } else if (auths.length > 1) {
+        info.auth = auths;
+      }
     }
 
-    const operation = await this.operationRepository.findOne({
-      where: { id: tool.operationId },
-      relations: ['api'],
-    });
+    return info;
+  }
 
-    if (!operation?.api?.authentication || operation.api.authentication.type === 'none') {
+  // UTCP Tool Execution (Proxy Mode — almyty extension)
+  async executeUtcpTool(
+    context: UtcpExecutionContext,
+    organizationId: string,
+    userId?: string,
+  ): Promise<UtcpExecutionResult> {
+    const startTime = Date.now();
+
+    try {
+      const result: ToolExecutionResult = await this.toolExecutorService.executeTool(
+        context.toolId,
+        context.parameters,
+        {
+          userId: userId || 'utcp-client',
+          organizationId,
+          timeout: context.options?.timeout,
+          retries: context.options?.retries,
+          skipCache: context.options?.skipCache,
+        },
+      );
+
       return {
-        id: 'none',
-        name: 'No Authentication',
-        type: 'none',
-        description: 'No authentication required',
-        configuration: {},
+        success: result.success,
+        data: result.data,
+        error: result.error
+          ? {
+              code: 'EXECUTION_ERROR',
+              message: result.error,
+              details: result.metadata,
+            }
+          : undefined,
+        metadata: {
+          executionTime: result.executionTime,
+          toolId: context.toolId,
+          requestId: this.requestId(),
+          timestamp: new Date().toISOString(),
+          cached: result.cached,
+          retryCount: result.retryCount,
+        },
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: error?.message || 'unknown error',
+        },
+        metadata: {
+          executionTime: Date.now() - startTime,
+          toolId: context.toolId,
+          requestId: this.requestId(),
+          timestamp: new Date().toISOString(),
+        },
       };
     }
-
-    const auth = operation.api.authentication;
-
-    return {
-      id: `auth_${operation.api.id}`,
-      name: `${operation.api.name} Authentication`,
-      type: auth.type as any,
-      description: `Authentication scheme for ${operation.api.name} API`,
-      configuration: {
-        location: auth.config.location || 'header',
-        parameter: auth.config.parameter || this.getDefaultAuthParameter(auth.type),
-        scheme: auth.config.scheme || this.getDefaultAuthScheme(auth.type),
-        // Do NOT spread auth.config under a `custom` key here.
-        // auth.config can contain the real secret for the API —
-        // apiKey, token, password, clientSecret — and the UTCP
-        // manual is returned verbatim to any org member who hits
-        // GET /utcp/:orgId/manual (and gets cached in Redis for
-        // 5 min). Leaking full credentials to every member is a
-        // privilege-escalation path. The other fields on
-        // configuration (location/parameter/scheme) describe HOW
-        // to authenticate, which is what UTCP consumers need; the
-        // secret value itself should only be surfaced through the
-        // credentials endpoints (which mask it).
-      },
-      examples: [
-        {
-          name: 'Example Usage',
-          description: `How to use ${auth.type} authentication`,
-          value: this.generateAuthExample(auth),
-        },
-      ],
-    };
   }
 
-  // Utility methods
+  // ─── Helpers ────────────────────────────────────────────────────
+
   private extractToolTags(tool: Tool): string[] {
-    const tags = ['ai-tool'];
-    
-    if (tool.metadata?.sourceApi?.type) {
-      tags.push(tool.metadata.sourceApi.type);
-    }
-    
-    if (tool.metadata?.autoGenerated) {
-      tags.push('auto-generated');
-    }
-    
+    const tags: string[] = [];
+    if (tool.metadata?.sourceApi?.type) tags.push(tool.metadata.sourceApi.type);
+    if (tool.metadata?.autoGenerated) tags.push('auto-generated');
     return tags;
   }
 
-  private async generateToolExamples(tool: Tool): Promise<any[]> {
-    // Generate examples based on tool parameters
-    const examples = [];
-    
-    if (tool.parameters && tool.parameters.properties) {
-      const exampleInput: Record<string, any> = {};
-      
-      Object.entries(tool.parameters.properties).forEach(([key, schema]: [string, any]) => {
-        exampleInput[key] = this.generateExampleValue(schema);
-      });
-
-      examples.push({
-        name: 'Basic Usage',
-        description: `Example usage of ${tool.name}`,
-        input: exampleInput,
-        notes: 'This example shows typical parameter values',
-      });
-    }
-    
-    return examples;
-  }
-
-  private generateExampleValue(schema: any): any {
-    switch (schema.type) {
-      case 'string':
-        return schema.example || 'example-value';
-      case 'number':
-      case 'integer':
-        return schema.example || 42;
-      case 'boolean':
-        return schema.example || true;
-      case 'array':
-        return schema.example || ['example-item'];
-      case 'object':
-        return schema.example || { key: 'value' };
-      default:
-        return schema.example || 'example';
-    }
-  }
-
   private getContentType(operation: Operation): string {
-    switch (operation.method) {
+    switch (operation.method?.toUpperCase()) {
       case 'GET':
       case 'DELETE':
+      case 'HEAD':
         return 'application/json';
       case 'POST':
       case 'PUT':
@@ -427,238 +425,7 @@ export class UtcpService {
     }
   }
 
-  private getAuthParameter(auth: any): string {
-    switch (auth.type) {
-      case 'bearer':
-        return 'Authorization';
-      case 'basic':
-        return 'Authorization';
-      case 'api_key':
-        return auth.config.parameter || 'X-API-Key';
-      default:
-        return 'Authorization';
-    }
-  }
-
-  private getAuthTemplate(auth: any): string {
-    switch (auth.type) {
-      case 'bearer':
-        return 'Bearer {token}';
-      case 'basic':
-        return 'Basic {credentials}';
-      case 'api_key':
-        return '{api_key}';
-      case 'oauth2':
-        return 'Bearer {access_token}';
-      default:
-        return '{auth_value}';
-    }
-  }
-
-  private getDefaultAuthParameter(type: string): string {
-    switch (type) {
-      case 'bearer':
-      case 'basic':
-      case 'oauth2':
-        return 'Authorization';
-      case 'api_key':
-        return 'X-API-Key';
-      default:
-        return 'Authorization';
-    }
-  }
-
-  private getDefaultAuthScheme(type: string): string {
-    switch (type) {
-      case 'bearer':
-        return 'Bearer';
-      case 'basic':
-        return 'Basic';
-      case 'oauth2':
-        return 'Bearer';
-      default:
-        return '';
-    }
-  }
-
-  private generateAuthExample(auth: any): string {
-    switch (auth.type) {
-      case 'bearer':
-        return 'Authorization: Bearer your_token_here';
-      case 'basic':
-        return 'Authorization: Basic base64(username:password)';
-      case 'api_key':
-        return `${auth.config.parameter || 'X-API-Key'}: your_api_key_here`;
-      case 'oauth2':
-        return 'Authorization: Bearer your_oauth_token_here';
-      default:
-        return 'Authentication required';
-    }
-  }
-
-  // UTCP Tool Execution (Proxy Mode)
-  async executeUtcpTool(
-    context: UtcpExecutionContext,
-    organizationId: string,
-  ): Promise<UtcpExecutionResult> {
-    const startTime = Date.now();
-
-    try {
-      // Execute using our existing tool executor
-      const result: ToolExecutionResult = await this.toolExecutorService.executeTool(
-        context.toolId,
-        context.parameters,
-        {
-          userId: 'utcp-client',
-          organizationId,
-          timeout: context.options?.timeout,
-          retries: context.options?.retries,
-          skipCache: context.options?.skipCache,
-        }
-      );
-
-      return {
-        success: result.success,
-        data: result.data,
-        error: result.error ? {
-          code: 'EXECUTION_ERROR',
-          message: result.error,
-          details: result.metadata,
-        } : undefined,
-        metadata: {
-          executionTime: result.executionTime,
-          toolId: context.toolId,
-          callTemplateId: context.callTemplateId,
-          requestId: `utcp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          timestamp: new Date().toISOString(),
-          cached: result.cached,
-          retryCount: result.retryCount,
-        },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: error.message,
-        },
-        metadata: {
-          executionTime: Date.now() - startTime,
-          toolId: context.toolId,
-          callTemplateId: context.callTemplateId,
-          requestId: `utcp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          timestamp: new Date().toISOString(),
-        },
-      };
-    }
-  }
-
-  // Get UTCP Discovery Information
-  getDiscoveryInfo(organizationId: string): UtcpDiscoveryInfo {
-    const baseUrl = process.env.BASE_URL || 'http://localhost:4000';
-    
-    return {
-      protocol: 'utcp',
-      version: this.version,
-      server: {
-        name: 'almyty',
-        version: '1.0.0',
-        description: 'Universal API-to-AI Tool Translation Platform with UTCP support',
-        contact: {
-          name: 'almyty',
-          url: 'https://almyty.com',
-        },
-      },
-      endpoints: {
-        manual: `${baseUrl}/api/utcp/${organizationId}/manual`,
-        execute: `${baseUrl}/api/utcp/${organizationId}/execute`,
-        health: `${baseUrl}/api/utcp/health`,
-      },
-      capabilities: {
-        directCalling: true,
-        proxyMode: true,
-        authentication: ['none', 'api_key', 'bearer', 'basic', 'oauth2'],
-        protocols: ['http', 'websocket'],
-        formats: ['json', 'xml', 'yaml'],
-      },
-      experimental: {
-        almyty: {
-          universalApiTranslation: true,
-          supportedApiFormats: ['openapi', 'graphql', 'soap', 'protobuf'],
-          autoGeneration: true,
-        },
-      },
-    };
-  }
-
-  // Validate UTCP manual
-  async validateManual(manual: UtcpManual): Promise<{
-    isValid: boolean;
-    errors: string[];
-    warnings: string[];
-  }> {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    // Basic validation
-    if (!manual.version) {
-      errors.push('Manual version is required');
-    }
-
-    if (!manual.info?.title) {
-      errors.push('Manual title is required');
-    }
-
-    if (!manual.tools || manual.tools.length === 0) {
-      warnings.push('No tools defined in manual');
-    }
-
-    // Validate each tool
-    for (const tool of manual.tools || []) {
-      if (!tool.id) {
-        errors.push(`Tool missing ID: ${tool.name}`);
-      }
-      
-      if (!tool.name) {
-        errors.push(`Tool missing name: ${tool.id}`);
-      }
-      
-      if (!tool.inputSchema) {
-        warnings.push(`Tool ${tool.name} missing input schema`);
-      }
-    }
-
-    // Validate call templates
-    for (const template of manual.callTemplates || []) {
-      if (!template.id) {
-        errors.push(`Call template missing ID`);
-      }
-      
-      if (!template.endpoint?.url) {
-        errors.push(`Call template ${template.id} missing endpoint URL`);
-      }
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings,
-    };
-  }
-
-  // Get manual for specific tool
-  async getToolManual(toolId: string, organizationId: string): Promise<UtcpTool> {
-    const tool = await this.toolRepository.findOne({
-      where: { 
-        id: toolId,
-        organizationId,
-      },
-    });
-
-    if (!tool) {
-      throw new NotFoundException('Tool not found');
-    }
-
-    return this.convertToolToUtcp(tool);
+  private requestId(): string {
+    return `utcp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   }
 }
