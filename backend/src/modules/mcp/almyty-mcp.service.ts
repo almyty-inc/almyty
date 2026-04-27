@@ -15,8 +15,9 @@ import { LlmProvidersService } from '../llm-providers/llm-providers.service';
 
 const TOOLS = [
   { name: 'list_apis', description: 'List all connected APIs', inputSchema: { type: 'object', properties: {} } },
-  { name: 'create_api', description: 'Connect a new API', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] }, baseUrl: { type: 'string' } }, required: ['name', 'type'] } },
-  { name: 'import_schema', description: 'Import schema + generate tools (async — returns a jobId)', inputSchema: { type: 'object', properties: { apiId: { type: 'string' }, schemaUrl: { type: 'string' }, generateTools: { type: 'boolean' } }, required: ['apiId', 'schemaUrl'] } },
+  { name: 'create_api', description: 'Connect a new API. Pass `authentication` to set auth (e.g. {type:"api_key",config:{parameter:"X-Key",location:"header",apiKey:"..."}}).', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] }, baseUrl: { type: 'string' }, authentication: { type: 'object', description: 'API auth: {type, config}', additionalProperties: true } }, required: ['name', 'type'] } },
+  { name: 'update_api', description: 'Update an existing API. Use to change baseUrl, headers, authentication, or rateLimits without deleting.', inputSchema: { type: 'object', properties: { apiId: { type: 'string' }, name: { type: 'string' }, baseUrl: { type: 'string' }, headers: { type: 'object', additionalProperties: true }, authentication: { type: 'object', description: 'API auth: {type, config}', additionalProperties: true }, rateLimits: { type: 'object', additionalProperties: true } }, required: ['apiId'] } },
+  { name: 'import_schema', description: 'Import schema + generate tools (async — returns a jobId). Pass either schemaUrl OR schemaContent.', inputSchema: { type: 'object', properties: { apiId: { type: 'string' }, schemaUrl: { type: 'string' }, schemaContent: { type: 'string', description: 'Inline schema content (use instead of schemaUrl)' }, generateTools: { type: 'boolean' } }, required: ['apiId'] } },
   { name: 'check_import_status', description: 'Check the status of a schema import job', inputSchema: { type: 'object', properties: { jobId: { type: 'string', description: 'Job ID returned by import_schema' } }, required: ['jobId'] } },
   { name: 'delete_api', description: 'Delete an API by ID', inputSchema: { type: 'object', properties: { apiId: { type: 'string', description: 'API ID to delete' } }, required: ['apiId'] } },
   { name: 'list_tools', description: 'List all tools', inputSchema: { type: 'object', properties: {} } },
@@ -82,11 +83,18 @@ export class AlmytyMcpService {
       }
       case 'create_api': return get(ApisService).create({ ...args, organizationId: orgId, userId });
       case 'import_schema': {
-        // Fetch schema content from URL
-        const schemaRes = await axios.get(args.schemaUrl, { timeout: 30000 });
-        const content = typeof schemaRes.data === 'string' ? schemaRes.data : JSON.stringify(schemaRes.data);
-        // Queue async import via BullMQ (same as the REST API does)
-        const { Queue } = require('bull');
+        // Either schemaContent or schemaUrl must be supplied. Inline
+        // content is the path callers want when they're crafting a
+        // throwaway schema in-process; URL is the more common one.
+        let content: string;
+        if (args.schemaContent) {
+          content = String(args.schemaContent);
+        } else if (args.schemaUrl) {
+          const schemaRes = await axios.get(args.schemaUrl, { timeout: 30000 });
+          content = typeof schemaRes.data === 'string' ? schemaRes.data : JSON.stringify(schemaRes.data);
+        } else {
+          throw new Error('import_schema requires either schemaUrl or schemaContent');
+        }
         const queue = this.moduleRef.get('BullQueue_schema-import', { strict: false });
         const job = await queue.add('import', {
           apiId: args.apiId,
@@ -95,6 +103,11 @@ export class AlmytyMcpService {
           options: { generateTools: args.generateTools !== false },
         }, { timeout: 5 * 60 * 1000, removeOnComplete: 100, removeOnFail: 50 });
         return { jobId: job.id, status: 'queued', message: `Schema import queued (job ${job.id}). Tools will be generated in the background.` };
+      }
+      case 'update_api': {
+        const { apiId, ...patch } = args;
+        const updated = await get(ApisService).update(apiId, patch, orgId);
+        return { id: updated.id, name: updated.name, baseUrl: updated.baseUrl, authentication: updated.authentication };
       }
       case 'check_import_status': {
         const queue = this.moduleRef.get('BullQueue_schema-import', { strict: false });
