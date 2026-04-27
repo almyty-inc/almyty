@@ -191,8 +191,11 @@ describe('OpenAPIParserService — Petstore fixture', () => {
     await expect(parser.parseSchema('{not-json')).rejects.toThrow();
   });
 
-  it('refuses a schema larger than the 5 MB cap', async () => {
-    const huge = 'x'.repeat(6 * 1024 * 1024);
+  it('refuses a schema larger than the 100 MB cap', async () => {
+    // Cap was raised 5 MB → 100 MB so real-world specs (Stripe ~7.7 MB,
+    // GitHub REST ~12 MB, AWS-class ~30 MB) can import. The size guard
+    // still exists — just at a higher threshold. 101 MB triggers it.
+    const huge = 'x'.repeat(101 * 1024 * 1024);
     await expect(parser.parseSchema(huge)).rejects.toThrow(/max size/);
   });
 });
