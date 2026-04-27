@@ -407,9 +407,18 @@ export class ApisService {
 
       let generatedTools: Tool[] = [];
 
-      // Generate tools if requested
+      // Generate tools if requested. Pass the just-saved operations
+      // explicitly: generateToolsFromApi otherwise re-queries via
+      // findOne on a connection from the default pool, which can't
+      // see this transaction's uncommitted operation rows and would
+      // throw 'No operations found'. Wrapping the import in a
+      // transaction (commit 3a7988b) introduced this regression.
       if (options.generateTools) {
-        generatedTools = await this.generateToolsFromApi(apiId, organizationId);
+        generatedTools = await this.generateToolsFromApi(
+          apiId,
+          organizationId,
+          savedOperations as Operation[],
+        );
       }
 
       await queryRunner.commitTransaction();
@@ -473,9 +482,16 @@ export class ApisService {
     }
   }
 
+  /**
+   * Generate tools for an API. When called inside an open transaction
+   * (e.g. during importSchema), pass `preloadedOperations` so we don't
+   * re-query for operations on a different connection that can't see
+   * the in-flight rows.
+   */
   async generateToolsFromApi(
     apiId: string,
     organizationId: string,
+    preloadedOperations?: Operation[],
   ): Promise<Tool[]> {
     const api = await this.findOne(apiId, organizationId);
 
@@ -483,19 +499,20 @@ export class ApisService {
       throw new NotFoundException('API not found');
     }
 
-    if (!api.operations || api.operations.length === 0) {
+    const operations = preloadedOperations ?? api.operations ?? [];
+    if (operations.length === 0) {
       throw new BadRequestException('No operations found for this API. Import a schema first.');
     }
 
     this.logger.log(`[TOOL-GEN] Starting PARALLEL tool generation for API ${api.name} (${apiId})`);
-    this.logger.log(`[TOOL-GEN] Found ${api.operations.length} operations to process`);
+    this.logger.log(`[TOOL-GEN] Found ${operations.length} operations to process`);
 
     let skippedInactive = 0;
     let skippedExisting = 0;
     let errorCount = 0;
 
     // Filter active operations first
-    const activeOperations = api.operations.filter(op => {
+    const activeOperations = operations.filter(op => {
       if (!op.isActive) {
         skippedInactive++;
         this.logger.log(`[TOOL-GEN] Skipping inactive operation: ${op.name}`);
@@ -545,7 +562,7 @@ export class ApisService {
     }
 
     this.logger.log(`[TOOL-GEN] Parallel tool generation complete for API ${api.name}:`);
-    this.logger.log(`[TOOL-GEN]   - Total operations: ${api.operations.length}`);
+    this.logger.log(`[TOOL-GEN]   - Total operations: ${operations.length}`);
     this.logger.log(`[TOOL-GEN]   - Tools generated: ${generatedTools.length}`);
     this.logger.log(`[TOOL-GEN]   - Skipped (inactive): ${skippedInactive}`);
     this.logger.log(`[TOOL-GEN]   - Skipped (existing): ${skippedExisting}`);
