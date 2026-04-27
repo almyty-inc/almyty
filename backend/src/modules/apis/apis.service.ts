@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, DataSource } from 'typeorm';
 import axios from 'axios';
+import { createHash } from 'crypto';
 
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
 import { ApiSchema, SchemaFormat } from '../../entities/api-schema.entity';
@@ -336,6 +337,7 @@ export class ApisService {
     schemaContent: string,
     organizationId: string,
     options: ImportSchemaOptions = {},
+    onProgress?: (pct: number) => void | Promise<void>,
   ): Promise<{ api: Api; schema: ApiSchema; operations: Operation[]; resources: Resource[]; tools?: Tool[] }> {
     const api = await this.findOne(apiId, organizationId);
 
@@ -423,7 +425,14 @@ export class ApisService {
       let generatedTools: Tool[] = [];
       if (options.generateTools) {
         try {
-          generatedTools = await this.generateToolsFromApi(apiId, organizationId);
+          generatedTools = await this.generateToolsFromApi(
+            apiId,
+            organizationId,
+            undefined,
+            onProgress
+              ? async (done, total) => onProgress(50 + Math.floor((done / Math.max(total, 1)) * 50))
+              : undefined,
+          );
         } catch (toolErr: any) {
           this.logger.error(
             `Tool generation failed after schema import for API ${apiId} (operations are committed; retry via /apis/${apiId}/generate-tools): ${toolErr.message}`,
@@ -508,6 +517,7 @@ export class ApisService {
     apiId: string,
     organizationId: string,
     preloadedOperations?: Operation[],
+    onBatchProgress?: (done: number, total: number) => void | Promise<void>,
   ): Promise<Tool[]> {
     const api = await this.findOne(apiId, organizationId);
 
@@ -575,6 +585,18 @@ export class ApisService {
         }),
       );
       generatedTools.push(...batchResults.filter(Boolean) as Tool[]);
+
+      // Heartbeat the host job (if any) every batch. The schema-import
+      // BullMQ processor passes onBatchProgress => job.progress(); a
+      // 7.7 MB Stripe spec generates 600+ tools and used to silently
+      // stall its job lock during this loop, killing the import.
+      if (onBatchProgress) {
+        try {
+          await onBatchProgress(Math.min(i + BATCH_SIZE, activeOperations.length), activeOperations.length);
+        } catch {
+          // progress reporting is best-effort
+        }
+      }
     }
 
     this.logger.log(`[TOOL-GEN] Parallel tool generation complete for API ${api.name}:`);
@@ -736,11 +758,19 @@ export class ApisService {
 
     const fullName = `${prefix}_${name}`;
 
-    // Truncate to 60 chars max
-    if (fullName.length > 60) {
-      return fullName.substring(0, 60).replace(/_[^_]*$/, '');
-    }
-    return fullName;
+    // The old behavior was truncate(60) then strip the last `_word`,
+    // which dropped the discriminator and silently collided distinct
+    // operations onto the same tool name. A real-world Google
+    // Translate proto import lost 22/38 operations to this. Replace
+    // the dropped suffix with a 6-char identity hash so the result
+    // stays under the 64-char ceiling and is deterministic per
+    // operation. Hash key is op identity (endpoint+method+name) so
+    // re-imports produce stable names.
+    const MAX = 64;
+    if (fullName.length <= MAX) return fullName;
+    const identity = `${operation.endpoint || ''}|${(operation.method || '').toUpperCase()}|${operation.operationId || operation.name || ''}`;
+    const hash = createHash('sha1').update(identity).digest('hex').slice(0, 6);
+    return `${fullName.substring(0, MAX - 7)}_${hash}`;
   }
 
   private applyAuthentication(config: any, authConfig: any): void {

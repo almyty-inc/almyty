@@ -97,6 +97,67 @@ describe('ApisService - tool generation', () => {
     expect(lastCall - firstCall).toBeGreaterThanOrEqual(20);
   });
 
+  it('generates UNIQUE tool names for distinct operations whose semantic name overflows 64 chars', async () => {
+    // Reproduces bug 11: a real Google Translate proto import lost
+    // 22/38 operations because the truncator kept the prefix and
+    // dropped the discriminator. Distinct ops collapsed to the same
+    // tool name, last-write-wins.
+    const apiRepo = (service as any).apiRepository;
+    apiRepo.findOne = jest.fn().mockResolvedValue({
+      id: 'api-1',
+      name: 'Real Google Translate Protobuf API',
+      type: ApiType.GRPC,
+      status: ApiStatus.ACTIVE,
+      organizationId: 'org-1',
+      operations: [],
+    });
+    const ops = [
+      { id: 'o1', name: 'TranslateText',          method: 'POST', endpoint: '/grpc/TranslateText',          operationId: 'TranslationService.TranslateText',          isActive: true },
+      { id: 'o2', name: 'TranslateDocument',      method: 'POST', endpoint: '/grpc/TranslateDocument',      operationId: 'TranslationService.TranslateDocument',      isActive: true },
+      { id: 'o3', name: 'BatchTranslateText',     method: 'POST', endpoint: '/grpc/BatchTranslateText',     operationId: 'TranslationService.BatchTranslateText',     isActive: true },
+      { id: 'o4', name: 'BatchTranslateDocument', method: 'POST', endpoint: '/grpc/BatchTranslateDocument', operationId: 'TranslationService.BatchTranslateDocument', isActive: true },
+      { id: 'o5', name: 'GetModel',               method: 'POST', endpoint: '/grpc/GetModel',               operationId: 'TranslationService.GetModel',               isActive: true },
+      { id: 'o6', name: 'GetAdaptiveMtFile',      method: 'POST', endpoint: '/grpc/GetAdaptiveMtFile',      operationId: 'TranslationService.GetAdaptiveMtFile',      isActive: true },
+    ] as any[];
+
+    await service.generateToolsFromApi('api-1', 'org-1', ops);
+
+    const names = (toolsService.createFromOperation as jest.Mock).mock.calls.map((c) => c[1].name);
+    expect(names).toHaveLength(6);
+    expect(new Set(names).size).toBe(6); // all distinct
+    for (const n of names) {
+      expect(n.length).toBeLessThanOrEqual(64);
+    }
+  });
+
+  it('calls onBatchProgress between tool-gen batches so a host BullMQ job can refresh its lock', async () => {
+    const apiRepo = (service as any).apiRepository;
+    apiRepo.findOne = jest.fn().mockResolvedValue({
+      id: 'api-1',
+      name: 'Test',
+      type: ApiType.OPENAPI,
+      status: ApiStatus.ACTIVE,
+      organizationId: 'org-1',
+      operations: [],
+    });
+    const ops = Array.from({ length: 12 }, (_, i) => ({
+      id: `op-${i}`,
+      name: `op_${i}`,
+      method: 'GET',
+      endpoint: `/p/${i}`,
+      isActive: true,
+    })) as any[];
+
+    const heartbeat = jest.fn();
+    await service.generateToolsFromApi('api-1', 'org-1', ops, heartbeat);
+
+    expect(heartbeat).toHaveBeenCalled();
+    // Last call should reach 100% of operations.
+    const lastCall = heartbeat.mock.calls[heartbeat.mock.calls.length - 1];
+    expect(lastCall[0]).toBe(12);
+    expect(lastCall[1]).toBe(12);
+  });
+
   it('uses preloadedOperations when supplied — must not fall through to api.operations (transaction-isolation regression)', async () => {
     // Simulate the importSchema call site: api.operations is empty
     // because the operations row was just saved in an open

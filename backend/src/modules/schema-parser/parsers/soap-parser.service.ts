@@ -144,8 +144,30 @@ export class SOAPParserService implements SchemaParser {
     const portTypes = definitions.portType || definitions['wsdl:portType'] || [];
     const portTypeArray = Array.isArray(portTypes) ? portTypes : [portTypes];
 
+    // A WSDL commonly declares the same operations across several
+    // portTypes — e.g. TempConvertSoap + TempConvertSoap12 +
+    // TempConvertHttpPost + TempConvertHttpGet — and we only want
+    // one tool per logical operation. Iterating every portType
+    // would produce N copies of each operation, all with the same
+    // name, which collide downstream during tool generation.
+    //
+    // Heuristic: prefer SOAP-flavoured portTypes; ignore HTTP
+    // GET/POST legacy bindings entirely (the user wouldn't reach
+    // for a SOAP API for plain HTTP). Within the kept portTypes,
+    // dedupe by operation name (first occurrence wins, which is
+    // the SOAP 1.1 binding when both are present).
+    const isSoapPortType = (pt: any): boolean => {
+      const name = (pt?.$?.name || '').toLowerCase();
+      // Only filter when the portType name explicitly signals an
+      // HTTP GET/POST legacy binding — bare names with no suffix
+      // are kept (some WSDLs don't flag the SOAP portType at all).
+      return !/\b(httpget|httppost)\b|httpget$|httppost$/.test(name);
+    };
+    const seen = new Set<string>();
+
     for (const portType of portTypeArray) {
       if (!portType) continue;
+      if (!isSoapPortType(portType)) continue;
 
       const operationsArray = portType.operation || portType['wsdl:operation'] || [];
       const operations_list = Array.isArray(operationsArray) ? operationsArray : [operationsArray];
@@ -154,6 +176,8 @@ export class SOAPParserService implements SchemaParser {
         if (!op || !op.$) continue;
 
         const operationName = op.$.name;
+        if (seen.has(operationName)) continue;
+        seen.add(operationName);
         const documentation = op.documentation || op['wsdl:documentation'];
 
         operations.push({
