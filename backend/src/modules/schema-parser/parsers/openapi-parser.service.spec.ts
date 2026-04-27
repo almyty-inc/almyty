@@ -217,7 +217,10 @@ describe('OpenAPIParserService', () => {
       expect(result.metadata.servers[0].url).toBe('https://api.example.com');
       expect(result.metadata.tags).toHaveLength(1);
       expect(result.metadata.fileName).toBe('test-api.json');
-      expect(result.metadata.originalSchema).toBeDefined();
+      // originalSchema deliberately not retained — see parser
+      // comment: keeping the parsed object on metadata doubled
+      // the import's peak memory.
+      expect((result.metadata as any).originalSchema).toBeUndefined();
     });
 
     it('should handle minimal OpenAPI schema', async () => {
@@ -256,21 +259,27 @@ describe('OpenAPIParserService', () => {
       await expect(service.parseSchema(invalidJson)).rejects.toThrow('Invalid OpenAPI schema');
     });
 
-    it('should handle invalid OpenAPI schema', async () => {
-      // `@apidevtools/swagger-parser` v12 silently upgrades Swagger 2.0
-      // to OpenAPI 3.0, so the old fixture stopped rejecting. Pin to an
-      // unsupported version instead — the parser still rejects anything
-      // outside the 3.0.x / 3.1.x range.
-      const invalidSchema = JSON.stringify({
-        openapi: '9.9.9', // Unsupported version
-        info: {
-          title: 'Invalid API',
-          version: '1.0.0',
+    it('rejects schemas containing external $refs (SSRF / file-read protection)', async () => {
+      // We dropped SwaggerParser.dereference (it deep-cloned every $ref
+      // and was the dominant cause of the 7.7 MB Stripe import OOM),
+      // so the implicit "valid OpenAPI version" validation it did is
+      // also gone. The version check was incidental; what we MUST
+      // still enforce is the SSRF guard against external $refs.
+      const externalRefSchema = JSON.stringify({
+        openapi: '3.0.0',
+        info: { title: 'Sneaky', version: '1.0.0' },
+        paths: {
+          '/x': {
+            get: {
+              parameters: [
+                { $ref: 'http://attacker.example/leak.json' },
+              ],
+              responses: { '200': { description: 'ok' } },
+            },
+          },
         },
-        paths: {},
       });
-
-      await expect(service.parseSchema(invalidSchema)).rejects.toThrow('Invalid OpenAPI schema');
+      await expect(service.parseSchema(externalRefSchema)).rejects.toThrow(/External \$ref blocked/);
     });
   });
 
@@ -448,7 +457,7 @@ describe('OpenAPIParserService', () => {
         },
       ];
 
-      const result = service['extractParameters'](parameters as any);
+      const result = service['extractParameters'](parameters as any, undefined, {} as any);
 
       expect(result.path.userId).toEqual({
         type: 'string',
@@ -475,7 +484,7 @@ describe('OpenAPIParserService', () => {
         },
       ];
 
-      const result = service['extractParameters'](parameters as any);
+      const result = service['extractParameters'](parameters as any, undefined, {} as any);
 
       expect(result.query.limit.type).toBe('integer');
       expect(result.query.offset.type).toBe('integer');
@@ -498,7 +507,7 @@ describe('OpenAPIParserService', () => {
         },
       };
 
-      const result = service['extractParameters'](undefined, requestBody as any);
+      const result = service['extractParameters'](undefined, requestBody as any, {} as any);
 
       expect(result.body.contentType).toBe('application/json');
       expect(result.body.required).toBe(true);
@@ -523,7 +532,7 @@ describe('OpenAPIParserService', () => {
         },
       ];
 
-      const result = service['extractParameters'](parameters as any);
+      const result = service['extractParameters'](parameters as any, undefined, {} as any);
 
       expect(result.header.Authorization).toEqual({
         type: 'string',
@@ -546,7 +555,7 @@ describe('OpenAPIParserService', () => {
         },
       };
 
-      const result = service['extractExamplesFromContent'](content as any);
+      const result = service['extractExamplesFromContent'](content as any, {} as any);
 
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({ id: '123', name: 'Test' });
@@ -577,7 +586,7 @@ describe('OpenAPIParserService', () => {
         },
       };
 
-      const result = service['extractResponses'](responses as any);
+      const result = service['extractResponses'](responses as any, {} as any);
 
       expect(result['200'].description).toBe('Success');
       expect(result['200'].schema).toEqual({

