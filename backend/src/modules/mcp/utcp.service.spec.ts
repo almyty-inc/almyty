@@ -75,7 +75,11 @@ describe('UtcpService — spec compliance', () => {
         .fn()
         .mockResolvedValue({ id: 'org-1', name: 'Test', updatedAt: new Date('2026-04-01T00:00:00Z') }),
     } as any;
-    gatewayToolRepo = { find: jest.fn() } as any;
+    // Default: gateway has the canonical fixture tool assigned. Specific
+    // tests override this when they want to exercise scoping.
+    gatewayToolRepo = {
+      find: jest.fn().mockResolvedValue([{ tool: buildTool(), isActive: true }]),
+    } as any;
     toolsService = { getTools: jest.fn() } as any;
     toolExecutor = { executeTool: jest.fn() } as any;
 
@@ -101,7 +105,7 @@ describe('UtcpService — spec compliance', () => {
       toolsService.getTools.mockResolvedValue({ tools: [buildTool()], total: 1 } as any);
       operationRepo.findOne.mockResolvedValue(buildOperation());
 
-      const manual = await service.generateManual({ organizationId: 'org-1' });
+      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
 
       expect(manual.utcp_version).toBe('1.0.0');
       expect(typeof manual.manual_version).toBe('string');
@@ -142,7 +146,7 @@ describe('UtcpService — spec compliance', () => {
       toolsService.getTools.mockResolvedValue({ tools: [buildTool()], total: 1 } as any);
       operationRepo.findOne.mockResolvedValue(buildOperation());
 
-      const manual = await service.generateManual({ organizationId: 'org-1' });
+      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
       const tool = manual.tools[0];
 
       expect(tool.name).toBe('open_meteo_forecast');
@@ -169,7 +173,7 @@ describe('UtcpService — spec compliance', () => {
         buildOperation({ method: HttpMethod.POST, endpoint: '/v1/predict' }),
       );
 
-      const manual = await service.generateManual({ organizationId: 'org-1' });
+      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
       const tmpl = manual.tools[0].tool_call_template as any;
 
       expect(tmpl.call_template_type).toBe('http');
@@ -199,7 +203,7 @@ describe('UtcpService — spec compliance', () => {
         }),
       );
 
-      const manual = await service.generateManual({ organizationId: 'org-1' });
+      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
       const auth = manual.tools[0].tool_call_template.auth as any;
 
       expect(auth.auth_type).toBe('api_key');
@@ -223,7 +227,7 @@ describe('UtcpService — spec compliance', () => {
         }),
       );
 
-      const manual = await service.generateManual({ organizationId: 'org-1' });
+      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
       const json = JSON.stringify(manual);
 
       expect(json).not.toContain('super-secret-real-key');
@@ -237,7 +241,7 @@ describe('UtcpService — spec compliance', () => {
         }),
       );
 
-      const manual = await service.generateManual({ organizationId: 'org-1' });
+      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
       expect(manual.tools[0].tool_call_template.auth).toBeUndefined();
     });
   });

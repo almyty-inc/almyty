@@ -61,6 +61,24 @@ describeIfDb('UTCP spec compliance (real Postgres)', () => {
   let gateway: Gateway;
 
   beforeAll(async () => {
+    // TypeORM's `dropSchema: true` is "drop the named schema, then
+    // synchronize", but synchronize tries to CREATE TABLE in that
+    // schema before re-creating the schema itself, so a clean DB
+    // (or a previous failed run that left the schema absent) blows
+    // up with `schema "utcp_spec_test" does not exist`. Pre-create
+    // it via a throwaway connection.
+    const bootstrap = new DataSource({
+      type: 'postgres',
+      host: process.env.DATABASE_HOST || '127.0.0.1',
+      port: Number(process.env.DATABASE_PORT || 5432),
+      username: process.env.DATABASE_USERNAME || 'postgres',
+      password: process.env.DATABASE_PASSWORD || '',
+      database: process.env.DATABASE_NAME || 'almyty_test',
+    });
+    await bootstrap.initialize();
+    await bootstrap.query('CREATE SCHEMA IF NOT EXISTS utcp_spec_test');
+    await bootstrap.destroy();
+
     ds = new DataSource({
       type: 'postgres',
       host: process.env.DATABASE_HOST || '127.0.0.1',
