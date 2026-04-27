@@ -204,8 +204,13 @@ export class UtcpService {
 
     switch (auth.type) {
       case 'api_key': {
-        const varName = auth.config?.parameter || 'X-API-Key';
-        const location = (auth.config?.location || 'header') as 'header' | 'query' | 'cookie';
+        // Same field-name fragmentation as ToolAuthService: read
+        // headerName / parameter / name in priority order so the
+        // descriptor stays accurate regardless of which call site
+        // wrote the row.
+        const c: Record<string, any> = auth.config || {};
+        const varName = c.headerName || c.parameter || c.name || 'X-API-Key';
+        const location = (c.location || 'header') as 'header' | 'query' | 'cookie';
         return {
           auth_type: 'api_key',
           api_key: `{{${api.id.toUpperCase()}_API_KEY}}`,
