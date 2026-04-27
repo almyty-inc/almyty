@@ -18,13 +18,21 @@ jest.mock('axios', () => ({
 describe('AlmytyMcpService', () => {
   let service: AlmytyMcpService;
 
-  const mockApisService = {
+  const mockApisService: any = {
     findAllByOrganization: jest.fn().mockResolvedValue({ apis: [], total: 0 }),
     create: jest.fn().mockResolvedValue({ id: 'api-1', name: 'Test' }),
     importSchema: jest.fn().mockResolvedValue({ api: {}, schema: {}, operations: [], resources: [], tools: [] }),
+    remove: jest.fn().mockResolvedValue(undefined),
   };
-  const mockToolsService = { getTools: jest.fn().mockResolvedValue({ tools: [], total: 0 }) };
-  const mockGatewaysService = { getGateways: jest.fn().mockResolvedValue({ gateways: [], total: 0 }), createGateway: jest.fn().mockResolvedValue({ id: 'gw-1' }) };
+  const mockToolsService: any = {
+    getTools: jest.fn().mockResolvedValue({ tools: [], total: 0 }),
+    deleteTool: jest.fn().mockResolvedValue(undefined),
+  };
+  const mockGatewaysService: any = {
+    getGateways: jest.fn().mockResolvedValue({ gateways: [], total: 0 }),
+    createGateway: jest.fn().mockResolvedValue({ id: 'gw-1' }),
+    deleteGateway: jest.fn().mockResolvedValue(undefined),
+  };
   const mockAgentsService = { getAgents: jest.fn().mockResolvedValue({ agents: [], total: 0 }), createAgent: jest.fn().mockResolvedValue({ id: 'agent-1' }) };
   const mockLlmProvidersService = { getProviders: jest.fn().mockResolvedValue([]), createProvider: jest.fn().mockResolvedValue({ id: 'prov-1' }) };
   const mockSchemaImportQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
@@ -228,6 +236,28 @@ describe('AlmytyMcpService', () => {
         { type: 'api_key', configuration: { keyHeader: 'x-api-key', keyQuery: 'api_key' } },
         'org-1',
       );
+    });
+
+    it('delete_gateway returns a serializable {deleted, gatewayId} (void Promise was producing invalid MCP content)', async () => {
+      mockGatewaysService.deleteGateway = jest.fn().mockResolvedValue(undefined);
+      const res = await call('tools/call', {
+        name: 'delete_gateway',
+        arguments: { gatewayId: 'gw-99' },
+      });
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed).toEqual({ deleted: true, gatewayId: 'gw-99' });
+      expect(mockGatewaysService.deleteGateway).toHaveBeenCalledWith('gw-99', 'org-1', 'user-1');
+    });
+
+    it('delete_tool and delete_api also return serializable confirmations (not undefined)', async () => {
+      mockToolsService.deleteTool = jest.fn().mockResolvedValue(undefined);
+      mockApisService.remove = jest.fn().mockResolvedValue(undefined);
+
+      const tRes = await call('tools/call', { name: 'delete_tool', arguments: { toolId: 't-1' } });
+      expect(JSON.parse(tRes.result.content[0].text)).toEqual({ deleted: true, toolId: 't-1' });
+
+      const aRes = await call('tools/call', { name: 'delete_api', arguments: { apiId: 'a-1' } });
+      expect(JSON.parse(aRes.result.content[0].text)).toEqual({ deleted: true, apiId: 'a-1' });
     });
 
     it('create_gateway defaults UTCP configuration to {protocol: http}', async () => {
