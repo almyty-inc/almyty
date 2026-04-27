@@ -1,6 +1,8 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import * as Redis from 'ioredis';
 
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
@@ -116,7 +118,26 @@ export class GatewayToolService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private readonly auditLogService: AuditLogService,
+    @InjectRedis() private readonly redis: Redis.Redis,
   ) {}
+
+  /**
+   * Drop the cached UTCP manual for a gateway. UtcpService caches
+   * the gateway-scoped manual at `utcp:manual:gw:<id>` for 5 minutes;
+   * any tool assignment / dissociation / activation change has to
+   * bust that key or the manual will lie about the gateway's tools
+   * for up to 5 min after the change.
+   *
+   * Best-effort — Redis being temporarily unreachable is non-fatal
+   * (the cached entry will TTL out).
+   */
+  private async invalidateUtcpManualCache(gatewayId: string): Promise<void> {
+    try {
+      await this.redis.del(`utcp:manual:gw:${gatewayId}`);
+    } catch (err: any) {
+      this.logger.warn(`Failed to invalidate UTCP manual cache for gw=${gatewayId}: ${err.message}`);
+    }
+  }
 
   async associateTool(
     gatewayId: string,
@@ -176,6 +197,7 @@ export class GatewayToolService {
       const savedAssociation = await this.gatewayToolRepository.save(gatewayTool);
 
       this.logger.log(`Tool '${tool.name}' associated with gateway '${gateway.name}'`);
+      await this.invalidateUtcpManualCache(gatewayId);
 
       // Audit log (fire-and-forget)
       this.auditLogService.log({ organizationId, userId, action: AuditAction.TOOL_ASSIGN, resourceType: AuditResource.GATEWAY, resourceId: gatewayId, resourceName: gateway.name, details: { toolId: tool.id, toolName: tool.name } });
@@ -220,6 +242,7 @@ export class GatewayToolService {
       const updatedAssociation = await this.gatewayToolRepository.save(gatewayTool);
 
       this.logger.log(`Gateway tool association ${gatewayToolId} updated`);
+      await this.invalidateUtcpManualCache(gatewayTool.gatewayId);
 
       return updatedAssociation;
 
@@ -257,6 +280,7 @@ export class GatewayToolService {
       await this.gatewayToolRepository.remove(gatewayTool);
 
       this.logger.log(`Tool '${gatewayTool.tool.name}' dissociated from gateway '${gatewayTool.gateway.name}'`);
+      await this.invalidateUtcpManualCache(gatewayTool.gatewayId);
 
       // Audit log (fire-and-forget)
       this.auditLogService.log({ organizationId, userId, action: AuditAction.TOOL_REMOVE, resourceType: AuditResource.GATEWAY, resourceId: gatewayTool.gateway.id, resourceName: gatewayTool.gateway.name, details: { toolId: gatewayTool.tool.id, toolName: gatewayTool.tool.name } });
@@ -354,6 +378,10 @@ export class GatewayToolService {
         `Bulk association completed for gateway '${gateway.name}': ` +
         `${associated.length} associated, ${skipped.length} skipped`
       );
+
+      if (associated.length > 0) {
+        await this.invalidateUtcpManualCache(gatewayId);
+      }
 
       return { associated, skipped };
 
@@ -514,6 +542,7 @@ export class GatewayToolService {
     const updatedGatewayTool = await this.gatewayToolRepository.save(gatewayTool);
 
     this.logger.log(`Gateway tool ${gatewayToolId} activated`);
+    await this.invalidateUtcpManualCache(gatewayTool.gatewayId);
 
     return updatedGatewayTool;
   }
@@ -543,6 +572,7 @@ export class GatewayToolService {
     const updatedGatewayTool = await this.gatewayToolRepository.save(gatewayTool);
 
     this.logger.log(`Gateway tool ${gatewayToolId} deactivated`);
+    await this.invalidateUtcpManualCache(gatewayTool.gatewayId);
 
     return updatedGatewayTool;
   }
@@ -721,6 +751,10 @@ export class GatewayToolService {
         `${copied.length} copied, ${skipped.length} skipped`
       );
 
+      if (copied.length > 0) {
+        await this.invalidateUtcpManualCache(targetGatewayId);
+      }
+
       return { copied, skipped };
 
     } catch (error) {
@@ -756,6 +790,7 @@ export class GatewayToolService {
       await this.gatewayToolRepository.remove(gatewayTool);
 
       this.logger.log(`Removed tool ${toolId} from gateway ${gatewayId}`);
+      await this.invalidateUtcpManualCache(gatewayId);
 
       // Audit log (fire-and-forget)
       this.auditLogService.log({ organizationId, userId: undefined, action: AuditAction.TOOL_REMOVE, resourceType: AuditResource.GATEWAY, resourceId: gatewayId, resourceName: gateway.name, details: { toolId } });
@@ -783,6 +818,7 @@ export class GatewayToolService {
       await this.gatewayToolRepository.delete({ gatewayId });
 
       this.logger.log(`Removed all tools from gateway ${gatewayId}`);
+      await this.invalidateUtcpManualCache(gatewayId);
     } catch (error) {
       this.logger.error(`Failed to remove all tools: ${error.message}`);
       throw error;
