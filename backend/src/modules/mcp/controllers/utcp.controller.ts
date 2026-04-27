@@ -4,224 +4,99 @@ import {
   Post,
   Body,
   Param,
-  Request,
+  Req,
   UseGuards,
+  Header,
+  Logger,
   HttpException,
   HttpStatus,
-  Logger,
-  Header,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { Request } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { UtcpService } from '../utcp.service';
-import { 
-  UtcpExecutionContext,
-  UtcpDiscoveryInfo,
-  UtcpManual,
-} from '../types/utcp.types';
+import { UtcpDiscoveryInfo, UtcpManual, UtcpExecutionContext } from '../types/utcp.types';
 
+/**
+ * Legacy global UTCP endpoints. The canonical surface is the unified
+ * gateway endpoint at `/{orgSlug}/{gatewaySlug}/{action}` — these
+ * routes serve a few static descriptors and an org-scoped manual
+ * for SDK / tooling that hasn't been pointed at the gateway yet.
+ */
 @Controller('utcp')
 export class UtcpController {
   private readonly logger = new Logger(UtcpController.name);
 
   constructor(private readonly utcpService: UtcpService) {}
 
-  // UTCP Discovery endpoint
   @Get('/.well-known/utcp')
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   @Header('Content-Type', 'application/json')
-  async discovery(): Promise<UtcpDiscoveryInfo> {
-    return this.utcpService.getDiscoveryInfo('global');
+  discovery(@Req() req: Request): UtcpDiscoveryInfo {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    return this.utcpService.getDiscoveryInfo({
+      organizationId: 'global',
+      baseUrl,
+      orgSlug: 'global',
+    });
   }
 
-  // Organization-specific discovery
-  @Get('/:organizationId/.well-known/utcp')
-  @UseGuards(JwtAuthGuard)
+  @Get('/capabilities')
   @Header('Content-Type', 'application/json')
-  async organizationDiscovery(
-    @Param('organizationId') organizationId: string,
-    @Request() req,
-  ): Promise<UtcpDiscoveryInfo> {
-    // Verify access to organization
-    if (req.user?.currentOrganizationId !== organizationId) {
-      throw new HttpException('Access denied', HttpStatus.FORBIDDEN);
-    }
-
-    return this.utcpService.getDiscoveryInfo(organizationId);
+  capabilities() {
+    return {
+      protocol: 'utcp',
+      utcp_version: '1.0.0',
+      server: 'almyty',
+      capabilities: {
+        manualGeneration: true,
+        proxyMode: true,
+        authenticationSchemes: ['none', 'api_key', 'basic', 'oauth2'],
+        protocols: ['http'],
+        formats: ['json'],
+        apiFormats: ['openapi', 'graphql', 'soap', 'protobuf'],
+      },
+    };
   }
 
-  // Get UTCP Manual (the core UTCP feature)
+  /**
+   * Health response stays minimal. `process.uptime()` and timestamps
+   * leak deploy timing to anonymous callers, which helps attackers
+   * align attempts with rolling restarts.
+   */
+  @Get('/health')
+  health() {
+    return {
+      protocol: 'utcp',
+      status: 'healthy',
+      utcp_version: '1.0.0',
+    };
+  }
+
   @Get('/:organizationId/manual')
   @UseGuards(JwtAuthGuard)
   @Header('Content-Type', 'application/json')
   async getManual(
     @Param('organizationId') organizationId: string,
-    @Request() req,
+    @Req() req: any,
   ): Promise<UtcpManual> {
-    // Verify access to organization
     if (req.user?.currentOrganizationId !== organizationId) {
       throw new HttpException('Access denied', HttpStatus.FORBIDDEN);
     }
-
-    const manual = await this.utcpService.generateManual(organizationId);
-    
-    this.logger.log(`UTCP manual generated for org ${organizationId}: ${manual.tools.length} tools, ${manual.callTemplates.length} templates`);
-    
-    return manual;
+    return this.utcpService.generateManual({ organizationId });
   }
 
-  // Get manual for specific tool
-  @Get('/:organizationId/tools/:toolId/manual')
-  @UseGuards(JwtAuthGuard)
-  @Header('Content-Type', 'application/json')
-  async getToolManual(
-    @Param('organizationId') organizationId: string,
-    @Param('toolId') toolId: string,
-    @Request() req,
-  ) {
-    // Verify access to organization
-    if (req.user?.currentOrganizationId !== organizationId) {
-      throw new HttpException('Access denied', HttpStatus.FORBIDDEN);
-    }
-
-    return this.utcpService.getToolManual(toolId, organizationId);
-  }
-
-  // Execute tool via UTCP (Proxy Mode)
   @Post('/:organizationId/execute')
   @UseGuards(JwtAuthGuard)
   @Header('Content-Type', 'application/json')
-  async executeUtcpTool(
+  async execute(
     @Param('organizationId') organizationId: string,
     @Body() context: UtcpExecutionContext,
-    @Request() req,
+    @Req() req: any,
   ) {
-    // Verify access to organization
     if (req.user?.currentOrganizationId !== organizationId) {
       throw new HttpException('Access denied', HttpStatus.FORBIDDEN);
     }
-
-    this.logger.debug(`UTCP tool execution: ${context.toolId} for org ${organizationId}`);
-
-    return this.utcpService.executeUtcpTool(context, organizationId);
-  }
-
-  // Validate UTCP manual
-  @Post('/:organizationId/validate')
-  @UseGuards(JwtAuthGuard)
-  async validateManual(
-    @Param('organizationId') organizationId: string,
-    @Body() manual: UtcpManual,
-    @Request() req,
-  ) {
-    // Verify access to organization
-    if (req.user?.currentOrganizationId !== organizationId) {
-      throw new HttpException('Access denied', HttpStatus.FORBIDDEN);
-    }
-
-    return this.utcpService.validateManual(manual);
-  }
-
-  // Get UTCP capabilities
-  @Get('/capabilities')
-  @Header('Content-Type', 'application/json')
-  async getCapabilities() {
-    return {
-      protocol: 'utcp',
-      version: '1.0.0',
-      server: 'almyty',
-      capabilities: {
-        manualGeneration: true,
-        directCalling: true,
-        proxyMode: true,
-        authenticationSchemes: ['none', 'api_key', 'bearer', 'basic', 'oauth2'],
-        protocols: ['http', 'websocket'],
-        formats: ['json', 'xml', 'yaml'],
-        apiFormats: ['openapi', 'graphql', 'soap', 'protobuf'],
-      },
-      features: {
-        manualGeneration: true,
-        directCalling: true,
-        autoToolGeneration: true,
-        multiProtocolOutput: true,
-        organizationIsolation: true,
-      },
-    };
-  }
-
-  // Health check. Previously leaked process.uptime() to any
-  // anonymous caller — uptime is platform-operator info that
-  // helps attackers time their attempts around deploys. Strip
-  // the response to a minimal liveness shape.
-  @Get('/health')
-  async health() {
-    return {
-      protocol: 'utcp',
-      status: 'healthy',
-      version: '1.0.0',
-    };
-  }
-
-  // Export manual as different formats
-  @Get('/:organizationId/manual/export/:format')
-  @UseGuards(JwtAuthGuard)
-  async exportManual(
-    @Param('organizationId') organizationId: string,
-    @Param('format') format: 'json' | 'yaml' | 'markdown',
-    @Request() req,
-  ) {
-    // Verify access to organization
-    if (req.user?.currentOrganizationId !== organizationId) {
-      throw new HttpException('Access denied', HttpStatus.FORBIDDEN);
-    }
-
-    const manual = await this.utcpService.generateManual(organizationId);
-
-    switch (format) {
-      case 'json':
-        return manual;
-        
-      case 'yaml':
-        // TODO: Convert to YAML format
-        throw new HttpException('YAML export not implemented yet', HttpStatus.NOT_IMPLEMENTED);
-        
-      case 'markdown':
-        // TODO: Generate markdown documentation
-        throw new HttpException('Markdown export not implemented yet', HttpStatus.NOT_IMPLEMENTED);
-        
-      default:
-        throw new HttpException('Unsupported export format', HttpStatus.BAD_REQUEST);
-    }
-  }
-
-  // Get statistics about UTCP usage
-  @Get('/:organizationId/stats')
-  @UseGuards(JwtAuthGuard)
-  async getUtcpStats(
-    @Param('organizationId') organizationId: string,
-    @Request() req,
-  ) {
-    // Verify access to organization
-    if (req.user?.currentOrganizationId !== organizationId) {
-      throw new HttpException('Access denied', HttpStatus.FORBIDDEN);
-    }
-
-    const manual = await this.utcpService.generateManual(organizationId);
-
-    return {
-      organizationId,
-      manual: {
-        version: manual.version,
-        toolCount: manual.tools.length,
-        callTemplateCount: manual.callTemplates.length,
-        authSchemeCount: manual.authentication?.length || 0,
-      },
-      features: {
-        directCalling: manual.callTemplates.length,
-        proxyMode: manual.tools.length,
-        autoGenerated: manual.tools.filter(t => t.metadata?.autoGenerated).length,
-      },
-      generatedAt: manual.metadata?.generatedAt,
-    };
+    return this.utcpService.executeUtcpTool(context, organizationId, req.user?.id);
   }
 }
