@@ -68,6 +68,14 @@ describe('GatewayToolService', () => {
             getResourceHistory: jest.fn().mockResolvedValue([]),
           },
         },
+        {
+          // GatewayToolService now busts the UTCP manual Redis cache
+          // on every assignment / dissociation so the served manual
+          // is consistent with the gateway's tools. Tests provide a
+          // stub Redis that records the del calls.
+          provide: 'default_IORedisModuleConnectionToken',
+          useValue: { del: jest.fn().mockResolvedValue(1) },
+        },
       ],
     }).compile();
 
@@ -76,6 +84,66 @@ describe('GatewayToolService', () => {
     gatewayRepository = module.get(getRepositoryToken(Gateway));
     toolRepository = module.get(getRepositoryToken(Tool));
     userRepository = module.get(getRepositoryToken(User));
+    redis = module.get('default_IORedisModuleConnectionToken');
+  });
+
+  let redis: any;
+
+  describe('UTCP manual cache invalidation', () => {
+    // Bug 9: the UTCP manual is Redis-cached for 5 min keyed by
+    // gatewayId. Every gateway-tool mutation must bust that key
+    // or clients see stale tools (or stale absences) for up to
+    // 5 minutes after a change.
+    const baseUser = { hasPermissionInOrganization: jest.fn().mockReturnValue(true) };
+
+    beforeEach(() => {
+      gatewayRepository.findOne.mockResolvedValue({ id: 'gw-1', organizationId: 'org-1', name: 'GW' });
+      userRepository.findOne.mockResolvedValue(baseUser);
+    });
+
+    it('busts the manual cache after associateTool', async () => {
+      toolRepository.findOne.mockResolvedValue({ id: 'tool-1', name: 't', status: ToolStatus.ACTIVE });
+      gatewayToolRepository.findOne.mockResolvedValue(null);
+      gatewayToolRepository.create.mockReturnValue({ id: 'gt-1', gatewayId: 'gw-1', toolId: 'tool-1' });
+      gatewayToolRepository.save.mockResolvedValue({ id: 'gt-1', gatewayId: 'gw-1', toolId: 'tool-1' });
+
+      await service.associateTool('gw-1', { toolId: 'tool-1' } as any, 'org-1', 'u-1');
+
+      expect(redis.del).toHaveBeenCalledWith('utcp:manual:gw:gw-1');
+    });
+
+    it('busts the manual cache after dissociateTool', async () => {
+      gatewayToolRepository.findOne.mockResolvedValue({
+        id: 'gt-1',
+        gatewayId: 'gw-1',
+        gateway: { id: 'gw-1', organizationId: 'org-1', name: 'GW' },
+        tool: { id: 'tool-1', name: 't' },
+      });
+
+      await service.dissociateTool('gt-1', 'org-1', 'u-1');
+
+      expect(redis.del).toHaveBeenCalledWith('utcp:manual:gw:gw-1');
+    });
+
+    it('busts the manual cache after activateGatewayTool / deactivateGatewayTool', async () => {
+      const gt = { id: 'gt-1', gatewayId: 'gw-1', isActive: false, gateway: { id: 'gw-1', organizationId: 'org-1' } };
+      gatewayToolRepository.findOne.mockResolvedValue(gt);
+      gatewayToolRepository.save.mockImplementation(async (x: any) => x);
+
+      await service.activateGatewayTool('gt-1', 'org-1', 'u-1');
+      expect(redis.del).toHaveBeenCalledWith('utcp:manual:gw:gw-1');
+
+      redis.del.mockClear();
+      gt.isActive = true;
+      await service.deactivateGatewayTool('gt-1', 'org-1', 'u-1');
+      expect(redis.del).toHaveBeenCalledWith('utcp:manual:gw:gw-1');
+    });
+
+    it('busts the manual cache after removeAllTools', async () => {
+      gatewayToolRepository.delete.mockResolvedValue({ affected: 5 });
+      await service.removeAllTools('gw-1', 'org-1');
+      expect(redis.del).toHaveBeenCalledWith('utcp:manual:gw:gw-1');
+    });
   });
 
   describe('associateTool', () => {

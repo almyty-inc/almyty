@@ -95,6 +95,10 @@ export interface UtcpDiscoveryInfo {
   utcp_version: string;
   manual_version: string;
   manual_url: string;
+  // Convenience hint so clients don't have to construct the URL by
+  // string-replacing /manual → /execute. Not part of the spec; UTCP
+  // SDKs ignore unknown fields, so this is purely additive.
+  execute_url: string;
   auth?: UtcpAuth | UtcpAuth[];
   server: {
     name: string;

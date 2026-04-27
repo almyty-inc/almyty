@@ -315,16 +315,13 @@ export class UtcpService {
    */
   getDiscoveryInfo(opts: DiscoveryOptions): UtcpDiscoveryInfo {
     const { gateway, baseUrl, orgSlug } = opts;
-    const manualUrl = gateway
-      ? `${baseUrl}/${orgSlug}${gateway.endpoint}/manual`
-      : `${baseUrl}/utcp/global/manual`;
+    const gatewayBase = `${baseUrl}/${orgSlug}${gateway.endpoint}`;
 
     const info: UtcpDiscoveryInfo = {
       utcp_version: UTCP_VERSION,
-      manual_version: gateway
-        ? `${gateway.id}:${gateway.updatedAt?.toISOString?.() || ''}`
-        : 'global',
-      manual_url: manualUrl,
+      manual_version: `${gateway.id}:${gateway.updatedAt?.toISOString?.() || ''}`,
+      manual_url: `${gatewayBase}/manual`,
+      execute_url: `${gatewayBase}/execute`,
       server: {
         name: 'almyty',
         version: UTCP_VERSION,
