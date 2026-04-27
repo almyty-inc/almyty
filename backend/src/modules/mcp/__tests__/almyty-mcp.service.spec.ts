@@ -230,6 +230,50 @@ describe('AlmytyMcpService', () => {
       );
     });
 
+    it('create_gateway defaults UTCP configuration to {protocol: http}', async () => {
+      await call('tools/call', {
+        name: 'create_gateway',
+        arguments: { name: 'My UTCP', type: 'utcp' },
+      });
+      expect(mockGatewaysService.createGateway).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'utcp',
+          configuration: { protocol: 'http' },
+        }),
+        'org-1',
+        'user-1',
+      );
+    });
+
+    it('create_gateway defaults MCP configuration to {transport: http}', async () => {
+      await call('tools/call', {
+        name: 'create_gateway',
+        arguments: { name: 'My MCP', type: 'mcp' },
+      });
+      expect(mockGatewaysService.createGateway).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'mcp',
+          configuration: { transport: 'http' },
+        }),
+        'org-1',
+        'user-1',
+      );
+    });
+
+    it('create_gateway respects explicit configuration override', async () => {
+      await call('tools/call', {
+        name: 'create_gateway',
+        arguments: { name: 'TCP UTCP', type: 'utcp', configuration: { protocol: 'tcp' } },
+      });
+      expect(mockGatewaysService.createGateway).toHaveBeenCalledWith(
+        expect.objectContaining({
+          configuration: { protocol: 'tcp' },
+        }),
+        'org-1',
+        'user-1',
+      );
+    });
+
     it('remove_auth_from_gateway passes (authId, orgId)', async () => {
       const res = await call('tools/call', {
         name: 'remove_auth_from_gateway',
