@@ -80,15 +80,28 @@ export class ToolAuthService {
         break;
       }
 
-      case 'api_key':
-        if (authConfig.config.location === 'header') {
-          (config.headers as Record<string, string>)[authConfig.config.name] =
-            authConfig.config.value;
-        } else if (authConfig.config.location === 'query') {
+      case 'api_key': {
+        // The api_key shape was never canonicalised: the frontend
+        // dialog writes {apiKey, headerName}, OpenAPI imports may
+        // populate {parameter, apiKey}, and the original tool
+        // executor expected {name, value}. Read all three so a
+        // mis-shaped row doesn't silently skip auth — the bug
+        // before this was that none of the wild shapes matched
+        // and api_key headers never got injected at all.
+        const c = authConfig.config || {};
+        const headerName: string | undefined =
+          c.headerName || c.parameter || c.name;
+        const value: string | undefined = c.apiKey || c.value || c.key;
+        const location: string = c.location || 'header';
+        if (!headerName || !value) break;
+        if (location === 'header') {
+          (config.headers as Record<string, string>)[headerName] = value;
+        } else if (location === 'query') {
           config.params = config.params || {};
-          config.params[authConfig.config.name] = authConfig.config.value;
+          config.params[headerName] = value;
         }
         break;
+      }
 
       case 'oauth2':
         if (authConfig.config.accessToken) {
