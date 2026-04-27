@@ -68,12 +68,21 @@ type Query { getUser(id: ID!): User }
 type Mutation { createUser(name: String!): User }
 `;
 
+// WSDL with two portTypes (SOAP + HttpPost) declaring the same
+// operations — mimics real-world WSDLs like w3schools' TempConvert.
+// The parser must dedupe to one operation per logical name, not
+// emit one per portType (bug 11a).
 const SAMPLE_WSDL = `<?xml version="1.0"?>
-<definitions xmlns="http://schemas.xmlsoap.org/wsdl/" name="UserService">
-  <portType name="UserPort">
-    <operation name="GetUser"/>
-  </portType>
-</definitions>`;
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" name="UserService">
+  <wsdl:portType name="UserSoap">
+    <wsdl:operation name="GetUser"/>
+    <wsdl:operation name="ListUsers"/>
+  </wsdl:portType>
+  <wsdl:portType name="UserHttpPost">
+    <wsdl:operation name="GetUser"/>
+    <wsdl:operation name="ListUsers"/>
+  </wsdl:portType>
+</wsdl:definitions>`;
 
 const SAMPLE_PROTO = `
 syntax = "proto3";
@@ -260,11 +269,16 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
     expect(result.tools!.length).toBeGreaterThan(0);
   });
 
-  it('imports a SOAP/WSDL schema and generates tools', async () => {
+  it('imports a SOAP/WSDL schema and generates tools — dedupes operations across portTypes (bug 11a)', async () => {
     const result = await importInto(ApiType.SOAP, SAMPLE_WSDL, 'https://example.com/soap');
-    expect(result.operations.length).toBeGreaterThan(0);
+    // Two portTypes × two ops = 4 candidates, but the parser must
+    // dedupe to two distinct logical operations.
+    const names = result.operations.map((o: any) => o.name).sort();
+    expect(names).toEqual(['GetUser', 'ListUsers']);
+
     expect(result.tools).toBeDefined();
-    expect(result.tools!.length).toBeGreaterThan(0);
+    const toolNames = result.tools!.map((t: any) => t.name);
+    expect(new Set(toolNames).size).toBe(toolNames.length); // unique
   });
 
   it('imports a Protobuf/gRPC schema and generates tools', async () => {
