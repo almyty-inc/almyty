@@ -6,7 +6,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { McpController } from './mcp.controller';
 import { McpTransportController } from './controllers/mcp-transport.controller';
 import { UtcpController } from './controllers/utcp.controller';
-import { GatewayUtcpController } from './controllers/gateway-utcp.controller';
 import { McpOAuthController } from './controllers/mcp-oauth.controller';
 import { McpOAuthDiscoveryController } from './controllers/mcp-oauth-discovery.controller';
 import { McpService } from './mcp.service';
@@ -69,7 +68,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
       }),
     }),
   ],
-  controllers: [McpOAuthDiscoveryController, McpOAuthController, McpController, McpTransportController, UtcpController, GatewayUtcpController],
+  controllers: [McpOAuthDiscoveryController, McpOAuthController, McpController, McpTransportController, UtcpController],
   providers: [
     McpToolHandler,
     McpContentHandler,
