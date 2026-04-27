@@ -23,7 +23,7 @@ const TOOLS = [
   { name: 'delete_tool', description: 'Delete a tool by ID', inputSchema: { type: 'object', properties: { toolId: { type: 'string', description: 'Tool ID to delete' } }, required: ['toolId'] } },
   { name: 'list_gateways', description: 'List all gateways', inputSchema: { type: 'object', properties: {} } },
   { name: 'delete_gateway', description: 'Delete a gateway by ID', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string', description: 'Gateway ID to delete' } }, required: ['gatewayId'] } },
-  { name: 'create_gateway', description: 'Create a gateway. For agent-kind types (a2a, acp, openai_chat), pass agentId. For tool-kind types (mcp, utcp, skills), tools are auto-assigned.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'a2a', 'acp', 'utcp', 'skills', 'openai_chat'] }, endpoint: { type: 'string', description: 'URL slug. Auto-generated from name if omitted.' }, agentId: { type: 'string', description: 'Agent ID for agent-kind gateways (a2a, acp, openai_chat)' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Specific tool IDs to assign (tool-kind only)' }, apiIds: { type: 'array', items: { type: 'string' }, description: 'Assign all tools from these API IDs (tool-kind only)' }, assignTools: { type: 'boolean', description: 'Auto-assign all org tools if no toolIds/apiIds given. Default: true for tool-kind.' } }, required: ['name', 'type'] } },
+  { name: 'create_gateway', description: 'Create a gateway. For agent-kind types (a2a, acp, openai_chat), pass agentId. For tool-kind types (mcp, utcp, skills), tools are auto-assigned.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'a2a', 'acp', 'utcp', 'skills', 'openai_chat'] }, endpoint: { type: 'string', description: 'URL slug. Auto-generated from name if omitted.' }, agentId: { type: 'string', description: 'Agent ID for agent-kind gateways (a2a, acp, openai_chat)' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Specific tool IDs to assign (tool-kind only)' }, apiIds: { type: 'array', items: { type: 'string' }, description: 'Assign all tools from these API IDs (tool-kind only)' }, assignTools: { type: 'boolean', description: 'Auto-assign all org tools if no toolIds/apiIds given. Default: true for tool-kind.' }, configuration: { type: 'object', description: 'Gateway-type-specific config. MCP: {transport: http|sse|websocket}. UTCP: {protocol: http|tcp}. Defaults are sensible per type.', additionalProperties: true } }, required: ['name', 'type'] } },
   { name: 'assign_tools_to_gateway', description: 'Assign tools to a gateway by tool IDs or by API name (assigns all tools from that API)', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Tool IDs to assign' }, apiName: { type: 'string', description: 'Assign all tools from this API (by name)' } }, required: ['gatewayId'] } },
   { name: 'add_auth_to_gateway', description: 'Add an auth method to a gateway', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, type: { type: 'string', enum: ['api_key', 'bearer_token', 'basic_auth', 'oauth2', 'jwt', 'none'], description: 'Auth type to add' } }, required: ['gatewayId', 'type'] } },
   { name: 'remove_auth_from_gateway', description: 'Remove an auth method from a gateway', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, authId: { type: 'string', description: 'Auth config ID to remove' } }, required: ['gatewayId', 'authId'] } },
@@ -119,7 +119,14 @@ export class AlmytyMcpService {
         const endpoint = args.endpoint || `/${args.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
         const toolTypes = ['mcp', 'utcp', 'skills'];
         const isToolKind = toolTypes.includes(args.type);
-        const gatewayData: any = { ...args, endpoint, configuration: args.configuration || { transport: 'http' } };
+        // Per-type default configuration. MCP requires `transport`, UTCP requires `protocol`.
+        // A bare `{transport: http}` blocks UTCP gateway creation through this tool.
+        const defaultConfigByType: Record<string, Record<string, any>> = {
+          mcp: { transport: 'http' },
+          utcp: { protocol: 'http' },
+        };
+        const configuration = args.configuration || defaultConfigByType[args.type] || {};
+        const gatewayData: any = { ...args, endpoint, configuration };
         if (!isToolKind && args.agentId) gatewayData.agentId = args.agentId;
         const gateway = await get(GatewaysService).createGateway(gatewayData, orgId, userId);
 
