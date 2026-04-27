@@ -332,6 +332,7 @@ describe('UtcpService — spec compliance', () => {
       const result = await service.executeUtcpTool(
         { toolId: 'tool-1', parameters: {} },
         'org-1',
+        'user-uuid',
       );
 
       expect(result.success).toBe(true);
@@ -339,6 +340,26 @@ describe('UtcpService — spec compliance', () => {
       expect(result.metadata.toolId).toBe('tool-1');
       expect(result.metadata.requestId).toMatch(/^utcp_/);
       expect(typeof result.metadata.timestamp).toBe('string');
+      // ToolExecutor must receive the real userId, never a placeholder.
+      // 'utcp-client' crashes the Postgres UUID cast on the
+      // execution row's userId FK.
+      expect(toolExecutor.executeTool).toHaveBeenCalledWith(
+        'tool-1',
+        {},
+        expect.objectContaining({ userId: 'user-uuid', organizationId: 'org-1' }),
+      );
+    });
+
+    it('passes null userId straight through (no placeholder string)', async () => {
+      toolExecutor.executeTool.mockResolvedValue({ success: true, data: {}, executionTime: 1 } as any);
+
+      await service.executeUtcpTool({ toolId: 'tool-1', parameters: {} }, 'org-1', null);
+
+      expect(toolExecutor.executeTool).toHaveBeenCalledWith(
+        'tool-1',
+        {},
+        expect.objectContaining({ userId: null }),
+      );
     });
   });
 });
