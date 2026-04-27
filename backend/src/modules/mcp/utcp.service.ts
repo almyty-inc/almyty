@@ -29,12 +29,12 @@ const UTCP_VERSION = '1.0.0';
 
 interface ManualOptions {
   organizationId: string;
-  gateway?: Gateway;
+  gateway: Gateway;
 }
 
 interface DiscoveryOptions {
   organizationId: string;
-  gateway?: Gateway;
+  gateway: Gateway;
   baseUrl: string;
   orgSlug: string;
 }
@@ -60,22 +60,20 @@ export class UtcpService {
   ) {}
 
   /**
-   * Build a spec-compliant UTCP manual.
+   * Build a spec-compliant UTCP manual scoped to a gateway.
    *
    * Spec: https://utcp.io — top-level fields are `utcp_version`,
    * `manual_version`, `tools`. Each tool carries an inline
    * `tool_call_template`. Snake_case throughout — UTCP SDKs (python,
    * typescript, go) parse against these exact field names.
    *
-   * When a gateway is supplied, the manual is scoped to that gateway's
-   * assigned tools — without it, the manual leaks every tool in the
-   * org regardless of which gateway the request came through.
+   * Tools are always scoped to the gateway's active assignments;
+   * there is no "global manual" surface — each gateway owns its
+   * own slice of the org's tools.
    */
   async generateManual(opts: ManualOptions): Promise<UtcpManual> {
     const { organizationId, gateway } = opts;
-    const cacheKey = gateway
-      ? `utcp:manual:gw:${gateway.id}`
-      : `utcp:manual:org:${organizationId}`;
+    const cacheKey = `utcp:manual:gw:${gateway.id}`;
 
     try {
       const cached = await this.redis.get(cacheKey);
@@ -91,7 +89,7 @@ export class UtcpService {
       throw new NotFoundException('Organization not found');
     }
 
-    const tools = await this.resolveTools(organizationId, gateway);
+    const tools = await this.resolveTools(gateway);
 
     const utcpToolResults = await batchAsyncSettled(tools, 5, async (tool) => {
       return this.convertToolToUtcp(tool);
@@ -101,9 +99,7 @@ export class UtcpService {
 
     const manual: UtcpManual = {
       utcp_version: UTCP_VERSION,
-      manual_version: gateway
-        ? `${gateway.id}:${gateway.updatedAt?.toISOString?.() || ''}`
-        : `${organizationId}:${organization.updatedAt?.toISOString?.() || ''}`,
+      manual_version: `${gateway.id}:${gateway.updatedAt?.toISOString?.() || ''}`,
       tools: utcpTools,
     };
 
@@ -116,26 +112,14 @@ export class UtcpService {
     return manual;
   }
 
-  /**
-   * Resolve tools for the manual. With a gateway, scope to that
-   * gateway's active assignments. Without one, fall back to all
-   * active tools in the org (legacy global manual at /utcp/global).
-   */
-  private async resolveTools(organizationId: string, gateway?: Gateway): Promise<Tool[]> {
-    if (gateway) {
-      const assignments = await this.gatewayToolRepository.find({
-        where: { gatewayId: gateway.id, isActive: true },
-        relations: ['tool'],
-      });
-      return assignments
-        .map((a) => a.tool)
-        .filter((t): t is Tool => !!t && t.status === ToolStatus.ACTIVE);
-    }
-    const { tools } = await this.toolsService.getTools({
-      organizationId,
-      status: ToolStatus.ACTIVE,
+  private async resolveTools(gateway: Gateway): Promise<Tool[]> {
+    const assignments = await this.gatewayToolRepository.find({
+      where: { gatewayId: gateway.id, isActive: true },
+      relations: ['tool'],
     });
-    return tools;
+    return assignments
+      .map((a) => a.tool)
+      .filter((t): t is Tool => !!t && t.status === ToolStatus.ACTIVE);
   }
 
   /**
