@@ -103,18 +103,27 @@ export class AlmytyMcpService {
         const state = await job.getState();
         return { jobId: args.jobId, state, failedReason: job.failedReason || null, progress: job.progress || 0 };
       }
-      case 'delete_api': return get(ApisService).remove(args.apiId, orgId);
+      case 'delete_api': {
+        await get(ApisService).remove(args.apiId, orgId);
+        return { deleted: true, apiId: args.apiId };
+      }
       case 'list_tools': {
         const toolResult = await get(ToolsService).getTools({ organizationId: orgId, limit: 100 });
         const tools = Array.isArray(toolResult) ? toolResult : (toolResult as any).tools || [];
         return { total: (toolResult as any).total || tools.length, tools: tools.map((t: any) => ({ id: t.id, name: t.name, type: t.type, status: t.status, description: t.description?.substring(0, 100) })) };
       }
-      case 'delete_tool': return get(ToolsService).deleteTool(args.toolId, orgId, userId);
+      case 'delete_tool': {
+        await get(ToolsService).deleteTool(args.toolId, orgId, userId);
+        return { deleted: true, toolId: args.toolId };
+      }
       case 'list_gateways': {
         const gwResult = await get(GatewaysService).getGateways({ organizationId: orgId, limit: 50 });
         return { total: gwResult.total, gateways: gwResult.gateways.map(g => ({ id: g.id, name: g.name, type: g.type, kind: g.kind, status: g.status, endpoint: g.endpoint, isSystem: g.isSystem })) };
       }
-      case 'delete_gateway': return get(GatewaysService).deleteGateway(args.gatewayId, orgId, userId);
+      case 'delete_gateway': {
+        await get(GatewaysService).deleteGateway(args.gatewayId, orgId, userId);
+        return { deleted: true, gatewayId: args.gatewayId };
+      }
       case 'create_gateway': {
         const endpoint = args.endpoint || `/${args.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
         const toolTypes = ['mcp', 'utcp', 'skills'];
