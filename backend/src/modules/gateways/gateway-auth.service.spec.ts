@@ -639,6 +639,7 @@ describe('GatewayAuthService - Real Business Logic', () => {
     it('should create and save gateway auth with valid data', async () => {
       const gateway = { id: 'gateway-1', organizationId: 'org-1' } as Gateway;
       jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(gateway);
+      jest.spyOn(gatewayAuthRepository, 'findOne').mockResolvedValue(null);
 
       const dto = {
         type: GatewayAuthType.API_KEY,
@@ -659,6 +660,31 @@ describe('GatewayAuthService - Real Business Logic', () => {
         ...dto,
       });
       expect(gatewayAuthRepository.save).toHaveBeenCalledWith(createdAuth);
+    });
+
+    it('rejects a duplicate active config of the same type (auto-created + manually-added would otherwise produce two identical rows)', async () => {
+      const gateway = { id: 'gateway-1', organizationId: 'org-1' } as Gateway;
+      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(gateway);
+
+      const existingAuth = {
+        id: 'auth-existing',
+        gatewayId: 'gateway-1',
+        type: GatewayAuthType.API_KEY,
+        isActive: true,
+        configuration: { keyHeader: 'x-api-key' },
+      } as Partial<GatewayAuth> as GatewayAuth;
+      jest.spyOn(gatewayAuthRepository, 'findOne').mockResolvedValue(existingAuth);
+
+      const dto = {
+        type: GatewayAuthType.API_KEY,
+        isRequired: true,
+        isActive: true,
+        configuration: { keyHeader: 'X-API-Key' },
+      };
+
+      await expect(service.createGatewayAuth('gateway-1', dto, 'org-1')).rejects.toThrow(
+        /already has an active api_key auth config.*auth-existing/,
+      );
     });
   });
 
