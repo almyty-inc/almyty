@@ -47,7 +47,7 @@ const describeIfDb = SHOULD_RUN ? describe : describe.skip;
 
 jest.setTimeout(60_000);
 
-const SAMPLE_SCHEMA = JSON.stringify({
+const SAMPLE_OPENAPI = JSON.stringify({
   openapi: '3.0.0',
   info: { title: 'AuthTest', version: '1.0' },
   paths: {
@@ -61,6 +61,29 @@ const SAMPLE_SCHEMA = JSON.stringify({
     },
   },
 });
+
+const SAMPLE_GRAPHQL = `
+type User { id: ID! name: String! }
+type Query { getUser(id: ID!): User }
+type Mutation { createUser(name: String!): User }
+`;
+
+const SAMPLE_WSDL = `<?xml version="1.0"?>
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/" name="UserService">
+  <portType name="UserPort">
+    <operation name="GetUser"/>
+  </portType>
+</definitions>`;
+
+const SAMPLE_PROTO = `
+syntax = "proto3";
+package user;
+service UserService {
+  rpc GetUser(GetUserRequest) returns (User);
+}
+message User { string id = 1; string name = 2; }
+message GetUserRequest { string user_id = 1; }
+`;
 
 describeIfDb('importSchema with tool generation (real Postgres)', () => {
   let ds: DataSource;
@@ -179,8 +202,30 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
     if (ds?.isInitialized) await ds.destroy();
   });
 
+  /**
+   * Helper to seed a fresh draft API of a given type and run the
+   * import pipeline against the real DB. The bug 7 fix is parser-
+   * agnostic — every parser feeds into the same transactional save
+   * + post-commit tool generation flow — but we exercise each one
+   * end-to-end so a regression in any parser path is caught.
+   */
+  async function importInto(apiType: ApiType, schema: string, baseUrl: string) {
+    const apiRepo = ds.getRepository(Api);
+    const fresh = (await apiRepo.save(
+      apiRepo.create({
+        name: `${apiType} fixture`,
+        type: apiType,
+        status: ApiStatus.DRAFT,
+        baseUrl,
+        organizationId: org.id,
+        authentication: { type: 'none' as any, config: {} },
+      } as any),
+    )) as unknown as Api;
+    return service.importSchema(fresh.id, schema, org.id, { generateTools: true });
+  }
+
   it('imports an OpenAPI schema and generates tools — does not throw "No operations found"', async () => {
-    const result = await service.importSchema(api.id, SAMPLE_SCHEMA, org.id, {
+    const result = await service.importSchema(api.id, SAMPLE_OPENAPI, org.id, {
       generateTools: true,
     });
 
@@ -206,5 +251,26 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
     expect(persistedTools.length).toBe(1);
     expect(persistedTools[0].status).toBe(ToolStatus.ACTIVE);
     expect(persistedTools[0].operationId).toBe(result.operations[0].id);
+  });
+
+  it('imports a GraphQL schema and generates tools', async () => {
+    const result = await importInto(ApiType.GRAPHQL, SAMPLE_GRAPHQL, 'https://example.com/graphql');
+    expect(result.operations.length).toBeGreaterThan(0);
+    expect(result.tools).toBeDefined();
+    expect(result.tools!.length).toBeGreaterThan(0);
+  });
+
+  it('imports a SOAP/WSDL schema and generates tools', async () => {
+    const result = await importInto(ApiType.SOAP, SAMPLE_WSDL, 'https://example.com/soap');
+    expect(result.operations.length).toBeGreaterThan(0);
+    expect(result.tools).toBeDefined();
+    expect(result.tools!.length).toBeGreaterThan(0);
+  });
+
+  it('imports a Protobuf/gRPC schema and generates tools', async () => {
+    const result = await importInto(ApiType.GRPC, SAMPLE_PROTO, 'https://example.com/grpc');
+    expect(result.operations.length).toBeGreaterThan(0);
+    expect(result.tools).toBeDefined();
+    expect(result.tools!.length).toBeGreaterThan(0);
   });
 });
