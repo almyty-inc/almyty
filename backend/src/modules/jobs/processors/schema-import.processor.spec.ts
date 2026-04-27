@@ -116,6 +116,9 @@ describe('SchemaImportProcessor', () => {
         '{"swagger":"2.0"}',
         'org-1',
         { fileName: 'petstore.json', description: 'Petstore API', generateTools: false },
+        // 5th arg is the job.progress() heartbeat callback wired in
+        // to keep BullMQ from killing the lock on long imports.
+        expect.any(Function),
       );
     });
 
