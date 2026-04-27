@@ -263,11 +263,22 @@ export class UtcpService {
   buildGatewayAuth(gateway: Gateway): UtcpAuth[] {
     const configs = gateway.authConfigs?.filter((a) => a.isActive) || [];
     const result: UtcpAuth[] = [];
+    // Dedupe by (auth_type, var_name) — a gateway can carry an
+    // auto-created API_KEY config plus a manually-added one; the
+    // discovery payload should advertise each scheme once, not echo
+    // every row.
+    const seen = new Set<string>();
+    const push = (key: string, auth: UtcpAuth) => {
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(auth);
+    };
+
     for (const cfg of configs) {
       switch (cfg.type) {
         case GatewayAuthType.API_KEY: {
           const varName = cfg.configuration?.keyHeader || 'x-api-key';
-          result.push({
+          push(`api_key:${varName}`, {
             auth_type: 'api_key',
             api_key: `{{GATEWAY_${gateway.id.toUpperCase()}_API_KEY}}`,
             var_name: varName,
@@ -277,7 +288,7 @@ export class UtcpService {
         }
         case GatewayAuthType.BEARER_TOKEN:
         case GatewayAuthType.JWT:
-          result.push({
+          push('bearer:Authorization', {
             auth_type: 'api_key',
             api_key: `Bearer {{GATEWAY_${gateway.id.toUpperCase()}_TOKEN}}`,
             var_name: 'Authorization',
@@ -285,14 +296,14 @@ export class UtcpService {
           });
           break;
         case GatewayAuthType.BASIC_AUTH:
-          result.push({
+          push('basic', {
             auth_type: 'basic',
             username: `{{GATEWAY_${gateway.id.toUpperCase()}_USERNAME}}`,
             password: `{{GATEWAY_${gateway.id.toUpperCase()}_PASSWORD}}`,
           });
           break;
         case GatewayAuthType.OAUTH2:
-          result.push({
+          push('oauth2', {
             auth_type: 'oauth2',
             client_id: `{{GATEWAY_${gateway.id.toUpperCase()}_CLIENT_ID}}`,
             client_secret: `{{GATEWAY_${gateway.id.toUpperCase()}_CLIENT_SECRET}}`,

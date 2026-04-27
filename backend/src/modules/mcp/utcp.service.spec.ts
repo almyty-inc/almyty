@@ -260,6 +260,36 @@ describe('UtcpService — spec compliance', () => {
       expect(info.manual_url).not.toContain('/api/');
     });
 
+    it('dedupes gateway auth descriptors when multiple active rows of the same type exist', () => {
+      const gateway = buildGateway({
+        authConfigs: [
+          {
+            id: 'a-1',
+            type: GatewayAuthType.API_KEY,
+            isActive: true,
+            configuration: { keyHeader: 'x-api-key' },
+          },
+          {
+            id: 'a-2', // duplicate — auto-created + manually added
+            type: GatewayAuthType.API_KEY,
+            isActive: true,
+            configuration: { keyHeader: 'x-api-key' },
+          },
+        ] as any,
+      });
+
+      const info = service.getDiscoveryInfo({
+        organizationId: 'org-1',
+        gateway,
+        baseUrl: 'https://x',
+        orgSlug: 'org',
+      });
+
+      // One entry, not two — discovery descriptor should advertise each scheme once.
+      expect(info.auth).toBeDefined();
+      expect(Array.isArray(info.auth)).toBe(false);
+    });
+
     it('embeds gateway api_key auth descriptor when the gateway requires API key', () => {
       const gateway = buildGateway({
         authConfigs: [

@@ -133,6 +133,21 @@ export class GatewayAuthService {
       // Validate configuration based on auth type
       this.validateAuthConfiguration(createGatewayAuthDto.type, createGatewayAuthDto.configuration);
 
+      // Reject a second active config of the same type. createGateway
+      // auto-provisions an API_KEY config; calling this endpoint with
+      // {type: api_key} after that would otherwise silently add a
+      // duplicate row and leak two identical entries into the UTCP
+      // discovery descriptor (and any other consumer that lists
+      // active gateway auths).
+      const existing = await this.gatewayAuthRepository.findOne({
+        where: { gatewayId, type: createGatewayAuthDto.type, isActive: true },
+      });
+      if (existing) {
+        throw new BadRequestException(
+          `Gateway already has an active ${createGatewayAuthDto.type} auth config (id=${existing.id}). Update or delete it first.`,
+        );
+      }
+
       const gatewayAuth = this.gatewayAuthRepository.create({
         gatewayId,
         ...createGatewayAuthDto,
