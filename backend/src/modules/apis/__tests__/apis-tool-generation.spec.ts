@@ -97,6 +97,35 @@ describe('ApisService - tool generation', () => {
     expect(lastCall - firstCall).toBeGreaterThanOrEqual(20);
   });
 
+  it('uses preloadedOperations when supplied — must not fall through to api.operations (transaction-isolation regression)', async () => {
+    // Simulate the importSchema call site: api.operations is empty
+    // because the operations row was just saved in an open
+    // transaction the repository can't see. preloadedOperations
+    // must be used directly so we still generate tools.
+    const apiRepo = (service as any).apiRepository;
+    apiRepo.findOne = jest.fn().mockResolvedValue({
+      id: 'api-1',
+      name: 'Test API',
+      type: ApiType.OPENAPI,
+      status: ApiStatus.ACTIVE,
+      organizationId: 'org-1',
+      operations: [], // empty as far as the repo can see
+    });
+
+    const preloaded = Array.from({ length: 3 }, (_, i) => ({
+      id: `op-${i}`,
+      name: `op_${i}`,
+      method: 'GET',
+      endpoint: `/p/${i}`,
+      isActive: true,
+      apiId: 'api-1',
+    })) as any[];
+
+    const tools = await service.generateToolsFromApi('api-1', 'org-1', preloaded);
+    expect(tools).toHaveLength(3);
+    expect(toolsService.createFromOperation).toHaveBeenCalledTimes(3);
+  });
+
   it('continues generating even if one tool fails', async () => {
     toolsService.createFromOperation
       .mockResolvedValue({ id: 'tool-ok', name: 'ok' })
