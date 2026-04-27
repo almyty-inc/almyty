@@ -343,7 +343,7 @@ export class UtcpService {
   async executeUtcpTool(
     context: UtcpExecutionContext,
     organizationId: string,
-    userId?: string,
+    userId: string | null,
   ): Promise<UtcpExecutionResult> {
     const startTime = Date.now();
 
@@ -352,7 +352,10 @@ export class UtcpService {
         context.toolId,
         context.parameters,
         {
-          userId: userId || 'utcp-client',
+          // userId is a UUID FK on the execution row — must be the
+          // real API-key owner or null, never a placeholder string
+          // like 'utcp-client' which crashes the Postgres UUID cast.
+          userId: userId ?? null,
           organizationId,
           timeout: context.options?.timeout,
           retries: context.options?.retries,
