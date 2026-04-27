@@ -238,6 +238,56 @@ describe('AlmytyMcpService', () => {
       );
     });
 
+    it('update_api forwards (apiId, patch, orgId) to ApisService.update', async () => {
+      mockApisService.update = jest.fn().mockResolvedValue({
+        id: 'api-1',
+        name: 'a',
+        baseUrl: 'https://x',
+        authentication: { type: 'api_key', config: {} },
+      });
+      await call('tools/call', {
+        name: 'update_api',
+        arguments: {
+          apiId: 'api-1',
+          authentication: { type: 'api_key', config: { parameter: 'X-Key' } },
+        },
+      });
+      expect(mockApisService.update).toHaveBeenCalledWith(
+        'api-1',
+        { authentication: { type: 'api_key', config: { parameter: 'X-Key' } } },
+        'org-1',
+      );
+    });
+
+    it('import_schema accepts schemaContent inline (no URL needed)', async () => {
+      const queueSpy = jest.fn().mockResolvedValue({ id: 'job-99' });
+      (mockSchemaImportQueue as any).add = queueSpy;
+      await call('tools/call', {
+        name: 'import_schema',
+        arguments: {
+          apiId: 'api-1',
+          schemaContent: '{"openapi":"3.0.0"}',
+        },
+      });
+      expect(queueSpy).toHaveBeenCalledWith(
+        'import',
+        expect.objectContaining({
+          apiId: 'api-1',
+          schemaContent: '{"openapi":"3.0.0"}',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('import_schema requires either schemaUrl or schemaContent', async () => {
+      const res = await call('tools/call', {
+        name: 'import_schema',
+        arguments: { apiId: 'api-1' },
+      });
+      expect(res.result.isError).toBe(true);
+      expect(res.result.content[0].text).toMatch(/schemaUrl or schemaContent/);
+    });
+
     it('delete_gateway returns a serializable {deleted, gatewayId} (void Promise was producing invalid MCP content)', async () => {
       mockGatewaysService.deleteGateway = jest.fn().mockResolvedValue(undefined);
       const res = await call('tools/call', {
