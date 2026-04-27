@@ -467,7 +467,7 @@ export class UnifiedEndpointController {
       case GatewayType.MCP:
         return this.delegateMcp(gateway, auth, body, req, res);
       case GatewayType.UTCP:
-        return this.delegateUtcp(gateway, organization, action, req, res, body);
+        return this.delegateUtcp(gateway, organization, action, auth, req, res, body);
       case GatewayType.A2A:
         return this.delegateA2A(gateway, organization, action, req, res, body);
       case GatewayType.ACP:
@@ -611,6 +611,7 @@ export class UnifiedEndpointController {
     gateway: Gateway,
     organization: Organization,
     action: string,
+    auth: any,
     req: Request,
     res: Response,
     body: any,
@@ -637,7 +638,11 @@ export class UnifiedEndpointController {
     }
 
     if (action === 'execute' && req.method === 'POST') {
-      return res.json(await this.utcpService.executeUtcpTool(body, organization.id));
+      // Auth.userId comes from the gateway API key's owner; the
+      // ToolExecutor stores this on the execution row as a UUID
+      // FK so it must NOT be a placeholder string.
+      const userId = auth?.userId || (req as any).user?.sub || null;
+      return res.json(await this.utcpService.executeUtcpTool(body, organization.id, userId));
     }
 
     throw new HttpException(`Unknown UTCP action: ${action}`, HttpStatus.NOT_FOUND);
