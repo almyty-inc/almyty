@@ -7,7 +7,7 @@ Install and manage almyty skills in 30+ AI coding agents (Claude Code, Cursor, W
 ```bash
 $ npx @almyty/auth login
 $ npx @almyty/skills gateways
-$ npx @almyty/skills install @org/gateway
+$ npx @almyty/skills install org/gateway
 ```
 
 ## Commands
@@ -16,23 +16,23 @@ $ npx @almyty/skills install @org/gateway
 |---------|-------------|
 | `gateways` | List your gateways |
 | `list` | List all available skills |
-| `list @org/gateway` | List skills from one gateway |
+| `list org/gateway` | List skills from one gateway |
 | `search <query>` | Search skills by keyword |
-| `install @org/gateway` | Install all skills from a gateway |
-| `install @org/gateway/skill` | Install a single skill |
+| `install org/gateway` | Install all skills from a gateway |
+| `install org/gateway/skill` | Install a single skill |
 | `installed` | Show locally installed skills |
 | `remove` | Remove all installed skills |
-| `run @org/gateway/skill [--key value]` | Execute a skill |
+| `run org/gateway/skill [--key value]` | Execute a skill |
 | `daemon [--interval 60]` | Sync all skills on a schedule |
-| `watch @org/gateway [--interval 60]` | Watch a specific gateway for changes |
+| `watch org/gateway [--interval 60]` | Watch a specific gateway for changes |
 
 ## References
 
-Skills are referenced as `@org/gateway` or `@org/gateway/skill`:
+Skills are referenced as `org/gateway` or `org/gateway/skill`:
 
 ```bash
-$ npx @almyty/skills install @acme/petstore
-$ npx @almyty/skills run @acme/petstore/get-pet --id 123
+$ npx @almyty/skills install acme/petstore
+$ npx @almyty/skills run acme/petstore/get-pet --id 123
 ```
 
 ## Where skills get installed
@@ -77,14 +77,14 @@ Default behavior:
 Examples:
 
 ```bash
-$ npx @almyty/skills install @acme/petstore                          # interactive picker
-$ npx @almyty/skills install @acme/petstore --all                    # every project-detected
-$ npx @almyty/skills install @acme/petstore --all --global           # project AND home detected
-$ npx @almyty/skills install @acme/petstore --global                 # only home-detected agents
-$ npx @almyty/skills install @acme/petstore -a codex                 # codex at whichever scope it lives
-$ npx @almyty/skills install @acme/petstore -a codex --global        # force codex at ~/.codex/skills
-$ npx @almyty/skills install @acme/petstore --agent '*' -y           # every known agent at project
-$ npx @almyty/skills install @acme/petstore -p ./agents/skills       # custom directory
+$ npx @almyty/skills install acme/petstore                          # interactive picker
+$ npx @almyty/skills install acme/petstore --all                    # every project-detected
+$ npx @almyty/skills install acme/petstore --all --global           # project AND home detected
+$ npx @almyty/skills install acme/petstore --global                 # only home-detected agents
+$ npx @almyty/skills install acme/petstore -a codex                 # codex at whichever scope it lives
+$ npx @almyty/skills install acme/petstore -a codex --global        # force codex at ~/.codex/skills
+$ npx @almyty/skills install acme/petstore --agent '*' -y           # every known agent at project
+$ npx @almyty/skills install acme/petstore -p ./agents/skills       # custom directory
 ```
 
 The 25+ supported agents include Claude Code, Codex, Cursor, Windsurf,
