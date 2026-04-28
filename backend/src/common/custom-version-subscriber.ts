@@ -8,11 +8,12 @@ import {
 import { isVersionedEntity } from 'typeorm-versions';
 import { VersionRepository } from 'typeorm-versions';
 import { VersionEvent } from 'typeorm-versions';
-import { getVersionOwner } from './version-context';
+import { getVersionOwner, shouldSkipVersions } from './version-context';
 
 @EventSubscriber()
 export class CustomVersionSubscriber implements EntitySubscriberInterface {
   async afterInsert(event: InsertEvent<any>) {
+    if (shouldSkipVersions()) return;
     if (isVersionedEntity(event.entity)) {
       await VersionRepository(event.connection).saveVersion(
         event.entity,
@@ -23,6 +24,7 @@ export class CustomVersionSubscriber implements EntitySubscriberInterface {
   }
 
   async afterUpdate(event: UpdateEvent<any>) {
+    if (shouldSkipVersions()) return;
     if (event.entity && isVersionedEntity(event.entity)) {
       await VersionRepository(event.connection).saveVersion(
         event.entity,
@@ -33,6 +35,7 @@ export class CustomVersionSubscriber implements EntitySubscriberInterface {
   }
 
   async beforeRemove(event: RemoveEvent<any>) {
+    if (shouldSkipVersions()) return;
     if (event.entity && isVersionedEntity(event.entity)) {
       await VersionRepository(event.connection).saveVersion(
         event.entity,

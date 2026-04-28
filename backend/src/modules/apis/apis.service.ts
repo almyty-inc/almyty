@@ -17,6 +17,7 @@ import { ToolsService } from '../tools/tools.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
+import { versionContext } from '../../common/version-context';
 
 export interface CreateApiData {
   name: string;
@@ -340,15 +341,38 @@ export class ApisService {
     options: ImportSchemaOptions = {},
     onProgress?: (pct: number) => void | Promise<void>,
   ): Promise<{ api: Api; schema: ApiSchema; operations: Operation[]; resources: Resource[]; tools?: Tool[] }> {
+    // Run the entire import inside a versionContext that disables
+    // the typeorm-versions subscriber. A real-world OpenAPI import
+    // creates 600+ Operation entities + 600+ Tool entities; with
+    // versions on, each save materialises a JSON diff of the entity
+    // and queues a `versions` row, holding ~1200 diffs in memory
+    // before flush. On a Stripe-class spec that was 200-400 MB of
+    // pure subscriber overhead. Bulk imports don't need per-row
+    // history (they're one logical event) — the api row's audit
+    // log entry is the right granularity.
+    return versionContext.run({ skipVersions: true }, () =>
+      this.importSchemaInner(apiId, schemaContent, organizationId, options, onProgress),
+    );
+  }
+
+  private async importSchemaInner(
+    apiId: string,
+    schemaContent: string,
+    organizationId: string,
+    options: ImportSchemaOptions = {},
+    onProgress?: (pct: number) => void | Promise<void>,
+  ): Promise<{ api: Api; schema: ApiSchema; operations: Operation[]; resources: Resource[]; tools?: Tool[] }> {
     const api = await this.findOne(apiId, organizationId);
 
     if (!api) {
       throw new NotFoundException('API not found');
     }
 
-    // Validate schema size (max 10MB)
+    // Schema size cap matches the controller's: 100 MB. Real-world
+    // OpenAPIs land in the 1-30 MB range; the cap exists to refuse
+    // pathological inputs, not to block legitimate big specs.
     const schemaSizeBytes = Buffer.byteLength(schemaContent, 'utf8');
-    const maxSizeBytes = 10 * 1024 * 1024; // 10MB
+    const maxSizeBytes = 100 * 1024 * 1024;
     if (schemaSizeBytes > maxSizeBytes) {
       throw new BadRequestException(`Schema too large: ${(schemaSizeBytes / 1024 / 1024).toFixed(2)}MB (max ${maxSizeBytes / 1024 / 1024}MB)`);
     }
