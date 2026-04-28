@@ -405,6 +405,57 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
   });
 
   /**
+   * Memory regression: findAllByOrganization is the org's API list
+   * endpoint. It used to eager-load ['schemas', 'operations',
+   * 'operations.tools'] which on an org with several Stripe-class
+   * imports meant each list request deserialized N × (full
+   * rawSchema text + 587 operations + 587 tools) into the heap
+   * — a single GET /apis?limit=100 reproducibly OOM-killed the
+   * worker at 4 GB. Both real callers (controller findAll, mcp
+   * list_apis) only use scalar Api fields. Pin that contract:
+   * the rows returned by findAllByOrganization must not carry
+   * the heavy relations, even when present in DB.
+   */
+  it('findAllByOrganization does not eager-load schemas/operations/tools (memory regression)', async () => {
+    // Import enough data to make the assertion meaningful — if
+    // findAllByOrganization eagerly loaded the relations, the
+    // returned api row would carry rawSchema, 1 operation, etc.
+    const apiRepo = ds.getRepository(Api);
+    const fresh = (await apiRepo.save(
+      apiRepo.create({
+        name: 'List-test fixture',
+        type: ApiType.OPENAPI,
+        status: ApiStatus.DRAFT,
+        baseUrl: 'https://example.com/list-test',
+        organizationId: org.id,
+        authentication: { type: 'none' as any, config: {} },
+      } as any),
+    )) as unknown as Api;
+    await service.importSchema(fresh.id, SAMPLE_OPENAPI, org.id, {
+      generateTools: true,
+    });
+
+    const { apis, total } = await service.findAllByOrganization(org.id, {
+      limit: 100,
+    });
+    expect(total).toBeGreaterThan(0);
+    expect(apis.length).toBeGreaterThan(0);
+
+    // Every row must come back lightweight — relations not loaded.
+    // `undefined` (relation skipped) is the contract; an empty array
+    // would mean the relation was requested but happened to be empty,
+    // which is also a leak the moment data exists.
+    for (const a of apis) {
+      expect((a as any).schemas).toBeUndefined();
+      expect((a as any).operations).toBeUndefined();
+      expect((a as any).resources).toBeUndefined();
+      // Scalar fields must still be populated.
+      expect(a.id).toBeDefined();
+      expect(a.name).toBeDefined();
+    }
+  });
+
+  /**
    * Tenant guard on parseSchemaOnDemand — a parsed view exposes the
    * full schema content, so it has to fail for callers from a
    * different organization. We simulate that by passing a wrong
