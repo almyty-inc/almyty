@@ -253,15 +253,15 @@ spec:
           failureThreshold: 3
         resources:
           requests:
-            # Real-world OpenAPI imports (Stripe ~7.7 MB / 587 ops)
-            # peak the api container at ~2.3 GB. The old 512Mi
-            # request let kubelet schedule the pod onto any node
-            # with 512Mi free, then evict it the moment the import
-            # actually claimed memory. Request 2Gi so the scheduler
-            # reserves real headroom — pods only land on nodes that
-            # can host them through a heavy import without tipping
-            # the node into memory pressure.
-            memory: "2Gi"
+            # Diagnostic value (not the long-term setting). 2Gi is the
+            # honest request that matches a real Stripe-class import,
+            # but 4GB nodes only have ~3GB allocatable, so a 2Gi pod
+            # crowds out everything else and the new revision can't
+            # schedule. 1Gi gets the rollout unstuck so we can
+            # measure actual peak memory after the bulk-skip-version
+            # fix landed (commit 9905370) and decide whether nodes
+            # need to grow or the request should stay at 1Gi.
+            memory: "1Gi"
             cpu: "250m"
           limits:
             # 4Gi is the operating ceiling. Earlier we tried 8Gi but
