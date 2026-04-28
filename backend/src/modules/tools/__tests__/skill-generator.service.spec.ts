@@ -63,6 +63,7 @@ describe('SkillGeneratorService', () => {
   const mockGateway = {
     id: 'gw-1',
     name: 'Petstore Gateway',
+    endpoint: '/petstore',
     type: GatewayType.MCP,
     status: GatewayStatus.ACTIVE,
   };
@@ -280,7 +281,7 @@ describe('SkillGeneratorService', () => {
   });
 
   describe('generateIndividualSkills', () => {
-    it('should generate individual SKILL.md files with name matching directory', async () => {
+    it('multi-tool gateway: prefixes each skill name with the gateway slug', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([
         { tool: mockTool, isActive: true },
@@ -290,14 +291,78 @@ describe('SkillGeneratorService', () => {
       const result = await service.generateIndividualSkills('gw-1', 'org-1');
 
       expect(result).toHaveLength(2);
-      expect(result[0].name).toBe('getpetbyid');
-      expect(result[0].fileName).toBe('almyty-getpetbyid');
-      // Frontmatter name MUST match directory name (Agent Skills spec compliance)
-      expect(result[0].content).toContain('name: almyty-getpetbyid');
-      expect(result[0].content).toContain('curl');
-      expect(result[1].name).toBe('addpet');
-      expect(result[1].fileName).toBe('almyty-addpet');
-      expect(result[1].content).toContain('name: almyty-addpet');
+      // Each skill gets `<gateway-slug>-<tool-suffix>`. Names are
+      // both kebab and start with the gateway endpoint slug, so a
+      // skill is unambiguously traceable to its source gateway.
+      for (const skill of result) {
+        expect(skill.name).toMatch(/^petstore-/);
+        expect(skill.name).toMatch(/^[a-z0-9-]+$/);
+        expect(skill.fileName).toBe(skill.name);
+        expect(skill.content).toContain(`name: ${skill.name}`);
+      }
+      // No `almyty-` prefix on the directory or in frontmatter.
+      expect(result[0].name.startsWith('almyty-')).toBe(false);
+      expect(result[0].content).not.toMatch(/^name: almyty-/m);
+    });
+
+    it('single-tool gateway still gets `{gateway}-{op}` shape (deterministic)', async () => {
+      // Critical: a 1-tool gateway must produce the same shape as a
+      // multi-tool gateway. If we collapsed to just `gateway-slug`
+      // for the 1-tool case, adding a 2nd tool would silently rename
+      // the existing skill — that breaks idempotence and confuses
+      // users who scripted `npx @almyty/skills run <name>`.
+      gatewayRepository.findOne.mockResolvedValue({
+        ...mockGateway,
+        endpoint: '/open-meteo-skills',
+      });
+      gatewayToolRepository.find.mockResolvedValue([
+        { tool: mockTool, isActive: true },
+      ]);
+
+      const result = await service.generateIndividualSkills('gw-1', 'org-1');
+
+      expect(result).toHaveLength(1);
+      // The op suffix is derived from operation.summary or tool.name,
+      // never empty — so the resulting slug always has the
+      // `<gateway>-<suffix>` shape.
+      expect(result[0].name.startsWith('open-meteo-skills-')).toBe(true);
+      expect(result[0].name).not.toBe('open-meteo-skills');
+      expect(result[0].fileName).toBe(result[0].name);
+      expect(result[0].content).toContain(`name: ${result[0].name}`);
+    });
+
+    it('multi-tool gateway: uses operation.summary when available', async () => {
+      const toolWithSummary = {
+        ...mockTool,
+        name: 'something_else',
+        operation: { ...mockTool.operation, summary: 'Find pet by ID' },
+      };
+      gatewayRepository.findOne.mockResolvedValue(mockGateway);
+      gatewayToolRepository.find.mockResolvedValue([
+        { tool: toolWithSummary, isActive: true },
+        { tool: mockMutationTool, isActive: true },
+      ]);
+
+      const result = await service.generateIndividualSkills('gw-1', 'org-1');
+      expect(result[0].name).toBe('petstore-find-pet-by-id');
+    });
+
+    it('caps composed slugs at 64 chars per agentskills.io spec', async () => {
+      const longTool = {
+        ...mockTool,
+        name: 'a-very-long-tool-name-that-exceeds-the-budget-when-prefixed-with-the-gateway-slug',
+        operation: { ...mockTool.operation, summary: undefined },
+      };
+      gatewayRepository.findOne.mockResolvedValue(mockGateway);
+      gatewayToolRepository.find.mockResolvedValue([
+        { tool: longTool, isActive: true },
+        { tool: mockMutationTool, isActive: true },
+      ]);
+
+      const result = await service.generateIndividualSkills('gw-1', 'org-1');
+      expect(result[0].name.length).toBeLessThanOrEqual(64);
+      expect(result[0].name).toMatch(/^petstore-/);
+      expect(result[0].name.endsWith('-')).toBe(false);
     });
 
     it('should throw NotFoundException for missing gateway', async () => {

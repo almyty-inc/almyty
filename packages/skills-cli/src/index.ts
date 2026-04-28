@@ -11,7 +11,7 @@ import {
   selectInstallTargetsInteractive,
 } from './target-selector.js';
 
-const VERSION = '1.0.10';
+const VERSION = '1.0.11';
 
 function printHelp(): void {
   console.log(`
@@ -80,9 +80,9 @@ Target selection (install):
 Examples:
   npx @almyty/skills daemon
   npx @almyty/skills install myorg/petstore/get-pet
-  npx @almyty/skills install @org/gw -a codex -a claude
-  npx @almyty/skills install @org/gw --path ./tmp/skills --yes
-  npx @almyty/skills install @org/gw --all
+  npx @almyty/skills install acme/petstore -a codex -a claude
+  npx @almyty/skills install acme/petstore --path ./tmp/skills --yes
+  npx @almyty/skills install acme/petstore --all
   npx @almyty/skills search "weather"
   npx @almyty/skills run myorg/petstore/get-pet --petId 123
 `);
@@ -186,7 +186,7 @@ function requireRef(args: ParsedArgs, command: string): string {
   const ref = getRef(args);
   if (!ref) {
     console.error('Error: reference required');
-    console.error(`  npx @almyty/skills ${command} @<org>/<gateway>`);
+    console.error(`  npx @almyty/skills ${command} <org>/<gateway>`);
     console.error(`  npx @almyty/skills ${command} <skill-name>`);
     process.exit(1);
   }
@@ -251,7 +251,7 @@ async function main(): Promise<void> {
         const slug = gw.name.toLowerCase().replace(/\s+/g, '-');
         console.log(`  ${gw.name}`);
         console.log(`    Type: ${gw.type}`);
-        console.log(`    Use:  npx @almyty/skills install @<org>/${slug}`);
+        console.log(`    Use:  npx @almyty/skills install <org>/${slug}`);
         console.log('');
       }
       break;
@@ -270,7 +270,7 @@ async function main(): Promise<void> {
         }
         console.log(`\n${(allSkills as any[]).length} skills available:\n`);
         for (const skill of allSkills as any[]) {
-          const label = skill.gateway ? `@${skill.orgSlug}/${skill.gatewaySlug}/${skill.name}` : skill.name;
+          const label = skill.gateway ? `${skill.orgSlug}/${skill.gatewaySlug}/${skill.name}` : skill.name;
           const desc = skill.description ? ` — ${skill.description}` : '';
           console.log(`  ${label}${desc}`);
         }
@@ -297,7 +297,7 @@ async function main(): Promise<void> {
         }
         console.log(`\n${(allSkills as any[]).length} skills available:\n`);
         for (const skill of allSkills as any[]) {
-          const label = skill.gateway ? `@${skill.orgSlug}/${skill.gatewaySlug}/${skill.name}` : skill.name;
+          const label = skill.gateway ? `${skill.orgSlug}/${skill.gatewaySlug}/${skill.name}` : skill.name;
           const desc = skill.description ? ` — ${skill.description}` : '';
           console.log(`  ${label}${desc}`);
         }
@@ -352,11 +352,12 @@ async function main(): Promise<void> {
         gwName = gateway?.name || ref;
       } else if (parsed.type === 'skill') {
         console.log('Fetching skill...');
-        const gatewayRef = `@${parsed.orgSlug}/${parsed.gatewaySlug}`;
+        const gatewayRef = `${parsed.orgSlug}/${parsed.gatewaySlug}`;
         const fetched = await client.fetchSkills(gatewayRef);
         const match = fetched.find(s =>
           s.name === parsed.skillName ||
-          s.fileName === `almyty-${parsed.skillName}`
+          s.fileName === `almyty-${parsed.skillName}` ||
+          s.fileName === parsed.skillName
         );
         if (!match) {
           console.error(`Skill "${parsed.skillName}" not found in ${gatewayRef}`);
@@ -552,7 +553,7 @@ async function main(): Promise<void> {
 
       if (totalFound === 0) {
         console.log('No almyty skills installed in this directory.');
-        console.log('Install: npx @almyty/skills install @<org>/<gateway>');
+        console.log('Install: npx @almyty/skills install <org>/<gateway>');
       }
       break;
     }

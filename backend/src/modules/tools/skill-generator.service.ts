@@ -97,8 +97,20 @@ export class SkillGeneratorService {
    * Generate individual SKILL.md files per tool for a gateway.
    * Used by the skills CLI to install into agent directories.
    *
-   * Per Agent Skills spec: frontmatter `name` must match parent directory name.
-   * Directory = `almyty-{slug}`, so name = `almyty-{slug}`.
+   * Naming rule (agentskills.io spec — kebab, lowercase, ≤64 chars,
+   * no leading/trailing/consecutive hyphens). The user-facing label
+   * Codex/Claude shows is the auto Title-Cased form of `name`, so a
+   * short slug is what produces a readable label.
+   *
+   * Always `{gateway-slug}-{op-suffix}`, regardless of how many
+   * tools the gateway has. Deterministic — adding a second tool to
+   * a gateway never renames the existing one, and the gateway's
+   * identity is always visible in every skill the gateway produces.
+   * op-suffix prefers the operation's short summary, falling back to
+   * the tool's name with any duplicate gateway/api prefix stripped.
+   *
+   * The frontmatter `name` matches the directory name, which is
+   * also what the skills-cli installer uses.
    */
   async generateIndividualSkills(
     gatewayId: string,
@@ -117,17 +129,55 @@ export class SkillGeneratorService {
     }
 
     const tools = await this.getGatewayTools(gatewayId);
+    const gatewaySlug = this.gatewayEndpointSlug(gateway);
 
-    return tools.map(tool => {
-      const slug = this.slugify(tool.name);
-      const fileName = `almyty-${slug}`;
+    return tools.map((tool) => {
+      const slug = this.composeToolSlug(gatewaySlug, tool);
       return {
         name: slug,
-        fileName,
-        // Use fileName as skillName so frontmatter name matches directory
-        content: this.renderToolSkillMd(tool, fileName, context),
+        fileName: slug,
+        content: this.renderToolSkillMd(tool, slug, context),
       };
     });
+  }
+
+  /**
+   * Pull a kebab-case slug from a gateway. The endpoint field is
+   * already `/foo-bar` — drop the leading slash and trailing dashes,
+   * fall back to slugified name if endpoint is missing.
+   */
+  private gatewayEndpointSlug(gateway: Gateway): string {
+    const ep = (gateway.endpoint || '').replace(/^\/+|\/+$/g, '').trim();
+    if (ep) return this.slugify(ep);
+    return this.slugify(gateway.name || 'gateway');
+  }
+
+  /**
+   * Build `{gateway}-{op-suffix}` for a tool. Tries operation.summary
+   * first (the most human label), falls back to tool.name with the
+   * gateway/api prefix stripped so we don't repeat the prefix.
+   * Capped at 64 chars per spec.
+   */
+  private composeToolSlug(gatewaySlug: string, tool: Tool): string {
+    const summary = (tool.operation as any)?.summary as string | undefined;
+    let suffix: string;
+    if (summary && summary.trim()) {
+      suffix = this.slugify(summary);
+    } else {
+      const toolSlug = this.slugify(tool.name || '');
+      // Strip a leading `<gateway>-` if present so we don't double up.
+      suffix = toolSlug.startsWith(`${gatewaySlug}-`)
+        ? toolSlug.slice(gatewaySlug.length + 1)
+        : toolSlug;
+    }
+    if (!suffix) suffix = 'tool';
+
+    const combined = `${gatewaySlug}-${suffix}`;
+    if (combined.length <= 64) return combined;
+    // Trim from the suffix tail so the gateway prefix stays intact.
+    const room = 64 - gatewaySlug.length - 1;
+    if (room <= 0) return gatewaySlug.slice(0, 64);
+    return `${gatewaySlug}-${suffix.slice(0, room).replace(/-+$/, '')}`;
   }
 
   private async getGatewayTools(gatewayId: string): Promise<Tool[]> {
