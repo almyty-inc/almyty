@@ -178,15 +178,24 @@ export class ApisService {
     options: FindApisOptions = {},
   ): Promise<{ apis: Api[]; total: number }> {
     const { type, status, page = 1, limit = 10 } = options;
-    
+
     const where: FindOptionsWhere<Api> = { organizationId };
-    
+
     if (type) where.type = type;
     if (status) where.status = status;
 
+    // No eager relations on list. Previously this loaded
+    // ['schemas', 'operations', 'operations.tools'] for every row,
+    // which on an org with several Stripe-class API imports meant
+    // each list request deserialized N × (rawSchema text + 587
+    // operations + 587 tools) into the heap. A single
+    // GET /apis?limit=100 against a populated org reproducibly
+    // OOM-killed the worker at 4 GB heap. Both real callers
+    // (apis.controller.findAll → response, almyty-mcp.list_apis)
+    // only use scalar fields. Detail views fetch their own
+    // relations via the dedicated endpoints.
     const [apis, total] = await this.apiRepository.findAndCount({
       where,
-      relations: ['schemas', 'operations', 'operations.tools'],
       order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
