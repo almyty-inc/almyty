@@ -154,8 +154,15 @@ export class SkillGeneratorService {
 
   /**
    * Build `{gateway}-{op-suffix}` for a tool. Tries operation.summary
-   * first (the most human label), falls back to tool.name with the
-   * gateway/api prefix stripped so we don't repeat the prefix.
+   * first (the most human label), falls back to tool.name. In the
+   * fallback case any kebab segments shared between the gateway
+   * slug and the tool slug are deduped — without this, a gateway
+   * named `open-meteo-skills` paired with a tool named
+   * `open-meteo-weather-get-v1-forecast` produced
+   * `open-meteo-skills-open-meteo-weather-get-v1-forecast` (the
+   * `open-meteo` segment repeats). After dedup it's just
+   * `open-meteo-skills-weather-get-v1-forecast`.
+   *
    * Capped at 64 chars per spec.
    */
   private composeToolSlug(gatewaySlug: string, tool: Tool): string {
@@ -164,13 +171,13 @@ export class SkillGeneratorService {
     if (summary && summary.trim()) {
       suffix = this.slugify(summary);
     } else {
-      const toolSlug = this.slugify(tool.name || '');
-      // Strip a leading `<gateway>-` if present so we don't double up.
-      suffix = toolSlug.startsWith(`${gatewaySlug}-`)
-        ? toolSlug.slice(gatewaySlug.length + 1)
-        : toolSlug;
+      suffix = this.dedupeSharedSegments(gatewaySlug, this.slugify(tool.name || ''));
     }
     if (!suffix) suffix = 'tool';
+    // If suffix happens to *equal* the gateway slug after dedup
+    // (e.g. tool name was identical to gateway endpoint), pick a
+    // generic 'tool' to avoid `gateway-gateway` double-up.
+    if (suffix === gatewaySlug) suffix = 'tool';
 
     const combined = `${gatewaySlug}-${suffix}`;
     if (combined.length <= 64) return combined;
@@ -178,6 +185,27 @@ export class SkillGeneratorService {
     const room = 64 - gatewaySlug.length - 1;
     if (room <= 0) return gatewaySlug.slice(0, 64);
     return `${gatewaySlug}-${suffix.slice(0, room).replace(/-+$/, '')}`;
+  }
+
+  /**
+   * Drop kebab segments from the head of `tail` that are already
+   * present at the head of `head` (in order). `dedupeSharedSegments
+   * ('open-meteo-skills', 'open-meteo-weather-get-v1-forecast')`
+   * → `'weather-get-v1-forecast'`. Walks one segment at a time so
+   * partial matches don't false-positive.
+   */
+  private dedupeSharedSegments(head: string, tail: string): string {
+    const headParts = head.split('-').filter(Boolean);
+    const tailParts = tail.split('-').filter(Boolean);
+    let i = 0;
+    while (
+      i < tailParts.length &&
+      i < headParts.length &&
+      tailParts[i] === headParts[i]
+    ) {
+      i++;
+    }
+    return tailParts.slice(i).join('-');
   }
 
   private async getGatewayTools(gatewayId: string): Promise<Tool[]> {
