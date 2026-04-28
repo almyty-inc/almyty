@@ -17,6 +17,7 @@ jest.unmock('bcryptjs');
 
 const SKIP = !process.env.RUN_DB_INTEGRATION;
 
+import * as crypto from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { DataSource } from 'typeorm';
@@ -49,9 +50,22 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
     subscribeRunEvents: jest.Mock;
   };
 
-  const SUFFIX = Date.now();
+  // Suffix mixes Date.now() with random bytes — Date.now() alone
+  // collides at millisecond resolution when jest runs this file in
+  // parallel with mcp-oauth-flow (which uses the same throwaway-org
+  // pattern under register()). The collision tanks both files'
+  // beforeAll on a UNIQUE constraint failure on organizations.name.
+  //
+  // No hyphens *inside* the suffix — the agent slug resolver
+  // (agents.service.findBySlug) deslugifies a URL by replacing every
+  // `-` with ` `. AGENT_NAME embeds SUFFIX, AGENT_SLUG is derived
+  // from AGENT_NAME with spaces → hyphens. If SUFFIX itself has a
+  // hyphen the round-trip stops being lossless and the resolver
+  // can't find the agent (404 on every /:org/:agent request).
+  const SUFFIX = `${Date.now()}${crypto.randomBytes(6).toString('hex')}`;
   const ORG_SLUG = `gw-runs-${SUFFIX}`;
   const TEST_EMAIL = `gw-runs-${SUFFIX}@test.com`;
+  const REGISTER_ORG_NAME = `gw-runs-ignore-${SUFFIX}`;
   const AGENT_NAME = `Run Test Agent ${SUFFIX}`;
   const AGENT_SLUG = AGENT_NAME.toLowerCase().replace(/\s+/g, '-');
 
@@ -93,7 +107,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
       password: 'TestPass123!',
       firstName: 'Test',
       lastName: 'User',
-      organizationName: `ignore-${Date.now()}`,
+      organizationName: REGISTER_ORG_NAME,
     });
     const userRepo = ds.getRepository(User);
     const user = await userRepo.findOne({ where: { email: TEST_EMAIL } });
@@ -134,6 +148,9 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
       await ds.getRepository(Agent).delete({ organizationId: org.id });
       await ds.getRepository(UserOrganization).delete({ organizationId: org.id });
       await ds.getRepository(Organization).delete({ id: org.id });
+      // Also drop the throwaway org AuthService.register() created
+      // as a side-effect — without this every run leaks one row.
+      await ds.getRepository(Organization).delete({ name: REGISTER_ORG_NAME });
     }
     await app?.close();
   });
