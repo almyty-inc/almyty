@@ -1108,7 +1108,7 @@ describe('GatewaysService', () => {
   });
 
   describe('searchSkillsAcrossGateways', () => {
-    it('should return matching tools with skillRef in @org/gateway/skill format', async () => {
+    it('should return matching tools with skillRef in org/gateway/skill format', async () => {
       const mockOrganization = {
         id: 'org-1',
         name: 'Test Org',
@@ -1148,7 +1148,7 @@ describe('GatewaysService', () => {
         gatewayName: 'My Gateway',
         orgSlug: 'test-org',
         gatewaySlug: 'my-gateway',
-        skillRef: '@test-org/my-gateway/get-users',
+        skillRef: 'test-org/my-gateway/get-users',
       });
     });
 
