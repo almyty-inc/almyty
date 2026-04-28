@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, DataSource } from 'typeorm';
 import axios from 'axios';
 import { createHash } from 'crypto';
+import * as v8 from 'v8';
 
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
 import { ApiSchema, SchemaFormat } from '../../entities/api-schema.entity';
@@ -407,6 +408,7 @@ export class ApisService {
       const SAVE_CHUNK = 50;
       const savedOperations: Operation[] = [];
       for (let i = 0; i < operations.length; i += SAVE_CHUNK) {
+        await this.awaitHeapHeadroom();
         const slice = operations.slice(i, i + SAVE_CHUNK);
         const saved = await queryRunner.manager.save(slice);
         savedOperations.push(...(saved as Operation[]));
@@ -420,6 +422,7 @@ export class ApisService {
       }
       const savedResources: Resource[] = [];
       for (let i = 0; i < resources.length; i += SAVE_CHUNK) {
+        await this.awaitHeapHeadroom();
         const slice = resources.slice(i, i + SAVE_CHUNK);
         const saved = await queryRunner.manager.save(slice);
         savedResources.push(...(saved as Resource[]));
@@ -583,6 +586,7 @@ export class ApisService {
     const generatedTools: Tool[] = [];
 
     for (let i = 0; i < activeOperations.length; i += BATCH_SIZE) {
+      await this.awaitHeapHeadroom();
       const batch = activeOperations.slice(i, i + BATCH_SIZE);
       const batchResults = await Promise.all(
         batch.map(async (operation) => {
@@ -751,6 +755,29 @@ export class ApisService {
         error: error.message,
       };
     }
+  }
+
+  /**
+   * Memory-aware backpressure between batches. If V8's used heap is
+   * over `threshold` of the configured heap ceiling, wait briefly to
+   * let GC run before producing more allocations. Cheap (one v8 stat
+   * read), idempotent, safe to call from anywhere.
+   *
+   * Without this, a real-world OpenAPI import (Stripe-class) could
+   * push past 70% heap and fail the liveness probe before the next
+   * batch had a chance to free its predecessor's working set. With
+   * this, the import naturally throttles when the host is under
+   * pressure.
+   */
+  private async awaitHeapHeadroom(threshold = 0.75): Promise<void> {
+    const stats = v8.getHeapStatistics();
+    const ratio = stats.used_heap_size / Math.max(stats.heap_size_limit, 1);
+    if (ratio < threshold) return;
+    this.logger.warn(
+      `[BACKPRESSURE] heap at ${(ratio * 100).toFixed(1)}% of limit — pausing 250ms`,
+    );
+    if (typeof (global as any).gc === 'function') (global as any).gc();
+    await new Promise((r) => setTimeout(r, 250));
   }
 
   private generateSemanticToolName(apiName: string, operation: any): string {
