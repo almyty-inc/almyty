@@ -582,7 +582,14 @@ export class ApisService {
     // The old code fired all operations in parallel (Promise.all on the full
     // array), which on a 438-operation API grabbed 438 connections simultaneously
     // and killed the DB.
-    const BATCH_SIZE = 5;
+    // Tool generation batch size — 20 in-flight saves per batch. The
+    // old default of 5 was conservative for a 10-connection pool, but
+    // the pool was bumped (see config/database.config.ts) and the real
+    // cost is the per-tool roundtrip latency rather than connection
+    // contention. 20 keeps each batch under half the pool while
+    // cutting wall-time on 600-op imports from ~5 min sequential
+    // batches to ~1.5 min.
+    const BATCH_SIZE = 20;
     const generatedTools: Tool[] = [];
 
     for (let i = 0; i < activeOperations.length; i += BATCH_SIZE) {

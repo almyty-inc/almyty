@@ -37,13 +37,18 @@ describe('ApisService - tool generation', () => {
       updateFromOperation: jest.fn(),
     };
 
+    // 60 operations: with BATCH_SIZE=20 that's 3 batches, so we can
+    // observe the parallel-within-batch + sequential-between-batch
+    // behavior. The earlier 20-op fixture matched the old batch
+    // size (5 → 4 batches) but doesn't fit the new batch size where
+    // 20 ops would all run in one go.
     const mockApi: Partial<Api> = {
       id: 'api-1',
       name: 'Test API',
       type: ApiType.OPENAPI,
       status: ApiStatus.ACTIVE,
       organizationId: 'org-1',
-      operations: Array.from({ length: 20 }, (_, i) => ({
+      operations: Array.from({ length: 60 }, (_, i) => ({
         id: `op-${i}`,
         name: `operation_${i}`,
         method: 'GET',
@@ -73,27 +78,26 @@ describe('ApisService - tool generation', () => {
 
   it('generates tools for all active operations', async () => {
     const tools = await service.generateToolsFromApi('api-1', 'org-1');
-    expect(tools).toHaveLength(20);
-    expect(toolsService.createFromOperation).toHaveBeenCalledTimes(20);
+    expect(tools).toHaveLength(60);
+    expect(toolsService.createFromOperation).toHaveBeenCalledTimes(60);
   });
 
   it('processes in batches, not all at once', async () => {
     await service.generateToolsFromApi('api-1', 'org-1');
 
-    // With batch size 3 and 20 operations, we should have 7 batches
-    // (3+3+3+3+3+3+2). Within each batch, calls happen in parallel,
-    // but the next batch waits for the previous to complete.
-    //
-    // If all 20 ran in parallel, the first 20 timestamps would be
-    // within ~1ms of each other. With batching, there should be gaps.
-    expect(createCallTimestamps.length).toBe(20);
+    // BATCH_SIZE = 20, 60 ops → 3 batches. Within each batch ops
+    // run in parallel; the next batch waits for the previous to
+    // settle. The original concern this guards against is the old
+    // bug where a 600-op import did Promise.all on the whole array
+    // and grabbed 600 connections at once. We re-prove it didn't
+    // come back: not all 60 timestamps arrived within ~1ms.
+    expect(createCallTimestamps.length).toBe(60);
 
-    // Check that NOT all calls started at the same time.
-    // With batch size 1 and 10ms delay per call, sequential processing
-    // should take at least 20 * 10ms = 200ms. Parallel would be ~10ms.
-    // Use a lenient threshold to avoid CI flakiness.
     const firstCall = createCallTimestamps[0];
     const lastCall = createCallTimestamps[createCallTimestamps.length - 1];
+    // Each tool sleeps 10ms in the mock. With 3 batches of 20 each,
+    // wall time should be at least ~30ms; if the batching collapsed
+    // back to one giant Promise.all it would be ~10ms.
     expect(lastCall - firstCall).toBeGreaterThanOrEqual(20);
   });
 
@@ -193,8 +197,8 @@ describe('ApisService - tool generation', () => {
       .mockRejectedValueOnce(new Error('DB error'));
 
     const tools = await service.generateToolsFromApi('api-1', 'org-1');
-    // 19 succeed, 1 fails
-    expect(tools.length).toBe(19);
-    expect(toolsService.createFromOperation).toHaveBeenCalledTimes(20);
+    // 59 succeed, 1 fails (60 ops in fixture)
+    expect(tools.length).toBe(59);
+    expect(toolsService.createFromOperation).toHaveBeenCalledTimes(60);
   });
 });
