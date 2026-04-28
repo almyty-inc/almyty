@@ -11,7 +11,7 @@ import {
   selectInstallTargetsInteractive,
 } from './target-selector.js';
 
-const VERSION = '1.0.11';
+const VERSION = '1.0.12';
 
 function printHelp(): void {
   console.log(`

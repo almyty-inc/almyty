@@ -149,17 +149,60 @@ export class AlmytyClient {
 
   async executeSkill(gatewayId: string, toolId: string, parameters: Record<string, any>): Promise<any> {
     // The execute endpoint expects a UUID. If toolId is a name slug,
-    // resolve it by listing the gateway's tools and matching.
+    // resolve by listing the gateway's tools and matching either
+    // the raw tool name, its kebab slug, OR the new
+    // `${gateway-slug}-${tool-slug}` composed form (with shared
+    // head segments deduped — the same rule the backend uses to
+    // generate SKILL.md names).
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     let resolvedId = toolId;
     if (!uuidRegex.test(toolId)) {
-      const tools: any = await this.request(`/gateways/${gatewayId}/tools`);
-      const list = tools?.data?.gatewayTools || tools?.data?.data || tools?.data || [];
-      const match = (Array.isArray(list) ? list : []).find((gt: any) => {
+      const gateway = await this.request(`/gateways/${gatewayId}`).catch(() => null);
+      const gatewaySlug =
+        (gateway as any)?.data?.endpoint?.replace(/^\/+/, '') || '';
+
+      // Walk every page — server caps limit at 100.
+      const allTools: any[] = [];
+      let page = 1;
+      while (true) {
+        const resp: any = await this.request(
+          `/gateways/${gatewayId}/tools?limit=100&page=${page}`,
+        );
+        const data = resp?.data || resp;
+        const items =
+          data?.gatewayTools || data?.data || (Array.isArray(data) ? data : []);
+        allTools.push(...(Array.isArray(items) ? items : []));
+        const totalPages = data?.totalPages ?? 1;
+        if (page >= totalPages || items.length === 0) break;
+        page++;
+        if (page > 50) break;
+      }
+
+      const slugify = (s: string) =>
+        (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const dedupeShared = (head: string, tail: string) => {
+        const h = head.split('-').filter(Boolean);
+        const t = tail.split('-').filter(Boolean);
+        let i = 0;
+        while (i < t.length && i < h.length && t[i] === h[i]) i++;
+        return t.slice(i).join('-');
+      };
+
+      const match = allTools.find((gt: any) => {
         const t = gt.tool || gt;
-        const slug = t.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-        return slug === toolId || t.name === toolId;
+        if (!t) return false;
+        const rawName = t.name || '';
+        const slug = slugify(rawName);
+        const composed = gatewaySlug
+          ? `${gatewaySlug}-${dedupeShared(gatewaySlug, slug)}`
+          : slug;
+        return (
+          rawName === toolId ||
+          slug === toolId ||
+          composed === toolId
+        );
       });
+
       if (!match) {
         throw new Error(`Tool "${toolId}" not found in gateway ${gatewayId}`);
       }
