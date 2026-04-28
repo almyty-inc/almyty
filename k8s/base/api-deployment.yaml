@@ -222,12 +222,13 @@ spec:
         # V8 old-space defaults to ~1.5 GB regardless of the cgroup
         # memory limit. Pin it just under the container limit so a
         # rogue request can't get killed mid-allocation. Container
-        # limit is 2Gi; reserve ~500 MB for native heap, buffers,
+        # limit is 4Gi; reserve ~500 MB for native heap, buffers,
         # threads, V8 retained arenas. Real-world Stripe import
-        # peaks at ~220 MB heap after the import refactor — this
-        # is sized for headroom on 50 MB-class specs.
+        # peaks at ~220 MB heap after the import refactor — most
+        # of the headroom is for the rest of the runtime (agent
+        # scheduler, plugins, BullMQ workers).
         - name: NODE_OPTIONS
-          value: "--max-old-space-size=1500"
+          value: "--max-old-space-size=3500"
         # Writable tmp dir for the sandbox workers, dependency
         # cache, etc. — readOnlyRootFilesystem above denies every
         # other write. Mounted as an emptyDir so it's tied to the
@@ -254,23 +255,28 @@ spec:
           failureThreshold: 3
         resources:
           requests:
-            # Sized against measured peaks after the schema-import
-            # memory refactor (commit adff115). A real Stripe-class
-            # OpenAPI import (7.4 MB / 587 ops / 1385 resources)
-            # peaks at ~433 MB RSS on staging. 512Mi gives the
-            # scheduler room to pack two replicas per node and
-            # leaves ~80 MB headroom over steady-state idle (~200
-            # MB) before active import work.
-            memory: "512Mi"
+            # Schema-import peak measured at ~433 MB RSS post-fix
+            # (commit adff115), but steady-state staging traffic
+            # (agent runtime, scheduler, plugin host, BullMQ
+            # workers, Redis pub/sub clients) sits well above the
+            # idle-only baseline. 512Mi was OOMKilled within ~30s
+            # of pod start during normal traffic; 1Gi gives the
+            # scheduler room to pack while accounting for the
+            # background workload. Don't drop below this without
+            # actually measuring steady-state under load.
+            memory: "1Gi"
             cpu: "250m"
           limits:
-            # 2Gi is the operating ceiling — ~5x headroom over the
-            # measured 433 MB peak so a single rogue request or a
-            # 50 MB-class spec has room without OOM-killing. Was
-            # 4Gi while we were chasing the OpenAPI parser leak;
-            # post-fix the node pool packs better at 2Gi and we
-            # can still size up if a 100 MB spec lands.
-            memory: "2Gi"
+            # 4Gi is the working ceiling. 2Gi was OOMKilling
+            # crashlooping pods within seconds of startup — even
+            # though Stripe import peaks at 433 MB RSS, the
+            # combined agent runtime + BullMQ workers + plugin
+            # host + Redis subscribers consume a couple hundred
+            # MB on top, and a brief spike during boot pushed past
+            # 2Gi reliably. Hold at 4Gi; revisit only with a real
+            # steady-state memory profile, not a one-shot import
+            # peak measurement.
+            memory: "4Gi"
             cpu: "1000m"
       # emptyDir tmp volume — see the volumeMounts above for why.
       volumes:
