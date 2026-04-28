@@ -253,7 +253,15 @@ spec:
           failureThreshold: 3
         resources:
           requests:
-            memory: "512Mi"
+            # Real-world OpenAPI imports (Stripe ~7.7 MB / 587 ops)
+            # peak the api container at ~2.3 GB. The old 512Mi
+            # request let kubelet schedule the pod onto any node
+            # with 512Mi free, then evict it the moment the import
+            # actually claimed memory. Request 2Gi so the scheduler
+            # reserves real headroom — pods only land on nodes that
+            # can host them through a heavy import without tipping
+            # the node into memory pressure.
+            memory: "2Gi"
             cpu: "250m"
           limits:
             # 4Gi is the operating ceiling. Earlier we tried 8Gi but
