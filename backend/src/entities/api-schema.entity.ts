@@ -35,8 +35,12 @@ export class ApiSchema {
   @Column({ type: 'text' })
   rawSchema: string;
 
-  @Column({ type: 'json' })
-  processedSchema: Record<string, any>;
+  // `processedSchema` (the parsed-result JSON column) was removed
+  // — it duplicated structural data already in operations/resources
+  // and bloated each schema row by 8-15 MB on big imports for a
+  // "pretty view" the UI calls maybe once per API. Callers that
+  // want a parsed view now hit GET /apis/:id/schemas/:schemaId/parsed
+  // which runs the parser on demand against rawSchema.
 
   @Column()
   schemaHash: string;

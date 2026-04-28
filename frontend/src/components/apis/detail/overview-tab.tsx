@@ -77,13 +77,19 @@ export function OverviewTab({
                     className="h-auto p-1 text-xs"
                     onClick={() => {
                       if (!api.schemas || api.schemas.length === 0) return
-                      const schemaContent = api.schemas[0].processedSchema || api.schemas[0].rawSchema || api.schemas[0].content
-                      const blob = new Blob([JSON.stringify(schemaContent, null, 2)], { type: 'application/json' })
+                      // Always download the original raw schema (the
+                      // exact bytes the user uploaded). The parsed
+                      // form is no longer persisted; users who want
+                      // it can hit the on-demand parse endpoint via
+                      // the schema viewer.
+                      const rawText = api.schemas[0].rawSchema || (api.schemas[0] as any).content || ''
+                      const blob = new Blob([rawText], { type: 'application/octet-stream' })
                       const url = URL.createObjectURL(blob)
                       const a = document.createElement('a')
                       a.href = url
-                      a.download = `${api.name}-schema.json`
+                      a.download = api.schemas[0].fileName || `${api.name}-schema.txt`
                       a.click()
+                      URL.revokeObjectURL(url)
                     }}
                   >
                     Download
