@@ -9,12 +9,23 @@
  */
 
 import { existsSync, mkdirSync } from 'fs';
+import { homedir } from 'os';
 import { join } from 'path';
+
+/**
+ * Where an install ends up. `project` means the skill is bound to
+ * this directory's `.x/skills/` so only this checkout sees it;
+ * `home` means it's installed at the user's home-scope dir
+ * (e.g. `~/.codex/skills/`) and every project shares it. `custom`
+ * means the caller specified a `--path` and we don't track scope.
+ */
+export type InstallScope = 'project' | 'home' | 'custom';
 
 export interface AgentTarget {
   name: string;
   configDir: string;
   skillsDir: string;
+  scope?: InstallScope;
 }
 
 /**
@@ -22,7 +33,7 @@ export interface AgentTarget {
  * Aligned with Vercel's skills CLI.
  * See: https://github.com/vercel-labs/skills/blob/main/src/agents.ts
  */
-const AGENT_CONFIGS: Array<{
+export const AGENT_CONFIGS: Array<{
   name: string;
   detectDirs: string[];
   skillsDir: string;
@@ -32,7 +43,13 @@ const AGENT_CONFIGS: Array<{
   { name: 'Cursor', detectDirs: ['.cursor', '.cursorrc'], skillsDir: '.agents/skills' },
   { name: 'GitHub Copilot', detectDirs: ['.github/copilot'], skillsDir: '.agents/skills' },
   { name: 'Windsurf', detectDirs: ['.windsurf'], skillsDir: '.windsurf/skills' },
-  { name: 'Codex', detectDirs: ['.codex'], skillsDir: '.agents/skills' },
+  // Codex reads skills from `.codex/skills/<skill>/SKILL.md` for repo-
+  // local skills (and `$CODEX_HOME/skills/...`, default ~/.codex/skills,
+  // for user-scoped). The agentskills.io universal `.agents/skills/`
+  // path is NOT consulted by Codex, so installs targeted at `.agents/`
+  // never appeared in the running agent. Source: Codex curated skill
+  // docs (~/.codex/vendor_imports/skills/skills/.curated/*/SKILL.md).
+  { name: 'Codex', detectDirs: ['.codex'], skillsDir: '.codex/skills' },
   // --- Additional agents ---
   { name: 'Amp', detectDirs: ['.amp'], skillsDir: '.agents/skills' },
   { name: 'Augment', detectDirs: ['.augment'], skillsDir: '.augment/skills' },
@@ -63,6 +80,7 @@ const AGENT_CONFIGS: Array<{
 
 /**
  * Detect which AI agents are configured in the given project directory.
+ * Project-scope only — for home-scope detection see detectHomeAgents.
  */
 export function detectAgents(projectDir: string): AgentTarget[] {
   const agents: AgentTarget[] = [];
@@ -82,9 +100,54 @@ export function detectAgents(projectDir: string): AgentTarget[] {
           name: config.name,
           configDir: config.detectDirs[0],
           skillsDir: fullSkillsDir,
+          scope: 'project',
         });
       }
     }
+  }
+
+  return agents;
+}
+
+/**
+ * Detect agents the user has installed globally (home-scope) — i.e.
+ * `~/.codex/`, `~/.claude/`, etc. exist regardless of cwd. The
+ * skillsDir returned is the home-scope path (`~/.codex/skills/`),
+ * which Codex and Claude Code both read for cross-project skills.
+ *
+ * Mirrors the project-scope detection: same detectDirs but anchored
+ * at $HOME instead of the project root. The shared `.agents/skills/`
+ * universal convention is intentionally NOT emitted here — that
+ * convention is repo-local (it lives next to the project's source
+ * so the team sees it under version control); if a user wants
+ * universal installs they can use --path explicitly.
+ */
+export function detectHomeAgents(home: string = homedir()): AgentTarget[] {
+  const agents: AgentTarget[] = [];
+  const seenSkillsDirs = new Set<string>();
+
+  for (const config of AGENT_CONFIGS) {
+    const detected = config.detectDirs.some(dir =>
+      existsSync(join(home, dir))
+    );
+
+    if (!detected) continue;
+
+    // Home-scope install path: replace the project-prefixed
+    // skillsDir with a home-prefixed equivalent. Most agents store
+    // skills under <configDir>/skills, so just join home with the
+    // skillsDir from AGENT_CONFIGS — that's already the right
+    // structure (e.g., `.codex/skills` → `<home>/.codex/skills`).
+    const fullSkillsDir = join(home, config.skillsDir);
+    if (seenSkillsDirs.has(fullSkillsDir)) continue;
+    seenSkillsDirs.add(fullSkillsDir);
+
+    agents.push({
+      name: config.name,
+      configDir: config.detectDirs[0],
+      skillsDir: fullSkillsDir,
+      scope: 'home',
+    });
   }
 
   return agents;
