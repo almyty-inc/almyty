@@ -69,29 +69,47 @@ export class OpenAPIParserService implements SchemaParser {
       const api = schemaObject as OpenAPIV3.Document;
       this.assertNoExternalRefs(api);
 
+      // Snapshot the small bits we want to surface in the result
+      // BEFORE we start tearing down `api`. Once these are captured
+      // we can progressively drop traversed sub-trees from `api` so
+      // the per-path wrappers (description, tags, summary objects)
+      // become GC-eligible before extraction even returns. The
+      // schema *sub-objects* themselves are still held by the
+      // returned operations[] / resources[] entries — that's the
+      // data we need to persist and translate into tools.
+      const version = api.openapi || '3.0.0';
+      const info = {
+        title: api.info.title,
+        description: api.info.description,
+        version: api.info.version,
+      };
+      const metadata = {
+        servers: api.servers,
+        externalDocs: api.externalDocs,
+        tags: api.tags,
+        fileName,
+      };
+
       const operations = await this.extractOperationsFromOpenAPI(api);
+      // After operations are extracted, the path-level wrappers
+      // (operation summaries, tags, security stanzas, callbacks)
+      // are no longer needed. Drop the paths object so the per-
+      // path/per-method wrappers can be GC'd while resource
+      // extraction is still walking components.schemas.
+      delete (api as any).paths;
       const resources = await this.extractResourcesFromOpenAPI(api);
+      // Same idea for components — once resources are produced,
+      // the components container (parameters, requestBodies,
+      // responses, securitySchemes, callbacks, links, examples,
+      // headers) is dead weight. Drop it.
+      delete (api as any).components;
 
       return {
-        version: api.openapi || '3.0.0',
-        info: {
-          title: api.info.title,
-          description: api.info.description,
-          version: api.info.version,
-        },
+        version,
+        info,
         operations,
         resources,
-        metadata: {
-          servers: api.servers,
-          externalDocs: api.externalDocs,
-          tags: api.tags,
-          fileName,
-          // Don't retain the entire spec on the ParsedSchema. The
-          // schema is already persisted as rawSchema on ApiSchema —
-          // keeping a parsed-object copy in memory just to put it
-          // in metadata doubled the import's peak memory.
-          // originalSchema: api,
-        },
+        metadata,
       };
     } catch (error) {
       this.logger.error(`Failed to parse OpenAPI schema: ${error.message}`);

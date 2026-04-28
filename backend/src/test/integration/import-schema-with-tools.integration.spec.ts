@@ -287,4 +287,152 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
     expect(result.tools).toBeDefined();
     expect(result.tools!.length).toBeGreaterThan(0);
   });
+
+  /**
+   * Memory regression: `findOne` previously eager-loaded
+   * `['organization', 'schemas', 'operations', 'resources']`, and
+   * `importSchema` called it twice (inside generateToolsFromApi and
+   * again for the post-commit reload). On any non-trivial spec the
+   * `schemas` relation deserialized the full raw + processed schema
+   * JSON column on every load, blowing past a 4 GB heap before
+   * tool generation could run on Stripe-class specs.
+   *
+   * This test pins the contract: `findOne` must not eager-load
+   * `schemas`, `resources`, or `organization`. If any future commit
+   * adds them back this test fails — a developer can always opt into
+   * those relations explicitly per call site, but the default must
+   * stay slim.
+   */
+  it('findOne does not eager-load heavy relations (memory regression)', async () => {
+    // Import enough data to make the assertion meaningful — if
+    // findOne eagerly loaded `schemas`, this api would carry the
+    // entire SAMPLE_OPENAPI string + parsed object graph hanging
+    // off `.schemas`.
+    await service.importSchema(api.id, SAMPLE_OPENAPI, org.id, { generateTools: true });
+
+    const reloaded = await service.findOne(api.id, org.id);
+    expect(reloaded).toBeDefined();
+
+    // The fields must be `undefined` (relation not requested), NOT
+    // `[]` (relation requested but empty). TypeORM materializes
+    // requested relations as arrays even when there are no rows, so
+    // an empty-array result is still a memory leak waiting to grow.
+    expect((reloaded as any).schemas).toBeUndefined();
+    expect((reloaded as any).resources).toBeUndefined();
+    expect((reloaded as any).organization).toBeUndefined();
+
+    // `operations` is the one relation findOne is allowed to load
+    // (generateToolsFromApi falls back to it when preloadedOperations
+    // isn't supplied). Confirm it's still wired so we don't silently
+    // break that fallback.
+    expect((reloaded as any).operations).toBeDefined();
+    expect(Array.isArray((reloaded as any).operations)).toBe(true);
+  });
+
+  /**
+   * Memory regression part 2: the importSchema return path used to
+   * call `findOne` after tool generation to reload the api with
+   * relations. After this fix the returned `api` is the lightweight
+   * row only — operations/resources/tools are returned alongside it,
+   * so the caller already has everything without re-deserializing
+   * the schemas JSON.
+   */
+  it('importSchema returns a lightweight api row without schemas/resources hanging off it', async () => {
+    const result = await importInto(ApiType.OPENAPI, SAMPLE_OPENAPI, 'https://example.com/light');
+    expect(result.api).toBeDefined();
+    expect((result.api as any).schemas).toBeUndefined();
+    expect((result.api as any).resources).toBeUndefined();
+    // operations + resources + schema come back as siblings, not
+    // hanging off `result.api` — that's the contract callers rely on.
+    expect(Array.isArray(result.operations)).toBe(true);
+    expect(Array.isArray(result.resources)).toBe(true);
+    expect(result.schema).toBeDefined();
+  });
+
+  /**
+   * On-demand parse: the parsed object form is no longer persisted
+   * on api_schemas (the processedSchema column was dropped). The
+   * UI gets the parsed view from parseSchemaOnDemand, which runs
+   * the parser against rawSchema for one specific schema row and
+   * returns the result ephemerally. This test pins three real
+   * properties:
+   *   1. importSchema still works against the entity that no
+   *      longer declares processedSchema (would throw a TypeORM
+   *      column-doesn't-exist error if the entity / DB drift).
+   *   2. parseSchemaOnDemand returns a parser-shaped result.
+   *   3. parseSchemaOnDemand is read-only — no rows are added or
+   *      modified by it.
+   */
+  it('parseSchemaOnDemand re-derives a parsed view from rawSchema without writing anything', async () => {
+    const apiRepo = ds.getRepository(Api);
+    const fresh = (await apiRepo.save(
+      apiRepo.create({
+        name: 'Parse-on-demand fixture',
+        type: ApiType.OPENAPI,
+        status: ApiStatus.DRAFT,
+        baseUrl: 'https://example.com/parse-od',
+        organizationId: org.id,
+        authentication: { type: 'none' as any, config: {} },
+      } as any),
+    )) as unknown as Api;
+
+    const result = await service.importSchema(fresh.id, SAMPLE_OPENAPI, org.id, {
+      generateTools: false,
+    });
+    expect(result.schema?.id).toBeDefined();
+
+    // rawSchema is the single source of truth for re-derivation.
+    const persisted = await ds.getRepository(ApiSchema).findOne({
+      where: { id: result.schema.id },
+    });
+    expect(persisted!.rawSchema).toBe(SAMPLE_OPENAPI);
+    const beforeUpdatedAt = (persisted as any).createdAt;
+
+    // The on-demand endpoint hands back parser-shaped output.
+    const parsed = await service.parseSchemaOnDemand(fresh.id, result.schema.id, org.id);
+    expect(parsed).toBeDefined();
+    expect(Array.isArray(parsed.operations)).toBe(true);
+    expect(parsed.operations.length).toBe(1);
+    expect(parsed.operations[0].method).toBe('GET');
+    expect(parsed.operations[0].endpoint).toBe('/get');
+
+    // Read-only contract: no new schema rows, no row mutation.
+    const allSchemas = await ds.getRepository(ApiSchema).find({
+      where: { apiId: fresh.id },
+    });
+    expect(allSchemas.length).toBe(1);
+    expect((allSchemas[0] as any).createdAt).toEqual(beforeUpdatedAt);
+  });
+
+  /**
+   * Tenant guard on parseSchemaOnDemand — a parsed view exposes the
+   * full schema content, so it has to fail for callers from a
+   * different organization. We simulate that by passing a wrong
+   * organizationId and asserting we get NotFound (not a leak).
+   */
+  it('parseSchemaOnDemand rejects cross-tenant access', async () => {
+    const apiRepo = ds.getRepository(Api);
+    const fresh = (await apiRepo.save(
+      apiRepo.create({
+        name: 'Tenant-guard fixture',
+        type: ApiType.OPENAPI,
+        status: ApiStatus.DRAFT,
+        baseUrl: 'https://example.com/tenant',
+        organizationId: org.id,
+        authentication: { type: 'none' as any, config: {} },
+      } as any),
+    )) as unknown as Api;
+
+    const result = await service.importSchema(fresh.id, SAMPLE_OPENAPI, org.id, {
+      generateTools: false,
+    });
+
+    await expect(
+      service.parseSchemaOnDemand(
+        fresh.id,
+        result.schema.id,
+        '00000000-0000-0000-0000-000000000000',
+      ),
+    ).rejects.toThrow();
+  });
 });

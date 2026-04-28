@@ -60,7 +60,12 @@ export class SOAPParserService implements SchemaParser {
           fileName,
           schemaType: 'soap',
           targetNamespace,
-          originalWSDL: wsdl,
+          // `originalWSDL: wsdl` was retained here for no downstream
+          // consumer. The xml2js-parsed WSDL tree is 5-10× the raw
+          // XML size in memory — a 50 MB WSDL would expand into
+          // ~300 MB of object graph and stay pinned for the entire
+          // tool generation phase. The raw XML is already in
+          // ApiSchema.rawSchema if anyone ever needs to re-parse.
         },
       };
     } catch (error) {

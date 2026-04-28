@@ -45,7 +45,10 @@ export class GraphQLParserService implements SchemaParser {
         metadata: {
           fileName,
           schemaType: 'graphql',
-          originalSchema: rawSchema,
+          // `originalSchema: rawSchema` was retained here for no
+          // downstream consumer — the raw SDL is already persisted
+          // as ApiSchema.rawSchema in DB. On a 50 MB SDL this
+          // doubled the parser's peak heap for nothing.
         },
       };
     } catch (error) {

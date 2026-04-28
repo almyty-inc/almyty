@@ -34,7 +34,11 @@ export class ProtobufParserService implements SchemaParser {
         metadata: {
           fileName,
           schemaType: 'protobuf',
-          originalProto: rawSchema,
+          // `originalProto: rawSchema` was retained here for no
+          // downstream consumer — the raw proto text is already
+          // persisted as ApiSchema.rawSchema in DB. On a massive
+          // proto (Google APIs hit ~10 MB) this doubled the
+          // parser's peak heap.
           packageName: root.name,
         },
       };
