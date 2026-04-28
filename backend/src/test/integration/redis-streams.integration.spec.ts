@@ -5,7 +5,12 @@
  * Verifies events written by one "pod" (emitEvent) can be read
  * by another "pod" (subscribeRunEvents) — the core cross-pod contract.
  *
- * Requires: RUN_DB_INTEGRATION=1 and a running Redis (docker-compose).
+ * Requires: RUN_DB_INTEGRATION=1 and a running Redis. The default
+ * `localhost:6379` is fine for a bare-metal redis; if running
+ * against docker-compose (which exposes redis on host port 6380),
+ * also set REDIS_PORT=6380. Without it the suite hangs on
+ * `redis.ping()` with the default ioredis reconnect loop until
+ * the afterAll timeout fires.
  */
 
 const SKIP = !process.env.RUN_DB_INTEGRATION;
