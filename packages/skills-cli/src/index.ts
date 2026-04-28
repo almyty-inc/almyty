@@ -6,8 +6,12 @@ import { detectAgents, getDefaultTargets, getAllTargets } from './agents.js';
 import { installSkills, removeSkills, listInstalledSkills } from './installer.js';
 import { loadConfig, resolveTargets } from './config.js';
 import { generateMetaSkill } from './meta-skill.js';
+import {
+  selectInstallTargetsAuto,
+  selectInstallTargetsInteractive,
+} from './target-selector.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.9';
 
 function printHelp(): void {
   console.log(`
@@ -43,15 +47,42 @@ Config:
   ALMYTY_TOKEN                   Override auth token
 
 Options:
+  --agent, -a <name>             Install target by name (repeatable; e.g.
+                                 -a codex -a claude). Accepts '*' or 'all'
+                                 for every known agent regardless of
+                                 detection. Partial match.
+  --path, -p <dir>               Custom skills dir, repeatable. Bypasses
+                                 agent detection.
+  --all                          Install to every PROJECT-detected agent
+                                 (plus the universal .agents/skills/).
+                                 Combine with --global to also include
+                                 home-detected. Skips the picker.
+  --global, -G                   Use home-scope (~/.codex/skills/, etc.)
+                                 instead of project-scope. With --all,
+                                 includes home-detected agents alongside
+                                 project-detected. With --agent <name>,
+                                 prefers home-scope when the agent is
+                                 detected at $HOME.
+  --yes, -y                      Skip the interactive picker. Falls back
+                                 to detected agents (or defaults).
   --interval, -i <seconds>       Daemon poll interval in seconds (default: 60)
   --url <url>                    almyty API URL (default: https://api.almyty.com)
   --dir <path>                   Project directory (default: current directory)
   --help, -h                     Show help
   --version, -v                  Show version
 
+Target selection (install):
+  Without flags in a TTY, install shows a multi-select picker of all
+  known agents (detected ones pre-checked) plus a "custom path…" option.
+  In a non-TTY, the picker is skipped: install writes to detected agents
+  and the universal .agents/skills/ directory.
+
 Examples:
   npx @almyty/skills daemon
   npx @almyty/skills install myorg/petstore/get-pet
+  npx @almyty/skills install @org/gw -a codex -a claude
+  npx @almyty/skills install @org/gw --path ./tmp/skills --yes
+  npx @almyty/skills install @org/gw --all
   npx @almyty/skills search "weather"
   npx @almyty/skills run myorg/petstore/get-pet --petId 123
 `);
@@ -61,7 +92,30 @@ interface ParsedArgs {
   command?: string;
   ref?: string;
   positional: string[];
-  flags: Record<string, string | boolean>;
+  flags: Record<string, string | string[] | boolean>;
+}
+
+/**
+ * Repeatable flags accumulate into a string[] when supplied more
+ * than once. Used by `--agent` and `--path` so callers can pick
+ * multiple targets without inventing comma syntax (the selector
+ * also splits on comma/space, so both styles work).
+ */
+const REPEATABLE_FLAGS = new Set(['agent', 'path']);
+
+function appendRepeatable(
+  flags: Record<string, string | string[] | boolean>,
+  key: string,
+  value: string,
+): void {
+  const existing = flags[key];
+  if (existing === undefined || existing === true || existing === false) {
+    flags[key] = value;
+  } else if (typeof existing === 'string') {
+    flags[key] = [existing, value];
+  } else {
+    existing.push(value);
+  }
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -79,6 +133,18 @@ function parseArgs(argv: string[]): ParsedArgs {
       result.flags.dir = argv[++i] || '';
     } else if (arg === '--interval' || arg === '-i') {
       result.flags.interval = argv[++i] || '60';
+    } else if (arg === '--agent' || arg === '-a') {
+      appendRepeatable(result.flags, 'agent', argv[++i] || '');
+    } else if (arg === '--path' || arg === '-p') {
+      appendRepeatable(result.flags, 'path', argv[++i] || '');
+    } else if (arg === '--all') {
+      result.flags.all = true;
+    } else if (arg === '--yes' || arg === '-y') {
+      result.flags.yes = true;
+    } else if (arg === '--global' || arg === '-G') {
+      // --global / -G installs at home scope (~/.codex/skills/, etc.)
+      // -g remains aliased to --gateway for back-compat.
+      result.flags.global = true;
     } else if (arg === '--help' || arg === '-h') {
       result.flags.help = true;
     } else if (arg === '--version' || arg === '-v') {
@@ -89,7 +155,11 @@ function parseArgs(argv: string[]): ParsedArgs {
       const key = arg.slice(2);
       const next = argv[i + 1];
       if (next && !next.startsWith('--')) {
-        result.flags[key] = next;
+        if (REPEATABLE_FLAGS.has(key)) {
+          appendRepeatable(result.flags, key, next);
+        } else {
+          result.flags[key] = next;
+        }
         i++;
       } else {
         result.flags[key] = true;
@@ -125,9 +195,12 @@ function requireRef(args: ParsedArgs, command: string): string {
 
 function parseRunParams(args: ParsedArgs): Record<string, any> {
   const params: Record<string, any> = {};
-  const entries = Object.entries(args.flags);
-  for (const [key, value] of entries) {
-    if (['url', 'dir', 'help', 'version', 'interval', 'gateway'].includes(key)) continue;
+  const reserved = new Set([
+    'url', 'dir', 'help', 'version', 'interval', 'gateway',
+    'agent', 'path', 'all', 'yes', 'global',
+  ]);
+  for (const [key, value] of Object.entries(args.flags)) {
+    if (reserved.has(key)) continue;
     params[key] = value;
   }
   return params;
@@ -331,7 +404,26 @@ async function main(): Promise<void> {
 
       console.log(`\n${gwName} (${skills.length} skill(s))`);
 
-      const targets = resolveTargets(projectDir, config);
+      const selection = {
+        projectDir,
+        config,
+        agentFlag: args.flags.agent as string | string[] | undefined,
+        pathFlag: args.flags.path as string | string[] | undefined,
+        all: !!args.flags.all,
+        yes: !!args.flags.yes,
+        global: !!args.flags.global,
+      };
+      let targets = selectInstallTargetsAuto(selection);
+      if (targets === null) {
+        // Interactive picker — TTY + no flags + no .almytyrc.
+        targets = await selectInstallTargetsInteractive(selection);
+      }
+
+      if (targets.length === 0) {
+        console.error('No install targets resolved. Pass --agent / --path / --all or run without flags in a TTY.');
+        process.exit(1);
+      }
+
       const results = targets.map(target => installSkills(skills, target));
 
       console.log('');
