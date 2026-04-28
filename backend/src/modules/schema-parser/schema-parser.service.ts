@@ -52,11 +52,12 @@ export class SchemaParserService {
         throw new BadRequestException(`Schema validation failed: ${validation.errors.join(', ')}`);
       }
 
-      // Create and save ApiSchema
+      // Create and save ApiSchema. processedSchema is no longer
+      // persisted (re-derived on demand from rawSchema via the
+      // parse endpoint).
       const apiSchema = this.apiSchemaRepository.create({
         apiId: api.id,
         rawSchema,
-        processedSchema: parsedSchema,
         version: parsedSchema.info.version,
         fileName,
         fileSize: Buffer.byteLength(rawSchema, 'utf8'),

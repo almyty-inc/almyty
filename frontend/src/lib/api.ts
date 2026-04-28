@@ -452,7 +452,10 @@ export const apisApi = {
   getResources: (id: string) => apiGet(`/apis/${id}/resources`),
   
   getSchemas: (id: string) => apiGet(`/apis/${id}/schemas`),
-  
+
+  getParsedSchema: (id: string, schemaId: string) =>
+    apiGet(`/apis/${id}/schemas/${schemaId}/parsed`),
+
   updateStatus: (id: string, status: string) => apiPut(`/apis/${id}/status`, { status }),
 
   createHttpApi: (data: any) => apiPost('/apis/http', data),

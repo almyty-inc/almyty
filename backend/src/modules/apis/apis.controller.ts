@@ -461,6 +461,29 @@ export class ApisController {
     return { success: true, data: result, message: 'Schemas retrieved successfully' };
   }
 
+  /**
+   * On-demand parse of a stored schema. The persisted row only
+   * carries the original rawSchema (text/JSON/XML/proto); the
+   * parsed object form is rebuilt by the parser when the UI's
+   * "view parsed" tab actually asks for it. This trades 8-15 MB
+   * of disk per import row for ~50-300 ms of parse latency on
+   * the rare clicks that need it.
+   */
+  @Get(':id/schemas/:schemaId/parsed')
+  @Roles('member', 'admin', 'owner')
+  async getParsedSchema(
+    @Request() req,
+    @Param('id') id: string,
+    @Param('schemaId') schemaId: string,
+  ) {
+    const result = await this.apisService.parseSchemaOnDemand(
+      id,
+      schemaId,
+      req.user.currentOrganizationId,
+    );
+    return { success: true, data: result, message: 'Schema parsed successfully' };
+  }
+
   @Put(':id/status')
   @Roles('admin', 'owner')
   async updateStatus(

@@ -154,9 +154,22 @@ export class ApisService {
    * this layer.
    */
   async findOne(id: string, organizationId: string): Promise<Api | null> {
+    // Only eager-load `operations` — that's the one relation any
+    // caller actually consumes (generateToolsFromApi falls back to
+    // `api.operations` when preloadedOperations isn't supplied).
+    //
+    // Previously this also pulled `schemas`, `resources`, and
+    // `organization`. None of those are read by any caller. The
+    // `schemas` relation was the killer: each row holds the full
+    // raw + processed schema JSON column, so on a Stripe-class
+    // import a single `findOne` deserialized ~30 MB+ of JSON into
+    // a JS object graph that V8 then needed several hundred MB to
+    // hold. On re-imports the existing operations + resources
+    // amplified this enough to OOM the worker before tool
+    // generation even started.
     return this.apiRepository.findOne({
       where: { id, organizationId },
-      relations: ['organization', 'schemas', 'operations', 'resources'],
+      relations: ['operations'],
     });
   }
 
@@ -366,8 +379,10 @@ export class ApisService {
     try {
       this.logMemoryPhase('start');
 
-      // Parse the schema
-      const parsedSchema = await this.schemaParserService.parseApiSchema(
+      // Parse the schema. `let` (not const) so we can null it out
+      // once extraction is done — keeping the parsed graph in scope
+      // through tool generation wastes tens of MB of retained heap.
+      let parsedSchema: any = await this.schemaParserService.parseApiSchema(
         schemaContent,
         api.type,
         options.fileName,
@@ -375,12 +390,14 @@ export class ApisService {
 
       this.logMemoryPhase('after-parse');
 
-      // Create API schema record
+      // Create API schema record. processedSchema is no longer
+      // persisted — the parsed form is rebuilt on demand from
+      // rawSchema via the on-demand parse endpoint when the UI
+      // asks for it.
       const apiSchema = this.apiSchemaRepository.create({
         apiId,
         version: parsedSchema.version,
         rawSchema: schemaContent,
-        processedSchema: parsedSchema,
         fileName: options.fileName,
         fileSize: schemaSizeBytes,
         format: this.detectSchemaFormat(api.type),
@@ -392,12 +409,26 @@ export class ApisService {
 
       const savedSchema = await queryRunner.manager.save(apiSchema);
 
+      // Once the schema row is persisted we no longer need the raw
+      // text hanging off the JS entity. The DB has it; the JS heap
+      // carrying it through the rest of the import is wasted. On a
+      // 7 MB Stripe spec this is ~10 MB of retained heap until tool
+      // gen finishes. Null it on the returned entity so it's
+      // GC-eligible immediately.
+      (savedSchema as any).rawSchema = '';
+
       // Extract operations and resources in parallel for better performance
       const parser = this.schemaParserService.getParserForApiType(api.type);
       const [operations, resources] = await Promise.all([
         parser.extractOperations(parsedSchema),
         parser.extractResources(parsedSchema),
       ]);
+
+      // Drop the parser's intermediate object graph — `operations`
+      // and `resources` are the only data we need from this point
+      // on. Keeping `parsedSchema` in scope through tool gen wastes
+      // tens of MB of retained heap on big specs.
+      parsedSchema = null;
 
       this.logMemoryPhase(`after-extract ops=${operations.length} resources=${resources.length}`);
 
@@ -471,7 +502,7 @@ export class ApisService {
           generatedTools = await this.generateToolsFromApi(
             apiId,
             organizationId,
-            undefined,
+            savedOperations,
             onProgress
               ? async (done, total) => onProgress(50 + Math.floor((done / Math.max(total, 1)) * 50))
               : undefined,
@@ -487,8 +518,36 @@ export class ApisService {
 
       this.logMemoryPhase(`after-tool-gen tools=${generatedTools.length}`);
 
-      // Reload the API with updated relations
-      const updatedApi = await this.findOne(apiId, organizationId);
+      // Tool gen has consumed the per-operation JSON metadata
+      // (parameters / responses / schema) — they're no longer
+      // needed by any caller of importSchema (the processor uses
+      // counts; the controller returns a 202 with just a job id).
+      // Null them on the in-memory entities so the GC can reclaim
+      // the per-row JSON object graphs while we still hold the
+      // arrays for the return contract.
+      for (const op of savedOperations) {
+        (op as any).parameters = null;
+        (op as any).responses = null;
+        (op as any).metadata = null;
+      }
+      for (const res of savedResources) {
+        (res as any).schema = null;
+        (res as any).properties = null;
+        (res as any).examples = null;
+        (res as any).validationRules = null;
+      }
+      this.logMemoryPhase('after-trim-rows');
+
+      // Lightweight reload — operations/resources/tools are returned
+      // alongside this api object, so callers don't need them eager-
+      // loaded onto `api`. Loading the `schemas` relation here would
+      // re-deserialize the entire raw + processed schema JSON column
+      // (the whole imported document), and on Stripe-class specs
+      // this duplicated graph blew the worker heap.
+      const updatedApi = await this.apiRepository.findOne({
+        where: { id: apiId, organizationId },
+      });
+      this.logMemoryPhase('after-reload-api');
 
       return {
         api: updatedApi!,
@@ -564,7 +623,17 @@ export class ApisService {
     preloadedOperations?: Operation[],
     onBatchProgress?: (done: number, total: number) => void | Promise<void>,
   ): Promise<Tool[]> {
-    const api = await this.findOne(apiId, organizationId);
+    // When operations are supplied by the caller (e.g. inline from
+    // importSchema), skip the heavy relation-loading findOne. That
+    // call eager-loads `schemas` — which deserializes the entire
+    // raw + processed schema JSON columns — plus operations and
+    // resources we already have in memory. On a Stripe-class spec
+    // the duplicated graph alone blows past a 4 GB heap before the
+    // first tool is generated. Only fetch the lightweight api row
+    // for name + organizationId.
+    const api = preloadedOperations
+      ? await this.apiRepository.findOne({ where: { id: apiId, organizationId } })
+      : await this.findOne(apiId, organizationId);
 
     if (!api) {
       throw new NotFoundException('API not found');
@@ -638,7 +707,35 @@ export class ApisService {
           }
         }),
       );
-      generatedTools.push(...batchResults.filter(Boolean) as Tool[]);
+      // Trim each tool's heavy JSON columns before accumulating.
+      // The DB row is canonical; the in-memory copy is only kept so
+      // callers can count + reference Tool.id / .name / .operationId.
+      // Holding 587 fully-hydrated Tool entities (each with translated
+      // input + output schemas, parameters, configuration) adds tens
+      // of MB of retained heap for nothing once tool gen is done.
+      for (const tool of batchResults) {
+        if (!tool) continue;
+        (tool as any).parameters = null;
+        (tool as any).configuration = null;
+        (tool as any).httpConfig = null;
+        (tool as any).graphqlConfig = null;
+        (tool as any).soapConfig = null;
+        (tool as any).grpcConfig = null;
+        (tool as any).llmConfig = null;
+        (tool as any).sdkConfig = null;
+        (tool as any).metadata = null;
+        (tool as any).examples = null;
+        generatedTools.push(tool);
+      }
+      // The operations consumed by this batch won't be touched again
+      // by tool gen — drop their JSON metadata now so the per-row
+      // schemas can be GC'd while the next batch runs, instead of
+      // waiting for the importSchema-level trim at the very end.
+      for (const op of batch) {
+        (op as any).parameters = null;
+        (op as any).responses = null;
+        (op as any).metadata = null;
+      }
 
       // Heartbeat the host job (if any) every batch. The schema-import
       // BullMQ processor passes onBatchProgress => job.progress(); a
@@ -715,6 +812,47 @@ export class ApisService {
       where: { apiId },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  /**
+   * Run the parser against a stored rawSchema on demand and return
+   * the parsed-form (operations, resources, metadata) without
+   * persisting anything. Used by the UI's "view parsed" path so we
+   * don't have to keep an 8-15 MB processedSchema column on every
+   * row for a feature that's clicked maybe once per API.
+   *
+   * The parser used is dictated by the parent api.type, so the
+   * caller can't inject a different parser by querying with a
+   * mismatched expectation.
+   */
+  async parseSchemaOnDemand(
+    apiId: string,
+    schemaId: string,
+    organizationId: string,
+  ): Promise<any> {
+    await this.assertApiInOrganization(apiId, organizationId);
+    const api = await this.apiRepository.findOne({
+      where: { id: apiId, organizationId },
+    });
+    if (!api) {
+      throw new NotFoundException('API not found');
+    }
+    const schema = await this.apiSchemaRepository.findOne({
+      where: { id: schemaId, apiId },
+    });
+    if (!schema) {
+      throw new NotFoundException('Schema not found');
+    }
+    if (!schema.rawSchema) {
+      throw new BadRequestException(
+        'Schema row has no rawSchema content — cannot parse on demand',
+      );
+    }
+    return this.schemaParserService.parseApiSchema(
+      schema.rawSchema,
+      api.type,
+      schema.fileName,
+    );
   }
 
   async testApiConnection(
