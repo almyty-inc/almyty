@@ -43,12 +43,25 @@ export class HealthController {
    * Liveness probe — simple uptime, no dependency checks
    * Used by: Kubernetes liveness probe
    * If this fails, k8s restarts the pod
+   *
+   * Threshold is set near the Node heap ceiling (NODE_OPTIONS pins
+   * --max-old-space-size=3500). The previous 500 MB threshold was
+   * a foot-cannon: any heavy-but-legitimate work (real-world OpenAPI
+   * import — 7.7 MB Stripe spec, AWS-class spec, etc.) routinely
+   * pushed heap past 500 MB, the liveness probe failed, and k8s
+   * killed the worker mid-import. The job then "stalled" in BullMQ
+   * because the worker was getting restarted, not because it was
+   * actually wedged.
+   *
+   * 3.4 GB leaves a small margin under the 3500 MB heap ceiling so
+   * we still catch a genuine runaway leak before V8 itself OOMs,
+   * but we don't kill the pod for doing the work it was sized to do.
    */
   @Get('live')
   @HealthCheck()
   liveness() {
     return this.health.check([
-      () => this.memory.checkHeap('memory_heap', 500 * 1024 * 1024), // 500MB
+      () => this.memory.checkHeap('memory_heap', 3400 * 1024 * 1024),
     ]);
   }
 
