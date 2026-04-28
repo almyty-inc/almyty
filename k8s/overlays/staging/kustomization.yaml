@@ -62,7 +62,13 @@ patches:
     patch: |-
       - op: replace
         path: /spec/replicas
-        value: 2
+        # Temporarily 1 (was 2). Two 2-GB-using pods compete for the
+        # same node when a real-world OpenAPI import is in flight,
+        # and the node hits memory pressure → kubelet evicts one of
+        # them mid-import (Stripe job 290 was killed at iter ~310s
+        # by node-level eviction, not pod-level OOM). Bump back to
+        # 2 once the staging node pool is upsized.
+        value: 1
 
   - target:
       kind: Deployment
