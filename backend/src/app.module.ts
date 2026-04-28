@@ -102,7 +102,13 @@ import { databaseConfig } from './config/database.config';
             logging: configService.get('NODE_ENV') === 'development',
             ssl: dbSsl ? { rejectUnauthorized: false } : false,
             extra: {
-              max: parseInt(configService.get<string>('DB_POOL_SIZE', '10')),
+              // Default pool 10 → 30. Tool generation now batches 20
+              // saves in flight per import (was 5); 30 gives the
+              // import worker its full batch + spare connections for
+              // the rest of the app's concurrent request handling.
+              // Postgres default max_connections is 100; one pod
+              // taking 30 leaves plenty for sibling pods + admin.
+              max: parseInt(configService.get<string>('DB_POOL_SIZE', '30')),
               ...(dbSsl && { ssl: { rejectUnauthorized: false } }),
             },
           });
