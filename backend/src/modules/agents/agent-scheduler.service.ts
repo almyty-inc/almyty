@@ -48,6 +48,14 @@ export class AgentSchedulerService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    // Emergency-disable gate. Set DISABLE_AGENT_SCHEDULER=true on the
+    // pod to skip both restore-on-boot and execution. Used to bisect
+    // whether a runaway scheduled agent is the cause of pod OOMs in
+    // production — clear this once root cause is identified.
+    if (process.env.DISABLE_AGENT_SCHEDULER === 'true') {
+      this.logger.warn('[SCHEDULER_DISABLED] DISABLE_AGENT_SCHEDULER=true — skipping schedule restore on boot');
+      return;
+    }
     await this.restoreSchedules();
   }
 
@@ -194,6 +202,15 @@ export class AgentSchedulerService implements OnModuleInit {
 
   @Process('execute-agent')
   async handleScheduledExecution(job: Job): Promise<void> {
+    // Same emergency gate as onModuleInit. The repeatable job entries
+    // already exist in BullMQ from prior boots; setting the env var
+    // alone wouldn't stop them firing without also short-circuiting
+    // the processor.
+    if (process.env.DISABLE_AGENT_SCHEDULER === 'true') {
+      this.logger.warn('[SCHEDULER_DISABLED] dropping scheduled-execution job');
+      return;
+    }
+
     const { agentId, organizationId, userId, input } = job.data;
 
     if (!agentId || !organizationId) {
