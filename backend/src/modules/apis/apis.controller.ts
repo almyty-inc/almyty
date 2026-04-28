@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  Res,
   UseGuards,
   Request,
   BadRequestException,
@@ -17,6 +18,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
@@ -318,6 +320,95 @@ export class ApisController {
         message: 'Import in progress',
       };
     }
+  }
+
+  /**
+   * Server-Sent Events stream for live import progress. Frontend
+   * connects after enqueueing an import and gets every progress
+   * tick + the final state, no polling required.
+   *
+   * Auth + cross-tenant guard mirrors getImportStatus exactly:
+   * verify the api belongs to the caller's org first, then verify
+   * the job's apiId matches. Without those, an authenticated user
+   * could subscribe to any job by id.
+   */
+  @Get(':id/import-status/:jobId/stream')
+  @Roles('member', 'admin', 'owner')
+  async streamImportStatus(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('jobId') jobId: string,
+    @Res() res: Response,
+  ) {
+    const api = await this.apisService.findOne(id, req.user?.currentOrganizationId);
+    if (!api) {
+      throw new NotFoundException('API not found');
+    }
+
+    const job = await this.schemaImportQueue.getJob(jobId);
+    if (!job || job.data?.apiId !== id) {
+      throw new NotFoundException('Job not found');
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering
+    res.flushHeaders?.();
+
+    let lastProgress = -1;
+    let lastState = '';
+    let stopped = false;
+
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      try { res.end(); } catch { /* socket already closed */ }
+    };
+
+    const emit = async () => {
+      if (stopped) return false;
+      const state = await job.getState();
+      const progress = job.progress();
+      const progressNum = typeof progress === 'number' ? progress : 0;
+      if (state !== lastState || progressNum !== lastProgress) {
+        const payload: any = { state, progress: progressNum };
+        if (state === 'completed') payload.result = job.returnvalue;
+        if (state === 'failed') payload.error = job.failedReason;
+        res.write(`event: progress\ndata: ${JSON.stringify(payload)}\n\n`);
+        lastProgress = progressNum;
+        lastState = state;
+      }
+      if (state === 'completed' || state === 'failed') {
+        stop();
+        return false;
+      }
+      return true;
+    };
+
+    await emit();
+    const interval = setInterval(async () => {
+      try {
+        const cont = await emit();
+        if (!cont) clearInterval(interval);
+      } catch (err) {
+        clearInterval(interval);
+        stop();
+      }
+    }, 1000);
+
+    // Cap the SSE life at 15 min — anything longer is the host job
+    // being stuck and the client should re-poll the status endpoint.
+    const cap = setTimeout(() => {
+      clearInterval(interval);
+      stop();
+    }, 15 * 60 * 1000);
+
+    req.on('close', () => {
+      clearInterval(interval);
+      clearTimeout(cap);
+      stop();
+    });
   }
 
   @Post(':id/generate-tools')
