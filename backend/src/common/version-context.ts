@@ -3,17 +3,6 @@ import { AsyncLocalStorage } from 'async_hooks';
 export interface VersionContextStore {
   userId?: string;
   userEmail?: string;
-  /**
-   * Bulk-import override. When true, CustomVersionSubscriber skips
-   * persisting per-row version diffs entirely. Used by schema
-   * imports that may create 600+ entities in one go — the diff
-   * machinery materialises a full JSON copy of every entity in
-   * memory before flush, which on a Stripe-class import added
-   * 200-400 MB to peak heap. Per-row history isn't useful for
-   * fresh-imported entities anyway; the import itself is the
-   * single audit event.
-   */
-  skipVersions?: boolean;
 }
 
 export const versionContext = new AsyncLocalStorage<VersionContextStore>();
@@ -23,6 +12,8 @@ export function getVersionOwner(): string {
   return ctx?.userEmail || ctx?.userId || 'system';
 }
 
-export function shouldSkipVersions(): boolean {
-  return versionContext.getStore()?.skipVersions === true;
-}
+// Per-save versioning skip is now provided upstream by typeorm-versions
+// (>=0.6.0) — use saveWithoutVersioning(target, entity, options?) at
+// the call site instead of an AsyncLocalStorage flag. The subscriber
+// reads event.queryRunner?.data?.skipVersioning, which is set
+// transactionally by the upstream helper for the duration of the save.

@@ -17,7 +17,6 @@ import { ToolsService } from '../tools/tools.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
-import { versionContext } from '../../common/version-context';
 
 export interface CreateApiData {
   name: string;
@@ -341,27 +340,6 @@ export class ApisService {
     options: ImportSchemaOptions = {},
     onProgress?: (pct: number) => void | Promise<void>,
   ): Promise<{ api: Api; schema: ApiSchema; operations: Operation[]; resources: Resource[]; tools?: Tool[] }> {
-    // Run the entire import inside a versionContext that disables
-    // the typeorm-versions subscriber. A real-world OpenAPI import
-    // creates 600+ Operation entities + 600+ Tool entities; with
-    // versions on, each save materialises a JSON diff of the entity
-    // and queues a `versions` row, holding ~1200 diffs in memory
-    // before flush. On a Stripe-class spec that was 200-400 MB of
-    // pure subscriber overhead. Bulk imports don't need per-row
-    // history (they're one logical event) — the api row's audit
-    // log entry is the right granularity.
-    return versionContext.run({ skipVersions: true }, () =>
-      this.importSchemaInner(apiId, schemaContent, organizationId, options, onProgress),
-    );
-  }
-
-  private async importSchemaInner(
-    apiId: string,
-    schemaContent: string,
-    organizationId: string,
-    options: ImportSchemaOptions = {},
-    onProgress?: (pct: number) => void | Promise<void>,
-  ): Promise<{ api: Api; schema: ApiSchema; operations: Operation[]; resources: Resource[]; tools?: Tool[] }> {
     const api = await this.findOne(apiId, organizationId);
 
     if (!api) {
@@ -386,12 +364,16 @@ export class ApisService {
     await queryRunner.startTransaction();
 
     try {
+      this.logMemoryPhase('start');
+
       // Parse the schema
       const parsedSchema = await this.schemaParserService.parseApiSchema(
         schemaContent,
         api.type,
         options.fileName,
       );
+
+      this.logMemoryPhase('after-parse');
 
       // Create API schema record
       const apiSchema = this.apiSchemaRepository.create({
@@ -417,6 +399,8 @@ export class ApisService {
         parser.extractResources(parsedSchema),
       ]);
 
+      this.logMemoryPhase(`after-extract ops=${operations.length} resources=${resources.length}`);
+
       // Set apiId for all operations and resources
       operations.forEach(op => op.apiId = apiId);
       resources.forEach(res => res.apiId = apiId);
@@ -429,15 +413,17 @@ export class ApisService {
       // be GC'd before the next is loaded. ~50 keeps each pg
       // INSERT under the libpq parameter cap (16k params) for any
       // realistic operation row width.
+      // Skip per-row version diffs during bulk import — see comment
+      // on importSchema. typeorm-versions >=0.6.0's subscriber reads
+      // SaveOptions.data.skipVersioning, set by the helper here.
       const SAVE_CHUNK = 50;
+      const skipVer = { data: { skipVersioning: true } };
       const savedOperations: Operation[] = [];
       for (let i = 0; i < operations.length; i += SAVE_CHUNK) {
         await this.awaitHeapHeadroom();
         const slice = operations.slice(i, i + SAVE_CHUNK);
-        const saved = await queryRunner.manager.save(slice);
+        const saved = await queryRunner.manager.save(slice, skipVer);
         savedOperations.push(...(saved as Operation[]));
-        // Periodic heartbeat so the host BullMQ job can refresh
-        // its lock during a long save phase.
         if (onProgress) {
           try {
             await onProgress(10 + Math.floor((i / Math.max(operations.length, 1)) * 30));
@@ -448,7 +434,7 @@ export class ApisService {
       for (let i = 0; i < resources.length; i += SAVE_CHUNK) {
         await this.awaitHeapHeadroom();
         const slice = resources.slice(i, i + SAVE_CHUNK);
-        const saved = await queryRunner.manager.save(slice);
+        const saved = await queryRunner.manager.save(slice, skipVer);
         savedResources.push(...(saved as Resource[]));
       }
       // The unparsed source arrays are no longer needed; let GC
@@ -456,6 +442,7 @@ export class ApisService {
       // generation also allocates heavily.
       operations.length = 0;
       resources.length = 0;
+      this.logMemoryPhase('after-save-ops');
 
       // Update API status if it was draft
       if (api.status === ApiStatus.DRAFT) {
@@ -476,6 +463,7 @@ export class ApisService {
       // be retried — that's the same shape the standalone endpoint
       // already provides.
       await queryRunner.commitTransaction();
+      this.logMemoryPhase('after-commit');
 
       let generatedTools: Tool[] = [];
       if (options.generateTools) {
@@ -496,6 +484,8 @@ export class ApisService {
           throw toolErr;
         }
       }
+
+      this.logMemoryPhase(`after-tool-gen tools=${generatedTools.length}`);
 
       // Reload the API with updated relations
       const updatedApi = await this.findOne(apiId, organizationId);
@@ -587,6 +577,7 @@ export class ApisService {
 
     this.logger.log(`[TOOL-GEN] Starting PARALLEL tool generation for API ${api.name} (${apiId})`);
     this.logger.log(`[TOOL-GEN] Found ${operations.length} operations to process`);
+    this.logMemoryPhase(`tool-gen-start ops=${operations.length}`);
 
     let skippedInactive = 0;
     let skippedExisting = 0;
@@ -800,6 +791,24 @@ export class ApisService {
    * this, the import naturally throttles when the host is under
    * pressure.
    */
+  /**
+   * One-line memory snapshot for import-phase diagnostics. Logs heap
+   * + RSS + external in MB so we can see which phase actually moves
+   * peak memory. Cheap (one v8 stat read), only logged at phase
+   * boundaries (4-6 calls per import) so it doesn't pollute logs.
+   *
+   * Format:
+   *   [MEM phase] heapUsed=NN heapTotal=NN rss=NN external=NN
+   */
+  private logMemoryPhase(phase: string): void {
+    const m = process.memoryUsage();
+    const mb = (b: number) => Math.round(b / 1024 / 1024);
+    this.logger.log(
+      `[MEM ${phase}] heapUsed=${mb(m.heapUsed)} heapTotal=${mb(m.heapTotal)} ` +
+      `rss=${mb(m.rss)} external=${mb(m.external)} arrayBuffers=${mb(m.arrayBuffers || 0)}`,
+    );
+  }
+
   private async awaitHeapHeadroom(threshold = 0.75): Promise<void> {
     const stats = v8.getHeapStatistics();
     const ratio = stats.used_heap_size / Math.max(stats.heap_size_limit, 1);

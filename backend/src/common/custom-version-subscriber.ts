@@ -5,15 +5,18 @@ import {
   UpdateEvent,
   RemoveEvent,
 } from 'typeorm';
-import { isVersionedEntity } from 'typeorm-versions';
-import { VersionRepository } from 'typeorm-versions';
-import { VersionEvent } from 'typeorm-versions';
-import { getVersionOwner, shouldSkipVersions } from './version-context';
+import {
+  isVersionedEntity,
+  isVersioningSkipped,
+  VersionRepository,
+  VersionEvent,
+} from 'typeorm-versions';
+import { getVersionOwner } from './version-context';
 
 @EventSubscriber()
 export class CustomVersionSubscriber implements EntitySubscriberInterface {
   async afterInsert(event: InsertEvent<any>) {
-    if (shouldSkipVersions()) return;
+    if (isVersioningSkipped(event.queryRunner?.data)) return;
     if (isVersionedEntity(event.entity)) {
       await VersionRepository(event.connection).saveVersion(
         event.entity,
@@ -24,7 +27,7 @@ export class CustomVersionSubscriber implements EntitySubscriberInterface {
   }
 
   async afterUpdate(event: UpdateEvent<any>) {
-    if (shouldSkipVersions()) return;
+    if (isVersioningSkipped(event.queryRunner?.data)) return;
     if (event.entity && isVersionedEntity(event.entity)) {
       await VersionRepository(event.connection).saveVersion(
         event.entity,
@@ -35,7 +38,7 @@ export class CustomVersionSubscriber implements EntitySubscriberInterface {
   }
 
   async beforeRemove(event: RemoveEvent<any>) {
-    if (shouldSkipVersions()) return;
+    if (isVersioningSkipped(event.queryRunner?.data)) return;
     if (event.entity && isVersionedEntity(event.entity)) {
       await VersionRepository(event.connection).saveVersion(
         event.entity,
