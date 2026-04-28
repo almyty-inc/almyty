@@ -347,6 +347,31 @@ describe('SkillGeneratorService', () => {
       expect(result[0].name).toBe('petstore-find-pet-by-id');
     });
 
+    it('dedupes shared kebab segments between gateway slug and tool name', async () => {
+      // Real-world case from staging: gateway endpoint is
+      // `/open-meteo-skills` and the tool was auto-named
+      // `open-meteo-weather-get-v1-forecast` during schema import.
+      // Naive concat → `open-meteo-skills-open-meteo-weather-...`
+      // (the `open-meteo` segment repeats). Dedup → drop the
+      // duplicated head segments.
+      const dupTool = {
+        ...mockTool,
+        name: 'open-meteo-weather-get-v1-forecast',
+        // No summary so the fallback (tool.name) path runs.
+        operation: { ...mockTool.operation, summary: undefined },
+      };
+      gatewayRepository.findOne.mockResolvedValue({
+        ...mockGateway,
+        endpoint: '/open-meteo-skills',
+      });
+      gatewayToolRepository.find.mockResolvedValue([
+        { tool: dupTool, isActive: true },
+      ]);
+
+      const result = await service.generateIndividualSkills('gw-1', 'org-1');
+      expect(result[0].name).toBe('open-meteo-skills-weather-get-v1-forecast');
+    });
+
     it('caps composed slugs at 64 chars per agentskills.io spec', async () => {
       const longTool = {
         ...mockTool,
