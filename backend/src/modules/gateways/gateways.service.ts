@@ -792,7 +792,7 @@ export class GatewaysService {
             gatewayName: gateway.name,
             orgSlug,
             gatewaySlug,
-            skillRef: `@${orgSlug}/${gatewaySlug}/${toolSlug}`,
+            skillRef: `${orgSlug}/${gatewaySlug}/${toolSlug}`,
           });
         }
       }

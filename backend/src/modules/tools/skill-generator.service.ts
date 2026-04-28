@@ -237,13 +237,23 @@ export class SkillGeneratorService {
 
     const lines: string[] = [];
 
-    // YAML frontmatter (Agent Skills standard)
+    // YAML frontmatter (Agent Skills standard).
+    // metadata.toolId is the canonical identifier the skills CLI's
+    // `run` uses to invoke the skill — name-based lookup against
+    // the search API doesn't see post-rename gateway-prefixed
+    // skill names, but the toolId is stable and unique. Without
+    // this, `npx @almyty/skills run <name>` would fail to resolve
+    // the underlying tool when the SKILL.md's `name` differs from
+    // what the search index returns.
     lines.push('---');
     lines.push(`name: ${skillName || this.slugify(tool.name)}`);
     lines.push(`description: ${this.escapeYaml(this.buildDescription(tool))}`);
     lines.push('metadata:');
     lines.push('  author: almyty');
     lines.push('  generated: "true"');
+    if (tool.id) {
+      lines.push(`  toolId: "${tool.id}"`);
+    }
     if (tool.version) {
       lines.push(`  version: "${tool.version}"`);
     }
@@ -304,15 +314,22 @@ export class SkillGeneratorService {
     }
     lines.push('');
 
-    // Invocation section (only if context with slugs is provided)
-    if (context?.orgSlug && context?.gatewaySlug) {
-      const skillSlug = this.slugify(tool.name);
-      const requiredFlags = required.map(p => `--${p} <${p}>`).join(' ');
+    // Invocation section (only if context with slugs is provided).
+    // Use the skill's own (already-deduped) slug — `skillName` here is
+    // the resolved name passed from generateIndividualSkills, which
+    // matches the directory and frontmatter `name`. Drop the `@`
+    // prefix on the org/gateway/skill ref so the format matches the
+    // rest of the almyty CLI family (chat-cli, agents-cli use bare
+    // `org/...`).
+    if (context?.orgSlug && context?.gatewaySlug && skillName) {
+      const requiredFlags = required.map((p) => `--${p} <${p}>`).join(' ');
       lines.push('## Invocation');
       lines.push('');
       lines.push('Run this tool directly:');
       lines.push('```bash');
-      lines.push(`npx @almyty/skills run @${context.orgSlug}/${context.gatewaySlug}/${skillSlug}${requiredFlags ? ' ' + requiredFlags : ''}`);
+      lines.push(
+        `npx @almyty/skills run ${context.orgSlug}/${context.gatewaySlug}/${skillName}${requiredFlags ? ' ' + requiredFlags : ''}`,
+      );
       lines.push('```');
       lines.push('');
     }
