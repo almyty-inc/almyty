@@ -323,13 +323,31 @@ export class SkillGeneratorService {
     // `org/...`).
     if (context?.orgSlug && context?.gatewaySlug && skillName) {
       const requiredFlags = required.map((p) => `--${p} <${p}>`).join(' ');
+      const ref = `${context.orgSlug}/${context.gatewaySlug}/${skillName}`;
+      const tail = requiredFlags ? ' ' + requiredFlags : '';
+
       lines.push('## Invocation');
       lines.push('');
-      lines.push('Run this tool directly:');
-      lines.push('```bash');
       lines.push(
-        `npx @almyty/skills run ${context.orgSlug}/${context.gatewaySlug}/${skillName}${requiredFlags ? ' ' + requiredFlags : ''}`,
+        'Prefer the **installed binary** for speed. `npx` re-resolves' +
+          ' the npm registry on every call (often 5–30 s overhead), ' +
+          'which dominates the actual HTTP request when the upstream' +
+          ' API responds in under a second.',
       );
+      lines.push('');
+      lines.push('Install once (any AI coding agent session):');
+      lines.push('```bash');
+      lines.push('npm i -g @almyty/skills');
+      lines.push('```');
+      lines.push('');
+      lines.push('Then run:');
+      lines.push('```bash');
+      lines.push(`almyty-skills run ${ref}${tail}`);
+      lines.push('```');
+      lines.push('');
+      lines.push('Fallback (no global install):');
+      lines.push('```bash');
+      lines.push(`npx -y @almyty/skills run ${ref}${tail}`);
       lines.push('```');
       lines.push('');
     }
