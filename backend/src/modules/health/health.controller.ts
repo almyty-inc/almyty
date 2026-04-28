@@ -45,7 +45,7 @@ export class HealthController {
    * If this fails, k8s restarts the pod
    *
    * Threshold is set near the Node heap ceiling (NODE_OPTIONS pins
-   * --max-old-space-size=1500). The previous 500 MB threshold was
+   * --max-old-space-size=3500). The previous 500 MB threshold was
    * a foot-cannon: any heavy-but-legitimate work (real-world OpenAPI
    * import — 7.7 MB Stripe spec, AWS-class spec, etc.) routinely
    * pushed heap past 500 MB, the liveness probe failed, and k8s
@@ -53,17 +53,15 @@ export class HealthController {
    * because the worker was getting restarted, not because it was
    * actually wedged.
    *
-   * 1.4 GB leaves a small margin under the 1500 MB heap ceiling so
+   * 3.4 GB leaves a small margin under the 3500 MB heap ceiling so
    * we still catch a genuine runaway leak before V8 itself OOMs,
    * but we don't kill the pod for doing the work it was sized to do.
-   * Real-world Stripe imports peak at ~220 MB heap after the
-   * import refactor (commit adff115); this leaves 6x headroom.
    */
   @Get('live')
   @HealthCheck()
   liveness() {
     return this.health.check([
-      () => this.memory.checkHeap('memory_heap', 1400 * 1024 * 1024),
+      () => this.memory.checkHeap('memory_heap', 3400 * 1024 * 1024),
     ]);
   }
 
