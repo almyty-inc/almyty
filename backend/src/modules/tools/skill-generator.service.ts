@@ -326,28 +326,26 @@ export class SkillGeneratorService {
       const ref = `${context.orgSlug}/${context.gatewaySlug}/${skillName}`;
       const tail = requiredFlags ? ' ' + requiredFlags : '';
 
-      // Self-bootstrapping invocation. The first line installs the
-      // CLI globally if and only if the bare `almyty-skills` binary
-      // isn't already on PATH. After the first call it's a no-op
-      // (~5 ms PATH check) so steady-state invocation is just the
-      // execution. The npx alternative would re-resolve the
-      // registry on every call (1 s minimum, 30+ s in agent
-      // sandboxes that scope per-session npm caches), which is
-      // why we don't lead with npx — agents read this block
-      // verbatim and we don't want to bake a slow path in.
+      // Suggest a one-time global install for fast invocation, but
+      // don't force-run the installer on every call. Some agents
+      // run inside sandboxes where `npm i -g` either fails (no
+      // write permission) or pollutes a shared environment, and
+      // some users prefer to pin specific versions or avoid global
+      // installs altogether. Document both paths and let the
+      // caller pick.
       lines.push('## Invocation');
       lines.push('');
-      lines.push(
-        'Run this whenever the skill is needed. The first line is a' +
-          ' one-time, idempotent bootstrap; running it on every call' +
-          ' is ~5 ms when already installed, so just include both' +
-          ' lines every time and the agent never has to remember' +
-          ' setup state:',
-      );
+      lines.push('Recommended (fastest, ~50 ms startup): install the CLI once globally, then call directly.');
       lines.push('');
       lines.push('```bash');
-      lines.push('command -v almyty-skills >/dev/null || npm i -g @almyty/skills');
+      lines.push('npm i -g @almyty/skills   # one-time, skip if already installed');
       lines.push(`almyty-skills run ${ref}${tail}`);
+      lines.push('```');
+      lines.push('');
+      lines.push('Or invoke with `npx` if a global install isn\'t available — slower (~1 s overhead per call, much more in sandboxes that scope per-session npm caches):');
+      lines.push('');
+      lines.push('```bash');
+      lines.push(`npx -y @almyty/skills run ${ref}${tail}`);
       lines.push('```');
       lines.push('');
     }
