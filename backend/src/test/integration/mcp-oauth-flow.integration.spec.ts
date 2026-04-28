@@ -38,9 +38,17 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
   let app: INestApplication;
   let ds: DataSource;
 
-  const ORG_SLUG = `mcp-test-${Date.now()}`;
-  const TEST_EMAIL = `mcp-test-${Date.now()}@test.com`;
+  // Random suffix per process — Date.now() alone collides at
+  // millisecond resolution when jest runs this file in parallel with
+  // gateway-agent-runs (which uses the same `ignore-${Date.now()}`
+  // throwaway-org pattern under register()). The collision shows
+  // up as a UNIQUE constraint failure on organizations.name and
+  // tanks all 15 tests in the describe block.
+  const SUFFIX = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
+  const ORG_SLUG = `mcp-test-${SUFFIX}`;
+  const TEST_EMAIL = `mcp-test-${SUFFIX}@test.com`;
   const TEST_PASSWORD = 'TestPass123!';
+  const REGISTER_ORG_NAME = `mcp-oauth-ignore-${SUFFIX}`;
 
   let org: Organization;
   let user: any;
@@ -72,7 +80,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
       password: TEST_PASSWORD,
       firstName: 'MCP',
       lastName: 'Test',
-      organizationName: `ignore-${Date.now()}`,
+      organizationName: REGISTER_ORG_NAME,
     });
     // Get the user from DB since register only returns tokens
     const userRepo = ds.getRepository(User);
@@ -174,6 +182,10 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
         await ds.getRepository(UserOrganization).delete({ userId: user?.id });
         await ds.getRepository(User).delete({ id: user?.id });
         await ds.getRepository(Organization).delete({ id: org?.id });
+        // Also drop the throwaway org that AuthService.register()
+        // creates as a side-effect — without this, every test run
+        // leaks one `mcp-oauth-ignore-*` row in public.organizations.
+        await ds.getRepository(Organization).delete({ name: REGISTER_ORG_NAME });
       } catch {}
     }
     if (app) await app.close();
