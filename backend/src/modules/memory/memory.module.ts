@@ -29,6 +29,11 @@ import {
   CONSOLIDATION_QUEUE_NAME,
 } from './canonical/consolidation.processor';
 import { ConsolidationService } from './canonical/consolidation.service';
+import {
+  CanonicalMemorySyncProcessor,
+  SYNC_QUEUE_NAME,
+} from './canonical/memory-sync.processor';
+import { MemorySyncService } from './canonical/memory-sync.service';
 import { AlmytyNativeBackend } from './canonical/backends/almyty-native.backend';
 import { AnthropicMemoryToolBackend } from './canonical/backends/anthropic-memory-tool.backend';
 import { Mem0Backend } from './canonical/backends/mem0.backend';
@@ -66,6 +71,7 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
       { name: EMBEDDING_QUEUE_NAME },
       { name: TTL_SWEEPER_QUEUE_NAME },
       { name: CONSOLIDATION_QUEUE_NAME },
+      { name: SYNC_QUEUE_NAME },
     ),
     forwardRef(() => LlmProvidersModule),
     forwardRef(() => CredentialsModule),
@@ -77,6 +83,8 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
     CanonicalMemoryTtlSweeperProcessor,
     CanonicalMemoryConsolidationProcessor,
     ConsolidationService,
+    CanonicalMemorySyncProcessor,
+    MemorySyncService,
     AlmytyNativeBackend,
     AnthropicMemoryToolBackend,
     Mem0Backend,
@@ -94,6 +102,7 @@ export class MemoryModule implements OnApplicationBootstrap {
   constructor(
     @InjectQueue(TTL_SWEEPER_QUEUE_NAME) private readonly ttlQueue: Queue,
     @InjectQueue(CONSOLIDATION_QUEUE_NAME) private readonly consolidationQueue: Queue,
+    @InjectQueue(SYNC_QUEUE_NAME) private readonly syncQueue: Queue,
   ) {}
 
   /**
@@ -124,6 +133,21 @@ export class MemoryModule implements OnApplicationBootstrap {
       {
         repeat: { every: 60 * 60 * 1000 },
         jobId: 'canonical-memory-consolidation:repeat',
+        removeOnComplete: 50,
+        removeOnFail: 50,
+      },
+    );
+    // Sync runs every 5 minutes for any scope that has a
+    // mirror_backend wired up. The router still does a fire-and-
+    // forget mirror put on every successful primary write, but
+    // that path drops on transient failures; this scheduled
+    // reconcile is the eventual-consistency guarantee.
+    await this.syncQueue.add(
+      'sync-all',
+      {},
+      {
+        repeat: { every: 5 * 60 * 1000 },
+        jobId: 'canonical-memory-sync:repeat',
         removeOnComplete: 50,
         removeOnFail: 50,
       },

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import axios, { AxiosInstance } from 'axios';
+import Supermemory, { NotFoundError } from 'supermemory';
 import { v7 as uuidv7 } from 'uuid';
 
 import {
@@ -17,9 +17,11 @@ import {
 import { BackendCredentials, BackendHealth, MemoryBackend } from './memory-backend.interface';
 
 /**
- * Supermemory backend. Talks to Supermemory (default
- * https://api.supermemory.ai) over HTTPS with bearer-token auth.
- * Per-call credentials.
+ * Supermemory backend, on the official `supermemory` SDK. Per-call
+ * credentials. Documents land via `client.documents.add` (auto-chunked
+ * by the platform) and memories surface via `client.search.memories`
+ * for low-latency retrieval. Listing uses `client.documents.list`
+ * filtered on the canonical scope's containerTag.
  *
  * Capability story:
  *   ✓ vector_search, fts, hybrid_search, mode_memory, mode_document,
@@ -36,76 +38,97 @@ export class SupermemoryBackend implements MemoryBackend {
   ]);
   readonly supported_modes = new Set<Mode>(['memory', 'document']);
   private readonly logger = new Logger(SupermemoryBackend.name);
-  private readonly clientCache = new Map<string, AxiosInstance>();
+  private readonly clientCache = new Map<string, Supermemory>();
   private static readonly CLIENT_CACHE_MAX = 64;
 
   async init(): Promise<void> {}
 
   async healthCheck(creds?: BackendCredentials): Promise<BackendHealth> {
-    const http = this.client(creds);
-    if (!http) return { ok: false, latency_ms: 0, details: { error: 'no_credentials' } };
+    const client = this.client(creds);
+    if (!client) return { ok: false, latency_ms: 0, details: { error: 'no_credentials' } };
     const start = Date.now();
     try {
-      await http.get('/v3/memories', { params: { limit: 1 } });
+      await client.documents.list({ limit: 1 });
       return { ok: true, latency_ms: Date.now() - start };
     } catch (e: any) {
-      return { ok: false, latency_ms: Date.now() - start, details: { status: e?.response?.status, error: e.message } };
+      return {
+        ok: false,
+        latency_ms: Date.now() - start,
+        details: { error: e?.message ?? String(e) },
+      };
     }
   }
 
   async get(id: string, creds?: BackendCredentials): Promise<MemoryItem | null> {
-    const http = this.requireClient(creds);
+    const client = this.requireClient(creds);
     try {
-      const res = await http.get(`/v3/memories/${encodeURIComponent(id)}`);
-      return this.toCanonical(res.data);
-    } catch (e: any) {
-      if (e?.response?.status === 404) return null;
+      const doc = await client.documents.get(id);
+      return this.toCanonical(doc);
+    } catch (e) {
+      if (e instanceof NotFoundError) return null;
       throw e;
     }
   }
 
   async put(item: MemoryItem, creds?: BackendCredentials): Promise<MemoryItem> {
-    const http = this.requireClient(creds);
-    const res = await http.post('/v3/memories', this.fromCanonical(item));
-    const created = res.data?.memory ?? res.data;
+    const client = this.requireClient(creds);
+    const tag = scopeToTag({ scope_type: item.scope_type, scope_id: item.scope_id });
+    const res = await client.documents.add({
+      content: item.content,
+      containerTag: tag,
+      customId: item.id,
+      metadata: this.flattenMetadata(item),
+    });
     return this.toCanonical({
-      ...created,
-      metadata: { ...(created?.metadata || {}), almyty_id: item.id, supermemory_id: created?.id },
+      ...res,
+      content: item.content,
+      metadata: { almyty_id: item.id, supermemory_id: res.id, ...this.flattenMetadata(item) },
     });
   }
 
   async delete(id: string, _mode: 'soft' | 'hard' = 'soft', creds?: BackendCredentials): Promise<boolean> {
-    const http = this.requireClient(creds);
+    const client = this.requireClient(creds);
     try {
-      await http.delete(`/v3/memories/${encodeURIComponent(id)}`);
+      await client.documents.delete(id);
       return true;
-    } catch (e: any) {
-      if (e?.response?.status === 404) return false;
+    } catch (e) {
+      if (e instanceof NotFoundError) return false;
       throw e;
     }
   }
 
   async list(query: ListQuery, creds?: BackendCredentials): Promise<Page<MemoryItem>> {
-    const http = this.requireClient(creds);
-    const containerTag = scopeToTag(query.scope);
-    const res = await http.get('/v3/memories', {
-      params: { containerTags: containerTag, limit: query.limit ?? 50 },
+    const client = this.requireClient(creds);
+    const tag = scopeToTag(query.scope);
+    const res = await client.documents.list({
+      filters: { OR: [{ key: 'containerTag', value: tag }] },
+      limit: query.limit ?? 50,
+      includeContent: true,
     });
-    const rows = (res.data?.memories ?? res.data?.results ?? []) as any[];
-    const items = rows.map((r) => this.toCanonical(r));
-    return { items, total: items.length, cursor: res.data?.next_cursor ?? null };
+    const items = res.memories.map((r) => this.toCanonical(r));
+    return {
+      items,
+      total: res.pagination?.totalItems ?? items.length,
+      cursor: null,
+    };
   }
 
   async search(query: SearchQuery, creds?: BackendCredentials): Promise<RankedItem[]> {
-    const http = this.requireClient(creds);
-    const containerTag = scopeToTag(query.scope);
-    const res = await http.post('/v3/search', {
-      q: query.query, containerTags: [containerTag], limit: query.top_k ?? 10,
+    const client = this.requireClient(creds);
+    const tag = scopeToTag(query.scope);
+    const res = await client.search.memories({
+      q: query.query,
+      containerTag: tag,
+      limit: query.top_k ?? 10,
     });
-    const rows = (res.data?.results ?? []) as any[];
-    return rows.map((r) => ({
-      item: this.toCanonical(r),
-      score: typeof r.score === 'number' ? r.score : 0,
+    return res.results.map((r) => ({
+      item: this.toCanonical({
+        id: r.id,
+        content: r.memory ?? r.chunk ?? '',
+        metadata: r.metadata ?? {},
+        updatedAt: r.updatedAt,
+      }),
+      score: typeof r.similarity === 'number' ? r.similarity : 0,
       signal: 'hybrid' as const,
     }));
   }
@@ -119,38 +142,69 @@ export class SupermemoryBackend implements MemoryBackend {
   }
 
   async batchPut(items: MemoryItem[], creds?: BackendCredentials): Promise<BatchResult> {
-    const result: BatchResult = { succeeded: 0, failed: 0, errors: [] };
-    for (const item of items) {
-      try { await this.put(item, creds); result.succeeded++; }
-      catch (e: any) {
-        result.failed++;
-        result.errors.push({ id: item.id, error: { kind: 'backend_unavailable', backend: this.id, cause: e.message ?? String(e) } });
-      }
+    const client = this.requireClient(creds);
+    if (items.length === 0) return { succeeded: 0, failed: 0, errors: [] };
+    try {
+      const res = await client.documents.batchAdd({
+        documents: items.map((item) => ({
+          content: item.content,
+          containerTag: scopeToTag({ scope_type: item.scope_type, scope_id: item.scope_id }),
+          customId: item.id,
+          metadata: this.flattenMetadata(item),
+        })),
+      });
+      const errors = res.results
+        .map((r, i) => (r.error ? {
+          id: items[i]?.id ?? r.id ?? '',
+          error: { kind: 'backend_unavailable' as const, backend: this.id, cause: r.error ?? 'unknown' },
+        } : null))
+        .filter((e): e is NonNullable<typeof e> => e !== null);
+      return {
+        succeeded: res.success,
+        failed: res.failed,
+        errors,
+      };
+    } catch (e: any) {
+      return {
+        succeeded: 0,
+        failed: items.length,
+        errors: items.map((item) => ({
+          id: item.id,
+          error: { kind: 'backend_unavailable', backend: this.id, cause: e.message ?? String(e) },
+        })),
+      };
     }
-    return result;
   }
 
   async batchDelete(ids: string[], creds?: BackendCredentials): Promise<BatchResult> {
-    const result: BatchResult = { succeeded: 0, failed: 0, errors: [] };
-    for (const id of ids) {
-      try {
-        const ok = await this.delete(id, 'hard', creds);
-        if (ok) result.succeeded++; else result.failed++;
-      } catch (e: any) {
-        result.failed++;
-        result.errors.push({ id, error: { kind: 'backend_unavailable', backend: this.id, cause: e.message ?? String(e) } });
-      }
+    const client = this.requireClient(creds);
+    if (ids.length === 0) return { succeeded: 0, failed: 0, errors: [] };
+    try {
+      const res = await client.documents.deleteBulk({ ids });
+      return {
+        succeeded: (res as any).deleted ?? ids.length,
+        failed: 0,
+        errors: [],
+      };
+    } catch (e: any) {
+      return {
+        succeeded: 0,
+        failed: ids.length,
+        errors: ids.map((id) => ({
+          id,
+          error: { kind: 'backend_unavailable', backend: this.id, cause: e.message ?? String(e) },
+        })),
+      };
     }
-    return result;
   }
 
   toCanonical(raw: any): MemoryItem {
-    const meta = raw?.metadata ?? {};
+    const meta = (raw?.metadata ?? {}) as Record<string, any>;
     const now = new Date();
-    const content = String(raw?.content ?? raw?.text ?? raw?.summary ?? '');
+    const content = String(raw?.content ?? raw?.memory ?? raw?.summary ?? '');
     const isDoc = !!meta.source_uri;
     return {
-      id: meta.almyty_id ?? raw?.id ?? uuidv7(),
+      id: meta.almyty_id ?? raw?.customId ?? raw?.id ?? uuidv7(),
       mode: isDoc ? 'document' : 'memory',
       scope_type: meta.scope_type ?? 'workspace',
       scope_id: meta.scope_id ?? 'unknown',
@@ -162,7 +216,7 @@ export class SupermemoryBackend implements MemoryBackend {
       tags: Array.isArray(meta.tags) ? meta.tags : [],
       metadata: meta, file_refs: [],
       tier: isDoc ? null : (meta.tier ?? 'project'),
-      valid_from: isDoc ? null : (raw?.created_at ? new Date(raw.created_at) : now),
+      valid_from: isDoc ? null : (raw?.createdAt ? new Date(raw.createdAt) : now),
       valid_until: null, superseded_by: null, ttl_seconds: null,
       source_uri: meta.source_uri ?? null,
       source_version: meta.source_version ?? (isDoc ? 1 : null),
@@ -170,14 +224,14 @@ export class SupermemoryBackend implements MemoryBackend {
       chunk_index: meta.chunk_index ?? null,
       chunk_total: meta.chunk_total ?? null,
       chunk_of: meta.chunk_of ?? null,
-      confidence: typeof raw?.score === 'number' ? raw.score : 1,
+      confidence: typeof raw?.similarity === 'number' ? raw.similarity : 1,
       provenance: (meta.provenance as Provenance) ?? ({
         agent_id: null, session_id: null, collab_id: null,
         model: null, provider: null, tool_chain: [],
         created_by: 'sync', source_backend: 'supermemory',
       } as Provenance),
-      created_at: raw?.created_at ? new Date(raw.created_at) : now,
-      updated_at: raw?.updated_at ? new Date(raw.updated_at) : now,
+      created_at: raw?.createdAt ? new Date(raw.createdAt) : now,
+      updated_at: raw?.updatedAt ? new Date(raw.updatedAt) : now,
       accessed_at: null, access_count: 0, deleted_at: null, deleted_by: null,
     };
   }
@@ -185,38 +239,50 @@ export class SupermemoryBackend implements MemoryBackend {
   fromCanonical(item: MemoryItem): unknown {
     return {
       content: item.content,
-      containerTags: [scopeToTag({ scope_type: item.scope_type, scope_id: item.scope_id })],
-      metadata: {
-        almyty_id: item.id, scope_type: item.scope_type, scope_id: item.scope_id,
-        tier: item.tier, tags: item.tags, provenance: item.provenance,
-        source_uri: item.source_uri, source_version: item.source_version,
-      },
+      containerTag: scopeToTag({ scope_type: item.scope_type, scope_id: item.scope_id }),
+      customId: item.id,
+      metadata: this.flattenMetadata(item),
     };
   }
 
-  private requireClient(creds?: BackendCredentials): AxiosInstance {
+  /**
+   * Supermemory's metadata is `Record<string, string | number | boolean | string[]>`,
+   * no nested objects. Flatten by JSON-stringifying the structured fields.
+   */
+  private flattenMetadata(item: MemoryItem): Record<string, string | number | boolean | string[]> {
+    return {
+      almyty_id: item.id,
+      scope_type: item.scope_type,
+      scope_id: item.scope_id,
+      tier: item.tier ?? '',
+      tags: item.tags,
+      content_format: item.content_format,
+      provenance_json: JSON.stringify(item.provenance),
+      confidence: item.confidence,
+      source_uri: item.source_uri ?? '',
+      source_version: item.source_version ?? 0,
+    };
+  }
+
+  private requireClient(creds?: BackendCredentials): Supermemory {
     const c = this.client(creds);
     if (!c) throw new Error('supermemory: missing apiKey credential — set in the org credential store');
     return c;
   }
 
-  private client(creds?: BackendCredentials): AxiosInstance | null {
+  private client(creds?: BackendCredentials): Supermemory | null {
     if (!creds?.apiKey) return null;
-    const baseUrl = creds.baseUrl || 'https://api.supermemory.ai';
-    const cacheKey = `${baseUrl}|${creds.apiKey}`;
+    const baseURL = creds.baseUrl || 'https://api.supermemory.ai';
+    const cacheKey = `${baseURL}|${creds.apiKey}`;
     const cached = this.clientCache.get(cacheKey);
     if (cached) return cached;
-    const http = axios.create({
-      baseURL: baseUrl,
-      headers: { Authorization: `Bearer ${creds.apiKey}` },
-      timeout: 15_000, maxRedirects: 0,
-    });
+    const client = new Supermemory({ apiKey: creds.apiKey, baseURL });
     if (this.clientCache.size >= SupermemoryBackend.CLIENT_CACHE_MAX) {
       const oldest = this.clientCache.keys().next().value;
       if (oldest !== undefined) this.clientCache.delete(oldest);
     }
-    this.clientCache.set(cacheKey, http);
-    return http;
+    this.clientCache.set(cacheKey, client);
+    return client;
   }
 }
 

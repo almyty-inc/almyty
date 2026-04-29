@@ -20,6 +20,9 @@ import {
   ScopeType,
   Provenance,
 } from '../memory/canonical/canonical.types';
+import { ConsolidationService } from '../memory/canonical/consolidation.service';
+import { MemoryRouter } from '../memory/canonical/memory-router.service';
+import { MemorySyncService } from '../memory/canonical/memory-sync.service';
 
 const TOOLS = [
   { name: 'list_apis', description: 'List all connected APIs', inputSchema: { type: 'object', properties: {} } },
@@ -47,6 +50,11 @@ const TOOLS = [
   { name: 'memory_get', description: 'Get a single memory item by id.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
   { name: 'memory_delete', description: 'Delete a memory item. mode=soft (default) sets deleted_at; mode=hard removes the row.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, mode: { type: 'string', enum: ['soft', 'hard'] } }, required: ['id'] } },
   { name: 'memory_supersede', description: 'Bi-temporal supersession (memory mode only): close valid_until on the old row and write a new one with the same logical content.', inputSchema: { type: 'object', properties: { old_id: { type: 'string' }, content: { type: 'string' }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'] }, tags: { type: 'array', items: { type: 'string' } } }, required: ['old_id', 'content'] } },
+  { name: 'memory_consolidate', description: 'Run consolidation now: LLM extracts durable facts from short-tier rows and supersedes them. Returns the run report.', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, scope_id: { type: 'string' }, force: { type: 'boolean', description: 'Bypass enabled-flag and min_short_count thresholds.' } } } },
+  { name: 'memory_transfer', description: 'Move memory items from one backend to another for a scope. Returns a TransferReport with capability-degradation warnings.', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, scope_id: { type: 'string' }, source: { type: 'string', description: 'Source backend id (almyty-native, mem0, zep, supermemory, vertex-memory-bank, anthropic-memory-tool)' }, target: { type: 'string' }, mode: { type: 'string', enum: ['memory', 'document'] }, dry_run: { type: 'boolean' } }, required: ['source', 'target'] } },
+  { name: 'memory_sync', description: 'Reconcile primary↔mirror for a scope. Last-write-wins by updated_at. Returns counts moved each direction.', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, scope_id: { type: 'string' } } } },
+  { name: 'memory_list_backends', description: 'List configured memory backends + capabilities + supported modes.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'memory_backends_health', description: 'Run a health check against every backend.', inputSchema: { type: 'object', properties: {} } },
 ];
 
 @Injectable()
@@ -379,6 +387,34 @@ export class AlmytyMcpService {
           throw err;
         }
       }
+
+      case 'memory_consolidate':
+        return get(ConsolidationService).run(
+          {
+            scope_type: (args.scope_type as ScopeType) || 'workspace',
+            scope_id: args.scope_id || orgId,
+          },
+          { force: !!args.force },
+        );
+      case 'memory_transfer':
+        return get(MemoryRouter).transfer(
+          {
+            scope_type: (args.scope_type as ScopeType) || 'workspace',
+            scope_id: args.scope_id || orgId,
+          },
+          String(args.source),
+          String(args.target),
+          { mode: args.mode as Mode, dry_run: !!args.dry_run },
+        );
+      case 'memory_sync':
+        return get(MemorySyncService).sync({
+          scope_type: (args.scope_type as ScopeType) || 'workspace',
+          scope_id: args.scope_id || orgId,
+        });
+      case 'memory_list_backends':
+        return get(MemoryRouter).list_backends();
+      case 'memory_backends_health':
+        return get(MemoryRouter).healthAll();
 
       default: throw new Error(`Unknown tool: ${name}`);
     }

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import axios, { AxiosInstance } from 'axios';
+import Anthropic, { toFile, NotFoundError } from '@anthropic-ai/sdk';
 import { v7 as uuidv7 } from 'uuid';
 
 import {
@@ -16,9 +16,11 @@ import {
 } from '../canonical.types';
 import { BackendCredentials, BackendHealth, MemoryBackend } from './memory-backend.interface';
 
+const FILES_API_BETA = 'files-api-2025-04-14';
+
 /**
- * Anthropic Memory Tool backend. Persists canonical memory items as
- * Anthropic Files (default https://api.anthropic.com /v1/files) so
+ * Anthropic Memory Tool backend, on the official `@anthropic-ai/sdk`
+ * Files API (beta). Persists canonical memory items as Files so
  * Claude's `memory` tool can read/list/search them. Per-call
  * credentials.
  *
@@ -36,70 +38,77 @@ export class AnthropicMemoryToolBackend implements MemoryBackend {
   ]);
   readonly supported_modes = new Set<Mode>(['memory', 'document']);
   private readonly logger = new Logger(AnthropicMemoryToolBackend.name);
-  private readonly clientCache = new Map<string, AxiosInstance>();
+  private readonly clientCache = new Map<string, Anthropic>();
   private static readonly CLIENT_CACHE_MAX = 64;
 
   async init(): Promise<void> {}
 
   async healthCheck(creds?: BackendCredentials): Promise<BackendHealth> {
-    const http = this.client(creds);
-    if (!http) return { ok: false, latency_ms: 0, details: { error: 'no_credentials' } };
+    const client = this.client(creds);
+    if (!client) return { ok: false, latency_ms: 0, details: { error: 'no_credentials' } };
     const start = Date.now();
     try {
-      await http.get('/v1/files', { params: { limit: 1 } });
+      await client.beta.files.list({ limit: 1, betas: [FILES_API_BETA] });
       return { ok: true, latency_ms: Date.now() - start };
     } catch (e: any) {
-      return { ok: false, latency_ms: Date.now() - start, details: { status: e?.response?.status, error: e.message } };
+      return { ok: false, latency_ms: Date.now() - start, details: { error: e?.message ?? String(e) } };
     }
   }
 
   async get(id: string, creds?: BackendCredentials): Promise<MemoryItem | null> {
-    const http = this.requireClient(creds);
+    const client = this.requireClient(creds);
     try {
-      const [meta, content] = await Promise.all([
-        http.get(`/v1/files/${encodeURIComponent(id)}`),
-        http.get(`/v1/files/${encodeURIComponent(id)}/content`, { responseType: 'text' }),
+      const [meta, downloaded] = await Promise.all([
+        client.beta.files.retrieveMetadata(id, { betas: [FILES_API_BETA] }),
+        client.beta.files.download(id, { betas: [FILES_API_BETA] }),
       ]);
-      return this.toCanonical({ ...meta.data, _content: content.data });
-    } catch (e: any) {
-      if (e?.response?.status === 404) return null;
+      const content = await downloaded.text();
+      return this.toCanonical({ ...meta, _content: content });
+    } catch (e) {
+      if (e instanceof NotFoundError) return null;
       throw e;
     }
   }
 
   async put(item: MemoryItem, creds?: BackendCredentials): Promise<MemoryItem> {
-    const http = this.requireClient(creds);
-    const fd = new (require('form-data'))();
-    fd.append('file', Buffer.from(item.content, 'utf8'), {
-      filename: scopedFileName(item),
-      contentType: 'text/markdown',
-    });
-    fd.append('purpose', 'memory');
-    await http.post('/v1/files', fd, { headers: { ...fd.getHeaders() } });
-    return item;
+    const client = this.requireClient(creds);
+    const file = await toFile(
+      Buffer.from(item.content, 'utf8'),
+      scopedFileName(item),
+      { type: 'text/markdown' },
+    );
+    const uploaded = await client.beta.files.upload(
+      { file, betas: [FILES_API_BETA] },
+    );
+    return {
+      ...item,
+      metadata: { ...item.metadata, anthropic_file_id: uploaded.id },
+    };
   }
 
   async delete(id: string, _mode: 'soft' | 'hard' = 'soft', creds?: BackendCredentials): Promise<boolean> {
-    const http = this.requireClient(creds);
+    const client = this.requireClient(creds);
     try {
-      await http.delete(`/v1/files/${encodeURIComponent(id)}`);
+      await client.beta.files.delete(id, { betas: [FILES_API_BETA] });
       return true;
-    } catch (e: any) {
-      if (e?.response?.status === 404) return false;
+    } catch (e) {
+      if (e instanceof NotFoundError) return false;
       throw e;
     }
   }
 
   async list(query: ListQuery, creds?: BackendCredentials): Promise<Page<MemoryItem>> {
-    const http = this.requireClient(creds);
+    const client = this.requireClient(creds);
     const prefix = `${query.scope.scope_type}_${query.scope.scope_id}__`;
-    const res = await http.get('/v1/files', { params: { limit: query.limit ?? 100 } });
-    const data = (res.data?.data ?? res.data?.files ?? []) as any[];
-    const filtered = data.filter((f) => typeof f?.filename === 'string' && f.filename.startsWith(prefix));
+    const limit = Math.min(query.limit ?? 100, 1000);
     const items: MemoryItem[] = [];
-    for (const f of filtered) {
-      const content = await http.get(`/v1/files/${encodeURIComponent(f.id)}/content`, { responseType: 'text' });
-      items.push(this.toCanonical({ ...f, _content: content.data }));
+    const pager = await client.beta.files.list({ limit, betas: [FILES_API_BETA] });
+    for await (const meta of pager) {
+      if (typeof meta.filename !== 'string' || !meta.filename.startsWith(prefix)) continue;
+      const downloaded = await client.beta.files.download(meta.id, { betas: [FILES_API_BETA] });
+      const content = await downloaded.text();
+      items.push(this.toCanonical({ ...meta, _content: content }));
+      if (items.length >= limit) break;
     }
     return { items, total: items.length, cursor: null };
   }
@@ -188,33 +197,25 @@ export class AnthropicMemoryToolBackend implements MemoryBackend {
     return { filename: scopedFileName(item), content: item.content };
   }
 
-  private requireClient(creds?: BackendCredentials): AxiosInstance {
+  private requireClient(creds?: BackendCredentials): Anthropic {
     const c = this.client(creds);
     if (!c) throw new Error('anthropic-memory-tool: missing apiKey credential — set in the org credential store');
     return c;
   }
 
-  private client(creds?: BackendCredentials): AxiosInstance | null {
+  private client(creds?: BackendCredentials): Anthropic | null {
     if (!creds?.apiKey) return null;
-    const baseUrl = creds.baseUrl || 'https://api.anthropic.com';
-    const cacheKey = `${baseUrl}|${creds.apiKey}`;
+    const baseURL = creds.baseUrl || 'https://api.anthropic.com';
+    const cacheKey = `${baseURL}|${creds.apiKey}`;
     const cached = this.clientCache.get(cacheKey);
     if (cached) return cached;
-    const http = axios.create({
-      baseURL: baseUrl,
-      headers: {
-        'x-api-key': creds.apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'files-api-2025-04-14',
-      },
-      timeout: 20_000, maxRedirects: 0,
-    });
+    const client = new Anthropic({ apiKey: creds.apiKey, baseURL });
     if (this.clientCache.size >= AnthropicMemoryToolBackend.CLIENT_CACHE_MAX) {
       const oldest = this.clientCache.keys().next().value;
       if (oldest !== undefined) this.clientCache.delete(oldest);
     }
-    this.clientCache.set(cacheKey, http);
-    return http;
+    this.clientCache.set(cacheKey, client);
+    return client;
   }
 }
 
