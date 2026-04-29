@@ -238,9 +238,21 @@ export class SkillGeneratorService {
     const declarations: string[] = [];
     const args: string[] = [];
     for (const [name, schema] of Object.entries(vars)) {
-      const gqlType = this.jsonTypeToGraphQLType(schema?.type);
-      const bang = required.has(name) ? '!' : '';
-      declarations.push(`$${name}: ${gqlType}${bang}`);
+      // The GraphQL parser stores the original type signature on
+      // `schema.gqlType` ("ID!", "[String!]!", "Int") — use it
+      // directly when present so re-rendered queries faithfully
+      // match the server's expected variable types. Older imports
+      // without that field fall back to the JSON-schema → GraphQL
+      // best-effort mapping plus a `required` boolean.
+      let decl: string;
+      if (typeof schema?.gqlType === 'string' && schema.gqlType.length > 0) {
+        decl = schema.gqlType;
+      } else {
+        const gqlType = this.jsonTypeToGraphQLType(schema?.type);
+        const bang = required.has(name) ? '!' : '';
+        decl = `${gqlType}${bang}`;
+      }
+      declarations.push(`$${name}: ${decl}`);
       args.push(`${name}: $${name}`);
     }
 

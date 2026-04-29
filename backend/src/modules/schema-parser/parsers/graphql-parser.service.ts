@@ -201,11 +201,29 @@ export class GraphQLParserService implements SchemaParser {
     for (const arg of args) {
       properties[arg.name] = {
         ...this.convertGraphQLTypeToJsonSchema(arg.type),
+        // Preserve the original GraphQL type signature ("ID!",
+        // "[String!]!", "Int") so downstream consumers (the skill
+        // generator's query template builder, and any UI showing
+        // variables) can render it back faithfully. Without this,
+        // ID! → JSON 'string' → re-rendered as 'String' and the
+        // server rejects the call with a type-mismatch error.
+        gqlType: this.formatGraphQLType(arg.type),
         description: arg.description,
       };
     }
 
     return properties;
+  }
+
+  /** Render a GraphQL type back into its source-style signature. */
+  private formatGraphQLType(graphqlType: any): string {
+    if (isNonNullType(graphqlType)) {
+      return `${this.formatGraphQLType(graphqlType.ofType)}!`;
+    }
+    if (isListType(graphqlType)) {
+      return `[${this.formatGraphQLType(graphqlType.ofType)}]`;
+    }
+    return graphqlType.name || 'String';
   }
 
   private async extractResourcesFromGraphQL(schema: GraphQLSchema): Promise<ParsedResource[]> {
