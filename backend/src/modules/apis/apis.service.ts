@@ -448,11 +448,14 @@ export class ApisService {
       for (const k of protocolFields) {
         if (parserMeta[k] !== undefined) lifted[k] = parserMeta[k];
       }
-      if (Object.keys(lifted).length > 0) {
-        await queryRunner.manager.update(Api, apiId, {
-          metadata: { ...((api.metadata as any) || {}), ...lifted },
-        });
-      }
+      // Defer this UPDATE until the same call that flips status (below).
+      // Doing two separate UPDATEs of the api row — one through the
+      // queryRunner and one through `updateStatus` (default pool) — caused
+      // a self-deadlock: queryRunner's row lock blocked the pool's UPDATE,
+      // but the queryRunner couldn't commit until the pool call returned.
+      // Symptom: SOAP/gRPC imports hung past the 60s test timeout while
+      // OpenAPI/GraphQL (no `lifted` keys) passed.
+      const liftedMetadata = Object.keys(lifted).length > 0 ? lifted : null;
 
       // Drop the parser's intermediate object graph — `operations`
       // and `resources` are the only data we need from this point
@@ -505,9 +508,18 @@ export class ApisService {
       resources.length = 0;
       this.logMemoryPhase('after-save-ops');
 
-      // Update API status if it was draft
+      // Single transactional UPDATE for status flip + parser-detected
+      // metadata. Combining into one queryRunner call avoids the
+      // dual-connection deadlock described above.
+      const apiPatch: Partial<Api> = {};
       if (api.status === ApiStatus.DRAFT) {
-        await this.updateStatus(apiId, ApiStatus.ACTIVE, organizationId);
+        apiPatch.status = ApiStatus.ACTIVE;
+      }
+      if (liftedMetadata) {
+        apiPatch.metadata = { ...((api.metadata as any) || {}), ...liftedMetadata };
+      }
+      if (Object.keys(apiPatch).length > 0) {
+        await queryRunner.manager.update(Api, apiId, apiPatch);
       }
 
       // Commit schema + operations BEFORE generating tools.
