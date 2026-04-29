@@ -181,10 +181,93 @@ export class SkillGeneratorService {
 
     const combined = `${gatewaySlug}-${suffix}`;
     if (combined.length <= 64) return combined;
-    // Trim from the suffix tail so the gateway prefix stays intact.
+
+    // Trim. Keep the *tail* of the suffix, not the head — for
+    // gateways with a long shared prefix (e.g. ~40 Google-Translate
+    // gRPC methods named
+    // `real_google_translate_protobuf_translation_service_*`) the
+    // method name is the tail and that's what makes each slug
+    // unique. Cutting from the head would collapse every method
+    // to the same truncated string. We drop kebab segments from
+    // the head of the suffix until it fits.
     const room = 64 - gatewaySlug.length - 1;
     if (room <= 0) return gatewaySlug.slice(0, 64);
-    return `${gatewaySlug}-${suffix.slice(0, room).replace(/-+$/, '')}`;
+    const segments = suffix.split('-').filter(Boolean);
+    let trimmed = segments.join('-');
+    while (trimmed.length > room && segments.length > 1) {
+      segments.shift();
+      trimmed = segments.join('-');
+    }
+    if (trimmed.length > room) {
+      // Single segment longer than the budget — keep the tail of
+      // it (last `room` chars) so any unique hash suffix survives.
+      trimmed = trimmed.slice(-room);
+    }
+    return `${gatewaySlug}-${trimmed.replace(/^-+|-+$/g, '')}`;
+  }
+
+  /**
+   * Build a starter GraphQL query for a parsed GraphQL operation.
+   * The agent can edit it to add fields it actually needs; we
+   * supply a minimal but valid skeleton so it doesn't have to
+   * remember the variable types or operation kind.
+   *
+   *   query country($code: ID!) {
+   *     country(code: $code) {
+   *       __typename
+   *     }
+   *   }
+   *
+   * The variable list comes from operation.parameters.body.variables;
+   * when types are unknown we fall back to `String`.
+   */
+  private buildGraphQLQueryTemplate(operation: any): string {
+    const opType: 'query' | 'mutation' | 'subscription' =
+      operation.type === 'mutation' || operation.type === 'subscription'
+        ? operation.type
+        : 'query';
+    const opName = operation.name || 'op';
+    const vars = (operation.parameters?.body?.variables?.properties || {}) as Record<
+      string,
+      any
+    >;
+    const required = new Set<string>(
+      operation.parameters?.body?.variables?.required || [],
+    );
+
+    const declarations: string[] = [];
+    const args: string[] = [];
+    for (const [name, schema] of Object.entries(vars)) {
+      const gqlType = this.jsonTypeToGraphQLType(schema?.type);
+      const bang = required.has(name) ? '!' : '';
+      declarations.push(`$${name}: ${gqlType}${bang}`);
+      args.push(`${name}: $${name}`);
+    }
+
+    const head = declarations.length
+      ? `${opType} ${opName}(${declarations.join(', ')})`
+      : `${opType} ${opName}`;
+    const argsBlock = args.length ? `(${args.join(', ')})` : '';
+    return `${head} {\n  ${opName}${argsBlock} {\n    __typename\n  }\n}`;
+  }
+
+  private jsonTypeToGraphQLType(t: string | undefined): string {
+    switch ((t || '').toLowerCase()) {
+      case 'integer':
+      case 'int':
+        return 'Int';
+      case 'number':
+      case 'float':
+        return 'Float';
+      case 'boolean':
+      case 'bool':
+        return 'Boolean';
+      case 'array':
+        return '[String]';
+      case 'string':
+      default:
+        return 'String';
+    }
   }
 
   /**
@@ -287,6 +370,37 @@ export class SkillGeneratorService {
       lines.push(`${method} ${fullUrl}`);
       lines.push('```');
       lines.push('');
+
+      // Protocol-specific guidance for non-REST APIs.
+      const apiType = (tool.operation?.api as any)?.type;
+      const opName = tool.operation?.name;
+      if (apiType === 'graphql' && opName) {
+        const queryTemplate = this.buildGraphQLQueryTemplate(tool.operation!);
+        lines.push('## GraphQL operation');
+        lines.push('');
+        lines.push(
+          'This skill wraps a GraphQL operation. You must pass a' +
+            ' `query` argument with the GraphQL document, and one' +
+            ' flag per variable (the gateway packages them into the' +
+            ' `variables` object server-side). Starting query:',
+        );
+        lines.push('');
+        lines.push('```graphql');
+        lines.push(queryTemplate);
+        lines.push('```');
+        lines.push('');
+      } else if (apiType === 'soap' && opName) {
+        lines.push('## SOAP operation');
+        lines.push('');
+        lines.push(
+          'This skill wraps a SOAP operation. The almyty gateway' +
+            ' currently requires the caller to pass the full SOAP' +
+            ' envelope as `--envelope` and the namespaced action as' +
+            ' `--action` — this is being improved server-side.' +
+            ' See https://github.com/frane/almyty for status.',
+        );
+        lines.push('');
+      }
     }
 
     // Parameters

@@ -35,6 +35,26 @@ import {
 const MAX_CONTENT_LENGTH = 10 * 1024 * 1024;
 const MAX_BODY_LENGTH = 5 * 1024 * 1024;
 
+/**
+ * Join an API baseUrl with an operation endpoint path, idempotently
+ * — i.e. if the user already pasted the full path into baseUrl
+ * (`https://countries.trevorblades.com/graphql`) and the operation
+ * endpoint is also `/graphql`, don't end up with `/graphql/graphql`.
+ *
+ * Rules:
+ *   - empty endpoint  → return baseUrl
+ *   - baseUrl already ends with the endpoint path → return baseUrl
+ *   - otherwise → strip trailing `/` from baseUrl, ensure exactly
+ *     one `/` between, append endpoint
+ */
+function joinApiUrl(baseUrl: string, endpoint?: string): string {
+  if (!endpoint) return baseUrl;
+  const base = (baseUrl || '').replace(/\/+$/, '');
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  if (base.endsWith(path)) return base;
+  return `${base}${path}`;
+}
+
 @Injectable()
 export class ToolProtocolExecutor {
   private readonly logger = new Logger(ToolProtocolExecutor.name);
@@ -113,8 +133,9 @@ export class ToolProtocolExecutor {
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
+    const targetUrl = joinApiUrl(api.baseUrl, operation.endpoint);
 
-    const urlCheck = validateUrl(api.baseUrl);
+    const urlCheck = validateUrl(targetUrl);
     if (!urlCheck.valid) {
       this.logger.warn(`SSRF blocked for GraphQL tool ${tool.name}: ${urlCheck.error}`);
       return this.blocked(urlCheck.error!, startTime);
@@ -140,7 +161,7 @@ export class ToolProtocolExecutor {
 
     const config: AxiosRequestConfig = {
       method: 'POST',
-      url: api.baseUrl,
+      url: targetUrl,
       timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
@@ -269,8 +290,9 @@ export class ToolProtocolExecutor {
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
+    const targetUrl = joinApiUrl(api.baseUrl, operation.endpoint);
 
-    const urlCheck = validateUrl(api.baseUrl);
+    const urlCheck = validateUrl(targetUrl);
     if (!urlCheck.valid) {
       this.logger.warn(`SSRF blocked for SOAP tool ${tool.name}: ${urlCheck.error}`);
       return this.blocked(urlCheck.error!, startTime);
@@ -281,7 +303,7 @@ export class ToolProtocolExecutor {
 
     const config: AxiosRequestConfig = {
       method: 'POST',
-      url: api.baseUrl,
+      url: targetUrl,
       timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
@@ -406,7 +428,7 @@ export class ToolProtocolExecutor {
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
-    const grpcUrl = `${api.baseUrl}${operation.endpoint}`;
+    const grpcUrl = joinApiUrl(api.baseUrl, operation.endpoint);
 
     const urlCheck = validateUrl(grpcUrl);
     if (!urlCheck.valid) {
