@@ -89,6 +89,23 @@ class CreateToolBodyDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, any>;
+
+  // SDK tool fields. Tool.sdkConfig is the structured assembly
+  // recipe the executor's sdk-code-assembler reads to build the
+  // sandboxed JS that imports the npm package and calls into it;
+  // tool.dependencies pins the exact version range. Without these
+  // whitelisted on the DTO, ValidationPipe drops them and
+  // SDK-type tools can't be created via the public API at all
+  // (the executor + entity model are wired but the surface
+  // wasn't). Both are arbitrary-shape JSON — the assembler
+  // validates structure server-side via SdkConfig types.
+  @IsOptional()
+  @IsObject()
+  sdkConfig?: any;
+
+  @IsOptional()
+  @IsObject()
+  dependencies?: Record<string, string>;
 }
 
 class UpdateToolBodyDto {
@@ -131,6 +148,15 @@ class UpdateToolBodyDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, any>;
+
+  // SDK tool fields — same rationale as CreateToolBodyDto.
+  @IsOptional()
+  @IsObject()
+  sdkConfig?: any;
+
+  @IsOptional()
+  @IsObject()
+  dependencies?: Record<string, string>;
 }
 
 class GenerateToolsFromApiDto {

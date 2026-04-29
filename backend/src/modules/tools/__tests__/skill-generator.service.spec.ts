@@ -390,6 +390,82 @@ describe('SkillGeneratorService', () => {
       expect(result[0].name.endsWith('-')).toBe(false);
     });
 
+    it('GraphQL operation: SKILL.md includes a starter query template', async () => {
+      const graphqlTool = {
+        ...mockTool,
+        name: 'country',
+        operation: {
+          id: 'op-gql',
+          name: 'country',
+          method: 'POST',
+          endpoint: '/graphql',
+          type: 'query',
+          parameters: {
+            body: {
+              query: { type: 'string', required: true },
+              variables: {
+                type: 'object',
+                properties: { code: { type: 'string' } },
+                required: ['code'],
+              },
+            },
+          },
+          api: { baseUrl: 'https://countries.example/graphql', type: 'graphql' },
+        } as any,
+      };
+      gatewayRepository.findOne.mockResolvedValue({
+        ...mockGateway,
+        endpoint: '/countries',
+      });
+      gatewayToolRepository.find.mockResolvedValue([
+        { tool: graphqlTool, isActive: true },
+      ]);
+
+      const result = await service.generateIndividualSkills('gw-1', 'org-1');
+      const md = result[0].content;
+      expect(md).toContain('## GraphQL operation');
+      expect(md).toContain('```graphql');
+      expect(md).toContain('query country($code: String!)');
+      expect(md).toContain('country(code: $code)');
+    });
+
+    it('truncation keeps the unique tail when many tools share a long prefix', async () => {
+      // Real-world Translate case: ~40 gRPC methods all named
+      // `real_google_translate_protobuf_translation_service_<method>`.
+      // Naive head-keeping truncation collapsed every method to the
+      // same 64-char prefix because the unique `<method>` got cut
+      // off the end.
+      const detect = {
+        ...mockTool,
+        name: 'real_google_translate_protobuf_translation_service_detect_language',
+        operation: { ...mockTool.operation, summary: undefined },
+      };
+      const translate = {
+        ...mockTool,
+        id: 'tool-translate',
+        name: 'real_google_translate_protobuf_translation_service_translate_text',
+        operation: { ...mockTool.operation, summary: undefined },
+      };
+      gatewayRepository.findOne.mockResolvedValue({
+        ...mockGateway,
+        endpoint: '/translate-grpc',
+      });
+      gatewayToolRepository.find.mockResolvedValue([
+        { tool: detect, isActive: true },
+        { tool: translate, isActive: true },
+      ]);
+
+      const result = await service.generateIndividualSkills('gw-1', 'org-1');
+      // Both must produce DIFFERENT slugs. Tail-keeping preserves
+      // `detect-language` and `translate-text`.
+      expect(result[0].name).not.toBe(result[1].name);
+      expect(result[0].name.length).toBeLessThanOrEqual(64);
+      expect(result[1].name.length).toBeLessThanOrEqual(64);
+      // Method-name segments must survive in both.
+      expect(result[0].name).toContain('detect');
+      expect(result[1].name).toContain('translate-text');
+    });
+
     it('should throw NotFoundException for missing gateway', async () => {
       gatewayRepository.findOne.mockResolvedValue(null);
 
