@@ -48,6 +48,15 @@ export interface CreateToolDto {
   inputSchemaId?: string;
   outputSchemaId?: string;
   metadata?: Record<string, any>;
+
+  /**
+   * SDK tool fields. When set, the executor uses node-sandbox to
+   * import the npm package, run the configured method, and return
+   * the result — see executors/tool-script.executor.ts:executeSdk
+   * + node-sandbox/sdk-code-assembler.service.ts.
+   */
+  sdkConfig?: any;
+  dependencies?: Record<string, string>;
 }
 
 export interface UpdateToolDto {
@@ -69,6 +78,8 @@ export interface UpdateToolDto {
   };
   categoryIds?: string[];
   metadata?: Record<string, any>;
+  sdkConfig?: any;
+  dependencies?: Record<string, string>;
 }
 
 export interface ToolSearchFilters {
@@ -308,6 +319,14 @@ export class ToolsService {
 
       if (updateToolDto.metadata !== undefined) {
         tool.metadata = { ...tool.metadata, ...updateToolDto.metadata };
+      }
+
+      if (updateToolDto.sdkConfig !== undefined) {
+        tool.sdkConfig = updateToolDto.sdkConfig;
+      }
+
+      if (updateToolDto.dependencies !== undefined) {
+        tool.dependencies = updateToolDto.dependencies;
       }
 
       // Increment version
@@ -959,6 +978,25 @@ export class ToolsService {
           parameters.required.push(name);
         }
       });
+    }
+
+    // GraphQL operations have a different body shape: instead of a
+    // single `schema`, the parser emits `body.query` (the GraphQL
+    // query string) and `body.variables` (an object whose
+    // `properties` map describes each variable). Lift those
+    // variables to top-level so the generated SKILL.md surfaces
+    // them as proper parameters.
+    if (
+      operation.parameters?.body?.variables?.properties &&
+      typeof operation.parameters.body.variables.properties === 'object'
+    ) {
+      const vars = operation.parameters.body.variables;
+      Object.entries(vars.properties as Record<string, any>).forEach(([name, prop]) => {
+        parameters.properties[name] = prop;
+      });
+      if (Array.isArray(vars.required)) {
+        parameters.required.push(...vars.required);
+      }
     }
 
     // Add body parameters
