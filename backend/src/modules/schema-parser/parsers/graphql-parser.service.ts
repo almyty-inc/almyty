@@ -259,7 +259,10 @@ export class GraphQLParserService implements SchemaParser {
     return resources;
   }
 
-  private convertGraphQLTypeToJsonSchema(graphqlType: any): Record<string, any> {
+  private convertGraphQLTypeToJsonSchema(
+    graphqlType: any,
+    depth = 0,
+  ): Record<string, any> {
     // Handle NonNull types: unwrap and recurse on the inner type.
     // Use isNonNullType explicitly — the previous shape branched on
     // the presence of `.ofType`, which ALSO exists on List types,
@@ -271,14 +274,14 @@ export class GraphQLParserService implements SchemaParser {
     // GraphQL API actually expected an array. Handle NonNull and
     // List as distinct shapes, in the right order.
     if (isNonNullType(graphqlType)) {
-      return this.convertGraphQLTypeToJsonSchema(graphqlType.ofType);
+      return this.convertGraphQLTypeToJsonSchema(graphqlType.ofType, depth);
     }
 
     // Handle List types
     if (isListType(graphqlType)) {
       return {
         type: 'array',
-        items: this.convertGraphQLTypeToJsonSchema(graphqlType.ofType),
+        items: this.convertGraphQLTypeToJsonSchema(graphqlType.ofType, depth),
       };
     }
 
@@ -307,12 +310,29 @@ export class GraphQLParserService implements SchemaParser {
       };
     }
 
-    // Handle object types
+    // Handle object types — walk one level deep so the SKILL.md
+    // generator has the field list it needs to emit a useful
+    // selection set instead of a `__typename` stub. Cap recursion at
+    // depth 1 so a self-referential type (e.g. Country.continent →
+    // Continent.countries → Country) doesn't blow the stack or the
+    // serialized schema.
     if (isObjectType(graphqlType)) {
-      return {
+      const out: Record<string, any> = {
         type: 'object',
         description: graphqlType.description,
       };
+      if (depth < 1) {
+        const fields = (graphqlType as GraphQLObjectType).getFields();
+        const properties: Record<string, any> = {};
+        for (const [name, field] of Object.entries(fields)) {
+          properties[name] = this.convertGraphQLTypeToJsonSchema(
+            field.type,
+            depth + 1,
+          );
+        }
+        out.properties = properties;
+      }
+      return out;
     }
 
     // Default fallback
