@@ -22,8 +22,9 @@ import {
   SearchMemoryDto,
   SupersedeMemoryDto,
 } from './canonical-memory.dto';
-import { MemoryError } from './canonical.types';
+import { MemoryError, Mode, ScopeType } from './canonical.types';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { MemoryRouter } from './memory-router.service';
 
 /**
  * Canonical memory HTTP API. Mounts under `/memory/canonical` so it
@@ -36,7 +37,52 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 export class CanonicalMemoryController {
-  constructor(private readonly service: CanonicalMemoryService) {}
+  constructor(
+    private readonly service: CanonicalMemoryService,
+    private readonly router: MemoryRouter,
+  ) {}
+
+  // ── backends list / health ────────────────────────────────────────
+
+  @Get('backends')
+  @ApiOperation({ summary: 'List configured memory backends + capabilities' })
+  async listBackends() {
+    return { success: true, data: this.router.list_backends() };
+  }
+
+  @Get('backends/health')
+  @ApiOperation({ summary: 'Run a health check against every backend' })
+  async healthAll() {
+    return { success: true, data: await this.router.healthAll() };
+  }
+
+  // ── transfer between backends ─────────────────────────────────────
+
+  @Post('transfer')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Transfer memory items from one backend to another' })
+  async transfer(
+    @Body() body: {
+      scope_type: ScopeType;
+      scope_id: string;
+      source: string;
+      target: string;
+      mode?: Mode;
+      dry_run?: boolean;
+    },
+  ) {
+    try {
+      const report = await this.router.transfer(
+        { scope_type: body.scope_type, scope_id: body.scope_id },
+        body.source,
+        body.target,
+        { mode: body.mode, dry_run: body.dry_run },
+      );
+      return { success: true, data: report };
+    } catch (err) {
+      throw memoryErrorToHttp(err);
+    }
+  }
 
   // ── put ───────────────────────────────────────────────────────────
 
