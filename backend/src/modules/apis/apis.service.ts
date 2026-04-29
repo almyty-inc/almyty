@@ -482,6 +482,29 @@ export class ApisService {
       // SaveOptions.data.skipVersioning, set by the helper here.
       const SAVE_CHUNK = 50;
       const skipVer = { data: { skipVersioning: true } };
+
+      // Re-import upsert: match incoming operations against existing
+      // rows by (apiId, operationId-string) and reuse the existing
+      // entity id. Without this, every re-import inserts brand-new
+      // rows — orphaning every Tool/Resource/skill that pointed at
+      // the old operation_id UUID. Symptom on staging: re-importing
+      // the Countries GraphQL schema after the parser was upgraded
+      // to capture return-type fields produced fresh operations
+      // with the new field info, but the existing tools still
+      // pointed at the stale rows, so SKILL.md kept emitting the
+      // __typename stub.
+      const existingByOpId = new Map<string, string>();
+      for (const op of await queryRunner.manager.find(Operation, {
+        where: { apiId },
+        select: { id: true, operationId: true },
+      })) {
+        if (op.operationId) existingByOpId.set(op.operationId, op.id);
+      }
+      for (const op of operations) {
+        const existing = existingByOpId.get(op.operationId);
+        if (existing) (op as any).id = existing;
+      }
+
       const savedOperations: Operation[] = [];
       for (let i = 0; i < operations.length; i += SAVE_CHUNK) {
         await this.awaitHeapHeadroom();
