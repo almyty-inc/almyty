@@ -12,6 +12,14 @@ import { ToolsService } from '../tools/tools.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { AgentsService } from '../agents/agents.service';
 import { LlmProvidersService } from '../llm-providers/llm-providers.service';
+import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
+import {
+  MemoryError,
+  Mode,
+  Tier,
+  ScopeType,
+  Provenance,
+} from '../memory/canonical/canonical.types';
 
 const TOOLS = [
   { name: 'list_apis', description: 'List all connected APIs', inputSchema: { type: 'object', properties: {} } },
@@ -32,6 +40,13 @@ const TOOLS = [
   { name: 'create_agent', description: 'Create an agent', inputSchema: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, mode: { type: 'string', enum: ['workflow', 'autonomous'] }, instructions: { type: 'string' } }, required: ['name'] } },
   { name: 'list_providers', description: 'List LLM providers', inputSchema: { type: 'object', properties: {} } },
   { name: 'add_provider', description: 'Add an LLM provider', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string' }, apiKey: { type: 'string' } }, required: ['name', 'type', 'apiKey'] } },
+  // ── Memory (canonical schema v1) ──────────────────────────────
+  { name: 'memory_put', description: 'Write a memory or document item. memory mode = agent-written facts/preferences; document mode = chunked imported text.', inputSchema: { type: 'object', properties: { mode: { type: 'string', enum: ['memory', 'document'] }, scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'], description: 'Defaults to workspace if omitted.' }, scope_id: { type: 'string', description: 'Defaults to the calling organization id when scope_type=workspace.' }, content: { type: 'string' }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'], description: 'Memory mode only. Defaults to short.' }, tags: { type: 'array', items: { type: 'string' } }, ttl_seconds: { type: 'number' }, source_uri: { type: 'string', description: 'Document mode: where the text came from.' }, source_version: { type: 'number' } }, required: ['mode', 'content'] } },
+  { name: 'memory_search', description: 'Hybrid (vector + FTS) search across a scope.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, scope_id: { type: 'string' }, mode: { type: 'string', enum: ['memory', 'document'] }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'] }, top_k: { type: 'number' }, fts_only: { type: 'boolean' } }, required: ['query'] } },
+  { name: 'memory_list', description: 'List memory items in a scope (newest first).', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, scope_id: { type: 'string' }, mode: { type: 'string', enum: ['memory', 'document'] }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'] }, tags: { type: 'array', items: { type: 'string' } }, include_superseded: { type: 'boolean' }, include_deleted: { type: 'boolean' }, limit: { type: 'number' }, cursor: { type: 'string' } } } },
+  { name: 'memory_get', description: 'Get a single memory item by id.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
+  { name: 'memory_delete', description: 'Delete a memory item. mode=soft (default) sets deleted_at; mode=hard removes the row.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, mode: { type: 'string', enum: ['soft', 'hard'] } }, required: ['id'] } },
+  { name: 'memory_supersede', description: 'Bi-temporal supersession (memory mode only): close valid_until on the old row and write a new one with the same logical content.', inputSchema: { type: 'object', properties: { old_id: { type: 'string' }, content: { type: 'string' }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'] }, tags: { type: 'array', items: { type: 'string' } } }, required: ['old_id', 'content'] } },
 ];
 
 @Injectable()
@@ -222,6 +237,149 @@ export class AlmytyMcpService {
       case 'create_agent': return get(AgentsService).createAgent({ ...args }, orgId, userId);
       case 'list_providers': return get(LlmProvidersService).getProviders({ organizationId: orgId });
       case 'add_provider': return get(LlmProvidersService).createProvider({ name: args.name, type: args.type, configuration: { apiKey: args.apiKey } }, orgId, userId);
+
+      // ── Memory (canonical) ─────────────────────────────────────
+      case 'memory_put': {
+        const memSvc = get(CanonicalMemoryService);
+        const mode = args.mode as Mode;
+        const scope_type = (args.scope_type as ScopeType) || 'workspace';
+        const scope_id = args.scope_id || orgId;
+        const provenance: Provenance = {
+          agent_id: null,
+          session_id: null,
+          collab_id: null,
+          model: null,
+          provider: null,
+          tool_chain: ['memory_put'],
+          created_by: 'agent',
+          source_backend: 'almyty-native',
+        };
+        try {
+          const item = await memSvc.put(
+            {
+              mode,
+              scope: { scope_type, scope_id },
+              content: String(args.content),
+              tier: mode === 'memory' ? ((args.tier as Tier) ?? 'short') : undefined,
+              tags: args.tags,
+              ttl_seconds: args.ttl_seconds ?? null,
+              source_uri: args.source_uri,
+              source_version: args.source_version,
+              provenance,
+            },
+            { user_id: userId },
+          );
+          return {
+            id: item.id,
+            mode: item.mode,
+            embedding_status: item.embedding_status,
+            content_bytes: item.content_bytes,
+            tier: item.tier,
+          };
+        } catch (err) {
+          if (err instanceof MemoryError) return { error: err.tag };
+          throw err;
+        }
+      }
+      case 'memory_search': {
+        const ranked = await get(CanonicalMemoryService).search({
+          scope: {
+            scope_type: (args.scope_type as ScopeType) || 'workspace',
+            scope_id: args.scope_id || orgId,
+          },
+          query: String(args.query),
+          mode: args.mode,
+          tier: args.tier,
+          tags: args.tags,
+          top_k: args.top_k ?? 10,
+          fts_only: args.fts_only ?? false,
+        });
+        return ranked.map((r) => ({
+          id: r.item.id,
+          score: r.score,
+          signal: r.signal,
+          content: r.item.content,
+          tier: r.item.tier,
+          tags: r.item.tags,
+          mode: r.item.mode,
+        }));
+      }
+      case 'memory_list': {
+        const page = await get(CanonicalMemoryService).list({
+          scope: {
+            scope_type: (args.scope_type as ScopeType) || 'workspace',
+            scope_id: args.scope_id || orgId,
+          },
+          mode: args.mode,
+          tier: args.tier,
+          tags: args.tags,
+          include_superseded: args.include_superseded,
+          include_deleted: args.include_deleted,
+          limit: args.limit ?? 50,
+          cursor: args.cursor ?? null,
+        });
+        return {
+          total: page.total,
+          cursor: page.cursor,
+          items: page.items.map((i) => ({
+            id: i.id,
+            mode: i.mode,
+            tier: i.tier,
+            content: i.content,
+            tags: i.tags,
+            embedding_status: i.embedding_status,
+            valid_until: i.valid_until,
+            created_at: i.created_at,
+          })),
+        };
+      }
+      case 'memory_get': {
+        const item = await get(CanonicalMemoryService).get(String(args.id));
+        return item ?? { error: { kind: 'not_found', id: args.id } };
+      }
+      case 'memory_delete': {
+        const ok = await get(CanonicalMemoryService).delete(
+          String(args.id),
+          (args.mode as 'soft' | 'hard') ?? 'soft',
+          { user_id: userId },
+        );
+        return { deleted: ok, id: args.id };
+      }
+      case 'memory_supersede': {
+        const provenance: Provenance = {
+          agent_id: null,
+          session_id: null,
+          collab_id: null,
+          model: null,
+          provider: null,
+          tool_chain: ['memory_supersede'],
+          created_by: 'agent',
+          source_backend: 'almyty-native',
+        };
+        try {
+          const result = await get(CanonicalMemoryService).supersede(
+            String(args.old_id),
+            {
+              mode: 'memory',
+              scope: { scope_type: 'workspace', scope_id: orgId },
+              content: String(args.content),
+              tier: (args.tier as Tier) ?? 'long',
+              tags: args.tags,
+              provenance,
+            },
+            { user_id: userId },
+          );
+          return {
+            old_id: result.old.id,
+            new_id: result.new.id,
+            valid_until: result.old.valid_until,
+          };
+        } catch (err) {
+          if (err instanceof MemoryError) return { error: err.tag };
+          throw err;
+        }
+      }
+
       default: throw new Error(`Unknown tool: ${name}`);
     }
   }

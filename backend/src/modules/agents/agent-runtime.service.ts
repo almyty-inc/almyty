@@ -12,8 +12,8 @@ import { Tool } from '../../entities/tool.entity';
 import { EventEmitter } from 'events';
 import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import { ToolExecutorService, ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
-import { MemoryService } from '../memory/memory.service';
-import { MemoryType, MemoryScope } from '../../entities/memory.entity';
+import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
+import { MemoryError, Provenance, Tier } from '../memory/canonical/canonical.types';
 import { MessageRole } from '../../entities/message.entity';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
@@ -123,8 +123,8 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
     private readonly llmProvidersService: LlmProvidersService,
     @Inject(forwardRef(() => ToolExecutorService))
     private readonly toolExecutorService: ToolExecutorService,
-    @Inject(forwardRef(() => MemoryService))
-    private readonly memoryService: MemoryService,
+    @Inject(forwardRef(() => CanonicalMemoryService))
+    private readonly memoryService: CanonicalMemoryService,
     @InjectRedis() private readonly redis: Redis,
   ) {}
 
@@ -320,14 +320,20 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
             : [];
           const lastUserMessage = recentMessages[0];
           if (lastUserMessage) {
-            const memories = await this.memoryService.search(
-              run.organizationId,
-              typeof lastUserMessage.content === 'string' ? lastUserMessage.content : JSON.stringify(lastUserMessage.content),
-              { agentId: agent.id, limit: 5 },
-            );
-            if (memories.length > 0) {
+            // Canonical search: workspace-scoped, hybrid (vector + FTS).
+            // Tier filter is omitted on read so the agent sees memories
+            // it stored in any tier (short/project/long/shared).
+            const ranked = await this.memoryService.search({
+              scope: { scope_type: 'workspace', scope_id: run.organizationId },
+              query: typeof lastUserMessage.content === 'string'
+                ? lastUserMessage.content
+                : JSON.stringify(lastUserMessage.content),
+              mode: 'memory',
+              top_k: 5,
+            });
+            if (ranked.length > 0) {
               memoryContext = '\n\n## Relevant Memories\n' +
-                memories.map(m => `- [${m.type}] ${m.content}`).join('\n');
+                ranked.map(r => `- [${r.item.tier ?? 'memory'}] ${r.item.content}`).join('\n');
             }
           }
         } catch (err) {
@@ -805,40 +811,56 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
 
       case 'store_memory': {
         try {
-          const memoryType = (parameters.type as MemoryType) || MemoryType.FACT;
-          const memory = await this.memoryService.create(
-            run.organizationId,
+          // Map the legacy `type` hint into the canonical tier:
+          //   'fact'/'preference'/'instruction' → 'long' (durable)
+          //   'context' → 'short' (within-session)
+          //   'episode' → 'project' (work-product)
+          //   anything else → 'project' (sane default)
+          const tier: Tier = legacyTypeToTier(parameters.type as string | undefined);
+          const provenance: Provenance = {
+            agent_id: agent.id,
+            session_id: run.id,
+            collab_id: null,
+            model: null,
+            provider: null,
+            tool_chain: ['store_memory'],
+            created_by: 'agent',
+            source_backend: 'almyty-native',
+          };
+          const item = await this.memoryService.put(
             {
+              mode: 'memory',
+              scope: { scope_type: 'workspace', scope_id: run.organizationId },
               content: parameters.content,
-              type: memoryType,
-              scope: MemoryScope.AGENT,
-              agentIds: [agent.id],
+              tier,
               tags: parameters.tags || [],
-              source: { type: 'agent_runtime', id: run.id, name: agent.name },
+              metadata: { source: { type: 'agent_runtime', id: run.id, name: agent.name } },
+              provenance,
             },
-            run.userId,
+            { user_id: run.userId },
           );
-          return { result: `Memory stored (id: ${memory.id})` };
+          return { result: `Memory stored (id: ${item.id})` };
         } catch (err) {
-          return { result: null, error: `Failed to store memory: ${err.message}` };
+          if (err instanceof MemoryError) {
+            return { result: null, error: `memory rejected: ${err.tag.kind}` };
+          }
+          return { result: null, error: `Failed to store memory: ${(err as Error).message}` };
         }
       }
 
       case 'recall_memory': {
         try {
-          const memories = await this.memoryService.search(
-            run.organizationId,
-            parameters.query,
-            {
-              agentId: agent.id,
-              limit: parameters.limit || 5,
-            },
-          );
-          if (memories.length === 0) {
+          const ranked = await this.memoryService.search({
+            scope: { scope_type: 'workspace', scope_id: run.organizationId },
+            query: parameters.query,
+            mode: 'memory',
+            top_k: parameters.limit || 5,
+          });
+          if (ranked.length === 0) {
             return { result: 'No relevant memories found.' };
           }
-          const formatted = memories.map((m, i) =>
-            `${i + 1}. [${m.type}] (similarity: ${m.similarity.toFixed(2)}) ${m.content}`,
+          const formatted = ranked.map((r, i) =>
+            `${i + 1}. [${r.item.tier ?? 'memory'}] (score: ${r.score.toFixed(2)}) ${r.item.content}`,
           ).join('\n');
           return { result: formatted };
         } catch (err) {
@@ -1494,17 +1516,27 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
 
       const content = `Task: ${inputSummary.substring(0, 500)}\nResult: ${outputSummary.substring(0, 500)}`;
 
-      await this.memoryService.create(
-        run.organizationId,
+      const provenance: Provenance = {
+        agent_id: agent.id,
+        session_id: run.id,
+        collab_id: null,
+        model: null,
+        provider: null,
+        tool_chain: ['auto_save'],
+        created_by: 'agent',
+        source_backend: 'almyty-native',
+      };
+      await this.memoryService.put(
         {
+          mode: 'memory',
+          scope: { scope_type: 'workspace', scope_id: run.organizationId },
           content,
-          type: MemoryType.EPISODE,
-          scope: MemoryScope.AGENT,
-          agentIds: [agent.id],
+          tier: 'project',
           tags: ['auto-saved', 'agent-run'],
-          source: { type: 'agent_runtime', id: run.id, name: agent.name },
+          metadata: { source: { type: 'agent_runtime', id: run.id, name: agent.name } },
+          provenance,
         },
-        run.userId,
+        { user_id: run.userId },
       );
     } catch (err) {
       this.logger.warn(`Failed to auto-save memory for run ${run.id}: ${err.message}`);
@@ -1852,5 +1884,27 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
         // Best-effort — swallow DB hiccups.
       }
     }
+  }
+}
+
+/**
+ * Translate a legacy `type` parameter ('fact', 'preference', 'context',
+ * 'episode', 'instruction') into a canonical memory tier. The legacy
+ * type field carried two orthogonal axes — durability and shape —
+ * that the canonical schema separates: durability becomes `tier`, shape
+ * becomes free-form metadata. This mapping keeps existing prompts and
+ * agent definitions working without re-prompting.
+ */
+function legacyTypeToTier(t: string | undefined): Tier {
+  switch (t) {
+    case 'context':
+      return 'short';
+    case 'fact':
+    case 'preference':
+    case 'instruction':
+      return 'long';
+    case 'episode':
+    default:
+      return 'project';
   }
 }

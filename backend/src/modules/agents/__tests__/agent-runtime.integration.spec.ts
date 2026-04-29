@@ -11,7 +11,7 @@ import { Conversation } from '../../../entities/conversation.entity';
 import { Message } from '../../../entities/message.entity';
 import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
-import { MemoryService } from '../../memory/memory.service';
+import { CanonicalMemoryService } from '../../memory/canonical/canonical-memory.service';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 
 /**
@@ -229,11 +229,10 @@ describe('AgentRuntimeService (integration)', () => {
           },
         },
         {
-          provide: MemoryService,
+          provide: CanonicalMemoryService,
           useValue: {
             search: jest.fn().mockResolvedValue([]),
-            autoSave: jest.fn().mockResolvedValue([]),
-            create: jest.fn().mockResolvedValue({}),
+            put: jest.fn().mockResolvedValue({ id: 'mem-test', mode: 'memory' }),
           },
         },
         {

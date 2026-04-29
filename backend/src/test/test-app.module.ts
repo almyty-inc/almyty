@@ -52,7 +52,9 @@ import { ToolExecution } from '../entities/tool-execution.entity';
 import { Agent } from '../entities/agent.entity';
 import { AgentExecution } from '../entities/agent-execution.entity';
 import { AgentRun } from '../entities/agent-run.entity';
-import { Memory } from '../entities/memory.entity';
+import { CanonicalMemory } from '../modules/memory/canonical/canonical-memory.entity';
+import { CanonicalMemoryWorkspaceConfig } from '../modules/memory/canonical/canonical-memory-config.entity';
+import { CanonicalMemorySoftcapWarning } from '../modules/memory/canonical/canonical-memory-softcap-warning.entity';
 import { AgentFile } from '../entities/file.entity';
 import { ExternalAgent } from '../entities/external-agent.entity';
 import { ToolTemplate } from '../entities/tool-template.entity';
@@ -155,7 +157,9 @@ const mockRedis = {
       ToolCategory, OAuthClient, OAuthAuthorizationCode, OAuthAccessToken,
       Credential, LlmProvider, Conversation, Message, AuditLog,
       UsageMetric, RequestLog, ToolVersion, ToolExecution,
-      Agent, AgentExecution, AgentRun, Memory, AgentFile, ExternalAgent,
+      Agent, AgentExecution, AgentRun,
+      CanonicalMemory, CanonicalMemoryWorkspaceConfig, CanonicalMemorySoftcapWarning,
+      AgentFile, ExternalAgent,
       ToolTemplate, JsonSchema, ApiSchema,
     ]),
 

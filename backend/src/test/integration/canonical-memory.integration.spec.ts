@@ -1,0 +1,521 @@
+/**
+ * Real-Postgres integration test for the canonical memory module.
+ *
+ * Hits a real database with the pgvector extension installed; runs
+ * the full migration DDL (extensions, tables, indexes, generated
+ * tsvector, HNSW vector index) and exercises every public method
+ * on `CanonicalMemoryService` end-to-end:
+ *
+ *   - put → embedding worker → vector + tsvector populated
+ *   - get / list / asOf
+ *   - search (hybrid vector + FTS)
+ *   - supersede (bi-temporal)
+ *   - delete (soft + hard)
+ *   - batchPut / batchDelete
+ *   - soft cap warn_log + reject behavior
+ *   - anti-dump: blob detection + compression-ratio reject
+ *   - validation pipeline mode invariants
+ *
+ * Gated behind RUN_DB_INTEGRATION=1. Skipped in unit-test runs; the
+ * CI workflow (.github/workflows/ci.yml) flips the flag.
+ */
+import { DataSource } from 'typeorm';
+import { Test } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { getQueueToken } from '@nestjs/bull';
+import { v7 as uuidv7 } from 'uuid';
+
+import { CanonicalMemory } from '../../modules/memory/canonical/canonical-memory.entity';
+import { CanonicalMemoryWorkspaceConfig } from '../../modules/memory/canonical/canonical-memory-config.entity';
+import { CanonicalMemorySoftcapWarning } from '../../modules/memory/canonical/canonical-memory-softcap-warning.entity';
+import {
+  CanonicalMemoryService,
+  EMBEDDING_QUEUE_NAME,
+} from '../../modules/memory/canonical/canonical-memory.service';
+import { EmbeddingService } from '../../modules/memory/embedding.service';
+import { AuditLogService } from '../../modules/audit-log/audit-log.service';
+import { Provenance, MemoryError, Tier } from '../../modules/memory/canonical/canonical.types';
+import { LIMITS } from '../../modules/memory/canonical/canonical.constants';
+import { MemoryCanonicalInit1745300000000 } from '../../migrations/1745300000000-MemoryCanonicalInit';
+
+const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
+const describeIfDb = SHOULD_RUN ? describe : describe.skip;
+
+jest.setTimeout(120_000);
+
+/**
+ * Generate diverse readable content. crypto.randomBytes gives high
+ * entropy, then we map each byte through a punctuation-rich
+ * alphabet so the result has spaces / commas / hyphens — enough
+ * to dodge the base64 charset check, and enough entropy to defeat
+ * the compression-ratio reject. Used by the soft-cap tests where
+ * the size needs to clear the cap without tripping anti-dump.
+ */
+function randomReadable(bytes: number): string {
+  const crypto = require('crypto');
+  const alphabet =
+    'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ,.;:-_?!()';
+  const buf = crypto.randomBytes(bytes);
+  let out = '';
+  for (let i = 0; i < buf.length; i++) {
+    out += alphabet[buf[i] % alphabet.length];
+  }
+  return out;
+}
+
+const baseProvenance: Provenance = {
+  agent_id: 'agent_test',
+  session_id: 'sess_test',
+  collab_id: null,
+  model: 'claude-test',
+  provider: 'anthropic',
+  tool_chain: ['put'],
+  created_by: 'agent',
+  source_backend: 'almyty-native',
+};
+
+describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
+  let ds: DataSource;
+  let service: CanonicalMemoryService;
+  let enqueued: Array<{ name: string; data: any }> = [];
+
+  beforeAll(async () => {
+    const bootstrap = new DataSource({
+      type: 'postgres',
+      host: process.env.DATABASE_HOST || '127.0.0.1',
+      port: Number(process.env.DATABASE_PORT || 5432),
+      username: process.env.DATABASE_USERNAME || 'postgres',
+      password: process.env.DATABASE_PASSWORD || '',
+      database: process.env.DATABASE_NAME || 'almyty_test',
+    });
+    await bootstrap.initialize();
+    await bootstrap.query('CREATE SCHEMA IF NOT EXISTS canonical_memory_test');
+    await bootstrap.destroy();
+
+    ds = new DataSource({
+      type: 'postgres',
+      host: process.env.DATABASE_HOST || '127.0.0.1',
+      port: Number(process.env.DATABASE_PORT || 5432),
+      username: process.env.DATABASE_USERNAME || 'postgres',
+      password: process.env.DATABASE_PASSWORD || '',
+      database: process.env.DATABASE_NAME || 'almyty_test',
+      schema: 'canonical_memory_test',
+      synchronize: false,
+      logging: false,
+      // Pin search_path on every connection (pool) so raw SQL through
+      // DataSource.query — used by hybridSearch / asOf / etc. for
+      // pgvector operators — finds the canonical_memory_test tables
+      // AND resolves the `vector` type from public.
+      extra: {
+        options: '-c search_path=canonical_memory_test,public',
+      },
+      entities: [CanonicalMemory, CanonicalMemoryWorkspaceConfig, CanonicalMemorySoftcapWarning],
+    });
+    await ds.initialize();
+
+    // Run the migration DDL against the dedicated test schema. The
+    // queryRunner doesn't auto-set search_path on a per-connection
+    // basis when the DataSource carries `schema:`; force it so the
+    // migration's unqualified CREATE TABLE statements land in the
+    // intended schema and the repositories (which DO qualify with
+    // the schema) find the tables.
+    const queryRunner = ds.createQueryRunner();
+    await queryRunner.connect();
+    // Include `public` on the search path so the `vector` type
+    // (provided by the pgvector extension installed into public)
+    // resolves while the migration's tables land in the test schema.
+    await queryRunner.query(`SET search_path TO canonical_memory_test, public`);
+    // Drop any leftover tables from a prior failed run.
+    await queryRunner.query(`DROP TABLE IF EXISTS memory_softcap_warnings CASCADE`);
+    await queryRunner.query(`DROP TABLE IF EXISTS memory_workspace_config CASCADE`);
+    await queryRunner.query(`DROP TABLE IF EXISTS memories CASCADE`);
+    const migration = new MemoryCanonicalInit1745300000000();
+    await migration.up(queryRunner);
+    await queryRunner.release();
+
+    // Stub embedding service: returns a deterministic 1536-dim vector
+    // (matches the column's vector(1536) constraint and the canonical
+    // default dim). The projection is text-content-derived so similar
+    // inputs produce similar vectors and cosine distance is meaningful.
+    // The real OpenAI path is covered separately in EmbeddingService
+    // unit tests.
+    const embeddingStub: Pick<EmbeddingService, 'generateEmbedding' | 'cosineSimilarity'> = {
+      generateEmbedding: jest.fn(async (text: string) => {
+        const dim = 1536;
+        const v = new Array(dim).fill(0);
+        for (let i = 0; i < text.length; i++) {
+          v[i % dim] += (text.charCodeAt(i) % 13) / 13;
+        }
+        const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0));
+        return norm > 0 ? v.map((x) => x / norm) : v;
+      }),
+      cosineSimilarity: jest.fn(),
+    };
+
+    const queueStub = {
+      add: jest.fn(async (name: string, data: any) => {
+        enqueued.push({ name, data });
+        return { id: 'job-' + enqueued.length };
+      }),
+    };
+
+    const auditStub = {
+      log: jest.fn(),
+      logCreate: jest.fn(),
+      logUpdate: jest.fn(),
+      logDelete: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        CanonicalMemoryService,
+        { provide: getRepositoryToken(CanonicalMemory), useValue: ds.getRepository(CanonicalMemory) },
+        { provide: getRepositoryToken(CanonicalMemoryWorkspaceConfig), useValue: ds.getRepository(CanonicalMemoryWorkspaceConfig) },
+        { provide: getRepositoryToken(CanonicalMemorySoftcapWarning), useValue: ds.getRepository(CanonicalMemorySoftcapWarning) },
+        { provide: getQueueToken(EMBEDDING_QUEUE_NAME), useValue: queueStub },
+        { provide: DataSource, useValue: ds },
+        { provide: AuditLogService, useValue: auditStub },
+        { provide: EmbeddingService, useValue: embeddingStub },
+      ],
+    }).compile();
+    service = moduleRef.get(CanonicalMemoryService);
+  });
+
+  afterAll(async () => {
+    if (ds?.isInitialized) await ds.destroy();
+  });
+
+  beforeEach(() => {
+    enqueued = [];
+  });
+
+  // ─── happy path: write → enqueue → embed → search ────────────
+
+  it('put: persists a memory-mode item and enqueues the embedding job', async () => {
+    const item = await service.put(
+      {
+        mode: 'memory',
+        scope: { scope_type: 'workspace', scope_id: 'wks_put_1' },
+        content: 'the quick brown fox jumps over the lazy dog',
+        tier: 'short',
+        provenance: baseProvenance,
+      },
+      { user_id: 'u_test' },
+    );
+    expect(item.id).toBeDefined();
+    expect(item.mode).toBe('memory');
+    expect(item.embedding_status).toBe('pending');
+
+    const row = await ds.getRepository(CanonicalMemory).findOne({ where: { id: item.id } });
+    expect(row).toBeDefined();
+    expect(row!.contentBytes).toBe(Buffer.byteLength(item.content, 'utf8'));
+    expect(row!.tier).toBe('short');
+
+    // Embedding job was enqueued.
+    expect(enqueued.length).toBe(1);
+    expect(enqueued[0]).toEqual(expect.objectContaining({ name: 'embed', data: { memory_id: item.id } }));
+  });
+
+  it('fillEmbedding: populates the vector and flips status to ready', async () => {
+    const item = await service.put(
+      {
+        mode: 'memory',
+        scope: { scope_type: 'workspace', scope_id: 'wks_emb_1' },
+        content: 'embeddings are vectors of real numbers',
+        tier: 'project',
+        provenance: baseProvenance,
+      },
+      { user_id: 'u_test' },
+    );
+    await service.fillEmbedding(item.id);
+
+    const row = await ds.getRepository(CanonicalMemory).findOne({ where: { id: item.id } });
+    expect(row!.embeddingStatus).toBe('ready');
+    expect(row!.embedding).not.toBeNull();
+    expect(row!.embeddingDim).toBe(1536);
+    expect(row!.embedding!.length).toBe(1536);
+  });
+
+  // ─── search: hybrid vector + FTS, scope-isolated ─────────────
+
+  it('search: returns ranked items in scope, isolating other scopes', async () => {
+    // Seed: 2 memories in scope A, 1 in scope B.
+    const aOne = await service.put(
+      { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'scope_A' },
+        content: 'pgvector enables fast cosine similarity search', tier: 'long',
+        provenance: baseProvenance },
+      { user_id: 'u' });
+    const aTwo = await service.put(
+      { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'scope_A' },
+        content: 'database indexes speed up reads', tier: 'long',
+        provenance: baseProvenance },
+      { user_id: 'u' });
+    const bOne = await service.put(
+      { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'scope_B' },
+        content: 'pgvector enables fast cosine similarity search', tier: 'long',
+        provenance: baseProvenance },
+      { user_id: 'u' });
+
+    // Fill embeddings synchronously (worker doesn't run in tests).
+    await Promise.all([
+      service.fillEmbedding(aOne.id),
+      service.fillEmbedding(aTwo.id),
+      service.fillEmbedding(bOne.id),
+    ]);
+
+    const ranked = await service.search({
+      scope: { scope_type: 'workspace', scope_id: 'scope_A' },
+      query: 'cosine similarity vectors',
+      mode: 'memory',
+      top_k: 5,
+    });
+    const ids = ranked.map((r) => r.item.id);
+    expect(ids).toContain(aOne.id);
+    expect(ids).not.toContain(bOne.id); // scope-isolated
+    // Hybrid signal because vector + FTS both fired.
+    expect(ranked[0].signal === 'hybrid' || ranked[0].signal === 'fts').toBeTruthy();
+  });
+
+  // ─── bi-temporal supersede ───────────────────────────────────
+
+  it('supersede: closes valid_until on old, points superseded_by to new', async () => {
+    const old = await service.put(
+      { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_super' },
+        content: 'pluto is a planet', tier: 'long', provenance: baseProvenance },
+      { user_id: 'u' });
+
+    const { old: refreshedOld, new: replacement } = await service.supersede(
+      old.id,
+      { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_super' },
+        content: 'pluto is a dwarf planet', tier: 'long', provenance: baseProvenance },
+      { user_id: 'u' },
+    );
+
+    expect(refreshedOld.valid_until).not.toBeNull();
+    expect(refreshedOld.superseded_by).toBe(replacement.id);
+    expect(replacement.valid_until).toBeNull();
+
+    // Default list excludes superseded rows.
+    const page = await service.list({ scope: { scope_type: 'workspace', scope_id: 'wks_super' } });
+    expect(page.items.map((i) => i.id)).not.toContain(refreshedOld.id);
+    expect(page.items.map((i) => i.id)).toContain(replacement.id);
+
+    // include_superseded shows them again.
+    const all = await service.list({
+      scope: { scope_type: 'workspace', scope_id: 'wks_super' },
+      include_superseded: true,
+    });
+    expect(all.items.map((i) => i.id)).toEqual(
+      expect.arrayContaining([refreshedOld.id, replacement.id]),
+    );
+  });
+
+  it('asOf: returns the row that was current at the given time', async () => {
+    const t0 = new Date();
+    const old = await service.put(
+      { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_asof' },
+        content: 'temperature is in Fahrenheit', tier: 'long', provenance: baseProvenance },
+      { user_id: 'u' });
+    // Wait for a measurable wall-clock gap so the as-of cutoff lands
+    // strictly between the old and the new row.
+    await new Promise((r) => setTimeout(r, 50));
+    const between = new Date();
+    await new Promise((r) => setTimeout(r, 50));
+    await service.supersede(
+      old.id,
+      { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_asof' },
+        content: 'temperature is in Celsius', tier: 'long', provenance: baseProvenance },
+      { user_id: 'u' },
+    );
+
+    const past = await service.asOf(between, {
+      scope: { scope_type: 'workspace', scope_id: 'wks_asof' },
+    });
+    expect(past.items.map((i) => i.id)).toContain(old.id);
+  });
+
+  // ─── soft delete + hard delete ───────────────────────────────
+
+  it('delete soft: marks deleted_at; default list hides it; hard removes the row', async () => {
+    const item = await service.put(
+      { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_del' },
+        content: 'will be deleted', tier: 'short', provenance: baseProvenance },
+      { user_id: 'u' });
+    expect(await service.delete(item.id, 'soft', { user_id: 'u' })).toBe(true);
+
+    const page = await service.list({ scope: { scope_type: 'workspace', scope_id: 'wks_del' } });
+    expect(page.items.map((i) => i.id)).not.toContain(item.id);
+
+    expect(await service.delete(item.id, 'hard', { user_id: 'u' })).toBe(true);
+    const row = await ds.getRepository(CanonicalMemory).findOne({ where: { id: item.id } });
+    expect(row).toBeNull();
+  });
+
+  // ─── soft cap warn_log behavior ──────────────────────────────
+
+  it('soft cap warn_log: writes warning row + lets the put succeed', async () => {
+    // 'short' tier soft cap is 128 KB; emit 200 KB to trip it. Use
+    // diverse-but-readable noise so neither the blob detector nor
+    // the compression-ratio check fires before the soft cap step.
+    const big = randomReadable(200 * 1024);
+    const item = await service.put(
+      { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_softcap' },
+        content: big, tier: 'short', provenance: baseProvenance },
+      { user_id: 'u' });
+    expect(item.id).toBeDefined();
+
+    // The default workspace config is `warn_log` → a row was logged.
+    const warnings = await ds
+      .getRepository(CanonicalMemorySoftcapWarning)
+      .find({ where: { memoryId: item.id } });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].sizeBytes).toBe(Buffer.byteLength(big, 'utf8'));
+    expect(warnings[0].softCap).toBe(LIMITS.SOFT_CAP_MEMORY_SHORT_BYTES);
+  });
+
+  it('soft cap reject: rejects the put when behavior=reject', async () => {
+    // Switch the workspace config for this scope to 'reject'.
+    await ds.getRepository(CanonicalMemoryWorkspaceConfig).save({
+      scopeType: 'workspace',
+      scopeId: 'wks_softcap_reject',
+      embeddingModel: LIMITS.EMBEDDING_DEFAULT_MODEL,
+      embeddingDim: LIMITS.EMBEDDING_DEFAULT_DIM,
+      embeddingProvider: 'openai',
+      softcapBehavior: 'reject',
+      overrides: {},
+    });
+    const big = randomReadable(200 * 1024);
+    await expect(
+      service.put(
+        { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_softcap_reject' },
+          content: big, tier: 'short', provenance: baseProvenance },
+        { user_id: 'u' },
+      ),
+    ).rejects.toBeInstanceOf(MemoryError);
+  });
+
+  // ─── anti-dump heuristics ────────────────────────────────────
+
+  it('anti-dump: detects a PDF-prefixed blob and rejects with looks_like_blob', async () => {
+    const fakePdf = `%PDF-1.4\nfake pdf body`;
+    await expect(
+      service.put(
+        { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_blob' },
+          content: fakePdf, tier: 'short', provenance: baseProvenance },
+        { user_id: 'u' },
+      ),
+    ).rejects.toMatchObject({ tag: { kind: 'looks_like_blob', detected: 'pdf' } });
+  });
+
+  it('anti-dump: long base64 block is rejected as base64 blob', async () => {
+    // Real base64 (mixed case + digits) — ≥ 2048 chars is the
+    // detector threshold for the long-stretch heuristic.
+    const b64 = require('crypto').randomBytes(2400).toString('base64');
+    await expect(
+      service.put(
+        { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_b64' },
+          content: b64, tier: 'short', provenance: baseProvenance },
+        { user_id: 'u' },
+      ),
+    ).rejects.toMatchObject({ tag: { kind: 'looks_like_blob' } });
+  });
+
+  it('anti-dump: highly compressible content is rejected', async () => {
+    // 'a' * 100k compresses to a tiny gzip stream — ratio well below
+    // the 5% threshold.
+    const repetitive = 'a'.repeat(100 * 1024);
+    await expect(
+      service.put(
+        { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_repeat' },
+          content: repetitive, tier: 'long', provenance: baseProvenance },
+        { user_id: 'u' },
+      ),
+    ).rejects.toMatchObject({ tag: { kind: 'looks_like_blob' } });
+  });
+
+  // ─── validation: mode invariants ─────────────────────────────
+
+  it('validation: document mode requires source_uri', async () => {
+    await expect(
+      service.put(
+        {
+          mode: 'document',
+          scope: { scope_type: 'workspace', scope_id: 'wks_doc' },
+          content: 'doc body',
+          // source_uri intentionally missing
+          source_version: 1,
+          chunk_index: 0,
+          chunk_total: 1,
+          provenance: baseProvenance,
+        },
+        { user_id: 'u' },
+      ),
+    ).rejects.toMatchObject({ tag: { kind: 'validation' } });
+  });
+
+  // ─── batch ops ───────────────────────────────────────────────
+
+  it('batchPut: accepts valid items, flags invalid ones, succeeds atomically per row', async () => {
+    const valid = (content: string): any => ({
+      id: uuidv7(),
+      mode: 'memory' as const,
+      scope_type: 'workspace' as const,
+      scope_id: 'wks_batch',
+      content,
+      content_format: 'text' as const,
+      content_bytes: Buffer.byteLength(content, 'utf8'),
+      embedding: null,
+      embedding_dim: null,
+      embedding_model: null,
+      embedding_status: 'pending' as const,
+      embedding_error: null,
+      tags: [],
+      metadata: {},
+      file_refs: [],
+      tier: 'short' as Tier,
+      valid_from: new Date(),
+      valid_until: null,
+      superseded_by: null,
+      ttl_seconds: null,
+      source_uri: null,
+      source_version: null,
+      source_checksum: null,
+      chunk_index: null,
+      chunk_total: null,
+      chunk_of: null,
+      confidence: 1,
+      provenance: baseProvenance,
+      created_at: new Date(),
+      updated_at: new Date(),
+      accessed_at: null,
+      access_count: 0,
+      deleted_at: null,
+      deleted_by: null,
+    });
+    const a = valid('row a');
+    const b = valid('row b');
+    const broken = { ...valid('row c'), tier: null }; // memory mode without tier
+    const result = await service.batchPut([a, b, broken]);
+    expect(result.succeeded).toBe(2);
+    expect(result.failed).toBe(1);
+    expect(result.errors[0].error.kind).toBe('validation');
+  });
+
+  it('batchDelete: soft-deletes the listed ids', async () => {
+    const a = await service.put(
+      { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_bd' },
+        content: 'first', tier: 'short', provenance: baseProvenance },
+      { user_id: 'u' });
+    const b = await service.put(
+      { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_bd' },
+        content: 'second', tier: 'short', provenance: baseProvenance },
+      { user_id: 'u' });
+    const result = await service.batchDelete([a.id, b.id]);
+    expect(result.succeeded).toBe(2);
+    const remaining = await service.list({
+      scope: { scope_type: 'workspace', scope_id: 'wks_bd' },
+    });
+    expect(remaining.items.map((i) => i.id)).not.toContain(a.id);
+    expect(remaining.items.map((i) => i.id)).not.toContain(b.id);
+  });
+});

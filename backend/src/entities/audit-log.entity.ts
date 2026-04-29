@@ -40,6 +40,13 @@ export enum AuditAction {
   MEMORY_RECALL = 'memory_recall',
   MEMORY_UPDATE = 'memory_update',
   MEMORY_DELETE = 'memory_delete',
+  // Canonical memory (v1) operations beyond basic CRUD.
+  MEMORY_SUPERSEDE = 'memory_supersede',
+  MEMORY_SEARCH = 'memory_search',
+  MEMORY_TRANSFER = 'memory_transfer',
+  MEMORY_SYNC = 'memory_sync',
+  MEMORY_DENIED = 'memory_denied',
+  MEMORY_SOFTCAP_WARNING = 'memory_softcap_warning',
   // File
   FILE_UPLOAD = 'file_upload',
   FILE_DOWNLOAD = 'file_download',
