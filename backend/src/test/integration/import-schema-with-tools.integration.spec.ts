@@ -289,6 +289,52 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
   });
 
   /**
+   * Re-import upserts operations by (apiId, operationId-string)
+   * instead of inserting fresh rows. Previously every re-import
+   * orphaned the existing tools/resources/skills that pointed at
+   * the prior operation_id UUIDs — a regression noticed when the
+   * GraphQL parser was upgraded to capture return-type fields and
+   * the new field info never reached the SKILL.md generator,
+   * because tools still pointed at the now-stale operation rows.
+   */
+  it('re-importing the same schema upserts operations instead of inserting duplicates', async () => {
+    // Fresh API row to keep this test isolated from the OpenAPI
+    // happy-path fixture above.
+    const apiRepo = ds.getRepository(Api);
+    const fresh = (await apiRepo.save(
+      apiRepo.create({
+        name: 'Re-import GraphQL fixture',
+        type: ApiType.GRAPHQL,
+        status: ApiStatus.DRAFT,
+        baseUrl: 'https://example.com/graphql',
+        organizationId: org.id,
+        authentication: { type: 'none' as any, config: {} },
+      } as any),
+    )) as unknown as Api;
+
+    const r1 = await service.importSchema(fresh.id, SAMPLE_GRAPHQL, org.id, {
+      generateTools: true,
+    });
+    const opIdsByName1 = new Map(r1.operations.map((o: any) => [o.name, o.id]));
+
+    const r2 = await service.importSchema(fresh.id, SAMPLE_GRAPHQL, org.id, {
+      generateTools: true,
+    });
+    expect(r2.operations.length).toBe(r1.operations.length);
+
+    // Every operation that existed before re-import must keep the
+    // same row UUID — anything else means we re-inserted and the
+    // tool→operation FK is now dangling.
+    for (const op of r2.operations as any[]) {
+      expect(opIdsByName1.get(op.name)).toBe(op.id);
+    }
+
+    // Total row count (across runs) shouldn't have doubled.
+    const total = await ds.getRepository(Operation).count({ where: { apiId: fresh.id } });
+    expect(total).toBe(r1.operations.length);
+  });
+
+  /**
    * Memory regression: `findOne` previously eager-loaded
    * `['organization', 'schemas', 'operations', 'resources']`, and
    * `importSchema` called it twice (inside generateToolsFromApi and
