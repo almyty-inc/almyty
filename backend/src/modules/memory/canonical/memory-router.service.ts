@@ -253,17 +253,21 @@ export class MemoryRouter implements OnModuleInit {
     const sourceCreds = await this.credsResolver.resolve(scope, source.id);
     const targetCreds = await this.credsResolver.resolve(scope, target.id);
 
+    // ── Phase 1: collect source items, paged ────────────────────
+    // No upper bound — we walk pages until source.list returns a
+    // null cursor. The previous 100k truncate silently lost data
+    // on big scopes; the caller already opted into the transfer
+    // by hitting this endpoint.
     const all: MemoryItem[] = [];
     let cursor: string | null = null;
     while (true) {
-      const page = await source.list({ scope, mode, limit: 100, cursor }, sourceCreds ?? undefined);
+      const page = await source.list(
+        { scope, mode, limit: 200, cursor },
+        sourceCreds ?? undefined,
+      );
       all.push(...page.items);
       if (!page.cursor) break;
       cursor = page.cursor;
-      if (all.length > 100_000) {
-        this.logger.warn(`transfer ${sourceId}→${targetId} exceeded 100k items; truncating`);
-        break;
-      }
     }
 
     // Compute capability-degradation warnings.
@@ -282,13 +286,19 @@ export class MemoryRouter implements OnModuleInit {
 
     if (options.dry_run) return report;
 
-    // Stream the items into the target. We use batchPut so backends
-    // that bulk under the hood (Mem0 does) get the chance.
-    const bp = await target.batchPut(all, targetCreds ?? undefined);
-    report.succeeded = bp.succeeded;
-    report.failed = bp.failed;
-    for (const e of bp.errors) {
-      report.errors.push({ id: e.id, error: JSON.stringify(e.error) });
+    // ── Phase 2: stream into target in chunks ───────────────────
+    // 200/chunk keeps any single batchPut under whatever per-call
+    // limit each backend imposes (Mem0 caps the request body
+    // around 200; Vertex API limits requests to a few MB).
+    const CHUNK = 200;
+    for (let i = 0; i < all.length; i += CHUNK) {
+      const slice = all.slice(i, i + CHUNK);
+      const bp = await target.batchPut(slice, targetCreds ?? undefined);
+      report.succeeded += bp.succeeded;
+      report.failed += bp.failed;
+      for (const e of bp.errors) {
+        report.errors.push({ id: e.id, error: JSON.stringify(e.error) });
+      }
     }
 
     this.auditLog.log({
