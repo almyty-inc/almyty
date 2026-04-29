@@ -309,6 +309,32 @@ export class ToolProtocolExecutor {
 
     const soapRequest = parameters as SOAPRequest;
     const safeSoapHeaders = soapRequest.headers ? sanitizeHeaders(soapRequest.headers) : {};
+    const targetNamespace =
+      (api.metadata as any)?.targetNamespace ||
+      (operation.metadata as any)?.targetNamespace ||
+      '';
+
+    // If the caller passed an explicit envelope, honor it. Otherwise
+    // auto-build from operation.name + the parser-extracted target
+    // namespace + the remaining flat `parameters` (each key becomes
+    // a child element). Auto-build is what most callers want — most
+    // agents shouldn't have to hand-write SOAP XML to use a SOAP
+    // skill.
+    const envelope = soapRequest.envelope
+      ? soapRequest.envelope
+      : this.buildSoapEnvelope(
+          operation.name,
+          targetNamespace,
+          this.extractSoapBodyFields(soapRequest as any),
+        );
+
+    // SOAP 1.1 SOAPAction header convention: `"{targetNamespace}{op}"`
+    // or `"{op}"` if no namespace is on file. Keep the surrounding
+    // quotes — bare values are spec-violating and some servers
+    // (TempConvert at w3schools) reject them with a SOAPFault.
+    const defaultAction = targetNamespace
+      ? `"${targetNamespace}${operation.name}"`
+      : `"${operation.name}"`;
 
     const config: AxiosRequestConfig = {
       method: 'POST',
@@ -319,11 +345,11 @@ export class ToolProtocolExecutor {
       signal: options.signal,
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',
-        SOAPAction: soapRequest.action || `"${operation.name}"`,
+        SOAPAction: soapRequest.action || defaultAction,
         'User-Agent': 'LLM-Tool-Gateway/1.0',
         ...safeSoapHeaders,
       },
-      data: soapRequest.envelope,
+      data: envelope,
     };
 
     await this.authService.applyApiAuth(config, api, options);
@@ -512,6 +538,63 @@ export class ToolProtocolExecutor {
       retryCount: 0,
       metadata: { grpcStatus: callRes.code, requestId: generateRequestId() },
     };
+  }
+
+  /**
+   * Pull the user-supplied flat fields out of a SOAPRequest payload.
+   * Drops the meta keys (envelope, action, headers) so they don't
+   * end up as XML children of the operation element.
+   */
+  private extractSoapBodyFields(req: Record<string, any>): Record<string, any> {
+    const { envelope: _e, action: _a, headers: _h, ...rest } = req || {};
+    return rest;
+  }
+
+  /**
+   * Build a minimal SOAP 1.1 envelope. Field values are passed
+   * through escapeXml so a value containing `</...>` can't break out
+   * of its element. Nested objects render as nested elements (one
+   * level deep is the realistic case for parser-extracted SOAP ops).
+   *
+   *   <?xml version="1.0" encoding="utf-8"?>
+   *   <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+   *     <soap:Body>
+   *       <CelsiusToFahrenheit xmlns="https://www.w3schools.com/xml/">
+   *         <Celsius>25</Celsius>
+   *       </CelsiusToFahrenheit>
+   *     </soap:Body>
+   *   </soap:Envelope>
+   */
+  private buildSoapEnvelope(
+    operationName: string,
+    targetNamespace: string,
+    fields: Record<string, any>,
+  ): string {
+    const ns = targetNamespace ? ` xmlns="${escapeXml(targetNamespace)}"` : '';
+    const renderField = (key: string, value: any): string => {
+      if (value === null || value === undefined) return `<${key}/>`;
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        const inner = Object.entries(value)
+          .map(([k, v]) => renderField(k, v))
+          .join('');
+        return `<${key}>${inner}</${key}>`;
+      }
+      if (Array.isArray(value)) {
+        return value.map((v) => renderField(key, v)).join('');
+      }
+      return `<${key}>${escapeXml(String(value))}</${key}>`;
+    };
+    const body = Object.entries(fields)
+      .map(([k, v]) => renderField(k, v))
+      .join('');
+    return (
+      `<?xml version="1.0" encoding="utf-8"?>` +
+      `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">` +
+      `<soap:Body>` +
+      `<${operationName}${ns}>${body}</${operationName}>` +
+      `</soap:Body>` +
+      `</soap:Envelope>`
+    );
   }
 
   // ─── shared result shapers ─────────────────────────────────────
