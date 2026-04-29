@@ -17,6 +17,13 @@ import {
 } from './canonical/canonical-memory.service';
 import { CanonicalMemoryController } from './canonical/canonical-memory.controller';
 import { CanonicalMemoryEmbeddingProcessor } from './canonical/embedding-worker.processor';
+import { AlmytyNativeBackend } from './canonical/backends/almyty-native.backend';
+import { AnthropicMemoryToolBackend } from './canonical/backends/anthropic-memory-tool.backend';
+import { Mem0Backend } from './canonical/backends/mem0.backend';
+import { ZepBackend } from './canonical/backends/zep.backend';
+import { SupermemoryBackend } from './canonical/backends/supermemory.backend';
+import { VertexMemoryBankBackend } from './canonical/backends/vertex-memory-bank.backend';
+import { MemoryRouter } from './canonical/memory-router.service';
 
 /**
  * Memory module.
@@ -42,8 +49,15 @@ import { CanonicalMemoryEmbeddingProcessor } from './canonical/embedding-worker.
     EmbeddingService,
     CanonicalMemoryService,
     CanonicalMemoryEmbeddingProcessor,
+    AlmytyNativeBackend,
+    AnthropicMemoryToolBackend,
+    Mem0Backend,
+    ZepBackend,
+    SupermemoryBackend,
+    VertexMemoryBankBackend,
+    MemoryRouter,
   ],
   controllers: [CanonicalMemoryController],
-  exports: [CanonicalMemoryService, EmbeddingService],
+  exports: [CanonicalMemoryService, EmbeddingService, MemoryRouter],
 })
 export class MemoryModule {}

@@ -61,5 +61,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/frane/almyty.git"
+  },
+  "dependencies": {
+    "form-data": "^4.0.5"
   }
 }
