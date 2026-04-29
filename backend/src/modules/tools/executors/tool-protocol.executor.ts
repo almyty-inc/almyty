@@ -299,7 +299,14 @@ export class ToolProtocolExecutor {
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
-    const targetUrl = joinApiUrl(api.baseUrl, operation.endpoint);
+    // SOAP is single-endpoint by spec — one URL (the .asmx / WSDL
+    // service URL) handles every operation, the SOAPAction header
+    // and envelope body name pick the operation. The parser emits
+    // a placeholder `/soap` for operation.endpoint that mustn't be
+    // joined to baseUrl, or we end up POSTing to
+    // `.../tempconvert.asmx/soap` which the server 500s as
+    // "method name is not valid". Use baseUrl as-is.
+    const targetUrl = api.baseUrl;
 
     const urlCheck = validateUrl(targetUrl);
     if (!urlCheck.valid) {
@@ -327,12 +334,6 @@ export class ToolProtocolExecutor {
           targetNamespace,
           this.extractSoapBodyFields(soapRequest as any),
         );
-    this.logger.log(
-      `[SOAP-DEBUG] op=${operation.name} ns=${targetNamespace} ` +
-      `action=${soapRequest.action || `(default)`} envelopeLen=${envelope.length} ` +
-      `bodyKeys=${Object.keys(this.extractSoapBodyFields(soapRequest as any)).join(',')}`,
-    );
-    this.logger.log(`[SOAP-DEBUG-ENVELOPE] ${envelope}`);
 
     // SOAPAction header. Spec says it should be a quoted-string,
     // but in practice .NET-style servers (w3schools TempConvert,
