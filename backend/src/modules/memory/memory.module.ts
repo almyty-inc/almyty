@@ -4,7 +4,9 @@ import { BullModule } from '@nestjs/bull';
 
 import { Organization } from '../../entities/organization.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
+import { Credential } from '../../entities/credential.entity';
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
+import { CredentialsModule } from '../credentials/credentials.module';
 
 import { EmbeddingService } from './embedding.service';
 
@@ -24,6 +26,7 @@ import { ZepBackend } from './canonical/backends/zep.backend';
 import { SupermemoryBackend } from './canonical/backends/supermemory.backend';
 import { VertexMemoryBankBackend } from './canonical/backends/vertex-memory-bank.backend';
 import { MemoryRouter } from './canonical/memory-router.service';
+import { BackendCredentialsResolver } from './canonical/backend-credentials.resolver';
 
 /**
  * Memory module.
@@ -41,9 +44,11 @@ import { MemoryRouter } from './canonical/memory-router.service';
       CanonicalMemorySoftcapWarning,
       Organization,
       LlmProvider,
+      Credential,
     ]),
     BullModule.registerQueue({ name: EMBEDDING_QUEUE_NAME }),
     forwardRef(() => LlmProvidersModule),
+    forwardRef(() => CredentialsModule),
   ],
   providers: [
     EmbeddingService,
@@ -56,6 +61,7 @@ import { MemoryRouter } from './canonical/memory-router.service';
     SupermemoryBackend,
     VertexMemoryBankBackend,
     MemoryRouter,
+    BackendCredentialsResolver,
   ],
   controllers: [CanonicalMemoryController],
   exports: [CanonicalMemoryService, EmbeddingService, MemoryRouter],

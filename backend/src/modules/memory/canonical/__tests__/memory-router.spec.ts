@@ -22,6 +22,7 @@ import { VertexMemoryBankBackend } from '../backends/vertex-memory-bank.backend'
 import { MemoryBackend, BackendHealth } from '../backends/memory-backend.interface';
 import { Capability, MemoryError, MemoryItem, Mode, Provenance } from '../canonical.types';
 import { AuditLogService } from '../../../audit-log/audit-log.service';
+import { BackendCredentialsResolver } from '../backend-credentials.resolver';
 
 const baseProvenance: Provenance = {
   agent_id: null, session_id: null, collab_id: null,
@@ -103,12 +104,17 @@ describe('MemoryRouter', () => {
 
     configRepo = { findOne: jest.fn().mockResolvedValue(null) };
     const auditStub = { log: jest.fn() };
+    // The resolver is exercised end-to-end in the credentials spec;
+    // the router-level tests just need it to return null so backends
+    // run without per-call credentials (the FakeBackend ignores them).
+    const credsResolverStub = { resolve: jest.fn().mockResolvedValue(null), invalidate: jest.fn() };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         MemoryRouter,
         { provide: getRepositoryToken(CanonicalMemoryWorkspaceConfig), useValue: configRepo },
         { provide: AuditLogService, useValue: auditStub },
+        { provide: BackendCredentialsResolver, useValue: credsResolverStub },
         { provide: AlmytyNativeBackend, useValue: native },
         { provide: AnthropicMemoryToolBackend, useValue: anthropic },
         { provide: Mem0Backend, useValue: mem0 },
@@ -162,10 +168,10 @@ describe('MemoryRouter', () => {
       });
       const item = makeItem();
       await router.put(item);
-      expect(native.put).toHaveBeenCalledWith(item);
+      expect(native.put).toHaveBeenCalledWith(item, undefined);
       // Mirror is fire-and-forget; allow microtask to flush.
       await new Promise((r) => setImmediate(r));
-      expect(mem0.put).toHaveBeenCalledWith(item);
+      expect(mem0.put).toHaveBeenCalledWith(item, undefined);
     });
   });
 
@@ -234,7 +240,7 @@ describe('MemoryRouter', () => {
         'almyty-native',
         'mem0',
       );
-      expect(mem0.batchPut).toHaveBeenCalledWith(items);
+      expect(mem0.batchPut).toHaveBeenCalledWith(items, undefined);
       expect(report.succeeded).toBe(2);
     });
   });

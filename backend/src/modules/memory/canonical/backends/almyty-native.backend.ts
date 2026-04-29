@@ -12,7 +12,11 @@ import {
   ScopeRef,
   SearchQuery,
 } from '../canonical.types';
-import { BackendHealth, MemoryBackend } from './memory-backend.interface';
+import {
+  BackendCredentials,
+  BackendHealth,
+  MemoryBackend,
+} from './memory-backend.interface';
 
 /**
  * Almyty Native backend — the default. Wraps `CanonicalMemoryService`
@@ -52,7 +56,7 @@ export class AlmytyNativeBackend implements MemoryBackend {
     // beyond what the module's TypeOrm + BullMQ wiring already does.
   }
 
-  async healthCheck(): Promise<BackendHealth> {
+  async healthCheck(_creds?: BackendCredentials): Promise<BackendHealth> {
     const start = Date.now();
     // Trivial round-trip through the workspace_config table — proves
     // the DB is reachable and the canonical schema is in place.
@@ -68,7 +72,7 @@ export class AlmytyNativeBackend implements MemoryBackend {
     }
   }
 
-  get(id: string): Promise<MemoryItem | null> {
+  get(id: string, _creds?: BackendCredentials): Promise<MemoryItem | null> {
     return this.service.get(id);
   }
 
@@ -78,40 +82,42 @@ export class AlmytyNativeBackend implements MemoryBackend {
    * `CanonicalMemoryService.put(input, actor)` instead so the full
    * 17-step validation pipeline runs. This entrypoint trusts the
    * caller (the router validates the canonical shape itself before
-   * forwarding).
+   * forwarding). Native ignores `creds` — its data lives in our
+   * own DB; per-org isolation rides on `scope_id`.
    */
-  async put(item: MemoryItem): Promise<MemoryItem> {
+  async put(item: MemoryItem, _creds?: BackendCredentials): Promise<MemoryItem> {
     return this.service.putCanonical(item);
   }
 
-  delete(id: string, mode: 'soft' | 'hard' = 'soft'): Promise<boolean> {
+  delete(id: string, mode: 'soft' | 'hard' = 'soft', _creds?: BackendCredentials): Promise<boolean> {
     return this.service.delete(id, mode, {});
   }
 
-  list(query: ListQuery): Promise<Page<MemoryItem>> {
+  list(query: ListQuery, _creds?: BackendCredentials): Promise<Page<MemoryItem>> {
     return this.service.list(query);
   }
 
-  search(query: SearchQuery): Promise<RankedItem[]> {
+  search(query: SearchQuery, _creds?: BackendCredentials): Promise<RankedItem[]> {
     return this.service.search(query);
   }
 
   async supersede(
     oldId: string,
     newItem: MemoryItem,
+    _creds?: BackendCredentials,
   ): Promise<{ old: MemoryItem; new: MemoryItem }> {
     return this.service.supersedeCanonical(oldId, newItem);
   }
 
-  asOf(time: Date, query: ListQuery): Promise<Page<MemoryItem>> {
+  asOf(time: Date, query: ListQuery, _creds?: BackendCredentials): Promise<Page<MemoryItem>> {
     return this.service.asOf(time, query);
   }
 
-  batchPut(items: MemoryItem[]): Promise<BatchResult> {
+  batchPut(items: MemoryItem[], _creds?: BackendCredentials): Promise<BatchResult> {
     return this.service.batchPut(items);
   }
 
-  batchDelete(ids: string[]): Promise<BatchResult> {
+  batchDelete(ids: string[], _creds?: BackendCredentials): Promise<BatchResult> {
     return this.service.batchDelete(ids);
   }
 

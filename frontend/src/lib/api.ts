@@ -622,20 +622,80 @@ export const runsApi = {
   getRun: (runId: string) => apiGet(`/agents/runs/${runId}`),
 }
 
-// Memories API
+// Canonical Memory API (v1)
+//
+// Talks to /memory/canonical/* — the canonical-schema-v1 backend.
+// Items are scoped via { scope_type, scope_id }; the UI defaults
+// scope_type=workspace and scope_id=current organization id when
+// the caller doesn't override.
+export type MemoryScopeType = 'user' | 'workspace' | 'project' | 'collab'
+export type MemoryMode = 'memory' | 'document'
+export type MemoryTier = 'short' | 'project' | 'long' | 'shared'
+
+export interface MemoryScopeRef {
+  scope_type: MemoryScopeType
+  scope_id: string
+}
+
 export const memoriesApi = {
-  getAll: (params?: Record<string, string>) => {
-    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
-    return apiGet(`/memories${qs}`)
-  },
-  getById: (id: string) => apiGet(`/memories/${id}`),
-  create: (data: any) => apiPost('/memories', data),
-  update: (id: string, data: any) => apiPatch(`/memories/${id}`, data),
-  delete: (id: string) => apiDel(`/memories/${id}`),
-  search: (query: string, options?: { agentId?: string; limit?: number; scope?: string; type?: string }) =>
-    apiPost('/memories/search', { query, ...options }),
-  getTags: () => apiGet('/memories/tags'),
-  bulkCreate: (items: any[]) => apiPost('/memories/bulk', { items }),
+  list: (body: {
+    scope: MemoryScopeRef
+    mode?: MemoryMode
+    tier?: MemoryTier
+    tags?: string[]
+    include_superseded?: boolean
+    include_deleted?: boolean
+    limit?: number
+    cursor?: string | null
+  }) => apiPost('/memory/canonical/list', body),
+  search: (body: {
+    scope: MemoryScopeRef
+    query: string
+    mode?: MemoryMode
+    tier?: MemoryTier
+    tags?: string[]
+    top_k?: number
+    fts_only?: boolean
+  }) => apiPost('/memory/canonical/search', body),
+  getById: (id: string) => apiGet(`/memory/canonical/${id}`),
+  put: (body: {
+    mode: MemoryMode
+    scope: MemoryScopeRef
+    content: string
+    tier?: MemoryTier
+    ttl_seconds?: number
+    tags?: string[]
+    metadata?: Record<string, unknown>
+    file_refs?: string[]
+    source_uri?: string
+    source_version?: number
+    confidence?: number
+    provenance: {
+      agent_id: string | null
+      session_id: string | null
+      collab_id: string | null
+      model: string | null
+      provider: string | null
+      tool_chain: string[]
+      created_by: 'user' | 'agent' | 'consolidation' | 'transfer' | 'sync' | 'import'
+      source_backend: string | null
+    }
+  }) => apiPost('/memory/canonical', body),
+  remove: (id: string, mode: 'soft' | 'hard' = 'soft') =>
+    apiDel(`/memory/canonical/${id}?mode=${mode}`),
+  supersede: (id: string, body: any) =>
+    apiPost(`/memory/canonical/${id}/supersede`, body),
+  // Backend roster + transfer (router-level operations)
+  listBackends: () => apiGet('/memory/canonical/backends'),
+  backendsHealth: () => apiGet('/memory/canonical/backends/health'),
+  transfer: (body: {
+    scope_type: MemoryScopeType
+    scope_id: string
+    source: string
+    target: string
+    mode?: MemoryMode
+    dry_run?: boolean
+  }) => apiPost('/memory/canonical/transfer', body),
 }
 
 // Files API

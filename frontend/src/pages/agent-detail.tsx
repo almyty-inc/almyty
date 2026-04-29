@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
 import { agentsApi, memoriesApi, filesApi, interfacesApi, versionsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { useOrganizationStore } from '@/store/organization'
 import type {
   Agent,
   AgentExecution,
@@ -43,6 +44,7 @@ export function AgentDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
+  const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
 
   const [invokeDialogOpen, setInvokeDialogOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
@@ -130,14 +132,22 @@ export function AgentDetailPage() {
 
   const runs: AgentRun[] = Array.isArray(runsData) ? runsData : []
 
-  // Fetch memories
+  // Fetch memories — agent-scoped reads route through the canonical
+  // store via the workspace scope. We don't filter by agent_id here
+  // because canonical scoping is per-workspace; the memory tab can
+  // narrow client-side via tags or use search if needed.
   const { data: memoriesData } = useQuery({
-    queryKey: ['agent-memories', id],
+    queryKey: ['agent-memories', id, orgId],
     queryFn: async () => {
-      const d = await memoriesApi.getAll({ agentId: id! })
-      return Array.isArray(d) ? d : d?.data || []
+      if (!orgId) return []
+      const d: any = await memoriesApi.list({
+        scope: { scope_type: 'workspace', scope_id: orgId },
+        mode: 'memory',
+        limit: 100,
+      })
+      return d?.data?.items ?? d?.items ?? []
     },
-    enabled: !!id && activeTab === 'memory',
+    enabled: !!id && !!orgId && activeTab === 'memory',
   })
 
   const memories: Memory[] = Array.isArray(memoriesData) ? memoriesData : []
