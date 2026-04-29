@@ -52,7 +52,7 @@ export function MemoriesPage() {
   const scope = orgId ? { scope_type: 'workspace' as const, scope_id: orgId } : null
 
   // ── tabs ────────────────────────────────────────────────────────────
-  const [tab, setTab] = useState<'browse' | 'search' | 'backends'>('browse')
+  const [tab, setTab] = useState<'browse' | 'search' | 'backends' | 'audit'>('browse')
 
   // ── browse + filters ────────────────────────────────────────────────
   const [tierFilter, setTierFilter] = useState<MemoryTier | 'all'>('all')
@@ -165,6 +165,34 @@ export function MemoriesPage() {
     },
   })
 
+  // ── workspace config (per-scope routing + credentials) ─────────────
+  const configQ = useQuery({
+    queryKey: ['memories', 'config', orgId],
+    queryFn: () => memoriesApi.getConfig('workspace', orgId!),
+    enabled: !!orgId && tab === 'backends',
+  })
+  const updateConfigMut = useMutation({
+    mutationFn: (patch: Parameters<typeof memoriesApi.updateConfig>[0]) =>
+      memoriesApi.updateConfig(patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['memories', 'config', orgId] })
+      qc.invalidateQueries({ queryKey: ['memories', 'backends', 'health'] })
+      notify.success('Saved')
+    },
+    onError: (err: any) => notify.error('Save failed', err.message ?? String(err)),
+  })
+
+  // Credentials list — for the "wire credential to backend" picker.
+  const credsQ = useQuery({
+    queryKey: ['credentials', 'memory-backend'],
+    queryFn: async () => {
+      const res: any = await import('@/lib/api').then((m) => m.credentialsApi.getAll())
+      const list = (res?.data ?? res ?? []) as any[]
+      return list.filter((c) => c?.type === 'memory_backend')
+    },
+    enabled: tab === 'backends',
+  })
+
   // ── render ──────────────────────────────────────────────────────────
   if (!orgId) {
     return <div className="p-8"><EmptyState icon={Brain} title="No organization" description="Switch to an organization to view memory." /></div>
@@ -198,6 +226,7 @@ export function MemoriesPage() {
           <TabsTrigger value="browse">Browse</TabsTrigger>
           <TabsTrigger value="search">Search</TabsTrigger>
           <TabsTrigger value="backends">Backends</TabsTrigger>
+          <TabsTrigger value="audit">Audit</TabsTrigger>
         </TabsList>
 
         {/* ── Browse ─────────────────────────────────────────────── */}
@@ -298,10 +327,16 @@ export function MemoriesPage() {
 
         {/* ── Backends ───────────────────────────────────────────── */}
         <TabsContent value="backends" className="space-y-4">
+          <ConfigCard
+            config={configQ.data?.data}
+            backends={backends}
+            credentials={credsQ.data ?? []}
+            saving={updateConfigMut.isPending}
+            onSave={(patch) => updateConfigMut.mutate(patch)}
+            orgId={orgId}
+          />
           <p className="text-sm text-muted-foreground">
-            Adapters available for routing. Pin a backend per scope under
-            <span className="font-mono mx-1">memory_workspace_config.overrides.routing</span>
-            and link the matching credential id from the Credentials tab.
+            Per-backend capabilities and live health below. Pinning a backend without a wired credential id falls back to almyty-native.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {backends.map((b) => {
@@ -337,6 +372,15 @@ export function MemoriesPage() {
               )
             })}
           </div>
+        </TabsContent>
+
+        {/* ── Audit ──────────────────────────────────────────────── */}
+        <TabsContent value="audit" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Per-tier soft-cap warnings logged when an agent wrote past the configured byte ceiling.
+            Behavior is set per scope under Backends → Soft-cap behavior.
+          </p>
+          <SoftcapAuditList orgId={orgId} enabled={tab === 'audit'} />
         </TabsContent>
       </Tabs>
 
@@ -461,4 +505,211 @@ export function MemoriesPage() {
   )
 }
 
+// ── ConfigCard ──────────────────────────────────────────────────────
+//
+// Per-scope routing + softcap behavior + credentials wiring. Reads the
+// server-side workspace_config row and writes patches via /memory/canonical/config.
+// Each backend that needs credentials gets a Select tied to the org's
+// memory_backend credential rows; saving here is what makes the
+// per-org credentials work I built actually usable from the product.
+
+interface ConfigCardProps {
+  config?: {
+    scopeType: string
+    scopeId: string
+    embeddingModel: string
+    embeddingDim: number
+    softcapBehavior: 'reject' | 'warn_log' | 'silent'
+    overrides: {
+      routing?: {
+        memory_backend?: string
+        document_backend?: string
+        mirror_backend?: string
+        credentials?: Record<string, string>
+      }
+    } & Record<string, unknown>
+  } | null
+  backends: Backend[]
+  credentials: Array<{ id: string; name: string; type: string }>
+  saving: boolean
+  orgId: string
+  onSave: (patch: {
+    scope_type: 'workspace'
+    scope_id: string
+    softcap_behavior?: 'reject' | 'warn_log' | 'silent'
+    overrides?: Record<string, unknown>
+  }) => void
+}
+
+function ConfigCard({ config, backends, credentials, saving, orgId, onSave }: ConfigCardProps) {
+  const routing = config?.overrides?.routing ?? {}
+  const memBackend = routing.memory_backend ?? 'almyty-native'
+  const docBackend = routing.document_backend ?? 'almyty-native'
+  const mirror = routing.mirror_backend ?? ''
+  const creds = routing.credentials ?? {}
+  const softcap = config?.softcapBehavior ?? 'warn_log'
+
+  const externalBackends = backends.filter((b) => b.id !== 'almyty-native')
+
+  function patch(next: Partial<typeof routing> | { softcap_behavior?: typeof softcap }) {
+    const isSoftcap = 'softcap_behavior' in next
+    if (isSoftcap) {
+      onSave({
+        scope_type: 'workspace',
+        scope_id: orgId,
+        softcap_behavior: (next as any).softcap_behavior,
+      })
+      return
+    }
+    onSave({
+      scope_type: 'workspace',
+      scope_id: orgId,
+      overrides: {
+        routing: { ...routing, ...next },
+      },
+    })
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Routing & credentials for this workspace</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs">Memory-mode backend</Label>
+            <Select value={memBackend} onValueChange={(v) => patch({ memory_backend: v })} disabled={saving}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {backends.filter((b) => b.modes.includes('memory')).map((b) => (
+                  <SelectItem key={b.id} value={b.id}>{b.id}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Document-mode backend</Label>
+            <Select value={docBackend} onValueChange={(v) => patch({ document_backend: v })} disabled={saving}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {backends.filter((b) => b.modes.includes('document')).map((b) => (
+                  <SelectItem key={b.id} value={b.id}>{b.id}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Mirror backend (best-effort)</Label>
+            <Select value={mirror || '__none__'} onValueChange={(v) => patch({ mirror_backend: v === '__none__' ? undefined : v })} disabled={saving}>
+              <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {externalBackends.filter((b) => b.modes.includes('memory')).map((b) => (
+                  <SelectItem key={b.id} value={b.id}>{b.id}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Soft-cap behavior</Label>
+            <Select value={softcap} onValueChange={(v) => patch({ softcap_behavior: v as any })} disabled={saving}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="warn_log">warn_log</SelectItem>
+                <SelectItem value="reject">reject</SelectItem>
+                <SelectItem value="silent">silent</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div>
+          <Label className="text-xs">Credentials per backend</Label>
+          <p className="text-xs text-muted-foreground mb-2">
+            Wire a memory_backend credential (managed in Credentials → Vault) to each external backend. Native needs no credential.
+          </p>
+          <div className="grid md:grid-cols-2 gap-2">
+            {externalBackends.map((b) => (
+              <div key={b.id} className="flex items-center gap-2">
+                <span className="text-xs font-mono w-44 shrink-0">{b.id}</span>
+                <Select
+                  value={creds[b.id] ?? '__none__'}
+                  onValueChange={(v) =>
+                    patch({
+                      credentials: { ...creds, [b.id]: v === '__none__' ? '' : v },
+                    })
+                  }
+                  disabled={saving}
+                >
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="(unconfigured)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">(unconfigured)</SelectItem>
+                    {credentials.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+            {credentials.length === 0 && (
+              <p className="text-xs text-muted-foreground italic">
+                No credentials of type <span className="font-mono">memory_backend</span> exist yet — add one from the Credentials page.
+              </p>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+
+// ── SoftcapAuditList ────────────────────────────────────────────────
+interface SoftcapWarning {
+  id: string
+  memoryId: string
+  scopeType: string
+  scopeId: string
+  tier: string | null
+  mode: 'memory' | 'document'
+  sizeBytes: number
+  softCap: number
+  at: string
+}
+
+function SoftcapAuditList({ orgId, enabled }: { orgId: string; enabled: boolean }) {
+  const q = useQuery({
+    queryKey: ['memories', 'softcap-warnings', orgId],
+    queryFn: () => memoriesApi.listSoftcapWarnings('workspace', orgId, 100),
+    enabled,
+    refetchInterval: enabled ? 60_000 : false,
+  })
+  const rows: SoftcapWarning[] = (q.data?.data ?? q.data ?? []) as SoftcapWarning[]
+  if (q.isLoading) return <LoadingSpinner />
+  if (rows.length === 0) {
+    return <p className="text-sm text-muted-foreground">No soft-cap warnings recorded for this scope.</p>
+  }
+  return (
+    <div className="grid gap-2">
+      {rows.map((w) => (
+        <Card key={w.id}>
+          <CardContent className="p-3 flex items-center justify-between gap-4">
+            <div>
+              <div className="flex gap-2 items-center mb-1">
+                <Badge variant="outline">{w.tier ?? w.mode}</Badge>
+                <Badge variant="secondary" className="font-mono text-xs">
+                  {(w.sizeBytes / 1024).toFixed(1)} KB / {(w.softCap / 1024).toFixed(0)} KB
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                memory {w.memoryId.slice(0, 8)} • {new Date(w.at).toLocaleString()}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
 export default MemoriesPage

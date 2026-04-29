@@ -29,6 +29,7 @@ import { BackendCredentials, BackendHealth, MemoryBackend } from './memory-backe
 @Injectable()
 export class ZepBackend implements MemoryBackend {
   readonly id = 'zep';
+  readonly schema_version = 1;
   readonly capabilities = new Set<Capability>([
     'mode_memory', 'vector_search', 'graph_search', 'bi_temporal',
     'multi_tenant', 'batch_writes', 'export',

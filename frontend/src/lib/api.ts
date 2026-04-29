@@ -688,6 +688,18 @@ export const memoriesApi = {
   // Backend roster + transfer (router-level operations)
   listBackends: () => apiGet('/memory/canonical/backends'),
   backendsHealth: () => apiGet('/memory/canonical/backends/health'),
+  // Workspace config (per-scope routing + softcap behavior + credentials wiring)
+  getConfig: (scope_type: MemoryScopeType, scope_id: string) =>
+    apiGet(`/memory/canonical/config?scope_type=${encodeURIComponent(scope_type)}&scope_id=${encodeURIComponent(scope_id)}`),
+  updateConfig: (body: {
+    scope_type: MemoryScopeType
+    scope_id: string
+    embedding_model?: string
+    embedding_dim?: number
+    embedding_provider?: string
+    softcap_behavior?: 'reject' | 'warn_log' | 'silent'
+    overrides?: Record<string, unknown>
+  }) => apiPost('/memory/canonical/config', body),
   transfer: (body: {
     scope_type: MemoryScopeType
     scope_id: string
@@ -696,6 +708,9 @@ export const memoriesApi = {
     mode?: MemoryMode
     dry_run?: boolean
   }) => apiPost('/memory/canonical/transfer', body),
+  // Audit: soft-cap warnings list
+  listSoftcapWarnings: (scope_type: MemoryScopeType, scope_id: string, limit = 50) =>
+    apiGet(`/memory/canonical/warnings/softcap?scope_type=${encodeURIComponent(scope_type)}&scope_id=${encodeURIComponent(scope_id)}&limit=${limit}`),
 }
 
 // Files API

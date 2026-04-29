@@ -18,6 +18,7 @@ import {
 } from './backends/memory-backend.interface';
 import { BackendCredentialsResolver } from './backend-credentials.resolver';
 import {
+  CANONICAL_SCHEMA_VERSION,
   Capability,
   ListQuery,
   MemoryError,
@@ -75,9 +76,22 @@ export class MemoryRouter implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
-    // Init backends in parallel; failures here just mean the backend
-    // can't be selected — they don't tear the router down. The
-    // health check surfaces the bad state per-backend.
+    // Spec §15: refuse to mount any backend declaring a schema
+    // version older than CANONICAL_SCHEMA_VERSION. The adapter's
+    // toCanonical/fromCanonical wouldn't know how to round-trip
+    // fields the new schema added; routing to it would silently
+    // corrupt data. Drop the bad ones from the registry — they
+    // never appear in list_backends, never get selected, never
+    // get a credential resolved.
+    for (const b of Array.from(this.backends.values())) {
+      if (b.schema_version < CANONICAL_SCHEMA_VERSION) {
+        this.logger.warn(
+          `dropping backend ${b.id}: declares schema_version=${b.schema_version}, current is ${CANONICAL_SCHEMA_VERSION}`,
+        );
+        this.backends.delete(b.id);
+      }
+    }
+
     await Promise.all(
       Array.from(this.backends.values()).map((b) =>
         b.init().catch((e) => this.logger.warn(`backend ${b.id} init failed: ${e.message}`)),

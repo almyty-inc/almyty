@@ -57,6 +57,7 @@ function makeItem(overrides: Partial<MemoryItem> = {}): MemoryItem {
 
 class FakeBackend implements MemoryBackend {
   readonly id: string;
+  readonly schema_version = 1;
   readonly capabilities: ReadonlySet<Capability>;
   readonly supported_modes: ReadonlySet<Mode>;
   put = jest.fn(async (item: MemoryItem) => item);

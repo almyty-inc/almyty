@@ -31,6 +31,7 @@ import {
 @Injectable()
 export class AlmytyNativeBackend implements MemoryBackend {
   readonly id = 'almyty-native';
+  readonly schema_version = 1;
   readonly capabilities = new Set<Capability>([
     'mode_memory',
     'mode_document',
