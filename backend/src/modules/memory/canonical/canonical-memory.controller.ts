@@ -27,6 +27,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { MemoryRouter } from './memory-router.service';
 import { DocumentChunkerService } from './document-chunker.service';
 import { ConsolidationService } from './consolidation.service';
+import { MemorySyncService } from './memory-sync.service';
 
 /**
  * Canonical memory HTTP API. Mounts under `/memory/canonical` so it
@@ -44,6 +45,7 @@ export class CanonicalMemoryController {
     private readonly router: MemoryRouter,
     private readonly chunker: DocumentChunkerService,
     private readonly consolidation: ConsolidationService,
+    private readonly memorySync: MemorySyncService,
   ) {}
 
   // ── backends list / health ────────────────────────────────────────
@@ -153,6 +155,29 @@ export class CanonicalMemoryController {
       );
     }
     const result = await this.consolidation.run(
+      { scope_type: body.scope_type, scope_id: body.scope_id },
+      { force: !!body.force },
+    );
+    return { success: true, data: result };
+  }
+
+  // ── continuous sync (primary ↔ mirror) ────────────────────────────
+
+  @Post('sync')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reconcile primary↔mirror for a scope. Last-write-wins by updated_at.',
+  })
+  async syncScope(
+    @Body() body: { scope_type: ScopeType; scope_id: string; force?: boolean },
+  ) {
+    if (!body?.scope_type || !body?.scope_id) {
+      throw new HttpException(
+        { success: false, error: 'BAD_REQUEST', message: 'scope_type and scope_id are required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const result = await this.memorySync.sync(
       { scope_type: body.scope_type, scope_id: body.scope_id },
       { force: !!body.force },
     );

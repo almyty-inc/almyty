@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
+import { GoogleAuth, JWT, OAuth2Client } from 'google-auth-library';
 import { v7 as uuidv7 } from 'uuid';
 
 import {
@@ -18,12 +19,16 @@ import {
 import { BackendCredentials, BackendHealth, MemoryBackend } from './memory-backend.interface';
 
 /**
- * Vertex AI Memory Bank backend. Talks to {region}-aiplatform.googleapis.com
- * via /v1beta1/{engine}:generateMemories | retrieveMemories. Per-call
- * credentials: project + location + engine + bearer come from the
- * org's Credential row (a Google service account is the typical
- * source — the credentials service decrypts the JSON and the OAuth
- * exchange happens out-of-band by the credentials resolver).
+ * Vertex AI Memory Bank backend. Memory Bank doesn't ship a typed
+ * JS SDK yet — every Google sample reaches the
+ * `:generateMemories` / `:retrieveMemories` endpoints via raw HTTP.
+ * What this backend uses from an "official client" is
+ * `google-auth-library`: when the org's Credential row carries a
+ * service-account JSON (`creds.serviceAccountJson`), we let
+ * google-auth mint a short-lived bearer for us; otherwise we accept
+ * a pre-minted bearer from the credential resolver.
+ *
+ * Per-call credentials. No env-var fallback.
  *
  * Capability story:
  *   ✓ vector_search, mode_memory, batch_writes, multi_tenant,
@@ -40,13 +45,16 @@ export class VertexMemoryBankBackend implements MemoryBackend {
   ]);
   readonly supported_modes = new Set<Mode>(['memory']);
   private readonly logger = new Logger(VertexMemoryBankBackend.name);
+  /** HTTP client per (location, credential signature) — bounded. */
   private readonly clientCache = new Map<string, AxiosInstance>();
+  /** GoogleAuth-resolved bearer cache per service-account fingerprint. */
+  private readonly authCache = new Map<string, { client: JWT | OAuth2Client; expiresAt: number; bearer: string }>();
   private static readonly CLIENT_CACHE_MAX = 64;
 
   async init(): Promise<void> {}
 
   async healthCheck(creds?: BackendCredentials): Promise<BackendHealth> {
-    const ctx = this.context(creds);
+    const ctx = await this.context(creds);
     if (!ctx) return { ok: false, latency_ms: 0, details: { error: 'no_credentials' } };
     const start = Date.now();
     try {
@@ -56,7 +64,7 @@ export class VertexMemoryBankBackend implements MemoryBackend {
       ).catch(() => undefined);
       return { ok: true, latency_ms: Date.now() - start };
     } catch (e: any) {
-      return { ok: false, latency_ms: Date.now() - start, details: { status: e?.response?.status, error: e.message } };
+      return { ok: false, latency_ms: Date.now() - start, details: { error: e?.message ?? String(e) } };
     }
   }
 
@@ -66,7 +74,7 @@ export class VertexMemoryBankBackend implements MemoryBackend {
   }
 
   async put(item: MemoryItem, creds?: BackendCredentials): Promise<MemoryItem> {
-    const ctx = this.requireContext(creds);
+    const ctx = await this.requireContext(creds);
     await ctx.http.post(`/v1beta1/${ctx.engine}:generateMemories`, {
       directContentsSource: {
         events: [{ content: { role: 'user', parts: [{ text: item.content }] } }],
@@ -81,11 +89,12 @@ export class VertexMemoryBankBackend implements MemoryBackend {
   }
 
   async list(query: ListQuery, creds?: BackendCredentials): Promise<Page<MemoryItem>> {
-    return this.search({ scope: query.scope, query: '', top_k: query.limit ?? 50 }, creds) as any;
+    const ranked = await this.search({ scope: query.scope, query: '', top_k: query.limit ?? 50 }, creds);
+    return { items: ranked.map((r) => r.item), total: ranked.length, cursor: null };
   }
 
   async search(query: SearchQuery, creds?: BackendCredentials): Promise<RankedItem[]> {
-    const ctx = this.requireContext(creds);
+    const ctx = await this.requireContext(creds);
     const userId = scopeToUserId(query.scope);
     const res = await ctx.http.post(`/v1beta1/${ctx.engine}:retrieveMemories`, {
       scope: { user_id: userId },
@@ -127,7 +136,7 @@ export class VertexMemoryBankBackend implements MemoryBackend {
   }
 
   async *subscribeChanges(_scope: ScopeRef, since: Date, creds?: BackendCredentials): AsyncIterable<MemoryChangeEvent> {
-    const ctx = this.requireContext(creds);
+    const ctx = await this.requireContext(creds);
     let cursor = since;
     while (true) {
       const res = await ctx.http
@@ -192,23 +201,25 @@ export class VertexMemoryBankBackend implements MemoryBackend {
     };
   }
 
-  private requireContext(creds?: BackendCredentials): { http: AxiosInstance; engine: string } {
-    const ctx = this.context(creds);
+  private async requireContext(creds?: BackendCredentials): Promise<{ http: AxiosInstance; engine: string }> {
+    const ctx = await this.context(creds);
     if (!ctx) {
-      throw new Error('vertex-memory-bank: missing project / engine / bearer credentials — set in the org credential store');
+      throw new Error('vertex-memory-bank: missing engine + (bearer | serviceAccountJson) credentials — set in the org credential store');
     }
     return ctx;
   }
 
-  private context(creds?: BackendCredentials): { http: AxiosInstance; engine: string } | null {
-    if (!creds?.engine || !creds.bearer) return null;
+  private async context(creds?: BackendCredentials): Promise<{ http: AxiosInstance; engine: string } | null> {
+    if (!creds?.engine) return null;
+    const bearer = await this.resolveBearer(creds);
+    if (!bearer) return null;
     const location = creds.location || 'us-central1';
-    const cacheKey = `${location}|${creds.bearer.slice(-12)}`;
+    const cacheKey = `${location}|${bearer.slice(-12)}`;
     let http = this.clientCache.get(cacheKey);
     if (!http) {
       http = axios.create({
         baseURL: `https://${location}-aiplatform.googleapis.com`,
-        headers: { Authorization: `Bearer ${creds.bearer}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' },
         timeout: 20_000, maxRedirects: 0,
       });
       if (this.clientCache.size >= VertexMemoryBankBackend.CLIENT_CACHE_MAX) {
@@ -218,6 +229,36 @@ export class VertexMemoryBankBackend implements MemoryBackend {
       this.clientCache.set(cacheKey, http);
     }
     return { http, engine: creds.engine };
+  }
+
+  /**
+   * Resolution order:
+   *   1. `creds.serviceAccountJson` — full service-account JSON; we
+   *      mint and refresh a bearer via `google-auth-library`.
+   *   2. `creds.bearer` — a pre-minted access token, used as-is.
+   * Pre-minted tokens go stale every hour; a service-account JSON
+   * is the durable production setup.
+   */
+  private async resolveBearer(creds: BackendCredentials): Promise<string | null> {
+    const sa = (creds as any).serviceAccountJson;
+    if (sa) {
+      const fingerprint = JSON.stringify({ client_email: sa.client_email, private_key_id: sa.private_key_id });
+      const cached = this.authCache.get(fingerprint);
+      const now = Date.now();
+      if (cached && cached.expiresAt - 60_000 > now) return cached.bearer;
+      const auth = new GoogleAuth({
+        credentials: sa,
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+      });
+      const client = (await auth.getClient()) as JWT | OAuth2Client;
+      const token = await client.getAccessToken();
+      const bearer = typeof token === 'string' ? token : token?.token ?? null;
+      if (!bearer) return null;
+      const expiresAt = (client as any).credentials?.expiry_date ?? now + 50 * 60_000;
+      this.authCache.set(fingerprint, { client, expiresAt, bearer });
+      return bearer;
+    }
+    return creds.bearer ?? null;
   }
 }
 

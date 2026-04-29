@@ -7,6 +7,9 @@ import { GatewaysService } from '../../gateways/gateways.service';
 import { AgentsService } from '../../agents/agents.service';
 import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
 import { CanonicalMemoryService } from '../../memory/canonical/canonical-memory.service';
+import { ConsolidationService } from '../../memory/canonical/consolidation.service';
+import { MemoryRouter } from '../../memory/canonical/memory-router.service';
+import { MemorySyncService } from '../../memory/canonical/memory-sync.service';
 
 // Mock axios for import_schema URL fetching
 const mockAxiosGet = jest.fn().mockResolvedValue({ data: '{"openapi":"3.0.0","info":{"title":"Test","version":"1.0"},"paths":{}}' });
@@ -55,6 +58,29 @@ describe('AlmytyMcpService', () => {
       new: { id: 'mem-2' },
     }),
   };
+  const mockConsolidation: any = {
+    run: jest.fn().mockResolvedValue({
+      scope: { scope_type: 'workspace', scope_id: 'org-1' },
+      scanned: 5, consolidated_facts: 2, superseded: 5, skipped: false,
+    }),
+  };
+  const mockRouter: any = {
+    transfer: jest.fn().mockResolvedValue({
+      source: 'almyty-native', target: 'mem0',
+      total_source: 5, succeeded: 5, failed: 0, warnings: [], errors: [],
+    }),
+    list_backends: jest.fn().mockReturnValue([
+      { id: 'almyty-native', capabilities: ['vector_search'], modes: ['memory'] },
+    ]),
+    healthAll: jest.fn().mockResolvedValue({ 'almyty-native': { ok: true, latency_ms: 1 } }),
+  };
+  const mockMemorySync: any = {
+    sync: jest.fn().mockResolvedValue({
+      scope: { scope_type: 'workspace', scope_id: 'org-1' },
+      primary: 'almyty-native', mirror: 'mem0',
+      to_mirror: 1, to_primary: 0, reconciled: 0, errors: [], skipped: false,
+    }),
+  };
 
   const mockModuleRef = {
     get: jest.fn((cls: any) => {
@@ -64,6 +90,9 @@ describe('AlmytyMcpService', () => {
       if (cls === AgentsService) return mockAgentsService;
       if (cls === LlmProvidersService) return mockLlmProvidersService;
       if (cls === CanonicalMemoryService) return mockMemoryService;
+      if (cls === ConsolidationService) return mockConsolidation;
+      if (cls === MemoryRouter) return mockRouter;
+      if (cls === MemorySyncService) return mockMemorySync;
       if (typeof cls === 'string' && cls === 'BullQueue_schema-import') return mockSchemaImportQueue;
       // Dynamic require() imports resolve by class name
       if (cls?.name === 'GatewayAuthService') return mockGatewayAuthService;
@@ -491,6 +520,61 @@ describe('AlmytyMcpService', () => {
       const parsed = JSON.parse(res.result.content[0].text);
       expect(parsed.old_id).toBe('mem-1');
       expect(parsed.new_id).toBe('mem-2');
+    });
+
+    // ── Router-level memory tools ─────────────────────────────
+
+    it('memory_consolidate: forwards force flag and scope, returns the consolidation report', async () => {
+      const res = await call('tools/call', {
+        name: 'memory_consolidate',
+        arguments: { force: true },
+      });
+      expect(mockConsolidation.run).toHaveBeenCalledWith(
+        { scope_type: 'workspace', scope_id: 'org-1' },
+        { force: true },
+      );
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed.consolidated_facts).toBe(2);
+    });
+
+    it('memory_transfer: forwards source/target/dry_run to the router', async () => {
+      const res = await call('tools/call', {
+        name: 'memory_transfer',
+        arguments: { source: 'almyty-native', target: 'mem0', dry_run: true },
+      });
+      expect(mockRouter.transfer).toHaveBeenCalledWith(
+        { scope_type: 'workspace', scope_id: 'org-1' },
+        'almyty-native', 'mem0',
+        expect.objectContaining({ dry_run: true }),
+      );
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed.succeeded).toBe(5);
+    });
+
+    it('memory_sync: reconciles primary↔mirror for the calling org by default', async () => {
+      const res = await call('tools/call', {
+        name: 'memory_sync',
+        arguments: {},
+      });
+      expect(mockMemorySync.sync).toHaveBeenCalledWith(
+        { scope_type: 'workspace', scope_id: 'org-1' },
+      );
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed.to_mirror).toBe(1);
+    });
+
+    it('memory_list_backends: returns the backend roster', async () => {
+      const res = await call('tools/call', { name: 'memory_list_backends', arguments: {} });
+      expect(mockRouter.list_backends).toHaveBeenCalled();
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed[0].id).toBe('almyty-native');
+    });
+
+    it('memory_backends_health: returns per-backend health', async () => {
+      const res = await call('tools/call', { name: 'memory_backends_health', arguments: {} });
+      expect(mockRouter.healthAll).toHaveBeenCalled();
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed['almyty-native'].ok).toBe(true);
     });
   });
 });
