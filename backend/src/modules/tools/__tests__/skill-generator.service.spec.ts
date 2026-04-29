@@ -410,6 +410,28 @@ describe('SkillGeneratorService', () => {
               },
             },
           },
+          // Parser-emitted return-type structure used by the
+          // skill-generator to render a useful selection set.
+          responses: {
+            '200': {
+              schema: {
+                type: 'object',
+                properties: {
+                  data: {
+                    type: 'object',
+                    properties: {
+                      name:    { type: 'string' },
+                      code:    { type: 'string' },
+                      emoji:   { type: 'string' },
+                      capital: { type: 'string' },
+                      languages: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' } } } },
+                      continent: { type: 'object', properties: { name: { type: 'string' } } },
+                    },
+                  },
+                },
+              },
+            },
+          },
           api: { baseUrl: 'https://countries.example/graphql', type: 'graphql' },
         } as any,
       };
@@ -427,6 +449,45 @@ describe('SkillGeneratorService', () => {
       expect(md).toContain('```graphql');
       expect(md).toContain('query country($code: String!)');
       expect(md).toContain('country(code: $code)');
+      // Scalar return-type fields should land directly in the selection.
+      expect(md).toContain('name');
+      expect(md).toContain('emoji');
+      expect(md).toContain('capital');
+      // Object / array-of-object fields get a stub subselection so
+      // the query parses but the agent knows to expand them.
+      expect(md).toMatch(/continent\s*\{\s*__typename/);
+      expect(md).toMatch(/languages\s*\{\s*__typename/);
+    });
+
+    it('GraphQL: falls back to __typename stub when parser did not capture return fields', async () => {
+      const graphqlTool = {
+        ...mockTool,
+        name: 'legacyOp',
+        operation: {
+          id: 'op-gql-legacy',
+          name: 'legacyOp',
+          method: 'POST',
+          endpoint: '/graphql',
+          type: 'query',
+          parameters: {
+            body: {
+              query: { type: 'string', required: true },
+              variables: { type: 'object', properties: {} },
+            },
+          },
+          // Pre-walk parser output: data.type=object but no
+          // properties — represents tools imported before the
+          // depth-walk change.
+          responses: {
+            '200': { schema: { type: 'object', properties: { data: { type: 'object' } } } },
+          },
+          api: { baseUrl: 'https://example.com/graphql', type: 'graphql' },
+        } as any,
+      };
+      gatewayRepository.findOne.mockResolvedValue({ ...mockGateway, endpoint: '/legacy' });
+      gatewayToolRepository.find.mockResolvedValue([{ tool: graphqlTool, isActive: true }]);
+      const result = await service.generateIndividualSkills('gw-1', 'org-1');
+      expect(result[0].content).toContain('__typename');
     });
 
     it('truncation keeps the unique tail when many tools share a long prefix', async () => {

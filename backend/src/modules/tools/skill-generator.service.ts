@@ -248,7 +248,62 @@ export class SkillGeneratorService {
       ? `${opType} ${opName}(${declarations.join(', ')})`
       : `${opType} ${opName}`;
     const argsBlock = args.length ? `(${args.join(', ')})` : '';
-    return `${head} {\n  ${opName}${argsBlock} {\n    __typename\n  }\n}`;
+    const selection = this.buildGraphQLSelectionSet(operation);
+    return `${head} {\n  ${opName}${argsBlock} ${selection}\n}`;
+  }
+
+  /**
+   * Render a starter selection set for the operation's return type.
+   *
+   * Reads `operation.responses['200'].schema.properties.data`, which
+   * the GraphQL parser populates with the field structure of the
+   * operation's return type (one level deep). Includes scalar/enum
+   * leaf fields directly. For nested object fields, emits a nested
+   * block with `__typename` so the query is still syntactically
+   * complete — the agent can flesh it out.
+   *
+   * Falls back to `{ __typename }` if the parser didn't capture
+   * field info (older tools, non-object return types, or imports
+   * predating the parser depth-walk change).
+   */
+  private buildGraphQLSelectionSet(operation: any): string {
+    const dataSchema = this.unwrapReturnType(
+      operation.responses?.['200']?.schema?.properties?.data,
+    );
+    const props = dataSchema?.properties as Record<string, any> | undefined;
+    if (!props || Object.keys(props).length === 0) {
+      return `{\n    __typename\n  }`;
+    }
+
+    const lines: string[] = [];
+    for (const [name, prop] of Object.entries(props)) {
+      const inner = this.unwrapReturnType(prop);
+      if (!inner) continue;
+      if (inner.type === 'object') {
+        // Object field — needs its own subselection. Emit a stub
+        // with `__typename` so the query parses; the agent can
+        // expand it.
+        lines.push(`${name} {\n      __typename\n    }`);
+      } else if (inner.type === 'array' && (inner.items as any)?.type === 'object') {
+        lines.push(`${name} {\n      __typename\n    }`);
+      } else {
+        // Scalar / enum / array-of-scalars — leaf field, no subselection.
+        lines.push(name);
+      }
+    }
+    if (lines.length === 0) {
+      return `{\n    __typename\n  }`;
+    }
+    return `{\n    ${lines.join('\n    ')}\n  }`;
+  }
+
+  /** Unwrap a JSON-schema array wrapper to expose the item shape. */
+  private unwrapReturnType(schema: any): any {
+    if (!schema || typeof schema !== 'object') return schema;
+    if (schema.type === 'array' && schema.items) {
+      return this.unwrapReturnType(schema.items);
+    }
+    return schema;
   }
 
   private jsonTypeToGraphQLType(t: string | undefined): string {
