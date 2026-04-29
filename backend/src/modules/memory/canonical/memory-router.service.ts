@@ -10,11 +10,13 @@ import { ZepBackend } from './backends/zep.backend';
 import { SupermemoryBackend } from './backends/supermemory.backend';
 import { VertexMemoryBankBackend } from './backends/vertex-memory-bank.backend';
 import {
+  BackendCredentials,
   BackendRoutingConfig,
   MemoryBackend,
   TransferReport,
   TransferWarning,
 } from './backends/memory-backend.interface';
+import { BackendCredentialsResolver } from './backend-credentials.resolver';
 import {
   Capability,
   ListQuery,
@@ -56,6 +58,7 @@ export class MemoryRouter implements OnModuleInit {
     @InjectRepository(CanonicalMemoryWorkspaceConfig)
     private readonly configRepo: Repository<CanonicalMemoryWorkspaceConfig>,
     private readonly auditLog: AuditLogService,
+    private readonly credsResolver: BackendCredentialsResolver,
     // The backends below are NestJS providers — they self-init on
     // module bootstrap. The router holds references and dispatches
     // by id at runtime.
@@ -92,11 +95,14 @@ export class MemoryRouter implements OnModuleInit {
     }));
   }
 
-  async healthAll(): Promise<Record<string, { ok: boolean; latency_ms: number }>> {
+  async healthAll(scope?: ScopeRef): Promise<Record<string, { ok: boolean; latency_ms: number }>> {
     const result: Record<string, { ok: boolean; latency_ms: number }> = {};
     await Promise.all(
       Array.from(this.backends.values()).map(async (b) => {
-        const h = await b.healthCheck().catch((e) => ({ ok: false, latency_ms: 0, details: { error: e.message } }));
+        const creds = scope ? await this.credsResolver.resolve(scope, b.id) : undefined;
+        const h = await b.healthCheck(creds ?? undefined).catch((e) => ({
+          ok: false, latency_ms: 0, details: { error: e.message },
+        }));
         result[b.id] = { ok: h.ok, latency_ms: h.latency_ms };
       }),
     );
@@ -153,36 +159,42 @@ export class MemoryRouter implements OnModuleInit {
     if (!primary.supported_modes.has(item.mode)) {
       throw new MemoryError({ kind: 'unsupported_capability', backend: primary.id, capability: item.mode === 'memory' ? 'mode_memory' : 'mode_document' });
     }
-    const result = await primary.put(item);
+    const creds = await this.credsResolver.resolve(scope, primary.id);
+    const result = await primary.put(item, creds ?? undefined);
     const mir = await this.mirror(scope);
     if (mir && mir.supported_modes.has(item.mode)) {
-      mir.put(item).catch((e) => this.logger.warn(`mirror ${mir.id} put failed for ${item.id}: ${e.message}`));
+      const mirCreds = await this.credsResolver.resolve(scope, mir.id);
+      mir.put(item, mirCreds ?? undefined).catch((e) => this.logger.warn(`mirror ${mir.id} put failed for ${item.id}: ${e.message}`));
     }
     return result;
   }
 
   async get(scope: ScopeRef, mode: Mode, id: string): Promise<MemoryItem | null> {
     const b = await this.resolve(scope, mode);
-    return b.get(id);
+    const creds = await this.credsResolver.resolve(scope, b.id);
+    return b.get(id, creds ?? undefined);
   }
 
   async list(query: ListQuery): Promise<ReturnType<MemoryBackend['list']>> {
     const mode = query.mode ?? 'memory';
     const b = await this.resolve(query.scope, mode);
-    return b.list(query);
+    const creds = await this.credsResolver.resolve(query.scope, b.id);
+    return b.list(query, creds ?? undefined);
   }
 
   async search(query: SearchQuery): Promise<ReturnType<MemoryBackend['search']>> {
     const mode = query.mode ?? 'memory';
     const b = await this.resolve(query.scope, mode);
     this.require(b, 'vector_search');
-    return b.search(query);
+    const creds = await this.credsResolver.resolve(query.scope, b.id);
+    return b.search(query, creds ?? undefined);
   }
 
   async delete(scope: ScopeRef, mode: Mode, id: string, deleteMode: 'soft' | 'hard' = 'soft'): Promise<boolean> {
     const b = await this.resolve(scope, mode);
     if (deleteMode === 'soft') this.require(b, 'soft_delete');
-    return b.delete(id, deleteMode);
+    const creds = await this.credsResolver.resolve(scope, b.id);
+    return b.delete(id, deleteMode, creds ?? undefined);
   }
 
   async supersede(
@@ -192,13 +204,15 @@ export class MemoryRouter implements OnModuleInit {
   ): ReturnType<MemoryBackend['supersede']> {
     const b = await this.resolve(scope, 'memory');
     this.require(b, 'bi_temporal');
-    return b.supersede(oldId, newItem);
+    const creds = await this.credsResolver.resolve(scope, b.id);
+    return b.supersede(oldId, newItem, creds ?? undefined);
   }
 
   async asOf(scope: ScopeRef, time: Date, query: ListQuery): ReturnType<MemoryBackend['asOf']> {
     const b = await this.resolve(scope, query.mode ?? 'memory');
     this.require(b, 'as_of_queries');
-    return b.asOf(time, query);
+    const creds = await this.credsResolver.resolve(scope, b.id);
+    return b.asOf(time, query, creds ?? undefined);
   }
 
   // ── transfer ────────────────────────────────────────────────
@@ -222,10 +236,13 @@ export class MemoryRouter implements OnModuleInit {
     if (!target) throw new Error(`unknown target backend: ${targetId}`);
     const mode = options.mode ?? 'memory';
 
+    const sourceCreds = await this.credsResolver.resolve(scope, source.id);
+    const targetCreds = await this.credsResolver.resolve(scope, target.id);
+
     const all: MemoryItem[] = [];
     let cursor: string | null = null;
     while (true) {
-      const page = await source.list({ scope, mode, limit: 100, cursor });
+      const page = await source.list({ scope, mode, limit: 100, cursor }, sourceCreds ?? undefined);
       all.push(...page.items);
       if (!page.cursor) break;
       cursor = page.cursor;
@@ -253,7 +270,7 @@ export class MemoryRouter implements OnModuleInit {
 
     // Stream the items into the target. We use batchPut so backends
     // that bulk under the hood (Mem0 does) get the chance.
-    const bp = await target.batchPut(all);
+    const bp = await target.batchPut(all, targetCreds ?? undefined);
     report.succeeded = bp.succeeded;
     report.failed = bp.failed;
     for (const e of bp.errors) {
