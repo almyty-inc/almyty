@@ -328,13 +328,14 @@ export class ToolProtocolExecutor {
           this.extractSoapBodyFields(soapRequest as any),
         );
 
-    // SOAP 1.1 SOAPAction header convention: `"{targetNamespace}{op}"`
-    // or `"{op}"` if no namespace is on file. Keep the surrounding
-    // quotes — bare values are spec-violating and some servers
-    // (TempConvert at w3schools) reject them with a SOAPFault.
+    // SOAPAction header. Spec says it should be a quoted-string,
+    // but in practice .NET-style servers (w3schools TempConvert,
+    // many WCF endpoints) reject the literal quote characters and
+    // expect a bare URI. Send bare; quoted variant is the rare
+    // exception that callers can override via `--action`.
     const defaultAction = targetNamespace
-      ? `"${targetNamespace}${operation.name}"`
-      : `"${operation.name}"`;
+      ? `${targetNamespace}${operation.name}`
+      : operation.name;
 
     const config: AxiosRequestConfig = {
       method: 'POST',
