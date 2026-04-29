@@ -33,6 +33,7 @@ export interface ParsedOperation {
   security?: Array<Record<string, string[]>>;
   tags?: string[];
   deprecated?: boolean;
+  metadata?: Record<string, any>;
 }
 
 export interface ParsedResource {

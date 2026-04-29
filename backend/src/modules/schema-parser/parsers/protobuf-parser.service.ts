@@ -80,6 +80,7 @@ export class ProtobufParserService implements SchemaParser {
       operation.parameters = parsedOp.parameters;
       operation.responses = parsedOp.responses;
       operation.tags = parsedOp.tags;
+      operation.metadata = parsedOp.metadata as any;
       operation.isActive = true;
 
       operations.push(operation);
@@ -113,6 +114,13 @@ export class ProtobufParserService implements SchemaParser {
     this.traverseServices(root, (service) => {
       service.methodsArray.forEach(method => {
         const operationName = `${service.name}_${method.name}`;
+        // protobufjs sets `requestStream`/`responseStream` to true
+        // when the .proto definition uses `stream` on the request or
+        // response side. We persist these on the operation metadata
+        // so the executor can pick the right call shape (unary,
+        // server-streaming, client-streaming, bidi) at run time.
+        const requestStream = !!(method as any).requestStream;
+        const responseStream = !!(method as any).responseStream;
 
         operations.push({
           operationId: operationName,
@@ -162,6 +170,7 @@ export class ProtobufParserService implements SchemaParser {
             },
           },
           tags: ['grpc', service.name],
+          metadata: { requestStream, responseStream },
         });
       });
     });
