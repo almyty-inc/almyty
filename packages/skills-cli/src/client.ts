@@ -187,19 +187,45 @@ export class AlmytyClient {
         while (i < t.length && i < h.length && t[i] === h[i]) i++;
         return t.slice(i).join('-');
       };
+      // Mirror the server's skill-generator truncation when
+      // `${gateway}-${suffix}` exceeds 64 chars: drop kebab
+      // segments off the *head* of the suffix until the whole
+      // thing fits, falling back to a tail substring if a single
+      // segment is itself longer than the remaining budget. Cutting
+      // from the head keeps the unique tail of long method names
+      // (e.g. ~40 google-translate gRPC methods that all share a
+      // long prefix) addressable from the CLI.
+      const composeAndTruncate = (gw: string, suffix: string): string => {
+        if (!gw) return suffix;
+        const combined = `${gw}-${suffix}`;
+        if (combined.length <= 64) return combined;
+        const room = 64 - gw.length - 1;
+        if (room <= 0) return gw.slice(0, 64);
+        const segments = suffix.split('-').filter(Boolean);
+        let trimmed = segments.join('-');
+        while (trimmed.length > room && segments.length > 1) {
+          segments.shift();
+          trimmed = segments.join('-');
+        }
+        if (trimmed.length > room) trimmed = trimmed.slice(-room);
+        return `${gw}-${trimmed.replace(/^-+|-+$/g, '')}`;
+      };
 
       const match = allTools.find((gt: any) => {
         const t = gt.tool || gt;
         if (!t) return false;
         const rawName = t.name || '';
         const slug = slugify(rawName);
+        const dedupedSuffix = dedupeShared(gatewaySlug, slug);
         const composed = gatewaySlug
-          ? `${gatewaySlug}-${dedupeShared(gatewaySlug, slug)}`
+          ? `${gatewaySlug}-${dedupedSuffix}`
           : slug;
+        const truncated = composeAndTruncate(gatewaySlug, dedupedSuffix);
         return (
           rawName === toolId ||
           slug === toolId ||
-          composed === toolId
+          composed === toolId ||
+          truncated === toolId
         );
       });
 
