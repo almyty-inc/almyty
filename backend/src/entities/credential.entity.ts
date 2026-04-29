@@ -24,6 +24,13 @@ export enum CredentialType {
   AWS_SIGV4 = 'aws_sigv4',
   GOOGLE_SERVICE_ACCOUNT = 'google_service_account',
   MTLS = 'mtls',
+  /**
+   * Credentials used by canonical memory backends. The `config`
+   * column carries backend-specific fields (`apiKey`, `baseUrl`,
+   * `engine`, `bearer`, `project`, `location`) and is consumed
+   * by `BackendCredentialsResolver`.
+   */
+  MEMORY_BACKEND = 'memory_backend',
 }
 
 @Entity('credentials')
@@ -127,7 +134,7 @@ export class Credential {
    */
   encryptSensitiveData(): void {
     if (this.config && typeof this.config === 'object') {
-      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken', 'headerValue', 'clientSecret'];
+      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken', 'headerValue', 'clientSecret', 'bearer', 'serviceAccountJson'];
       const encrypted = { ...this.config };
 
       for (const field of sensitiveFields) {

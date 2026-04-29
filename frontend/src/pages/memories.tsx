@@ -1,739 +1,464 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Brain, Plus, MoreHorizontal, Trash2, Pencil, Search, X, Sparkles, Tag } from 'lucide-react'
+import { Brain, Plus, Trash2, Search, ArrowRightLeft, HeartPulse, Tags as TagsIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu'
-import { DataTable, createActionsColumn } from '@/components/ui/data-table'
-import { memoriesApi, agentsApi } from '@/lib/api'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { memoriesApi, type MemoryTier, type MemoryMode } from '@/lib/api'
 import { useNotifications } from '@/store/app'
-import type { Memory, MemoryType, MemoryScope, PaginatedMemories } from '@/types'
+import { useOrganizationStore } from '@/store/organization'
 
-// ── Constants ──
-
-const MEMORY_TYPES: { value: MemoryType; label: string }[] = [
-  { value: 'fact', label: 'Fact' },
-  { value: 'preference', label: 'Preference' },
-  { value: 'context', label: 'Context' },
-  { value: 'episode', label: 'Episode' },
-  { value: 'instruction', label: 'Instruction' },
-]
-
-const MEMORY_SCOPES: { value: MemoryScope; label: string }[] = [
-  { value: 'agent', label: 'Agent' },
-  { value: 'shared', label: 'Shared' },
-  { value: 'global', label: 'Global' },
-]
-
-const TYPE_COLORS: Record<MemoryType, string> = {
-  fact: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-  preference: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
-  context: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
-  episode: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-  instruction: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
-}
-
-const SCOPE_COLORS: Record<MemoryScope, string> = {
-  agent: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-  shared: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-  global: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
-}
-
-// ── Helpers ──
-
-function formatDate(date: string | null | undefined): string {
-  if (!date) return 'Never'
-  const d = new Date(date)
-  const diff = Date.now() - d.getTime()
-  if (diff < 60000) return 'Just now'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  return d.toLocaleDateString()
-}
-
-function truncate(text: string, maxLength = 100): string {
-  if (text.length <= maxLength) return text
-  return text.slice(0, maxLength) + '...'
-}
-
-// ── Form state type ──
-
-interface MemoryFormState {
+type Item = {
+  id: string
+  mode: MemoryMode
+  scope_type: string
+  scope_id: string
   content: string
-  type: MemoryType
-  scope: MemoryScope
-  agentIds: string[]
-  tags: string
+  tier: MemoryTier | null
+  tags: string[]
+  embedding_status: 'pending' | 'ready' | 'failed' | 'skipped'
+  valid_until: string | null
+  created_at: string
 }
 
-const EMPTY_FORM: MemoryFormState = {
-  content: '',
-  type: 'fact',
-  scope: 'global',
-  agentIds: [],
-  tags: '',
+type RankedItem = { item: Item; score: number; signal: 'vector' | 'fts' | 'hybrid' }
+
+type Backend = {
+  id: string
+  capabilities: string[]
+  modes: MemoryMode[]
 }
 
-// ── Main Page ──
+const TIERS: MemoryTier[] = ['short', 'project', 'long', 'shared']
 
 export function MemoriesPage() {
-  const qc = useQueryClient()
+  const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
   const notify = useNotifications()
-
-  // Pagination
-  const [page, setPage] = useState(1)
-  const pageSize = 50
-
-  // Filters
-  const [searchText, setSearchText] = useState('')
-  const [typeFilter, setTypeFilter] = useState<string>('all')
-  const [scopeFilter, setScopeFilter] = useState<string>('all')
-  const [tagFilter, setTagFilter] = useState<string>('all')
-
-  // Semantic search
-  const [semanticMode, setSemanticMode] = useState(false)
-  const [semanticResults, setSemanticResults] = useState<Memory[] | null>(null)
-  const [isSearching, setIsSearching] = useState(false)
-
-  // Dialog state
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [editingMemory, setEditingMemory] = useState<Memory | null>(null)
-  const [deletingMemory, setDeletingMemory] = useState<Memory | null>(null)
-
-  // Form state
-  const [form, setForm] = useState<MemoryFormState>(EMPTY_FORM)
+  const qc = useQueryClient()
 
   useEffect(() => {
     document.title = 'Memory | almyty'
     return () => { document.title = 'almyty' }
   }, [])
 
-  // ── Queries ──
+  const scope = orgId ? { scope_type: 'workspace' as const, scope_id: orgId } : null
 
-  const buildParams = (): Record<string, string> => {
-    const params: Record<string, string> = { page: String(page), limit: String(pageSize) }
-    if (searchText && !semanticMode) params.search = searchText
-    if (typeFilter !== 'all') params.type = typeFilter
-    if (scopeFilter !== 'all') params.scope = scopeFilter
-    if (tagFilter !== 'all') params.tag = tagFilter
-    return params
-  }
+  // ── tabs ────────────────────────────────────────────────────────────
+  const [tab, setTab] = useState<'browse' | 'search' | 'backends'>('browse')
 
-  const { data: memoriesRaw, isLoading, refetch } = useQuery({
-    queryKey: ['memories', page, searchText, typeFilter, scopeFilter, tagFilter, semanticMode],
-    queryFn: () => memoriesApi.getAll(buildParams()),
-    enabled: !semanticMode,
+  // ── browse + filters ────────────────────────────────────────────────
+  const [tierFilter, setTierFilter] = useState<MemoryTier | 'all'>('all')
+  const [modeFilter, setModeFilter] = useState<MemoryMode>('memory')
+
+  const list = useQuery({
+    queryKey: ['memories', 'list', orgId, modeFilter, tierFilter],
+    enabled: !!scope,
+    queryFn: () => memoriesApi.list({
+      scope: scope!,
+      mode: modeFilter,
+      tier: tierFilter === 'all' ? undefined : tierFilter,
+      limit: 100,
+    }),
   })
 
-  const paginatedData = memoriesRaw as PaginatedMemories | undefined
-  const memories: Memory[] = semanticResults
-    ? semanticResults
-    : paginatedData?.data
-      ? paginatedData.data
-      : Array.isArray(memoriesRaw)
-        ? memoriesRaw as Memory[]
-        : []
+  // ── search ──────────────────────────────────────────────────────────
+  const [query, setQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<RankedItem[]>([])
+  const [searching, setSearching] = useState(false)
 
-  const totalCount = semanticResults
-    ? semanticResults.length
-    : paginatedData?.total ?? memories.length
-
-  const totalPages = semanticResults
-    ? 1
-    : paginatedData?.totalPages ?? Math.ceil(totalCount / pageSize)
-
-  const { data: tagsRaw } = useQuery({
-    queryKey: ['memory-tags'],
-    queryFn: () => memoriesApi.getTags(),
-  })
-  const tags: string[] = Array.isArray(tagsRaw) ? tagsRaw : (tagsRaw as any)?.tags || []
-
-  const { data: agentsRaw } = useQuery({
-    queryKey: ['agents'],
-    queryFn: () => agentsApi.getAll(),
-  })
-  const agents: { id: string; name: string }[] = Array.isArray(agentsRaw)
-    ? agentsRaw
-    : (agentsRaw as any)?.data || (agentsRaw as any)?.agents || []
-
-  // ── Mutations ──
-
-  const createMut = useMutation({
-    mutationFn: (data: any) => memoriesApi.create(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['memories'] })
-      qc.invalidateQueries({ queryKey: ['memory-tags'] })
-      notify.success('Created', 'Memory created successfully')
-      setIsCreateOpen(false)
-      setForm(EMPTY_FORM)
-    },
-    onError: (err: any) => notify.error('Error', err.response?.data?.message || 'Failed to create memory'),
-  })
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => memoriesApi.update(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['memories'] })
-      qc.invalidateQueries({ queryKey: ['memory-tags'] })
-      notify.success('Updated', 'Memory updated successfully')
-      setEditingMemory(null)
-      setForm(EMPTY_FORM)
-    },
-    onError: (err: any) => notify.error('Error', err.response?.data?.message || 'Failed to update memory'),
-  })
-
-  const deleteMut = useMutation({
-    mutationFn: (id: string) => memoriesApi.delete(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['memories'] })
-      qc.invalidateQueries({ queryKey: ['memory-tags'] })
-      notify.success('Deleted', 'Memory deleted successfully')
-      setDeletingMemory(null)
-    },
-    onError: (err: any) => notify.error('Error', err.response?.data?.message || 'Failed to delete memory'),
-  })
-
-  // ── Semantic Search ──
-
-  const handleSearch = async () => {
-    if (!searchText.trim()) {
-      setSemanticResults(null)
-      setSemanticMode(false)
-      return
-    }
-    if (!semanticMode) return
-    setIsSearching(true)
+  async function runSearch() {
+    if (!scope || !query.trim()) return
+    setSearching(true)
     try {
-      const opts: any = {}
-      if (typeFilter !== 'all') opts.type = typeFilter
-      if (scopeFilter !== 'all') opts.scope = scopeFilter
-      opts.limit = pageSize
-      const results = await memoriesApi.search(searchText, opts)
-      const items = Array.isArray(results) ? results : (results as any)?.data || (results as any)?.memories || []
-      setSemanticResults(items)
+      const res: any = await memoriesApi.search({ scope, query, top_k: 20 })
+      setSearchResults((res?.data ?? res ?? []) as RankedItem[])
     } catch (err: any) {
-      notify.error('Search Failed', err.response?.data?.message || 'Semantic search failed')
-      setSemanticResults(null)
+      notify.error('Search failed', err.message ?? String(err))
     } finally {
-      setIsSearching(false)
+      setSearching(false)
     }
   }
 
-  // Reset semantic results when toggling off
-  useEffect(() => {
-    if (!semanticMode) setSemanticResults(null)
-  }, [semanticMode])
+  // ── put dialog ──────────────────────────────────────────────────────
+  const [putOpen, setPutOpen] = useState(false)
+  const [draft, setDraft] = useState({
+    content: '',
+    tier: 'short' as MemoryTier,
+    tags: '',
+    mode: 'memory' as MemoryMode,
+    source_uri: '',
+  })
 
-  // Reset to page 1 when filters change
-  useEffect(() => {
-    setPage(1)
-  }, [searchText, typeFilter, scopeFilter, tagFilter])
-
-  // ── Form helpers ──
-
-  const openCreate = () => {
-    setForm(EMPTY_FORM)
-    setIsCreateOpen(true)
-  }
-
-  const openEdit = (memory: Memory) => {
-    setForm({
-      content: memory.content,
-      type: memory.type,
-      scope: memory.scope,
-      agentIds: memory.agentIds || [],
-      tags: (memory.tags || []).join(', '),
-    })
-    setEditingMemory(memory)
-  }
-
-  const handleSubmitCreate = () => {
-    if (!form.content.trim()) return
-    createMut.mutate({
-      content: form.content,
-      type: form.type,
-      scope: form.scope,
-      agentIds: form.scope === 'agent' ? form.agentIds : [],
-      tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
-    })
-  }
-
-  const handleSubmitEdit = () => {
-    if (!editingMemory || !form.content.trim()) return
-    updateMut.mutate({
-      id: editingMemory.id,
-      data: {
-        content: form.content,
-        type: form.type,
-        scope: form.scope,
-        agentIds: form.scope === 'agent' ? form.agentIds : [],
-        tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
-      },
-    })
-  }
-
-  const toggleAgentId = (agentId: string) => {
-    setForm(f => ({
-      ...f,
-      agentIds: f.agentIds.includes(agentId)
-        ? f.agentIds.filter(id => id !== agentId)
-        : [...f.agentIds, agentId],
-    }))
-  }
-
-  // ── Table columns ──
-
-  const columns = useMemo(() => [
-    {
-      accessorKey: 'content',
-      header: 'Content',
-      cell: ({ row }: any) => {
-        const m = row.original as Memory
-        return (
-          <div className="max-w-md">
-            <span className="text-sm">{truncate(m.content)}</span>
-            {m.similarity != null && (
-              <Badge variant="outline" className="ml-2 text-xs">
-                {(m.similarity * 100).toFixed(1)}% match
-              </Badge>
-            )}
-          </div>
-        )
-      },
-    },
-    {
-      accessorKey: 'type',
-      header: 'Type',
-      cell: ({ row }: any) => {
-        const m = row.original as Memory
-        return (
-          <Badge className={TYPE_COLORS[m.type] + ' border-0'}>
-            {m.type}
-          </Badge>
-        )
-      },
-    },
-    {
-      accessorKey: 'scope',
-      header: 'Scope',
-      cell: ({ row }: any) => {
-        const m = row.original as Memory
-        return (
-          <Badge className={SCOPE_COLORS[m.scope] + ' border-0'}>
-            {m.scope}
-          </Badge>
-        )
-      },
-    },
-    {
-      accessorKey: 'tags',
-      header: 'Tags',
-      cell: ({ row }: any) => {
-        const m = row.original as Memory
-        if (!m.tags?.length) return <span className="text-muted-foreground text-sm">--</span>
-        return (
-          <div className="flex gap-1 flex-wrap">
-            {m.tags.slice(0, 3).map((tag: string) => (
-              <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
-            ))}
-            {m.tags.length > 3 && <Badge variant="outline" className="text-xs">+{m.tags.length - 3}</Badge>}
-          </div>
-        )
-      },
-    },
-    {
-      accessorKey: 'accessCount',
-      header: 'Access Count',
-      cell: ({ row }: any) => (
-        <span className="text-sm text-muted-foreground">{(row.original as Memory).accessCount}</span>
-      ),
-    },
-    {
-      accessorKey: 'lastAccessedAt',
-      header: 'Last Accessed',
-      cell: ({ row }: any) => (
-        <span className="text-sm text-muted-foreground">{formatDate((row.original as Memory).lastAccessedAt)}</span>
-      ),
-    },
-    createActionsColumn<Memory>({
-      cell: ({ row }: any) => {
-        const m = row.original as Memory
-        return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => openEdit(m)}>
-                <Pencil className="h-4 w-4 mr-2" /> Edit
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive" onClick={() => setDeletingMemory(m)}>
-                <Trash2 className="h-4 w-4 mr-2" /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )
+  const putMut = useMutation({
+    mutationFn: () => memoriesApi.put({
+      mode: draft.mode,
+      scope: scope!,
+      content: draft.content,
+      tier: draft.mode === 'memory' ? draft.tier : undefined,
+      tags: draft.tags.split(',').map((t) => t.trim()).filter(Boolean),
+      source_uri: draft.mode === 'document' ? draft.source_uri : undefined,
+      source_version: draft.mode === 'document' ? 1 : undefined,
+      provenance: {
+        agent_id: null, session_id: null, collab_id: null,
+        model: null, provider: null, tool_chain: ['ui_put'],
+        created_by: 'user', source_backend: 'almyty-native',
       },
     }),
-  ], [])
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
+      setPutOpen(false)
+      setDraft({ content: '', tier: 'short', tags: '', mode: 'memory', source_uri: '' })
+      notify.success('Memory stored')
+    },
+    onError: (err: any) => {
+      notify.error('Store failed', err.message ?? String(err))
+    },
+  })
 
-  // ── Render ──
+  // ── delete ──────────────────────────────────────────────────────────
+  const removeMut = useMutation({
+    mutationFn: ({ id, mode }: { id: string; mode: 'soft' | 'hard' }) => memoriesApi.remove(id, mode),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
+      notify.success('Deleted')
+    },
+  })
+
+  // ── backends + transfer ─────────────────────────────────────────────
+  const backendsQ = useQuery({
+    queryKey: ['memories', 'backends'],
+    queryFn: () => memoriesApi.listBackends(),
+  })
+  const healthQ = useQuery({
+    queryKey: ['memories', 'backends', 'health'],
+    queryFn: () => memoriesApi.backendsHealth(),
+    enabled: tab === 'backends',
+    refetchInterval: 30_000,
+  })
+
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [transfer, setTransfer] = useState({ source: 'almyty-native', target: 'mem0', dry_run: true })
+  const transferMut = useMutation({
+    mutationFn: () => memoriesApi.transfer({
+      scope_type: scope!.scope_type, scope_id: scope!.scope_id,
+      source: transfer.source, target: transfer.target,
+      mode: 'memory', dry_run: transfer.dry_run,
+    }),
+    onSuccess: (res: any) => {
+      const r = res?.data ?? res
+      notify.success(
+        transfer.dry_run ? 'Dry run complete' : 'Transfer complete',
+        `${r.succeeded ?? 0} of ${r.total_source ?? 0} items, ${r.warnings?.length ?? 0} warnings`,
+      )
+      setTransferOpen(false)
+    },
+    onError: (err: any) => {
+      notify.error('Transfer failed', err.message ?? String(err))
+    },
+  })
+
+  // ── render ──────────────────────────────────────────────────────────
+  if (!orgId) {
+    return <div className="p-8"><EmptyState icon={Brain} title="No organization" description="Switch to an organization to view memory." /></div>
+  }
+
+  const items: Item[] = (list.data?.data?.items ?? []) as Item[]
+  const backends: Backend[] = (backendsQ.data?.data ?? []) as Backend[]
+  const health: Record<string, { ok: boolean; latency_ms: number }> = (healthQ.data?.data ?? {}) as any
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div>
-            <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-              Memory
-            </h1>
-            <p className="text-muted-foreground">Centralized memory store for agents and tools</p>
-          </div>
-          <Badge variant="secondary" className="text-sm">{totalCount}</Badge>
+        <div>
+          <h1 className="text-2xl font-semibold flex items-center gap-2"><Brain className="h-6 w-6" /> Memory</h1>
+          <p className="text-sm text-muted-foreground">
+            Canonical schema v1 — bi-temporal memory + document mode + multi-backend routing.
+          </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-1" /> Add Memory
-        </Button>
-      </div>
-
-      {/* Search & Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={semanticMode ? 'Semantic search...' : 'Search memories...'}
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && semanticMode) handleSearch() }}
-            className="pl-9 pr-9"
-          />
-          {searchText && (
-            <button
-              onClick={() => { setSearchText(''); setSemanticResults(null) }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        <Button
-          variant={semanticMode ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => {
-            setSemanticMode(!semanticMode)
-            if (semanticMode) setSemanticResults(null)
-          }}
-          title="Toggle semantic search"
-        >
-          <Sparkles className="h-4 w-4 mr-1" />
-          Semantic
-        </Button>
-        {semanticMode && (
-          <Button size="sm" onClick={handleSearch} disabled={isSearching || !searchText.trim()}>
-            {isSearching ? 'Searching...' : 'Search'}
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setTransferOpen(true)}>
+            <ArrowRightLeft className="h-4 w-4 mr-2" /> Transfer
           </Button>
-        )}
-
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            {MEMORY_TYPES.map(t => (
-              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={scopeFilter} onValueChange={setScopeFilter}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Scope" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Scopes</SelectItem>
-            {MEMORY_SCOPES.map(s => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {tags.length > 0 && (
-          <Select value={tagFilter} onValueChange={setTagFilter}>
-            <SelectTrigger className="w-[150px]">
-              <Tag className="h-3.5 w-3.5 mr-1" />
-              <SelectValue placeholder="Tag" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Tags</SelectItem>
-              {tags.map(tag => (
-                <SelectItem key={tag} value={tag}>{tag}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+          <Button onClick={() => setPutOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" /> New memory
+          </Button>
+        </div>
       </div>
 
-      {/* Table */}
-      <Card>
-        <CardContent className="pt-6">
-          <DataTable
-            columns={columns}
-            data={memories}
-            loading={isLoading || isSearching}
-            hideColumnsButton
-            hideSelectionCount
-            manualPagination={!semanticResults}
-            pageCount={totalPages}
-            pageIndex={page - 1}
-            onPageChange={(idx) => setPage(idx + 1)}
-            pageSize={pageSize}
-            emptyState={
-              <EmptyState
-                icon={Brain}
-                title={
-                  searchText || typeFilter !== 'all' || scopeFilter !== 'all' || tagFilter !== 'all'
-                    ? 'No memories match your filters'
-                    : 'No memories yet'
-                }
-                description={
-                  searchText || typeFilter !== 'all' || scopeFilter !== 'all' || tagFilter !== 'all'
-                    ? 'Try clearing the filters or searching for a different term.'
-                    : 'Memories give agents persistent knowledge — facts, preferences, instructions, conversation history. Create your first memory to start.'
-                }
-                action={
-                  !(searchText || typeFilter !== 'all' || scopeFilter !== 'all' || tagFilter !== 'all') && (
-                    <Button onClick={openCreate}>
-                      <Plus className="h-4 w-4 mr-1" /> Add Memory
-                    </Button>
-                  )
-                }
-                className="py-12"
+      <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+        <TabsList>
+          <TabsTrigger value="browse">Browse</TabsTrigger>
+          <TabsTrigger value="search">Search</TabsTrigger>
+          <TabsTrigger value="backends">Backends</TabsTrigger>
+        </TabsList>
+
+        {/* ── Browse ─────────────────────────────────────────────── */}
+        <TabsContent value="browse" className="space-y-4">
+          <div className="flex gap-3">
+            <Select value={modeFilter} onValueChange={(v) => setModeFilter(v as MemoryMode)}>
+              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="memory">Memory mode</SelectItem>
+                <SelectItem value="document">Document mode</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={tierFilter} onValueChange={(v) => setTierFilter(v as any)}>
+              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All tiers</SelectItem>
+                {TIERS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {list.isLoading ? <LoadingSpinner /> : items.length === 0 ? (
+            <EmptyState icon={Brain} title="No memories yet" description="Click 'New memory' to write one." />
+          ) : (
+            <div className="grid gap-3">
+              {items.map((m) => (
+                <Card key={m.id}>
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex gap-2 items-center mb-2 flex-wrap">
+                          {m.tier && <Badge variant="outline">{m.tier}</Badge>}
+                          <Badge variant="secondary">{m.mode}</Badge>
+                          <Badge variant={m.embedding_status === 'ready' ? 'default' : 'outline'}>
+                            embedding: {m.embedding_status}
+                          </Badge>
+                          {(m.tags ?? []).slice(0, 6).map((t) => (
+                            <Badge key={t} variant="outline" className="font-normal"><TagsIcon className="h-3 w-3 mr-1" />{t}</Badge>
+                          ))}
+                        </div>
+                        <p className="text-sm whitespace-pre-wrap">{m.content}</p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {new Date(m.created_at).toLocaleString()} • id {m.id.slice(0, 8)}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => removeMut.mutate({ id: m.id, mode: 'soft' })}
+                        title="Soft delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Search ─────────────────────────────────────────────── */}
+        <TabsContent value="search" className="space-y-4">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Hybrid search (vector + FTS)…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && runSearch()}
+                className="pl-9"
               />
-            }
-          />
-        </CardContent>
-      </Card>
+            </div>
+            <Button onClick={runSearch} disabled={searching || !query.trim()}>
+              {searching ? <LoadingSpinner /> : 'Search'}
+            </Button>
+          </div>
 
-      {/* Create Dialog */}
-      <MemoryFormDialog
-        open={isCreateOpen}
-        onOpenChange={v => { setIsCreateOpen(v); if (!v) setForm(EMPTY_FORM) }}
-        title="Add Memory"
-        description="Create a new memory entry for agents to recall."
-        form={form}
-        setForm={setForm}
-        agents={agents}
-        onToggleAgent={toggleAgentId}
-        isPending={createMut.isPending}
-        onSubmit={handleSubmitCreate}
-        submitLabel="Create Memory"
-        pendingLabel="Creating..."
-      />
+          <div className="grid gap-3">
+            {searchResults.map((r) => (
+              <Card key={r.item.id}>
+                <CardContent className="p-4">
+                  <div className="flex gap-2 items-center mb-2">
+                    <Badge variant="outline">{r.signal}</Badge>
+                    <Badge>score: {r.score.toFixed(3)}</Badge>
+                    {r.item.tier && <Badge variant="secondary">{r.item.tier}</Badge>}
+                  </div>
+                  <p className="text-sm whitespace-pre-wrap">{r.item.content}</p>
+                </CardContent>
+              </Card>
+            ))}
+            {!searching && query && searchResults.length === 0 && (
+              <p className="text-sm text-muted-foreground">No results.</p>
+            )}
+          </div>
+        </TabsContent>
 
-      {/* Edit Dialog */}
-      <MemoryFormDialog
-        open={!!editingMemory}
-        onOpenChange={v => { if (!v) { setEditingMemory(null); setForm(EMPTY_FORM) } }}
-        title="Edit Memory"
-        description="Update this memory entry."
-        form={form}
-        setForm={setForm}
-        agents={agents}
-        onToggleAgent={toggleAgentId}
-        isPending={updateMut.isPending}
-        onSubmit={handleSubmitEdit}
-        submitLabel="Save Changes"
-        pendingLabel="Saving..."
-      />
+        {/* ── Backends ───────────────────────────────────────────── */}
+        <TabsContent value="backends" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Adapters available for routing. Pin a backend per scope under
+            <span className="font-mono mx-1">memory_workspace_config.overrides.routing</span>
+            and link the matching credential id from the Credentials tab.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {backends.map((b) => {
+              const h = health[b.id]
+              return (
+                <Card key={b.id}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base font-mono">{b.id}</CardTitle>
+                      <Badge variant={h?.ok ? 'default' : 'outline'} className="flex items-center gap-1">
+                        <HeartPulse className="h-3 w-3" />
+                        {h?.ok ? `${h.latency_ms}ms` : 'unconfigured'}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Modes</p>
+                      <div className="flex flex-wrap gap-1">
+                        {b.modes.map((m) => <Badge key={m} variant="secondary">{m}</Badge>)}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Capabilities</p>
+                      <div className="flex flex-wrap gap-1">
+                        {b.capabilities.map((c) => (
+                          <Badge key={c} variant="outline" className="font-mono text-xs">{c}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        </TabsContent>
+      </Tabs>
 
-      {/* Delete Confirmation */}
-      <AlertDialog open={!!deletingMemory} onOpenChange={v => { if (!v) setDeletingMemory(null) }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Memory</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this memory? This action cannot be undone.
-              {deletingMemory && (
-                <span className="block mt-2 text-xs font-mono bg-muted p-2 rounded max-h-20 overflow-hidden">
-                  {truncate(deletingMemory.content, 200)}
-                </span>
+      {/* ── Put dialog ───────────────────────────────────────────── */}
+      <Dialog open={putOpen} onOpenChange={setPutOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New memory</DialogTitle>
+            <DialogDescription>
+              Writes to the canonical store. Routes to whichever backend the scope is configured for.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Mode</Label>
+                <Select value={draft.mode} onValueChange={(v) => setDraft({ ...draft, mode: v as MemoryMode })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="memory">memory</SelectItem>
+                    <SelectItem value="document">document</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {draft.mode === 'memory' ? (
+                <div>
+                  <Label>Tier</Label>
+                  <Select value={draft.tier} onValueChange={(v) => setDraft({ ...draft, tier: v as MemoryTier })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TIERS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <Label>Source URI</Label>
+                  <Input
+                    placeholder="https://… or almyty:file/…"
+                    value={draft.source_uri}
+                    onChange={(e) => setDraft({ ...draft, source_uri: e.target.value })}
+                  />
+                </div>
               )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deletingMemory && deleteMut.mutate(deletingMemory.id)}
-              disabled={deleteMut.isPending}
-            >
-              {deleteMut.isPending ? 'Deleting...' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </div>
+            <div>
+              <Label>Content</Label>
+              <Textarea
+                rows={6}
+                placeholder="The fact, preference, decision, or document body."
+                value={draft.content}
+                onChange={(e) => setDraft({ ...draft, content: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Tags (comma-separated)</Label>
+              <Input
+                placeholder="user-pref, infrastructure"
+                value={draft.tags}
+                onChange={(e) => setDraft({ ...draft, tags: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPutOpen(false)}>Cancel</Button>
+            <Button onClick={() => putMut.mutate()} disabled={putMut.isPending || !draft.content.trim()}>
+              {putMut.isPending ? <LoadingSpinner /> : 'Store'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Transfer dialog ──────────────────────────────────────── */}
+      <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transfer memory between backends</DialogTitle>
+            <DialogDescription>
+              Streams items from the source's list into the target's batchPut. Capabilities the source
+              has and the target lacks (bi_temporal, ttl, soft_delete, document mode) appear as warnings —
+              dry run shows the warnings without writing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Source</Label>
+              <Select value={transfer.source} onValueChange={(v) => setTransfer({ ...transfer, source: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {backends.map((b) => <SelectItem key={b.id} value={b.id}>{b.id}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Target</Label>
+              <Select value={transfer.target} onValueChange={(v) => setTransfer({ ...transfer, target: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {backends.map((b) => <SelectItem key={b.id} value={b.id}>{b.id}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="dry-run"
+              type="checkbox"
+              checked={transfer.dry_run}
+              onChange={(e) => setTransfer({ ...transfer, dry_run: e.target.checked })}
+            />
+            <Label htmlFor="dry-run">Dry run (preview warnings, no writes)</Label>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setTransferOpen(false)}>Cancel</Button>
+            <Button onClick={() => transferMut.mutate()} disabled={transferMut.isPending || transfer.source === transfer.target}>
+              {transferMut.isPending ? <LoadingSpinner /> : transfer.dry_run ? 'Run dry-run' : 'Transfer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
-// ── Reusable Form Dialog ──
-
-interface MemoryFormDialogProps {
-  open: boolean
-  onOpenChange: (v: boolean) => void
-  title: string
-  description: string
-  form: MemoryFormState
-  setForm: React.Dispatch<React.SetStateAction<MemoryFormState>>
-  agents: { id: string; name: string }[]
-  onToggleAgent: (id: string) => void
-  isPending: boolean
-  onSubmit: () => void
-  submitLabel: string
-  pendingLabel: string
-}
-
-function MemoryFormDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  form,
-  setForm,
-  agents,
-  onToggleAgent,
-  isPending,
-  onSubmit,
-  submitLabel,
-  pendingLabel,
-}: MemoryFormDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 pt-2">
-          <div>
-            <Label>Content</Label>
-            <Textarea
-              placeholder="Enter the memory content..."
-              rows={4}
-              value={form.content}
-              onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
-            />
-          </div>
-
-          <div>
-            <Label>Type</Label>
-            <Select value={form.type} onValueChange={(v: MemoryType) => setForm(f => ({ ...f, type: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {MEMORY_TYPES.map(t => (
-                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Scope</Label>
-            <Select value={form.scope} onValueChange={(v: MemoryScope) => setForm(f => ({ ...f, scope: v, agentIds: v !== 'agent' ? [] : f.agentIds }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {MEMORY_SCOPES.map(s => (
-                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {form.scope === 'agent' && (
-            <div>
-              <Label>Agents</Label>
-              <p className="text-xs text-muted-foreground mb-2">Select which agents can access this memory.</p>
-              {agents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No agents available.</p>
-              ) : (
-                <div className="flex gap-2 flex-wrap max-h-32 overflow-y-auto border rounded-md p-2">
-                  {agents.map(agent => (
-                    <button
-                      key={agent.id}
-                      type="button"
-                      onClick={() => onToggleAgent(agent.id)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                        form.agentIds.includes(agent.id)
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-background text-muted-foreground border-border hover:border-primary/50'
-                      }`}
-                    >
-                      {agent.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div>
-            <Label>Tags</Label>
-            <Input
-              placeholder="Comma-separated, e.g. api, onboarding, user-prefs"
-              value={form.tags}
-              onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
-            />
-          </div>
-
-          <Button
-            className="w-full"
-            disabled={!form.content.trim() || isPending}
-            onClick={onSubmit}
-          >
-            {isPending ? pendingLabel : submitLabel}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
+export default MemoriesPage

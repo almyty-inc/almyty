@@ -42,6 +42,7 @@ import {
 
 import { memoriesApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { useOrganizationStore } from '@/store/organization'
 import type { Memory } from '@/types'
 
 interface MemoryTabProps {
@@ -58,14 +59,35 @@ export function MemoryTab({ agentId, memories }: MemoryTabProps) {
   const [newMemoryType, setNewMemoryType] = useState<string>('fact')
   const [newMemoryTags, setNewMemoryTags] = useState('')
 
+  // Map the legacy `type` hint into the canonical tier:
+  //   'fact'/'preference'/'instruction' → 'long' (durable)
+  //   'context' → 'short' (within-session)
+  //   'episode' → 'project' (work-product)
+  // The agent-runtime helper does the same mapping; we duplicate it
+  // here so the dialog can talk directly to the canonical API
+  // without an intermediary service.
+  const tierForLegacyType = (t: string) =>
+    t === 'context' ? 'short'
+    : (t === 'fact' || t === 'preference' || t === 'instruction') ? 'long'
+    : 'project'
+  const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
+
   const addMemoryMutation = useMutation({
     mutationFn: async () => {
-      return memoriesApi.create({
+      return memoriesApi.put({
+        mode: 'memory',
+        scope: { scope_type: 'workspace', scope_id: orgId! },
         content: newMemoryContent,
-        type: newMemoryType,
-        scope: 'agent',
-        agentIds: [agentId],
+        tier: tierForLegacyType(newMemoryType),
         tags: newMemoryTags.split(',').map(t => t.trim()).filter(Boolean),
+        provenance: {
+          agent_id: agentId,
+          session_id: null, collab_id: null,
+          model: null, provider: null,
+          tool_chain: ['ui_agent_memory_tab'],
+          created_by: 'user',
+          source_backend: 'almyty-native',
+        },
       })
     },
     onSuccess: () => {

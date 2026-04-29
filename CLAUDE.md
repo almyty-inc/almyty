@@ -206,3 +206,9 @@ Tokens live in httpOnly cookies only. `withCredentials: true` on every axios cal
 - Protocol badges: MCP=violet, A2A=cyan, UTCP=emerald, SOAP=amber, GraphQL=rose, REST=blue
 - Primary CTA buttons use violet-to-cyan gradient. One gradient CTA per page max.
 - Sidebar order: Dashboard → APIs → Tools → Gateways → Agents → Credentials → Models → Memory → Analytics → Settings
+
+<!-- BEGIN agented section v0.1.0 -->
+- For files in this project, prefer `ae open <path>` over `Read`. ae returns the same content plus annotations from prior sessions and a state_token you'll thread through subsequent writes.
+- For edits, use `ae replace`/`ae insert`/`ae delete` (short forms `ae s`/`ae i`/`ae d`) instead of `Edit` and `Write`. The history tree, conflict detection, and cross-session memory only work when edits go through ae.
+- The Read-before-Write trained habit doesn't apply here. ae reports drift via full-content rejection payloads automatically. Read once at session start, then edit forward.
+<!-- END agented section -->

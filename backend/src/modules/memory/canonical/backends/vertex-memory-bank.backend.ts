@@ -15,85 +15,42 @@ import {
   ScopeRef,
   SearchQuery,
 } from '../canonical.types';
-import { BackendHealth, MemoryBackend } from './memory-backend.interface';
+import { BackendCredentials, BackendHealth, MemoryBackend } from './memory-backend.interface';
 
 /**
- * Vertex AI Memory Bank backend. Talks to Google Cloud's Vertex AI
- * Memory Bank API (https://{region}-aiplatform.googleapis.com).
- * Memory Bank is GCP's managed long-term memory store with native
- * vector search and a change-feed primitive built into the
- * `extract` + `consolidate` cycle.
+ * Vertex AI Memory Bank backend. Talks to {region}-aiplatform.googleapis.com
+ * via /v1beta1/{engine}:generateMemories | retrieveMemories. Per-call
+ * credentials: project + location + engine + bearer come from the
+ * org's Credential row (a Google service account is the typical
+ * source — the credentials service decrypts the JSON and the OAuth
+ * exchange happens out-of-band by the credentials resolver).
  *
  * Capability story:
  *   ✓ vector_search, mode_memory, batch_writes, multi_tenant,
- *     change_feed (Memory Bank emits create/update events)
- *   ✗ bi_temporal, ttl, as_of_queries, fts (vector-only retrieval)
- *
- * Configuration (env):
- *   - VERTEX_MEMORY_BANK_PROJECT (GCP project id)
- *   - VERTEX_MEMORY_BANK_LOCATION (defaults to us-central1)
- *   - VERTEX_MEMORY_BANK_ENGINE (memory bank id, e.g. 'projects/{p}/locations/{l}/reasoningEngines/{id}')
- *   - GOOGLE_APPLICATION_CREDENTIALS (path to service-account JSON)
- *     OR GOOGLE_OAUTH_TOKEN (pre-fetched bearer token, used in CI)
- *
- * The auth path uses the standard Application Default Credentials
- * chain (GOOGLE_APPLICATION_CREDENTIALS, gcloud login, metadata
- * server). The single externally-facing dependency is `axios` —
- * we intentionally don't pull in `@google-cloud/aiplatform` here
- * because the SDK ships a 50 MB dep tree and the REST surface
- * we use is small.
+ *     change_feed (polling fallback)
+ *   ✗ bi_temporal, ttl, as_of_queries, fts
  */
 @Injectable()
 export class VertexMemoryBankBackend implements MemoryBackend {
   readonly id = 'vertex-memory-bank';
   readonly capabilities = new Set<Capability>([
-    'mode_memory',
-    'vector_search',
-    'multi_tenant',
-    'batch_writes',
-    'change_feed',
-    'export',
+    'mode_memory', 'vector_search', 'multi_tenant',
+    'batch_writes', 'change_feed', 'export',
   ]);
   readonly supported_modes = new Set<Mode>(['memory']);
-
   private readonly logger = new Logger(VertexMemoryBankBackend.name);
-  private http: AxiosInstance | null = null;
+  private readonly clientCache = new Map<string, AxiosInstance>();
+  private static readonly CLIENT_CACHE_MAX = 64;
 
-  constructor(
-    private readonly project: string | undefined = process.env.VERTEX_MEMORY_BANK_PROJECT,
-    private readonly location: string = process.env.VERTEX_MEMORY_BANK_LOCATION || 'us-central1',
-    private readonly engine: string | undefined = process.env.VERTEX_MEMORY_BANK_ENGINE,
-    /** Pre-fetched bearer token. In production we'd refresh via google-auth-library. */
-    private readonly bearer: string | undefined = process.env.GOOGLE_OAUTH_TOKEN,
-  ) {}
+  async init(): Promise<void> {}
 
-  async init(): Promise<void> {
-    if (!this.project || !this.engine || !this.bearer) {
-      this.logger.warn(
-        'VertexMemoryBankBackend missing project/engine/bearer — backend will fail health check',
-      );
-      return;
-    }
-    this.http = axios.create({
-      baseURL: `https://${this.location}-aiplatform.googleapis.com`,
-      headers: {
-        Authorization: `Bearer ${this.bearer}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 20_000,
-      maxRedirects: 0,
-    });
-  }
-
-  async healthCheck(): Promise<BackendHealth> {
-    if (!this.http || !this.engine) {
-      return { ok: false, latency_ms: 0, details: { error: 'not_configured' } };
-    }
+  async healthCheck(creds?: BackendCredentials): Promise<BackendHealth> {
+    const ctx = this.context(creds);
+    if (!ctx) return { ok: false, latency_ms: 0, details: { error: 'no_credentials' } };
     const start = Date.now();
     try {
-      // Lightest read: list a single memory entry.
-      await this.http.post(
-        `/v1beta1/${this.engine}:retrieveMemories`,
+      await ctx.http.post(
+        `/v1beta1/${ctx.engine}:retrieveMemories`,
         { scope: { user_id: '__healthcheck__' }, similaritySearchParams: { searchQuery: 'health', topK: 1 } },
       ).catch(() => undefined);
       return { ok: true, latency_ms: Date.now() - start };
@@ -102,43 +59,34 @@ export class VertexMemoryBankBackend implements MemoryBackend {
     }
   }
 
-  async get(_id: string): Promise<MemoryItem | null> {
-    // Memory Bank doesn't expose a `getMemory` by id at v1beta1; the
-    // standard read path is `retrieveMemories` (search). The router
-    // calls `get` for round-trip checks; falling back to a search
-    // by id-as-content lets the backend behave consistently.
+  async get(_id: string, _creds?: BackendCredentials): Promise<MemoryItem | null> {
+    // Memory Bank doesn't expose getMemory by id at v1beta1.
     return null;
   }
 
-  async put(item: MemoryItem): Promise<MemoryItem> {
-    if (!this.http || !this.engine) throw new Error('VertexMemoryBankBackend not initialised');
-    await this.http.post(`/v1beta1/${this.engine}:generateMemories`, {
+  async put(item: MemoryItem, creds?: BackendCredentials): Promise<MemoryItem> {
+    const ctx = this.requireContext(creds);
+    await ctx.http.post(`/v1beta1/${ctx.engine}:generateMemories`, {
       directContentsSource: {
-        events: [
-          { content: { role: 'user', parts: [{ text: item.content }] } },
-        ],
+        events: [{ content: { role: 'user', parts: [{ text: item.content }] } }],
       },
       scope: { user_id: scopeToUserId({ scope_type: item.scope_type, scope_id: item.scope_id }) },
     });
     return item;
   }
 
-  async delete(_id: string, _mode: 'soft' | 'hard' = 'soft'): Promise<boolean> {
-    if (!this.http || !this.engine) throw new Error('VertexMemoryBankBackend not initialised');
-    // Memory Bank v1beta1 has no per-item delete. Best-effort: a
-    // `consolidateMemories` call with a tombstone can suppress the
-    // entry. Return false so the router knows the op didn't take.
-    return false;
+  async delete(_id: string, _mode: 'soft' | 'hard' = 'soft', _creds?: BackendCredentials): Promise<boolean> {
+    return false; // Memory Bank v1beta1 has no per-item delete.
   }
 
-  async list(query: ListQuery): Promise<Page<MemoryItem>> {
-    return this.search({ scope: query.scope, query: '', top_k: query.limit ?? 50 }) as any;
+  async list(query: ListQuery, creds?: BackendCredentials): Promise<Page<MemoryItem>> {
+    return this.search({ scope: query.scope, query: '', top_k: query.limit ?? 50 }, creds) as any;
   }
 
-  async search(query: SearchQuery): Promise<RankedItem[]> {
-    if (!this.http || !this.engine) throw new Error('VertexMemoryBankBackend not initialised');
+  async search(query: SearchQuery, creds?: BackendCredentials): Promise<RankedItem[]> {
+    const ctx = this.requireContext(creds);
     const userId = scopeToUserId(query.scope);
-    const res = await this.http.post(`/v1beta1/${this.engine}:retrieveMemories`, {
+    const res = await ctx.http.post(`/v1beta1/${ctx.engine}:retrieveMemories`, {
       scope: { user_id: userId },
       similaritySearchParams: { searchQuery: query.query, topK: query.top_k ?? 10 },
     });
@@ -158,13 +106,11 @@ export class VertexMemoryBankBackend implements MemoryBackend {
     throw new Error('vertex-memory-bank backend does not support as_of_queries');
   }
 
-  async batchPut(items: MemoryItem[]): Promise<BatchResult> {
+  async batchPut(items: MemoryItem[], creds?: BackendCredentials): Promise<BatchResult> {
     const result: BatchResult = { succeeded: 0, failed: 0, errors: [] };
     for (const item of items) {
-      try {
-        await this.put(item);
-        result.succeeded++;
-      } catch (e: any) {
+      try { await this.put(item, creds); result.succeeded++; }
+      catch (e: any) {
         result.failed++;
         result.errors.push({ id: item.id, error: { kind: 'backend_unavailable', backend: this.id, cause: e.message ?? String(e) } });
       }
@@ -172,23 +118,19 @@ export class VertexMemoryBankBackend implements MemoryBackend {
     return result;
   }
 
-  async batchDelete(_ids: string[]): Promise<BatchResult> {
-    return { succeeded: 0, failed: _ids.length, errors: _ids.map((id) => ({ id, error: { kind: 'backend_unavailable', backend: this.id, cause: 'vertex memory bank has no per-item delete' } })) };
+  async batchDelete(ids: string[]): Promise<BatchResult> {
+    return {
+      succeeded: 0, failed: ids.length,
+      errors: ids.map((id) => ({ id, error: { kind: 'backend_unavailable', backend: this.id, cause: 'vertex memory bank has no per-item delete' } })),
+    };
   }
 
-  async *subscribeChanges(_scope: ScopeRef, since: Date): AsyncIterable<MemoryChangeEvent> {
-    if (!this.http || !this.engine) throw new Error('VertexMemoryBankBackend not initialised');
-    // Vertex emits change events through the operations API as
-    // long-running operations on `consolidateMemories`. Polling-based
-    // change-feed: every 30s, ask for memories created since the
-    // last cursor, yield them as `op: 'put'`. A real implementation
-    // would subscribe to the LRO event stream — left as a polling
-    // fallback that satisfies the interface without requiring
-    // gRPC streaming infrastructure.
+  async *subscribeChanges(_scope: ScopeRef, since: Date, creds?: BackendCredentials): AsyncIterable<MemoryChangeEvent> {
+    const ctx = this.requireContext(creds);
     let cursor = since;
     while (true) {
-      const res = await this.http
-        .post(`/v1beta1/${this.engine}:retrieveMemories`, {
+      const res = await ctx.http
+        .post(`/v1beta1/${ctx.engine}:retrieveMemories`, {
           scope: { user_id: '*' },
           similaritySearchParams: { searchQuery: '', topK: 100 },
         })
@@ -196,9 +138,7 @@ export class VertexMemoryBankBackend implements MemoryBackend {
       const rows = (res?.data?.retrievedMemories ?? []) as any[];
       for (const r of rows) {
         const item = this.toCanonical(r);
-        if (item.created_at > cursor) {
-          yield { op: 'put', item, at: item.created_at };
-        }
+        if (item.created_at > cursor) yield { op: 'put', item, at: item.created_at };
       }
       cursor = new Date();
       await new Promise((r) => setTimeout(r, 30_000));
@@ -215,63 +155,68 @@ export class VertexMemoryBankBackend implements MemoryBackend {
       mode: 'memory',
       scope_type: meta.scope_type ?? 'workspace',
       scope_id: meta.scope_id ?? 'unknown',
-      content,
-      content_format: 'text',
+      content, content_format: 'text',
       content_bytes: Buffer.byteLength(content, 'utf8'),
-      embedding: null,
-      embedding_dim: null,
-      embedding_model: null,
-      embedding_status: 'skipped',
-      embedding_error: null,
+      embedding: null, embedding_dim: null, embedding_model: null,
+      embedding_status: 'skipped', embedding_error: null,
       tags: Array.isArray(meta.tags) ? meta.tags : [],
-      metadata: meta,
-      file_refs: [],
+      metadata: meta, file_refs: [],
       tier: meta.tier ?? 'long',
       valid_from: memory?.createTime ? new Date(memory.createTime) : now,
-      valid_until: null,
-      superseded_by: null,
-      ttl_seconds: null,
-      source_uri: null,
-      source_version: null,
-      source_checksum: null,
-      chunk_index: null,
-      chunk_total: null,
-      chunk_of: null,
+      valid_until: null, superseded_by: null, ttl_seconds: null,
+      source_uri: null, source_version: null, source_checksum: null,
+      chunk_index: null, chunk_total: null, chunk_of: null,
       confidence: 1,
-      provenance:
-        (meta.provenance as Provenance) ??
-        ({
-          agent_id: null, session_id: null, collab_id: null,
-          model: null, provider: 'google', tool_chain: [],
-          created_by: 'sync', source_backend: 'vertex-memory-bank',
-        } as Provenance),
+      provenance: (meta.provenance as Provenance) ?? ({
+        agent_id: null, session_id: null, collab_id: null,
+        model: null, provider: 'google', tool_chain: [],
+        created_by: 'sync', source_backend: 'vertex-memory-bank',
+      } as Provenance),
       created_at: memory?.createTime ? new Date(memory.createTime) : now,
       updated_at: memory?.updateTime ? new Date(memory.updateTime) : now,
-      accessed_at: null,
-      access_count: 0,
-      deleted_at: null,
-      deleted_by: null,
+      accessed_at: null, access_count: 0, deleted_at: null, deleted_by: null,
     };
   }
 
   fromCanonical(item: MemoryItem): unknown {
     return {
       directContentsSource: {
-        events: [
-          { content: { role: 'user', parts: [{ text: item.content }] } },
-        ],
+        events: [{ content: { role: 'user', parts: [{ text: item.content }] } }],
       },
-      scope: {
-        user_id: scopeToUserId({ scope_type: item.scope_type, scope_id: item.scope_id }),
-      },
+      scope: { user_id: scopeToUserId({ scope_type: item.scope_type, scope_id: item.scope_id }) },
       metadata: {
-        almyty_id: item.id,
-        scope_type: item.scope_type,
-        scope_id: item.scope_id,
-        tier: item.tier,
-        tags: item.tags,
+        almyty_id: item.id, scope_type: item.scope_type, scope_id: item.scope_id,
+        tier: item.tier, tags: item.tags,
       },
     };
+  }
+
+  private requireContext(creds?: BackendCredentials): { http: AxiosInstance; engine: string } {
+    const ctx = this.context(creds);
+    if (!ctx) {
+      throw new Error('vertex-memory-bank: missing project / engine / bearer credentials — set in the org credential store');
+    }
+    return ctx;
+  }
+
+  private context(creds?: BackendCredentials): { http: AxiosInstance; engine: string } | null {
+    if (!creds?.engine || !creds.bearer) return null;
+    const location = creds.location || 'us-central1';
+    const cacheKey = `${location}|${creds.bearer.slice(-12)}`;
+    let http = this.clientCache.get(cacheKey);
+    if (!http) {
+      http = axios.create({
+        baseURL: `https://${location}-aiplatform.googleapis.com`,
+        headers: { Authorization: `Bearer ${creds.bearer}`, 'Content-Type': 'application/json' },
+        timeout: 20_000, maxRedirects: 0,
+      });
+      if (this.clientCache.size >= VertexMemoryBankBackend.CLIENT_CACHE_MAX) {
+        const oldest = this.clientCache.keys().next().value;
+        if (oldest !== undefined) this.clientCache.delete(oldest);
+      }
+      this.clientCache.set(cacheKey, http);
+    }
+    return { http, engine: creds.engine };
   }
 }
 

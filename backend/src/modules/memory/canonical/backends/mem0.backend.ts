@@ -14,35 +14,25 @@ import {
   ScopeRef,
   SearchQuery,
 } from '../canonical.types';
-import { BackendHealth, MemoryBackend } from './memory-backend.interface';
+import {
+  BackendCredentials,
+  BackendHealth,
+  MemoryBackend,
+} from './memory-backend.interface';
 
 /**
- * Mem0 backend. Talks to the public Mem0 API (https://api.mem0.ai)
- * over HTTPS with bearer-token auth. Mem0 is a vector-store memory
- * service that supports add / search / list / delete by user id.
+ * Mem0 backend. Talks to the Mem0 API (default https://api.mem0.ai)
+ * over HTTPS with bearer-token auth. Credentials arrive per-call from
+ * the router, which reads the org's Credential row — no process.env.
  *
  * Capability story:
  *   ✓ vector_search, mode_memory, batch_writes
  *   ✗ bi_temporal, ttl, as_of_queries (Mem0 has no temporal model)
  *   ✗ document mode, fts, hybrid_search, change_feed, soft_delete
  *
- * Configuration:
- *   - MEM0_API_KEY (required)
- *   - MEM0_BASE_URL (defaults to https://api.mem0.ai)
- *
- * Scope mapping:
- *   The canonical (scope_type, scope_id) tuple becomes Mem0's
- *   `user_id` parameter as `${scope_type}:${scope_id}`. Mem0 has no
- *   nested scope concept beyond user, so we encode our scope into
- *   the user id and rely on Mem0's per-user isolation.
- *
- * Translation:
- *   - id: we keep our canonical UUID v7 in metadata.almyty_id; Mem0
- *     returns its own ids (we map back via metadata on read).
- *   - tags: forwarded as Mem0 metadata.tags
- *   - provenance: forwarded as metadata.provenance
- *   - tier / mode / etc.: forwarded as metadata so reads can rebuild
- *     the canonical shape.
+ * Scope mapping: canonical (scope_type, scope_id) → Mem0 `user_id`
+ * as `${scope_type}:${scope_id}`. Each org's tenant isolation rides
+ * on Mem0's per-user partitioning.
  */
 @Injectable()
 export class Mem0Backend implements MemoryBackend {
@@ -57,34 +47,21 @@ export class Mem0Backend implements MemoryBackend {
   readonly supported_modes = new Set<Mode>(['memory']);
 
   private readonly logger = new Logger(Mem0Backend.name);
-  private http: AxiosInstance | null = null;
-
-  constructor(
-    private readonly apiKey: string | undefined = process.env.MEM0_API_KEY,
-    private readonly baseUrl: string = process.env.MEM0_BASE_URL || 'https://api.mem0.ai',
-  ) {}
+  /** Per-credential HTTP client cache, bounded so a churn of orgs
+   *  doesn't leak a client per call. */
+  private readonly clientCache = new Map<string, AxiosInstance>();
+  private static readonly CLIENT_CACHE_MAX = 64;
 
   async init(): Promise<void> {
-    if (!this.apiKey) {
-      this.logger.warn('Mem0Backend has no MEM0_API_KEY — backend will fail health check');
-      return;
-    }
-    this.http = axios.create({
-      baseURL: this.baseUrl,
-      headers: { Authorization: `Token ${this.apiKey}` },
-      timeout: 15_000,
-      maxRedirects: 0,
-    });
+    // Construction is per-call now — nothing to warm up.
   }
 
-  async healthCheck(): Promise<BackendHealth> {
-    if (!this.http) return { ok: false, latency_ms: 0, details: { error: 'no_api_key' } };
+  async healthCheck(creds?: BackendCredentials): Promise<BackendHealth> {
+    const http = this.client(creds);
+    if (!http) return { ok: false, latency_ms: 0, details: { error: 'no_credentials' } };
     const start = Date.now();
     try {
-      // Mem0's `/v1/ping/` is the lightest read; some deployments
-      // expose `/v1/users/` which works too. We'll try ping and fall
-      // back to a tiny list call.
-      await this.http.get('/v1/ping/').catch(() => this.http!.get('/v1/memories/?limit=1'));
+      await http.get('/v1/ping/').catch(() => http.get('/v1/memories/?limit=1'));
       return { ok: true, latency_ms: Date.now() - start };
     } catch (e: any) {
       return {
@@ -95,12 +72,10 @@ export class Mem0Backend implements MemoryBackend {
     }
   }
 
-  // ── CRUD ────────────────────────────────────────────────────
-
-  async get(id: string): Promise<MemoryItem | null> {
-    if (!this.http) throw new Error('Mem0Backend not initialised');
+  async get(id: string, creds?: BackendCredentials): Promise<MemoryItem | null> {
+    const http = this.requireClient(creds);
     try {
-      const res = await this.http.get(`/v1/memories/${encodeURIComponent(id)}/`);
+      const res = await http.get(`/v1/memories/${encodeURIComponent(id)}/`);
       return this.toCanonical(res.data);
     } catch (e: any) {
       if (e?.response?.status === 404) return null;
@@ -108,26 +83,24 @@ export class Mem0Backend implements MemoryBackend {
     }
   }
 
-  async put(item: MemoryItem): Promise<MemoryItem> {
-    if (!this.http) throw new Error('Mem0Backend not initialised');
-    const res = await this.http.post('/v1/memories/', this.fromCanonical(item));
-    // Mem0 returns either the created memory or an array of one;
-    // normalise both shapes.
+  async put(item: MemoryItem, creds?: BackendCredentials): Promise<MemoryItem> {
+    const http = this.requireClient(creds);
+    const res = await http.post('/v1/memories/', this.fromCanonical(item));
     const created = Array.isArray(res.data) ? res.data[0] : res.data;
     return this.toCanonical({
       ...created,
-      // Preserve the canonical id we sent so downstream lookups
-      // remain stable. Mem0's `id` lives in metadata.mem0_id.
       metadata: { ...(created?.metadata || {}), mem0_id: created?.id, almyty_id: item.id },
     });
   }
 
-  async delete(id: string, _mode: 'soft' | 'hard' = 'soft'): Promise<boolean> {
-    if (!this.http) throw new Error('Mem0Backend not initialised');
+  async delete(
+    id: string,
+    _mode: 'soft' | 'hard' = 'soft',
+    creds?: BackendCredentials,
+  ): Promise<boolean> {
+    const http = this.requireClient(creds);
     try {
-      // Mem0's only delete is hard delete — soft-delete capability
-      // isn't declared, so callers are warned upstream.
-      await this.http.delete(`/v1/memories/${encodeURIComponent(id)}/`);
+      await http.delete(`/v1/memories/${encodeURIComponent(id)}/`);
       return true;
     } catch (e: any) {
       if (e?.response?.status === 404) return false;
@@ -135,10 +108,10 @@ export class Mem0Backend implements MemoryBackend {
     }
   }
 
-  async list(query: ListQuery): Promise<Page<MemoryItem>> {
-    if (!this.http) throw new Error('Mem0Backend not initialised');
+  async list(query: ListQuery, creds?: BackendCredentials): Promise<Page<MemoryItem>> {
+    const http = this.requireClient(creds);
     const userId = scopeToUserId(query.scope);
-    const res = await this.http.get('/v1/memories/', {
+    const res = await http.get('/v1/memories/', {
       params: { user_id: userId, limit: query.limit ?? 50 },
     });
     const rows = Array.isArray(res.data) ? res.data : res.data?.results ?? [];
@@ -146,10 +119,10 @@ export class Mem0Backend implements MemoryBackend {
     return { items, total: items.length, cursor: null };
   }
 
-  async search(query: SearchQuery): Promise<RankedItem[]> {
-    if (!this.http) throw new Error('Mem0Backend not initialised');
+  async search(query: SearchQuery, creds?: BackendCredentials): Promise<RankedItem[]> {
+    const http = this.requireClient(creds);
     const userId = scopeToUserId(query.scope);
-    const res = await this.http.post('/v1/memories/search/', {
+    const res = await http.post('/v1/memories/search/', {
       query: query.query,
       user_id: userId,
       limit: query.top_k ?? 10,
@@ -163,8 +136,6 @@ export class Mem0Backend implements MemoryBackend {
   }
 
   async supersede(): Promise<never> {
-    // Mem0 has no bi-temporal model. The router gates this op via
-    // capabilities and never calls through, but defend the method.
     throw new Error('mem0 backend does not support bi_temporal supersede');
   }
 
@@ -172,11 +143,11 @@ export class Mem0Backend implements MemoryBackend {
     throw new Error('mem0 backend does not support as_of_queries');
   }
 
-  async batchPut(items: MemoryItem[]): Promise<BatchResult> {
+  async batchPut(items: MemoryItem[], creds?: BackendCredentials): Promise<BatchResult> {
     const result: BatchResult = { succeeded: 0, failed: 0, errors: [] };
     for (const item of items) {
       try {
-        await this.put(item);
+        await this.put(item, creds);
         result.succeeded++;
       } catch (e: any) {
         result.failed++;
@@ -186,11 +157,11 @@ export class Mem0Backend implements MemoryBackend {
     return result;
   }
 
-  async batchDelete(ids: string[]): Promise<BatchResult> {
+  async batchDelete(ids: string[], creds?: BackendCredentials): Promise<BatchResult> {
     const result: BatchResult = { succeeded: 0, failed: 0, errors: [] };
     for (const id of ids) {
       try {
-        const ok = await this.delete(id, 'hard');
+        const ok = await this.delete(id, 'hard', creds);
         if (ok) result.succeeded++;
         else result.failed++;
       } catch (e: any) {
@@ -206,65 +177,43 @@ export class Mem0Backend implements MemoryBackend {
   toCanonical(raw: any): MemoryItem {
     const meta = raw?.metadata ?? {};
     const now = new Date();
+    const content = typeof raw?.memory === 'string' ? raw.memory : String(raw?.text ?? raw?.content ?? '');
     return {
       id: meta.almyty_id ?? raw?.id ?? uuidv7(),
       mode: 'memory',
       scope_type: meta.scope_type ?? 'workspace',
       scope_id: meta.scope_id ?? 'unknown',
-      content: typeof raw?.memory === 'string' ? raw.memory : String(raw?.text ?? raw?.content ?? ''),
+      content,
       content_format: meta.content_format ?? 'text',
-      content_bytes: Buffer.byteLength(
-        typeof raw?.memory === 'string' ? raw.memory : String(raw?.text ?? raw?.content ?? ''),
-        'utf8',
-      ),
-      embedding: null,
-      embedding_dim: null,
-      embedding_model: meta.embedding_model ?? null,
-      embedding_status: 'skipped',
-      embedding_error: null,
+      content_bytes: Buffer.byteLength(content, 'utf8'),
+      embedding: null, embedding_dim: null, embedding_model: meta.embedding_model ?? null,
+      embedding_status: 'skipped', embedding_error: null,
       tags: Array.isArray(meta.tags) ? meta.tags : [],
       metadata: meta,
       file_refs: Array.isArray(meta.file_refs) ? meta.file_refs : [],
       tier: meta.tier ?? 'project',
       valid_from: raw?.created_at ? new Date(raw.created_at) : now,
-      valid_until: null,
-      superseded_by: null,
-      ttl_seconds: null,
-      source_uri: null,
-      source_version: null,
-      source_checksum: null,
-      chunk_index: null,
-      chunk_total: null,
-      chunk_of: null,
+      valid_until: null, superseded_by: null, ttl_seconds: null,
+      source_uri: null, source_version: null, source_checksum: null,
+      chunk_index: null, chunk_total: null, chunk_of: null,
       confidence: meta.confidence ?? 1,
       provenance:
         (meta.provenance as Provenance) ??
         ({
-          agent_id: null,
-          session_id: null,
-          collab_id: null,
-          model: null,
-          provider: null,
-          tool_chain: [],
-          created_by: 'sync',
-          source_backend: 'mem0',
+          agent_id: null, session_id: null, collab_id: null,
+          model: null, provider: null, tool_chain: [],
+          created_by: 'sync', source_backend: 'mem0',
         } as Provenance),
       created_at: raw?.created_at ? new Date(raw.created_at) : now,
       updated_at: raw?.updated_at ? new Date(raw.updated_at) : now,
-      accessed_at: null,
-      access_count: 0,
-      deleted_at: null,
-      deleted_by: null,
+      accessed_at: null, access_count: 0, deleted_at: null, deleted_by: null,
     };
   }
 
   fromCanonical(item: MemoryItem): unknown {
     return {
       messages: [{ role: 'user', content: item.content }],
-      user_id: scopeToUserId({
-        scope_type: item.scope_type,
-        scope_id: item.scope_id,
-      }),
+      user_id: scopeToUserId({ scope_type: item.scope_type, scope_id: item.scope_id }),
       metadata: {
         almyty_id: item.id,
         scope_type: item.scope_type,
@@ -276,6 +225,35 @@ export class Mem0Backend implements MemoryBackend {
         confidence: item.confidence,
       },
     };
+  }
+
+  // ── HTTP client lifecycle ────────────────────────────────────
+
+  private requireClient(creds?: BackendCredentials): AxiosInstance {
+    const c = this.client(creds);
+    if (!c) throw new Error('mem0: missing apiKey credential — set in the org credential store');
+    return c;
+  }
+
+  private client(creds?: BackendCredentials): AxiosInstance | null {
+    if (!creds?.apiKey) return null;
+    const baseUrl = creds.baseUrl || 'https://api.mem0.ai';
+    const cacheKey = `${baseUrl}|${creds.apiKey}`;
+    const cached = this.clientCache.get(cacheKey);
+    if (cached) return cached;
+    const http = axios.create({
+      baseURL: baseUrl,
+      headers: { Authorization: `Token ${creds.apiKey}` },
+      timeout: 15_000,
+      maxRedirects: 0,
+    });
+    if (this.clientCache.size >= Mem0Backend.CLIENT_CACHE_MAX) {
+      // drop oldest (Map preserves insertion order)
+      const oldest = this.clientCache.keys().next().value;
+      if (oldest !== undefined) this.clientCache.delete(oldest);
+    }
+    this.clientCache.set(cacheKey, http);
+    return http;
   }
 }
 

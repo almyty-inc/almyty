@@ -28,6 +28,32 @@ import {
   SearchQuery,
 } from '../canonical.types';
 
+/**
+ * Resolved credentials for a single backend dispatch. The router
+ * builds this from the org's Credential row (decrypted on read by
+ * CredentialsService) and the workspace's routing config. Backends
+ * never read process.env — every secret arrives here.
+ *
+ * Per-org isolation is the whole point: tenant A's Mem0 key never
+ * touches tenant B's traffic.
+ */
+export interface BackendCredentials {
+  /** Bearer-token style backends (Mem0, Anthropic, Supermemory). */
+  apiKey?: string;
+  /** Override base URL — useful for self-hosted Zep or Mem0 dev. */
+  baseUrl?: string;
+  /** Vertex Memory Bank: GCP project id. */
+  project?: string;
+  /** Vertex Memory Bank: GCP region. */
+  location?: string;
+  /** Vertex Memory Bank: full reasoning-engine resource path. */
+  engine?: string;
+  /** Vertex Memory Bank: short-lived OAuth bearer (router refreshes). */
+  bearer?: string;
+  /** Allow backend-specific extras without changing the interface. */
+  [extra: string]: unknown;
+}
+
 export interface BackendHealth {
   ok: boolean;
   latency_ms: number;
@@ -45,25 +71,30 @@ export interface MemoryBackend {
   readonly supported_modes: ReadonlySet<Mode>;
 
   /**
-   * Called once on module init. Backends that need ahead-of-time
-   * setup (cache warmup, schema check, oauth refresh) do it here.
-   * Failures are surfaced via the next health check.
+   * Called once on module init for any cache warmup. External
+   * backends do per-call client construction now (see `creds`
+   * arg below) — init exists for the native backend's TypeORM /
+   * BullMQ wiring and is a no-op everywhere else.
    */
   init(): Promise<void>;
 
-  /** Liveness probe; non-blocking. */
-  healthCheck(): Promise<BackendHealth>;
+  /** Liveness probe with the given credentials; non-blocking. */
+  healthCheck(creds?: BackendCredentials): Promise<BackendHealth>;
 
   // ── CRUD ──────────────────────────────────────────────────────
 
-  get(id: string): Promise<MemoryItem | null>;
-  put(item: MemoryItem): Promise<MemoryItem>;
-  delete(id: string, mode?: 'soft' | 'hard'): Promise<boolean>;
+  get(id: string, creds?: BackendCredentials): Promise<MemoryItem | null>;
+  put(item: MemoryItem, creds?: BackendCredentials): Promise<MemoryItem>;
+  delete(
+    id: string,
+    mode?: 'soft' | 'hard',
+    creds?: BackendCredentials,
+  ): Promise<boolean>;
 
   // ── listing & search ──────────────────────────────────────────
 
-  list(query: ListQuery): Promise<Page<MemoryItem>>;
-  search(query: SearchQuery): Promise<RankedItem[]>;
+  list(query: ListQuery, creds?: BackendCredentials): Promise<Page<MemoryItem>>;
+  search(query: SearchQuery, creds?: BackendCredentials): Promise<RankedItem[]>;
 
   // ── bi-temporal (memory mode only; backends without `bi_temporal`
   //    capability implement these as best-effort with documented loss) ──
@@ -71,19 +102,31 @@ export interface MemoryBackend {
   supersede(
     oldId: string,
     newItem: MemoryItem,
+    creds?: BackendCredentials,
   ): Promise<{ old: MemoryItem; new: MemoryItem }>;
-  asOf(time: Date, query: ListQuery): Promise<Page<MemoryItem>>;
+  asOf(
+    time: Date,
+    query: ListQuery,
+    creds?: BackendCredentials,
+  ): Promise<Page<MemoryItem>>;
 
   // ── batch (transfer / sync) ───────────────────────────────────
 
-  batchPut(items: MemoryItem[]): Promise<BatchResult>;
-  batchDelete(ids: string[]): Promise<BatchResult>;
+  batchPut(
+    items: MemoryItem[],
+    creds?: BackendCredentials,
+  ): Promise<BatchResult>;
+  batchDelete(
+    ids: string[],
+    creds?: BackendCredentials,
+  ): Promise<BatchResult>;
 
   // ── change feed (only if `change_feed` capability) ────────────
 
   subscribeChanges?(
     scope: ScopeRef,
     since: Date,
+    creds?: BackendCredentials,
   ): AsyncIterable<MemoryChangeEvent>;
 
   // ── canonical translation ─────────────────────────────────────
