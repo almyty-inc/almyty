@@ -711,6 +711,9 @@ export const memoriesApi = {
   // Audit: soft-cap warnings list
   listSoftcapWarnings: (scope_type: MemoryScopeType, scope_id: string, limit = 50) =>
     apiGet(`/memory/canonical/warnings/softcap?scope_type=${encodeURIComponent(scope_type)}&scope_id=${encodeURIComponent(scope_id)}&limit=${limit}`),
+  // Consolidation: trigger now (returns ConsolidationResult).
+  consolidate: (body: { scope_type: MemoryScopeType; scope_id: string; force?: boolean }) =>
+    apiPost('/memory/canonical/consolidate', body),
 }
 
 // Files API

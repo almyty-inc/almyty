@@ -26,6 +26,7 @@ import { MemoryError, Mode, ScopeType } from './canonical.types';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { MemoryRouter } from './memory-router.service';
 import { DocumentChunkerService } from './document-chunker.service';
+import { ConsolidationService } from './consolidation.service';
 
 /**
  * Canonical memory HTTP API. Mounts under `/memory/canonical` so it
@@ -42,6 +43,7 @@ export class CanonicalMemoryController {
     private readonly service: CanonicalMemoryService,
     private readonly router: MemoryRouter,
     private readonly chunker: DocumentChunkerService,
+    private readonly consolidation: ConsolidationService,
   ) {}
 
   // ── backends list / health ────────────────────────────────────────
@@ -132,6 +134,29 @@ export class CanonicalMemoryController {
     const limit = Math.min(Math.max(Number(limitRaw) || 50, 1), 500);
     const rows = await this.service.listSoftcapWarnings(scopeType, scopeId, limit);
     return { success: true, data: rows };
+  }
+
+  // ── consolidation ─────────────────────────────────────────────────
+
+  @Post('consolidate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Run consolidation now for a scope (LLM extracts durable facts from short-tier rows and supersedes them)',
+  })
+  async consolidate(
+    @Body() body: { scope_type: ScopeType; scope_id: string; force?: boolean },
+  ) {
+    if (!body?.scope_type || !body?.scope_id) {
+      throw new HttpException(
+        { success: false, error: 'BAD_REQUEST', message: 'scope_type and scope_id are required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const result = await this.consolidation.run(
+      { scope_type: body.scope_type, scope_id: body.scope_id },
+      { force: !!body.force },
+    );
+    return { success: true, data: result };
   }
 
   // ── transfer between backends ─────────────────────────────────────
