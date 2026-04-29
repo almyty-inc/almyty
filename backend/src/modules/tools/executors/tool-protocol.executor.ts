@@ -14,12 +14,16 @@
  * break out of its containing element and inject additional XML.
  */
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { Repository } from 'typeorm';
 import { Tool } from '../../../entities/tool.entity';
 import { Api } from '../../../entities/api.entity';
+import { ApiSchema } from '../../../entities/api-schema.entity';
 import { Operation } from '../../../entities/operation.entity';
 import { validateUrl, sanitizeHeaders } from '../../../common/security/url-validator';
 import { ToolAuthService } from '../services/tool-auth.service';
+import { GrpcCallerService } from './grpc-caller.service';
 import {
   ToolExecutionOptions,
   ToolExecutionResult,
@@ -59,7 +63,12 @@ function joinApiUrl(baseUrl: string, endpoint?: string): string {
 export class ToolProtocolExecutor {
   private readonly logger = new Logger(ToolProtocolExecutor.name);
 
-  constructor(private readonly authService: ToolAuthService) {}
+  constructor(
+    private readonly authService: ToolAuthService,
+    private readonly grpcCaller: GrpcCallerService,
+    @InjectRepository(ApiSchema)
+    private readonly apiSchemaRepo: Repository<ApiSchema>,
+  ) {}
 
   // ─── GraphQL (structured config) ───────────────────────────────
 
@@ -428,64 +437,81 @@ export class ToolProtocolExecutor {
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
-    const grpcUrl = joinApiUrl(api.baseUrl, operation.endpoint);
-
-    const urlCheck = validateUrl(grpcUrl);
-    if (!urlCheck.valid) {
-      this.logger.warn(`SSRF blocked for gRPC tool ${tool.name}: ${urlCheck.error}`);
-      return this.blocked(urlCheck.error!, startTime);
+    const baseValidation = validateUrl(api.baseUrl);
+    if (!baseValidation.valid) {
+      this.logger.warn(`SSRF blocked for gRPC tool ${tool.name}: ${baseValidation.error}`);
+      return this.blocked(baseValidation.error!, startTime);
     }
 
-    const config: AxiosRequestConfig = {
-      method: 'POST',
-      url: grpcUrl,
-      timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
-      maxContentLength: MAX_CONTENT_LENGTH,
-      maxBodyLength: MAX_BODY_LENGTH,
-      signal: options.signal,
-      headers: {
-        'Content-Type': 'application/grpc+proto',
-        'User-Agent': 'LLM-Tool-Gateway/1.0',
-      },
-      data: parameters,
-    };
+    // Resolve service + method from the parser-emitted endpoint
+    // shape `/grpc/{Service}/{Method}`. Fall back to operation.name
+    // (the parser writes the method name there too).
+    const m = (operation.endpoint || '').match(/^\/grpc\/([^/]+)\/([^/]+)/);
+    if (!m) {
+      return this.failure(
+        `gRPC operation has malformed endpoint: ${operation.endpoint}. ` +
+          `Expected /grpc/{ServiceName}/{MethodName}.`,
+        startTime,
+      );
+    }
+    const [, serviceName, methodName] = m;
 
-    await this.authService.applyApiAuth(config, api, options);
+    // Pull the .proto source from the most recent ApiSchema row for
+    // this api. We need this every call — proto is per-api, not
+    // per-tool, and embedding the whole proto on each Tool entity
+    // would balloon the row size.
+    const schemaRow = await this.apiSchemaRepo.findOne({
+      where: { apiId: api.id },
+      order: { createdAt: 'DESC' },
+    });
+    if (!schemaRow?.rawSchema) {
+      return this.failure(
+        `gRPC tool ${tool.name} has no proto schema on file (api_schemas.rawSchema is empty for api ${api.id}). Re-import the proto.`,
+        startTime,
+      );
+    }
 
-    try {
-      const response: AxiosResponse = await axios(config);
+    // Build metadata for the call. Reuse the auth service to pick
+    // up bearer/api_key/oauth2 headers exactly the way HTTP tools
+    // do, then copy them onto the gRPC Metadata.
+    const fakeConfig: AxiosRequestConfig = { headers: {} };
+    await this.authService.applyApiAuth(fakeConfig, api, options);
+    const metadata: Record<string, string> = {};
+    for (const [k, v] of Object.entries((fakeConfig.headers || {}) as Record<string, any>)) {
+      if (typeof v === 'string') metadata[k.toLowerCase()] = v;
+    }
+
+    const callRes = await this.grpcCaller.call({
+      protoSource: schemaRow.rawSchema,
+      baseUrl: api.baseUrl,
+      serviceName,
+      methodName,
+      request: parameters || {},
+      metadata,
+      timeoutMs: options.timeout ?? tool.configuration?.timeout ?? 30000,
+    });
+
+    const executionTime = Date.now() - startTime;
+    if (callRes.success) {
       return {
         success: true,
-        data: response.data,
-        executionTime: Date.now() - startTime,
+        data: callRes.data,
+        executionTime,
         cached: false,
         rateLimited: false,
         retryCount: 0,
-        metadata: this.httpMeta(response),
+        metadata: { grpcStatus: callRes.code, requestId: generateRequestId() },
       };
-    } catch (error: any) {
-      if (axios.isAxiosError(error)) {
-        const bodyText =
-          typeof error.response?.data === 'string'
-            ? error.response.data.slice(0, 500)
-            : error.message;
-        return {
-          success: false,
-          error: `gRPC request failed: ${bodyText}`,
-          executionTime: Date.now() - startTime,
-          cached: false,
-          rateLimited: false,
-          retryCount: 0,
-          metadata: {
-            httpStatus: error.response?.status,
-            headers: error.response?.headers as Record<string, string>,
-            requestId:
-              (error.response?.headers?.['x-request-id'] as string) || generateRequestId(),
-          },
-        };
-      }
-      throw error;
     }
+    return {
+      success: false,
+      error: `gRPC request failed: ${callRes.error}`,
+      executionTime,
+      cached: false,
+      rateLimited: false,
+      retryCount: 0,
+      metadata: { grpcStatus: callRes.code, requestId: generateRequestId() },
+    };
   }
 
   // ─── shared result shapers ─────────────────────────────────────
