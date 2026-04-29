@@ -433,6 +433,27 @@ export class ApisService {
         parser.extractResources(parsedSchema),
       ]);
 
+      // Propagate parser-detected protocol-level metadata onto the
+      // api row so the executor can pick it up at run time without
+      // having to re-parse. Concretely: SOAP parsers extract
+      // `targetNamespace` from the WSDL and Protobuf parsers
+      // extract `packageName` — both are needed when building the
+      // outbound request (SOAP envelope xmlns, gRPC service
+      // resolution). Without this propagation the api row stays
+      // `metadata: null` and the executor falls back to ambiguous
+      // defaults that the upstream server rejects.
+      const parserMeta = (parsedSchema as any).metadata || {};
+      const protocolFields = ['targetNamespace', 'packageName'];
+      const lifted: Record<string, any> = {};
+      for (const k of protocolFields) {
+        if (parserMeta[k] !== undefined) lifted[k] = parserMeta[k];
+      }
+      if (Object.keys(lifted).length > 0) {
+        await queryRunner.manager.update(Api, apiId, {
+          metadata: { ...((api.metadata as any) || {}), ...lifted },
+        });
+      }
+
       // Drop the parser's intermediate object graph — `operations`
       // and `resources` are the only data we need from this point
       // on. Keeping `parsedSchema` in scope through tool gen wastes
