@@ -493,12 +493,25 @@ export class ApisService {
       // with the new field info, but the existing tools still
       // pointed at the stale rows, so SKILL.md kept emitting the
       // __typename stub.
+      // Prefer the OLDEST row when duplicates already exist for the
+      // same operationId (a leftover from imports that ran before
+      // this upsert was added). Tools/Resources/skills created by
+      // the very first import all point at the oldest UUID, so
+      // updating it is what makes the new parser output reach
+      // downstream consumers. The newer dupes become orphans we
+      // leave in place — `onDelete: 'CASCADE'` on Tool→Operation
+      // means an unconditional cleanup would risk wiping live tools
+      // if any of them were ever relinked to a newer dupe.
       const existingByOpId = new Map<string, string>();
-      for (const op of await queryRunner.manager.find(Operation, {
+      const ops = await queryRunner.manager.find(Operation, {
         where: { apiId },
         select: { id: true, operationId: true },
-      })) {
-        if (op.operationId) existingByOpId.set(op.operationId, op.id);
+        order: { createdAt: 'ASC' },
+      });
+      for (const op of ops) {
+        if (op.operationId && !existingByOpId.has(op.operationId)) {
+          existingByOpId.set(op.operationId, op.id);
+        }
       }
       for (const op of operations) {
         const existing = existingByOpId.get(op.operationId);
