@@ -1,6 +1,6 @@
 {
   "name": "@almyty/skills",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "Install API skills into AI coding agents — Claude Code, Cursor, Windsurf, Copilot, Codex",
   "type": "module",
   "main": "dist/index.js",
