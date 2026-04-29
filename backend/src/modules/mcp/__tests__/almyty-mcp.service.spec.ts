@@ -6,6 +6,7 @@ import { ToolsService } from '../../tools/tools.service';
 import { GatewaysService } from '../../gateways/gateways.service';
 import { AgentsService } from '../../agents/agents.service';
 import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
+import { CanonicalMemoryService } from '../../memory/canonical/canonical-memory.service';
 
 // Mock axios for import_schema URL fetching
 const mockAxiosGet = jest.fn().mockResolvedValue({ data: '{"openapi":"3.0.0","info":{"title":"Test","version":"1.0"},"paths":{}}' });
@@ -38,6 +39,22 @@ describe('AlmytyMcpService', () => {
   const mockSchemaImportQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
   const mockGatewayAuthService = { createGatewayAuth: jest.fn().mockResolvedValue({ id: 'auth-1', type: 'oauth2' }), deleteGatewayAuth: jest.fn().mockResolvedValue(undefined) };
   const mockGatewayToolService = { bulkAssociateTools: jest.fn().mockResolvedValue({ associated: [], skipped: [] }) };
+  const mockMemoryService: any = {
+    put: jest.fn().mockResolvedValue({
+      id: 'mem-1', mode: 'memory', tier: 'short',
+      embedding_status: 'pending', content_bytes: 11,
+    }),
+    search: jest.fn().mockResolvedValue([
+      { item: { id: 'mem-1', content: 'hello', tier: 'short', tags: [], mode: 'memory' }, score: 0.9, signal: 'hybrid' },
+    ]),
+    list: jest.fn().mockResolvedValue({ items: [], total: 0, cursor: null }),
+    get: jest.fn().mockResolvedValue({ id: 'mem-1', content: 'hello', mode: 'memory' }),
+    delete: jest.fn().mockResolvedValue(true),
+    supersede: jest.fn().mockResolvedValue({
+      old: { id: 'mem-1', valid_until: new Date('2026-01-01') },
+      new: { id: 'mem-2' },
+    }),
+  };
 
   const mockModuleRef = {
     get: jest.fn((cls: any) => {
@@ -46,6 +63,7 @@ describe('AlmytyMcpService', () => {
       if (cls === GatewaysService) return mockGatewaysService;
       if (cls === AgentsService) return mockAgentsService;
       if (cls === LlmProvidersService) return mockLlmProvidersService;
+      if (cls === CanonicalMemoryService) return mockMemoryService;
       if (typeof cls === 'string' && cls === 'BullQueue_schema-import') return mockSchemaImportQueue;
       // Dynamic require() imports resolve by class name
       if (cls?.name === 'GatewayAuthService') return mockGatewayAuthService;
@@ -362,6 +380,117 @@ describe('AlmytyMcpService', () => {
       expect(mockGatewayAuthService.deleteGatewayAuth).toHaveBeenCalledWith('auth-99', 'org-1');
       const parsed = JSON.parse(res.result.content[0].text);
       expect(parsed.deleted).toBe(true);
+    });
+
+    // ── Memory tools (canonical schema v1) ─────────────────────
+
+    it('memory_put: defaults scope_type=workspace, scope_id=orgId; passes through to canonical service', async () => {
+      const res = await call('tools/call', {
+        name: 'memory_put',
+        arguments: { mode: 'memory', content: 'a useful fact' },
+      });
+      expect(mockMemoryService.put).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: 'memory',
+          content: 'a useful fact',
+          scope: { scope_type: 'workspace', scope_id: 'org-1' },
+          tier: 'short',
+        }),
+        { user_id: 'user-1' },
+      );
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed.id).toBe('mem-1');
+    });
+
+    it('memory_put: forwards explicit scope and tier', async () => {
+      await call('tools/call', {
+        name: 'memory_put',
+        arguments: {
+          mode: 'memory',
+          content: 'project note',
+          scope_type: 'project',
+          scope_id: 'proj_42',
+          tier: 'project',
+          tags: ['note'],
+        },
+      });
+      expect(mockMemoryService.put).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: { scope_type: 'project', scope_id: 'proj_42' },
+          tier: 'project',
+          tags: ['note'],
+        }),
+        { user_id: 'user-1' },
+      );
+    });
+
+    it('memory_search: passes query + scope to canonical service and returns ranked items', async () => {
+      const res = await call('tools/call', {
+        name: 'memory_search',
+        arguments: { query: 'cosine similarity' },
+      });
+      expect(mockMemoryService.search).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: 'cosine similarity',
+          scope: { scope_type: 'workspace', scope_id: 'org-1' },
+          top_k: 10,
+        }),
+      );
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed[0]).toEqual(
+        expect.objectContaining({ id: 'mem-1', score: 0.9, signal: 'hybrid' }),
+      );
+    });
+
+    it('memory_list: pages with default limit + cursor null', async () => {
+      await call('tools/call', { name: 'memory_list', arguments: { mode: 'memory' } });
+      expect(mockMemoryService.list).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: { scope_type: 'workspace', scope_id: 'org-1' },
+          mode: 'memory',
+          limit: 50,
+          cursor: null,
+        }),
+      );
+    });
+
+    it('memory_get: returns the row when found', async () => {
+      const res = await call('tools/call', {
+        name: 'memory_get',
+        arguments: { id: 'mem-1' },
+      });
+      expect(mockMemoryService.get).toHaveBeenCalledWith('mem-1');
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed.id).toBe('mem-1');
+    });
+
+    it('memory_delete: defaults to soft mode', async () => {
+      await call('tools/call', {
+        name: 'memory_delete',
+        arguments: { id: 'mem-1' },
+      });
+      expect(mockMemoryService.delete).toHaveBeenCalledWith('mem-1', 'soft', {
+        user_id: 'user-1',
+      });
+    });
+
+    it('memory_supersede: forwards old_id + new content as memory mode write', async () => {
+      const res = await call('tools/call', {
+        name: 'memory_supersede',
+        arguments: { old_id: 'mem-1', content: 'corrected fact' },
+      });
+      expect(mockMemoryService.supersede).toHaveBeenCalledWith(
+        'mem-1',
+        expect.objectContaining({
+          mode: 'memory',
+          content: 'corrected fact',
+          tier: 'long',
+        }),
+        { user_id: 'user-1' },
+      );
+      const parsed = JSON.parse(res.result.content[0].text);
+      expect(parsed.old_id).toBe('mem-1');
+      expect(parsed.new_id).toBe('mem-2');
     });
   });
 });
