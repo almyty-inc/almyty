@@ -515,6 +515,17 @@ export class ToolProtocolExecutor {
       if (typeof v === 'string') metadata[k.toLowerCase()] = v;
     }
 
+    // Streaming flags persisted by the parser (operation.metadata.
+     // requestStream / responseStream). Caller passes a single message
+    // for unary + server-streaming, an array for client-streaming +
+    // bidi. The executor doesn't reshape parameters here — it trusts
+    // the upstream gateway to feed the right shape because the
+    // parameters JSON schema for streaming methods will say `type:
+    // 'array'`.
+    const opMeta = (operation.metadata as any) || {};
+    const requestStream = !!opMeta.requestStream;
+    const responseStream = !!opMeta.responseStream;
+
     const callRes = await this.grpcCaller.call({
       protoSource: schemaRow.rawSchema,
       baseUrl: api.baseUrl,
@@ -523,9 +534,27 @@ export class ToolProtocolExecutor {
       request: parameters || {},
       metadata,
       timeoutMs: options.timeout ?? tool.configuration?.timeout ?? 30000,
+      requestStream,
+      responseStream,
     });
 
     const executionTime = Date.now() - startTime;
+    const baseMeta: Record<string, any> = {
+      grpcStatus: callRes.code,
+      requestId: generateRequestId(),
+    };
+    if (responseStream || requestStream) {
+      baseMeta.streaming = {
+        request: requestStream,
+        response: responseStream,
+      };
+      if (callRes.streamMessageCount !== undefined) {
+        baseMeta.streamMessageCount = callRes.streamMessageCount;
+      }
+      if (callRes.streamTruncated) {
+        baseMeta.streamTruncated = true;
+      }
+    }
     if (callRes.success) {
       return {
         success: true,
@@ -534,7 +563,7 @@ export class ToolProtocolExecutor {
         cached: false,
         rateLimited: false,
         retryCount: 0,
-        metadata: { grpcStatus: callRes.code, requestId: generateRequestId() },
+        metadata: baseMeta,
       };
     }
     return {
@@ -544,7 +573,7 @@ export class ToolProtocolExecutor {
       cached: false,
       rateLimited: false,
       retryCount: 0,
-      metadata: { grpcStatus: callRes.code, requestId: generateRequestId() },
+      metadata: baseMeta,
     };
   }
 

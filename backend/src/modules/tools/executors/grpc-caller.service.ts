@@ -1,33 +1,31 @@
 /**
- * Real gRPC executor — replaces the previous "POST with content-type
- * application/grpc+proto via axios" stub. Loads the proto file
- * stored on ApiSchema.rawSchema, builds a dynamic @grpc/grpc-js
- * client, makes the unary call, returns the response as plain JSON.
+ * Real gRPC executor. Loads the proto file stored on
+ * ApiSchema.rawSchema, builds a dynamic @grpc/grpc-js client,
+ * dispatches the call, and returns a JSON-safe response.
  *
- * Things this does:
+ * Supported call shapes (selected via the `requestStream` and
+ * `responseStream` flags the parser persists on the operation):
+ *   - unary               (!req && !res) — single in, single out
+ *   - server streaming    (!req &&  res) — single in, collected list out
+ *   - client streaming    ( req && !res) — list in, single out
+ *   - bidi streaming      ( req &&  res) — list in, collected list out
+ *
+ * Streaming responses are bounded — `MAX_STREAM_MESSAGES` and the
+ * caller's deadline both apply — so a runaway server stream can't
+ * exhaust the worker's heap or hang the tool execution.
+ *
+ * Other things this does:
  *   - resolves host:port from `api.baseUrl` (defaults to :443 for
  *     https, :80 for http, or whatever the URL specifies)
  *   - writes the proto schema to a tmp file (proto-loader requires a
  *     path), keyed by sha256 hash so repeat calls reuse it
- *   - loads the package definition with permissive options
- *     (keepCase, longs as Number, defaults true) — same shape the
- *     parser expects
  *   - walks the loaded package object recursively to find the
- *     service constructor matching the requested service name —
- *     handles namespaced services (`google.cloud...TranslationService`)
- *     without forcing the caller to know the full path
+ *     service constructor matching the requested service name
  *   - applies metadata for auth (OAuth2 bearer, API key) and any
  *     extra metadata passed in
- *   - returns response.toJSON() so the gateway response stays
- *     structured-clone safe
- *
- * Things this does NOT do (yet):
- *   - server streaming, client streaming, bidirectional streaming
- *   - load balancing config beyond the default channel picker
- *   - protobuf field validation (the gRPC client itself enforces it)
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { credentials, Metadata, loadPackageDefinition } from '@grpc/grpc-js';
+import { credentials, Metadata, loadPackageDefinition, ClientReadableStream, ClientWritableStream, ClientDuplexStream } from '@grpc/grpc-js';
 import { loadSync as loadProtoSync } from '@grpc/proto-loader';
 import { createHash } from 'crypto';
 import { mkdirSync, writeFileSync, existsSync } from 'fs';
@@ -35,6 +33,9 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 const PROTO_CACHE_DIR = join(tmpdir(), 'almyty-proto-cache');
+
+/** Hard cap on collected stream messages — protects worker heap. */
+const MAX_STREAM_MESSAGES = 100;
 
 export interface GrpcCallInput {
   /** Full proto schema source — typically ApiSchema.rawSchema. */
@@ -45,20 +46,48 @@ export interface GrpcCallInput {
   serviceName: string;
   /** Method name (e.g. "DetectLanguage"). */
   methodName: string;
-  /** Request message body. Will be passed through to the gRPC client as-is. */
-  request: Record<string, any>;
+  /**
+   * Request body. For unary + server-streaming, a single message
+   * object. For client-streaming + bidi, an array of messages to
+   * send sequentially.
+   */
+  request: Record<string, any> | Record<string, any>[];
   /** Per-call metadata headers (auth, etc). */
   metadata?: Record<string, string>;
   /** Per-call deadline in ms (added to Date.now()). */
   timeoutMs?: number;
+  /** Set by the parser; treat `request` as an array of messages. */
+  requestStream?: boolean;
+  /** Set by the parser; collect server messages into an array. */
+  responseStream?: boolean;
+  /**
+   * Override the default {@link MAX_STREAM_MESSAGES} cap for this
+   * call. Used by the executor when the operation needs more (or
+   * fewer) buffered messages than the default.
+   */
+  maxStreamMessages?: number;
 }
 
 export interface GrpcCallResult {
   success: boolean;
+  /**
+   * Response payload. Single object for unary + client-streaming,
+   * an array of messages for server-streaming + bidi (capped at
+   * `maxStreamMessages`). Empty array if the server completed
+   * without emitting a message.
+   */
   data?: any;
   error?: string;
   /** gRPC status code on failure (0 = OK). See @grpc/grpc-js status enum. */
   code?: number;
+  /**
+   * For streaming responses: how many messages we received before
+   * either the stream ended naturally or we hit the cap. Lets the
+   * caller surface "we cut you off" without inspecting `.data.length`.
+   */
+  streamMessageCount?: number;
+  /** True if the cap stopped collection before the stream ended. */
+  streamTruncated?: boolean;
 }
 
 @Injectable()
@@ -123,39 +152,226 @@ export class GrpcCallerService {
     const deadline = input.timeoutMs
       ? new Date(Date.now() + input.timeoutMs)
       : undefined;
+    const callOptions: any = {};
+    if (deadline) callOptions.deadline = deadline;
 
-    return await new Promise<GrpcCallResult>((resolve) => {
-      const callOptions: any = {};
-      if (deadline) callOptions.deadline = deadline;
+    const cap = input.maxStreamMessages ?? MAX_STREAM_MESSAGES;
+    const reqStream = !!input.requestStream;
+    const resStream = !!input.responseStream;
+
+    try {
+      if (!reqStream && !resStream) {
+        return await this.callUnary(client, input.methodName, input.request ?? {}, meta, callOptions);
+      }
+      if (!reqStream && resStream) {
+        return await this.callServerStreaming(client, input.methodName, input.request ?? {}, meta, callOptions, cap);
+      }
+      if (reqStream && !resStream) {
+        return await this.callClientStreaming(client, input.methodName, this.toMessageArray(input.request), meta, callOptions);
+      }
+      return await this.callBidi(client, input.methodName, this.toMessageArray(input.request), meta, callOptions, cap);
+    } catch (err: any) {
+      // Synchronous throw paths — usually means the request payload
+      // doesn't match the proto's message shape, or the channel
+      // refused to dial.
+      return { success: false, error: err.message || String(err) };
+    }
+  }
+
+  // ── Call shape implementations ────────────────────────────────
+
+  private callUnary(
+    client: any,
+    method: string,
+    request: any,
+    meta: Metadata,
+    options: any,
+  ): Promise<GrpcCallResult> {
+    return new Promise<GrpcCallResult>((resolve) => {
+      client[method](request, meta, options, (err: any, response: any) => {
+        if (err) {
+          resolve({
+            success: false,
+            error: err.details || err.message || String(err),
+            code: err.code,
+          });
+          return;
+        }
+        resolve({ success: true, data: response, code: 0 });
+      });
+    });
+  }
+
+  private callServerStreaming(
+    client: any,
+    method: string,
+    request: any,
+    meta: Metadata,
+    options: any,
+    cap: number,
+  ): Promise<GrpcCallResult> {
+    return new Promise<GrpcCallResult>((resolve) => {
+      let stream: ClientReadableStream<any>;
       try {
-        client[input.methodName](
-          input.request ?? {},
-          meta,
-          callOptions,
-          (err: any, response: any) => {
-            if (err) {
-              resolve({
-                success: false,
-                error: err.details || err.message || String(err),
-                code: err.code,
-              });
-              return;
-            }
-            // The dynamic client returns a plain JS object already
-            // matching the response message; passing it through is
-            // safe for JSON serialization.
-            resolve({ success: true, data: response, code: 0 });
-          },
-        );
+        stream = client[method](request, meta, options);
       } catch (err: any) {
-        // Synchronous throw paths — usually means the request
-        // payload doesn't match the proto's message shape.
+        resolve({ success: false, error: err.message || String(err) });
+        return;
+      }
+      const messages: any[] = [];
+      let truncated = false;
+      stream.on('data', (msg: any) => {
+        if (messages.length >= cap) {
+          if (!truncated) {
+            truncated = true;
+            // Close the stream as soon as we hit the cap so the
+            // server stops sending. cancel() is safe to call
+            // multiple times; the type definition exposes it.
+            try { (stream as any).cancel(); } catch { /* best effort */ }
+          }
+          return;
+        }
+        messages.push(msg);
+      });
+      stream.on('error', (err: any) => {
+        // CANCELLED (1) is the expected outcome when we hit the cap
+        // and called cancel() ourselves — return what we have.
+        if (truncated && err.code === 1) {
+          resolve({
+            success: true,
+            data: messages,
+            code: 0,
+            streamMessageCount: messages.length,
+            streamTruncated: true,
+          });
+          return;
+        }
         resolve({
           success: false,
-          error: err.message || String(err),
+          error: err.details || err.message || String(err),
+          code: err.code,
+          data: messages,
+          streamMessageCount: messages.length,
+          streamTruncated: truncated,
         });
-      }
+      });
+      stream.on('end', () => {
+        resolve({
+          success: true,
+          data: messages,
+          code: 0,
+          streamMessageCount: messages.length,
+          streamTruncated: truncated,
+        });
+      });
     });
+  }
+
+  private callClientStreaming(
+    client: any,
+    method: string,
+    messages: any[],
+    meta: Metadata,
+    options: any,
+  ): Promise<GrpcCallResult> {
+    return new Promise<GrpcCallResult>((resolve) => {
+      let stream: ClientWritableStream<any>;
+      try {
+        stream = client[method](meta, options, (err: any, response: any) => {
+          if (err) {
+            resolve({
+              success: false,
+              error: err.details || err.message || String(err),
+              code: err.code,
+            });
+            return;
+          }
+          resolve({ success: true, data: response, code: 0 });
+        });
+      } catch (err: any) {
+        resolve({ success: false, error: err.message || String(err) });
+        return;
+      }
+      // Pump messages serially; backpressure is honored by the
+      // grpc-js stream returning false from write(). With a small
+      // batch (typical client-streaming use case) we just write
+      // everything and call end().
+      for (const msg of messages) stream.write(msg);
+      stream.end();
+    });
+  }
+
+  private callBidi(
+    client: any,
+    method: string,
+    messages: any[],
+    meta: Metadata,
+    options: any,
+    cap: number,
+  ): Promise<GrpcCallResult> {
+    return new Promise<GrpcCallResult>((resolve) => {
+      let stream: ClientDuplexStream<any, any>;
+      try {
+        stream = client[method](meta, options);
+      } catch (err: any) {
+        resolve({ success: false, error: err.message || String(err) });
+        return;
+      }
+      const responses: any[] = [];
+      let truncated = false;
+      stream.on('data', (msg: any) => {
+        if (responses.length >= cap) {
+          if (!truncated) {
+            truncated = true;
+            try { (stream as any).cancel(); } catch { /* best effort */ }
+          }
+          return;
+        }
+        responses.push(msg);
+      });
+      stream.on('error', (err: any) => {
+        if (truncated && err.code === 1) {
+          resolve({
+            success: true,
+            data: responses,
+            code: 0,
+            streamMessageCount: responses.length,
+            streamTruncated: true,
+          });
+          return;
+        }
+        resolve({
+          success: false,
+          error: err.details || err.message || String(err),
+          code: err.code,
+          data: responses,
+          streamMessageCount: responses.length,
+          streamTruncated: truncated,
+        });
+      });
+      stream.on('end', () => {
+        resolve({
+          success: true,
+          data: responses,
+          code: 0,
+          streamMessageCount: responses.length,
+          streamTruncated: truncated,
+        });
+      });
+      for (const msg of messages) stream.write(msg);
+      stream.end();
+    });
+  }
+
+  /**
+   * Normalize a streaming-request input to an array of messages.
+   * Most callers will already pass an array, but tolerate a single
+   * object in case the LLM emitted one (a common mistake).
+   */
+  private toMessageArray(request: any): any[] {
+    if (Array.isArray(request)) return request;
+    if (request === undefined || request === null) return [];
+    return [request];
   }
 
   /**
