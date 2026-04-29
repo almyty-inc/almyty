@@ -24,6 +24,11 @@ import {
   CanonicalMemoryTtlSweeperProcessor,
   TTL_SWEEPER_QUEUE_NAME,
 } from './canonical/ttl-sweeper.processor';
+import {
+  CanonicalMemoryConsolidationProcessor,
+  CONSOLIDATION_QUEUE_NAME,
+} from './canonical/consolidation.processor';
+import { ConsolidationService } from './canonical/consolidation.service';
 import { AlmytyNativeBackend } from './canonical/backends/almyty-native.backend';
 import { AnthropicMemoryToolBackend } from './canonical/backends/anthropic-memory-tool.backend';
 import { Mem0Backend } from './canonical/backends/mem0.backend';
@@ -60,6 +65,7 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
     BullModule.registerQueue(
       { name: EMBEDDING_QUEUE_NAME },
       { name: TTL_SWEEPER_QUEUE_NAME },
+      { name: CONSOLIDATION_QUEUE_NAME },
     ),
     forwardRef(() => LlmProvidersModule),
     forwardRef(() => CredentialsModule),
@@ -69,6 +75,8 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
     CanonicalMemoryService,
     CanonicalMemoryEmbeddingProcessor,
     CanonicalMemoryTtlSweeperProcessor,
+    CanonicalMemoryConsolidationProcessor,
+    ConsolidationService,
     AlmytyNativeBackend,
     AnthropicMemoryToolBackend,
     Mem0Backend,
@@ -85,13 +93,15 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
 export class MemoryModule implements OnApplicationBootstrap {
   constructor(
     @InjectQueue(TTL_SWEEPER_QUEUE_NAME) private readonly ttlQueue: Queue,
+    @InjectQueue(CONSOLIDATION_QUEUE_NAME) private readonly consolidationQueue: Queue,
   ) {}
 
   /**
-   * Schedule the TTL sweeper as a repeating BullMQ job. Idempotent —
-   * BullMQ deduplicates repeatable jobs by their key (queue + name +
-   * cron), so module reloads (HMR / blue-green deploys / autoscaling)
-   * don't pile up duplicate schedules.
+   * Schedule the TTL sweeper + consolidation passes as repeating
+   * BullMQ jobs. Idempotent — BullMQ deduplicates repeatable jobs
+   * by their key (queue + name + cron), so module reloads
+   * (HMR / blue-green deploys / autoscaling) don't pile up
+   * duplicate schedules.
    */
   async onApplicationBootstrap(): Promise<void> {
     await this.ttlQueue.add(
@@ -99,9 +109,21 @@ export class MemoryModule implements OnApplicationBootstrap {
       {},
       {
         repeat: { every: 60_000 },
-        // BullMQ's docs recommend a stable jobId so duplicate registrations
-        // resolve to the same scheduled job rather than appending.
         jobId: 'canonical-memory-ttl-sweeper:repeat',
+        removeOnComplete: 50,
+        removeOnFail: 50,
+      },
+    );
+    // Consolidation runs hourly across every workspace that has it
+    // enabled. The hourly cadence balances LLM cost against staleness;
+    // a workspace can also trigger a manual run via
+    // POST /memory/canonical/consolidate.
+    await this.consolidationQueue.add(
+      'consolidate-all',
+      {},
+      {
+        repeat: { every: 60 * 60 * 1000 },
+        jobId: 'canonical-memory-consolidation:repeat',
         removeOnComplete: 50,
         removeOnFail: 50,
       },
