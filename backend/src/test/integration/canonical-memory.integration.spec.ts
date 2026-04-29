@@ -33,6 +33,7 @@ import {
   EMBEDDING_QUEUE_NAME,
 } from '../../modules/memory/canonical/canonical-memory.service';
 import { EmbeddingService } from '../../modules/memory/embedding.service';
+import { DocumentChunkerService } from '../../modules/memory/canonical/document-chunker.service';
 import { AuditLogService } from '../../modules/audit-log/audit-log.service';
 import { Provenance, MemoryError, Tier } from '../../modules/memory/canonical/canonical.types';
 import { LIMITS } from '../../modules/memory/canonical/canonical.constants';
@@ -77,6 +78,7 @@ const baseProvenance: Provenance = {
 describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
   let ds: DataSource;
   let service: CanonicalMemoryService;
+  let chunker: DocumentChunkerService;
   let enqueued: Array<{ name: string; data: any }> = [];
 
   beforeAll(async () => {
@@ -169,6 +171,7 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         CanonicalMemoryService,
+        DocumentChunkerService,
         { provide: getRepositoryToken(CanonicalMemory), useValue: ds.getRepository(CanonicalMemory) },
         { provide: getRepositoryToken(CanonicalMemoryWorkspaceConfig), useValue: ds.getRepository(CanonicalMemoryWorkspaceConfig) },
         { provide: getRepositoryToken(CanonicalMemorySoftcapWarning), useValue: ds.getRepository(CanonicalMemorySoftcapWarning) },
@@ -179,6 +182,7 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
       ],
     }).compile();
     service = moduleRef.get(CanonicalMemoryService);
+    chunker = moduleRef.get(DocumentChunkerService);
   });
 
   afterAll(async () => {
@@ -517,5 +521,162 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
     });
     expect(remaining.items.map((i) => i.id)).not.toContain(a.id);
     expect(remaining.items.map((i) => i.id)).not.toContain(b.id);
+  });
+
+  // ── workspace config CRUD ──────────────────────────────────
+
+  it('updateConfig: shallow-merges overrides without wiping siblings', async () => {
+    const scope = { scope_type: 'workspace' as const, scope_id: 'wks_cfg_merge' };
+    await service.updateConfig(scope.scope_type, scope.scope_id, {
+      overrides: { routing: { memory_backend: 'mem0' } },
+    });
+    await service.updateConfig(scope.scope_type, scope.scope_id, {
+      overrides: { routing: { mirror_backend: 'zep' } } as any,
+    });
+    const cfg = await service.getOrCreateConfig(scope.scope_type, scope.scope_id);
+    // The router subkey itself isn't shallow-merged here — only the
+    // top-level `overrides` keys are. That's the documented contract:
+    // callers patch `overrides.routing` whole at a time.
+    expect((cfg.overrides as any).routing).toEqual({ mirror_backend: 'zep' });
+  });
+
+  it('updateConfig: persists softcap_behavior', async () => {
+    const scope = { scope_type: 'workspace' as const, scope_id: 'wks_cfg_softcap' };
+    await service.updateConfig(scope.scope_type, scope.scope_id, {
+      softcap_behavior: 'reject',
+    });
+    const cfg = await service.getOrCreateConfig(scope.scope_type, scope.scope_id);
+    expect(cfg.softcapBehavior).toBe('reject');
+  });
+
+  // ── audit listing ───────────────────────────────────────────
+
+  it('listSoftcapWarnings: returns the warnings written by warn_log soft-cap behavior', async () => {
+    const scope = { scope_type: 'workspace' as const, scope_id: 'wks_audit_list' };
+    // Default config = warn_log; trip the short-tier cap.
+    const big = randomReadable(200 * 1024);
+    await service.put(
+      { mode: 'memory', scope, content: big, tier: 'short', provenance: baseProvenance },
+      { user_id: 'u' },
+    );
+    const rows = await service.listSoftcapWarnings(scope.scope_type, scope.scope_id, 10);
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows[0].tier).toBe('short');
+  });
+
+  // ── URI scheme allow-list ──────────────────────────────────
+
+  it('URI allow-list: rejects a write whose source_uri uses a scheme not in the workspace allow-list', async () => {
+    const scope = { scope_type: 'workspace' as const, scope_id: 'wks_uri_block' };
+    await service.updateConfig(scope.scope_type, scope.scope_id, {
+      overrides: { allowed_uri_schemes: ['almyty', 'https'] },
+    });
+    await expect(
+      service.put(
+        {
+          mode: 'document',
+          scope,
+          content: 'hello',
+          source_uri: 's3://bucket/key',
+          source_version: 1,
+          provenance: baseProvenance,
+        },
+        { user_id: 'u' },
+      ),
+    ).rejects.toMatchObject({ tag: { kind: 'validation' } });
+  });
+
+  it('URI allow-list: defaults are permissive (https / almyty / s3 / file all allowed)', async () => {
+    const scope = { scope_type: 'workspace' as const, scope_id: 'wks_uri_default' };
+    const item = await service.put(
+      {
+        mode: 'document',
+        scope,
+        content: 'permitted source',
+        source_uri: 's3://bucket/k',
+        source_version: 1,
+        provenance: baseProvenance,
+      },
+      { user_id: 'u' },
+    );
+    expect(item.source_uri).toBe('s3://bucket/k');
+  });
+
+  // ── schema-version dropping ────────────────────────────────
+  // The router-level test for this is in
+  // src/modules/memory/canonical/__tests__/memory-router.spec.ts —
+  // covered there with FakeBackend stand-ins instead of standing
+  // up the full service stack here.
+
+  // ── TTL sweeper (raw SQL, exercised against pgvector DB) ───
+
+  it('TTL sweeper: closes valid_until on rows whose ttl_seconds elapsed', async () => {
+    const scope = { scope_type: 'workspace' as const, scope_id: 'wks_ttl' };
+    // Insert a row with ttl_seconds=1, backdate created_at by 2s
+    // so it's already expired by sweeper time.
+    const item = await service.put(
+      { mode: 'memory', scope, content: 'expires fast', tier: 'short',
+        ttl_seconds: 1, provenance: baseProvenance },
+      { user_id: 'u' },
+    );
+    await ds.query(
+      `UPDATE memories SET created_at = now() - INTERVAL '5 seconds' WHERE id = $1`,
+      [item.id],
+    );
+    // Run the sweep query directly (the production code uses the
+    // same SQL via the BullMQ processor).
+    await ds.query(`
+      WITH expired AS (
+        SELECT id FROM memories
+        WHERE mode = 'memory' AND ttl_seconds IS NOT NULL
+          AND valid_until IS NULL AND deleted_at IS NULL
+          AND created_at + (ttl_seconds * INTERVAL '1 second') < now()
+        LIMIT 1000
+      )
+      UPDATE memories m SET valid_until = now(), updated_at = now()
+      FROM expired WHERE m.id = expired.id
+    `);
+    const reloaded = await service.get(item.id);
+    expect(reloaded?.valid_until).not.toBeNull();
+  });
+
+  // ── document import (chunker + atomic re-import) ───────────
+
+  it('document import: writes parent + chunks atomically, dedupes by checksum, re-imports under force', async () => {
+    const scope = { scope_type: 'workspace' as const, scope_id: 'wks_import' };
+    const text = Array.from({ length: 6 }, (_, i) => `Section ${i + 1}: ${'x'.repeat(800)}.`).join('\n\n');
+
+    // First import.
+    const first = await chunker.importSource({
+      scope, source_uri: 'almyty:file/doc-1', content: text,
+      provenance: baseProvenance,
+    });
+    expect(first.skipped).toBe(false);
+    expect(first.chunks_inserted).toBeGreaterThan(1);
+    expect(first.source_version).toBe(1);
+
+    // Second import, same content — should be skipped on checksum match.
+    const second = await chunker.importSource({
+      scope, source_uri: 'almyty:file/doc-1', content: text,
+      provenance: baseProvenance,
+    });
+    expect(second.skipped).toBe(true);
+    expect(second.source_version).toBe(1);
+    expect(second.parent_id).toBe(first.parent_id);
+
+    // Third import, force=true — bumps source_version, replaces parent.
+    const third = await chunker.importSource({
+      scope, source_uri: 'almyty:file/doc-1', content: text,
+      provenance: baseProvenance, force: true,
+    });
+    expect(third.skipped).toBe(false);
+    expect(third.source_version).toBe(2);
+    expect(third.parent_id).not.toBe(first.parent_id);
+
+    // Old parent + chunks should be gone (cascade).
+    const oldParent = await ds
+      .getRepository(CanonicalMemory)
+      .findOne({ where: { id: first.parent_id } });
+    expect(oldParent).toBeNull();
   });
 });

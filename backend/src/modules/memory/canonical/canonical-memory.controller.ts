@@ -25,6 +25,7 @@ import {
 import { MemoryError, Mode, ScopeType } from './canonical.types';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { MemoryRouter } from './memory-router.service';
+import { DocumentChunkerService } from './document-chunker.service';
 
 /**
  * Canonical memory HTTP API. Mounts under `/memory/canonical` so it
@@ -40,6 +41,7 @@ export class CanonicalMemoryController {
   constructor(
     private readonly service: CanonicalMemoryService,
     private readonly router: MemoryRouter,
+    private readonly chunker: DocumentChunkerService,
   ) {}
 
   // ── backends list / health ────────────────────────────────────────
@@ -54,6 +56,82 @@ export class CanonicalMemoryController {
   @ApiOperation({ summary: 'Run a health check against every backend' })
   async healthAll() {
     return { success: true, data: await this.router.healthAll() };
+  }
+
+  // ── workspace config (per-scope routing + softcap) ────────────────
+
+  @Get('config')
+  @ApiOperation({ summary: 'Get the canonical-memory config for a scope' })
+  async getConfig(
+    @Query('scope_type') scopeType: ScopeType,
+    @Query('scope_id') scopeId: string,
+  ) {
+    if (!scopeType || !scopeId) {
+      throw new HttpException(
+        { success: false, error: 'BAD_REQUEST', message: 'scope_type and scope_id are required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const cfg = await this.service.getOrCreateConfig(scopeType, scopeId);
+    return { success: true, data: cfg };
+  }
+
+  @Post('config')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Update the canonical-memory config for a scope (routing, mirror, credentials, softcap behavior)',
+  })
+  async updateConfig(
+    @Body() body: {
+      scope_type: ScopeType;
+      scope_id: string;
+      embedding_model?: string;
+      embedding_dim?: number;
+      embedding_provider?: string;
+      softcap_behavior?: 'reject' | 'warn_log' | 'silent';
+      overrides?: Record<string, unknown>;
+    },
+    @Request() req: any,
+  ) {
+    if (!body?.scope_type || !body?.scope_id) {
+      throw new HttpException(
+        { success: false, error: 'BAD_REQUEST', message: 'scope_type and scope_id are required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const updated = await this.service.updateConfig(
+      body.scope_type,
+      body.scope_id,
+      {
+        embedding_model: body.embedding_model,
+        embedding_dim: body.embedding_dim,
+        embedding_provider: body.embedding_provider,
+        softcap_behavior: body.softcap_behavior,
+        overrides: body.overrides,
+      },
+      { user_id: req.user?.sub ?? req.user?.id },
+    );
+    return { success: true, data: updated };
+  }
+
+  // ── audit: soft-cap warnings ──────────────────────────────────────
+
+  @Get('warnings/softcap')
+  @ApiOperation({ summary: 'Recent soft-cap warnings for a scope (audit dashboard)' })
+  async listSoftcapWarnings(
+    @Query('scope_type') scopeType: ScopeType,
+    @Query('scope_id') scopeId: string,
+    @Query('limit') limitRaw?: string,
+  ) {
+    if (!scopeType || !scopeId) {
+      throw new HttpException(
+        { success: false, error: 'BAD_REQUEST', message: 'scope_type and scope_id are required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const limit = Math.min(Math.max(Number(limitRaw) || 50, 1), 500);
+    const rows = await this.service.listSoftcapWarnings(scopeType, scopeId, limit);
+    return { success: true, data: rows };
   }
 
   // ── transfer between backends ─────────────────────────────────────
@@ -79,6 +157,51 @@ export class CanonicalMemoryController {
         { mode: body.mode, dry_run: body.dry_run },
       );
       return { success: true, data: report };
+    } catch (err) {
+      throw memoryErrorToHttp(err);
+    }
+  }
+
+  // ── document import (chunker + atomic re-import) ──────────────────
+
+  @Post('document/import')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Import a document source — chunks the content, dedups by checksum, atomic re-import',
+  })
+  async importDocument(
+    @Body() body: {
+      scope_type: ScopeType;
+      scope_id: string;
+      source_uri: string;
+      content: string;
+      content_format?: 'text' | 'markdown' | 'json';
+      force?: boolean;
+      chunk_tokens?: number;
+    },
+    @Request() req: any,
+  ) {
+    if (!body?.source_uri || !body?.content) {
+      throw new HttpException(
+        { success: false, error: 'BAD_REQUEST', message: 'source_uri and content are required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      const result = await this.chunker.importSource({
+        scope: { scope_type: body.scope_type, scope_id: body.scope_id },
+        source_uri: body.source_uri,
+        content: body.content,
+        content_format: body.content_format,
+        force: body.force,
+        chunk_tokens: body.chunk_tokens,
+        provenance: {
+          agent_id: null, session_id: null, collab_id: null,
+          model: null, provider: null, tool_chain: ['document_import'],
+          created_by: 'import', source_backend: 'almyty-native',
+        },
+      });
+      return { success: true, data: result };
     } catch (err) {
       throw memoryErrorToHttp(err);
     }

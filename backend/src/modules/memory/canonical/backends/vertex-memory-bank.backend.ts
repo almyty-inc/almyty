@@ -33,6 +33,7 @@ import { BackendCredentials, BackendHealth, MemoryBackend } from './memory-backe
 @Injectable()
 export class VertexMemoryBankBackend implements MemoryBackend {
   readonly id = 'vertex-memory-bank';
+  readonly schema_version = 1;
   readonly capabilities = new Set<Capability>([
     'mode_memory', 'vector_search', 'multi_tenant',
     'batch_writes', 'change_feed', 'export',

@@ -29,6 +29,7 @@ import { BackendCredentials, BackendHealth, MemoryBackend } from './memory-backe
 @Injectable()
 export class SupermemoryBackend implements MemoryBackend {
   readonly id = 'supermemory';
+  readonly schema_version = 1;
   readonly capabilities = new Set<Capability>([
     'mode_memory', 'mode_document', 'vector_search', 'fts',
     'hybrid_search', 'multi_tenant', 'batch_writes', 'export',
