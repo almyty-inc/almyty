@@ -37,6 +37,7 @@ import {
 @Injectable()
 export class Mem0Backend implements MemoryBackend {
   readonly id = 'mem0';
+  readonly schema_version = 1;
   readonly capabilities = new Set<Capability>([
     'mode_memory',
     'vector_search',

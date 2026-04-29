@@ -224,6 +224,39 @@ export class CanonicalMemoryService {
       }
     }
 
+
+    // ── 10b. URI scheme allow-list (per spec §4) ─────────────────────
+    // Every URI in `file_refs` (memory + document mode) and the
+    // `source_uri` (document mode) must use a scheme the workspace
+    // permits. The default is permissive (every well-known scheme
+    // allowed); admins can restrict to e.g. only `almyty:` and
+    // `https:` if external references are unwanted.
+    const allowed = uriSchemeAllowList(config.overrides);
+    const refs: string[] = [
+      ...item.file_refs,
+      ...(item.source_uri ? [item.source_uri] : []),
+    ];
+    for (const ref of refs) {
+      const scheme = parseScheme(ref);
+      if (!scheme) continue; // bare path; the validator already vetted shape
+      if (!allowed.has(scheme)) {
+        this.auditLog.log({
+          organizationId: scopeToOrganizationId(item.scope_type, item.scope_id),
+          userId: actor.user_id,
+          action: AuditAction.MEMORY_DENIED,
+          resourceType: AuditResource.MEMORY,
+          resourceId: item.id,
+          details: { reason: 'uri_scheme_blocked', scheme, ref },
+        });
+        throw new MemoryError({
+          kind: 'validation',
+          issues: [{
+            path: item.source_uri === ref ? 'source_uri' : 'file_refs',
+            message: `URI scheme "${scheme}:" is not in this workspace's allow-list`,
+          }],
+        });
+      }
+    }
     // ── 11. Backend capability check ─────────────────────────────────
     // The native backend supports every capability declared in v1 —
     // this becomes meaningful when adapters land (Mem0 lacks
@@ -700,6 +733,27 @@ export class CanonicalMemoryService {
   // lifecycle.
   // ────────────────────────────────────────────────────────────────────
 
+  /**
+   * Enqueue an async embedding job for a memory id. The same payload
+   * shape `put` produces — pulled out as a method so the document
+   * chunker (which inserts rows directly through DataSource and
+   * bypasses `put`) can still wire embeddings without re-importing
+   * the queue handle.
+   */
+  async enqueueEmbeddingFor(memoryId: string): Promise<void> {
+    await this.embeddingQueue.add(
+      'embed',
+      { memory_id: memoryId },
+      {
+        jobId: `embed:${memoryId}`,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: 100,
+      },
+    );
+  }
+
   async fillEmbedding(memoryId: string): Promise<void> {
     const row = await this.repo.findOne({ where: { id: memoryId } });
     if (!row) {
@@ -776,6 +830,72 @@ export class CanonicalMemoryService {
       overrides: {},
     });
     return this.configRepo.save(created);
+  }
+
+  /**
+   * Update a workspace's canonical-memory config. Used by the
+   * settings UI to wire backend routing, mirror, credential ids,
+   * and softcap behavior. Only the fields the caller passes are
+   * touched; `overrides` is shallow-merged so partial edits don't
+   * wipe sibling keys (e.g. setting routing.memory_backend leaves
+   * routing.credentials in place).
+   *
+   * Invalidates the credentials resolver's cache so a freshly
+   * wired credential id is observed on the next dispatch without
+   * waiting for the TTL.
+   */
+  async updateConfig(
+    scopeType: ScopeType,
+    scopeId: string,
+    patch: {
+      embedding_model?: string;
+      embedding_dim?: number;
+      embedding_provider?: string;
+      softcap_behavior?: SoftCapBehavior;
+      overrides?: Record<string, unknown>;
+    },
+    actor: { user_id?: string } = {},
+  ): Promise<CanonicalMemoryWorkspaceConfig> {
+    const cfg = await this.getOrCreateConfig(scopeType, scopeId);
+    if (patch.embedding_model !== undefined) cfg.embeddingModel = patch.embedding_model;
+    if (patch.embedding_dim !== undefined) cfg.embeddingDim = patch.embedding_dim;
+    if (patch.embedding_provider !== undefined) cfg.embeddingProvider = patch.embedding_provider;
+    if (patch.softcap_behavior !== undefined) cfg.softcapBehavior = patch.softcap_behavior;
+    if (patch.overrides !== undefined) {
+      cfg.overrides = { ...(cfg.overrides ?? {}), ...patch.overrides };
+    }
+    const saved = await this.configRepo.save(cfg);
+
+    this.auditLog.log({
+      organizationId: scopeId,
+      userId: actor.user_id,
+      action: AuditAction.MEMORY_UPDATE,
+      resourceType: AuditResource.MEMORY,
+      resourceId: '',
+      details: {
+        scope_type: scopeType,
+        scope_id: scopeId,
+        config_keys: Object.keys(patch),
+      },
+    });
+    return saved;
+  }
+
+  /**
+   * List recent soft-cap warning rows for a scope. Powers the audit
+   * dashboard tab — lets operators see agents that consistently
+   * over-write into a tier whose soft cap they keep tripping.
+   */
+  async listSoftcapWarnings(
+    scopeType: ScopeType,
+    scopeId: string,
+    limit: number = 50,
+  ): Promise<CanonicalMemorySoftcapWarning[]> {
+    return this.warningRepo.find({
+      where: { scopeType, scopeId },
+      order: { at: 'DESC' },
+      take: limit,
+    });
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -904,6 +1024,31 @@ function overrideOrDefault(
   const v = overrides[key];
   if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
   return fallback;
+}
+
+/**
+ * Default URI schemes a workspace allows. The list is the
+ * permissive superset documented in spec §4 (almyty:, file:,
+ * https:, gdrive:, notion:, git:, s3:). Admins can override via
+ * `overrides.allowed_uri_schemes` — a string[] that, when present,
+ * replaces this default entirely (no merge, so an admin who wants
+ * only `almyty` and `https` writes ['almyty','https']).
+ */
+const DEFAULT_URI_SCHEMES: ReadonlyArray<string> = [
+  'almyty', 'file', 'https', 'http', 'gdrive', 'notion', 'git', 's3',
+];
+
+function uriSchemeAllowList(overrides: Record<string, unknown> | null): Set<string> {
+  if (overrides && Array.isArray((overrides as any).allowed_uri_schemes)) {
+    const list = (overrides as any).allowed_uri_schemes as unknown[];
+    return new Set(list.filter((s): s is string => typeof s === 'string').map((s) => s.toLowerCase()));
+  }
+  return new Set(DEFAULT_URI_SCHEMES);
+}
+
+function parseScheme(uri: string): string | null {
+  const m = /^([a-z][a-z0-9+\-.]*):/i.exec(uri);
+  return m ? m[1].toLowerCase() : null;
 }
 
 /**

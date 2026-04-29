@@ -71,6 +71,15 @@ export interface MemoryBackend {
   readonly supported_modes: ReadonlySet<Mode>;
 
   /**
+   * Canonical schema version this backend speaks. Backends bump this
+   * in lockstep with `CANONICAL_SCHEMA_VERSION`; the router refuses
+   * to mount a backend that declares an older version, since the
+   * adapter's `toCanonical` / `fromCanonical` won't know how to
+   * round-trip fields the new schema added. Spec §15.
+   */
+  readonly schema_version: number;
+
+  /**
    * Called once on module init for any cache warmup. External
    * backends do per-call client construction now (see `creds`
    * arg below) — init exists for the native backend's TypeORM /
