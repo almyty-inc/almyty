@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
 import {
@@ -8,7 +9,9 @@ import {
   NpmRegistryConfig,
 } from './types';
 
-const DEFAULT_DEPS_PATH = '.tool-deps';
+// Absolute path under the OS tmpdir. Containers often have a read-only
+// rootfs with /tmp mounted writable — a relative path would fail mkdir.
+const DEFAULT_DEPS_PATH = path.join(os.tmpdir(), 'almyty-tool-deps');
 const DEFAULT_INSTALL_TIMEOUT = 120_000; // 2 minutes
 const DEFAULT_MAX_CACHE_SIZE_MB = 2048; // 2 GB
 
