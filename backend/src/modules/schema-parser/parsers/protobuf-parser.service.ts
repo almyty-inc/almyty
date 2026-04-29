@@ -75,7 +75,12 @@ export class ProtobufParserService implements SchemaParser {
       operation.operationId = parsedOp.operationId;
       operation.description = parsedOp.description;
       operation.method = HttpMethod.POST; // gRPC typically uses POST
-      operation.endpoint = `/grpc/${parsedOp.name}`;
+      // Carry the parsed endpoint through. The parsed shape already
+      // encodes the full `/grpc/${ServiceName}/${MethodName}` path —
+      // overwriting it with `/grpc/${parsedOp.name}` here used to
+      // drop the service segment, leaving the executor unable to
+      // resolve the service constructor at run time.
+      operation.endpoint = parsedOp.endpoint || `/grpc/${parsedOp.name}`;
       operation.type = OperationType.RPC;
       operation.parameters = parsedOp.parameters;
       operation.responses = parsedOp.responses;
