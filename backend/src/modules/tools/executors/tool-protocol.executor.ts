@@ -327,6 +327,12 @@ export class ToolProtocolExecutor {
           targetNamespace,
           this.extractSoapBodyFields(soapRequest as any),
         );
+    this.logger.log(
+      `[SOAP-DEBUG] op=${operation.name} ns=${targetNamespace} ` +
+      `action=${soapRequest.action || `(default)`} envelopeLen=${envelope.length} ` +
+      `bodyKeys=${Object.keys(this.extractSoapBodyFields(soapRequest as any)).join(',')}`,
+    );
+    this.logger.log(`[SOAP-DEBUG-ENVELOPE] ${envelope}`);
 
     // SOAPAction header. Spec says it should be a quoted-string,
     // but in practice .NET-style servers (w3schools TempConvert,
