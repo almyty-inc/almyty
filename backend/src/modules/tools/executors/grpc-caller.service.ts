@@ -30,9 +30,45 @@ import { loadSync as loadProtoSync } from '@grpc/proto-loader';
 import { createHash } from 'crypto';
 import { mkdirSync, writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, dirname } from 'path';
 
 const PROTO_CACHE_DIR = join(tmpdir(), 'almyty-proto-cache');
+
+/**
+ * Include directories that proto-loader walks when resolving
+ * `import "google/api/...";` and similar references inside the
+ * stored proto. Without these, real-world protos (Google Cloud
+ * APIs, Envoy, etc.) fail to load because their imports point at
+ * well-known proto subtrees that aren't bundled in the schema text.
+ */
+function resolveProtoIncludeDirs(): string[] {
+  const dirs: string[] = [PROTO_CACHE_DIR];
+  try {
+    // google-proto-files' getProtoPath('.') returns
+    // `<install>/google` — the import paths in real protos are of
+    // the form `google/api/foo.proto`, so the include dir we want
+    // is the parent directory.
+    const gpf = require('google-proto-files');
+    const base = dirname(gpf.getProtoPath('.'));
+    dirs.push(base);
+  } catch {
+    // package optional — if it's missing, single-file protos still
+    // load fine and any proto with cross-file imports will surface a
+    // clear error from proto-loader.
+  }
+  // protobufjs ships its own `google/protobuf/*.proto` (descriptor,
+  // any, struct, timestamp, ...). Add the parent of its `google`
+  // subtree so those well-known types are always available.
+  try {
+    const pbjs = require.resolve('protobufjs');
+    dirs.push(dirname(pbjs));
+  } catch {
+    // ignore
+  }
+  return dirs;
+}
+
+const PROTO_INCLUDE_DIRS = resolveProtoIncludeDirs();
 
 /** Hard cap on collected stream messages — protects worker heap. */
 const MAX_STREAM_MESSAGES = 100;
@@ -118,6 +154,7 @@ export class GrpcCallerService {
         enums: String,
         defaults: true,
         oneofs: true,
+        includeDirs: PROTO_INCLUDE_DIRS,
       });
     } catch (err: any) {
       return { success: false, error: `Failed to load proto: ${err.message}` };
