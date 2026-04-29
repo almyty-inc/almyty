@@ -22,6 +22,9 @@ package echo;
 
 service EchoService {
   rpc Echo(EchoRequest) returns (EchoResponse);
+  rpc Stream(EchoRequest) returns (stream EchoResponse);
+  rpc Aggregate(stream EchoRequest) returns (EchoResponse);
+  rpc Bidi(stream EchoRequest) returns (stream EchoResponse);
 }
 
 message EchoRequest {
@@ -62,6 +65,25 @@ describeIfRun('GrpcCallerService (real @grpc/grpc-js server)', () => {
       Echo: (call: any, cb: any) => {
         const { text = '', times = 1 } = call.request || {};
         cb(null, { repeated: Array(times).fill(text).join(' ') });
+      },
+      Stream: (call: any) => {
+        const { text = '', times = 1 } = call.request || {};
+        for (let i = 0; i < times; i++) {
+          call.write({ repeated: `${text}-${i}` });
+        }
+        call.end();
+      },
+      Aggregate: (call: any, cb: any) => {
+        const parts: string[] = [];
+        call.on('data', (msg: any) => parts.push(msg.text || ''));
+        call.on('end', () => cb(null, { repeated: parts.join('|') }));
+      },
+      Bidi: (call: any) => {
+        // Echo each inbound message back, prefixed.
+        call.on('data', (msg: any) =>
+          call.write({ repeated: `pong:${msg.text || ''}` }),
+        );
+        call.on('end', () => call.end());
       },
     });
 
@@ -133,5 +155,72 @@ describeIfRun('GrpcCallerService (real @grpc/grpc-js server)', () => {
     });
     expect(result.success).toBe(true);
     expect(result.data?.repeated).toBe('meta');
+  });
+
+  // ─── Streaming ───────────────────────────────────────────────
+
+  it('server-streaming: collects every emitted message', async () => {
+    const result = await svc.call({
+      protoSource: PROTO,
+      baseUrl: `127.0.0.1:${port}`,
+      serviceName: 'EchoService',
+      methodName: 'Stream',
+      request: { text: 'tick', times: 4 },
+      responseStream: true,
+    });
+    expect(result.success).toBe(true);
+    expect(Array.isArray(result.data)).toBe(true);
+    expect(result.data).toHaveLength(4);
+    expect(result.data[0]?.repeated).toBe('tick-0');
+    expect(result.data[3]?.repeated).toBe('tick-3');
+    expect(result.streamMessageCount).toBe(4);
+    expect(result.streamTruncated).toBeFalsy();
+  });
+
+  it('server-streaming: caps at maxStreamMessages and reports truncation', async () => {
+    const result = await svc.call({
+      protoSource: PROTO,
+      baseUrl: `127.0.0.1:${port}`,
+      serviceName: 'EchoService',
+      methodName: 'Stream',
+      request: { text: 'flood', times: 50 },
+      responseStream: true,
+      maxStreamMessages: 5,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data).toHaveLength(5);
+    expect(result.streamMessageCount).toBe(5);
+    expect(result.streamTruncated).toBe(true);
+  });
+
+  it('client-streaming: aggregates the inbound messages into one response', async () => {
+    const result = await svc.call({
+      protoSource: PROTO,
+      baseUrl: `127.0.0.1:${port}`,
+      serviceName: 'EchoService',
+      methodName: 'Aggregate',
+      request: [{ text: 'a' }, { text: 'b' }, { text: 'c' }],
+      requestStream: true,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.repeated).toBe('a|b|c');
+  });
+
+  it('bidi-streaming: replies to each inbound message and collects the responses', async () => {
+    const result = await svc.call({
+      protoSource: PROTO,
+      baseUrl: `127.0.0.1:${port}`,
+      serviceName: 'EchoService',
+      methodName: 'Bidi',
+      request: [{ text: 'one' }, { text: 'two' }],
+      requestStream: true,
+      responseStream: true,
+    });
+    expect(result.success).toBe(true);
+    expect(Array.isArray(result.data)).toBe(true);
+    expect(result.data).toHaveLength(2);
+    expect(result.data[0]?.repeated).toBe('pong:one');
+    expect(result.data[1]?.repeated).toBe('pong:two');
+    expect(result.streamMessageCount).toBe(2);
   });
 });
