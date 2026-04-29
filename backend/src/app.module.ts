@@ -35,7 +35,9 @@ import { RequestLog } from './entities/request-log.entity';
 import { Agent } from './entities/agent.entity';
 import { AgentExecution } from './entities/agent-execution.entity';
 import { AgentRun } from './entities/agent-run.entity';
-import { Memory } from './entities/memory.entity';
+import { CanonicalMemory } from './modules/memory/canonical/canonical-memory.entity';
+import { CanonicalMemoryWorkspaceConfig } from './modules/memory/canonical/canonical-memory-config.entity';
+import { CanonicalMemorySoftcapWarning } from './modules/memory/canonical/canonical-memory-softcap-warning.entity';
 import { Conversation } from './entities/conversation.entity';
 import { Message } from './entities/message.entity';
 import { AgentFile } from './entities/file.entity';
@@ -146,7 +148,9 @@ import { databaseConfig } from './config/database.config';
       Agent,
       AgentExecution,
       AgentRun,
-      Memory,
+      CanonicalMemory,
+      CanonicalMemoryWorkspaceConfig,
+      CanonicalMemorySoftcapWarning,
       Conversation,
       Message,
       AgentFile,

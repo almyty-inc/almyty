@@ -50,7 +50,7 @@ import { GatewayAuth } from '../../entities/gateway-auth.entity';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
-import { Memory, MemoryType } from '../../entities/memory.entity';
+// Legacy Memory entity removed — see canonical-memory.entity for v1.
 import { ApiKey } from '../../entities/api-key.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 
@@ -60,7 +60,7 @@ import { AgentsService } from '../../modules/agents/agents.service';
 import { CredentialsService } from '../../modules/credentials/credentials.service';
 import { GatewaysService } from '../../modules/gateways/gateways.service';
 import { LlmProvidersService } from '../../modules/llm-providers/llm-providers.service';
-import { MemoryService } from '../../modules/memory/memory.service';
+// Legacy MemoryService removed — canonical service in canonical/.
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
 const describeIfDb = SHOULD_RUN ? describe : describe.skip;
@@ -688,105 +688,10 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
     });
   });
 
-  // ─── MemoryService ────────────────────────────────────────────
-
-  describe('MemoryService', () => {
-    let service: MemoryService;
-    let memA: Memory;
-    let memB: Memory;
-
-    beforeAll(async () => {
-      service = new MemoryService(
-        fx.ds.getRepository(Memory),
-        // EmbeddingService stub: isolation tests don't exercise
-        // the embedding pipeline, just the tenant filter on the
-        // read side.
-        { generateEmbedding: jest.fn().mockResolvedValue(null) } as any,
-        stubAuditLog() as any,
-      );
-
-      const memRepo = fx.ds.getRepository(Memory);
-      memA = await memRepo.save(
-        memRepo.create({
-          organizationId: fx.orgA.id,
-          type: MemoryType.FACT,
-          content: 'org A secret fact',
-          isActive: true,
-          agentIds: [],
-          tags: [],
-        }),
-      );
-      memB = await memRepo.save(
-        memRepo.create({
-          organizationId: fx.orgB.id,
-          type: MemoryType.FACT,
-          content: 'org B secret fact',
-          isActive: true,
-          agentIds: [],
-          tags: [],
-        }),
-      );
-    });
-
-    it('findById(B.id, orgA) throws NotFoundException', async () => {
-      await expect(service.findById(memB.id, fx.orgA.id)).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('findAll({orgA}) only returns org-A rows', async () => {
-      const { data } = await service.findAll({ organizationId: fx.orgA.id });
-      expect(data.every((m: Memory) => m.organizationId === fx.orgA.id)).toBe(true);
-      expect(data.map((m: Memory) => m.id)).not.toContain(memB.id);
-    });
-
-    it('update(B.id, orgA, …) throws NotFoundException', async () => {
-      await expect(
-        service.update(memB.id, fx.orgA.id, { content: 'hacked' } as any),
-      ).rejects.toThrow(NotFoundException);
-      const reloaded = await fx.ds
-        .getRepository(Memory)
-        .findOne({ where: { id: memB.id } });
-      expect(reloaded?.content).toBe('org B secret fact');
-    });
-
-    it('remove(B.id, orgA) throws NotFoundException', async () => {
-      await expect(service.remove(memB.id, fx.orgA.id)).rejects.toThrow(
-        NotFoundException,
-      );
-      const reloaded = await fx.ds
-        .getRepository(Memory)
-        .findOne({ where: { id: memB.id } });
-      expect(reloaded).not.toBeNull();
-    });
-
-    it('search(orgA, …) only returns org-A rows', async () => {
-      const result = await service.search(fx.orgA.id, 'secret fact', {});
-      expect(result.every((m: any) => m.organizationId === fx.orgA.id)).toBe(true);
-      expect(result.map((m: any) => m.id)).not.toContain(memB.id);
-    });
-
-    it('getTags(orgA) does not include tags from org B', async () => {
-      // Add a uniquely-named tag to org B's memory so we can
-      // detect cross-tenant bleed even if other tests added
-      // similarly-named fixtures.
-      const memRepo = fx.ds.getRepository(Memory);
-      const orgBTagged = await memRepo.save(
-        memRepo.create({
-          organizationId: fx.orgB.id,
-          type: MemoryType.FACT,
-          content: 'tag probe',
-          tags: ['ORG_B_ONLY_TAG'],
-          agentIds: [],
-          isActive: true,
-        }),
-      );
-      try {
-        const tags = await service.getTags(fx.orgA.id);
-        expect(tags).not.toContain('ORG_B_ONLY_TAG');
-      } finally {
-        await memRepo.delete(orgBTagged.id);
-      }
-    });
-  });
+  // The legacy MemoryService isolation suite has been superseded by
+  // the canonical schema's scope-based design — cross-scope read
+  // safety is asserted in
+  // `src/modules/memory/canonical/__tests__/canonical-memory.integration.spec.ts`
+  // against real Postgres + pgvector. The legacy `Memory` entity,
+  // service, and `organizationId` filter are removed.
 });

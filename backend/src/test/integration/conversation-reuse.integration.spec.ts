@@ -10,7 +10,7 @@ import { Conversation } from '../../entities/conversation.entity';
 import { Message, MessageRole } from '../../entities/message.entity';
 import { LlmProvidersService } from '../../modules/llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../../modules/tools/tool-executor.service';
-import { MemoryService } from '../../modules/memory/memory.service';
+import { CanonicalMemoryService } from '../../modules/memory/canonical/canonical-memory.service';
 import { AuditLogService } from '../../modules/audit-log/audit-log.service';
 
 /**
@@ -188,8 +188,11 @@ describe('Conversation reuse (integration)', () => {
         { provide: LlmProvidersService, useValue: mockLlmService },
         { provide: ToolExecutorService, useValue: { executeTool: jest.fn().mockResolvedValue({ success: true }) } },
         {
-          provide: MemoryService,
-          useValue: { search: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}) },
+          provide: CanonicalMemoryService,
+          useValue: {
+            search: jest.fn().mockResolvedValue([]),
+            put: jest.fn().mockResolvedValue({ id: 'mem-test', mode: 'memory' }),
+          },
         },
         {
           provide: AuditLogService,
