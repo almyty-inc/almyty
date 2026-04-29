@@ -34,6 +34,9 @@ import {
 } from '../../modules/memory/canonical/canonical-memory.service';
 import { EmbeddingService } from '../../modules/memory/embedding.service';
 import { DocumentChunkerService } from '../../modules/memory/canonical/document-chunker.service';
+import { ConsolidationService } from '../../modules/memory/canonical/consolidation.service';
+import { LlmProvidersService } from '../../modules/llm-providers/llm-providers.service';
+import { LlmProvider } from '../../entities/llm-provider.entity';
 import { AuditLogService } from '../../modules/audit-log/audit-log.service';
 import { Provenance, MemoryError, Tier } from '../../modules/memory/canonical/canonical.types';
 import { LIMITS } from '../../modules/memory/canonical/canonical.constants';
@@ -678,5 +681,77 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
       .getRepository(CanonicalMemory)
       .findOne({ where: { id: first.parent_id } });
     expect(oldParent).toBeNull();
+  });
+
+  // ── consolidation (LLM stubbed; DB real) ────────────────────
+
+  it('consolidation: extracts facts from short-tier rows, writes long-tier facts, supersedes sources', async () => {
+    const scope = { scope_type: 'workspace' as const, scope_id: 'wks_consolidation' };
+
+    // Seed 5 short-tier memories with backdated created_at so they
+    // pass the `older_than_minutes` cutoff.
+    for (let i = 0; i < 5; i++) {
+      await service.put(
+        { mode: 'memory', scope, content: `Episode ${i + 1}: user said something interesting #${i}.`,
+          tier: 'short', provenance: baseProvenance },
+        { user_id: 'u' },
+      );
+    }
+    await ds.query(
+      `UPDATE memories SET created_at = now() - INTERVAL '2 hours' WHERE scope_id = $1 AND tier = 'short'`,
+      [scope.scope_id],
+    );
+
+    // Enable consolidation + lower the min_short_count so 5 rows
+    // is enough to trigger.
+    await service.updateConfig(scope.scope_type, scope.scope_id, {
+      overrides: {
+        consolidation: { enabled: true, min_short_count: 5, older_than_minutes: 10 },
+      },
+    });
+
+    // Stub the LLM service to return two synthetic facts.
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        ConsolidationService,
+        { provide: getRepositoryToken(CanonicalMemory), useValue: ds.getRepository(CanonicalMemory) },
+        { provide: getRepositoryToken(LlmProvider), useValue: { findOne: jest.fn().mockResolvedValue({ id: 'p-1', type: 'openai', organizationId: scope.scope_id, status: 'active' }) } },
+        { provide: CanonicalMemoryService, useValue: service },
+        { provide: AuditLogService, useValue: { log: jest.fn() } },
+        {
+          provide: LlmProvidersService,
+          useValue: {
+            chat: jest.fn().mockResolvedValue({
+              message: {
+                content: JSON.stringify({
+                  facts: [
+                    { content: 'user prefers terse output', tags: ['ui'], confidence: 0.9 },
+                    { content: 'agent used tool memory', tags: ['behavior'], confidence: 0.8 },
+                  ],
+                }),
+              },
+              model: 'gpt-test',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              cost: 0,
+              conversationId: '',
+              messageId: '',
+            }),
+          },
+        },
+      ],
+    }).compile();
+    const consolidator = moduleRef.get(ConsolidationService);
+
+    const result = await consolidator.run(scope);
+    expect(result.skipped).toBe(false);
+    expect(result.consolidated_facts).toBe(2);
+    expect(result.superseded).toBe(5);
+
+    // Default list excludes superseded — only the new long-tier
+    // facts should remain visible.
+    const page = await service.list({ scope });
+    const tiers = page.items.map((i) => i.tier).sort();
+    expect(tiers).toEqual(['long', 'long']);
+    expect(page.items.every((i) => i.tags.includes('consolidated'))).toBe(true);
   });
 });

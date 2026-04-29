@@ -380,6 +380,7 @@ export function MemoriesPage() {
             Per-tier soft-cap warnings logged when an agent wrote past the configured byte ceiling.
             Behavior is set per scope under Backends → Soft-cap behavior.
           </p>
+          <ConsolidationCard orgId={orgId} />
           <SoftcapAuditList orgId={orgId} enabled={tab === 'audit'} />
         </TabsContent>
       </Tabs>
@@ -678,6 +679,64 @@ interface SoftcapWarning {
   at: string
 }
 
+
+// ── ConsolidationCard ───────────────────────────────────────────────
+//
+// Manual trigger button + last-run summary. The repeating BullMQ job
+// runs every hour automatically; this is for "I just had a long
+// session, consolidate now" or for forcing a run when the cadence
+// hasn't fired yet.
+function ConsolidationCard({ orgId }: { orgId: string }) {
+  const notify = useNotifications()
+  const [last, setLast] = useState<{ consolidated_facts: number; superseded: number; skipped: boolean; reason?: string } | null>(null)
+  const mut = useMutation({
+    mutationFn: (force: boolean) =>
+      memoriesApi.consolidate({ scope_type: 'workspace', scope_id: orgId, force }),
+    onSuccess: (res: any) => {
+      const r = res?.data ?? res
+      setLast(r)
+      if (r.skipped) {
+        notify.info('Consolidation skipped', r.reason)
+      } else {
+        notify.success(
+          'Consolidation done',
+          `${r.consolidated_facts} fact(s) written, ${r.superseded} short-tier row(s) superseded`,
+        )
+      }
+    },
+    onError: (err: any) => notify.error('Consolidation failed', err.message ?? String(err)),
+  })
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Consolidation</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Distills short-tier memories into durable long-tier facts via the org's LLM provider.
+          Runs hourly when enabled in Backends config; you can also trigger it now.
+        </p>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => mut.mutate(false)} disabled={mut.isPending}>
+            {mut.isPending ? <LoadingSpinner /> : 'Run if eligible'}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => mut.mutate(true)} disabled={mut.isPending}>
+            Force run
+          </Button>
+        </div>
+        {last && (
+          <div className="text-xs text-muted-foreground">
+            Last run: {last.skipped
+              ? <>skipped — <span className="font-mono">{last.reason}</span></>
+              : <><span className="font-mono">{last.consolidated_facts}</span> facts, <span className="font-mono">{last.superseded}</span> superseded</>
+            }
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 function SoftcapAuditList({ orgId, enabled }: { orgId: string; enabled: boolean }) {
   const q = useQuery({
     queryKey: ['memories', 'softcap-warnings', orgId],
