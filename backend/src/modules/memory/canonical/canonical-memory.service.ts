@@ -278,6 +278,62 @@ export class CanonicalMemoryService {
 
   // ────────────────────────────────────────────────────────────────────
 
+  // ────────────────────────────────────────────────────────────────────
+  // Backend-facing entry points: take a pre-built canonical item and
+  // persist it directly. Used by the router on transfer/sync where the
+  // shape has already been validated upstream. The HTTP / MCP / agent
+  // paths go through `put(input, actor)` (above) so the 17-step
+  // pipeline runs on agent-supplied input.
+  // ────────────────────────────────────────────────────────────────────
+
+  async putCanonical(item: MemoryItem): Promise<MemoryItem> {
+    const issues = validateMemoryItem(item);
+    if (issues.length > 0) throw new MemoryError({ kind: 'validation', issues });
+    await this.repo.save(itemToEntity(item));
+    if (item.embedding_status === 'pending') {
+      await this.embeddingQueue.add(
+        'embed',
+        { memory_id: item.id },
+        { jobId: `embed:${item.id}`, attempts: 3, removeOnComplete: true },
+      );
+    }
+    return item;
+  }
+
+  async supersedeCanonical(
+    oldId: string,
+    newItem: MemoryItem,
+  ): Promise<{ old: MemoryItem; new: MemoryItem }> {
+    const issues = validateMemoryItem(newItem);
+    if (issues.length > 0) throw new MemoryError({ kind: 'validation', issues });
+    const result = await this.dataSource.transaction(async (manager) => {
+      const oldRow = await manager.findOne(CanonicalMemory, { where: { id: oldId } });
+      if (!oldRow) throw new MemoryError({ kind: 'not_found', id: oldId });
+      if (oldRow.mode !== 'memory') {
+        throw new MemoryError({
+          kind: 'unsupported_capability',
+          backend: 'almyty-native',
+          capability: 'bi_temporal',
+        });
+      }
+      const now = new Date();
+      await manager.save(itemToEntity(newItem));
+      oldRow.validUntil = now;
+      oldRow.supersededBy = newItem.id;
+      await manager.save(oldRow);
+      const refreshedOld = await manager.findOne(CanonicalMemory, { where: { id: oldId } });
+      return { old: entityToItem(refreshedOld!), new: newItem };
+    });
+    if (result.new.embedding_status === 'pending') {
+      await this.embeddingQueue.add(
+        'embed',
+        { memory_id: result.new.id },
+        { jobId: `embed:${result.new.id}`, attempts: 3, removeOnComplete: true },
+      );
+    }
+    return result;
+  }
+
   async get(id: string): Promise<MemoryItem | null> {
     const row = await this.repo.findOne({ where: { id } });
     return row ? entityToItem(row) : null;
