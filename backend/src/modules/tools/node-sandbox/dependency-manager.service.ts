@@ -205,6 +205,13 @@ export class DependencyManagerService {
     //
     // --no-package-lock keeps the cache directory free of lock files
     // that would otherwise need management.
+    // Force npm to use a writable cache dir under the OS tmpdir.
+    // Containers with readOnlyRootFilesystem don't have $HOME/.npm
+    // writable, and npm fails to mkdir it before downloading the
+    // first package.
+    const npmCacheDir = path.join(os.tmpdir(), 'almyty-npm-cache');
+    fs.mkdirSync(npmCacheDir, { recursive: true });
+
     return new Promise<void>((resolve, reject) => {
       const child = spawn(
         'npm',
@@ -216,11 +223,16 @@ export class DependencyManagerService {
           '--prefer-offline',
           '--ignore-scripts',
           '--no-package-lock',
+          `--cache=${npmCacheDir}`,
         ],
         {
           cwd,
           stdio: 'pipe',
-          env: { ...process.env, NODE_ENV: 'production' },
+          env: {
+            ...process.env,
+            NODE_ENV: 'production',
+            npm_config_cache: npmCacheDir,
+          },
         },
       );
 
@@ -283,6 +295,7 @@ export class DependencyManagerService {
     // Same --ignore-scripts requirement as runNpmInstall: this also runs
     // in the host process and would otherwise execute arbitrary postinstall
     // hooks from the @types/* packages.
+    const npmCacheDir = path.join(os.tmpdir(), 'almyty-npm-cache');
     try {
       await new Promise<void>((resolve) => {
         const child = spawn(
@@ -294,9 +307,14 @@ export class DependencyManagerService {
             '--no-fund',
             '--ignore-scripts',
             '--no-package-lock',
+            `--cache=${npmCacheDir}`,
             ...typesToInstall,
           ],
-          { cwd: installDir, stdio: 'pipe' },
+          {
+            cwd: installDir,
+            stdio: 'pipe',
+            env: { ...process.env, npm_config_cache: npmCacheDir },
+          },
         );
         child.on('close', () => resolve());
         child.on('error', () => resolve());
