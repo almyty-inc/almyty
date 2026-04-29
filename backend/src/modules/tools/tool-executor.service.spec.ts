@@ -11,11 +11,13 @@ import { hashCacheObject, sleep as sleepUtil } from './tool-execution-utils';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { Api, ApiType } from '../../entities/api.entity';
+import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
 import { User } from '../../entities/user.entity';
 import { Credential } from '../../entities/credential.entity';
 import { NodeSandboxService } from './node-sandbox/node-sandbox.service';
 import { SdkCodeAssemblerService } from './node-sandbox/sdk-code-assembler.service';
+import { GrpcCallerService } from './executors/grpc-caller.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import axios from 'axios';
 
@@ -145,6 +147,19 @@ describe('ToolExecutorService', () => {
           useValue: {
             assemble: jest.fn().mockReturnValue('return null;'),
           },
+        },
+        // Real-gRPC executor dep + the proto-source repository its
+        // operation-path needs. The spec doesn't exercise gRPC, but
+        // the protocol executor's constructor pulls them.
+        {
+          provide: GrpcCallerService,
+          useValue: {
+            call: jest.fn().mockResolvedValue({ success: true, data: null, code: 0 }),
+          },
+        },
+        {
+          provide: getRepositoryToken(ApiSchema),
+          useValue: { findOne: jest.fn().mockResolvedValue(null) },
         },
         {
           provide: AuditLogService,
