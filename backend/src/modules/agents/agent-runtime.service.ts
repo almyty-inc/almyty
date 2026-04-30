@@ -20,6 +20,7 @@ import { Message } from '../../entities/message.entity';
 import { batchAsync } from '../../common/utils/batch-async';
 import { AgentRuntimeBuilders } from './agent-runtime-builders';
 import { AgentCollaborationHelper } from './agent-collaboration.helper';
+import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentBuiltInToolsHelper } from './agent-builtin-tools.helper';
 
 /**
@@ -130,6 +131,7 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
     private readonly memoryService: CanonicalMemoryService,
     @InjectRedis() private readonly redis: Redis,
     private readonly builders: AgentRuntimeBuilders,
+    private readonly heartbeat: AgentHeartbeatHelper,
     @Inject(forwardRef(() => AgentCollaborationHelper))
     private readonly collaboration: AgentCollaborationHelper,
     @Inject(forwardRef(() => AgentBuiltInToolsHelper))
@@ -1034,64 +1036,6 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
   /**
    * Enable heartbeat: creates a repeating BullMQ job for this agent.
    */
-  async enableHeartbeat(agentId: string, organizationId: string, intervalMinutes: number, prompt: string): Promise<Agent> {
-    const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
-    if (!agent) throw new NotFoundException('Agent not found');
-
-    // Remove any existing heartbeat job for this agent
-    await this.disableHeartbeatJob(agentId);
-
-    // Save heartbeat config on the agent
-    agent.heartbeat = { enabled: true, intervalMinutes, prompt };
-    await this.agentRepository.save(agent);
-
-    // Create a repeating job
-    await this.runtimeQueue.add(
-      'heartbeat',
-      { agentId, organizationId },
-      {
-        repeat: { every: intervalMinutes * 60 * 1000 },
-        jobId: `heartbeat-${agentId}`,
-        removeOnComplete: 50,
-        removeOnFail: 20,
-      },
-    );
-
-    this.logger.log(`Heartbeat enabled for agent ${agentId}: every ${intervalMinutes}m`);
-    return agent;
-  }
-
-  /**
-   * Disable heartbeat: removes the repeating BullMQ job and updates the agent.
-   */
-  async disableHeartbeat(agentId: string, organizationId: string): Promise<Agent> {
-    const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
-    if (!agent) throw new NotFoundException('Agent not found');
-
-    agent.heartbeat = { ...agent.heartbeat, enabled: false } as any;
-    await this.agentRepository.save(agent);
-
-    await this.disableHeartbeatJob(agentId);
-
-    this.logger.log(`Heartbeat disabled for agent ${agentId}`);
-    return agent;
-  }
-
-  /**
-   * Remove the repeating heartbeat job from the queue.
-   */
-  private async disableHeartbeatJob(agentId: string): Promise<void> {
-    try {
-      const repeatableJobs = await this.runtimeQueue.getRepeatableJobs();
-      for (const job of repeatableJobs) {
-        if (job.id === `heartbeat-${agentId}`) {
-          await this.runtimeQueue.removeRepeatableByKey(job.key);
-        }
-      }
-    } catch (err) {
-      this.logger.warn(`Failed to remove heartbeat job for agent ${agentId}: ${err.message}`);
-    }
-  }
 
   /**
    * Emit an event for SSE subscribers. The emitter is cleaned up
@@ -1213,6 +1157,10 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
       }
     }
   }
+
+  // ── Delegations to AgentHeartbeatHelper ──
+  enableHeartbeat(...args: Parameters<AgentHeartbeatHelper['enableHeartbeat']>) { return this.heartbeat.enableHeartbeat(...args); }
+  disableHeartbeat(...args: Parameters<AgentHeartbeatHelper['disableHeartbeat']>) { return this.heartbeat.disableHeartbeat(...args); }
 }
 
 /**
