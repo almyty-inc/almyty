@@ -13,7 +13,11 @@ import { OAuthClient } from '../../../entities/oauth-client.entity';
 import { OAuthAuthorizationCode } from '../../../entities/oauth-authorization-code.entity';
 import { OAuthAccessToken } from '../../../entities/oauth-access-token.entity';
 import { Gateway } from '../../../entities/gateway.entity';
-
+import {
+  hashValue,
+  validateRedirectUri,
+  verifyClientAuth,
+} from './mcp-oauth-helpers.helper';
 // --- Interfaces ---
 
 export interface AuthorizationServerMetadata {
@@ -205,7 +209,7 @@ export class McpOAuthService {
           `redirect_uri exceeds ${MAX_REDIRECT_URI_LENGTH} characters`,
         );
       }
-      this.validateRedirectUri(uri);
+      validateRedirectUri(uri);
     }
 
     // Per-gateway quota — refuse if the gateway has already hit
@@ -253,7 +257,7 @@ export class McpOAuthService {
     let clientSecretHash: string | undefined;
     if (authMethod === 'client_secret_post') {
       clientSecret = crypto.randomBytes(48).toString('base64url');
-      clientSecretHash = this.hashValue(clientSecret);
+      clientSecretHash = hashValue(clientSecret);
     }
 
     const scope = dto.scope ?? DEFAULT_SCOPES.join(' ');
@@ -338,7 +342,7 @@ export class McpOAuthService {
 
     // Generate the raw authorization code
     const rawCode = crypto.randomBytes(32).toString('base64url');
-    const codeHash = this.hashValue(rawCode);
+    const codeHash = hashValue(rawCode);
 
     const expiresAt = new Date(
       Date.now() + AUTHORIZATION_CODE_LIFETIME_SECONDS * 1000,
@@ -395,9 +399,9 @@ export class McpOAuthService {
     if (!client) {
       throw new UnauthorizedException('Invalid client');
     }
-    this.verifyClientAuth(client, clientSecret);
+    verifyClientAuth(client, clientSecret);
 
-    const codeHash = this.hashValue(codeValue);
+    const codeHash = hashValue(codeValue);
 
     const authCode = await this.oauthCodeRepository.findOne({
       where: { codeHash, clientId, gatewayId },
@@ -506,9 +510,9 @@ export class McpOAuthService {
     if (!client) {
       throw new UnauthorizedException('Invalid client');
     }
-    this.verifyClientAuth(client, clientSecret);
+    verifyClientAuth(client, clientSecret);
 
-    const tokenHash = this.hashValue(refreshTokenValue);
+    const tokenHash = hashValue(refreshTokenValue);
 
     const existingToken = await this.oauthTokenRepository.findOne({
       where: { tokenHash, clientId, gatewayId, tokenType: 'refresh' },
@@ -591,7 +595,7 @@ export class McpOAuthService {
   async validateAccessToken(
     tokenValue: string,
   ): Promise<TokenValidationResult> {
-    const tokenHash = this.hashValue(tokenValue);
+    const tokenHash = hashValue(tokenValue);
 
     const token = await this.oauthTokenRepository.findOne({
       where: { tokenHash, tokenType: 'access' },
@@ -639,9 +643,9 @@ export class McpOAuthService {
     if (!client) {
       return;
     }
-    this.verifyClientAuth(client, clientSecret);
+    verifyClientAuth(client, clientSecret);
 
-    const tokenHash = this.hashValue(tokenValue);
+    const tokenHash = hashValue(tokenValue);
 
     const token = await this.oauthTokenRepository.findOne({
       where: { tokenHash, clientId, gatewayId },
@@ -696,8 +700,8 @@ export class McpOAuthService {
     const rawAccessToken = `almyty_at_${crypto.randomBytes(48).toString('base64url')}`;
     const rawRefreshToken = `almyty_rt_${crypto.randomBytes(48).toString('base64url')}`;
 
-    const accessTokenHash = this.hashValue(rawAccessToken);
-    const refreshTokenHash = this.hashValue(rawRefreshToken);
+    const accessTokenHash = hashValue(rawAccessToken);
+    const refreshTokenHash = hashValue(rawRefreshToken);
 
     const now = new Date();
     const accessExpiresAt = new Date(
@@ -746,97 +750,4 @@ export class McpOAuthService {
     };
   }
 
-  // -----------------------------------------------------------------------
-  // Private helpers
-  // -----------------------------------------------------------------------
-
-  private hashValue(value: string): string {
-    return crypto.createHash('sha256').update(value).digest('hex');
-  }
-
-  /**
-   * Enforce the client's registered token-endpoint authentication method.
-   * Previously the /token, /revoke, and refresh paths NEVER checked the
-   * presented client_secret — even a client registered with
-   * `client_secret_post` was effectively public, because the service
-   * never took a clientSecret parameter. Any caller who knew the
-   * clientId could exchange codes, refresh tokens, and revoke anything
-   * on their behalf.
-   *
-   * Rules:
-   * - Public client (`tokenEndpointAuthMethod === 'none'`): secret MUST
-   *   NOT be presented. Presenting one is an error — prevents confusing
-   *   "worked because we ignored it" behaviour during migration.
-   * - Confidential client (`client_secret_post`): secret MUST be
-   *   presented and MUST match the stored hash via a timing-safe
-   *   comparison of the SHA-256 digests.
-   */
-  private verifyClientAuth(client: OAuthClient, presented?: string): void {
-    const method = client.tokenEndpointAuthMethod || 'none';
-
-    if (method === 'none') {
-      if (presented !== undefined && presented !== '') {
-        throw new UnauthorizedException(
-          'Client is registered as public — client_secret must not be presented',
-        );
-      }
-      return;
-    }
-
-    if (method === 'client_secret_post') {
-      if (!client.clientSecretHash) {
-        // Shouldn't happen — the registration path sets the hash when
-        // the method is client_secret_post. If it's missing, refuse
-        // rather than falling open.
-        throw new UnauthorizedException('Client configuration is invalid');
-      }
-      if (!presented) {
-        throw new UnauthorizedException(
-          'client_secret is required for this client',
-        );
-      }
-
-      const expected = Buffer.from(client.clientSecretHash, 'hex');
-      const actual = Buffer.from(this.hashValue(presented), 'hex');
-      if (
-        expected.length !== actual.length ||
-        !crypto.timingSafeEqual(expected, actual)
-      ) {
-        throw new UnauthorizedException('Invalid client_secret');
-      }
-      return;
-    }
-
-    // Any other method (client_secret_basic, private_key_jwt, etc.) is
-    // not supported by this server and must be rejected.
-    throw new UnauthorizedException(
-      `Unsupported token_endpoint_auth_method: ${method}`,
-    );
-  }
-
-  private validateRedirectUri(uri: string): void {
-    let parsed: URL;
-    try {
-      parsed = new URL(uri);
-    } catch {
-      throw new BadRequestException(`Invalid redirect_uri: ${uri}`);
-    }
-
-    // OAuth 2.1 requires HTTPS for redirect URIs (except localhost for dev)
-    const isLocalhost =
-      parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
-
-    if (!isLocalhost && parsed.protocol !== 'https:') {
-      throw new BadRequestException(
-        'redirect_uri must use HTTPS (except for localhost)',
-      );
-    }
-
-    // Fragment identifiers are not allowed
-    if (parsed.hash) {
-      throw new BadRequestException(
-        'redirect_uri must not contain a fragment identifier',
-      );
-    }
-  }
 }
