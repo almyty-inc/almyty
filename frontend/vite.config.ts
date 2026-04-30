@@ -57,6 +57,11 @@ export default defineConfig({
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
+      '/memory': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
       '/monitoring': {
         target: 'http://localhost:4000',
         changeOrigin: true,
