@@ -28,6 +28,7 @@ import { SkillGeneratorService } from './skill-generator.service';
 import { CliGeneratorService } from './cli-generator.service';
 import { CodegenService } from './codegen.service';
 import { ToolsController } from './tools.controller';
+import { ToolsExportController } from './tools-export.controller';
 
 import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schema-translator.module';
 import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
@@ -66,7 +67,7 @@ import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
     CliGeneratorService,
     CodegenService,
   ],
-  controllers: [ToolsController],
+  controllers: [ToolsController, ToolsExportController],
   exports: [
     ToolsService,
     ToolGeneratorService,
