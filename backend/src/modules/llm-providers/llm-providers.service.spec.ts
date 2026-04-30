@@ -13,6 +13,20 @@ import { Tool } from '../../entities/tool.entity';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 
+// jest.mock with __esModule: true short-circuits __importDefault so the
+// application code's `axios_1.default` and the spec's
+// `require('axios').default` are the same jest.fn singleton. Tests
+// configure it via mockAxios.default.mockResolvedValueOnce(...).
+jest.mock('axios', () => {
+  const mockFn = jest.fn();
+  return {
+    __esModule: true,
+    default: mockFn,
+    isAxiosError: jest.fn().mockReturnValue(false),
+    AxiosError: class extends Error {},
+  };
+});
+
 describe('LlmProvidersService', () => {
   let service: LlmProvidersService;
   let llmProviderRepository: any;
@@ -1528,7 +1542,7 @@ describe('LlmProvidersService', () => {
           model: 'gpt-4',
         },
       });
-      mockAxios.default = axiosSpy;
+      mockAxios.default.mockImplementationOnce(axiosSpy);
 
       const chatRequest: ChatRequest = {
         messages: [{ role: MessageRole.USER, content: 'Test' }],

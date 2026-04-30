@@ -1,7 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as WebSocket from 'ws';
+import { WebSocket } from 'ws';
 
 import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';

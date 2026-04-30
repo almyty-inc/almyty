@@ -495,7 +495,10 @@ export class SdkIntrospectorService {
 
     let type: SdkType = { raw: 'unknown', kind: 'unknown' };
     if (decl) {
-      const paramType = checker.getTypeOfSymbolAtLocation(paramSymbol, decl);
+      let paramType = checker.getTypeOfSymbolAtLocation(paramSymbol, decl);
+      // Optional params are typed as `T | undefined` since TS 6.
+      // Unwrap to the underlying type so introspection stays stable.
+      if (optional) paramType = paramType.getNonNullableType();
       type = this.resolveType(paramType, checker, 0);
     }
 

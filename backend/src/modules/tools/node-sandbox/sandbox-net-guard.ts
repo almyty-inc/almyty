@@ -51,9 +51,14 @@
  * the test harness has to pass it explicitly via workerData or
  * similar — production code can't set it.
  */
-import * as net from 'net';
-import * as dns from 'dns';
-import * as dgram from 'dgram';
+// CommonJS require so we get a mutable module object — `import * as`
+// returns a frozen namespace that we can't patch lookup() on under
+// TS6's stricter __importStar.
+const net = require('net');
+const dns = require('dns');
+const dgram = require('dgram');
+import type * as netTypes from 'net';
+import type * as dgramTypes from 'dgram';
 
 // ── Ban list ────────────────────────────────────────────────────
 
@@ -328,9 +333,9 @@ function patchSocketConnect(): void {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (net.Socket.prototype as any).connect = function patchedConnect(
-    this: net.Socket,
+    this: netTypes.Socket,
     ...args: any[]
-  ): net.Socket {
+  ): netTypes.Socket {
     // Normalise the overloaded signature into a { host, port }
     // shape. Supports:
     //   connect(options, callback?)
@@ -441,7 +446,7 @@ function patchDgram(): void {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (OrigSocket.prototype as any).send = function patchedSend(
-    this: dgram.Socket,
+    this: dgramTypes.Socket,
     ...args: any[]
   ): any {
     // dgram.send has ~6 overloads. The `port` and `address` args
