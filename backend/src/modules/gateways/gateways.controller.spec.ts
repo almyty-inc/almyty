@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GatewaysController } from './gateways.controller';
+import { GatewayAuthController } from './gateway-auth.controller';
 import { GatewaysService } from './gateways.service';
 import { GatewayAuthService } from './gateway-auth.service';
 import { GatewayToolService } from './gateway-tool.service';
@@ -11,6 +12,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 
 describe('GatewaysController', () => {
+  let authController: GatewayAuthController;
   let controller: GatewaysController;
   let gatewaysService: jest.Mocked<GatewaysService>;
   let gatewayAuthService: jest.Mocked<GatewayAuthService>;
@@ -51,7 +53,7 @@ describe('GatewaysController', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [GatewaysController],
+      controllers: [GatewaysController, GatewayAuthController],
       providers: [
         {
           provide: GatewaysService,
@@ -90,6 +92,7 @@ describe('GatewaysController', () => {
     .compile();
 
     controller = module.get<GatewaysController>(GatewaysController);
+    authController = module.get<GatewayAuthController>(GatewayAuthController);
     gatewaysService = module.get(GatewaysService);
     gatewayAuthService = module.get(GatewayAuthService);
     gatewayToolService = module.get(GatewayToolService);
@@ -329,7 +332,7 @@ describe('GatewaysController', () => {
 
       gatewayAuthService.createGatewayAuth.mockResolvedValue(mockAuthConfig as any);
 
-      const result = await controller.createGatewayAuth('gateway-1', authDto as any, mockRequest);
+      const result = await authController.createGatewayAuth('gateway-1', authDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAuthConfig);
@@ -346,7 +349,7 @@ describe('GatewaysController', () => {
 
       gatewayAuthService.getGatewayAuths.mockResolvedValue(mockAuthConfigs as any);
 
-      const result = await controller.getGatewayAuths('gateway-1', mockRequest);
+      const result = await authController.getGatewayAuths('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAuthConfigs);
@@ -808,7 +811,7 @@ describe('GatewaysController', () => {
 
       gatewayAuthService.createGatewayAuth.mockRejectedValue(new Error('Auth creation failed'));
 
-      await expect(controller.createGatewayAuth('gateway-1', {} as any, mockRequest))
+      await expect(authController.createGatewayAuth('gateway-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -819,7 +822,7 @@ describe('GatewaysController', () => {
 
       gatewayAuthService.getGatewayAuths.mockRejectedValue(new Error('Auth retrieval failed'));
 
-      await expect(controller.getGatewayAuths('gateway-1', mockRequest))
+      await expect(authController.getGatewayAuths('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
