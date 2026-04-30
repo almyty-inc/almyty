@@ -12,6 +12,7 @@ import { Tool } from '../../entities/tool.entity';
 import { LlmProvidersService } from './llm-providers.service';
 import { LlmProvidersController } from './llm-providers.controller';
 import { LlmSessionsController } from './llm-sessions.controller';
+import { LlmModelsHelper } from './llm-models.helper';
 
 import { ToolsModule } from '../tools/tools.module';
 
@@ -28,7 +29,7 @@ import { ToolsModule } from '../tools/tools.module';
     ]),
     ToolsModule,
   ],
-  providers: [LlmProvidersService],
+  providers: [LlmProvidersService, LlmModelsHelper],
   controllers: [LlmProvidersController, LlmSessionsController],
   exports: [LlmProvidersService],
 })

@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { LlmSessionsController } from './llm-sessions.controller';
+import { LlmModelsHelper } from './llm-models.helper';
 import { LlmProvidersController } from './llm-providers.controller';
 import { LlmProvidersService } from './llm-providers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -9,6 +10,7 @@ describe('LlmProvidersController', () => {
   let controller: LlmProvidersController;
   let sessionsController: LlmSessionsController;
   let llmProvidersService: jest.Mocked<LlmProvidersService>;
+  let modelsHelper: jest.Mocked<LlmModelsHelper>;
 
   beforeEach(async () => {
     const mockLlmProvidersService = {
@@ -30,6 +32,10 @@ describe('LlmProvidersController', () => {
           provide: LlmProvidersService,
           useValue: mockLlmProvidersService,
         },
+        {
+          provide: LlmModelsHelper,
+          useValue: { fetchModelsFromProvider: jest.fn(), fetchModelsByType: jest.fn() },
+        },
       ],
     })
     .overrideGuard(JwtAuthGuard)
@@ -41,6 +47,7 @@ describe('LlmProvidersController', () => {
     controller = module.get<LlmProvidersController>(LlmProvidersController);
     sessionsController = module.get<LlmSessionsController>(LlmSessionsController);
     llmProvidersService = module.get(LlmProvidersService);
+    modelsHelper = module.get(LlmModelsHelper);
   });
 
   describe('createProvider', () => {
@@ -325,7 +332,7 @@ describe('LlmProvidersController', () => {
       ];
 
       llmProvidersService.getProvider.mockResolvedValue(mockProvider);
-      (llmProvidersService as any).fetchModelsFromProvider.mockResolvedValue(mockModels);
+      modelsHelper.fetchModelsFromProvider.mockResolvedValue(mockModels);
 
       const result = await controller.getProviderModels('provider-1', mockRequest);
 

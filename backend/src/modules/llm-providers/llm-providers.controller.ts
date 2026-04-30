@@ -20,6 +20,7 @@ import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsNumber, Min, Max, Is
 import { Transform, Type } from 'class-transformer';
 
 import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, LlmProviderSearchFilters } from './llm-providers.service';
+import { LlmModelsHelper } from './llm-models.helper';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -269,6 +270,7 @@ class LlmProviderSearchQueryDto {
 export class LlmProvidersController {
   constructor(
     private readonly llmProvidersService: LlmProvidersService,
+    private readonly modelsHelper: LlmModelsHelper,
   ) {}
 
   @Post()
@@ -661,7 +663,7 @@ export class LlmProvidersController {
         );
       }
 
-      const models = await this.llmProvidersService.fetchModelsByType(
+      const models = await this.modelsHelper.fetchModelsByType(
         body.type as any,
         body.apiKey,
       );
@@ -701,7 +703,7 @@ export class LlmProvidersController {
       }
 
       const provider = await this.llmProvidersService.getProvider(providerId, organizationId, true);
-      const models = await this.llmProvidersService.fetchModelsFromProvider(provider);
+      const models = await this.modelsHelper.fetchModelsFromProvider(provider);
 
       return {
         success: true,

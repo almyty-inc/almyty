@@ -12,6 +12,7 @@ import { Gateway } from '../../entities/gateway.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { LlmModelsHelper } from './llm-models.helper';
 
 // jest.mock with __esModule: true short-circuits __importDefault so the
 // application code's `axios_1.default` and the spec's
@@ -132,6 +133,7 @@ describe('LlmProvidersService', () => {
             getResourceHistory: jest.fn().mockResolvedValue([]),
           },
         },
+        LlmModelsHelper,
       ],
     }).compile();
 
