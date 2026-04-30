@@ -11,6 +11,7 @@ import { Tool } from '../../entities/tool.entity';
 
 import { LlmProvidersService } from './llm-providers.service';
 import { LlmProvidersController } from './llm-providers.controller';
+import { LlmSessionsController } from './llm-sessions.controller';
 
 import { ToolsModule } from '../tools/tools.module';
 
@@ -28,7 +29,7 @@ import { ToolsModule } from '../tools/tools.module';
     ToolsModule,
   ],
   providers: [LlmProvidersService],
-  controllers: [LlmProvidersController],
+  controllers: [LlmProvidersController, LlmSessionsController],
   exports: [LlmProvidersService],
 })
 export class LlmProvidersModule {}
