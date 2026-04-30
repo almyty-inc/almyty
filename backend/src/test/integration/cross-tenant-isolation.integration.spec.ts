@@ -227,6 +227,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         {} as any, // ToolsService — not touched by isolation tests
         stubAuditLog() as any,
         fx.ds, // DataSource for transaction support
+        {} as any, // ApisImportHelper
       );
 
       const apiRepo = fx.ds.getRepository(Api);

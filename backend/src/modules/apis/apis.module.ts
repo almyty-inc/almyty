@@ -5,6 +5,7 @@ import { BullModule } from '@nestjs/bull';
 
 import { ApisController } from './apis.controller';
 import { ApisService } from './apis.service';
+import { ApisImportHelper } from './apis-import.helper';
 import { CredentialService } from './credential.service';
 
 // Entities
@@ -61,7 +62,7 @@ import { ToolsModule } from '../tools/tools.module';
     ToolsModule,
   ],
   controllers: [ApisController],
-  providers: [ApisService, CredentialService],
+  providers: [ApisService, ApisImportHelper, CredentialService],
   exports: [ApisService, CredentialService],
 })
 export class ApisModule {}

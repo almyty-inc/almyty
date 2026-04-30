@@ -9,6 +9,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { ApisService } from '../apis.service';
+import { ApisImportHelper } from '../apis-import.helper';
 import { Api, ApiType, ApiStatus } from '../../../entities/api.entity';
 import { ApiSchema } from '../../../entities/api-schema.entity';
 import { Operation } from '../../../entities/operation.entity';
@@ -61,6 +62,7 @@ describe('ApisService - tool generation', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ApisService,
+        ApisImportHelper,
         { provide: getRepositoryToken(Api), useValue: { findOne: jest.fn().mockResolvedValue(mockApi) } },
         { provide: getRepositoryToken(ApiSchema), useValue: {} },
         { provide: getRepositoryToken(Operation), useValue: {} },
