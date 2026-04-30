@@ -423,6 +423,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds.getRepository(Organization),
         fx.ds.getRepository(User),
         { appendAudit: jest.fn().mockResolvedValue(undefined) } as any,
+        {} as any, // AgentValidationHelper
       );
 
       const agentRepo = fx.ds.getRepository(Agent);

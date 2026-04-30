@@ -28,6 +28,7 @@ import { AgentCollaborationHelper } from './agent-collaboration.helper';
 import { AgentBuiltInToolsHelper } from './agent-builtin-tools.helper';
 import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
+import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentsController } from './agents.controller';
 import { AgentManagementController } from './agent-management.controller';
 import { AgentRunsController } from './agent-runs.controller';
