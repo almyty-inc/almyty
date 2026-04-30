@@ -18,11 +18,7 @@ import {
   PluginEvent,
 } from './types/plugin.types';
 
-import { PiiFilterPlugin } from './built-in/pii-filter.plugin';
-import { RateLimiterPlugin } from './built-in/rate-limiter.plugin';
-import { RequestLoggerPlugin } from './built-in/request-logger.plugin';
-import { SecurityScannerPlugin } from './built-in/security-scanner.plugin';
-import { PerformanceMonitorPlugin } from './built-in/performance-monitor.plugin';
+import { PluginLoaderHelper, isSafeHandlerName } from './plugin-loader.helper';
 
 @Injectable()
 export class PluginManagerService extends EventEmitter implements OnModuleInit, OnModuleDestroy {
@@ -36,7 +32,7 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
   
   private readonly installations = new Map<string, PluginInstallation>();
   private readonly executionSemaphore = new Map<string, number>(); // Concurrent execution tracking
-  
+  private readonly loader = new PluginLoaderHelper();
   private readonly config: PluginManagerConfig = {
     maxConcurrentExecutions: 10,
     defaultTimeout: 30000,
@@ -66,10 +62,10 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
 
     try {
       // Load built-in plugins
-      await this.loadBuiltInPlugins();
+      await this.loader.loadBuiltInPlugins(this.registerPlugin.bind(this));
       
       // Load external plugins from directory
-      await this.loadExternalPlugins();
+      await this.loader.loadExternalPlugins(this.registerPlugin.bind(this), this.config.pluginDirectory!);
       
       // Load plugin configurations from Redis
       await this.loadPluginConfigurations();
@@ -259,12 +255,12 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
       // we still do a normal `pluginModule[name]` lookup after the
       // safelist check — the safelist is what blocks the escape, not
       // own-property enforcement.
-      if (!this.isSafeHandlerName(handlerName)) {
+      if (!isSafeHandlerName(handlerName)) {
         throw new Error(`Unsafe or invalid handler name: ${handlerName}`);
       }
 
       // Load plugin module
-      const pluginModule = await this.loadPluginModule(plugin);
+      const pluginModule = await this.loader.loadPluginModule(plugin);
 
       // Get handler function
       const handlerFunction = pluginModule[handlerName];
@@ -443,7 +439,7 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     // registered plugin that happened to reuse the same id (which
     // was guessable until we swapped to crypto.randomBytes, and can
     // still collide during tests).
-    this.pluginModules.delete(pluginId);
+    this.loader.forget(pluginId);
     this.executionSemaphore.delete(pluginId);
 
     // Emit plugin event
@@ -453,138 +449,6 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     return true;
   }
 
-  // Built-in Plugin Loading
-  private async loadBuiltInPlugins(): Promise<void> {
-    const builtInPlugins = [
-      new PiiFilterPlugin(),
-      new RateLimiterPlugin(),
-      new RequestLoggerPlugin(),
-      new SecurityScannerPlugin(),
-      new PerformanceMonitorPlugin(),
-    ];
-
-    for (const pluginInstance of builtInPlugins) {
-      try {
-        const plugin = pluginInstance.getPluginDefinition();
-        await this.registerPlugin(plugin);
-        this.logger.log(`Built-in plugin loaded: ${plugin.name}`);
-      } catch (error) {
-        this.logger.error(`Failed to load built-in plugin: ${error.message}`);
-      }
-    }
-  }
-
-  // External Plugin Loading
-  private async loadExternalPlugins(): Promise<void> {
-    try {
-      const pluginDir = this.config.pluginDirectory!;
-      const exists = await fs.access(pluginDir).then(() => true).catch(() => false);
-      
-      if (!exists) {
-        this.logger.log('Plugin directory not found - skipping external plugin loading');
-        return;
-      }
-
-      const entries = await fs.readdir(pluginDir, { withFileTypes: true });
-      const pluginDirs = entries.filter(entry => entry.isDirectory());
-
-      for (const dir of pluginDirs) {
-        try {
-          await this.loadExternalPlugin(path.join(pluginDir, dir.name));
-        } catch (error) {
-          this.logger.error(`Failed to load external plugin ${dir.name}: ${error.message}`);
-        }
-      }
-
-    } catch (error) {
-      this.logger.error(`Failed to load external plugins: ${error.message}`);
-    }
-  }
-
-  private async loadExternalPlugin(pluginPath: string): Promise<void> {
-    // Resolve the plugin root up front so we can assert that every path
-    // we derive from the manifest stays inside it.
-    const resolvedPluginRoot = path.resolve(pluginPath);
-
-    // Load plugin manifest
-    const manifestPath = path.join(resolvedPluginRoot, 'plugin.json');
-    const manifestContent = await fs.readFile(manifestPath, 'utf-8');
-    const manifest = JSON.parse(manifestContent);
-
-    // Resolve + confine manifest.main. Previously this was a raw
-    // `path.join(pluginPath, manifest.main || 'index.js')` and `main`
-    // is user-controlled — a manifest with
-    // `"main": "../../node_modules/whatever/index.js"` would happily
-    // `import()` code from outside the plugin directory.
-    const requestedMain = typeof manifest.main === 'string' && manifest.main.length > 0
-      ? manifest.main
-      : 'index.js';
-    const mainPath = path.resolve(resolvedPluginRoot, requestedMain);
-    if (!mainPath.startsWith(resolvedPluginRoot + path.sep) && mainPath !== resolvedPluginRoot) {
-      throw new Error(
-        `Plugin manifest.main escapes the plugin directory: ${requestedMain}`,
-      );
-    }
-
-    // Load plugin code
-    const pluginModule = await import(mainPath);
-
-    // Register plugin
-    const pluginId = await this.registerPlugin(manifest);
-
-    // Store module reference
-    this.pluginModules.set(pluginId, pluginModule);
-
-    this.logger.log(`External plugin loaded: ${manifest.name} from ${resolvedPluginRoot}`);
-  }
-
-  /**
-   * Handler names for external plugins are strings pulled from the plugin
-   * manifest (pluginHook.handler). Without a safelist, `pluginModule[name]`
-   * could resolve to prototype builtins (`__proto__`, `constructor`,
-   * `toString`, …) and we'd happily call them with `(context, settings)`.
-   */
-  private isSafeHandlerName(name: string): boolean {
-    if (typeof name !== 'string' || name.length === 0 || name.length > 128) return false;
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) return false;
-    const BLOCKED = new Set([
-      '__proto__',
-      'constructor',
-      'prototype',
-      'hasOwnProperty',
-      'isPrototypeOf',
-      'propertyIsEnumerable',
-      'toLocaleString',
-      'toString',
-      'valueOf',
-    ]);
-    return !BLOCKED.has(name);
-  }
-
-  private readonly pluginModules = new Map<string, any>();
-
-  private async loadPluginModule(plugin: Plugin): Promise<any> {
-    // Check if already loaded
-    if (this.pluginModules.has(plugin.id)) {
-      return this.pluginModules.get(plugin.id);
-    }
-
-    // For built-in plugins, return the instance
-    switch (plugin.name) {
-      case 'PII Filter':
-        return new PiiFilterPlugin();
-      case 'Rate Limiter':
-        return new RateLimiterPlugin();
-      case 'Request Logger':
-        return new RequestLoggerPlugin();
-      case 'Security Scanner':
-        return new SecurityScannerPlugin();
-      case 'Performance Monitor':
-        return new PerformanceMonitorPlugin();
-      default:
-        throw new Error(`Plugin module not found: ${plugin.id}`);
-    }
-  }
 
   // Plugin Validation
   private async validatePlugin(plugin: Plugin): Promise<{
