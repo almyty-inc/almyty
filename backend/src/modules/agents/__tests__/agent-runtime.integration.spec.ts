@@ -3,6 +3,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { AgentRuntimeService } from '../agent-runtime.service';
+import { AgentRuntimeBuilders } from '../agent-runtime-builders';
+import { AgentCollaborationHelper } from '../agent-collaboration.helper';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../../entities/agent-run.entity';
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
 import { Organization } from '../../../entities/organization.entity';
@@ -158,6 +160,8 @@ describe('AgentRuntimeService (integration)', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AgentRuntimeService,
+        AgentRuntimeBuilders,
+        AgentCollaborationHelper,
         {
           provide: getRepositoryToken(AgentRun),
           useValue: mockRunRepo,

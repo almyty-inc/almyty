@@ -3,6 +3,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
 import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
+import { AgentRuntimeBuilders } from '../../modules/agents/agent-runtime-builders';
+import { AgentCollaborationHelper } from '../../modules/agents/agent-collaboration.helper';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
@@ -175,6 +177,8 @@ describe('Conversation reuse (integration)', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AgentRuntimeService,
+        AgentRuntimeBuilders,
+        AgentCollaborationHelper,
         { provide: getRepositoryToken(AgentRun), useValue: mockRunRepo },
         { provide: getRepositoryToken(Agent), useValue: mockAgentRepo },
         { provide: getRepositoryToken(Tool), useValue: { find: jest.fn().mockResolvedValue([]) } },

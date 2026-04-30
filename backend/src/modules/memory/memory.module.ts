@@ -16,9 +16,9 @@ import { CanonicalMemoryWorkspaceConfig } from './canonical/canonical-memory-con
 import { CanonicalMemorySoftcapWarning } from './canonical/canonical-memory-softcap-warning.entity';
 import {
   CanonicalMemoryService,
-import { CanonicalSearchHelper } from './canonical/canonical-search.helper';
   EMBEDDING_QUEUE_NAME,
 } from './canonical/canonical-memory.service';
+import { CanonicalSearchHelper } from './canonical/canonical-search.helper';
 import { CanonicalMemoryController } from './canonical/canonical-memory.controller';
 import { CanonicalMemoryEmbeddingProcessor } from './canonical/embedding-worker.processor';
 import {
