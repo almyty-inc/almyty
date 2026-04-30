@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Tool } from '../../entities/tool.entity';
 import { ToolVersion } from '../../entities/tool-version.entity';
+import { ToolsOperationHelper } from './tools-operation.helper';
 import { ToolCategory } from '../../entities/tool-category.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { Operation } from '../../entities/operation.entity';
@@ -53,6 +54,7 @@ import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
   ],
   providers: [
     ToolsService,
+    ToolsOperationHelper,
     ToolGeneratorService,
     ToolExecutorService,
     ToolHttpExecutor,

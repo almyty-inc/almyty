@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ToolsService, CreateToolDto, UpdateToolDto, ToolSearchFilters } from './tools.service';
+import { ToolsOperationHelper } from './tools-operation.helper';
 import { Tool, ToolStatus, ToolType } from '../../entities/tool.entity';
 import { ToolVersion } from '../../entities/tool-version.entity';
 import { ToolCategory } from '../../entities/tool-category.entity';
@@ -164,6 +165,7 @@ describe('ToolsService', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        ToolsOperationHelper,
         ToolsService,
         { provide: getRepositoryToken(Tool), useValue: toolRepo },
         { provide: getRepositoryToken(ToolVersion), useValue: toolVersionRepo },

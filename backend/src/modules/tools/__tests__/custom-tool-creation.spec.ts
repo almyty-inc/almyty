@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ToolsService } from '../tools.service';
+import { ToolsOperationHelper } from '../tools-operation.helper';
 import { Tool, ToolType } from '../../../entities/tool.entity';
 import { ToolVersion } from '../../../entities/tool-version.entity';
 import { ToolCategory } from '../../../entities/tool-category.entity';
@@ -20,6 +21,7 @@ describe('ToolsService - Custom Tool Creation', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: ToolsOperationHelper, useValue: {} },
         ToolsService,
         {
           provide: getRepositoryToken(Tool),
