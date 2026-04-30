@@ -630,6 +630,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         {} as any, // ToolExecutorService — unused for isolation tests
         stubAuditLog() as any,
         {} as any, // LlmModelsHelper
+        {} as any, // chatHelper
       );
 
       const provRepo = fx.ds.getRepository(LlmProvider);

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { LlmSessionsController } from './llm-sessions.controller';
 import { LlmModelsHelper } from './llm-models.helper';
+import { LlmChatHelper } from './llm-chat.helper';
 import { LlmProvidersController } from './llm-providers.controller';
 import { LlmProvidersService } from './llm-providers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -35,6 +36,10 @@ describe('LlmProvidersController', () => {
         {
           provide: LlmModelsHelper,
           useValue: { fetchModelsFromProvider: jest.fn(), fetchModelsByType: jest.fn() },
+        },
+        {
+          provide: LlmChatHelper,
+          useValue: { chat: jest.fn(), chatStream: jest.fn() },
         },
       ],
     })

@@ -328,6 +328,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         {} as any, // toolExecutorService
         {} as any, // auditLogService
         {} as any, // modelsHelper
+        {} as any, // chatHelper
       );
     });
 
