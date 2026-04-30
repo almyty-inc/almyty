@@ -20,6 +20,7 @@ import { GatewayAuthService } from './gateway-auth.service';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayAuthValidators } from './gateway-auth-validators.helper';
 import { GatewayToolService } from './gateway-tool.service';
+import { GatewayToolTransferHelper } from './gateway-tool-transfer.helper';
 import { GatewaysController } from './gateways.controller';
 import { GatewayAuthController } from './gateway-auth.controller';
 import { GatewayToolsController } from './gateway-tools.controller';
@@ -68,7 +69,7 @@ import { ChannelGatewayService } from './channels/channel-gateway.service';
     GatewaysService,
     GatewayProtocolService,
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,
-    GatewayToolService,
+    GatewayToolService, GatewayToolTransferHelper,
     // Channel adapters
     ChannelGatewayService,
     ChatWidgetAdapter,
