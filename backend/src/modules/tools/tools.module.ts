@@ -25,6 +25,7 @@ import { ToolScriptExecutor } from './executors/tool-script.executor';
 import { GrpcCallerService } from './executors/grpc-caller.service';
 import { ToolAuthService } from './services/tool-auth.service';
 import { SkillGeneratorService } from './skill-generator.service';
+import { SkillRendererHelper } from './skill-renderer.helper';
 import { CliGeneratorService } from './cli-generator.service';
 import { CodegenService } from './codegen.service';
 import { ToolsController } from './tools.controller';
@@ -64,6 +65,7 @@ import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
     GrpcCallerService,
     ToolAuthService,
     SkillGeneratorService,
+    SkillRendererHelper,
     CliGeneratorService,
     CodegenService,
   ],
