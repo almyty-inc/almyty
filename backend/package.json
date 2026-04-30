@@ -97,6 +97,7 @@
     "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.28",
     "typeorm-versions": "^0.6.0",
+    "typescript": "^6.0.3",
     "uuid": "^13.0.0",
     "winston": "^3.19.0",
     "ws": "^8.20.0",
@@ -138,8 +139,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.21.0",
-    "typeorm-ts-node-commonjs": "^0.3.20",
-    "typescript": "^6.0.3"
+    "typeorm-ts-node-commonjs": "^0.3.20"
   },
   "jest": {
     "moduleFileExtensions": [
