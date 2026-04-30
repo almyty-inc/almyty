@@ -29,6 +29,7 @@ import { AgentBuiltInToolsHelper } from './agent-builtin-tools.helper';
 import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from './agent-runtime-misc.helper';
 import { AgentStepProcessor } from './agent-step-processor';
+import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
 import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentValidationHelper } from './agent-validation.helper';
