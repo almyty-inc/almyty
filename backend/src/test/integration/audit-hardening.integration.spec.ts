@@ -36,6 +36,8 @@ import { FilesController } from '../../modules/files/files.controller';
 import { TextExtractorService } from '../../modules/files/text-extractor.service';
 import { OrganizationsService } from '../../modules/organizations/organizations.service';
 import { UnifiedEndpointController } from '../../modules/gateways/unified-endpoint.controller';
+import { UnifiedAgentHelper } from '../../modules/gateways/unified-agent.helper';
+import { UnifiedGatewayDelegation } from '../../modules/gateways/unified-gateway-delegation.helper';
 
 // ─── MonitoringController platform-metrics token gate ─────────
 
@@ -318,25 +320,48 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
 
     const mcpOAuthStub: any = { validateAccessToken: jest.fn() };
 
-    return new UnifiedEndpointController(
-      orgRepo,
-      gatewayRepo,
+    const jwtStub: any = { verify: jest.fn().mockImplementation(() => { throw new Error('invalid'); }) };
+    const runtimeStub: any = {
+      startRun: jest.fn(),
+      getRun: jest.fn(),
+      listRuns: jest.fn(),
+      subscribeRunEvents: jest.fn(),
+      sendInput: jest.fn(),
+      cancelRun: jest.fn(),
+    };
+
+    const agentHelper = new UnifiedAgentHelper(
       agentRepo,
       apiKeyRepo,
+      executionEngineStub,
+      runtimeStub,
+      jwtStub,
+    );
+    const gatewayDelegation = new UnifiedGatewayDelegation(
+      agentRepo,
       mcpServiceStub,
       almytyMcpStub,
       mcpOAuthStub,
       utcpServiceStub,
       gatewayResolverStub,
-      agentsServiceStub,
-      executionEngineStub,
       a2aServerStub,
       a2aAgentCardStub,
       acpServerStub,
       acpDiscoveryStub,
-      { startRun: jest.fn(), getRun: jest.fn(), listRuns: jest.fn(), getRunEmitter: jest.fn(), sendInput: jest.fn(), cancelRun: jest.fn() } as any,
-      { verify: jest.fn() } as any,
       { get: jest.fn().mockReturnValue(null) } as any,
+    );
+
+    return new UnifiedEndpointController(
+      orgRepo,
+      gatewayRepo,
+      agentRepo,
+      apiKeyRepo,
+      gatewayResolverStub,
+      a2aServerStub,
+      a2aAgentCardStub,
+      { get: jest.fn().mockReturnValue(null) } as any,
+      agentHelper,
+      gatewayDelegation,
     );
   }
 
