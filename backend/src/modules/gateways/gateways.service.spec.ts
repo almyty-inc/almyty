@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { GatewaysService } from './gateways.service';
+import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { GatewayAuth } from '../../entities/gateway-auth.entity';
@@ -21,6 +22,7 @@ describe('GatewaysService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        GatewaysStatsHelper,
         GatewaysService,
         {
           provide: getRepositoryToken(Gateway),

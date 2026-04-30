@@ -561,6 +561,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds.getRepository(Organization),
         fx.ds.getRepository(UsageMetric),
         stubAuditLog() as any,
+        {} as any, // GatewaysStatsHelper
       );
 
       const gwRepo = fx.ds.getRepository(Gateway);

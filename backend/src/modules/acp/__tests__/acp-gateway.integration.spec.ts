@@ -8,6 +8,7 @@ import { User } from '../../../entities/user.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { UsageMetric } from '../../../entities/usage-metric.entity';
 import { GatewaysService } from '../../gateways/gateways.service';
+import { GatewaysStatsHelper } from '../../gateways/gateways-stats.helper';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 
 /**
@@ -38,6 +39,7 @@ describe('ACP Gateway Integration', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GatewaysService,
+        { provide: GatewaysStatsHelper, useValue: {} },
         {
           provide: getRepositoryToken(Gateway),
           useValue: {
