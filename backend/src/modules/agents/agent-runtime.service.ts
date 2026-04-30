@@ -23,6 +23,7 @@ import { AgentCollaborationHelper } from './agent-collaboration.helper';
 import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentBuiltInToolsHelper } from './agent-builtin-tools.helper';
 import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
+import { AgentRuntimeMiscHelper } from './agent-runtime-misc.helper';
 
 /**
  * Built-in tool definitions that the agent runtime injects for autonomous agents.
@@ -88,7 +89,7 @@ export class AgentRuntimeService implements OnModuleInit {
   onModuleInit(): void {
     // Wire the emitter cleanup hook so terminal events flush
     // collaboration-temp agents tied to the run.
-    this.events.setCleanupHook((runId) => this.cleanupTemporaryAgents(runId));
+    this.events.setCleanupHook((runId) => this.misc.cleanupTemporaryAgents(runId));
   }
 
   constructor(
@@ -120,6 +121,7 @@ export class AgentRuntimeService implements OnModuleInit {
     @Inject(forwardRef(() => AgentBuiltInToolsHelper))
     private readonly builtInTools: AgentBuiltInToolsHelper,
     private readonly events: AgentRuntimeEventsHelper,
+    private readonly misc: AgentRuntimeMiscHelper,
   ) {}
 
   /**
@@ -269,7 +271,7 @@ export class AgentRuntimeService implements OnModuleInit {
     }
 
     // Enforce limits
-    const limitCheck = this.checkLimits(run);
+    const limitCheck = this.misc.checkLimits(run);
     if (limitCheck) {
       run.status = AgentRunStatus.FAILED;
       run.error = limitCheck;
@@ -528,7 +530,7 @@ export class AgentRuntimeService implements OnModuleInit {
                 { parentRunId: run.id, maxSteps: 20, maxCostCents: 50 },
               );
               // Wait for the sub-run to complete (poll with timeout)
-              const subResult = await this.waitForRun(subRun.id, 120000);
+              const subResult = await this.misc.waitForRun(subRun.id, 120000);
               toolCall.result = subResult?.output || 'Sub-agent completed without output';
               toolCall.error = subResult?.error;
               toolCall.executionTime = Date.now() - toolExecStart;
@@ -688,7 +690,7 @@ export class AgentRuntimeService implements OnModuleInit {
 
         // Auto-save memory if enabled
         if (agent.memoryConfig?.autoSave) {
-          await this.autoSaveMemory(run, agent);
+          await this.misc.autoSaveMemory(run, agent);
         }
 
         this.emitEvent(runId, 'step.completed', { step: run.currentStep, total: run.maxSteps });
@@ -724,13 +726,13 @@ export class AgentRuntimeService implements OnModuleInit {
 
         // Update agent stats atomically (see bumpAgentStats
         // rationale — same race as the engine used to have).
-        await this.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost);
+        await this.misc.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost);
 
         await this.runRepository.save(run);
 
         // Auto-save memory if enabled
         if (agent.memoryConfig?.autoSave) {
-          await this.autoSaveMemory(run, agent);
+          await this.misc.autoSaveMemory(run, agent);
         }
 
         this.emitEvent(runId, 'run.completed', { output: run.output });
@@ -752,7 +754,7 @@ export class AgentRuntimeService implements OnModuleInit {
 
       // Update agent stats (failure). bumpAgentStats already
       // swallows DB errors internally so no outer try/catch needed.
-      await this.bumpAgentStats(agent.id, false, run.executionTime, run.totalCost);
+      await this.misc.bumpAgentStats(agent.id, false, run.executionTime, run.totalCost);
 
       await this.runRepository.save(run);
       this.emitEvent(runId, 'run.failed', { error: error.message });
@@ -767,163 +769,6 @@ export class AgentRuntimeService implements OnModuleInit {
   /**
    * Execute a built-in tool. Returns null if the tool name is not a built-in.
    */
-  private async cleanupTemporaryAgents(runId: string): Promise<void> {
-    try {
-      const tempAgents = await this.agentRepository.find({
-        where: { isTemporary: true, parentRunId: runId },
-      });
-      if (tempAgents.length > 0) {
-        await this.agentRepository.remove(tempAgents);
-        this.logger.log(`Cleaned up ${tempAgents.length} temporary agent(s) for run ${runId}`);
-      }
-    } catch (err) {
-      this.logger.warn(`Failed to cleanup temporary agents for run ${runId}: ${err.message}`);
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Collaboration strategies
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Handle collaboration orchestration. The orchestrator agent delegates to child agents
-   * based on the configured strategy.
-   */
-  async waitForRun(runId: string, timeoutMs: number): Promise<AgentRun | null> {
-    const pollInterval = 1000;
-    const maxAttempts = Math.ceil(timeoutMs / pollInterval);
-
-    for (let i = 0; i < maxAttempts; i++) {
-      const run = await this.runRepository.findOne({ where: { id: runId } });
-      if (!run) return null;
-      if (run.isDone()) return run;
-      await this.sleep(pollInterval);
-    }
-
-    // Timeout — cancel the run
-    try {
-      const run = await this.runRepository.findOne({ where: { id: runId } });
-      if (run && !run.isDone()) {
-        run.status = AgentRunStatus.TIMEOUT;
-        run.error = 'Timed out waiting for sub-agent';
-        await this.runRepository.save(run);
-      }
-      return run;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /**
-   * Auto-save a summary of the run as a memory entry after completion.
-   */
-  private async autoSaveMemory(run: AgentRun, agent: Agent): Promise<void> {
-    try {
-      // Only save on completion with substantive output
-      if (run.status !== AgentRunStatus.COMPLETED || !run.output) return;
-
-      const inputSummary = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
-      const outputSummary = typeof run.output === 'string' ? run.output : JSON.stringify(run.output);
-
-      // Don't save trivially short interactions
-      if (inputSummary.length < 20 && outputSummary.length < 20) return;
-
-      const content = `Task: ${inputSummary.substring(0, 500)}\nResult: ${outputSummary.substring(0, 500)}`;
-
-      const provenance: Provenance = {
-        agent_id: agent.id,
-        session_id: run.id,
-        collab_id: null,
-        model: null,
-        provider: null,
-        tool_chain: ['auto_save'],
-        created_by: 'agent',
-        source_backend: 'almyty-native',
-      };
-      await this.memoryService.put(
-        {
-          mode: 'memory',
-          scope: { scope_type: 'workspace', scope_id: run.organizationId },
-          content,
-          tier: 'project',
-          tags: ['auto-saved', 'agent-run'],
-          metadata: { source: { type: 'agent_runtime', id: run.id, name: agent.name } },
-          provenance,
-        },
-        { user_id: run.userId },
-      );
-    } catch (err) {
-      this.logger.warn(`Failed to auto-save memory for run ${run.id}: ${err.message}`);
-    }
-  }
-
-  /**
-   * Check resource limits.
-   *
-   * Unit note: `run.totalCost` accumulates values from `llmResponse.cost`, which
-   * `LlmProvidersService.calculateProviderCost` returns in **dollars** (see
-   * "in dollars per 1K tokens" in llm-providers.service.ts). The `maxCostCents`
-   * limit is, per its name, in **cents**. We therefore multiply totalCost by 100
-   * when comparing — previously the comparison was dollars-vs-cents, which
-   * silently allowed a 100x cost overrun (a `maxCostCents: 100` cap let a run
-   * spend $100 before tripping).
-   */
-  private checkLimits(run: AgentRun): string | null {
-    const limits = run.limits || {};
-
-    if (run.currentStep >= (limits.maxSteps || run.maxSteps)) {
-      return 'MAX_STEPS_EXCEEDED';
-    }
-    if (limits.maxCostCents && (run.totalCost * 100) >= limits.maxCostCents) {
-      return 'BUDGET_EXCEEDED';
-    }
-    if (limits.maxDurationMs && (Date.now() - run.createdAt.getTime()) > limits.maxDurationMs) {
-      return 'TIMEOUT';
-    }
-    if (limits.maxTokens && run.totalTokens >= limits.maxTokens) {
-      return 'TOKEN_LIMIT_EXCEEDED';
-    }
-    return null;
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Atomically update an agent's running stats. Mirrors the helper
-   * in AgentExecutionEngine — both paths used to do a load-modify-
-   * save pair which lost increments under concurrency. See the
-   * engine's `bumpAgentStats` for the full rationale + the Welford
-   * rolling-average formula.
-   */
-  private async bumpAgentStats(
-    agentId: string,
-    success: boolean,
-    executionTime: number,
-    cost: number,
-  ): Promise<void> {
-    try {
-      await this.agentRepository
-        .createQueryBuilder()
-        .update(Agent)
-        .set({
-          totalExecutions: () => '"totalExecutions" + 1',
-          successfulExecutions: success
-            ? () => '"successfulExecutions" + 1'
-            : () => '"successfulExecutions"',
-          totalCost: () => `"totalCost" + ${Number(cost) || 0}`,
-          averageExecutionTime: () =>
-            `ROUND("averageExecutionTime" + (${Number(executionTime) || 0} - "averageExecutionTime") / ("totalExecutions" + 1))`,
-          lastExecutedAt: new Date(),
-        })
-        .where('id = :id', { id: agentId })
-        .execute();
-    } catch (err: any) {
-      // Best-effort — never mask the run result on a stats failure.
-      this.logger.error(`Failed to update agent stats: ${err.message}`);
-    }
-  }
 
   // ---------------------------------------------------------------------------
   // Public API (unchanged)
@@ -1031,7 +876,10 @@ export class AgentRuntimeService implements OnModuleInit {
     return this.events.sweepOrphanedRunEmitters();
   }
 
-  // ── Delegations to AgentHeartbeatHelper ──
+  // ── Delegations to AgentRuntimeMiscHelper ──
+  waitForRun(...args: Parameters<AgentRuntimeMiscHelper['waitForRun']>) { return this.misc.waitForRun(...args); }
+
+  // ── Delegations to AgentHeartbeatHelper
   enableHeartbeat(...args: Parameters<AgentHeartbeatHelper['enableHeartbeat']>) { return this.heartbeat.enableHeartbeat(...args); }
   disableHeartbeat(...args: Parameters<AgentHeartbeatHelper['disableHeartbeat']>) { return this.heartbeat.disableHeartbeat(...args); }
 }

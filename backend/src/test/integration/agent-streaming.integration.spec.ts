@@ -7,6 +7,7 @@ import { AgentRuntimeBuilders } from '../../modules/agents/agent-runtime-builder
 import { AgentCollaborationHelper } from '../../modules/agents/agent-collaboration.helper';
 import { AgentBuiltInToolsHelper } from '../../modules/agents/agent-builtin-tools.helper';
 import { AgentRuntimeEventsHelper } from '../../modules/agents/agent-runtime-events.helper';
+import { AgentRuntimeMiscHelper } from '../../modules/agents/agent-runtime-misc.helper';
 import { AgentHeartbeatHelper } from '../../modules/agents/agent-heartbeat.helper';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
@@ -223,6 +224,7 @@ describe('Agent Streaming (integration)', () => {
         AgentBuiltInToolsHelper,
         AgentHeartbeatHelper,
         AgentRuntimeEventsHelper,
+        AgentRuntimeMiscHelper,
         { provide: getRepositoryToken(AgentRun), useValue: mockRunRepo },
         { provide: getRepositoryToken(Agent), useValue: mockAgentRepo },
         { provide: getRepositoryToken(Tool), useValue: mockToolRepo },

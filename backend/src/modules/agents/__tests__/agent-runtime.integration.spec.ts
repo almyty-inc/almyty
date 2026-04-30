@@ -7,6 +7,7 @@ import { AgentRuntimeBuilders } from '../agent-runtime-builders';
 import { AgentCollaborationHelper } from '../agent-collaboration.helper';
 import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
 import { AgentRuntimeEventsHelper } from '../agent-runtime-events.helper';
+import { AgentRuntimeMiscHelper } from '../agent-runtime-misc.helper';
 import { AgentHeartbeatHelper } from '../agent-heartbeat.helper';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../../entities/agent-run.entity';
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
@@ -168,6 +169,7 @@ describe('AgentRuntimeService (integration)', () => {
         AgentBuiltInToolsHelper,
         AgentHeartbeatHelper,
         AgentRuntimeEventsHelper,
+        AgentRuntimeMiscHelper,
         {
           provide: getRepositoryToken(AgentRun),
           useValue: mockRunRepo,
