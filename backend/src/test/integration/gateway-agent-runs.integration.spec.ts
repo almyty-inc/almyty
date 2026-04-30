@@ -21,8 +21,8 @@ import * as crypto from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import * as request from 'supertest';
-import * as cookieParser from 'cookie-parser';
+import request from 'supertest';
+import cookieParser from 'cookie-parser';
 import { JwtService } from '@nestjs/jwt';
 
 import { TestAppModule } from '../test-app.module';

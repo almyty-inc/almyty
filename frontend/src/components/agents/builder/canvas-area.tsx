@@ -36,7 +36,7 @@ export interface CanvasAreaProps {
   onPaneClick: () => void
   onDrop: (event: React.DragEvent) => void
   onDragOver: (event: React.DragEvent) => void
-  reactFlowWrapper: React.RefObject<HTMLDivElement>
+  reactFlowWrapper: React.RefObject<HTMLDivElement | null>
   setReactFlowInstance: (instance: ReactFlowInstance) => void
   selectedNode: Node | null
   setSelectedNode: (node: Node | null) => void

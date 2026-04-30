@@ -19,8 +19,8 @@ jest.unmock('bcryptjs');
 import * as crypto from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import * as request from 'supertest';
-import * as cookieParser from 'cookie-parser';
+import request from 'supertest';
+import cookieParser from 'cookie-parser';
 import { DataSource } from 'typeorm';
 
 import { TestAppModule } from '../test-app.module';

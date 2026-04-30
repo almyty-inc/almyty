@@ -9,7 +9,11 @@
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
+    "rootDir": "./src",
     "baseUrl": "./",
+    "ignoreDeprecations": "6.0",
+    "useUnknownInCatchVariables": false,
+    "types": ["jest", "node"],
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": false,
@@ -26,5 +30,7 @@
       "@/services/*": ["src/services/*"],
       "@/utils/*": ["src/utils/*"]
     }
-  }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["dist", "node_modules", "scripts", "test"]
 }
