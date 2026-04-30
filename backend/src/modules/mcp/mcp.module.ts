@@ -16,6 +16,7 @@ import { RealtimeExecutorService } from './realtime-executor.service';
 import { GatewayResolverService } from './services/gateway-resolver.service';
 import { McpOAuthService } from './services/mcp-oauth.service';
 import { McpOAuthTokensHelper } from './services/mcp-oauth-tokens.helper';
+import { McpOAuthResolveHelper } from './controllers/mcp-oauth-resolve.helper';
 import { McpToolHandler } from './services/mcp-tool.handler';
 import { McpContentHandler } from './services/mcp-content.handler';
 import { McpServerRequestService } from './services/mcp-server-request.service';
@@ -82,6 +83,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
     GatewayResolverService,
     McpOAuthService,
     McpOAuthTokensHelper,
+    McpOAuthResolveHelper,
     SseTransport,
     WebSocketTransport,
   ],

@@ -16,18 +16,13 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
-import { Organization } from '../../../entities/organization.entity';
+
 import { McpOAuthService } from '../services/mcp-oauth.service';
+import { McpOAuthResolveHelper } from './mcp-oauth-resolve.helper';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { getBaseUrl, getFrontendUrl } from '../../../common/config/base-url';
 
 /**
- * MCP OAuth 2.1 Controller
+ * MCP OAuth 2.1 Controller.
  *
  * Implements the OAuth 2.1 authorization flow for MCP gateways as specified
  * in the MCP authorization spec. All endpoints are scoped to a specific
@@ -41,137 +36,9 @@ export class McpOAuthController {
   private readonly logger = new Logger(McpOAuthController.name);
 
   constructor(
-    @InjectRepository(Gateway)
-    private readonly gatewayRepository: Repository<Gateway>,
-    @InjectRepository(Organization)
-    private readonly organizationRepository: Repository<Organization>,
     private readonly mcpOAuthService: McpOAuthService,
-    private readonly configService: ConfigService,
-    private readonly jwtService: JwtService,
+    private readonly resolve: McpOAuthResolveHelper,
   ) {}
-
-  /**
-   * Try to extract and verify the user from the JWT cookie or Authorization header.
-   * Returns the JWT payload if valid, null otherwise. Never throws.
-   */
-  private async tryExtractUser(req: any): Promise<any | null> {
-    // If a guard already ran (e.g. tests or middleware), use req.user
-    if (req.user) return req.user;
-    const token = req.cookies?.access_token
-      || (req.headers?.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null);
-    if (!token) return null;
-    try {
-      return this.jwtService.verify(token);
-    } catch {
-      return null;
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Resolve organization by slug or UUID — without requiring
-   * authentication. This mirrors GatewayResolverService.resolveOrganization
-   * but lives here to avoid pulling in the auth pipeline.
-   */
-  private async resolveOrg(orgSlug: string): Promise<Organization> {
-    const isUUID =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        orgSlug,
-      );
-
-    if (isUUID) {
-      const org = await this.organizationRepository.findOne({
-        where: { id: orgSlug },
-      });
-      if (!org) {
-        throw new HttpException(
-          `Organization not found: ${orgSlug}`,
-          HttpStatus.NOT_FOUND,
-        );
-      }
-      return org;
-    }
-
-    // Try exact slug column first. Previously, on a miss, the handler
-    // fell back to `organizationRepository.find()` — an UNBOUNDED scan of
-    // every organization in the database — and then filtered in JS by a
-    // name->slug derivation. That's a DoS vector on a public endpoint:
-    // each request pulls the entire orgs table into the process heap.
-    //
-    // Fix: one targeted query that computes the slug-from-name comparison
-    // in SQL. It's still a table scan without an index, but only one
-    // round-trip and only the matching row(s) come back.
-    const org = await this.organizationRepository
-      .createQueryBuilder('org')
-      .where('org.slug = :slug', { slug: orgSlug })
-      .orWhere("LOWER(REPLACE(org.name, ' ', '-')) = :slug", { slug: orgSlug })
-      .limit(1)
-      .getOne();
-
-    if (!org) {
-      throw new HttpException(
-        `Organization not found: ${orgSlug}`,
-        HttpStatus.NOT_FOUND,
-      );
-    }
-    return org;
-  }
-
-  /**
-   * Resolve an active gateway by its endpoint slug within an organization.
-   * The gatewaySlug is expected to match the gateway endpoint (e.g. "my-gateway"
-   * maps to endpoint "/my-gateway"). The system gateway (almyty) is a real DB
-   * row now, so no special-casing is needed.
-   */
-  private async resolveGateway(
-    organizationId: string,
-    gatewaySlug: string,
-  ): Promise<Gateway> {
-    const endpoint = gatewaySlug.startsWith('/')
-      ? gatewaySlug
-      : `/${gatewaySlug}`;
-
-    const gateway = await this.gatewayRepository.findOne({
-      where: {
-        endpoint,
-        organizationId,
-        status: GatewayStatus.ACTIVE,
-      },
-      relations: ['organization'],
-    });
-
-    if (!gateway) {
-      throw new HttpException(
-        `Gateway not found: ${gatewaySlug}`,
-        HttpStatus.NOT_FOUND,
-      );
-    }
-    return gateway;
-  }
-
-  /**
-   * Resolve both org and gateway from URL slugs. Convenience wrapper used by
-   * every endpoint in this controller.
-   */
-  private async resolveOrgAndGateway(
-    orgSlug: string,
-    gatewaySlug: string,
-  ): Promise<{ organization: Organization; gateway: Gateway }> {
-    const organization = await this.resolveOrg(orgSlug);
-    const gateway = await this.resolveGateway(organization.id, gatewaySlug);
-    return { organization, gateway };
-  }
-
-  private getBaseUrl(): string {
-    return getBaseUrl(this.configService);
-  }
-
-  private getFrontendUrl(): string {
-    return getFrontendUrl(this.configService);
-  }
 
   // ---------------------------------------------------------------------------
   // 1. Authorization Server Metadata (RFC 8414)
@@ -184,8 +51,8 @@ export class McpOAuthController {
     @Param('orgSlug') orgSlug: string,
     @Param('gatewaySlug') gatewaySlug: string,
   ) {
-    const { gateway } = await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
-    const base = this.getBaseUrl();
+    const { gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    const base = this.resolve.getBaseUrl();
     const prefix = `${base}/${orgSlug}/${gatewaySlug}`;
 
     this.logger.log(
@@ -221,8 +88,8 @@ export class McpOAuthController {
     @Param('orgSlug') orgSlug: string,
     @Param('gatewaySlug') gatewaySlug: string,
   ) {
-    const { gateway } = await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
-    const base = this.getBaseUrl();
+    const { gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    const base = this.resolve.getBaseUrl();
     const prefix = `${base}/${orgSlug}/${gatewaySlug}`;
 
     this.logger.log(
@@ -259,7 +126,7 @@ export class McpOAuthController {
     @Req() req: any,
     @Res() res: Response,
   ) {
-    const { organization, gateway } = await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    const { organization, gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
 
     this.logger.log(
       `OAuth authorize: org=${orgSlug}, gateway=${gateway.name}, client=${clientId}`,
@@ -301,11 +168,11 @@ export class McpOAuthController {
     // --- Check if user is authenticated (JWT cookie or Bearer token) ---
     // Read JWT from cookie or Authorization header, verify, and attach user.
     // Don't use @UseGuards — we need to redirect to login on failure, not 401.
-    const user = await this.tryExtractUser(req);
+    const user = await this.resolve.tryExtractUser(req);
 
     if (!user) {
       // Redirect to frontend login page with a return URL back to this authorize endpoint
-      const currentUrl = `${this.getBaseUrl()}/${orgSlug}/${gatewaySlug}/authorize?${new URLSearchParams({
+      const currentUrl = `${this.resolve.getBaseUrl()}/${orgSlug}/${gatewaySlug}/authorize?${new URLSearchParams({
         response_type: responseType,
         client_id: clientId,
         redirect_uri: redirectUri,
@@ -316,7 +183,7 @@ export class McpOAuthController {
         ...(resource ? { resource } : {}),
       }).toString()}`;
 
-      const loginUrl = `${this.getFrontendUrl()}/auth/login?returnTo=${encodeURIComponent(currentUrl)}`;
+      const loginUrl = `${this.resolve.getFrontendUrl()}/auth/login?returnTo=${encodeURIComponent(currentUrl)}`;
       return res.redirect(302, loginUrl);
     }
 
@@ -363,7 +230,7 @@ export class McpOAuthController {
     @Body() body: any,
     @Req() req: any,
   ) {
-    const { organization, gateway } = await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    const { organization, gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
 
     const responseType = body.response_type;
     const clientId = body.client_id;
@@ -444,7 +311,7 @@ export class McpOAuthController {
     @Param('gatewaySlug') gatewaySlug: string,
     @Body() body: any,
   ) {
-    const { gateway } = await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    const { gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
 
     const grantType = body.grant_type;
     const clientId = body.client_id;
@@ -548,7 +415,7 @@ export class McpOAuthController {
     },
     @Res() res: Response,
   ) {
-    const { organization, gateway } = await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    const { organization, gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
 
     this.logger.log(
       `OAuth client registration: org=${orgSlug}, gateway=${gateway.name}, client_name=${body.client_name}`,
@@ -627,7 +494,7 @@ export class McpOAuthController {
     },
     @Res() res: Response,
   ) {
-    const { gateway } = await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    const { gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
 
     this.logger.log(
       `OAuth revoke: org=${orgSlug}, gateway=${gateway.name}, hint=${body.token_type_hint || 'none'}`,
