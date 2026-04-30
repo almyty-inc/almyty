@@ -23,7 +23,7 @@ interface Notification {
   duration?: number
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>()((set, get) => ({
   sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 1024,
   sidebarCollapsed: typeof window !== 'undefined' && localStorage.getItem('sidebar-collapsed') === 'true',
   theme: 'light',
