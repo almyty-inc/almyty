@@ -25,6 +25,8 @@ import { AgentAuditService } from './agent-audit.service';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentsController } from './agents.controller';
+import { AgentManagementController } from './agent-management.controller';
+import { AgentRunsController } from './agent-runs.controller';
 import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
@@ -56,7 +58,7 @@ import { A2AModule } from '../a2a/a2a.module';
     forwardRef(() => A2AModule),
   ],
   providers: [AgentsService, AgentExecutionEngine, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeProcessor],
-  controllers: [AgentsController, AgentOpenAICompatController],
+  controllers: [AgentsController, AgentManagementController, AgentRunsController, AgentOpenAICompatController],
   exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })
 export class AgentsModule {}
