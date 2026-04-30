@@ -17,6 +17,7 @@ import { AgentRun } from '../../entities/agent-run.entity';
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
 import { GatewayAuthService } from './gateway-auth.service';
+import { GatewayAuthValidators } from './gateway-auth-validators.helper';
 import { GatewayToolService } from './gateway-tool.service';
 import { GatewaysController } from './gateways.controller';
 import { GatewayAuthController } from './gateway-auth.controller';
@@ -65,7 +66,7 @@ import { ChannelGatewayService } from './channels/channel-gateway.service';
   providers: [
     GatewaysService,
     GatewayProtocolService,
-    GatewayAuthService,
+    GatewayAuthService, GatewayAuthValidators,
     GatewayToolService,
     // Channel adapters
     ChannelGatewayService,
@@ -91,7 +92,7 @@ import { ChannelGatewayService } from './channels/channel-gateway.service';
   exports: [
     GatewaysService,
     GatewayProtocolService,
-    GatewayAuthService,
+    GatewayAuthService, GatewayAuthValidators,
     GatewayToolService,
     ChannelGatewayService,
   ],
