@@ -16,6 +16,7 @@ import { CanonicalMemoryWorkspaceConfig } from './canonical/canonical-memory-con
 import { CanonicalMemorySoftcapWarning } from './canonical/canonical-memory-softcap-warning.entity';
 import {
   CanonicalMemoryService,
+import { CanonicalSearchHelper } from './canonical/canonical-search.helper';
   EMBEDDING_QUEUE_NAME,
 } from './canonical/canonical-memory.service';
 import { CanonicalMemoryController } from './canonical/canonical-memory.controller';
@@ -79,6 +80,7 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
   providers: [
     EmbeddingService,
     CanonicalMemoryService,
+    CanonicalSearchHelper,
     CanonicalMemoryEmbeddingProcessor,
     CanonicalMemoryTtlSweeperProcessor,
     CanonicalMemoryConsolidationProcessor,
