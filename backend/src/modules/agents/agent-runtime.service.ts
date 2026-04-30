@@ -22,6 +22,7 @@ import { AgentRuntimeBuilders } from './agent-runtime-builders';
 import { AgentCollaborationHelper } from './agent-collaboration.helper';
 import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentBuiltInToolsHelper } from './agent-builtin-tools.helper';
+import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
 
 /**
  * Built-in tool definitions that the agent runtime injects for autonomous agents.
@@ -81,31 +82,13 @@ export const BUILT_IN_TOOLS = {
 const RUNTIME_EMITTER_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 min
 
 @Injectable()
-export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
+export class AgentRuntimeService implements OnModuleInit {
   private readonly logger = new Logger(AgentRuntimeService.name);
-  private readonly runEmitters = new Map<string, EventEmitter>();
-  private emitterSweepTimer?: NodeJS.Timeout;
 
   onModuleInit(): void {
-    // Orphaned emitter sweep — see sweepOrphanedRunEmitters below.
-    // Previously the runEmitters map had no cleanup path beyond the
-    // emitEvent() terminal branch, so any run that died without
-    // emitting completed/failed/cancelled (process crash mid-run,
-    // BullMQ worker exit, unhandled exception) left its emitter in
-    // the map forever. The sweep catches those orphans.
-    this.emitterSweepTimer = setInterval(() => {
-      this.sweepOrphanedRunEmitters().catch((err) => {
-        this.logger.warn(`Emitter sweep failed: ${err.message}`);
-      });
-    }, RUNTIME_EMITTER_SWEEP_INTERVAL_MS);
-    this.emitterSweepTimer.unref?.();
-  }
-
-  onModuleDestroy(): void {
-    if (this.emitterSweepTimer) {
-      clearInterval(this.emitterSweepTimer);
-      this.emitterSweepTimer = undefined;
-    }
+    // Wire the emitter cleanup hook so terminal events flush
+    // collaboration-temp agents tied to the run.
+    this.events.setCleanupHook((runId) => this.cleanupTemporaryAgents(runId));
   }
 
   constructor(
@@ -136,6 +119,7 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
     private readonly collaboration: AgentCollaborationHelper,
     @Inject(forwardRef(() => AgentBuiltInToolsHelper))
     private readonly builtInTools: AgentBuiltInToolsHelper,
+    private readonly events: AgentRuntimeEventsHelper,
   ) {}
 
   /**
@@ -252,7 +236,7 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
     const savedRun = await this.runRepository.save(run);
 
     // Create event emitter for this run (for SSE streaming)
-    this.runEmitters.set(savedRun.id, new EventEmitter());
+    this.events.ensureRunEmitter(savedRun.id);
 
     // Enqueue first step
     await this.runtimeQueue.add('next-step', { runId: savedRun.id }, {
@@ -1022,140 +1006,29 @@ export class AgentRuntimeService implements OnModuleInit, OnModuleDestroy {
     return run;
   }
 
-  /**
-   * Get SSE event emitter for a run
-   */
+  /** Get SSE event emitter for a run. */
   getRunEmitter(runId: string): EventEmitter | null {
-    return this.runEmitters.get(runId) || null;
+    return this.events.getRunEmitter(runId);
   }
 
-  // ---------------------------------------------------------------------------
-  // Heartbeat management
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Enable heartbeat: creates a repeating BullMQ job for this agent.
-   */
-
-  /**
-   * Emit an event for SSE subscribers. The emitter is cleaned up
-   * on terminal event types (completed / failed / cancelled). If a
-   * run dies without ever emitting a terminal event — a process
-   * crash mid-run, a BullMQ worker timeout that doesn't get caught,
-   * an unhandled exception — the emitter would otherwise leak.
-   * The onModuleInit sweeper below handles that case.
-   */
+  /** Emit an event for SSE subscribers. */
   emitEvent(runId: string, type: string, data: any) {
-    const event = { type, data, timestamp: new Date().toISOString() };
-
-    // Local emitter (same-pod fast path)
-    const emitter = this.runEmitters.get(runId);
-    if (emitter) {
-      emitter.emit('event', event);
-
-      if (['run.completed', 'run.failed', 'run.cancelled'].includes(type)) {
-        emitter.emit('done');
-        this.runEmitters.delete(runId);
-        this.cleanupTemporaryAgents(runId).catch(() => {});
-      }
-    }
-
-    // Redis Stream (cross-pod distribution)
-    const streamKey = `run:${runId}:events`;
-    this.redis.xadd(streamKey, '*', 'event', JSON.stringify(event)).catch(err => {
-      this.logger.warn(`Failed to write event to Redis stream ${streamKey}: ${err.message}`);
-    });
-
-    // Set TTL on the stream after terminal events so it auto-cleans
-    if (['run.completed', 'run.failed', 'run.cancelled'].includes(type)) {
-      this.redis.expire(streamKey, 300).catch(() => {}); // 5 min TTL
-    }
+    this.events.emitEvent(runId, type, data);
   }
 
-  /**
-   * Subscribe to run events via Redis Streams. Works across pods.
-   * Calls handler for each event. Resolves when a terminal event
-   * is received or the timeout expires.
-   *
-   * Used by SSE endpoints instead of getRunEmitter() for cross-pod support.
-   */
+  /** Subscribe to run events via Redis Streams (cross-pod). */
   async subscribeRunEvents(
     runId: string,
     handler: (event: { type: string; data: any; timestamp: string }) => void,
     signal?: AbortSignal,
     timeoutMs = 300_000,
   ): Promise<void> {
-    const streamKey = `run:${runId}:events`;
-    const deadline = Date.now() + timeoutMs;
-    let lastId = '0'; // Start from beginning to replay missed events
-
-    // Use a duplicate connection for blocking reads
-    const subscriber = this.redis.duplicate();
-
-    try {
-      while (Date.now() < deadline) {
-        if (signal?.aborted) break;
-
-        const blockMs = Math.min(2000, deadline - Date.now());
-        if (blockMs <= 0) break;
-
-        const results = await (subscriber as any).xread(
-          'BLOCK', blockMs, 'COUNT', 100,
-          'STREAMS', streamKey, lastId,
-        ) as Array<[string, Array<[string, string[]]>]> | null;
-
-        if (!results) continue;
-
-        for (const [, messages] of results) {
-          for (const [id, fields] of messages) {
-            lastId = id;
-            const raw = fields[1]; // fields = ['event', jsonString]
-            try {
-              const event = JSON.parse(raw);
-              handler(event);
-              if (['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)) {
-                return;
-              }
-            } catch { /* skip malformed */ }
-          }
-        }
-      }
-    } finally {
-      subscriber.disconnect();
-    }
+    return this.events.subscribeRunEvents(runId, handler, signal, timeoutMs);
   }
 
-  /**
-   * Best-effort periodic sweep of orphaned run emitters. Any
-   * emitter whose corresponding run has been in a terminal state
-   * in the DB for more than 15 minutes is evicted. The sweep is
-   * started in onModuleInit (see module lifecycle) and unref'd
-   * so it doesn't keep the event loop alive at shutdown.
-   */
+  /** Best-effort periodic sweep of orphaned run emitters. */
   async sweepOrphanedRunEmitters(): Promise<void> {
-    if (this.runEmitters.size === 0) return;
-    const cutoff = new Date(Date.now() - 15 * 60 * 1000);
-
-    for (const runId of Array.from(this.runEmitters.keys())) {
-      try {
-        const run = await this.runRepository.findOne({
-          where: { id: runId },
-          select: ['id', 'status', 'updatedAt'],
-        });
-        // Run gone → orphaned.
-        if (!run) {
-          this.runEmitters.delete(runId);
-          continue;
-        }
-        // Run in a terminal state for longer than the cutoff → orphaned.
-        const terminal = ['completed', 'failed', 'cancelled', 'timeout'];
-        if (terminal.includes(run.status as any) && run.updatedAt < cutoff) {
-          this.runEmitters.delete(runId);
-        }
-      } catch {
-        // Best-effort — swallow DB hiccups.
-      }
-    }
+    return this.events.sweepOrphanedRunEmitters();
   }
 
   // ── Delegations to AgentHeartbeatHelper ──

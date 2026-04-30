@@ -26,6 +26,7 @@ import { AgentRuntimeService } from './agent-runtime.service';
 import { AgentRuntimeBuilders } from './agent-runtime-builders';
 import { AgentCollaborationHelper } from './agent-collaboration.helper';
 import { AgentBuiltInToolsHelper } from './agent-builtin-tools.helper';
+import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
 import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentValidationHelper } from './agent-validation.helper';
@@ -62,7 +63,7 @@ import { A2AModule } from '../a2a/a2a.module';
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
   ],
-  providers: [AgentsService, AgentExecutionEngine, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeProcessor],
+  providers: [AgentsService, AgentExecutionEngine, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeProcessor],
   controllers: [AgentsController, AgentManagementController, AgentRunsController, AgentOpenAICompatController],
   exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })

@@ -6,6 +6,7 @@ import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.en
 import { AgentRuntimeBuilders } from '../../modules/agents/agent-runtime-builders';
 import { AgentCollaborationHelper } from '../../modules/agents/agent-collaboration.helper';
 import { AgentBuiltInToolsHelper } from '../../modules/agents/agent-builtin-tools.helper';
+import { AgentRuntimeEventsHelper } from '../../modules/agents/agent-runtime-events.helper';
 import { AgentHeartbeatHelper } from '../../modules/agents/agent-heartbeat.helper';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -183,6 +184,7 @@ describe('Conversation reuse (integration)', () => {
         AgentCollaborationHelper,
         AgentBuiltInToolsHelper,
         AgentHeartbeatHelper,
+        AgentRuntimeEventsHelper,
         { provide: getRepositoryToken(AgentRun), useValue: mockRunRepo },
         { provide: getRepositoryToken(Agent), useValue: mockAgentRepo },
         { provide: getRepositoryToken(Tool), useValue: { find: jest.fn().mockResolvedValue([]) } },
