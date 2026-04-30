@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service';
 import { AgentRuntimeBuilders } from '../../modules/agents/agent-runtime-builders';
 import { AgentCollaborationHelper } from '../../modules/agents/agent-collaboration.helper';
+import { AgentBuiltInToolsHelper } from '../../modules/agents/agent-builtin-tools.helper';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -217,6 +218,7 @@ describe('Agent Streaming (integration)', () => {
         AgentRuntimeService,
         AgentRuntimeBuilders,
         AgentCollaborationHelper,
+        AgentBuiltInToolsHelper,
         { provide: getRepositoryToken(AgentRun), useValue: mockRunRepo },
         { provide: getRepositoryToken(Agent), useValue: mockAgentRepo },
         { provide: getRepositoryToken(Tool), useValue: mockToolRepo },
