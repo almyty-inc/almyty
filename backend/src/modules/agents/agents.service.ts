@@ -1,4 +1,6 @@
 import { AgentValidationHelper } from './agent-validation.helper';
+import { AgentTemplate, getAgentTemplates } from './agent-templates';
+import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
 import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -61,13 +63,7 @@ export interface UpdateAgentInput {
   webhookUrl?: string;
 }
 
-export interface AgentTemplate {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  pipeline: AgentPipeline;
-}
+export { AgentTemplate } from './agent-templates';
 
 export interface AgentVersionSnapshot {
   version: string;
@@ -446,87 +442,7 @@ export class AgentsService {
   // ── Templates ──
 
   getTemplates(): AgentTemplate[] {
-    return [
-      {
-        id: 'simple-chat',
-        name: 'Simple Chat Agent',
-        description: 'Single LLM with tools — the basic conversational agent',
-        category: 'basic',
-        pipeline: {
-          nodes: [
-            { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, config: {}, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } } as any,
-            { id: 'llm_1', type: 'llm_call', position: { x: 350, y: 200 }, config: {}, data: { providerId: '', userPromptTemplate: '{{input.message}}', systemPrompt: 'You are a helpful assistant.' } } as any,
-            { id: 'output_1', type: 'output', position: { x: 650, y: 200 }, config: {}, data: { mapping: '{{nodes.llm_1.output}}' } } as any,
-          ],
-          edges: [
-            { id: 'e1', source: 'input_1', target: 'llm_1' },
-            { id: 'e2', source: 'llm_1', target: 'output_1' },
-          ],
-        },
-      },
-      {
-        id: 'multi-llm-consensus',
-        name: 'Multi-LLM Consensus',
-        description: 'Send prompt to multiple LLMs in parallel, then use a judge to pick the best answer',
-        category: 'advanced',
-        pipeline: {
-          nodes: [
-            { id: 'input_1', type: 'input', position: { x: 50, y: 250 }, config: {}, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } } as any,
-            { id: 'parallel_1', type: 'parallel', position: { x: 250, y: 250 }, config: {} } as any,
-            { id: 'llm_a', type: 'llm_call', position: { x: 500, y: 100 }, config: {}, data: { providerId: '', userPromptTemplate: '{{input.message}}', systemPrompt: 'You are a helpful assistant.' } } as any,
-            { id: 'llm_b', type: 'llm_call', position: { x: 500, y: 400 }, config: {}, data: { providerId: '', userPromptTemplate: '{{input.message}}', systemPrompt: 'You are a helpful assistant.' } } as any,
-            { id: 'merge_1', type: 'merge', position: { x: 750, y: 250 }, config: {}, data: { strategy: 'best_of_n', judgeConfig: { providerId: '' } } } as any,
-            { id: 'output_1', type: 'output', position: { x: 1000, y: 250 }, config: {}, data: { mapping: '{{nodes.merge_1.output}}' } } as any,
-          ],
-          edges: [
-            { id: 'e1', source: 'input_1', target: 'parallel_1' },
-            { id: 'e2', source: 'parallel_1', target: 'llm_a' },
-            { id: 'e3', source: 'parallel_1', target: 'llm_b' },
-            { id: 'e4', source: 'llm_a', target: 'merge_1' },
-            { id: 'e5', source: 'llm_b', target: 'merge_1' },
-            { id: 'e6', source: 'merge_1', target: 'output_1' },
-          ],
-        },
-      },
-      {
-        id: 'research-agent',
-        name: 'Research Agent',
-        description: 'Extract facts with one LLM, then summarize with another — sequential chain',
-        category: 'advanced',
-        pipeline: {
-          nodes: [
-            { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, config: {}, data: { schema: { type: 'object', properties: { topic: { type: 'string' } }, required: ['topic'] } } } as any,
-            { id: 'llm_extract', type: 'llm_call', position: { x: 300, y: 200 }, config: {}, data: { providerId: '', userPromptTemplate: 'Research and list key facts about: {{input.topic}}', systemPrompt: 'You are a research assistant. List facts as bullet points.', responseFormat: 'text' } } as any,
-            { id: 'transform_1', type: 'transform', position: { x: 550, y: 200 }, config: {}, data: { expression: '{{nodes.llm_extract.output}}' } } as any,
-            { id: 'llm_summarize', type: 'llm_call', position: { x: 800, y: 200 }, config: {}, data: { providerId: '', userPromptTemplate: 'Write a concise summary from these facts:\n\n{{nodes.transform_1.output}}', systemPrompt: 'You are a skilled writer. Produce clear, concise summaries.' } } as any,
-            { id: 'output_1', type: 'output', position: { x: 1050, y: 200 }, config: {}, data: { mapping: '{{nodes.llm_summarize.output}}' } } as any,
-          ],
-          edges: [
-            { id: 'e1', source: 'input_1', target: 'llm_extract' },
-            { id: 'e2', source: 'llm_extract', target: 'transform_1' },
-            { id: 'e3', source: 'transform_1', target: 'llm_summarize' },
-            { id: 'e4', source: 'llm_summarize', target: 'output_1' },
-          ],
-        },
-      },
-      {
-        id: 'tool-augmented',
-        name: 'Tool-Augmented Agent',
-        description: 'LLM with access to your API tools — the standard agentic pattern',
-        category: 'basic',
-        pipeline: {
-          nodes: [
-            { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, config: {}, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } } as any,
-            { id: 'llm_1', type: 'llm_call', position: { x: 350, y: 200 }, config: {}, data: { providerId: '', userPromptTemplate: '{{input.message}}', systemPrompt: 'You are a helpful assistant with access to tools. Use them when needed.', toolIds: [], maxToolRounds: 5 } } as any,
-            { id: 'output_1', type: 'output', position: { x: 650, y: 200 }, config: {}, data: { mapping: '{{nodes.llm_1.output}}' } } as any,
-          ],
-          edges: [
-            { id: 'e1', source: 'input_1', target: 'llm_1' },
-            { id: 'e2', source: 'llm_1', target: 'output_1' },
-          ],
-        },
-      },
-    ];
+    return getAgentTemplates();
   }
 
   // ── Import / Export ──
@@ -573,103 +489,9 @@ export class AgentsService {
    *   - Unknown/unset: ~1-5 cents per call (conservative range)
    * Tool calls add a small fixed cost (~0.1 cents each).
    */
-  async estimateCost(agentId: string, organizationId: string): Promise<any> {
+  async estimateCost(agentId: string, organizationId: string): Promise<EstimatedCost> {
     const agent = await this.getAgent(agentId, organizationId);
-    // Only merge strategies that actually call an LLM count toward the cost
-    // estimate. `first_response` and `concatenate` are pure bookkeeping and
-    // don't touch the LLM — counting them as LLM calls over-estimated cost.
-    const LLM_MERGE_STRATEGIES = new Set(['best_of_n', 'consensus']);
-    const llmNodes = agent.pipeline.nodes.filter((n: any) => {
-      if (n.type === 'llm_call') return true;
-      if (n.type === 'merge') {
-        const strategy = n.data?.strategy || n.config?.strategy;
-        return LLM_MERGE_STRATEGIES.has(strategy);
-      }
-      return false;
-    });
-    const toolCallNodes = agent.pipeline.nodes.filter(
-      (n: any) => n.type === 'tool_call',
-    );
-    const parallelNodes = agent.pipeline.nodes.filter(
-      (n: any) => n.type === 'parallel',
-    );
-
-    // Estimate cost per LLM node based on model/provider
-    let totalLow = 0;
-    let totalHigh = 0;
-    for (const node of llmNodes) {
-      const model = ((node.data?.model as string) || '').toLowerCase();
-      const providerType = ((node.data?.providerType as string) || '').toLowerCase();
-      const { low, high } = this.estimateNodeCost(model, providerType);
-      totalLow += low;
-      totalHigh += high;
-    }
-
-    // Add a small cost per tool call (API execution overhead)
-    const toolCost = toolCallNodes.length * 0.1;
-    totalLow += toolCost;
-    totalHigh += toolCost;
-
-    // If no LLM nodes exist, report zero
-    if (llmNodes.length === 0 && toolCallNodes.length === 0) {
-      totalLow = 0;
-      totalHigh = 0;
-    }
-
-    return {
-      estimatedLlmCalls: llmNodes.length,
-      estimatedToolCalls: toolCallNodes.length,
-      hasParallelExecution: parallelNodes.length > 0,
-      estimatedCostRange: {
-        low: Math.round(totalLow * 10) / 10,
-        high: Math.round(totalHigh * 10) / 10,
-      },
-      nodeCount: agent.pipeline.nodes.length,
-      edgeCount: agent.pipeline.edges.length,
-    };
-  }
-
-  /**
-   * Return low/high cost estimate in cents for a single LLM call
-   * based on model name and provider type.
-   */
-  private estimateNodeCost(
-    model: string,
-    providerType: string,
-  ): { low: number; high: number } {
-    // Cheap OpenAI models (check before gpt-4o since gpt-4o-mini contains gpt-4o)
-    if (model.includes('gpt-3.5') || model.includes('gpt-4o-mini') || model.includes('mini')) {
-      return { low: 0.2, high: 1 };
-    }
-    // GPT-4 class models (expensive)
-    if (model.includes('gpt-4o')) {
-      return { low: 1, high: 4 };
-    }
-    if (model.includes('gpt-4')) {
-      return { low: 3, high: 8 };
-    }
-    // Claude models
-    if (model.includes('opus')) {
-      return { low: 5, high: 15 };
-    }
-    if (model.includes('sonnet')) {
-      return { low: 1, high: 4 };
-    }
-    if (model.includes('haiku')) {
-      return { low: 0.2, high: 1 };
-    }
-    if (model.includes('claude')) {
-      return { low: 2, high: 4 };
-    }
-    // Provider-based fallback when model is unknown/empty
-    if (providerType === 'anthropic') {
-      return { low: 2, high: 4 };
-    }
-    if (providerType === 'openai') {
-      return { low: 1, high: 5 };
-    }
-    // Completely unknown — conservative range
-    return { low: 1, high: 5 };
+    return estimateAgentCost(agent);
   }
 
   /**

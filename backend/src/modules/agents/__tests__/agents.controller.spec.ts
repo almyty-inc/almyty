@@ -540,7 +540,10 @@ describe('AgentsController', () => {
       const mockEstimate = {
         estimatedLlmCalls: 2,
         estimatedToolCalls: 1,
+        hasParallelExecution: false,
         estimatedCostRange: { low: 1, high: 20 },
+        nodeCount: 4,
+        edgeCount: 3,
       };
 
       agentsService.estimateCost.mockResolvedValue(mockEstimate);
