@@ -35,6 +35,7 @@ import { MonitoringController } from '../../modules/monitoring/monitoring.contro
 import { FilesController } from '../../modules/files/files.controller';
 import { TextExtractorService } from '../../modules/files/text-extractor.service';
 import { OrganizationsService } from '../../modules/organizations/organizations.service';
+import { OrganizationsInvitesHelper } from '../../modules/organizations/organizations-invites.helper';
 import { UnifiedEndpointController } from '../../modules/gateways/unified-endpoint.controller';
 import { UnifiedAgentHelper } from '../../modules/gateways/unified-agent.helper';
 import { UnifiedGatewayDelegation } from '../../modules/gateways/unified-gateway-delegation.helper';
@@ -244,6 +245,13 @@ describe('OrganizationsService.getInviteDetails — email privacy', () => {
       createQueryBuilder: jest.fn(),
       findOne: jest.fn(),
     };
+    const invitesHelper = new OrganizationsInvitesHelper(
+      orgRepo as any,
+      membershipRepo as any,
+      { findOne: jest.fn() } as any,
+      { sendInvitation: jest.fn() } as any,
+      { ensureSystemGateway: jest.fn() } as any,
+    );
     const service = new OrganizationsService(
       orgRepo as any,
       membershipRepo as any,
@@ -252,6 +260,7 @@ describe('OrganizationsService.getInviteDetails — email privacy', () => {
       { findOne: jest.fn() } as any, // User
       { sendInvitation: jest.fn() } as any, // MailService
       { ensureSystemGateway: jest.fn() } as any, // GatewaysService
+      invitesHelper,
     );
 
     const result = await service.getInviteDetails('valid-token');
