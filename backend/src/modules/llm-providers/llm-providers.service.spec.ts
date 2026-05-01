@@ -13,6 +13,7 @@ import { Tool } from '../../entities/tool.entity';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { LlmChatHelper } from './llm-chat.helper';
+import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmModelsHelper } from './llm-models.helper';
 
 // jest.mock with __esModule: true short-circuits __importDefault so the
@@ -137,6 +138,7 @@ describe('LlmProvidersService', () => {
         },
         LlmModelsHelper,
         LlmChatHelper,
+        LlmStatsHelper,
       ],
     }).compile();
 

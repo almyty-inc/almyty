@@ -14,6 +14,7 @@ import { LlmProvidersController } from './llm-providers.controller';
 import { LlmSessionsController } from './llm-sessions.controller';
 import { LlmModelsHelper } from './llm-models.helper';
 import { LlmChatHelper } from './llm-chat.helper';
+import { LlmStatsHelper } from './llm-stats.helper';
 
 import { ToolsModule } from '../tools/tools.module';
 

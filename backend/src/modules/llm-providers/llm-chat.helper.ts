@@ -11,6 +11,7 @@ import { ToolExecutorService } from '../tools/tool-executor.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { LlmModelsHelper } from './llm-models.helper';
+import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmProvidersService } from './llm-providers.service';
 import { ChatRequest, ChatResponse, StreamChunk } from './dto/llm-providers.dto';
 import { callLlmProviderHttp } from './providers/safe-request';
@@ -34,7 +35,9 @@ export class LlmChatHelper {
     private readonly auditLogService: AuditLogService,
     private readonly modelsHelper: LlmModelsHelper,
     @Inject(forwardRef(() => LlmProvidersService))
+    @Inject(forwardRef(() => LlmProvidersService))
     private readonly providers: LlmProvidersService,
+    private readonly stats: LlmStatsHelper,
   ) {}
 
   async chat(
@@ -180,7 +183,7 @@ export class LlmChatHelper {
       // would be silently lost. Replaced with a single atomic
       // SQL UPDATE via bumpSessionStats.
       const hasToolCalls = (response.message.toolCalls?.length || 0) > 0;
-      await this.bumpSessionStats(session.id, {
+      await this.stats.bumpSessionStats(session.id, {
         inputTokens: response.usage.inputTokens,
         outputTokens: response.usage.outputTokens,
         cost: response.cost * 100,
@@ -190,7 +193,7 @@ export class LlmChatHelper {
 
       // Same race existed on provider stats — replace with atomic
       // SQL UPDATE via bumpProviderStats.
-      await this.bumpProviderStats(provider.id, {
+      await this.stats.bumpProviderStats(provider.id, {
         tokens: response.usage.totalTokens,
         cost: response.cost * 100,
         success: true,
@@ -216,7 +219,7 @@ export class LlmChatHelper {
       // save(provider) — racing with any concurrent writer on the
       // same row. Use a scoped partial UPDATE instead.
       try {
-        await this.bumpProviderStats(providerId, {
+        await this.stats.bumpProviderStats(providerId, {
           tokens: 0,
           cost: 0,
           success: false,
@@ -369,7 +372,7 @@ export class LlmChatHelper {
 
       // Update session stats atomically
       const hasToolCalls = (response.message.toolCalls?.length || 0) > 0;
-      await this.bumpSessionStats(session.id, {
+      await this.stats.bumpSessionStats(session.id, {
         inputTokens: response.usage.inputTokens,
         outputTokens: response.usage.outputTokens,
         cost: response.cost * 100,
@@ -378,7 +381,7 @@ export class LlmChatHelper {
       });
 
       // Update provider stats atomically
-      await this.bumpProviderStats(provider.id, {
+      await this.stats.bumpProviderStats(provider.id, {
         tokens: response.usage.totalTokens,
         cost: response.cost * 100,
         success: true,
@@ -399,7 +402,7 @@ export class LlmChatHelper {
       );
 
       try {
-        await this.bumpProviderStats(providerId, {
+        await this.stats.bumpProviderStats(providerId, {
           tokens: 0,
           cost: 0,
           success: false,
@@ -416,72 +419,6 @@ export class LlmChatHelper {
     }
   }
 
-  /**
-   * Atomic session counter bump. Single UPDATE with column
-   * expressions so two concurrent chat calls on the same session
-   * can never lose an increment. Mirrors the pattern we use on
-   * agent-execution and tool-executor stats.
-   */
-  async bumpSessionStats(
-    sessionId: string,
-    delta: {
-      inputTokens: number;
-      outputTokens: number;
-      cost: number;
-      toolCall: boolean;
-      toolCallSuccess: boolean;
-    },
-  ): Promise<void> {
-    const input = Number(delta.inputTokens) || 0;
-    const output = Number(delta.outputTokens) || 0;
-    const cost = Number(delta.cost) || 0;
-    await this.conversationRepository
-      .createQueryBuilder()
-      .update(Conversation)
-      .set({
-        messageCount: () => '"messageCount" + 1',
-        totalInputTokens: () => `"totalInputTokens" + ${input}`,
-        totalOutputTokens: () => `"totalOutputTokens" + ${output}`,
-        totalCost: () => `"totalCost" + ${cost}`,
-        toolCalls: delta.toolCall
-          ? () => '"toolCalls" + 1'
-          : () => '"toolCalls"',
-        successfulToolCalls: delta.toolCall && delta.toolCallSuccess
-          ? () => '"successfulToolCalls" + 1'
-          : () => '"successfulToolCalls"',
-        lastActivityAt: new Date(),
-      })
-      .where('id = :id', { id: sessionId })
-      .execute();
-  }
-
-  /**
-   * Atomic provider counter bump. Same shape as bumpSessionStats —
-   * single UPDATE with column expressions so concurrent chat calls
-   * don't lose increments on totalRequests / totalTokensUsed /
-   * totalCost / successfulRequests.
-   */
-  async bumpProviderStats(
-    providerId: string,
-    delta: { tokens: number; cost: number; success: boolean },
-  ): Promise<void> {
-    const tokens = Number(delta.tokens) || 0;
-    const cost = Number(delta.cost) || 0;
-    await this.llmProviderRepository
-      .createQueryBuilder()
-      .update(LlmProvider)
-      .set({
-        totalRequests: () => '"totalRequests" + 1',
-        successfulRequests: delta.success
-          ? () => '"successfulRequests" + 1'
-          : () => '"successfulRequests"',
-        totalTokensUsed: () => `"totalTokensUsed" + ${tokens}`,
-        totalCost: () => `"totalCost" + ${cost}`,
-        lastRequestAt: new Date(),
-      })
-      .where('id = :id', { id: providerId })
-      .execute();
-  }
 
   async callLlmProvider(
     provider: LlmProvider,

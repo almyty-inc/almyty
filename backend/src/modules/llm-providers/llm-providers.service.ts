@@ -17,6 +17,7 @@ import { Tool } from '../../entities/tool.entity';
 import { ToolExecutorService, ToolExecutionOptions } from '../tools/tool-executor.service';
 import { callLlmProviderHttp } from './providers/safe-request';
 import { LlmChatHelper } from './llm-chat.helper';
+import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmModelsHelper } from './llm-models.helper';
 
 import { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters } from './dto/llm-providers.dto';
@@ -92,6 +93,7 @@ export class LlmProvidersService {
     private readonly modelsHelper: LlmModelsHelper,
     @Inject(forwardRef(() => LlmChatHelper))
     private readonly chatHelper: LlmChatHelper,
+    private readonly statsHelper: LlmStatsHelper,
   ) {}
 
   async createProvider(
@@ -530,8 +532,8 @@ export class LlmProvidersService {
   callLlmProvider(...args: Parameters<LlmChatHelper['callLlmProvider']>) { return this.chatHelper.callLlmProvider(...args); }
   prepareTools(...args: Parameters<LlmChatHelper['prepareTools']>) { return this.chatHelper.prepareTools(...args); }
   executeToolCalls(...args: Parameters<LlmChatHelper['executeToolCalls']>) { return this.chatHelper.executeToolCalls(...args); }
-  bumpSessionStats(...args: Parameters<LlmChatHelper['bumpSessionStats']>) { return this.chatHelper.bumpSessionStats(...args); }
-  bumpProviderStats(...args: Parameters<LlmChatHelper['bumpProviderStats']>) { return this.chatHelper.bumpProviderStats(...args); }
+  bumpSessionStats(...args: Parameters<LlmStatsHelper['bumpSessionStats']>) { return this.statsHelper.bumpSessionStats(...args); }
+  bumpProviderStats(...args: Parameters<LlmStatsHelper['bumpProviderStats']>) { return this.statsHelper.bumpProviderStats(...args); }
   dispatchProviderCall(...args: Parameters<LlmChatHelper['dispatchProviderCall']>) { return this.chatHelper.dispatchProviderCall(...args); }
   chatStream(...args: Parameters<LlmChatHelper['chatStream']>) { return this.chatHelper.chatStream(...args); }
 }

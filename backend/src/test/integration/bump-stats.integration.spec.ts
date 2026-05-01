@@ -29,6 +29,7 @@ import { Organization } from '../../entities/organization.entity';
 import { AgentExecutionEngine } from '../../modules/agents/agent-execution.engine';
 import { ToolExecutorService } from '../../modules/tools/tool-executor.service';
 import { LlmProvidersService } from '../../modules/llm-providers/llm-providers.service';
+import { LlmStatsHelper } from '../../modules/llm-providers/llm-stats.helper';
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
 const describeIfDb = SHOULD_RUN ? describe : describe.skip;
@@ -329,6 +330,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         {} as any, // auditLogService
         {} as any, // modelsHelper
         {} as any, // chatHelper
+        new LlmStatsHelper(conversationRepo, providerRepo),
       );
     });
 
