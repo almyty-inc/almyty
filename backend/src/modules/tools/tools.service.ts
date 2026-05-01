@@ -17,6 +17,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 import { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats } from './dto/tools.dto';
 import { ToolsOperationHelper } from './tools-operation.helper';
+import { ToolsStatsHelper } from './tools-stats.helper';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
 
 @Injectable()
@@ -44,7 +45,9 @@ export class ToolsService {
     private organizationRepository: Repository<Organization>,
     private readonly auditLogService: AuditLogService,
     @Inject(forwardRef(() => ToolsOperationHelper))
+    @Inject(forwardRef(() => ToolsOperationHelper))
     private readonly operationHelper: ToolsOperationHelper,
+    private readonly statsHelper: ToolsStatsHelper,
   ) {}
 
   async createTool(
@@ -495,135 +498,12 @@ export class ToolsService {
     });
   }
 
-  async getToolUsageStats(
-    toolId: string,
-    organizationId: string,
-    timeframe: 'hour' | 'day' | 'week' | 'month' = 'day'
-  ): Promise<ToolUsageStats> {
-    const tool = await this.getTool(toolId, organizationId, false);
 
-    const timeframeDurations = {
-      hour: 60 * 60 * 1000,
-      day: 24 * 60 * 60 * 1000,
-      week: 7 * 24 * 60 * 60 * 1000,
-      month: 30 * 24 * 60 * 60 * 1000,
-    };
-
-    const since = new Date(Date.now() - timeframeDurations[timeframe]);
-
-    // Get executions. Previously this used the MongoDB-style
-    // `{ $gte: since }` operator, which TypeORM doesn't recognise —
-    // the whole where clause was an object-literal comparison that
-    // matched zero rows, so `getToolUsageStats` silently returned
-    // all-zeros for every tool in every timeframe.
-    const executions = await this.toolExecutionRepository.find({
-      where: {
-        toolId: tool.id,
-        organizationId,
-        createdAt: MoreThanOrEqual(since),
-      },
-      relations: ['user'],
-    });
-
-    const total = executions.length;
-    const successful = executions.filter(e => e.success).length;
-    const failed = total - successful;
-    const avgTime = total > 0 ? executions.reduce((sum, e) => sum + e.executionTime, 0) / total : 0;
-    const cached = executions.filter(e => e.cached).length;
-    const cacheHitRate = total > 0 ? (cached / total) * 100 : 0;
-    const rateLimited = executions.filter(e => e.metadata?.rateLimited).length;
-    const uniqueUsers = new Set(executions.map(e => e.userId)).size;
-
-    // Calculate trend data
-    const trendData = this.calculateExecutionTrend(executions, timeframe);
-
-    return {
-      totalExecutions: total,
-      successfulExecutions: successful,
-      failedExecutions: failed,
-      averageExecutionTime: Math.round(avgTime),
-      cacheHitRate: Math.round(cacheHitRate * 100) / 100,
-      rateLimitedExecutions: rateLimited,
-      uniqueUsers,
-      executionTrend: trendData,
-    };
-  }
-
-  async getOrganizationToolStats(organizationId: string): Promise<{
-    totalTools: number;
-    activeTools: number;
-    draftTools: number;
-    inactiveTools: number;
-    totalExecutions: number;
-    averageExecutionTime: number;
-    topUsedTools: Array<{
-      tool: Tool;
-      executionCount: number;
-    }>;
-  }> {
-    // Get tool counts
-    const toolCounts = await this.toolRepository
-      .createQueryBuilder('tool')
-      .select('tool.status')
-      .addSelect('COUNT(*)', 'count')
-      .where('tool.organizationId = :organizationId', { organizationId })
-      .groupBy('tool.status')
-      .getRawMany();
-
-    const statusCounts: Record<string, number> = toolCounts.reduce((acc, row) => {
-      acc[row.tool_status] = parseInt(row.count);
-      return acc;
-    }, {} as Record<string, number>);
-
-    const totalTools = Object.values(statusCounts).reduce((sum: number, count: number) => sum + count, 0);
-
-    // Get execution stats
-    const executions = await this.toolExecutionRepository.find({
-      where: { organizationId },
-      relations: ['tool'],
-    });
-
-    const totalExecutions = executions.length;
-    const averageExecutionTime = totalExecutions > 0
-      ? Math.round(executions.reduce((sum, e) => sum + e.executionTime, 0) / totalExecutions)
-      : 0;
-
-    // Get top used tools
-    const toolUsage = executions.reduce((acc, execution) => {
-      const toolId = execution.toolId;
-      acc[toolId] = (acc[toolId] || 0) + 1;
-      return acc;
-    }, {});
-
-    const topToolIds = Object.entries(toolUsage)
-      .sort(([, a], [, b]) => (b as number) - (a as number))
-      .slice(0, 10)
-      .map(([toolId]) => toolId);
-
-    const topTools = await this.toolRepository.find({
-      where: { id: In(topToolIds) },
-    });
-
-    const topUsedTools = topTools.map(tool => ({
-      tool,
-      executionCount: toolUsage[tool.id] || 0,
-    }));
-
-    return {
-      totalTools,
-      activeTools: statusCounts[ToolStatus.ACTIVE] || 0,
-      draftTools: statusCounts[ToolStatus.DRAFT] || 0,
-      inactiveTools: statusCounts[ToolStatus.INACTIVE] || 0,
-      totalExecutions,
-      averageExecutionTime,
-      topUsedTools,
-    };
-  }
 
   async createToolVersion(
     tool: Tool,
     changelog: string,
-    userId: string
+    userId: string,
   ): Promise<ToolVersion> {
     const version = this.toolVersionRepository.create({
       toolId: tool.id,
@@ -643,91 +523,17 @@ export class ToolsService {
     return this.toolVersionRepository.save(version);
   }
 
-  private calculateExecutionTrend(
-    executions: ToolExecution[],
-    timeframe: 'hour' | 'day' | 'week' | 'month'
-  ): Array<{ date: string; executions: number; success: number; failed: number }> {
-    const intervals = {
-      hour: 24, // Last 24 hours
-      day: 30,  // Last 30 days
-      week: 12, // Last 12 weeks
-      month: 12, // Last 12 months
-    };
-
-    const interval = intervals[timeframe];
-    const trend: Array<{ date: string; executions: number; success: number; failed: number }> = [];
-
-    for (let i = interval - 1; i >= 0; i--) {
-      let date: Date;
-      let dateKey: string;
-
-      switch (timeframe) {
-        case 'hour':
-          date = new Date(Date.now() - i * 60 * 60 * 1000);
-          dateKey = date.toISOString().slice(0, 13) + ':00:00Z';
-          break;
-        case 'day':
-          date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-          dateKey = date.toISOString().slice(0, 10);
-          break;
-        case 'week':
-          date = new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000);
-          dateKey = `${date.getFullYear()}-W${this.getWeekNumber(date)}`;
-          break;
-        case 'month':
-          date = new Date(Date.now() - i * 30 * 24 * 60 * 60 * 1000);
-          dateKey = date.toISOString().slice(0, 7);
-          break;
-      }
-
-      const periodExecutions = executions.filter(e => {
-        const executionDate = new Date(e.createdAt);
-        switch (timeframe) {
-          case 'hour':
-            return executionDate.getHours() === date.getHours() &&
-                   executionDate.toDateString() === date.toDateString();
-          case 'day':
-            return executionDate.toDateString() === date.toDateString();
-          case 'week':
-            return this.getWeekNumber(executionDate) === this.getWeekNumber(date) &&
-                   executionDate.getFullYear() === date.getFullYear();
-          case 'month':
-            return executionDate.getMonth() === date.getMonth() &&
-                   executionDate.getFullYear() === date.getFullYear();
-          default:
-            return false;
-        }
-      });
-
-      const total = periodExecutions.length;
-      const successful = periodExecutions.filter(e => e.success).length;
-      const failed = total - successful;
-
-      trend.push({
-        date: dateKey,
-        executions: total,
-        success: successful,
-        failed,
-      });
-    }
-
-    return trend;
-  }
-
   async findByName(name: string, organizationId: string): Promise<Tool | null> {
-    return this.toolRepository.findOne({
-      where: {
-        name,
-        organizationId,
-      },
-    });
+    return this.toolRepository.findOne({ where: { name, organizationId } });
   }
 
-
-  private getWeekNumber(date: Date): number {
-    const oneJan = new Date(date.getFullYear(), 0, 1);
-    const numberOfDays = Math.floor((date.getTime() - oneJan.getTime()) / (24 * 60 * 60 * 1000));
-    return Math.ceil((date.getDay() + 1 + numberOfDays) / 7);
+  // ── Delegations to ToolsStatsHelper ──
+  async getToolUsageStats(toolId: string, organizationId: string, timeframe: 'hour' | 'day' | 'week' | 'month' = 'day') {
+    const tool = await this.getTool(toolId, organizationId, false);
+    return this.statsHelper.getToolUsageStats(tool, organizationId, timeframe);
+  }
+  getOrganizationToolStats(...args: Parameters<ToolsStatsHelper['getOrganizationToolStats']>) {
+    return this.statsHelper.getOrganizationToolStats(...args);
   }
 
   // ── Delegations to ToolsOperationHelper ──

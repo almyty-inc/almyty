@@ -346,6 +346,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds.getRepository(Organization),
         stubAuditLog() as any,
         {} as any, // ToolsOperationHelper
+        {} as any, // ToolsStatsHelper
       );
 
       const toolRepo = fx.ds.getRepository(Tool);
