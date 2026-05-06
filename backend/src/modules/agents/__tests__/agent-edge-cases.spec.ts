@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { AgentExecutionEngine, StreamEvent } from '../agent-execution.engine';
 import { AgentNodeExecutor, NodeExecutionResult } from '../agent-node-executor';
 import { AgentWebhookService } from '../agent-webhook.service';
+import { AgentExecutionStateHelper } from '../agent-execution-state.helper';
 import { Agent, AgentStatus, AgentPipeline, AgentPipelineNode } from '../../../entities/agent.entity';
 import { AgentExecution, AgentExecutionStatus } from '../../../entities/agent-execution.entity';
 import { AgentTemplateResolver, ExecutionContext } from '../agent-template-resolver';
@@ -104,6 +105,7 @@ describe('Agent Edge Cases', () => {
         { provide: getRepositoryToken(AgentExecution), useValue: agentExecutionRepo },
         { provide: AgentNodeExecutor, useValue: mockNodeExecutor },
         { provide: AgentWebhookService, useValue: mockWebhookService },
+        AgentExecutionStateHelper,
       ],
     }).compile();
 

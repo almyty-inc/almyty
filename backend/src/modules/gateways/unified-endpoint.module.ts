@@ -9,6 +9,8 @@ import { Agent } from '../../entities/agent.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 
 import { UnifiedEndpointController } from './unified-endpoint.controller';
+import { UnifiedAgentHelper } from './unified-agent.helper';
+import { UnifiedGatewayDelegation } from './unified-gateway-delegation.helper';
 import { GatewaysModule } from './gateways.module';
 import { McpModule } from '../mcp/mcp.module';
 import { AgentsModule } from '../agents/agents.module';
@@ -37,5 +39,6 @@ import { AcpModule } from '../acp/acp.module';
     GatewaysModule,
   ],
   controllers: [UnifiedEndpointController],
+  providers: [UnifiedAgentHelper, UnifiedGatewayDelegation],
 })
 export class UnifiedEndpointModule {}
