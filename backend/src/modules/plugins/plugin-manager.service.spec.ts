@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PluginManagerService } from './plugin-manager.service';
+import { PluginStoreHelper } from './plugin-store.helper';
 import { PluginHookType } from './types/plugin.types';
 
 describe('PluginManagerService - Real Business Logic', () => {
@@ -27,6 +28,7 @@ describe('PluginManagerService - Real Business Logic', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PluginManagerService,
+        PluginStoreHelper,
         {
           provide: 'default_IORedisModuleConnectionToken',
           useValue: mockRedis,
@@ -809,7 +811,7 @@ describe('PluginManagerService - Real Business Logic', () => {
     it('should handle Redis errors gracefully', async () => {
       mockRedis.keys.mockRejectedValue(new Error('Redis error'));
 
-      await service['loadPluginConfigurations']();
+      await service['store'].loadPluginConfigurations(service['registry']);
 
       expect(mockRedis.keys).toHaveBeenCalled();
     });
@@ -818,7 +820,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       mockRedis.keys.mockResolvedValue(['plugin:config:non-existent']);
       mockRedis.get.mockResolvedValue(JSON.stringify({ priority: 90 }));
 
-      await service['loadPluginConfigurations']();
+      await service['store'].loadPluginConfigurations(service['registry']);
 
       expect(mockRedis.get).toHaveBeenCalled();
     });
@@ -854,7 +856,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       mockRedis.keys.mockResolvedValue([`plugin:config:${pluginId}`]);
       mockRedis.get.mockResolvedValue(JSON.stringify({ priority: 90, settings: { new: 'value' } }));
 
-      await service['loadPluginConfigurations']();
+      await service['store'].loadPluginConfigurations(service['registry']);
 
       const plugin = service.getPlugin(pluginId);
       expect(plugin?.configuration.priority).toBe(90);
@@ -877,7 +879,7 @@ describe('PluginManagerService - Real Business Logic', () => {
 
   describe('Plugin Metrics - Branch Coverage', () => {
     it('should skip metrics update for non-existent plugin', async () => {
-      await service['updatePluginMetrics']('non-existent', 100, true);
+      await service['store'].updatePluginMetrics(service['registry'], 'non-existent', 100, true);
 
       expect(service).toBeDefined();
     });
@@ -910,7 +912,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         ],
       });
 
-      await service['updatePluginMetrics'](pluginId, 100, false);
+      await service['store'].updatePluginMetrics(service['registry'], pluginId, 100, false);
 
       const plugin = service.getPlugin(pluginId);
       expect(plugin?.metadata.errorRate).toBeGreaterThan(0);

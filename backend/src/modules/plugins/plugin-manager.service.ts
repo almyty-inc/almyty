@@ -19,6 +19,7 @@ import {
 } from './types/plugin.types';
 
 import { PluginLoaderHelper, isSafeHandlerName } from './plugin-loader.helper';
+import { PluginStoreHelper } from './plugin-store.helper';
 
 @Injectable()
 export class PluginManagerService extends EventEmitter implements OnModuleInit, OnModuleDestroy {
@@ -43,6 +44,7 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
 
   constructor(
     @InjectRedis() private readonly redis: Redis.Redis,
+    private readonly store: PluginStoreHelper,
   ) {
     super();
     this.setupEventHandlers();
@@ -68,7 +70,7 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
       await this.loader.loadExternalPlugins(this.registerPlugin.bind(this), this.config.pluginDirectory!);
       
       // Load plugin configurations from Redis
-      await this.loadPluginConfigurations();
+      await this.store.loadPluginConfigurations(this.registry);
       
       this.logger.log(`Plugin Manager initialized with ${this.registry.plugins.size} plugins`);
       
@@ -219,7 +221,7 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
       const result = await this.executePluginHandler(plugin, pluginHook.handler, context);
 
       // Update plugin usage metrics
-      await this.updatePluginMetrics(plugin.id, Date.now() - startTime, result.success);
+      await this.store.updatePluginMetrics(this.registry, plugin.id, Date.now() - startTime, result.success);
 
       return result;
 
@@ -502,79 +504,6 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     };
   }
 
-  // Plugin Configuration Management
-  private async loadPluginConfigurations(): Promise<void> {
-    try {
-      const configKeys = await this.redis.keys('plugin:config:*');
-      
-      for (const key of configKeys) {
-        const config = await this.redis.get(key);
-        if (config) {
-          const pluginId = key.replace('plugin:config:', '');
-          const plugin = this.registry.plugins.get(pluginId);
-          
-          if (plugin) {
-            plugin.configuration = { ...plugin.configuration, ...JSON.parse(config) };
-            this.registry.plugins.set(pluginId, plugin);
-          }
-        }
-      }
-    } catch (error) {
-      this.logger.error(`Failed to load plugin configurations: ${error.message}`);
-    }
-  }
-
-  async updatePluginConfiguration(
-    pluginId: string,
-    configuration: Partial<Plugin['configuration']>,
-  ): Promise<boolean> {
-    const plugin = this.registry.plugins.get(pluginId);
-    if (!plugin) {
-      return false;
-    }
-
-    // Update configuration
-    plugin.configuration = { ...plugin.configuration, ...configuration };
-    this.registry.plugins.set(pluginId, plugin);
-
-    // Store in Redis
-    await this.redis.setex(
-      `plugin:config:${pluginId}`,
-      86400,
-      JSON.stringify(configuration)
-    );
-
-    this.logger.log(`Plugin configuration updated: ${pluginId}`);
-    return true;
-  }
-
-  // Plugin Metrics and Monitoring
-  private async updatePluginMetrics(
-    pluginId: string,
-    executionTime: number,
-    success: boolean,
-  ): Promise<void> {
-    const plugin = this.registry.plugins.get(pluginId);
-    if (!plugin) {
-      return;
-    }
-
-    plugin.metadata.usageCount++;
-    plugin.metadata.averageExecutionTime = (
-      (plugin.metadata.averageExecutionTime * (plugin.metadata.usageCount - 1)) + executionTime
-    ) / plugin.metadata.usageCount;
-
-    if (!success) {
-      const totalExecutions = plugin.metadata.usageCount;
-      const errorCount = Math.round(plugin.metadata.errorRate * (totalExecutions - 1)) + 1;
-      plugin.metadata.errorRate = errorCount / totalExecutions;
-    }
-
-    plugin.metadata.lastUpdated = new Date().toISOString();
-
-    // Update in Redis
-    await this.redis.setex(`plugin:${pluginId}`, 86400, JSON.stringify(plugin));
-  }
 
   // Utility Methods
   private evaluateConditions(conditions: any[], context: PluginContext): boolean {
@@ -690,6 +619,11 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     };
   }
 
+
+  // ── Delegations to PluginStoreHelper ──
+  updatePluginConfiguration(pluginId: string, configuration: Partial<Plugin['configuration']>) {
+    return this.store.updatePluginConfiguration(this.registry, pluginId, configuration);
+  }
   async shutdown(): Promise<void> {
     this.logger.log('Shutting down Plugin Manager');
     
