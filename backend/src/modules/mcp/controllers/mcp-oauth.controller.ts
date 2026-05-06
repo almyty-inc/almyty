@@ -189,16 +189,13 @@ export class McpOAuthController {
 
     // --- User is authenticated — auto-consent for now ---
     // TODO: Add consent screen UI in the future
-    const authorizationCode = await this.generateAuthorizationCode({
-      organizationId: organization.id,
-      gatewayId: gateway.id,
-      userId: user.sub || user.id, // sub from JWT payload, id from User entity (guard)
+    const authorizationCode = await this.mcpOAuthService.createAuthorizationCode(
       clientId,
-      redirectUri,
-      codeChallenge,
-      codeChallengeMethod,
-      scope: scope || 'mcp:*',
-    });
+      user.sub || user.id,
+      gateway.id,
+      organization.id,
+      { redirectUri, codeChallenge, codeChallengeMethod, scope: scope || 'mcp:*' },
+    );
 
     // Redirect back to client with the authorization code
     const redirectUrl = new URL(redirectUri);
@@ -280,16 +277,13 @@ export class McpOAuthController {
     // User is authenticated via JwtAuthGuard — req.user is always set here
     const user = req.user;
 
-    const authorizationCode = await this.generateAuthorizationCode({
-      organizationId: organization.id,
-      gatewayId: gateway.id,
-      userId: user.sub || user.id, // sub from JWT payload, id from User entity (guard)
+    const authorizationCode = await this.mcpOAuthService.createAuthorizationCode(
       clientId,
-      redirectUri,
-      codeChallenge,
-      codeChallengeMethod,
-      scope: scope || 'mcp:*',
-    });
+      user.sub || user.id,
+      gateway.id,
+      organization.id,
+      { redirectUri, codeChallenge, codeChallengeMethod, scope: scope || 'mcp:*' },
+    );
 
     return {
       code: authorizationCode,
@@ -344,14 +338,7 @@ export class McpOAuthController {
         );
       }
 
-      return this.exchangeCode({
-        gatewayId: gateway.id,
-        code,
-        redirectUri: redirect_uri,
-        codeVerifier: code_verifier,
-        clientId,
-        clientSecret: client_secret,
-      });
+      return this.mcpOAuthService.exchangeCode(code, clientId, code_verifier, redirect_uri, gateway.id, client_secret);
     }
 
     if (grantType === 'refresh_token') {
@@ -368,12 +355,7 @@ export class McpOAuthController {
         );
       }
 
-      return this.refreshToken({
-        gatewayId: gateway.id,
-        refreshToken: refresh_token,
-        clientId,
-        clientSecret: client_secret,
-      });
+      return this.mcpOAuthService.refreshToken(refresh_token, clientId, gateway.id, client_secret);
     }
 
     throw new HttpException(
@@ -462,17 +444,17 @@ export class McpOAuthController {
       }
     }
 
-    const clientMetadata = await this.registerClient({
-      organizationId: organization.id,
-      gatewayId: gateway.id,
-      clientName: body.client_name,
-      redirectUris: body.redirect_uris,
-      grantTypes: body.grant_types || ['authorization_code', 'refresh_token'],
-      responseTypes: body.response_types || ['code'],
-      tokenEndpointAuthMethod:
-        body.token_endpoint_auth_method || 'none',
-      clientUri: body.client_uri,
-    });
+    const clientMetadata = await this.mcpOAuthService.registerClient(
+      gateway.id,
+      organization.id,
+      {
+        client_name: body.client_name,
+        redirect_uris: body.redirect_uris,
+        grant_types: body.grant_types || ['authorization_code', 'refresh_token'],
+        response_types: body.response_types || ['code'],
+        token_endpoint_auth_method: body.token_endpoint_auth_method || 'none',
+      },
+    );
 
     return res.status(HttpStatus.CREATED).json(clientMetadata);
   }
@@ -506,116 +488,12 @@ export class McpOAuthController {
     }
 
     try {
-      await this.revokeToken({
-        gatewayId: gateway.id,
-        token: body.token,
-        tokenTypeHint: body.token_type_hint,
-        clientId: body.client_id,
-        clientSecret: body.client_secret,
-      });
+      await this.mcpOAuthService.revokeToken(body.token, body.client_id, gateway.id, body.client_secret);
     } catch {
       // RFC 7009: The authorization server responds with HTTP status code 200
       // for both successful and unsuccessful revocation requests
     }
 
     return res.status(HttpStatus.OK).json({});
-  }
-
-  // ---------------------------------------------------------------------------
-  // Delegations to McpOAuthService
-  // ---------------------------------------------------------------------------
-
-  private async generateAuthorizationCode(params: {
-    organizationId: string;
-    gatewayId: string;
-    userId: string;
-    clientId: string;
-    redirectUri: string;
-    codeChallenge: string;
-    codeChallengeMethod: string;
-    scope: string;
-  }): Promise<string> {
-    return this.mcpOAuthService.createAuthorizationCode(
-      params.clientId,
-      params.userId,
-      params.gatewayId,
-      params.organizationId,
-      {
-        redirectUri: params.redirectUri,
-        codeChallenge: params.codeChallenge,
-        codeChallengeMethod: params.codeChallengeMethod,
-        scope: params.scope,
-      },
-    );
-  }
-
-  private async exchangeCode(params: {
-    gatewayId: string;
-    code: string;
-    redirectUri: string;
-    codeVerifier: string;
-    clientId: string;
-    clientSecret?: string;
-  }) {
-    return this.mcpOAuthService.exchangeCode(
-      params.code,
-      params.clientId,
-      params.codeVerifier,
-      params.redirectUri,
-      params.gatewayId,
-      params.clientSecret,
-    );
-  }
-
-  private async refreshToken(params: {
-    gatewayId: string;
-    refreshToken: string;
-    clientId: string;
-    clientSecret?: string;
-  }) {
-    return this.mcpOAuthService.refreshToken(
-      params.refreshToken,
-      params.clientId,
-      params.gatewayId,
-      params.clientSecret,
-    );
-  }
-
-  private async registerClient(params: {
-    organizationId: string;
-    gatewayId: string;
-    clientName: string;
-    redirectUris: string[];
-    grantTypes: string[];
-    responseTypes: string[];
-    tokenEndpointAuthMethod: string;
-    clientUri?: string;
-  }) {
-    return this.mcpOAuthService.registerClient(
-      params.gatewayId,
-      params.organizationId,
-      {
-        client_name: params.clientName,
-        redirect_uris: params.redirectUris,
-        grant_types: params.grantTypes,
-        response_types: params.responseTypes,
-        token_endpoint_auth_method: params.tokenEndpointAuthMethod,
-      },
-    );
-  }
-
-  private async revokeToken(params: {
-    gatewayId: string;
-    token: string;
-    tokenTypeHint?: string;
-    clientId: string;
-    clientSecret?: string;
-  }): Promise<void> {
-    await this.mcpOAuthService.revokeToken(
-      params.token,
-      params.clientId,
-      params.gatewayId,
-      params.clientSecret,
-    );
   }
 }
