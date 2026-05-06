@@ -9,6 +9,7 @@ import { Agent, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agen
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { A2AClientService } from '../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../a2a/external-agents.service';
+import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
 
 export interface NodeExecutionResult {
   output: any;
@@ -48,6 +49,7 @@ export class AgentNodeExecutor {
     private readonly executionEngine: AgentExecutionEngine,
     private readonly a2aClientService: A2AClientService,
     private readonly externalAgentsService: ExternalAgentsService,
+    private readonly subAgents: AgentSubAgentExecutors,
   ) {}
 
   /**
@@ -97,7 +99,7 @@ export class AgentNodeExecutor {
         return this.executeMergeNode(node, context, execOptions);
 
       case 'sub_agent':
-        return this.executeSubAgentNode(node, context, execOptions);
+        return this.subAgents.executeSubAgentNode(node, context, execOptions);
 
       default:
         throw new Error(`Unsupported node type: ${node.type}`);
@@ -524,180 +526,6 @@ export class AgentNodeExecutor {
     }
   }
 
-  /**
-   * Execute a sub_agent node — loads and runs another agent with mapped inputs.
-   * Enforces maximum nesting depth to prevent runaway recursion.
-   *
-   * Supports two target kinds:
-   * - { kind: 'native', agentId } — run a local agent via the execution engine
-   * - { kind: 'external_a2a', externalAgentId } — call a remote agent via A2A protocol
-   * - Legacy format (no target property) — treat agentId as a native agent
-   */
-  private async executeSubAgentNode(
-    node: AgentPipelineNode,
-    context: ExecutionContext,
-    options: NodeExecutionOptions,
-  ): Promise<NodeExecutionResult> {
-    const config = node.data || node.config || {};
-    const { inputMapping, target } = config;
-    const startTime = Date.now();
-
-    const currentDepth = options.nestingDepth || 0;
-    const maxDepth = options.maxNestingDepth || 5;
-
-    if (currentDepth >= maxDepth) {
-      throw new Error(`Max nesting depth (${maxDepth}) exceeded at node '${node.id}'`);
-    }
-
-    // Resolve input mapping
-    const subInput: Record<string, any> = {};
-    if (inputMapping) {
-      for (const [key, template] of Object.entries(inputMapping)) {
-        if (typeof template === 'string') {
-          subInput[key] = this.templateResolver.resolve(template, context);
-        } else {
-          subInput[key] = template;
-        }
-      }
-    } else {
-      // Default: pass entire context input
-      Object.assign(subInput, context.input);
-    }
-
-    // Determine target kind — legacy nodes have agentId at the top level
-    const resolvedTarget = target
-      ? target
-      : config.agentId
-        ? { kind: 'native' as const, agentId: config.agentId }
-        : null;
-
-    if (!resolvedTarget) {
-      throw new Error(`Sub-agent node '${node.id}' is missing 'target' or 'agentId' in config`);
-    }
-
-    if (resolvedTarget.kind === 'external_a2a') {
-      return this.executeExternalA2ASubAgent(node, resolvedTarget.externalAgentId, subInput, options, startTime);
-    }
-
-    // Default: native sub-agent
-    return this.executeNativeSubAgent(node, resolvedTarget.agentId, subInput, options, startTime);
-  }
-
-  /**
-   * Execute a native (local) sub-agent via the execution engine.
-   */
-  private async executeNativeSubAgent(
-    node: AgentPipelineNode,
-    agentId: string,
-    subInput: Record<string, any>,
-    options: NodeExecutionOptions,
-    startTime: number,
-  ): Promise<NodeExecutionResult> {
-    if (!agentId) {
-      throw new Error(`Sub-agent node '${node.id}' is missing 'agentId' in target`);
-    }
-
-    const currentDepth = options.nestingDepth || 0;
-    const maxDepth = options.maxNestingDepth || 5;
-
-    // Load sub-agent. CRITICAL: scope to the caller's organizationId.
-    const subAgent = await this.agentRepository.findOne({
-      where: { id: agentId, organizationId: options.organizationId },
-    });
-    if (!subAgent) {
-      throw new Error(`Sub-agent '${agentId}' not found`);
-    }
-
-    const result = await this.executionEngine.execute(
-      subAgent,
-      options.organizationId,
-      options.userId,
-      {
-        input: subInput,
-        metadata: {
-          parentNodeId: node.id,
-          nestingDepth: currentDepth + 1,
-        },
-        signal: options.signal,
-      },
-      undefined,
-      {
-        nestingDepth: currentDepth + 1,
-        maxNestingDepth: maxDepth,
-      },
-    );
-
-    const executionTime = Date.now() - startTime;
-
-    if (result.status === 'failed') {
-      throw new Error(`Sub-agent execution failed: ${result.error}`);
-    }
-
-    return {
-      output: result.output,
-      cost: result.totalCost || 0,
-      tokens: result.totalTokens || 0,
-      executionTime,
-    };
-  }
-
-  /**
-   * Execute a remote external agent via the A2A protocol.
-   */
-  private async executeExternalA2ASubAgent(
-    node: AgentPipelineNode,
-    externalAgentId: string,
-    subInput: Record<string, any>,
-    options: NodeExecutionOptions,
-    startTime: number,
-  ): Promise<NodeExecutionResult> {
-    if (!externalAgentId) {
-      throw new Error(`Sub-agent node '${node.id}' is missing 'externalAgentId' in target`);
-    }
-
-    const externalAgent = await this.externalAgentsService.findById(
-      externalAgentId,
-      options.organizationId,
-    );
-
-    // Build a text message from the sub-input
-    const text = typeof subInput === 'string'
-      ? subInput
-      : subInput.text || subInput.message || subInput.prompt || JSON.stringify(subInput);
-
-    const rpcResponse = await this.a2aClientService.sendMessage(externalAgent, text);
-    const executionTime = Date.now() - startTime;
-
-    // Extract text from A2A response
-    let output: any = rpcResponse;
-    if (rpcResponse?.result) {
-      const task = rpcResponse.result;
-      // Try to extract text from artifacts or status message
-      if (task.artifacts?.length) {
-        const textParts = task.artifacts
-          .flatMap((a: any) => a.parts || [])
-          .filter((p: any) => p.type === 'text')
-          .map((p: any) => p.text);
-        output = textParts.length === 1 ? textParts[0] : textParts.join('\n');
-      } else if (task.status?.message?.parts?.length) {
-        const textParts = task.status.message.parts
-          .filter((p: any) => p.type === 'text')
-          .map((p: any) => p.text);
-        output = textParts.length === 1 ? textParts[0] : textParts.join('\n');
-      }
-    } else if (rpcResponse?.error) {
-      throw new Error(`A2A call failed: ${rpcResponse.error.message || JSON.stringify(rpcResponse.error)}`);
-    }
-
-    return {
-      output,
-      executionTime,
-    };
-  }
-
-  /**
-   * Find the ID of the first incoming node that has output in context.
-   */
   private getInputNodeId(node: AgentPipelineNode, context: ExecutionContext): string | null {
     for (const [nodeId, nodeResult] of Object.entries(context.nodes)) {
       if (nodeResult.output !== undefined) {

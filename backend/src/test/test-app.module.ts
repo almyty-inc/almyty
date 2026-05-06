@@ -92,6 +92,8 @@ import { MailService } from '../modules/mail/mail.service';
 
 // Unified endpoint
 import { UnifiedEndpointController } from '../modules/gateways/unified-endpoint.controller';
+import { UnifiedAgentHelper } from '../modules/gateways/unified-agent.helper';
+import { UnifiedGatewayDelegation } from '../modules/gateways/unified-gateway-delegation.helper';
 import { AgentExecutionEngine } from '../modules/agents/agent-execution.engine';
 import { A2AServerService } from '../modules/a2a/a2a-server.service';
 import { A2AAgentCardService } from '../modules/a2a/a2a-agent-card.service';
@@ -243,7 +245,9 @@ const mockRedis = {
     { provide: AcpServerService, useValue: { handleJsonRpc: () => ({}) } },
     { provide: AcpDiscoveryService, useValue: { buildDiscovery: () => ({}) } },
     { provide: UtcpService, useValue: { handleRequest: () => ({}) } },
-    { provide: AgentRuntimeService, useValue: { startRun: () => ({}), getRun: () => ({}), listRuns: () => ([]), getRunEmitter: () => null, sendInput: () => ({}), cancelRun: () => ({}) } },
+    { provide: AgentRuntimeService, useValue: { startRun: () => ({}), getRun: () => ({}), listRuns: () => ([]), getRunEmitter: () => null, subscribeRunEvents: () => ({}), sendInput: () => ({}), cancelRun: () => ({}) } },
+    UnifiedAgentHelper,
+    UnifiedGatewayDelegation,
 
     // Redis mock
     { provide: 'default_IORedisModuleConnectionToken', useValue: mockRedis },

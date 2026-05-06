@@ -4,6 +4,7 @@ import { NotFoundException } from '@nestjs/common';
 import { AgentOpenAICompatController } from '../agent-openai-compat.controller';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
+import { AgentOpenAIStreamHelper } from '../agent-openai-stream.helper';
 import { ApiKey } from '../../../entities/api-key.entity';
 import { AgentExecutionStatus } from '../../../entities/agent-execution.entity';
 import * as crypto from 'crypto';
@@ -114,6 +115,7 @@ describe('OpenAI Compatibility', () => {
           provide: getRepositoryToken(ApiKey),
           useValue: apiKeyRepo,
         },
+        AgentOpenAIStreamHelper,
       ],
     }).compile();
 

@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PluginManagerService } from './plugin-manager.service';
+import { evaluateConditions, validatePlugin } from './plugin-utils';
+import * as pluginUtils from './plugin-utils';
+import { PluginStoreHelper } from './plugin-store.helper';
 import { PluginHookType } from './types/plugin.types';
 
 describe('PluginManagerService - Real Business Logic', () => {
@@ -27,6 +30,7 @@ describe('PluginManagerService - Real Business Logic', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PluginManagerService,
+        PluginStoreHelper,
         {
           provide: 'default_IORedisModuleConnectionToken',
           useValue: mockRedis,
@@ -670,7 +674,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         hooks: [],
       };
 
-      const validation = await service['validatePlugin'](pluginWithoutHooks as any);
+      const validation = await validatePlugin(pluginWithoutHooks as any, false);
 
       expect(validation.isValid).toBe(true);
       expect(validation.warnings).toContain('Plugin has no hooks defined');
@@ -696,7 +700,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         hooks: [],
       };
 
-      const validation = await service['validatePlugin'](invalidPlugin as any);
+      const validation = await validatePlugin(invalidPlugin as any, false);
 
       expect(validation.isValid).toBe(false);
       expect(validation.errors).toContain('Plugin version is required');
@@ -730,7 +734,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         ],
       };
 
-      const validation = await service['validatePlugin'](invalidPlugin as any);
+      const validation = await validatePlugin(invalidPlugin as any, false);
 
       expect(validation.isValid).toBe(false);
       expect(validation.errors.some(e => e.includes('Invalid hook type'))).toBe(true);
@@ -764,7 +768,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         ],
       };
 
-      const validation = await service['validatePlugin'](invalidPlugin as any);
+      const validation = await validatePlugin(invalidPlugin as any, false);
 
       expect(validation.isValid).toBe(false);
       expect(validation.errors.some(e => e.includes('Missing handler'))).toBe(true);
@@ -799,7 +803,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         ],
       };
 
-      const validation = await service['validatePlugin'](unsafePlugin as any);
+      const validation = await validatePlugin(unsafePlugin as any, false);
 
       expect(validation.warnings.some(w => w.includes('execute capabilities'))).toBe(true);
     });
@@ -809,7 +813,7 @@ describe('PluginManagerService - Real Business Logic', () => {
     it('should handle Redis errors gracefully', async () => {
       mockRedis.keys.mockRejectedValue(new Error('Redis error'));
 
-      await service['loadPluginConfigurations']();
+      await service['store'].loadPluginConfigurations(service['registry']);
 
       expect(mockRedis.keys).toHaveBeenCalled();
     });
@@ -818,7 +822,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       mockRedis.keys.mockResolvedValue(['plugin:config:non-existent']);
       mockRedis.get.mockResolvedValue(JSON.stringify({ priority: 90 }));
 
-      await service['loadPluginConfigurations']();
+      await service['store'].loadPluginConfigurations(service['registry']);
 
       expect(mockRedis.get).toHaveBeenCalled();
     });
@@ -854,7 +858,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       mockRedis.keys.mockResolvedValue([`plugin:config:${pluginId}`]);
       mockRedis.get.mockResolvedValue(JSON.stringify({ priority: 90, settings: { new: 'value' } }));
 
-      await service['loadPluginConfigurations']();
+      await service['store'].loadPluginConfigurations(service['registry']);
 
       const plugin = service.getPlugin(pluginId);
       expect(plugin?.configuration.priority).toBe(90);
@@ -863,13 +867,13 @@ describe('PluginManagerService - Real Business Logic', () => {
 
   describe('External Plugin Loading - Branch Coverage', () => {
     it('should skip loading when plugin directory does not exist', async () => {
-      await service['loadExternalPlugins']();
+      await service['loader'].loadExternalPlugins(service['registerPlugin'].bind(service), service['config'].pluginDirectory);
 
       expect(service).toBeDefined();
     });
 
     it('should handle errors when loading external plugin fails', async () => {
-      await service['loadExternalPlugins']();
+      await service['loader'].loadExternalPlugins(service['registerPlugin'].bind(service), service['config'].pluginDirectory);
 
       expect(service).toBeDefined();
     });
@@ -877,7 +881,7 @@ describe('PluginManagerService - Real Business Logic', () => {
 
   describe('Plugin Metrics - Branch Coverage', () => {
     it('should skip metrics update for non-existent plugin', async () => {
-      await service['updatePluginMetrics']('non-existent', 100, true);
+      await service['store'].updatePluginMetrics(service['registry'], 'non-existent', 100, true);
 
       expect(service).toBeDefined();
     });
@@ -910,7 +914,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         ],
       });
 
-      await service['updatePluginMetrics'](pluginId, 100, false);
+      await service['store'].updatePluginMetrics(service['registry'], pluginId, 100, false);
 
       const plugin = service.getPlugin(pluginId);
       expect(plugin?.metadata.errorRate).toBeGreaterThan(0);
@@ -921,7 +925,7 @@ describe('PluginManagerService - Real Business Logic', () => {
     it('should handle errors when loading individual built-in plugins', async () => {
       const originalGet = service.getPlugin;
 
-      await service['loadBuiltInPlugins']();
+      await service['loader'].loadBuiltInPlugins(service['registerPlugin'].bind(service));
 
       expect(service).toBeDefined();
     });
@@ -1127,7 +1131,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       const plugin = service.getPlugin(pluginId);
 
       // Mock evaluateConditions to return false
-      jest.spyOn(service as any, 'evaluateConditions').mockReturnValue(false);
+      jest.spyOn(pluginUtils, 'evaluateConditions').mockReturnValue(false);
 
       const context: any = {
         hookType: PluginHookType.PRE_REQUEST,
@@ -1160,7 +1164,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       };
 
       // Mock loadPluginModule to return empty object
-      jest.spyOn(service as any, 'loadPluginModule').mockResolvedValue({});
+      jest.spyOn(service['loader'] as any, 'loadPluginModule').mockResolvedValue({});
 
       const result = await service['executePluginHandler'](plugin, 'nonExistentHandler', context);
 
@@ -1187,7 +1191,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         return { data: {} };
       };
 
-      jest.spyOn(service as any, 'loadPluginModule').mockResolvedValue({
+      jest.spyOn(service['loader'] as any, 'loadPluginModule').mockResolvedValue({
         testHandler: slowHandler,
       });
 
@@ -1212,7 +1216,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       };
 
       // Mock loadPluginModule to return non-function
-      jest.spyOn(service as any, 'loadPluginModule').mockResolvedValue({
+      jest.spyOn(service['loader'] as any, 'loadPluginModule').mockResolvedValue({
         testHandler: 'not a function',
       });
 
@@ -1242,7 +1246,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         nextAction: 'continue',
       });
 
-      jest.spyOn(service as any, 'loadPluginModule').mockResolvedValue({
+      jest.spyOn(service['loader'] as any, 'loadPluginModule').mockResolvedValue({
         testHandler: successHandler,
       });
 
@@ -1263,9 +1267,9 @@ describe('PluginManagerService - Real Business Logic', () => {
       };
 
       const mockModule = { testHandler: jest.fn() };
-      service['pluginModules'].set('cached-plugin', mockModule);
+      service['loader']['pluginModules'].set('cached-plugin', mockModule);
 
-      const result = await service['loadPluginModule'](plugin);
+      const result = await service['loader'].loadPluginModule(plugin);
 
       expect(result).toBe(mockModule);
     });
@@ -1276,7 +1280,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         name: 'PII Filter',
       };
 
-      const result = await service['loadPluginModule'](plugin);
+      const result = await service['loader'].loadPluginModule(plugin);
 
       expect(result).toBeDefined();
       expect(result.constructor.name).toBe('PiiFilterPlugin');
@@ -1288,7 +1292,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         name: 'Rate Limiter',
       };
 
-      const result = await service['loadPluginModule'](plugin);
+      const result = await service['loader'].loadPluginModule(plugin);
 
       expect(result).toBeDefined();
       expect(result.constructor.name).toBe('RateLimiterPlugin');
@@ -1300,7 +1304,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         name: 'Request Logger',
       };
 
-      const result = await service['loadPluginModule'](plugin);
+      const result = await service['loader'].loadPluginModule(plugin);
 
       expect(result).toBeDefined();
       expect(result.constructor.name).toBe('RequestLoggerPlugin');
@@ -1312,7 +1316,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         name: 'Security Scanner',
       };
 
-      const result = await service['loadPluginModule'](plugin);
+      const result = await service['loader'].loadPluginModule(plugin);
 
       expect(result).toBeDefined();
       expect(result.constructor.name).toBe('SecurityScannerPlugin');
@@ -1324,7 +1328,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         name: 'Performance Monitor',
       };
 
-      const result = await service['loadPluginModule'](plugin);
+      const result = await service['loader'].loadPluginModule(plugin);
 
       expect(result).toBeDefined();
       expect(result.constructor.name).toBe('PerformanceMonitorPlugin');
@@ -1336,7 +1340,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         name: 'Unknown Plugin',
       };
 
-      await expect(service['loadPluginModule'](plugin)).rejects.toThrow('Plugin module not found');
+      await expect(service['loader'].loadPluginModule(plugin)).rejects.toThrow('Plugin module not found');
     });
   });
 
@@ -1372,7 +1376,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         ],
       };
 
-      const validation = await service['validatePlugin'](pluginWithNetworkAccess as any);
+      const validation = await validatePlugin(pluginWithNetworkAccess as any, false);
 
       expect(validation.warnings.some(w => w.includes('network access but no host restrictions'))).toBe(true);
     });
@@ -1438,7 +1442,7 @@ describe('PluginManagerService - Real Business Logic', () => {
   describe('Initialize Error Handling - Branch Coverage', () => {
     it('should handle initialization errors gracefully', async () => {
       // Force an error during initialization
-      jest.spyOn(service as any, 'loadBuiltInPlugins').mockRejectedValue(new Error('Init error'));
+      jest.spyOn(service['loader'] as any, 'loadBuiltInPlugins').mockRejectedValue(new Error('Init error'));
 
       await service.initialize();
 
@@ -1477,7 +1481,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       const plugin = service.getPlugin(pluginId)!;
 
       // Stub the handler lookup with a well-behaved async function.
-      jest.spyOn(service as any, 'loadPluginModule').mockResolvedValue({
+      jest.spyOn(service['loader'] as any, 'loadPluginModule').mockResolvedValue({
         handle: async (ctx: any) => ({ data: ctx.data, modifications: [] }),
       });
 
@@ -1508,7 +1512,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       const pluginId = await service.registerPlugin(basePlugin);
       const plugin = service.getPlugin(pluginId)!;
 
-      jest.spyOn(service as any, 'loadPluginModule').mockResolvedValue({
+      jest.spyOn(service['loader'] as any, 'loadPluginModule').mockResolvedValue({
         handle: async (ctx: any) => ({ data: ctx.data, modifications: [] }),
       });
 
@@ -1584,7 +1588,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       });
       const plugin = service.getPlugin(pluginId)!;
 
-      jest.spyOn(service as any, 'loadPluginModule').mockResolvedValue({});
+      jest.spyOn(service['loader'] as any, 'loadPluginModule').mockResolvedValue({});
 
       const result = await (service as any).executePluginHandler(plugin, unsafe, {
         hookType: PluginHookType.PRE_REQUEST,
@@ -1612,7 +1616,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       });
       const plugin = service.getPlugin(pluginId)!;
 
-      jest.spyOn(service as any, 'loadPluginModule').mockResolvedValue({
+      jest.spyOn(service['loader'] as any, 'loadPluginModule').mockResolvedValue({
         handleRequest: async (ctx: any) => ({ data: ctx.data, modifications: [] }),
       });
 
@@ -1687,7 +1691,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       );
 
       await expect(
-        (service as any).loadExternalPlugin(pluginPath),
+        service['loader'].loadExternalPlugin(service['registerPlugin'].bind(service), pluginPath),
       ).rejects.toThrow(/escapes the plugin directory/);
 
       readFileSpy.mockRestore();

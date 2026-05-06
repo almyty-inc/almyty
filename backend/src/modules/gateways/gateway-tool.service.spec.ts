@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { GatewayToolService } from './gateway-tool.service';
+import { GatewayToolTransferHelper } from './gateway-tool-transfer.helper';
+import { GatewayToolStatsHelper } from './gateway-tool-stats.helper';
+import { GatewayToolQueriesHelper } from './gateway-tool-queries.helper';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
@@ -76,6 +79,9 @@ describe('GatewayToolService', () => {
           provide: 'default_IORedisModuleConnectionToken',
           useValue: { del: jest.fn().mockResolvedValue(1) },
         },
+        GatewayToolTransferHelper,
+        GatewayToolStatsHelper,
+        GatewayToolQueriesHelper,
       ],
     }).compile();
 

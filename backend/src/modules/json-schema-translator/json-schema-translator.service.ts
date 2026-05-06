@@ -8,6 +8,17 @@ import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
 import { Resource } from '../../entities/resource.entity';
 import { Api, ApiType } from '../../entities/api.entity';
+import {
+  normalizePropertyToJsonSchema,
+  translateOpenAPIOperationInput,
+  translateOpenAPIOperationOutput,
+  translateGraphQLOperationInput,
+  translateGraphQLOperationOutput,
+  translateSOAPOperationInput,
+  translateSOAPOperationOutput,
+  translateProtobufOperationInput,
+  translateProtobufOperationOutput,
+} from './protocol-translators.helper';
 
 @Injectable()
 export class JsonSchemaTranslatorService {
@@ -74,16 +85,16 @@ export class JsonSchemaTranslatorService {
 
       switch (apiType) {
         case ApiType.OPENAPI:
-          jsonSchema = this.translateOpenAPIOperationInput(operation);
+          jsonSchema = translateOpenAPIOperationInput(operation);
           break;
         case ApiType.GRAPHQL:
-          jsonSchema = this.translateGraphQLOperationInput(operation);
+          jsonSchema = translateGraphQLOperationInput(operation);
           break;
         case ApiType.SOAP:
-          jsonSchema = this.translateSOAPOperationInput(operation);
+          jsonSchema = translateSOAPOperationInput(operation);
           break;
         case ApiType.GRPC:
-          jsonSchema = this.translateProtobufOperationInput(operation);
+          jsonSchema = translateProtobufOperationInput(operation);
           break;
         default:
           return null;
@@ -116,16 +127,16 @@ export class JsonSchemaTranslatorService {
 
       switch (apiType) {
         case ApiType.OPENAPI:
-          jsonSchema = this.translateOpenAPIOperationOutput(operation);
+          jsonSchema = translateOpenAPIOperationOutput(operation);
           break;
         case ApiType.GRAPHQL:
-          jsonSchema = this.translateGraphQLOperationOutput(operation);
+          jsonSchema = translateGraphQLOperationOutput(operation);
           break;
         case ApiType.SOAP:
-          jsonSchema = this.translateSOAPOperationOutput(operation);
+          jsonSchema = translateSOAPOperationOutput(operation);
           break;
         case ApiType.GRPC:
-          jsonSchema = this.translateProtobufOperationOutput(operation);
+          jsonSchema = translateProtobufOperationOutput(operation);
           break;
         default:
           return null;
@@ -166,7 +177,7 @@ export class JsonSchemaTranslatorService {
       // Convert properties to JSON Schema format
       if (resource.properties) {
         for (const [propName, propDef] of Object.entries(resource.properties)) {
-          jsonSchema.properties![propName] = this.normalizePropertyToJsonSchema(propDef);
+          jsonSchema.properties![propName] = normalizePropertyToJsonSchema(propDef);
           
           if (propDef.required) {
             jsonSchema.required!.push(propName);
@@ -199,326 +210,6 @@ export class JsonSchemaTranslatorService {
       this.logger.error(`Failed to translate resource: ${error.message}`);
       return null;
     }
-  }
-
-  private translateOpenAPIOperationInput(operation: Operation): JSONSchema7 {
-    const schema: JSONSchema7 = {
-      type: 'object',
-      title: `${operation.name} Input`,
-      description: `Input parameters for ${operation.name}`,
-      properties: {},
-      required: [],
-    };
-
-    if (operation.parameters) {
-      // Path parameters
-      if (operation.parameters.path) {
-        for (const [name, param] of Object.entries(operation.parameters.path)) {
-          schema.properties![name] = this.normalizePropertyToJsonSchema(param);
-          if (param.required) {
-            schema.required!.push(name);
-          }
-        }
-      }
-
-      // Query parameters
-      if (operation.parameters.query) {
-        for (const [name, param] of Object.entries(operation.parameters.query)) {
-          schema.properties![name] = this.normalizePropertyToJsonSchema(param);
-          if (param.required) {
-            schema.required!.push(name);
-          }
-        }
-      }
-
-      // Header parameters
-      if (operation.parameters.header) {
-        for (const [name, param] of Object.entries(operation.parameters.header)) {
-          schema.properties![name] = this.normalizePropertyToJsonSchema(param);
-          if (param.required) {
-            schema.required!.push(name);
-          }
-        }
-      }
-
-      // Body parameters
-      if (operation.parameters.body) {
-        // If body has schema property, use it
-        if (operation.parameters.body.schema) {
-          if (typeof operation.parameters.body.schema === 'object') {
-            Object.assign(schema, operation.parameters.body.schema);
-          }
-        }
-        // If body has properties directly (flattened structure), use those
-        else if (Object.keys(operation.parameters.body).length > 0) {
-          for (const [name, param] of Object.entries(operation.parameters.body)) {
-            if (name !== 'schema' && typeof param === 'object') {
-              schema.properties![name] = this.normalizePropertyToJsonSchema(param);
-              if (param.required) {
-                schema.required!.push(name);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    return schema;
-  }
-
-  private translateOpenAPIOperationOutput(operation: Operation): JSONSchema7 {
-    const schema: JSONSchema7 = {
-      type: 'object',
-      title: `${operation.name} Output`,
-      description: `Output response for ${operation.name}`,
-      properties: {},
-    };
-
-    if (operation.responses) {
-      // Use the first successful response (2xx)
-      const successResponse = Object.entries(operation.responses)
-        .find(([code]) => code.startsWith('2'))?.[1];
-
-      if (successResponse && successResponse.schema) {
-        if (typeof successResponse.schema === 'object') {
-          Object.assign(schema, successResponse.schema);
-        }
-      }
-    }
-
-    return schema;
-  }
-
-  private translateGraphQLOperationInput(operation: Operation): JSONSchema7 {
-    const schema: JSONSchema7 = {
-      type: 'object',
-      title: `${operation.name} Variables`,
-      description: `GraphQL variables for ${operation.name}`,
-      properties: {},
-      required: [],
-    };
-
-    if (operation.parameters?.body?.variables?.properties) {
-      schema.properties = operation.parameters.body.variables.properties;
-      schema.required = operation.parameters.body.variables.required || [];
-    }
-
-    return schema;
-  }
-
-  private translateGraphQLOperationOutput(operation: Operation): JSONSchema7 {
-    return {
-      type: 'object',
-      title: `${operation.name} Response`,
-      description: `GraphQL response for ${operation.name}`,
-      properties: {
-        data: {
-          type: 'object',
-          description: 'GraphQL response data',
-        },
-        errors: {
-          type: 'array',
-          description: 'GraphQL errors',
-          items: {
-            type: 'object',
-            properties: {
-              message: { type: 'string' },
-              path: { type: 'array' },
-              extensions: { type: 'object' },
-            },
-          },
-        },
-      },
-    };
-  }
-
-  private translateSOAPOperationInput(operation: Operation): JSONSchema7 {
-    return {
-      type: 'object',
-      title: `${operation.name} SOAP Request`,
-      description: `SOAP request for ${operation.name}`,
-      properties: {
-        soapEnvelope: {
-          type: 'object',
-          properties: {
-            'soap:Envelope': {
-              type: 'object',
-              properties: {
-                'soap:Body': {
-                  type: 'object',
-                  properties: {
-                    [operation.name]: {
-                      type: 'object',
-                      description: `${operation.name} parameters`,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      required: ['soapEnvelope'],
-    };
-  }
-
-  private translateSOAPOperationOutput(operation: Operation): JSONSchema7 {
-    return {
-      type: 'object',
-      title: `${operation.name} SOAP Response`,
-      description: `SOAP response for ${operation.name}`,
-      properties: {
-        soapEnvelope: {
-          type: 'object',
-          properties: {
-            'soap:Envelope': {
-              type: 'object',
-              properties: {
-                'soap:Body': {
-                  type: 'object',
-                  properties: {
-                    [`${operation.name}Response`]: {
-                      type: 'object',
-                      description: `${operation.name} response`,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    };
-  }
-
-  private translateProtobufOperationInput(operation: Operation): JSONSchema7 {
-    const schema: JSONSchema7 = {
-      type: 'object',
-      title: `${operation.name} gRPC Request`,
-      description: `gRPC request for ${operation.name}`,
-      properties: {},
-    };
-
-    if (operation.parameters?.body?.message?.properties) {
-      schema.properties = operation.parameters.body.message.properties;
-    }
-
-    return schema;
-  }
-
-  private translateProtobufOperationOutput(operation: Operation): JSONSchema7 {
-    const schema: JSONSchema7 = {
-      type: 'object',
-      title: `${operation.name} gRPC Response`,
-      description: `gRPC response for ${operation.name}`,
-      properties: {},
-    };
-
-    if (operation.responses?.['200']?.schema?.properties) {
-      schema.properties = operation.responses['200'].schema.properties;
-    }
-
-    return schema;
-  }
-
-  /**
-   * Maximum recursion depth for normalizePropertyToJsonSchema. Real
-   * schemas nest a few levels (object-of-object-of-array-of-object);
-   * 50 is well beyond any legitimate shape and cheaply prevents a
-   * stack overflow on malformed / adversarial input.
-   */
-  private static readonly MAX_NORMALIZE_DEPTH = 50;
-
-  private normalizePropertyToJsonSchema(
-    property: any,
-    depth = 0,
-    seen: WeakSet<object> = new WeakSet(),
-  ): JSONSchema7 {
-    // Depth / cycle guards. The walker recurses into `items` and every
-    // entry in `properties`, neither of which were previously bounded.
-    // A schema with a cycle (e.g. a protobuf message whose `items`
-    // points back to itself, or an OpenAPI schema that the parser
-    // failed to fully dereference) used to infinite-recurse and blow
-    // the V8 stack. A malformed deeply-nested schema did the same.
-    // Bail with the current state rather than throwing — this runs
-    // during tool generation, and a bad source schema should degrade
-    // to "tool has a shallow input type" rather than "tool generation
-    // crashed the worker".
-    if (depth >= JsonSchemaTranslatorService.MAX_NORMALIZE_DEPTH) {
-      return { type: 'object', description: 'truncated: max normalize depth' };
-    }
-    if (property && typeof property === 'object') {
-      if (seen.has(property)) {
-        return { type: 'object', description: 'truncated: cyclic reference' };
-      }
-      seen.add(property);
-    }
-
-    if (typeof property === 'object' && property.type) {
-      return property as JSONSchema7;
-    }
-
-    // Handle different property formats
-    const normalized: JSONSchema7 = {
-      type: 'string', // Default type
-    };
-
-    if (property.type) {
-      normalized.type = property.type;
-    }
-
-    if (property.description) {
-      normalized.description = property.description;
-    }
-
-    if (property.example !== undefined) {
-      normalized.examples = [property.example];
-    }
-
-    if (property.enum) {
-      normalized.enum = property.enum;
-    }
-
-    if (property.format) {
-      normalized.format = property.format;
-    }
-
-    if (property.minimum !== undefined) {
-      normalized.minimum = property.minimum;
-    }
-
-    if (property.maximum !== undefined) {
-      normalized.maximum = property.maximum;
-    }
-
-    if (property.minLength !== undefined) {
-      normalized.minLength = property.minLength;
-    }
-
-    if (property.maxLength !== undefined) {
-      normalized.maxLength = property.maxLength;
-    }
-
-    if (property.pattern) {
-      normalized.pattern = property.pattern;
-    }
-
-    if (property.items) {
-      normalized.items = this.normalizePropertyToJsonSchema(property.items, depth + 1, seen);
-    }
-
-    if (property.properties) {
-      normalized.properties = {};
-      for (const [name, prop] of Object.entries(property.properties)) {
-        normalized.properties[name] = this.normalizePropertyToJsonSchema(prop, depth + 1, seen);
-      }
-    }
-
-    if (property.required && Array.isArray(property.required)) {
-      normalized.required = property.required;
-    }
-
-    return normalized;
   }
 
   async validateJsonSchema(schema: Record<string, any>): Promise<{

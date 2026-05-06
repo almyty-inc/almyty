@@ -17,8 +17,18 @@ import { AgentRun } from '../../entities/agent-run.entity';
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
 import { GatewayAuthService } from './gateway-auth.service';
+import { GatewaysStatsHelper } from './gateways-stats.helper';
+import { GatewayInitHelper } from './gateway-init.helper';
+import { GatewayAuthValidators } from './gateway-auth-validators.helper';
 import { GatewayToolService } from './gateway-tool.service';
+import { GatewayToolTransferHelper } from './gateway-tool-transfer.helper';
+import { GatewayToolStatsHelper } from './gateway-tool-stats.helper';
+import { GatewayToolQueriesHelper } from './gateway-tool-queries.helper';
 import { GatewaysController } from './gateways.controller';
+import { GatewayAuthController } from './gateway-auth.controller';
+import { GatewayToolsController } from './gateway-tools.controller';
+import { GatewaySkillsController } from './gateway-skills.controller';
+import { GatewayInfoController } from './gateway-info.controller';
 // GatewayProtocolController removed — all protocol traffic goes through
 // the unified endpoint controller at /:orgSlug/:resourceSlug
 
@@ -62,8 +72,8 @@ import { ChannelGatewayService } from './channels/channel-gateway.service';
   providers: [
     GatewaysService,
     GatewayProtocolService,
-    GatewayAuthService,
-    GatewayToolService,
+    GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper, GatewayInitHelper,
+    GatewayToolService, GatewayToolTransferHelper, GatewayToolStatsHelper, GatewayToolQueriesHelper,
     // Channel adapters
     ChannelGatewayService,
     ChatWidgetAdapter,
@@ -81,11 +91,15 @@ import { ChannelGatewayService } from './channels/channel-gateway.service';
   ],
   controllers: [
     GatewaysController,
+    GatewayAuthController,
+    GatewayToolsController,
+    GatewaySkillsController,
+    GatewayInfoController,
   ],
   exports: [
     GatewaysService,
     GatewayProtocolService,
-    GatewayAuthService,
+    GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,
     GatewayToolService,
     ChannelGatewayService,
   ],
