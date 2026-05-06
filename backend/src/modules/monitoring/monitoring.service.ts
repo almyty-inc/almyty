@@ -12,6 +12,7 @@ import { Api, ApiStatus } from '../../entities/api.entity';
 import { Organization } from '../../entities/organization.entity';
 import { MonitoringRedisStatsHelper } from './monitoring-redis-stats.helper';
 import { DEFAULT_ALERT_RULES } from './default-alert-rules';
+import { formatPrometheusMetrics, computeSystemHealth } from './monitoring-prometheus';
 
 export interface SystemMetrics {
   timestamp: string;
@@ -471,92 +472,14 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     return true;
   }
 
-  // Health Checks
-  async getSystemHealth(): Promise<{
-    status: 'healthy' | 'degraded' | 'unhealthy';
-    components: Record<string, {
-      status: 'healthy' | 'degraded' | 'unhealthy';
-      message?: string;
-      responseTime?: number;
-    }>;
-    uptime: number;
-    version: string;
-  }> {
+  async getSystemHealth() {
     const metrics = await this.getLatestMetrics();
     const alerts = await this.getActiveAlerts();
-    
-    const criticalAlerts = alerts.filter(a => a.severity === 'critical');
-    const errorAlerts = alerts.filter(a => a.severity === 'error');
-
-    let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
-    
-    if (criticalAlerts.length > 0) {
-      overallStatus = 'unhealthy';
-    } else if (errorAlerts.length > 0) {
-      overallStatus = 'degraded';
-    }
-
-    const components = {
-      database: { status: 'healthy' as const },
-      redis: { status: 'healthy' as const },
-      mcp: { status: 'healthy' as const },
-      utcp: { status: 'healthy' as const },
-      a2a: { status: 'healthy' as const },
-      plugins: { status: 'healthy' as const },
-    };
-
-    return {
-      status: overallStatus,
-      components,
-      uptime: process.uptime(),
-      version: '1.0.0',
-    };
+    return computeSystemHealth(metrics, alerts);
   }
 
-  // Prometheus Metrics Export
   async getPrometheusMetrics(): Promise<string> {
-    const metrics = await this.getLatestMetrics();
-    if (!metrics) {
-      return '';
-    }
-
-    const prometheusMetrics = [
-      `# HELP almyty_uptime_seconds Total uptime in seconds`,
-      `# TYPE almyty_uptime_seconds counter`,
-      `almyty_uptime_seconds ${metrics.system.uptime}`,
-      ``,
-      `# HELP almyty_memory_usage_bytes Memory usage in bytes`,
-      `# TYPE almyty_memory_usage_bytes gauge`,
-      `almyty_memory_usage_bytes{type="heap"} ${metrics.system.memoryUsage.heapUsed}`,
-      `almyty_memory_usage_bytes{type="heap_total"} ${metrics.system.memoryUsage.heapTotal}`,
-      ``,
-      `# HELP almyty_tools_total Total number of tools`,
-      `# TYPE almyty_tools_total gauge`,
-      `almyty_tools_total ${metrics.application.tools.total}`,
-      ``,
-      `# HELP almyty_tools_active Active tools`,
-      `# TYPE almyty_tools_active gauge`,
-      `almyty_tools_active ${metrics.application.tools.active}`,
-      ``,
-      `# HELP almyty_requests_total Total requests processed`,
-      `# TYPE almyty_requests_total counter`,
-      `almyty_requests_total{status="success"} ${metrics.application.requests.successful}`,
-      `almyty_requests_total{status="error"} ${metrics.application.requests.failed}`,
-      ``,
-      `# HELP almyty_response_time_ms Average response time in milliseconds`,
-      `# TYPE almyty_response_time_ms gauge`,
-      `almyty_response_time_ms ${metrics.performance.averageResponseTime}`,
-      ``,
-      `# HELP almyty_mcp_sessions Active MCP sessions`,
-      `# TYPE almyty_mcp_sessions gauge`,
-      `almyty_mcp_sessions ${metrics.protocols.mcp.sessions}`,
-      ``,
-      `# HELP almyty_a2a_agents Active A2A agents`,
-      `# TYPE almyty_a2a_agents gauge`,
-      `almyty_a2a_agents ${metrics.protocols.a2a.activeAgents}`,
-    ];
-
-    return prometheusMetrics.join('\n') + '\n';
+    return formatPrometheusMetrics(await this.getLatestMetrics());
   }
 
   // Cleanup
