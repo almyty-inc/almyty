@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AgentsService, CreateAgentInput, UpdateAgentInput } from '../agents.service';
 import { AgentAuditService } from '../agent-audit.service';
+import { AgentValidationHelper } from '../agent-validation.helper';
 import { Agent, AgentStatus, AgentPipeline } from '../../../entities/agent.entity';
 import { AgentExecution } from '../../../entities/agent-execution.entity';
 import { Organization } from '../../../entities/organization.entity';
@@ -88,6 +89,7 @@ function makeUser(overrides: Partial<any> = {}): any {
 
 describe('AgentsService', () => {
   let service: AgentsService;
+  let validation: AgentValidationHelper;
 
   let agentRepo: jest.Mocked<any>;
   let agentExecutionRepo: jest.Mocked<any>;
@@ -132,10 +134,12 @@ describe('AgentsService', () => {
         { provide: getRepositoryToken(Organization), useValue: organizationRepo },
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: AgentAuditService, useValue: mockAuditService },
+        AgentValidationHelper,
       ],
     }).compile();
 
     service = module.get<AgentsService>(AgentsService);
+    validation = module.get<AgentValidationHelper>(AgentValidationHelper);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -516,8 +520,8 @@ describe('AgentsService', () => {
         ],
       };
 
-      expect(() => service['validatePipeline'](pipeline)).toThrow(BadRequestException);
-      expect(() => service['validatePipeline'](pipeline)).toThrow('at least 1 output node');
+      expect(() => validation.validatePipeline(pipeline)).toThrow(BadRequestException);
+      expect(() => validation.validatePipeline(pipeline)).toThrow('at least 1 output node');
     });
 
     it('should reject condition node with wrong number of outgoing edges', () => {
@@ -536,8 +540,8 @@ describe('AgentsService', () => {
         ],
       };
 
-      expect(() => service['validatePipeline'](pipeline)).toThrow(BadRequestException);
-      expect(() => service['validatePipeline'](pipeline)).toThrow('exactly 2 outgoing edges');
+      expect(() => validation.validatePipeline(pipeline)).toThrow(BadRequestException);
+      expect(() => validation.validatePipeline(pipeline)).toThrow('exactly 2 outgoing edges');
     });
 
     it('should reject merge node with fewer than 2 incoming edges', () => {
@@ -555,17 +559,17 @@ describe('AgentsService', () => {
         ],
       };
 
-      expect(() => service['validatePipeline'](pipeline)).toThrow(BadRequestException);
-      expect(() => service['validatePipeline'](pipeline)).toThrow('at least 2 incoming edges');
+      expect(() => validation.validatePipeline(pipeline)).toThrow(BadRequestException);
+      expect(() => validation.validatePipeline(pipeline)).toThrow('at least 2 incoming edges');
     });
 
     it('should reject pipeline with null/undefined', () => {
-      expect(() => service['validatePipeline'](null as any)).toThrow(BadRequestException);
-      expect(() => service['validatePipeline'](undefined as any)).toThrow(BadRequestException);
+      expect(() => validation.validatePipeline(null as any)).toThrow(BadRequestException);
+      expect(() => validation.validatePipeline(undefined as any)).toThrow(BadRequestException);
     });
 
     it('should reject pipeline where nodes or edges are not arrays', () => {
-      expect(() => service['validatePipeline']({ nodes: 'bad', edges: [] } as any))
+      expect(() => validation.validatePipeline({ nodes: 'bad', edges: [] } as any))
         .toThrow(BadRequestException);
     });
 
@@ -587,8 +591,8 @@ describe('AgentsService', () => {
         ],
       };
 
-      expect(() => service['validatePipeline'](pipeline)).toThrow(BadRequestException);
-      expect(() => service['validatePipeline'](pipeline)).toThrow(/not reachable/);
+      expect(() => validation.validatePipeline(pipeline)).toThrow(BadRequestException);
+      expect(() => validation.validatePipeline(pipeline)).toThrow(/not reachable/);
     });
 
     it('should accept a pipeline where at least one output is reachable', () => {
@@ -605,7 +609,7 @@ describe('AgentsService', () => {
         ],
       };
 
-      expect(() => service['validatePipeline'](pipeline)).not.toThrow();
+      expect(() => validation.validatePipeline(pipeline)).not.toThrow();
     });
 
     it('should reject pipeline with duplicate node IDs', () => {
@@ -620,7 +624,7 @@ describe('AgentsService', () => {
         ],
       };
 
-      expect(() => service['validatePipeline'](pipeline)).toThrow(BadRequestException);
+      expect(() => validation.validatePipeline(pipeline)).toThrow(BadRequestException);
     });
 
     it('should reject parallel node with fewer than 2 outgoing edges', () => {
@@ -642,8 +646,8 @@ describe('AgentsService', () => {
         ],
       };
 
-      expect(() => service['validatePipeline'](pipeline)).toThrow(BadRequestException);
-      expect(() => service['validatePipeline'](pipeline)).toThrow('at least 2 outgoing edges');
+      expect(() => validation.validatePipeline(pipeline)).toThrow(BadRequestException);
+      expect(() => validation.validatePipeline(pipeline)).toThrow('at least 2 outgoing edges');
     });
 
     it('should accept a valid pipeline with condition branching', () => {
@@ -665,7 +669,7 @@ describe('AgentsService', () => {
         ],
       };
 
-      expect(() => service['validatePipeline'](pipeline)).not.toThrow();
+      expect(() => validation.validatePipeline(pipeline)).not.toThrow();
     });
 
     it('should reject sub_agent node referencing itself', () => {
@@ -681,9 +685,9 @@ describe('AgentsService', () => {
         ],
       };
 
-      expect(() => service['validatePipeline'](pipeline, 'self-agent'))
+      expect(() => validation.validatePipeline(pipeline, 'self-agent'))
         .toThrow(BadRequestException);
-      expect(() => service['validatePipeline'](pipeline, 'self-agent'))
+      expect(() => validation.validatePipeline(pipeline, 'self-agent'))
         .toThrow('self-recursion');
     });
 
@@ -700,9 +704,9 @@ describe('AgentsService', () => {
         ],
       };
 
-      expect(() => service['validatePipeline'](pipeline))
+      expect(() => validation.validatePipeline(pipeline))
         .toThrow(BadRequestException);
-      expect(() => service['validatePipeline'](pipeline))
+      expect(() => validation.validatePipeline(pipeline))
         .toThrow('toolId');
     });
   });

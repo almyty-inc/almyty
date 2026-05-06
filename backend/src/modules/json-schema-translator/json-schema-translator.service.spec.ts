@@ -1,6 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JsonSchemaTranslatorService } from './json-schema-translator.service';
+import {
+  normalizePropertyToJsonSchema,
+  translateOpenAPIOperationInput,
+  translateOpenAPIOperationOutput,
+  translateGraphQLOperationInput,
+  translateGraphQLOperationOutput,
+  translateSOAPOperationInput,
+  translateSOAPOperationOutput,
+  translateProtobufOperationInput,
+  translateProtobufOperationOutput,
+} from './protocol-translators.helper';
 import { JsonSchema, JsonSchemaType } from '../../entities/json-schema.entity';
 import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
@@ -419,7 +430,7 @@ describe('JsonSchemaTranslatorService', () => {
         pattern: '^[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$',
       };
 
-      const result = service['normalizePropertyToJsonSchema'](property);
+      const result = normalizePropertyToJsonSchema(property);
 
       expect(result.type).toBe('string');
       expect(result.description).toBe('User email address');
@@ -437,7 +448,7 @@ describe('JsonSchemaTranslatorService', () => {
         enum: ['admin', 'user', 'guest'],
       };
 
-      const result = service['normalizePropertyToJsonSchema'](property);
+      const result = normalizePropertyToJsonSchema(property);
 
       expect(result.type).toBe('string');
       expect(result.description).toBe('User role');
@@ -453,7 +464,7 @@ describe('JsonSchemaTranslatorService', () => {
         example: 25,
       };
 
-      const result = service['normalizePropertyToJsonSchema'](property);
+      const result = normalizePropertyToJsonSchema(property);
 
       expect(result.type).toBe('number');
       expect(result.description).toBe('User age');
@@ -472,7 +483,7 @@ describe('JsonSchemaTranslatorService', () => {
         },
       };
 
-      const result = service['normalizePropertyToJsonSchema'](property);
+      const result = normalizePropertyToJsonSchema(property);
 
       expect(result.type).toBe('array');
       expect(result.description).toBe('List of tags');
@@ -503,7 +514,7 @@ describe('JsonSchemaTranslatorService', () => {
         required: ['street', 'city'],
       };
 
-      const result = service['normalizePropertyToJsonSchema'](property);
+      const result = normalizePropertyToJsonSchema(property);
 
       expect(result.type).toBe('object');
       expect(result.description).toBe('User address');
@@ -533,7 +544,7 @@ describe('JsonSchemaTranslatorService', () => {
         },
       };
 
-      const result = service['normalizePropertyToJsonSchema'](property);
+      const result = normalizePropertyToJsonSchema(property);
 
       expect(result.type).toBe('object');
       expect((result.properties as any).user.type).toBe('object');
@@ -548,7 +559,7 @@ describe('JsonSchemaTranslatorService', () => {
         example: 'test value',
       };
 
-      const result = service['normalizePropertyToJsonSchema'](property);
+      const result = normalizePropertyToJsonSchema(property);
 
       expect(result.type).toBe('string');
       expect(result.description).toBe('Some field');
@@ -560,7 +571,7 @@ describe('JsonSchemaTranslatorService', () => {
         format: 'date-time',
       };
 
-      const result = service['normalizePropertyToJsonSchema'](property);
+      const result = normalizePropertyToJsonSchema(property);
 
       expect(result.type).toBe('string');
       expect(result.format).toBe('date-time');
@@ -577,7 +588,7 @@ describe('JsonSchemaTranslatorService', () => {
         example: 'VALUE1',
       };
 
-      const result = service['normalizePropertyToJsonSchema'](property);
+      const result = normalizePropertyToJsonSchema(property);
 
       expect(result.minLength).toBe(10);
       expect(result.maxLength).toBe(100);
@@ -598,7 +609,7 @@ describe('JsonSchemaTranslatorService', () => {
       cyclic.items = cyclic;
 
       // Must not throw.
-      const result = service['normalizePropertyToJsonSchema'](cyclic);
+      const result = normalizePropertyToJsonSchema(cyclic);
       expect(result).toBeDefined();
       // The self-reference gets a marker rather than infinite recursion.
       const selfNormalized = (result as any).properties?.self;
@@ -620,7 +631,7 @@ describe('JsonSchemaTranslatorService', () => {
       }
 
       // Must not throw.
-      const result = service['normalizePropertyToJsonSchema'](deep);
+      const result = normalizePropertyToJsonSchema(deep);
       expect(result).toBeDefined();
 
       // Walk into `result.properties.next.properties.next...` until we
@@ -906,7 +917,7 @@ describe('JsonSchemaTranslatorService', () => {
           minLength: 5,
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.type).toBe('string');
         expect(result.minLength).toBe(5);
@@ -923,7 +934,7 @@ describe('JsonSchemaTranslatorService', () => {
           },
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.type).toBe('array');
         expect((result.items as any).type).toBe('array');
@@ -937,7 +948,7 @@ describe('JsonSchemaTranslatorService', () => {
           maximum: 0,
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.minimum).toBe(0);
         expect(result.maximum).toBe(0);
@@ -950,7 +961,7 @@ describe('JsonSchemaTranslatorService', () => {
           maxLength: 0,
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.minLength).toBe(0);
         expect(result.maxLength).toBe(0);
@@ -962,7 +973,7 @@ describe('JsonSchemaTranslatorService', () => {
           enum: [],
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.enum).toEqual([]);
       });
@@ -973,7 +984,7 @@ describe('JsonSchemaTranslatorService', () => {
           pattern: '',
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.pattern).toBe('');
       });
@@ -983,7 +994,7 @@ describe('JsonSchemaTranslatorService', () => {
           description: 'Some property',
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.type).toBe('string'); // Default type
         expect(result.description).toBe('Some property');
@@ -1010,7 +1021,7 @@ describe('JsonSchemaTranslatorService', () => {
           },
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.type).toBe('object');
         expect((result.properties as any).users.type).toBe('array');
@@ -1490,7 +1501,7 @@ describe('JsonSchemaTranslatorService', () => {
           pattern: '^[a-z]+$',
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.enum).toEqual(['value1', 'value2', 'value3']);
         expect(result.format).toBe('email');
@@ -1514,7 +1525,7 @@ describe('JsonSchemaTranslatorService', () => {
           },
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.items).toBeDefined();
         expect((result.items as any).type).toBe('object');
@@ -1528,7 +1539,7 @@ describe('JsonSchemaTranslatorService', () => {
           description: 'Property without explicit type',
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         // Should default to 'string' type when no type specified
         expect(result.type).toBe('string');
@@ -1540,7 +1551,7 @@ describe('JsonSchemaTranslatorService', () => {
           type: 'string',
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.enum).toBeUndefined();
       });
@@ -1551,7 +1562,7 @@ describe('JsonSchemaTranslatorService', () => {
           maximum: 100,
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.minimum).toBeUndefined();
         expect(result.maximum).toBe(100);
@@ -1563,7 +1574,7 @@ describe('JsonSchemaTranslatorService', () => {
           minimum: 0,
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.maximum).toBeUndefined();
         expect(result.minimum).toBe(0);
@@ -1575,7 +1586,7 @@ describe('JsonSchemaTranslatorService', () => {
           maxLength: 50,
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.minLength).toBeUndefined();
         expect(result.maxLength).toBe(50);
@@ -1587,7 +1598,7 @@ describe('JsonSchemaTranslatorService', () => {
           minLength: 5,
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.maxLength).toBeUndefined();
         expect(result.minLength).toBe(5);
@@ -1598,7 +1609,7 @@ describe('JsonSchemaTranslatorService', () => {
           type: 'string',
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.pattern).toBeUndefined();
       });
@@ -1608,7 +1619,7 @@ describe('JsonSchemaTranslatorService', () => {
           type: 'array',
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.items).toBeUndefined();
       });
@@ -1618,7 +1629,7 @@ describe('JsonSchemaTranslatorService', () => {
           type: 'object',
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.properties).toBeUndefined();
       });
@@ -1632,7 +1643,7 @@ describe('JsonSchemaTranslatorService', () => {
           },
         };
 
-        const result = service['normalizePropertyToJsonSchema'](property);
+        const result = normalizePropertyToJsonSchema(property);
 
         expect(result.properties).toBeDefined();
         expect(result.required).toBeUndefined();

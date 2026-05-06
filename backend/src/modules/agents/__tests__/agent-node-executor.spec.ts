@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { AgentNodeExecutor } from '../agent-node-executor';
+import { AgentSubAgentExecutors } from '../agent-subagent-executors.helper';
 import { AgentTemplateResolver, ExecutionContext } from '../agent-template-resolver';
 import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
@@ -80,6 +81,7 @@ describe('AgentNodeExecutor', () => {
         { provide: AgentExecutionEngine, useValue: executionEngine },
         { provide: A2AClientService, useValue: a2aClientService },
         { provide: ExternalAgentsService, useValue: externalAgentsService },
+        AgentSubAgentExecutors,
       ],
     }).compile();
 

@@ -3,6 +3,13 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
 import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
+import { AgentRuntimeBuilders } from '../../modules/agents/agent-runtime-builders';
+import { AgentCollaborationHelper } from '../../modules/agents/agent-collaboration.helper';
+import { AgentBuiltInToolsHelper } from '../../modules/agents/agent-builtin-tools.helper';
+import { AgentRuntimeEventsHelper } from '../../modules/agents/agent-runtime-events.helper';
+import { AgentRuntimeMiscHelper } from '../../modules/agents/agent-runtime-misc.helper';
+import { AgentStepProcessor } from '../../modules/agents/agent-step-processor';
+import { AgentHeartbeatHelper } from '../../modules/agents/agent-heartbeat.helper';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
@@ -175,6 +182,13 @@ describe('Conversation reuse (integration)', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AgentRuntimeService,
+        AgentRuntimeBuilders,
+        AgentCollaborationHelper,
+        AgentBuiltInToolsHelper,
+        AgentHeartbeatHelper,
+        AgentRuntimeEventsHelper,
+        AgentRuntimeMiscHelper,
+        AgentStepProcessor,
         { provide: getRepositoryToken(AgentRun), useValue: mockRunRepo },
         { provide: getRepositoryToken(Agent), useValue: mockAgentRepo },
         { provide: getRepositoryToken(Tool), useValue: { find: jest.fn().mockResolvedValue([]) } },

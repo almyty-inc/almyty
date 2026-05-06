@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 
 import { GatewayAuthService } from './gateway-auth.service';
+import { GatewayAuthValidators } from './gateway-auth-validators.helper';
 import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { User } from '../../entities/user.entity';
@@ -22,6 +23,7 @@ describe('GatewayAuthService - Real Business Logic', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        GatewayAuthValidators,
         GatewayAuthService,
         {
           provide: getRepositoryToken(GatewayAuth),

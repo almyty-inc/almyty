@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { AgentExecutionEngine, StreamEvent } from '../agent-execution.engine';
 import { AgentNodeExecutor, NodeExecutionResult } from '../agent-node-executor';
 import { AgentWebhookService } from '../agent-webhook.service';
+import { AgentExecutionStateHelper } from '../agent-execution-state.helper';
 import { Agent, AgentStatus, AgentPipeline } from '../../../entities/agent.entity';
 import { AgentExecution, AgentExecutionStatus } from '../../../entities/agent-execution.entity';
 
@@ -116,6 +117,7 @@ describe('AgentExecutionEngine', () => {
         { provide: getRepositoryToken(AgentExecution), useValue: agentExecutionRepo },
         { provide: AgentNodeExecutor, useValue: mockNodeExecutor },
         { provide: AgentWebhookService, useValue: mockWebhookService },
+        AgentExecutionStateHelper,
       ],
     }).compile();
 

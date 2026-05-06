@@ -46,6 +46,8 @@ import { hashCacheObject, sleep } from './tool-execution-utils';
 import { ToolHttpExecutor } from './executors/tool-http.executor';
 import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
 import { ToolScriptExecutor } from './executors/tool-script.executor';
+import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
+import { ToolStatsHelper } from './tool-stats.helper';
 
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
@@ -72,6 +74,8 @@ export class ToolExecutorService {
     private readonly protocolExecutor: ToolProtocolExecutor,
     private readonly scriptExecutor: ToolScriptExecutor,
     private readonly auditLogService: AuditLogService,
+    private readonly cacheRateLimit: ToolCacheRateLimitHelper,
+    private readonly stats: ToolStatsHelper,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -132,7 +136,7 @@ export class ToolExecutorService {
       }
 
       // Parameter schema validation (if the tool has one).
-      const validation = await this.validateParameters(tool, parameters);
+      const validation = await this.stats.validateParameters(tool, parameters);
       if (!validation.isValid) {
         throw new BadRequestException(`Invalid parameters: ${validation.errors.join(', ')}`);
       }
@@ -171,7 +175,7 @@ export class ToolExecutorService {
 
       // Rate limit.
       if (!options.skipRateLimit) {
-        const rateLimitResult = await this.checkRateLimit(tool, options);
+        const rateLimitResult = await this.cacheRateLimit.checkRateLimit(tool, options);
         if (rateLimitResult.limited) {
           rateLimited = true;
           return {
@@ -187,10 +191,10 @@ export class ToolExecutorService {
 
       // Cache lookup.
       if (!options.skipCache && tool.configuration?.cache?.enabled) {
-        const cachedResult = await this.getCachedResult(tool, parameters);
+        const cachedResult = await this.cacheRateLimit.getCachedResult(tool, parameters);
         if (cachedResult) {
           cached = true;
-          await this.recordExecution(tool, parameters, cachedResult, options, {
+          await this.stats.recordExecution(tool, parameters, cachedResult, options, {
             cached: true,
             executionTime: Date.now() - startTime,
             retryCount: 0,
@@ -236,9 +240,9 @@ export class ToolExecutorService {
       if (result !== undefined) {
         // Cache successful config-based tool results.
         if (tool.configuration?.cache?.enabled && result.success) {
-          await this.cacheResult(tool, parameters, result);
+          await this.cacheRateLimit.cacheResult(tool, parameters, result);
         }
-        await this.recordExecution(tool, parameters, result, options, {
+        await this.stats.recordExecution(tool, parameters, result, options, {
           executionTime: result.executionTime ?? Date.now() - startTime,
           cached,
           retryCount: 0,
@@ -256,10 +260,10 @@ export class ToolExecutorService {
           const opResult = await this.executeOperation(tool, parameters, options);
 
           if (tool.configuration?.cache?.enabled && opResult.success) {
-            await this.cacheResult(tool, parameters, opResult);
+            await this.cacheRateLimit.cacheResult(tool, parameters, opResult);
           }
 
-          await this.recordExecution(tool, parameters, opResult, options, {
+          await this.stats.recordExecution(tool, parameters, opResult, options, {
             cached: false,
             executionTime: Date.now() - startTime,
             retryCount,
@@ -295,7 +299,7 @@ export class ToolExecutorService {
         retryCount,
       };
 
-      await this.recordExecution(tool, parameters, failureResult, options, {
+      await this.stats.recordExecution(tool, parameters, failureResult, options, {
         cached: false,
         executionTime: Date.now() - startTime,
         retryCount,
@@ -324,7 +328,7 @@ export class ToolExecutorService {
             where: { id: toolId, organizationId: options.organizationId },
           });
           if (tool) {
-            await this.recordExecution(tool, parameters, errorResult, options, {
+            await this.stats.recordExecution(tool, parameters, errorResult, options, {
               cached: false,
               executionTime: Date.now() - startTime,
               retryCount,
@@ -381,225 +385,10 @@ export class ToolExecutorService {
     }
   }
 
-  // ─── Validation / rate limit / cache ───────────────────────────
-
-  private async validateParameters(
-    tool: Tool,
-    parameters: Record<string, any>,
-  ): Promise<{ isValid: boolean; errors: string[] }> {
-    try {
-      if (tool.inputSchema) {
-        return tool.inputSchema.validate(parameters);
-      }
-
-      const errors: string[] = [];
-      const toolParams = tool.parameters;
-      if (toolParams?.required) {
-        for (const requiredParam of toolParams.required) {
-          if (!(requiredParam in parameters)) {
-            errors.push(`Missing required parameter: ${requiredParam}`);
-          }
-        }
-      }
-      return { isValid: errors.length === 0, errors };
-    } catch (error: any) {
-      return { isValid: false, errors: [`Parameter validation error: ${error.message}`] };
-    }
+  getToolExecutionStats(...args: Parameters<ToolStatsHelper['getToolExecutionStats']>) {
+    return this.stats.getToolExecutionStats(...args);
   }
 
-  private async checkRateLimit(
-    tool: Tool,
-    options: ToolExecutionOptions,
-  ): Promise<{ limited: boolean; message?: string }> {
-    try {
-      const rateLimitConfig = tool.configuration?.rateLimit;
-      if (!rateLimitConfig) return { limited: false };
-
-      const { userId } = options;
-      const toolId = tool.id;
-
-      if (rateLimitConfig.requestsPerMinute) {
-        const minuteKey = `rate_limit:${toolId}:${userId}:minute:${Math.floor(Date.now() / 60000)}`;
-        const currentMinuteCount = await this.redis.incr(minuteKey);
-        await this.redis.expire(minuteKey, 60);
-        if (currentMinuteCount > rateLimitConfig.requestsPerMinute) {
-          return {
-            limited: true,
-            message: `Exceeded ${rateLimitConfig.requestsPerMinute} requests per minute`,
-          };
-        }
-      }
-
-      if (rateLimitConfig.requestsPerHour) {
-        const hourKey = `rate_limit:${toolId}:${userId}:hour:${Math.floor(Date.now() / 3600000)}`;
-        const currentHourCount = await this.redis.incr(hourKey);
-        await this.redis.expire(hourKey, 3600);
-        if (currentHourCount > rateLimitConfig.requestsPerHour) {
-          return {
-            limited: true,
-            message: `Exceeded ${rateLimitConfig.requestsPerHour} requests per hour`,
-          };
-        }
-      }
-
-      return { limited: false };
-    } catch (error: any) {
-      // Fail open on Redis outage so the platform isn't taken down
-      // by a rate-limiter dependency failure.
-      this.logger.warn(`Rate limiting check failed, allowing request: ${error.message}`);
-      return { limited: false };
-    }
-  }
-
-  private async getCachedResult(
-    tool: Tool,
-    parameters: Record<string, any>,
-  ): Promise<ToolExecutionResult | null> {
-    try {
-      const cacheKey = this.generateCacheKey(tool.id, parameters);
-      const cached = await this.redis.get(cacheKey);
-      return cached ? JSON.parse(cached) : null;
-    } catch (error: any) {
-      this.logger.warn(`Cache retrieval failed: ${error.message}`);
-      return null;
-    }
-  }
-
-  private async cacheResult(
-    tool: Tool,
-    parameters: Record<string, any>,
-    result: ToolExecutionResult,
-  ): Promise<void> {
-    try {
-      const cacheConfig = tool.configuration?.cache;
-      if (!cacheConfig?.enabled) return;
-      const cacheKey = this.generateCacheKey(tool.id, parameters);
-      const ttl = cacheConfig.ttl || 300;
-      await this.redis.setex(cacheKey, ttl, JSON.stringify(result));
-    } catch (error: any) {
-      this.logger.warn(`Cache storage failed: ${error.message}`);
-    }
-  }
-
-  private generateCacheKey(toolId: string, parameters: Record<string, any>): string {
-    return `tool_cache:${toolId}:${hashCacheObject(parameters)}`;
-  }
-
-  // ─── Execution recording + atomic stats ────────────────────────
-
-  private async recordExecution(
-    tool: Tool,
-    parameters: Record<string, any>,
-    result: ToolExecutionResult,
-    options: ToolExecutionOptions,
-    metadata: { cached: boolean; executionTime: number; retryCount: number },
-  ): Promise<void> {
-    try {
-      const execution = this.toolExecutionRepository.create({
-        toolId: tool.id,
-        userId: options.userId,
-        organizationId: options.organizationId,
-        parameters,
-        result: result.data,
-        success: result.success,
-        error: result.error,
-        executionTime: metadata.executionTime,
-        cached: metadata.cached,
-        retryCount: metadata.retryCount,
-        metadata: {
-          httpStatus: result.metadata?.httpStatus,
-          requestId: result.metadata?.requestId,
-          rateLimited: result.rateLimited,
-        },
-      });
-
-      await this.toolExecutionRepository.save(execution);
-
-      // Audit log (fire-and-forget)
-      this.auditLogService.logToolExecution(
-        options.organizationId,
-        options.userId,
-        tool.id,
-        tool.name,
-        { success: result.success, executionTime: metadata.executionTime, parameters },
-      );
-
-      // Atomic stats bump. The old shape was `tool.incrementUsage() +
-      // tool.updateMetrics() + toolRepository.save(tool)`, which is a
-      // read-modify-write race: two concurrent executions on the same
-      // tool both read the counter, both compute `+ 1`, both save,
-      // and one increment is lost. Same class of bug we already
-      // fixed on agent-execution.engine. Do a single conditional
-      // SQL UPDATE with a Welford-style running average so the
-      // result is atomic under concurrency.
-      await this.bumpToolStats(
-        tool.id,
-        result.success,
-        metadata.executionTime,
-      );
-    } catch (error: any) {
-      this.logger.error(`Failed to record tool execution: ${error.message}`);
-    }
-  }
-
-  /**
-   * Atomic per-tool stats update. Single SQL UPDATE so two concurrent
-   * calls can never lose an increment — the RHS of every SET clause
-   * evaluates against the OLD column values, so we can reference
-   * `"usageCount"` in multiple expressions and they all see the pre-
-   * update value.
-   *
-   * Stats we maintain:
-   *
-   *   - usageCount — `"usageCount" + 1`
-   *
-   *   - lastUsedAt — clock time at row write
-   *
-   *   - averageResponseTime — incremental running average. New avg =
-   *     (old_avg * old_count + x) / (old_count + 1). Special case when
-   *     old_count is zero so we don't divide by… well, one anyway, but
-   *     we'd still multiply an uninitialised 0 by 0 and end up with x
-   *     which is what we want — the branch is just documentation.
-   *
-   *   - successRate — exponential moving average matching the shape
-   *     of the old entity-method code:
-   *       success: newRate = min(100, rate + (100 - rate) * 0.1)
-   *       failure: newRate = max(0, rate * 0.9)
-   *     The GREATEST/LEAST clamps mirror the Math.min/Math.max in the
-   *     entity method.
-   */
-  private async bumpToolStats(
-    toolId: string,
-    success: boolean,
-    executionTime: number,
-  ): Promise<void> {
-    const execTime = Number(executionTime) || 0;
-    await this.toolRepository
-      .createQueryBuilder()
-      .update(Tool)
-      .set({
-        usageCount: () => '"usageCount" + 1',
-        averageResponseTime: () =>
-          `CASE WHEN "usageCount" = 0 THEN ${execTime} ELSE ROUND(("averageResponseTime" * "usageCount" + ${execTime}) / ("usageCount" + 1)) END`,
-        successRate: success
-          ? () => `LEAST(100, "successRate" + (100 - "successRate") * 0.1)`
-          : () => `GREATEST(0, "successRate" * 0.9)`,
-        lastUsedAt: new Date(),
-      })
-      .where('id = :id', { id: toolId })
-      .execute();
-  }
-
-  // ─── Cancellation helper ───────────────────────────────────────
-
-  /**
-   * Shared ToolExecutionResult shape for a cancelled call. Returned
-   * whenever `options.signal` fires before dispatch or when a
-   * downstream executor throws an AbortError. We don't record an
-   * audit row for cancelled calls — the caller's request was the
-   * thing that cancelled, and logging a spurious "failed execution"
-   * under their id would be misleading.
-   */
   private abortedResult(startTime: number): ToolExecutionResult {
     return {
       success: false,
@@ -609,56 +398,6 @@ export class ToolExecutorService {
       rateLimited: false,
       retryCount: 0,
       metadata: { cancelled: true },
-    };
-  }
-
-  // ─── Stats reader ──────────────────────────────────────────────
-
-  async getToolExecutionStats(
-    toolId: string,
-    organizationId: string,
-    timeframe: 'hour' | 'day' | 'week' | 'month' = 'day',
-  ): Promise<{
-    totalExecutions: number;
-    successfulExecutions: number;
-    failedExecutions: number;
-    averageExecutionTime: number;
-    cacheHitRate: number;
-    rateLimitedExecutions: number;
-  }> {
-    const timeframeDurations = {
-      hour: 60 * 60 * 1000,
-      day: 24 * 60 * 60 * 1000,
-      week: 7 * 24 * 60 * 60 * 1000,
-      month: 30 * 24 * 60 * 60 * 1000,
-    };
-
-    const since = new Date(Date.now() - timeframeDurations[timeframe]);
-
-    const executions = await this.toolExecutionRepository.find({
-      where: {
-        toolId,
-        organizationId,
-        createdAt: MoreThanOrEqual(since),
-      },
-    });
-
-    const total = executions.length;
-    const successful = executions.filter(e => e.success).length;
-    const failed = total - successful;
-    const avgTime =
-      total > 0 ? executions.reduce((sum, e) => sum + e.executionTime, 0) / total : 0;
-    const cached = executions.filter(e => e.cached).length;
-    const cacheHitRate = total > 0 ? (cached / total) * 100 : 0;
-    const rateLimited = executions.filter(e => (e.metadata as any)?.rateLimited).length;
-
-    return {
-      totalExecutions: total,
-      successfulExecutions: successful,
-      failedExecutions: failed,
-      averageExecutionTime: Math.round(avgTime),
-      cacheHitRate: Math.round(cacheHitRate * 100) / 100,
-      rateLimitedExecutions: rateLimited,
     };
   }
 }

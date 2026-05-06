@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { OrganizationsService } from './organizations.service';
+import { OrganizationsInvitesHelper } from './organizations-invites.helper';
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
@@ -22,6 +23,8 @@ describe('OrganizationsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrganizationsService,
+        OrganizationsInvitesHelper,
+        OrganizationsInvitesHelper,
         {
           provide: getRepositoryToken(Organization),
           useValue: {
@@ -717,6 +720,7 @@ describe('OrganizationsService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           OrganizationsService,
+          OrganizationsInvitesHelper,
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
           { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
@@ -756,6 +760,7 @@ describe('OrganizationsService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           OrganizationsService,
+          OrganizationsInvitesHelper,
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
           { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
@@ -793,6 +798,7 @@ describe('OrganizationsService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           OrganizationsService,
+          OrganizationsInvitesHelper,
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
           { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
@@ -857,6 +863,7 @@ describe('OrganizationsService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           OrganizationsService,
+          OrganizationsInvitesHelper,
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
           { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },

@@ -33,6 +33,8 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { JsonSchema } from '../../entities/json-schema.entity';
 
 import { ApisService } from '../../modules/apis/apis.service';
+import { ApisImportHelper } from '../../modules/apis/apis-import.helper';
+import { ApisToolGeneratorHelper } from '../../modules/apis/apis-tool-generator.helper';
 import { ToolsService } from '../../modules/tools/tools.service';
 import { SchemaParserService } from '../../modules/schema-parser/schema-parser.service';
 import { OpenAPIParserService } from '../../modules/schema-parser/parsers/openapi-parser.service';
@@ -181,6 +183,8 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         ApisService,
+        ApisImportHelper,
+        ApisToolGeneratorHelper,
         SchemaParserService,
         OpenAPIParserService,
         GraphQLParserService,

@@ -8,6 +8,7 @@ import {
 import * as crypto from 'crypto';
 
 import { McpOAuthService } from '../services/mcp-oauth.service';
+import { McpOAuthTokensHelper } from '../services/mcp-oauth-tokens.helper';
 import { OAuthClient } from '../../../entities/oauth-client.entity';
 import { OAuthAuthorizationCode } from '../../../entities/oauth-authorization-code.entity';
 import { OAuthAccessToken } from '../../../entities/oauth-access-token.entity';
@@ -50,6 +51,7 @@ describe('McpOAuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         McpOAuthService,
+        McpOAuthTokensHelper,
         {
           provide: getRepositoryToken(OAuthClient),
           useValue: {

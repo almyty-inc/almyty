@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { SkillGeneratorService } from '../skill-generator.service';
+import { SkillRendererHelper } from '../skill-renderer.helper';
 import { Tool, ToolType, ToolStatus } from '../../../entities/tool.entity';
 import { Gateway, GatewayType, GatewayStatus } from '../../../entities/gateway.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
@@ -85,6 +86,7 @@ describe('SkillGeneratorService', () => {
         { provide: getRepositoryToken(Tool), useValue: toolRepository },
         { provide: getRepositoryToken(Gateway), useValue: gatewayRepository },
         { provide: getRepositoryToken(GatewayTool), useValue: gatewayToolRepository },
+        SkillRendererHelper,
       ],
     }).compile();
 

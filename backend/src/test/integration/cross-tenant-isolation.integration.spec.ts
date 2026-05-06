@@ -227,6 +227,8 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         {} as any, // ToolsService — not touched by isolation tests
         stubAuditLog() as any,
         fx.ds, // DataSource for transaction support
+        {} as any, // ApisImportHelper
+        {} as any, // ApisToolGeneratorHelper
       );
 
       const apiRepo = fx.ds.getRepository(Api);
@@ -344,6 +346,8 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds.getRepository(User),
         fx.ds.getRepository(Organization),
         stubAuditLog() as any,
+        {} as any, // ToolsOperationHelper
+        {} as any, // ToolsStatsHelper
       );
 
       const toolRepo = fx.ds.getRepository(Tool);
@@ -421,6 +425,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds.getRepository(Organization),
         fx.ds.getRepository(User),
         { appendAudit: jest.fn().mockResolvedValue(undefined) } as any,
+        {} as any, // AgentValidationHelper
       );
 
       const agentRepo = fx.ds.getRepository(Agent);
@@ -559,6 +564,8 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds.getRepository(Organization),
         fx.ds.getRepository(UsageMetric),
         stubAuditLog() as any,
+        {} as any, // GatewaysStatsHelper
+        {} as any, // GatewayInitHelper
       );
 
       const gwRepo = fx.ds.getRepository(Gateway);
@@ -629,6 +636,10 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds.getRepository(Tool),
         {} as any, // ToolExecutorService — unused for isolation tests
         stubAuditLog() as any,
+        {} as any, // LlmModelsHelper
+        {} as any, // chatHelper
+        {} as any, // statsHelper
+        {} as any, // runner
       );
 
       const provRepo = fx.ds.getRepository(LlmProvider);
