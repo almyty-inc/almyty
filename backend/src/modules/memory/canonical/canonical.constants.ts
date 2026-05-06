@@ -71,3 +71,5 @@ export function softCapForTier(tier: Tier): number {
     case 'shared': return LIMITS.SOFT_CAP_MEMORY_SHARED_BYTES;
   }
 }
+
+export const EMBEDDING_QUEUE_NAME = 'canonical-memory-embedding';
