@@ -9,6 +9,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { AnalyticsService } from '../analytics.service';
 import { AnalyticsExportHelper } from '../analytics-export.helper';
+import { AnalyticsSummariesHelper } from '../analytics-summaries.helper';
 import { RequestLog } from '../../../entities/request-log.entity';
 import { UsageMetric } from '../../../entities/usage-metric.entity';
 import { ToolExecution } from '../../../entities/tool-execution.entity';
@@ -86,6 +87,7 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
         { provide: getRepositoryToken(AuditLog), useValue: auditRepo },
         { provide: getRepositoryToken(AgentRun), useValue: agentRunRepo },
         AnalyticsExportHelper,
+        AnalyticsSummariesHelper,
       ],
     }).compile();
 
