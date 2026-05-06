@@ -38,6 +38,7 @@ import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentsController } from './agents.controller';
 import { AgentExecutionController } from './agent-execution.controller';
 import { AgentManagementController } from './agent-management.controller';
+import { AgentScheduleController } from './agent-schedule.controller';
 import { AgentRunsController } from './agent-runs.controller';
 import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 
@@ -70,7 +71,7 @@ import { A2AModule } from '../a2a/a2a.module';
     forwardRef(() => A2AModule),
   ],
   providers: [AgentsService, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeProcessor],
-  controllers: [AgentsController, AgentManagementController, AgentRunsController, AgentOpenAICompatController],
+  controllers: [AgentsController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController],
   exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })
 export class AgentsModule {}
