@@ -86,7 +86,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --legacy-peer-deps
 
       # The DB integration specs use spec-specific Postgres schemas
       # so parallel Jest workers don't collide on DROP TABLE cycles.
@@ -133,7 +133,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --legacy-peer-deps
 
       - name: Run vitest
         working-directory: frontend
@@ -158,7 +158,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --legacy-peer-deps
 
       - name: tsc --noEmit
         working-directory: backend
