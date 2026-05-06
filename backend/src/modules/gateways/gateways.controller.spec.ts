@@ -3,6 +3,7 @@ import { GatewaysController } from './gateways.controller';
 import { GatewayAuthController } from './gateway-auth.controller';
 import { GatewayToolsController } from './gateway-tools.controller';
 import { GatewaySkillsController } from './gateway-skills.controller';
+import { GatewayInfoController } from './gateway-info.controller';
 import { GatewaysService } from './gateways.service';
 import { GatewayAuthService } from './gateway-auth.service';
 import { GatewayToolService } from './gateway-tool.service';
@@ -17,6 +18,7 @@ describe('GatewaysController', () => {
   let authController: GatewayAuthController;
   let toolsController: GatewayToolsController;
   let skillsController: GatewaySkillsController;
+  let infoController: GatewayInfoController;
   let controller: GatewaysController;
   let gatewaysService: jest.Mocked<GatewaysService>;
   let gatewayAuthService: jest.Mocked<GatewayAuthService>;
@@ -57,7 +59,7 @@ describe('GatewaysController', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [GatewaysController, GatewayAuthController, GatewayToolsController, GatewaySkillsController],
+      controllers: [GatewaysController, GatewayAuthController, GatewayToolsController, GatewaySkillsController, GatewayInfoController],
       providers: [
         {
           provide: GatewaysService,
@@ -99,6 +101,7 @@ describe('GatewaysController', () => {
     authController = module.get<GatewayAuthController>(GatewayAuthController);
     toolsController = module.get<GatewayToolsController>(GatewayToolsController);
     skillsController = module.get<GatewaySkillsController>(GatewaySkillsController);
+    infoController = module.get<GatewayInfoController>(GatewayInfoController);
     gatewaysService = module.get(GatewaysService);
     gatewayAuthService = module.get(GatewayAuthService);
     gatewayToolService = module.get(GatewayToolService);
@@ -221,7 +224,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.performHealthCheck.mockResolvedValue(mockResult);
 
-      const result = await controller.performHealthCheck('gateway-1', mockRequest);
+      const result = await infoController.performHealthCheck('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult);
@@ -275,7 +278,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.getGatewayStats.mockResolvedValue(mockStats);
 
-      const result = await controller.getGatewayStats('gateway-1', 'day', mockRequest);
+      const result = await infoController.getGatewayStats('gateway-1', 'day', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockStats);
@@ -457,7 +460,7 @@ describe('GatewaysController', () => {
 
       (gatewaysService as any).getOrganizationGatewayStats = jest.fn().mockResolvedValue(mockStats);
 
-      const result = await controller.getOrganizationStats(mockRequest);
+      const result = await infoController.getOrganizationStats(mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockStats);
@@ -474,7 +477,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.searchSkillsAcrossGateways.mockResolvedValue(mockResults);
 
-      const result = await controller.searchSkills('user', mockRequest);
+      const result = await infoController.searchSkills('user', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResults);
@@ -487,7 +490,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.searchSkillsAcrossGateways.mockResolvedValue([]);
 
-      const result = await controller.searchSkills('', mockRequest);
+      const result = await infoController.searchSkills('', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual([]);
@@ -497,7 +500,7 @@ describe('GatewaysController', () => {
     it('should throw when no organization found', async () => {
       const mockRequest = { user: { organizations: [] } };
 
-      await expect(controller.searchSkills('test', mockRequest)).rejects.toThrow();
+      await expect(infoController.searchSkills('test', mockRequest)).rejects.toThrow();
     });
   });
 
@@ -526,7 +529,7 @@ describe('GatewaysController', () => {
         .mockResolvedValueOnce(mockSkills1 as any)
         .mockResolvedValueOnce(mockSkills2 as any);
 
-      const result = await controller.getAllSkills(mockRequest);
+      const result = await infoController.getAllSkills(mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toHaveLength(2);
@@ -564,7 +567,7 @@ describe('GatewaysController', () => {
       gatewaysService.getAllUserGateways.mockResolvedValue(mockGateways as any);
       skillGeneratorService.generateIndividualSkills.mockResolvedValue([]);
 
-      const result = await controller.getAllSkills(mockRequest);
+      const result = await infoController.getAllSkills(mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data[0].orgSlug).toBe('my-org-name');
@@ -575,7 +578,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.getAllUserGateways.mockResolvedValue([]);
 
-      const result = await controller.getAllSkills(mockRequest);
+      const result = await infoController.getAllSkills(mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual([]);
@@ -585,7 +588,7 @@ describe('GatewaysController', () => {
     it('should throw when no organization found', async () => {
       const mockRequest = { user: { organizations: [] } };
 
-      await expect(controller.getAllSkills(mockRequest)).rejects.toThrow();
+      await expect(infoController.getAllSkills(mockRequest)).rejects.toThrow();
     });
   });
 
@@ -795,7 +798,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.getGatewayStats.mockRejectedValue(new Error('Stats failed'));
 
-      await expect(controller.getGatewayStats('gateway-1', 'day', mockRequest))
+      await expect(infoController.getGatewayStats('gateway-1', 'day', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -806,7 +809,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.performHealthCheck.mockRejectedValue(new Error('Health check failed'));
 
-      await expect(controller.performHealthCheck('gateway-1', mockRequest))
+      await expect(infoController.performHealthCheck('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -890,7 +893,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (gatewaysService as any).getOrganizationGatewayStats = jest.fn().mockRejectedValue(new Error('Org stats failed'));
 
-      await expect(controller.getOrganizationStats(mockRequest))
+      await expect(infoController.getOrganizationStats(mockRequest))
         .rejects.toThrow();
     });
   });
@@ -901,7 +904,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.searchSkillsAcrossGateways.mockRejectedValue(new Error('Search failed'));
 
-      await expect(controller.searchSkills('test', mockRequest))
+      await expect(infoController.searchSkills('test', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -912,7 +915,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.getAllUserGateways.mockRejectedValue(new Error('Retrieval failed'));
 
-      await expect(controller.getAllSkills(mockRequest))
+      await expect(infoController.getAllSkills(mockRequest))
         .rejects.toThrow();
     });
   });

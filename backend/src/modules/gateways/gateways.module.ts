@@ -28,6 +28,7 @@ import { GatewaysController } from './gateways.controller';
 import { GatewayAuthController } from './gateway-auth.controller';
 import { GatewayToolsController } from './gateway-tools.controller';
 import { GatewaySkillsController } from './gateway-skills.controller';
+import { GatewayInfoController } from './gateway-info.controller';
 // GatewayProtocolController removed — all protocol traffic goes through
 // the unified endpoint controller at /:orgSlug/:resourceSlug
 
@@ -93,6 +94,7 @@ import { ChannelGatewayService } from './channels/channel-gateway.service';
     GatewayAuthController,
     GatewayToolsController,
     GatewaySkillsController,
+    GatewayInfoController,
   ],
   exports: [
     GatewaysService,
