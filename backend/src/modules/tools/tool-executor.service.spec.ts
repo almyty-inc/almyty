@@ -5,6 +5,7 @@ import { AxiosRequestConfig } from 'axios';
 import { ToolExecutorService } from './tool-executor.service';
 import { ToolHttpExecutor } from './executors/tool-http.executor';
 import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
+import { ToolGrpcExecutor } from './executors/tool-grpc.executor';
 import { ToolScriptExecutor } from './executors/tool-script.executor';
 import { ToolAuthService } from './services/tool-auth.service';
 import { hashCacheObject, sleep as sleepUtil } from './tool-execution-utils';
@@ -81,6 +82,7 @@ describe('ToolExecutorService', () => {
         // repositories + helpers below.
         ToolHttpExecutor,
         ToolProtocolExecutor,
+        ToolGrpcExecutor,
         ToolScriptExecutor,
         ToolAuthService,
         {

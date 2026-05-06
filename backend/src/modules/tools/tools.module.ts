@@ -22,6 +22,7 @@ import { ToolGeneratorService } from './tool-generator.service';
 import { ToolExecutorService } from './tool-executor.service';
 import { ToolHttpExecutor } from './executors/tool-http.executor';
 import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
+import { ToolGrpcExecutor } from './executors/tool-grpc.executor';
 import { ToolScriptExecutor } from './executors/tool-script.executor';
 import { GrpcCallerService } from './executors/grpc-caller.service';
 import { ToolAuthService } from './services/tool-auth.service';
@@ -63,6 +64,7 @@ import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
     ToolExecutorService,
     ToolHttpExecutor,
     ToolProtocolExecutor,
+    ToolGrpcExecutor,
     ToolScriptExecutor,
     GrpcCallerService,
     ToolAuthService,
