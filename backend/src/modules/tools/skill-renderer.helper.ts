@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { Tool } from '../../entities/tool.entity';
+import { buildGraphQLQueryTemplate, dedupeSharedSegments } from './skill-graphql.helper';
 
 /**
  * Pure helpers extracted from SkillGeneratorService — GraphQL
@@ -11,143 +12,6 @@ import { Tool } from '../../entities/tool.entity';
  */
 @Injectable()
 export class SkillRendererHelper {
-  buildGraphQLQueryTemplate(operation: any): string {
-    const opType: 'query' | 'mutation' | 'subscription' =
-      operation.type === 'mutation' || operation.type === 'subscription'
-        ? operation.type
-        : 'query';
-    const opName = operation.name || 'op';
-    const vars = (operation.parameters?.body?.variables?.properties || {}) as Record<
-      string,
-      any
-    >;
-    const required = new Set<string>(
-      operation.parameters?.body?.variables?.required || [],
-    );
-
-    const declarations: string[] = [];
-    const args: string[] = [];
-    for (const [name, schema] of Object.entries(vars)) {
-      // The GraphQL parser stores the original type signature on
-      // `schema.gqlType` ("ID!", "[String!]!", "Int") — use it
-      // directly when present so re-rendered queries faithfully
-      // match the server's expected variable types. Older imports
-      // without that field fall back to the JSON-schema → GraphQL
-      // best-effort mapping plus a `required` boolean.
-      let decl: string;
-      if (typeof schema?.gqlType === 'string' && schema.gqlType.length > 0) {
-        decl = schema.gqlType;
-      } else {
-        const gqlType = this.jsonTypeToGraphQLType(schema?.type);
-        const bang = required.has(name) ? '!' : '';
-        decl = `${gqlType}${bang}`;
-      }
-      declarations.push(`$${name}: ${decl}`);
-      args.push(`${name}: $${name}`);
-    }
-
-    const head = declarations.length
-      ? `${opType} ${opName}(${declarations.join(', ')})`
-      : `${opType} ${opName}`;
-    const argsBlock = args.length ? `(${args.join(', ')})` : '';
-    const selection = this.buildGraphQLSelectionSet(operation);
-    return `${head} {\n  ${opName}${argsBlock} ${selection}\n}`;
-  }
-
-  /**
-   * Render a starter selection set for the operation's return type.
-   *
-   * Reads `operation.responses['200'].schema.properties.data`, which
-   * the GraphQL parser populates with the field structure of the
-   * operation's return type (one level deep). Includes scalar/enum
-   * leaf fields directly. For nested object fields, emits a nested
-   * block with `__typename` so the query is still syntactically
-   * complete — the agent can flesh it out.
-   *
-   * Falls back to `{ __typename }` if the parser didn't capture
-   * field info (older tools, non-object return types, or imports
-   * predating the parser depth-walk change).
-   */
-  buildGraphQLSelectionSet(operation: any): string {
-    const dataSchema = this.unwrapReturnType(
-      operation.responses?.['200']?.schema?.properties?.data,
-    );
-    const props = dataSchema?.properties as Record<string, any> | undefined;
-    if (!props || Object.keys(props).length === 0) {
-      return `{\n    __typename\n  }`;
-    }
-
-    const lines: string[] = [];
-    for (const [name, prop] of Object.entries(props)) {
-      const inner = this.unwrapReturnType(prop);
-      if (!inner) continue;
-      if (inner.type === 'object') {
-        // Object field — needs its own subselection. Emit a stub
-        // with `__typename` so the query parses; the agent can
-        // expand it.
-        lines.push(`${name} {\n      __typename\n    }`);
-      } else if (inner.type === 'array' && (inner.items as any)?.type === 'object') {
-        lines.push(`${name} {\n      __typename\n    }`);
-      } else {
-        // Scalar / enum / array-of-scalars — leaf field, no subselection.
-        lines.push(name);
-      }
-    }
-    if (lines.length === 0) {
-      return `{\n    __typename\n  }`;
-    }
-    return `{\n    ${lines.join('\n    ')}\n  }`;
-  }
-
-  /** Unwrap a JSON-schema array wrapper to expose the item shape. */
-  unwrapReturnType(schema: any): any {
-    if (!schema || typeof schema !== 'object') return schema;
-    if (schema.type === 'array' && schema.items) {
-      return this.unwrapReturnType(schema.items);
-    }
-    return schema;
-  }
-
-  jsonTypeToGraphQLType(t: string | undefined): string {
-    switch ((t || '').toLowerCase()) {
-      case 'integer':
-      case 'int':
-        return 'Int';
-      case 'number':
-      case 'float':
-        return 'Float';
-      case 'boolean':
-      case 'bool':
-        return 'Boolean';
-      case 'array':
-        return '[String]';
-      case 'string':
-      default:
-        return 'String';
-    }
-  }
-
-  /**
-   * Drop kebab segments from the head of `tail` that are already
-   * present at the head of `head` (in order). `dedupeSharedSegments
-   * ('open-meteo-skills', 'open-meteo-weather-get-v1-forecast')`
-   * → `'weather-get-v1-forecast'`. Walks one segment at a time so
-   * partial matches don't false-positive.
-   */
-  dedupeSharedSegments(head: string, tail: string): string {
-    const headParts = head.split('-').filter(Boolean);
-    const tailParts = tail.split('-').filter(Boolean);
-    let i = 0;
-    while (
-      i < tailParts.length &&
-      i < headParts.length &&
-      tailParts[i] === headParts[i]
-    ) {
-      i++;
-    }
-    return tailParts.slice(i).join('-');
-  }
-
 
   /**
    * Render a SKILL.md following the Agent Skills open standard.
@@ -224,7 +88,7 @@ export class SkillRendererHelper {
       const apiType = (tool.operation?.api as any)?.type;
       const opName = tool.operation?.name;
       if (apiType === 'graphql' && opName) {
-        const queryTemplate = this.buildGraphQLQueryTemplate(tool.operation!);
+        const queryTemplate = buildGraphQLQueryTemplate(tool.operation!);
         lines.push('## GraphQL operation');
         lines.push('');
         lines.push(

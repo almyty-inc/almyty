@@ -6,6 +6,7 @@ import { Tool, ToolType, ToolExecutionMethod } from '../../entities/tool.entity'
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { SkillRendererHelper } from './skill-renderer.helper';
+import { dedupeSharedSegments } from './skill-graphql.helper';
 
 export interface SkillOutput {
   name: string;
@@ -173,7 +174,7 @@ export class SkillGeneratorService {
     if (summary && summary.trim()) {
       suffix = this.renderer.slugify(summary);
     } else {
-      suffix = this.renderer.dedupeSharedSegments(gatewaySlug, this.renderer.slugify(tool.name || ''));
+      suffix = dedupeSharedSegments(gatewaySlug, this.renderer.slugify(tool.name || ''));
     }
     if (!suffix) suffix = 'tool';
     // If suffix happens to *equal* the gateway slug after dedup
