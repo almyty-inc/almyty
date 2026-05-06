@@ -6,6 +6,7 @@ import { Agent, AgentPipeline, AgentPipelineNode, AgentPipelineEdge } from '../.
 import { AgentExecution, AgentExecutionStatus } from '../../entities/agent-execution.entity';
 import { AgentNodeExecutor, NodeExecutionResult } from './agent-node-executor';
 import { AgentWebhookService } from './agent-webhook.service';
+import { AgentExecutionStateHelper } from './agent-execution-state.helper';
 import { ExecutionContext } from './agent-template-resolver';
 import { StreamEvent } from './stream-event.types';
 
@@ -74,6 +75,7 @@ export class AgentExecutionEngine {
     private agentExecutionRepository: Repository<AgentExecution>,
     private readonly nodeExecutor: AgentNodeExecutor,
     private readonly webhookService: AgentWebhookService,
+    private readonly state: AgentExecutionStateHelper,
   ) {}
 
   /**
@@ -115,7 +117,7 @@ export class AgentExecutionEngine {
     await this.agentExecutionRepository.save(execution);
 
     // Emit execution started
-    this.emitEvent(onEvent, {
+    this.state.emitEvent(onEvent, {
       type: 'execution.started',
       data: { executionId: execution.id, agentId: agent.id },
       timestamp: Date.now(),
@@ -180,9 +182,9 @@ export class AgentExecutionEngine {
           execution.totalTokens = totalTokens;
           execution.nodeResults = nodeResults;
           await this.agentExecutionRepository.save(execution);
-          await this.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
+          await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
 
-          this.emitEvent(onEvent, {
+          this.state.emitEvent(onEvent, {
             type: 'execution.failed',
             data: {
               error: execution.error,
@@ -202,9 +204,9 @@ export class AgentExecutionEngine {
           execution.executionTime = Date.now() - startTime;
           execution.nodeResults = nodeResults;
           await this.agentExecutionRepository.save(execution);
-          await this.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
+          await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
 
-          this.emitEvent(onEvent, {
+          this.state.emitEvent(onEvent, {
             type: 'execution.failed',
             data: { error: execution.error, errorType: ExecutionErrorType.TIMEOUT, executionId: execution.id },
             timestamp: Date.now(),
@@ -222,9 +224,9 @@ export class AgentExecutionEngine {
           execution.totalTokens = totalTokens;
           execution.nodeResults = nodeResults;
           await this.agentExecutionRepository.save(execution);
-          await this.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
+          await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
 
-          this.emitEvent(onEvent, {
+          this.state.emitEvent(onEvent, {
             type: 'execution.failed',
             data: { error: execution.error, errorType: ExecutionErrorType.BUDGET_EXCEEDED, executionId: execution.id },
             timestamp: Date.now(),
@@ -247,7 +249,7 @@ export class AgentExecutionEngine {
 
           this.logger.log(`[EXECUTE] Processing node '${nodeId}' (type=${node.type}) for agent=${agent.id}`);
 
-          this.emitEvent(onEvent, {
+          this.state.emitEvent(onEvent, {
             type: 'node.started',
             nodeId,
             nodeType: node.type,
@@ -312,7 +314,7 @@ export class AgentExecutionEngine {
         const remainingTime = maxExecutionTime - (Date.now() - startTime);
         let layerResults;
         try {
-          layerResults = await this.withTimeout(
+          layerResults = await this.state.withTimeout(
             Promise.all(layerPromises),
             remainingTime,
             `Layer execution timed out`,
@@ -325,9 +327,9 @@ export class AgentExecutionEngine {
           execution.totalTokens = totalTokens;
           execution.nodeResults = nodeResults;
           await this.agentExecutionRepository.save(execution);
-          await this.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
+          await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
 
-          this.emitEvent(onEvent, {
+          this.state.emitEvent(onEvent, {
             type: 'execution.failed',
             data: { error: execution.error, errorType: ExecutionErrorType.TIMEOUT, executionId: execution.id },
             timestamp: Date.now(),
@@ -356,7 +358,7 @@ export class AgentExecutionEngine {
             };
             context.nodes[nodeId] = { output: undefined };
 
-            this.emitEvent(onEvent, {
+            this.state.emitEvent(onEvent, {
               type: 'node.completed',
               nodeId,
               nodeType: node.type,
@@ -386,7 +388,7 @@ export class AgentExecutionEngine {
           totalCost += result.cost || 0;
           totalTokens += result.tokens || 0;
 
-          this.emitEvent(onEvent, {
+          this.state.emitEvent(onEvent, {
             type: 'node.output',
             nodeId,
             nodeType: node.type,
@@ -394,7 +396,7 @@ export class AgentExecutionEngine {
             timestamp: Date.now(),
           });
 
-          this.emitEvent(onEvent, {
+          this.state.emitEvent(onEvent, {
             type: 'node.completed',
             nodeId,
             nodeType: node.type,
@@ -437,7 +439,7 @@ export class AgentExecutionEngine {
             nodeResults[nodeId] = { skipped: true };
             context.nodes[nodeId] = { output: undefined };
 
-            this.emitEvent(onEvent, {
+            this.state.emitEvent(onEvent, {
               type: 'node.skipped',
               nodeId,
               nodeType: node?.type,
@@ -469,9 +471,9 @@ export class AgentExecutionEngine {
         execution.totalTokens = totalTokens;
         await this.agentExecutionRepository.save(execution);
 
-        await this.bumpAgentStats(agent.id, false, executionTime, totalCost);
+        await this.state.bumpAgentStats(agent.id, false, executionTime, totalCost);
 
-        this.emitEvent(onEvent, {
+        this.state.emitEvent(onEvent, {
           type: 'execution.failed',
           data: { error: execution.error, executionId: execution.id },
           timestamp: Date.now(),
@@ -490,11 +492,11 @@ export class AgentExecutionEngine {
       await this.agentExecutionRepository.save(execution);
 
       // 9. Update agent stats atomically via SQL UPDATE.
-      await this.bumpAgentStats(agent.id, true, executionTime, totalCost);
+      await this.state.bumpAgentStats(agent.id, true, executionTime, totalCost);
 
       this.logger.log(`[EXECUTE] Agent ${agent.id} execution completed in ${executionTime}ms, cost=${totalCost}`);
 
-      this.emitEvent(onEvent, {
+      this.state.emitEvent(onEvent, {
         type: 'execution.completed',
         data: {
           executionId: execution.id,
@@ -521,14 +523,14 @@ export class AgentExecutionEngine {
         await this.agentExecutionRepository.save(execution);
 
         // Update agent stats (failed)
-        await this.bumpAgentStats(agent.id, false, executionTime, 0);
+        await this.state.bumpAgentStats(agent.id, false, executionTime, 0);
       } catch (saveError) {
         this.logger.error(`[EXECUTE] Failed to persist execution record on crash: ${saveError.message}`);
       }
 
       this.logger.error(`[EXECUTE] Agent ${agent.id} execution failed: ${error.message}`, error.stack);
 
-      this.emitEvent(onEvent, {
+      this.state.emitEvent(onEvent, {
         type: 'execution.failed',
         data: { error: error.message, executionId: execution.id },
         timestamp: Date.now(),
@@ -541,108 +543,4 @@ export class AgentExecutionEngine {
     }
   }
 
-  // ── Input validation ─────────────────────────────────────────────────
-
-  /**
-   * Atomically update an agent's running stats (totalExecutions,
-   * successfulExecutions, totalCost, averageExecutionTime,
-   * lastExecutedAt) via a single SQL UPDATE.
-   *
-   * Previously every call site did the read-modify-write pair:
-   *
-   *   agent.incrementExecution(success, executionTime, cost);
-   *   await this.agentRepository.save(agent);
-   *
-   * Two concurrent executions of the same agent both loaded
-   * `totalExecutions=N`, both mutated in memory to `N+1`, and both
-   * wrote back. One increment was silently lost, and the rolling
-   * `averageExecutionTime` was computed twice from the same stale
-   * snapshot — so both the counts and the average drifted under
-   * heavy concurrency.
-   *
-   * The rolling average uses the Welford-style formula
-   *
-   *   new_avg = old_avg + (x - old_avg) / new_count
-   *
-   * which is mathematically equivalent to
-   * `(old_avg * old_count + x) / new_count` but can be expressed in
-   * one SQL statement using the pre-update column values. Postgres
-   * evaluates the whole UPDATE atomically, so under MVCC two
-   * concurrent updates see each other's committed state and both
-   * increments land correctly.
-   */
-  private async bumpAgentStats(
-    agentId: string,
-    success: boolean,
-    executionTime: number,
-    cost: number,
-  ): Promise<void> {
-    try {
-      await this.agentRepository
-        .createQueryBuilder()
-        .update(Agent)
-        .set({
-          totalExecutions: () => '"totalExecutions" + 1',
-          successfulExecutions: success
-            ? () => '"successfulExecutions" + 1'
-            : () => '"successfulExecutions"',
-          totalCost: () => `"totalCost" + ${Number(cost) || 0}`,
-          // Welford running average. Uses the PRE-update value of
-          // totalExecutions (so the divisor is the new count) and
-          // averageExecutionTime (the old rolling mean). ROUND to
-          // stay integer-compatible with the existing column type.
-          averageExecutionTime: () =>
-            `ROUND("averageExecutionTime" + (${Number(executionTime) || 0} - "averageExecutionTime") / ("totalExecutions" + 1))`,
-          lastExecutedAt: new Date(),
-        })
-        .where('id = :id', { id: agentId })
-        .execute();
-    } catch (err: any) {
-      // Stats updates are best-effort — a DB hiccup here must never
-      // mask the execution result we're about to return.
-      this.logger.error(`Failed to update agent stats: ${err.message}`);
-    }
-  }
-
-
-  /**
-   * Wrap a promise with a timeout. The setTimeout handle is explicitly
-   * cleared on either resolution so the timer callback never fires
-   * once the underlying promise has settled — the previous shape
-   * left the handle alive for up to `maxExecutionTime` (5 minutes
-   * default) after every layer finished, which meant every completed
-   * layer held a live Node timer handle for minutes afterwards. That's
-   * a real event-loop pressure issue on busy deployments and the
-   * source of the "worker process has failed to exit gracefully"
-   * warnings from test runs.
-   */
-  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-    if (timeoutMs <= 0) {
-      throw new Error(message);
-    }
-
-    let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(message)), timeoutMs);
-    });
-
-    try {
-      return (await Promise.race([promise, timeout])) as T;
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  }
-
-  /**
-   * Emit a streaming event if a callback is provided.
-   */
-  private emitEvent(onEvent: ((event: StreamEvent) => void) | undefined, event: StreamEvent): void {
-    if (onEvent) {
-      try {
-        onEvent(event);
-      } catch (err) {
-        this.logger.warn(`Failed to emit stream event: ${err.message}`);
-      }
-    }
-  }
 }

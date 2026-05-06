@@ -27,6 +27,7 @@ import { Conversation, ConversationStatus } from '../../entities/conversation.en
 import { Organization } from '../../entities/organization.entity';
 
 import { AgentExecutionEngine } from '../../modules/agents/agent-execution.engine';
+import { AgentExecutionStateHelper } from '../../modules/agents/agent-execution-state.helper';
 import { ToolExecutorService } from '../../modules/tools/tool-executor.service';
 import { LlmProvidersService } from '../../modules/llm-providers/llm-providers.service';
 import { LlmStatsHelper } from '../../modules/llm-providers/llm-stats.helper';
@@ -115,6 +116,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         {} as any, // agentExecutionRepository
         {} as any, // nodeExecutor
         {} as any, // webhookService
+        new AgentExecutionStateHelper(agentRepo, {} as any),
       );
     });
 
@@ -127,7 +129,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         pipeline: { nodes: [], edges: [] } as any,
       } as any) as Agent;
 
-      await (engine as any).bumpAgentStats(agent.id, true, 1000, 0.05);
+      await (engine as any).state.bumpAgentStats(agent.id, true, 1000, 0.05);
 
       const after = await agentRepo.findOneByOrFail({ id: agent.id });
       expect(after.totalExecutions).toBe(1);
@@ -146,7 +148,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
           pipeline: { nodes: [], edges: [] } as any,
         } as any) as Agent;
 
-      await (engine as any).bumpAgentStats(agent.id, false, 500, 0.02);
+      await (engine as any).state.bumpAgentStats(agent.id, false, 500, 0.02);
 
       const after = await agentRepo.findOneByOrFail({ id: agent.id });
       expect(after.totalExecutions).toBe(1);
@@ -164,10 +166,10 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         } as any) as Agent;
 
       // First: 1000ms. Post-update running average should be 1000.
-      await (engine as any).bumpAgentStats(agent.id, true, 1000, 0);
+      await (engine as any).state.bumpAgentStats(agent.id, true, 1000, 0);
       // Second: 2000ms. The new_avg = old_avg + (x - old_avg) /
       // new_count = 1000 + (2000 - 1000) / 2 = 1500.
-      await (engine as any).bumpAgentStats(agent.id, true, 2000, 0);
+      await (engine as any).state.bumpAgentStats(agent.id, true, 2000, 0);
 
       const after = await agentRepo.findOneByOrFail({ id: agent.id });
       expect(after.totalExecutions).toBe(2);
@@ -187,7 +189,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
 
       await Promise.all(
         Array.from({ length: 50 }, () =>
-          (engine as any).bumpAgentStats(agent.id, true, 100, 0.001),
+          (engine as any).state.bumpAgentStats(agent.id, true, 100, 0.001),
         ),
       );
 
