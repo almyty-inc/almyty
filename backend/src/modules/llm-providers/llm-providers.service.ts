@@ -18,6 +18,7 @@ import { ToolExecutorService, ToolExecutionOptions } from '../tools/tool-executo
 import { callLlmProviderHttp } from './providers/safe-request';
 import { LlmChatHelper } from './llm-chat.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
+import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
 
 import { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters } from './dto/llm-providers.dto';
@@ -94,6 +95,7 @@ export class LlmProvidersService {
     @Inject(forwardRef(() => LlmChatHelper))
     private readonly chatHelper: LlmChatHelper,
     private readonly statsHelper: LlmStatsHelper,
+    private readonly runner: LlmChatRunnerHelper,
   ) {}
 
   async createProvider(
@@ -121,7 +123,7 @@ export class LlmProvidersService {
       }
 
       // Validate configuration
-      this.chatHelper.validateProviderConfiguration(createDto.type, createDto.configuration);
+      this.runner.validateProviderConfiguration(createDto.type, createDto.configuration);
 
       // Set default capabilities if not provided
       const capabilities = createDto.capabilities || this.modelsHelper.getDefaultCapabilities(createDto.type);
@@ -185,7 +187,7 @@ export class LlmProvidersService {
       // Update configuration
       if (updateDto.configuration) {
         provider.configuration = { ...provider.configuration, ...updateDto.configuration };
-        this.chatHelper.validateProviderConfiguration(provider.type, provider.configuration);
+        this.runner.validateProviderConfiguration(provider.type, provider.configuration);
       }
 
       // Update other fields
@@ -368,7 +370,7 @@ export class LlmProvidersService {
         title: 'Health Check',
       });
 
-      const response = await this.chatHelper.callLlmProvider(provider, testRequest, session, []);
+      const response = await this.runner.callLlmProvider(provider, testRequest, session, []);
       const responseTime = Date.now() - startTime;
 
       // Update provider health status. Partial UPDATE so we don't
@@ -528,12 +530,12 @@ export class LlmProvidersService {
 
   // ── Delegations to LlmChatHelper ──
   chat(...args: Parameters<LlmChatHelper['chat']>) { return this.chatHelper.chat(...args); }
-  validateProviderConfiguration(...args: Parameters<LlmChatHelper['validateProviderConfiguration']>) { return this.chatHelper.validateProviderConfiguration(...args); }
-  callLlmProvider(...args: Parameters<LlmChatHelper['callLlmProvider']>) { return this.chatHelper.callLlmProvider(...args); }
-  prepareTools(...args: Parameters<LlmChatHelper['prepareTools']>) { return this.chatHelper.prepareTools(...args); }
-  executeToolCalls(...args: Parameters<LlmChatHelper['executeToolCalls']>) { return this.chatHelper.executeToolCalls(...args); }
+  validateProviderConfiguration(...args: Parameters<LlmChatRunnerHelper['validateProviderConfiguration']>) { return this.runner.validateProviderConfiguration(...args); }
+  callLlmProvider(...args: Parameters<LlmChatRunnerHelper['callLlmProvider']>) { return this.runner.callLlmProvider(...args); }
+  prepareTools(...args: Parameters<LlmChatRunnerHelper['prepareTools']>) { return this.runner.prepareTools(...args); }
+  executeToolCalls(...args: Parameters<LlmChatRunnerHelper['executeToolCalls']>) { return this.runner.executeToolCalls(...args); }
   bumpSessionStats(...args: Parameters<LlmStatsHelper['bumpSessionStats']>) { return this.statsHelper.bumpSessionStats(...args); }
   bumpProviderStats(...args: Parameters<LlmStatsHelper['bumpProviderStats']>) { return this.statsHelper.bumpProviderStats(...args); }
-  dispatchProviderCall(...args: Parameters<LlmChatHelper['dispatchProviderCall']>) { return this.chatHelper.dispatchProviderCall(...args); }
+  dispatchProviderCall(...args: Parameters<LlmChatRunnerHelper['dispatchProviderCall']>) { return this.runner.dispatchProviderCall(...args); }
   chatStream(...args: Parameters<LlmChatHelper['chatStream']>) { return this.chatHelper.chatStream(...args); }
 }

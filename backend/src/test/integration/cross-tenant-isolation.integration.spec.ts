@@ -637,6 +637,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         {} as any, // LlmModelsHelper
         {} as any, // chatHelper
         {} as any, // statsHelper
+        {} as any, // runner
       );
 
       const provRepo = fx.ds.getRepository(LlmProvider);

@@ -14,6 +14,7 @@ import { ToolExecutorService } from '../tools/tool-executor.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { LlmChatHelper } from './llm-chat.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
+import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
 
 // jest.mock with __esModule: true short-circuits __importDefault so the
@@ -33,6 +34,7 @@ jest.mock('axios', () => {
 describe('LlmProvidersService', () => {
   let service: LlmProvidersService;
   let chatHelperInstance: LlmChatHelper;
+  let runnerInstance: LlmChatRunnerHelper;
   let llmProviderRepository: any;
   let conversationRepository: any;
   let messageRepository: any;
@@ -139,11 +141,13 @@ describe('LlmProvidersService', () => {
         LlmModelsHelper,
         LlmChatHelper,
         LlmStatsHelper,
+        LlmChatRunnerHelper,
       ],
     }).compile();
 
     service = module.get<LlmProvidersService>(LlmProvidersService);
     chatHelperInstance = module.get(LlmChatHelper);
+    runnerInstance = module.get(LlmChatRunnerHelper);
     llmProviderRepository = module.get(getRepositoryToken(LlmProvider));
     conversationRepository = module.get(getRepositoryToken(Conversation));
     messageRepository = module.get(getRepositoryToken(Message));
@@ -188,7 +192,7 @@ describe('LlmProvidersService', () => {
       llmProviderRepository.save.mockResolvedValue(mockProvider);
 
       // Mock private methods
-      jest.spyOn(chatHelperInstance as any, 'validateProviderConfiguration').mockImplementation();
+      jest.spyOn(runnerInstance as any, 'validateProviderConfiguration').mockImplementation();
       jest.spyOn(service as any, 'getDefaultCapabilities').mockReturnValue({});
       jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
 
@@ -253,7 +257,7 @@ describe('LlmProvidersService', () => {
       userRepository.findOne.mockResolvedValue(mockUser);
       llmProviderRepository.save.mockResolvedValue({ ...mockProvider, ...updateDto });
 
-      jest.spyOn(chatHelperInstance as any, 'validateProviderConfiguration').mockImplementation();
+      jest.spyOn(runnerInstance as any, 'validateProviderConfiguration').mockImplementation();
 
       const result = await service.updateProvider('provider-1', updateDto, 'org-1', 'user-1');
 
@@ -543,8 +547,8 @@ describe('LlmProvidersService', () => {
       llmProviderRepository.save.mockResolvedValue(mockProvider);
       conversationRepository.findOne.mockResolvedValue(mockSession);
       conversationRepository.save.mockResolvedValue(mockSession);
-      jest.spyOn(chatHelperInstance as any, 'callLlmProvider').mockResolvedValue(mockResponse);
-      jest.spyOn(chatHelperInstance as any, 'prepareTools').mockResolvedValue([]);
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue(mockResponse);
+      jest.spyOn(runnerInstance as any, 'prepareTools').mockResolvedValue([]);
       messageRepository.create.mockReturnValue({});
       messageRepository.save.mockResolvedValue({ id: 'msg-1' });
 
@@ -618,8 +622,8 @@ describe('LlmProvidersService', () => {
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
       conversationRepository.save.mockResolvedValue(mockSession);
-      jest.spyOn(chatHelperInstance as any, 'callLlmProvider').mockResolvedValue(mockResponse);
-      jest.spyOn(chatHelperInstance as any, 'prepareTools').mockResolvedValue([]);
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue(mockResponse);
+      jest.spyOn(runnerInstance as any, 'prepareTools').mockResolvedValue([]);
       messageRepository.create.mockReturnValue({});
       messageRepository.save.mockResolvedValue({ id: 'msg-1' });
 
@@ -684,9 +688,9 @@ describe('LlmProvidersService', () => {
       llmProviderRepository.save.mockResolvedValue(mockProvider);
       conversationRepository.findOne.mockResolvedValue(mockSession);
       conversationRepository.save.mockResolvedValue(mockSession);
-      jest.spyOn(chatHelperInstance as any, 'callLlmProvider').mockResolvedValue(mockResponse);
-      jest.spyOn(chatHelperInstance as any, 'prepareTools').mockResolvedValue([]);
-      jest.spyOn(chatHelperInstance as any, 'executeToolCalls').mockResolvedValue(undefined);
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue(mockResponse);
+      jest.spyOn(runnerInstance as any, 'prepareTools').mockResolvedValue([]);
+      jest.spyOn(runnerInstance as any, 'executeToolCalls').mockResolvedValue(undefined);
       messageRepository.create.mockReturnValue({});
       messageRepository.save.mockResolvedValue({ id: 'msg-1' });
 
@@ -712,8 +716,8 @@ describe('LlmProvidersService', () => {
         .mockResolvedValueOnce(mockProvider);
       conversationRepository.findOne.mockResolvedValue(mockSession);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
-      jest.spyOn(chatHelperInstance as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
-      jest.spyOn(chatHelperInstance as any, 'prepareTools').mockResolvedValue([]);
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
+      jest.spyOn(runnerInstance as any, 'prepareTools').mockResolvedValue([]);
 
       await expect(service.chat('provider-1', chatRequest, 'org-1', 'user-1'))
         .rejects
@@ -745,7 +749,7 @@ describe('LlmProvidersService', () => {
       };
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
-      jest.spyOn(chatHelperInstance as any, 'callLlmProvider').mockResolvedValue({
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue({
         message: { role: MessageRole.ASSISTANT, content: 'Test response' },
         usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
         model: 'gpt-4',
@@ -778,7 +782,7 @@ describe('LlmProvidersService', () => {
       };
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
-      jest.spyOn(chatHelperInstance as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
       llmProviderRepository.update.mockResolvedValue({ affected: 1 });
 
       const result = await service.performHealthCheck('provider-1', 'org-1');
@@ -817,7 +821,7 @@ describe('LlmProvidersService', () => {
       };
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
-      jest.spyOn(chatHelperInstance as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
       llmProviderRepository.update.mockRejectedValue(new Error('Database error'));
 
       const result = await service.performHealthCheck('provider-1', 'org-1');
@@ -1260,7 +1264,7 @@ describe('LlmProvidersService', () => {
       };
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
-      jest.spyOn(chatHelperInstance as any, 'callLlmProvider').mockRejectedValue(
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(
         new Error('API rate limit exceeded')
       );
 
@@ -1368,15 +1372,15 @@ describe('LlmProvidersService', () => {
         responseTime: 1500,
       };
 
-      jest.spyOn(chatHelperInstance as any, 'callLlmProvider').mockResolvedValue(mockResponse);
-      jest.spyOn(chatHelperInstance as any, 'prepareTools').mockResolvedValue([
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue(mockResponse);
+      jest.spyOn(runnerInstance as any, 'prepareTools').mockResolvedValue([
         {
           name: 'get_weather',
           description: 'Get weather information',
           parameters: { type: 'object' },
         },
       ]);
-      jest.spyOn(chatHelperInstance as any, 'executeToolCalls').mockResolvedValue([
+      jest.spyOn(runnerInstance as any, 'executeToolCalls').mockResolvedValue([
         {
           id: 'call-1',
           result: { temperature: 72, condition: 'sunny' },
@@ -1432,8 +1436,8 @@ describe('LlmProvidersService', () => {
         responseTime: 1000,
       };
 
-      jest.spyOn(chatHelperInstance as any, 'callLlmProvider').mockResolvedValue(mockResponse);
-      jest.spyOn(chatHelperInstance as any, 'prepareTools').mockResolvedValue([]);
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue(mockResponse);
+      jest.spyOn(runnerInstance as any, 'prepareTools').mockResolvedValue([]);
       messageRepository.create.mockReturnValue({});
       messageRepository.save.mockResolvedValue({});
 
@@ -2282,7 +2286,7 @@ describe('LlmProvidersService', () => {
         responseTime: 100,
       };
 
-      jest.spyOn(chatHelperInstance as any, 'dispatchProviderCall').mockImplementation(async () => {
+      jest.spyOn(runnerInstance as any, 'dispatchProviderCall').mockImplementation(async () => {
         callCount++;
         if (callCount === 1) {
           const err: any = new Error('Rate limited');
@@ -2292,7 +2296,7 @@ describe('LlmProvidersService', () => {
         return mockResult;
       });
 
-      jest.spyOn(chatHelperInstance as any, 'sleep').mockResolvedValue(undefined);
+      jest.spyOn(runnerInstance as any, 'sleep').mockResolvedValue(undefined);
 
       const result = await service['callLlmProvider'](provider, request, session, []);
 
@@ -2314,14 +2318,14 @@ describe('LlmProvidersService', () => {
 
       let callCount = 0;
 
-      jest.spyOn(chatHelperInstance as any, 'dispatchProviderCall').mockImplementation(async () => {
+      jest.spyOn(runnerInstance as any, 'dispatchProviderCall').mockImplementation(async () => {
         callCount++;
         const err: any = new Error('Bad request');
         err.response = { status: 400, data: { error: { message: 'Invalid model' } } };
         throw err;
       });
 
-      jest.spyOn(chatHelperInstance as any, 'sleep').mockResolvedValue(undefined);
+      jest.spyOn(runnerInstance as any, 'sleep').mockResolvedValue(undefined);
 
       await expect(
         service['callLlmProvider'](provider, request, session, []),
@@ -2344,14 +2348,14 @@ describe('LlmProvidersService', () => {
 
       let callCount = 0;
 
-      jest.spyOn(chatHelperInstance as any, 'dispatchProviderCall').mockImplementation(async () => {
+      jest.spyOn(runnerInstance as any, 'dispatchProviderCall').mockImplementation(async () => {
         callCount++;
         const err: any = new Error('Server error');
         err.response = { status: 500, data: 'Internal Server Error' };
         throw err;
       });
 
-      jest.spyOn(chatHelperInstance as any, 'sleep').mockResolvedValue(undefined);
+      jest.spyOn(runnerInstance as any, 'sleep').mockResolvedValue(undefined);
 
       await expect(
         service['callLlmProvider'](provider, request, session, []),
@@ -2380,13 +2384,13 @@ describe('LlmProvidersService', () => {
       const session = { id: 'session-1', context: {} } as any;
       const request = { messages: [{ role: 'user', content: 'Hello' }] } as any;
 
-      jest.spyOn(chatHelperInstance as any, 'dispatchProviderCall').mockImplementation(async () => {
+      jest.spyOn(runnerInstance as any, 'dispatchProviderCall').mockImplementation(async () => {
         const err: any = new Error('Timeout');
         err.response = { status: 503, data: 'Service Unavailable' };
         throw err;
       });
 
-      jest.spyOn(chatHelperInstance as any, 'sleep').mockResolvedValue(undefined);
+      jest.spyOn(runnerInstance as any, 'sleep').mockResolvedValue(undefined);
 
       await expect(
         service['callLlmProvider'](provider, request, session, []),
