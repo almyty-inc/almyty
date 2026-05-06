@@ -1,4 +1,4 @@
-import { LIMITS, softCapForTier, SoftCapBehavior } from './canonical.constants';
+import { LIMITS, softCapForTier, SoftCapBehavior, EMBEDDING_QUEUE_NAME } from './canonical.constants';
 import { EmbeddingStatus } from './canonical.types';
 import { scopeToOrganizationId } from './canonical-memory.service';
 import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
@@ -14,7 +14,7 @@ import { ScopeType } from './canonical.types';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { EmbeddingService } from '../embedding.service';
-import { EMBEDDING_QUEUE_NAME, CanonicalMemoryService } from './canonical-memory.service';
+import { CanonicalMemoryService } from './canonical-memory.service';
 
 @Injectable()
 export class CanonicalMemoryOpsHelper {
