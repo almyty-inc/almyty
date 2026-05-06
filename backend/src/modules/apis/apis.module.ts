@@ -4,6 +4,7 @@ import { MulterModule } from '@nestjs/platform-express';
 import { BullModule } from '@nestjs/bull';
 
 import { ApisController } from './apis.controller';
+import { ApisCredentialsController } from './apis-credentials.controller';
 import { ApisService } from './apis.service';
 import { ApisImportHelper } from './apis-import.helper';
 import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
@@ -62,7 +63,7 @@ import { ToolsModule } from '../tools/tools.module';
     SchemaParserModule,
     ToolsModule,
   ],
-  controllers: [ApisController],
+  controllers: [ApisController, ApisCredentialsController],
   providers: [ApisService, ApisImportHelper, ApisToolGeneratorHelper, CredentialService],
   exports: [ApisService, CredentialService],
 })
