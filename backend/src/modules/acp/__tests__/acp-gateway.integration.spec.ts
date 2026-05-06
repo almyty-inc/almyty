@@ -9,6 +9,7 @@ import { Organization } from '../../../entities/organization.entity';
 import { UsageMetric } from '../../../entities/usage-metric.entity';
 import { GatewaysService } from '../../gateways/gateways.service';
 import { GatewaysStatsHelper } from '../../gateways/gateways-stats.helper';
+import { GatewayInitHelper } from '../../gateways/gateway-init.helper';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 
 /**
@@ -39,6 +40,7 @@ describe('ACP Gateway Integration', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GatewaysService,
+        { provide: GatewayInitHelper, useValue: { validateGatewayConfiguration: jest.fn(), createDefaultAuth: jest.fn(), ensureSystemGateway: jest.fn() } },
         { provide: GatewaysStatsHelper, useValue: {} },
         {
           provide: getRepositoryToken(Gateway),

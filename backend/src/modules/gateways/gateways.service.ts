@@ -13,6 +13,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 import { GatewaysStatsHelper } from './gateways-stats.helper';
+import { GatewayInitHelper } from './gateway-init.helper';
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -141,6 +142,7 @@ export class GatewaysService {
     private readonly auditLogService: AuditLogService,
     @Inject(forwardRef(() => GatewaysStatsHelper))
     private readonly statsHelper: GatewaysStatsHelper,
+    private readonly init: GatewayInitHelper,
   ) {}
 
   async createGateway(
@@ -200,7 +202,7 @@ export class GatewaysService {
       }
 
       // Validate configuration based on gateway type
-      this.validateGatewayConfiguration(createGatewayDto.type, createGatewayDto.configuration);
+      this.init.validateGatewayConfiguration(createGatewayDto.type, createGatewayDto.configuration);
 
       // Create the gateway
       const gateway = this.gatewayRepository.create({
@@ -216,7 +218,7 @@ export class GatewaysService {
       this.logger.log(`[CREATE_GATEWAY] Gateway saved to DB: id=${savedGateway.id}, name='${savedGateway.name}', org=${savedGateway.organizationId}`);
 
       // Create default authentication if not provided
-      await this.createDefaultAuth(savedGateway);
+      await this.init.createDefaultAuth(savedGateway);
 
       this.logger.log(`[CREATE_GATEWAY] Gateway '${savedGateway.name}' created successfully in organization ${organizationId}`);
 
@@ -264,7 +266,7 @@ export class GatewaysService {
 
       // Validate configuration if updated
       if (updateGatewayDto.configuration) {
-        this.validateGatewayConfiguration(gateway.type, gateway.configuration);
+        this.init.validateGatewayConfiguration(gateway.type, gateway.configuration);
       }
 
       const updatedGateway = await this.gatewayRepository.save(gateway);
@@ -529,118 +531,16 @@ export class GatewaysService {
    * gateway row and its OAuth auth config. Called during org creation
    * and (via the migration) for all existing orgs.
    */
-  async ensureSystemGateway(organizationId: string): Promise<Gateway> {
-    const existing = await this.gatewayRepository.findOne({
-      where: { organizationId, isSystem: true, endpoint: '/almyty' },
-      relations: ['authConfigs'],
-    });
-
-    if (existing) {
-      return existing;
-    }
-
-    const gateway = this.gatewayRepository.create({
-      name: 'almyty',
-      description: 'almyty platform management tools',
-      type: GatewayType.MCP,
-      kind: GatewayKind.TOOL,
-      endpoint: '/almyty',
-      configuration: { transport: 'http' },
-      organizationId,
-      status: GatewayStatus.ACTIVE,
-      isSystem: true,
-      requestTimeout: 30000,
-      maxRetries: 3,
-      isHealthy: true,
-    });
-
-    const saved = await this.gatewayRepository.save(gateway);
-
-    // Create OAuth auth config so the gateway auth pipeline uses OAuth
-    const oauthAuth = this.gatewayAuthRepository.create({
-      gatewayId: saved.id,
-      type: GatewayAuthType.OAUTH2,
-      isRequired: true,
-      isActive: true,
-      configuration: {},
-      validationRules: {},
-      errorResponses: {},
-    });
-    await this.gatewayAuthRepository.save(oauthAuth);
-
-    this.logger.log(`System gateway created for organization ${organizationId}`);
-
-    return saved;
-  }
-
-
-  // kind is now derived from type via Gateway.kindForType()
-
-  private validateGatewayConfiguration(type: GatewayType, configuration: Record<string, any>): void {
-    switch (type) {
-      case GatewayType.MCP:
-        if (!configuration.transport) {
-          throw new BadRequestException('MCP gateway requires transport configuration');
-        }
-        if (!['http', 'sse', 'websocket'].includes(configuration.transport)) {
-          throw new BadRequestException('Invalid MCP transport type');
-        }
-        break;
-
-      case GatewayType.UTCP:
-        if (!configuration.protocol) {
-          throw new BadRequestException('UTCP gateway requires protocol configuration');
-        }
-        if (!['http', 'tcp'].includes(configuration.protocol)) {
-          throw new BadRequestException('Invalid UTCP protocol type');
-        }
-        break;
-
-      case GatewayType.A2A:
-      case GatewayType.ACP:
-      case GatewayType.OPENAI_CHAT:
-        // Agent-kind protocol types — no special config required
-        break;
-
-      // Channel types and SKILLS don't require specific configuration validation
-    }
-  }
-
-  private async createDefaultAuth(gateway: Gateway): Promise<void> {
-    const defaultAuth = this.gatewayAuthRepository.create({
-      gatewayId: gateway.id,
-      type: GatewayAuthType.API_KEY,
-      isRequired: true,
-      isActive: true,
-      configuration: {
-        keyHeader: 'x-api-key',
-        keyQuery: 'api_key',
-        defaultScopes: ['gateway:use'],
-      },
-      validationRules: {
-        minKeyLength: 32,
-        maxKeyLength: 128,
-        keyFormat: '^[a-zA-Z0-9_-]+$',
-      },
-      errorResponses: {
-        unauthorized: {
-          code: 401,
-          message: 'API key is required',
-        },
-        invalid: {
-          code: 401,
-          message: 'Invalid API key',
-        },
-      },
-    });
-
-    await this.gatewayAuthRepository.save(defaultAuth);
-  }
 
   private getWeekNumber(date: Date): number {
     const oneJan = new Date(date.getFullYear(), 0, 1);
     const numberOfDays = Math.floor((date.getTime() - oneJan.getTime()) / (24 * 60 * 60 * 1000));
     return Math.ceil((date.getDay() + 1 + numberOfDays) / 7);
+  }
+
+  // ── Delegations to GatewayInitHelper ──
+  ensureSystemGateway(...args: Parameters<GatewayInitHelper['ensureSystemGateway']>) {
+    return this.init.ensureSystemGateway(...args);
   }
 
   // ── Delegations to GatewaysStatsHelper ──
