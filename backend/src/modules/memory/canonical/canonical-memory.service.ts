@@ -67,7 +67,6 @@ export class CanonicalMemoryService {
     private readonly embedding: EmbeddingService,
     private readonly searchHelper: CanonicalSearchHelper,
     @Inject(forwardRef(() => CanonicalMemoryOpsHelper))
-    @Inject(forwardRef(() => CanonicalMemoryOpsHelper))
     private readonly opsHelper: CanonicalMemoryOpsHelper,
     private readonly putValidators: CanonicalPutValidators,
   ) {}

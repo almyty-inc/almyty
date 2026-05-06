@@ -32,6 +32,9 @@ import {
   CanonicalMemoryService,
   EMBEDDING_QUEUE_NAME,
 } from '../../modules/memory/canonical/canonical-memory.service';
+import { CanonicalSearchHelper } from '../../modules/memory/canonical/canonical-search.helper';
+import { CanonicalMemoryOpsHelper } from '../../modules/memory/canonical/canonical-ops.helper';
+import { CanonicalPutValidators } from '../../modules/memory/canonical/canonical-put-validators.helper';
 import { EmbeddingService } from '../../modules/memory/embedding.service';
 import { DocumentChunkerService } from '../../modules/memory/canonical/document-chunker.service';
 import { ConsolidationService } from '../../modules/memory/canonical/consolidation.service';
@@ -182,6 +185,9 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
         { provide: DataSource, useValue: ds },
         { provide: AuditLogService, useValue: auditStub },
         { provide: EmbeddingService, useValue: embeddingStub },
+        CanonicalSearchHelper,
+        CanonicalMemoryOpsHelper,
+        CanonicalPutValidators,
       ],
     }).compile();
     service = moduleRef.get(CanonicalMemoryService);
