@@ -17,14 +17,29 @@ import { Message } from '../../entities/message.entity';
 
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
+import { AgentExecutionStateHelper } from './agent-execution-state.helper';
+import { AgentOpenAIStreamHelper } from './agent-openai-stream.helper';
 import { AgentNodeExecutor } from './agent-node-executor';
 import { AgentTemplateResolver } from './agent-template-resolver';
 import { AgentWebhookService } from './agent-webhook.service';
 import { AgentSchedulerService } from './agent-scheduler.service';
 import { AgentAuditService } from './agent-audit.service';
 import { AgentRuntimeService } from './agent-runtime.service';
+import { AgentRuntimeBuilders } from './agent-runtime-builders';
+import { AgentCollaborationHelper } from './agent-collaboration.helper';
+import { AgentBuiltInToolsHelper } from './agent-builtin-tools.helper';
+import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
+import { AgentRuntimeMiscHelper } from './agent-runtime-misc.helper';
+import { AgentStepProcessor } from './agent-step-processor';
+import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
+import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
+import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentsController } from './agents.controller';
+import { AgentExecutionController } from './agent-execution.controller';
+import { AgentManagementController } from './agent-management.controller';
+import { AgentScheduleController } from './agent-schedule.controller';
+import { AgentRunsController } from './agent-runs.controller';
 import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
@@ -55,8 +70,8 @@ import { A2AModule } from '../a2a/a2a.module';
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
   ],
-  providers: [AgentsService, AgentExecutionEngine, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeProcessor],
-  controllers: [AgentsController, AgentOpenAICompatController],
+  providers: [AgentsService, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeProcessor],
+  controllers: [AgentsController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController],
   exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })
 export class AgentsModule {}

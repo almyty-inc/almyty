@@ -4,6 +4,7 @@ import { NotFoundException } from '@nestjs/common';
 import { AgentOpenAICompatController } from '../agent-openai-compat.controller';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
+import { AgentOpenAIStreamHelper } from '../agent-openai-stream.helper';
 import { ApiKey } from '../../../entities/api-key.entity';
 import * as crypto from 'crypto';
 
@@ -63,6 +64,7 @@ describe('AgentOpenAICompatController', () => {
         { provide: AgentsService, useValue: { getAgent: jest.fn(), findByName: jest.fn(), findAllActive: jest.fn() } },
         { provide: AgentExecutionEngine, useValue: { execute: jest.fn() } },
         { provide: getRepositoryToken(ApiKey), useValue: apiKeyRepo },
+        { provide: AgentOpenAIStreamHelper, useValue: { handleSync: jest.fn(), handleStreaming: jest.fn() } },
       ],
     }).compile();
 

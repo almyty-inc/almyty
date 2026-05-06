@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { MonitoringService, SystemMetrics, Alert } from './monitoring.service';
+import { MonitoringRedisStatsHelper } from './monitoring-redis-stats.helper';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { Tool } from '../../entities/tool.entity';
 import { Api } from '../../entities/api.entity';
@@ -27,6 +28,7 @@ describe('MonitoringService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MonitoringService,
+        MonitoringRedisStatsHelper,
         {
           provide: getRepositoryToken(UsageMetric),
           useValue: {
@@ -960,7 +962,7 @@ describe('MonitoringService', () => {
       it('should return default request stats when Redis returns null', async () => {
         mockRedis.get.mockResolvedValue(null);
 
-        const stats = await service['getRequestStats']();
+        const stats = await service['redisStats'].getRequestStats();
 
         expect(stats).toEqual({
           total: 0,
@@ -973,7 +975,7 @@ describe('MonitoringService', () => {
       it('should parse request stats from Redis', async () => {
         mockRedis.get.mockResolvedValue(JSON.stringify({ total: 100, successful: 95, failed: 5, rate: 5 }));
 
-        const stats = await service['getRequestStats']();
+        const stats = await service['redisStats'].getRequestStats();
 
         expect(stats.total).toBe(100);
         expect(stats.successful).toBe(95);
@@ -984,7 +986,7 @@ describe('MonitoringService', () => {
       it('should handle Redis errors in getRequestStats', async () => {
         mockRedis.get.mockRejectedValue(new Error('Redis error'));
 
-        const stats = await service['getRequestStats']();
+        const stats = await service['redisStats'].getRequestStats();
 
         expect(stats).toEqual({
           total: 0,
@@ -997,7 +999,7 @@ describe('MonitoringService', () => {
       it('should return default protocol stats when Redis returns null', async () => {
         mockRedis.get.mockResolvedValue(null);
 
-        const stats = await service['getProtocolStats']();
+        const stats = await service['redisStats'].getProtocolStats();
 
         expect(stats).toEqual({
           mcp: { sessions: 0, toolCalls: 0, responseTime: 0, errorRate: 0 },
@@ -1013,7 +1015,7 @@ describe('MonitoringService', () => {
           a2a: { activeAgents: 5, messages: 1000, workflows: 15 },
         }));
 
-        const stats = await service['getProtocolStats']();
+        const stats = await service['redisStats'].getProtocolStats();
 
         expect(stats.mcp.sessions).toBe(10);
         expect(stats.utcp.directCalls).toBe(300);
@@ -1023,7 +1025,7 @@ describe('MonitoringService', () => {
       it('should handle Redis errors in getProtocolStats', async () => {
         mockRedis.get.mockRejectedValue(new Error('Redis error'));
 
-        const stats = await service['getProtocolStats']();
+        const stats = await service['redisStats'].getProtocolStats();
 
         expect(stats.mcp.sessions).toBe(0);
       });
@@ -1031,7 +1033,7 @@ describe('MonitoringService', () => {
       it('should return default security stats when Redis returns null', async () => {
         mockRedis.get.mockResolvedValue(null);
 
-        const stats = await service['getSecurityStats']();
+        const stats = await service['redisStats'].getSecurityStats();
 
         expect(stats).toEqual({
           threatsBlocked: 0,
@@ -1049,7 +1051,7 @@ describe('MonitoringService', () => {
           authFailures: 10,
         }));
 
-        const stats = await service['getSecurityStats']();
+        const stats = await service['redisStats'].getSecurityStats();
 
         expect(stats.threatsBlocked).toBe(50);
         expect(stats.piiFiltered).toBe(100);
@@ -1058,7 +1060,7 @@ describe('MonitoringService', () => {
       it('should handle Redis errors in getSecurityStats', async () => {
         mockRedis.get.mockRejectedValue(new Error('Redis error'));
 
-        const stats = await service['getSecurityStats']();
+        const stats = await service['redisStats'].getSecurityStats();
 
         expect(stats.threatsBlocked).toBe(0);
       });
@@ -1066,7 +1068,7 @@ describe('MonitoringService', () => {
       it('should return default performance stats when Redis returns null', async () => {
         mockRedis.get.mockResolvedValue(null);
 
-        const stats = await service['getPerformanceStats']();
+        const stats = await service['redisStats'].getPerformanceStats();
 
         expect(stats).toEqual({
           averageResponseTime: 0,
@@ -1086,7 +1088,7 @@ describe('MonitoringService', () => {
           errorRate: 0.02,
         }));
 
-        const stats = await service['getPerformanceStats']();
+        const stats = await service['redisStats'].getPerformanceStats();
 
         expect(stats.averageResponseTime).toBe(300);
         expect(stats.cacheHitRate).toBe(0.8);
@@ -1095,7 +1097,7 @@ describe('MonitoringService', () => {
       it('should handle Redis errors in getPerformanceStats', async () => {
         mockRedis.get.mockRejectedValue(new Error('Redis error'));
 
-        const stats = await service['getPerformanceStats']();
+        const stats = await service['redisStats'].getPerformanceStats();
 
         expect(stats.errorRate).toBe(0);
       });

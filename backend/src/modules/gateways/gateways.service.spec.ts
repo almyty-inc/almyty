@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { GatewaysService } from './gateways.service';
+import { GatewaysStatsHelper } from './gateways-stats.helper';
+import { GatewayInitHelper } from './gateway-init.helper';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { GatewayAuth } from '../../entities/gateway-auth.entity';
@@ -21,6 +23,8 @@ describe('GatewaysService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        GatewaysStatsHelper,
+        GatewayInitHelper,
         GatewaysService,
         {
           provide: getRepositoryToken(Gateway),
@@ -929,55 +933,55 @@ describe('GatewaysService', () => {
   describe('validateGatewayConfiguration', () => {
     it('should validate MCP gateway configuration - missing transport', () => {
       expect(() => {
-        service['validateGatewayConfiguration']('mcp' as any, {});
+        service['init'].validateGatewayConfiguration('mcp' as any, {});
       }).toThrow('MCP gateway requires transport configuration');
     });
 
     it('should validate MCP gateway configuration - invalid transport', () => {
       expect(() => {
-        service['validateGatewayConfiguration']('mcp' as any, { transport: 'invalid' });
+        service['init'].validateGatewayConfiguration('mcp' as any, { transport: 'invalid' });
       }).toThrow('Invalid MCP transport type');
     });
 
     it('should validate MCP gateway configuration - valid', () => {
       expect(() => {
-        service['validateGatewayConfiguration']('mcp' as any, { transport: 'http' });
+        service['init'].validateGatewayConfiguration('mcp' as any, { transport: 'http' });
       }).not.toThrow();
 
       expect(() => {
-        service['validateGatewayConfiguration']('mcp' as any, { transport: 'sse' });
+        service['init'].validateGatewayConfiguration('mcp' as any, { transport: 'sse' });
       }).not.toThrow();
 
       expect(() => {
-        service['validateGatewayConfiguration']('mcp' as any, { transport: 'websocket' });
+        service['init'].validateGatewayConfiguration('mcp' as any, { transport: 'websocket' });
       }).not.toThrow();
     });
 
     it('should accept A2A gateway configuration without special requirements', () => {
       expect(() => {
-        service['validateGatewayConfiguration']('a2a' as any, {});
+        service['init'].validateGatewayConfiguration('a2a' as any, {});
       }).not.toThrow();
     });
 
     it('should validate UTCP gateway configuration - missing protocol', () => {
       expect(() => {
-        service['validateGatewayConfiguration']('utcp' as any, {});
+        service['init'].validateGatewayConfiguration('utcp' as any, {});
       }).toThrow('UTCP gateway requires protocol configuration');
     });
 
     it('should validate UTCP gateway configuration - invalid protocol', () => {
       expect(() => {
-        service['validateGatewayConfiguration']('utcp' as any, { protocol: 'invalid' });
+        service['init'].validateGatewayConfiguration('utcp' as any, { protocol: 'invalid' });
       }).toThrow('Invalid UTCP protocol type');
     });
 
     it('should validate UTCP gateway configuration - valid', () => {
       expect(() => {
-        service['validateGatewayConfiguration']('utcp' as any, { protocol: 'http' });
+        service['init'].validateGatewayConfiguration('utcp' as any, { protocol: 'http' });
       }).not.toThrow();
 
       expect(() => {
-        service['validateGatewayConfiguration']('utcp' as any, { protocol: 'tcp' });
+        service['init'].validateGatewayConfiguration('utcp' as any, { protocol: 'tcp' });
       }).not.toThrow();
     });
   });

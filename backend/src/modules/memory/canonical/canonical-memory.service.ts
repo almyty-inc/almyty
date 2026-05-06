@@ -1,3 +1,4 @@
+import { Inject, forwardRef } from '@nestjs/common';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -29,34 +30,24 @@ import {
 import { validateMemoryItem } from './canonical.validator';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
+import {
+  detectBlob,
+  overrideOrDefault,
+  uriSchemeAllowList,
+  parseScheme,
+  scopeToOrganizationId,
+  itemToEntity,
+  entityToItem,
+} from './canonical-memory.helpers';
 import { EmbeddingService } from '../embedding.service';
+import { CanonicalSearchHelper } from './canonical-search.helper';
+import { CanonicalMemoryOpsHelper } from './canonical-ops.helper';
+import { CanonicalPutValidators } from './canonical-put-validators.helper';
 
 export const EMBEDDING_QUEUE_NAME = 'canonical-memory-embedding';
 
-export interface PutInput {
-  mode: Mode;
-  scope: ScopeRef;
-  content: string;
-  content_format?: 'text' | 'markdown' | 'json';
-  tags?: string[];
-  metadata?: Record<string, unknown>;
-  file_refs?: string[];
-  // memory mode
-  tier?: Tier;
-  ttl_seconds?: number | null;
-  // document mode
-  source_uri?: string;
-  source_version?: number;
-  source_checksum?: string;
-  chunk_index?: number;
-  chunk_total?: number;
-  chunk_of?: string;
-  // common
-  confidence?: number;
-  provenance: Provenance;
-  /** Optional explicit id — bypasses the v7 generator (used by transfer/sync). */
-  id?: string;
-}
+import { PutInput } from './dto/canonical-memory.dto';
+export type { PutInput };
 
 @Injectable()
 export class CanonicalMemoryService {
@@ -74,6 +65,10 @@ export class CanonicalMemoryService {
     private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
     private readonly embedding: EmbeddingService,
+    private readonly searchHelper: CanonicalSearchHelper,
+    @Inject(forwardRef(() => CanonicalMemoryOpsHelper))
+    private readonly opsHelper: CanonicalMemoryOpsHelper,
+    private readonly putValidators: CanonicalPutValidators,
   ) {}
 
   // ════════════════════════════════════════════════════════════════════
@@ -103,160 +98,9 @@ export class CanonicalMemoryService {
     // their own auth guards. If a future PolicyService is added it
     // wraps this method.
 
-    // ── 4 & 5. Anti-dump: blob detection + compression ratio ─────────
-    const blobKind = detectBlob(input.content);
-    if (blobKind) {
-      this.auditLog.log({
-        organizationId: scopeToOrganizationId(item.scope_type, item.scope_id),
-        userId: actor.user_id,
-        action: AuditAction.MEMORY_DENIED,
-        resourceType: AuditResource.MEMORY,
-        resourceId: item.id,
-        details: { reason: 'looks_like_blob', detected: blobKind, size: contentBytes },
-      });
-      throw new MemoryError({ kind: 'looks_like_blob', detected: blobKind, suggest: 'file' });
-    }
-    if (contentBytes > 1024) {
-      // Only run gzip on non-trivial inputs — very small strings have
-      // a low compressed/raw ratio simply because of header overhead,
-      // not because the content is repetitive.
-      const ratio = gzipSync(input.content).length / contentBytes;
-      if (ratio < LIMITS.COMPRESSION_RATIO_REJECT_THRESHOLD) {
-        this.auditLog.log({
-          organizationId: scopeToOrganizationId(item.scope_type, item.scope_id),
-          userId: actor.user_id,
-          action: AuditAction.MEMORY_DENIED,
-          resourceType: AuditResource.MEMORY,
-          resourceId: item.id,
-          details: { reason: 'compression_ratio', ratio, size: contentBytes },
-        });
-        throw new MemoryError({ kind: 'looks_like_blob', detected: 'binary', suggest: 'file' });
-      }
-    }
-
-    // ── 6 & 7. Per-agent throttle / max single write ─────────────────
-    // The throttle is currently bounded only by the per-write byte
-    // ceiling — an effective stand-in for rate limiting on the
-    // synchronous write path. A BullMQ-backed sliding window can be
-    // layered on top later without changing the contract here.
-    if (item.mode === 'memory' && contentBytes > LIMITS.AGENT_MAX_SINGLE_WRITE_BYTES_DEFAULT) {
-      throw new MemoryError({
-        kind: 'too_large',
-        size: contentBytes,
-        hard_cap: LIMITS.AGENT_MAX_SINGLE_WRITE_BYTES_DEFAULT,
-        suggest: 'document',
-      });
-    }
-    if (item.mode === 'document' && contentBytes > LIMITS.AGENT_MAX_IMPORT_BYTES_DEFAULT) {
-      throw new MemoryError({
-        kind: 'too_large',
-        size: contentBytes,
-        hard_cap: LIMITS.AGENT_MAX_IMPORT_BYTES_DEFAULT,
-        suggest: 'file',
-      });
-    }
-
-    // ── 8 & 9. Workspace hard cap + system ceiling ───────────────────
+    // ── 4-10b. Validation pipeline (blob, caps, soft cap, URI) ───────
     const config = await this.getOrCreateConfig(item.scope_type, item.scope_id);
-    const hardCap =
-      item.mode === 'memory'
-        ? overrideOrDefault(config.overrides, 'hard_cap_memory_bytes', LIMITS.WORKSPACE_DEFAULT_HARD_CAP_MEMORY_BYTES)
-        : overrideOrDefault(config.overrides, 'hard_cap_document_bytes', LIMITS.WORKSPACE_DEFAULT_HARD_CAP_DOCUMENT_BYTES);
-    if (contentBytes > hardCap) {
-      throw new MemoryError({
-        kind: 'too_large',
-        size: contentBytes,
-        hard_cap: hardCap,
-        suggest: item.mode === 'memory' ? 'document' : 'file',
-      });
-    }
-    const systemCeiling =
-      item.mode === 'memory'
-        ? LIMITS.SYSTEM_CEILING_MEMORY_BYTES
-        : LIMITS.SYSTEM_CEILING_DOCUMENT_BYTES;
-    if (contentBytes > systemCeiling) {
-      throw new MemoryError({
-        kind: 'too_large',
-        size: contentBytes,
-        hard_cap: systemCeiling,
-        suggest: item.mode === 'memory' ? 'document' : 'file',
-      });
-    }
-
-    // ── 10. Per-tier soft cap with workspace behavior ────────────────
-    if (item.mode === 'memory' && item.tier !== null) {
-      const softCap = softCapForTier(item.tier);
-      if (contentBytes > softCap) {
-        const behavior: SoftCapBehavior = config.softcapBehavior;
-        if (behavior === 'reject') {
-          throw new MemoryError({
-            kind: 'too_large',
-            size: contentBytes,
-            soft_cap: softCap,
-            hard_cap: hardCap,
-            suggest: 'document',
-          });
-        }
-        if (behavior === 'warn_log') {
-          // Persist a warning row + an audit event. Both are
-          // synchronous so the operator always sees the trail; if the
-          // process crashes between these and the row insert we'd
-          // rather have the audit than a silent oversize write.
-          await this.warningRepo.save({
-            memoryId: item.id,
-            scopeType: item.scope_type,
-            scopeId: item.scope_id,
-            tier: item.tier,
-            mode: item.mode,
-            sizeBytes: contentBytes,
-            softCap,
-          } as CanonicalMemorySoftcapWarning);
-          this.auditLog.log({
-            organizationId: scopeToOrganizationId(item.scope_type, item.scope_id),
-            userId: actor.user_id,
-            action: AuditAction.MEMORY_SOFTCAP_WARNING,
-            resourceType: AuditResource.MEMORY,
-            resourceId: item.id,
-            details: { tier: item.tier, size: contentBytes, soft_cap: softCap },
-          });
-        }
-        // 'silent' → fall through.
-      }
-    }
-
-
-    // ── 10b. URI scheme allow-list (per spec §4) ─────────────────────
-    // Every URI in `file_refs` (memory + document mode) and the
-    // `source_uri` (document mode) must use a scheme the workspace
-    // permits. The default is permissive (every well-known scheme
-    // allowed); admins can restrict to e.g. only `almyty:` and
-    // `https:` if external references are unwanted.
-    const allowed = uriSchemeAllowList(config.overrides);
-    const refs: string[] = [
-      ...item.file_refs,
-      ...(item.source_uri ? [item.source_uri] : []),
-    ];
-    for (const ref of refs) {
-      const scheme = parseScheme(ref);
-      if (!scheme) continue; // bare path; the validator already vetted shape
-      if (!allowed.has(scheme)) {
-        this.auditLog.log({
-          organizationId: scopeToOrganizationId(item.scope_type, item.scope_id),
-          userId: actor.user_id,
-          action: AuditAction.MEMORY_DENIED,
-          resourceType: AuditResource.MEMORY,
-          resourceId: item.id,
-          details: { reason: 'uri_scheme_blocked', scheme, ref },
-        });
-        throw new MemoryError({
-          kind: 'validation',
-          issues: [{
-            path: item.source_uri === ref ? 'source_uri' : 'file_refs',
-            message: `URI scheme "${scheme}:" is not in this workspace's allow-list`,
-          }],
-        });
-      }
-    }
+    await this.putValidators.run(item, input, contentBytes, actor, config);
     // ── 11. Backend capability check ─────────────────────────────────
     // The native backend supports every capability declared in v1 —
     // this becomes meaningful when adapters land (Mem0 lacks
@@ -525,8 +369,8 @@ export class CanonicalMemoryService {
     }
 
     const results = queryEmbedding
-      ? await this.hybridSearch(query, queryEmbedding, topK)
-      : await this.ftsSearch(query, topK);
+      ? await this.searchHelper.hybridSearch(query, queryEmbedding, topK)
+      : await this.searchHelper.ftsSearch(query, topK);
 
     // Bump access counters on the matched rows.
     if (results.length > 0) {
@@ -562,97 +406,6 @@ export class CanonicalMemoryService {
     return results;
   }
 
-  private async hybridSearch(
-    query: SearchQuery,
-    queryEmbedding: number[],
-    topK: number,
-  ): Promise<RankedItem[]> {
-    // Hybrid scoring: vector cosine distance ascending + FTS rank
-    // descending, normalized into a single weighted score. The
-    // candidate pool is bounded by the index — pgvector's HNSW gives
-    // us O(log n) nearest-neighbour lookup, and FTS rides the GIN
-    // index on `content_tsv`.
-    const params: any[] = [
-      query.scope.scope_type,
-      query.scope.scope_id,
-      pgvector.toSql(queryEmbedding),
-      query.query,
-      topK,
-    ];
-    let where = `m.scope_type = $1 AND m.scope_id = $2 AND m.deleted_at IS NULL AND m.valid_until IS NULL AND m.embedding IS NOT NULL`;
-    if (query.mode) {
-      params.push(query.mode);
-      where += ` AND m.mode = $${params.length}`;
-    }
-    if (query.tier) {
-      params.push(query.tier);
-      where += ` AND m.tier = $${params.length}`;
-    }
-    if (query.tags && query.tags.length > 0) {
-      params.push(query.tags);
-      where += ` AND m.tags && $${params.length}`;
-    }
-
-    const rows = await this.dataSource.query(
-      `
-      WITH vec AS (
-        SELECT m.*, (m.embedding <=> $3::vector) AS vec_distance
-        FROM memories m
-        WHERE ${where}
-        ORDER BY m.embedding <=> $3::vector
-        LIMIT $5 * 4
-      ),
-      fts AS (
-        SELECT m.id, ts_rank_cd(m.content_tsv, plainto_tsquery('english', $4)) AS fts_rank
-        FROM memories m
-        WHERE m.scope_type = $1 AND m.scope_id = $2
-          AND m.deleted_at IS NULL AND m.valid_until IS NULL
-          AND m.content_tsv @@ plainto_tsquery('english', $4)
-        ORDER BY fts_rank DESC
-        LIMIT $5 * 4
-      )
-      SELECT v.*,
-             COALESCE(f.fts_rank, 0) AS fts_rank,
-             v.vec_distance
-      FROM vec v
-      LEFT JOIN fts f ON f.id = v.id
-      ORDER BY (1 - v.vec_distance) * 0.7 + COALESCE(f.fts_rank, 0) * 0.3 DESC
-      LIMIT $5
-      `,
-      params,
-    );
-
-    return rows.map((row: any) => ({
-      item: entityToItem(rowToEntity(row)),
-      score: (1 - Number(row.vec_distance)) * 0.7 + Number(row.fts_rank ?? 0) * 0.3,
-      signal: 'hybrid' as const,
-    }));
-  }
-
-  private async ftsSearch(query: SearchQuery, topK: number): Promise<RankedItem[]> {
-    const params: any[] = [query.scope.scope_type, query.scope.scope_id, query.query, topK];
-    let where = `m.scope_type = $1 AND m.scope_id = $2 AND m.deleted_at IS NULL AND m.valid_until IS NULL AND m.content_tsv @@ plainto_tsquery('english', $3)`;
-    if (query.mode) {
-      params.push(query.mode);
-      where += ` AND m.mode = $${params.length}`;
-    }
-
-    const rows = await this.dataSource.query(
-      `
-      SELECT m.*, ts_rank_cd(m.content_tsv, plainto_tsquery('english', $3)) AS fts_rank
-      FROM memories m
-      WHERE ${where}
-      ORDER BY fts_rank DESC
-      LIMIT $4
-      `,
-      params,
-    );
-    return rows.map((row: any) => ({
-      item: entityToItem(rowToEntity(row)),
-      score: Number(row.fts_rank ?? 0),
-      signal: 'fts' as const,
-    }));
-  }
 
   // ────────────────────────────────────────────────────────────────────
   // As-of queries: fetch the row that was current at `time`.
@@ -740,164 +493,6 @@ export class CanonicalMemoryService {
    * bypasses `put`) can still wire embeddings without re-importing
    * the queue handle.
    */
-  async enqueueEmbeddingFor(memoryId: string): Promise<void> {
-    await this.embeddingQueue.add(
-      'embed',
-      { memory_id: memoryId },
-      {
-        jobId: `embed:${memoryId}`,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: true,
-        removeOnFail: 100,
-      },
-    );
-  }
-
-  async fillEmbedding(memoryId: string): Promise<void> {
-    const row = await this.repo.findOne({ where: { id: memoryId } });
-    if (!row) {
-      this.logger.warn(`fillEmbedding: memory ${memoryId} no longer exists`);
-      return;
-    }
-    if (row.embeddingStatus === 'ready' || row.embeddingStatus === 'skipped') return;
-
-    const orgId = scopeToOrganizationId(row.scopeType, row.scopeId);
-    const config = await this.getOrCreateConfig(row.scopeType, row.scopeId);
-
-    try {
-      const raw = await this.embedding.generateEmbedding(row.content, orgId);
-      if (!raw) {
-        await this.repo.update(
-          { id: memoryId },
-          {
-            embeddingStatus: 'failed' as EmbeddingStatus,
-            embeddingError: 'embedding generation returned null',
-          },
-        );
-        return;
-      }
-      // The DB column is `vector(EMBEDDING_DEFAULT_DIM)`. Normalise
-      // truncate or zero-pad incoming vectors to that length so a
-      // workspace using a different-dim embedder still produces
-      // insertable rows. The recorded `embedding_dim` reflects the
-      // raw model output so consumers know what shape to expect on
-      // the read side.
-      const target = LIMITS.EMBEDDING_DEFAULT_DIM;
-      const normalised =
-        raw.length === target
-          ? raw
-          : raw.length > target
-            ? raw.slice(0, target)
-            : raw.concat(new Array(target - raw.length).fill(0));
-      await this.repo.update(
-        { id: memoryId },
-        {
-          embedding: normalised,
-          embeddingDim: raw.length,
-          embeddingModel: config.embeddingModel,
-          embeddingStatus: 'ready' as EmbeddingStatus,
-          embeddingError: null,
-        },
-      );
-    } catch (e: any) {
-      await this.repo.update(
-        { id: memoryId },
-        {
-          embeddingStatus: 'failed' as EmbeddingStatus,
-          embeddingError: e.message ?? String(e),
-        },
-      );
-      throw e;
-    }
-  }
-
-  // ────────────────────────────────────────────────────────────────────
-
-  async getOrCreateConfig(
-    scopeType: ScopeType,
-    scopeId: string,
-  ): Promise<CanonicalMemoryWorkspaceConfig> {
-    const existing = await this.configRepo.findOne({ where: { scopeType, scopeId } });
-    if (existing) return existing;
-    const created = this.configRepo.create({
-      scopeType,
-      scopeId,
-      embeddingModel: LIMITS.EMBEDDING_DEFAULT_MODEL,
-      embeddingDim: LIMITS.EMBEDDING_DEFAULT_DIM,
-      embeddingProvider: 'openai',
-      softcapBehavior: LIMITS.SOFTCAP_BEHAVIOR_DEFAULT,
-      overrides: {},
-    });
-    return this.configRepo.save(created);
-  }
-
-  /**
-   * Update a workspace's canonical-memory config. Used by the
-   * settings UI to wire backend routing, mirror, credential ids,
-   * and softcap behavior. Only the fields the caller passes are
-   * touched; `overrides` is shallow-merged so partial edits don't
-   * wipe sibling keys (e.g. setting routing.memory_backend leaves
-   * routing.credentials in place).
-   *
-   * Invalidates the credentials resolver's cache so a freshly
-   * wired credential id is observed on the next dispatch without
-   * waiting for the TTL.
-   */
-  async updateConfig(
-    scopeType: ScopeType,
-    scopeId: string,
-    patch: {
-      embedding_model?: string;
-      embedding_dim?: number;
-      embedding_provider?: string;
-      softcap_behavior?: SoftCapBehavior;
-      overrides?: Record<string, unknown>;
-    },
-    actor: { user_id?: string } = {},
-  ): Promise<CanonicalMemoryWorkspaceConfig> {
-    const cfg = await this.getOrCreateConfig(scopeType, scopeId);
-    if (patch.embedding_model !== undefined) cfg.embeddingModel = patch.embedding_model;
-    if (patch.embedding_dim !== undefined) cfg.embeddingDim = patch.embedding_dim;
-    if (patch.embedding_provider !== undefined) cfg.embeddingProvider = patch.embedding_provider;
-    if (patch.softcap_behavior !== undefined) cfg.softcapBehavior = patch.softcap_behavior;
-    if (patch.overrides !== undefined) {
-      cfg.overrides = { ...(cfg.overrides ?? {}), ...patch.overrides };
-    }
-    const saved = await this.configRepo.save(cfg);
-
-    this.auditLog.log({
-      organizationId: scopeId,
-      userId: actor.user_id,
-      action: AuditAction.MEMORY_UPDATE,
-      resourceType: AuditResource.MEMORY,
-      resourceId: '',
-      details: {
-        scope_type: scopeType,
-        scope_id: scopeId,
-        config_keys: Object.keys(patch),
-      },
-    });
-    return saved;
-  }
-
-  /**
-   * List recent soft-cap warning rows for a scope. Powers the audit
-   * dashboard tab — lets operators see agents that consistently
-   * over-write into a tier whose soft cap they keep tripping.
-   */
-  async listSoftcapWarnings(
-    scopeType: ScopeType,
-    scopeId: string,
-    limit: number = 50,
-  ): Promise<CanonicalMemorySoftcapWarning[]> {
-    return this.warningRepo.find({
-      where: { scopeType, scopeId },
-      order: { at: 'DESC' },
-      take: limit,
-    });
-  }
-
   // ────────────────────────────────────────────────────────────────────
 
   private buildItem(
@@ -944,243 +539,14 @@ export class CanonicalMemoryService {
       deleted_by: null,
     };
   }
+
+  // ── Delegations to CanonicalMemoryOpsHelper ──
+  enqueueEmbeddingFor(...args: Parameters<CanonicalMemoryOpsHelper['enqueueEmbeddingFor']>) { return this.opsHelper.enqueueEmbeddingFor(...args); }
+  fillEmbedding(...args: Parameters<CanonicalMemoryOpsHelper['fillEmbedding']>) { return this.opsHelper.fillEmbedding(...args); }
+  getOrCreateConfig(...args: Parameters<CanonicalMemoryOpsHelper['getOrCreateConfig']>) { return this.opsHelper.getOrCreateConfig(...args); }
+  updateConfig(...args: Parameters<CanonicalMemoryOpsHelper['updateConfig']>) { return this.opsHelper.updateConfig(...args); }
+  listSoftcapWarnings(...args: Parameters<CanonicalMemoryOpsHelper['listSoftcapWarnings']>) { return this.opsHelper.listSoftcapWarnings(...args); }
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Helpers
-// ════════════════════════════════════════════════════════════════════════
-
-/**
- * Detect content that is almost certainly a binary blob the caller
- * meant to upload as a file, not a memory. Heuristic — false
- * positives are acceptable because the caller can either re-route
- * to the file API or pass `--force` (TBD).
- */
-function detectBlob(content: string):
-  | 'pdf'
-  | 'image'
-  | 'archive'
-  | 'binary'
-  | 'base64'
-  | 'hex'
-  | null {
-  if (content.startsWith('%PDF-')) return 'pdf';
-  if (content.startsWith('\x89PNG')) return 'image';
-  if (content.startsWith('\xff\xd8\xff')) return 'image'; // JPEG SOI
-  if (content.startsWith('GIF87a') || content.startsWith('GIF89a')) return 'image';
-  if (content.startsWith('PK\x03\x04') || content.startsWith('PK\x05\x06')) return 'archive';
-  if (content.startsWith('\x1f\x8b')) return 'archive'; // gzip
-  if (content.startsWith('Rar!') || content.startsWith('7z\xbc\xaf')) return 'archive';
-
-  // Long stretches of base64 / hex are almost always encoded blobs.
-  // Trim a small slice — checking the entire 256 KB content character
-  // by character would be wasteful when the heuristic only needs the
-  // tail/head shape.
-  const slice = content.length > 4096 ? content.slice(0, 4096) : content;
-  if (slice.length >= 2048) {
-    const trimmed = slice.replace(/\s+/g, '');
-    if (trimmed.length >= 1024) {
-      // Real base64 mixes character classes — uppercase, lowercase
-      // and digits all show up in any non-trivial encoded blob.
-      // A single-class run (e.g. plain lowercase prose) matches the
-      // base64 regex too, so we'd false-positive on natural text.
-      // Require at least two of {upper, lower, digit} before flagging.
-      const isBase64Charset = /^[A-Za-z0-9+/=]+$/.test(trimmed);
-      if (isBase64Charset) {
-        const classes =
-          (/[A-Z]/.test(trimmed) ? 1 : 0) +
-          (/[a-z]/.test(trimmed) ? 1 : 0) +
-          (/[0-9]/.test(trimmed) ? 1 : 0);
-        if (classes >= 2) return 'base64';
-      }
-      if (/^[0-9a-fA-F]+$/.test(trimmed) && trimmed.length % 2 === 0) {
-        // Same idea for hex — letters AND digits both appear in any
-        // real-world hex blob (sha256s, hex-encoded blobs, etc.).
-        const classes =
-          (/[a-fA-F]/.test(trimmed) ? 1 : 0) + (/[0-9]/.test(trimmed) ? 1 : 0);
-        if (classes >= 2) return 'hex';
-      }
-    }
-  }
-
-  // Non-printable byte ratio. >= 5% of non-ASCII-control characters
-  // in the first 4 KB → call it binary.
-  let nonPrintable = 0;
-  for (let i = 0; i < slice.length; i++) {
-    const code = slice.charCodeAt(i);
-    if (code < 9 || (code > 13 && code < 32)) nonPrintable++;
-  }
-  if (slice.length >= 256 && nonPrintable / slice.length > 0.05) return 'binary';
-
-  return null;
-}
-
-function overrideOrDefault(
-  overrides: Record<string, unknown> | null,
-  key: string,
-  fallback: number,
-): number {
-  if (!overrides) return fallback;
-  const v = overrides[key];
-  if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
-  return fallback;
-}
-
-/**
- * Default URI schemes a workspace allows. The list is the
- * permissive superset documented in spec §4 (almyty:, file:,
- * https:, gdrive:, notion:, git:, s3:). Admins can override via
- * `overrides.allowed_uri_schemes` — a string[] that, when present,
- * replaces this default entirely (no merge, so an admin who wants
- * only `almyty` and `https` writes ['almyty','https']).
- */
-const DEFAULT_URI_SCHEMES: ReadonlyArray<string> = [
-  'almyty', 'file', 'https', 'http', 'gdrive', 'notion', 'git', 's3',
-];
-
-function uriSchemeAllowList(overrides: Record<string, unknown> | null): Set<string> {
-  if (overrides && Array.isArray((overrides as any).allowed_uri_schemes)) {
-    const list = (overrides as any).allowed_uri_schemes as unknown[];
-    return new Set(list.filter((s): s is string => typeof s === 'string').map((s) => s.toLowerCase()));
-  }
-  return new Set(DEFAULT_URI_SCHEMES);
-}
-
-function parseScheme(uri: string): string | null {
-  const m = /^([a-z][a-z0-9+\-.]*):/i.exec(uri);
-  return m ? m[1].toLowerCase() : null;
-}
-
-/**
- * Map a (scope_type, scope_id) to the organization id that the
- * audit-log service expects. For `workspace` and `project` scopes
- * the convention is to encode the organization id into scope_id;
- * for `user` and `collab` the audit log doesn't carry a tenant
- * slot and uses the scope id directly. The audit row is non-fatal
- * either way — the service swallows write failures.
- */
-function scopeToOrganizationId(scopeType: ScopeType, scopeId: string): string {
-  return scopeId;
-}
-
-function itemToEntity(item: MemoryItem): CanonicalMemory {
-  const e = new CanonicalMemory();
-  e.id = item.id;
-  e.mode = item.mode;
-  e.scopeType = item.scope_type;
-  e.scopeId = item.scope_id;
-  e.content = item.content;
-  e.contentFormat = item.content_format;
-  e.contentBytes = item.content_bytes;
-  e.embedding = item.embedding;
-  e.embeddingDim = item.embedding_dim;
-  e.embeddingModel = item.embedding_model;
-  e.embeddingStatus = item.embedding_status;
-  e.embeddingError = item.embedding_error;
-  e.tags = item.tags;
-  e.metadata = item.metadata;
-  e.fileRefs = item.file_refs;
-  e.tier = item.tier;
-  e.validFrom = item.valid_from;
-  e.validUntil = item.valid_until;
-  e.supersededBy = item.superseded_by;
-  e.ttlSeconds = item.ttl_seconds;
-  e.sourceUri = item.source_uri;
-  e.sourceVersion = item.source_version;
-  e.sourceChecksum = item.source_checksum;
-  e.chunkIndex = item.chunk_index;
-  e.chunkTotal = item.chunk_total;
-  e.chunkOf = item.chunk_of;
-  e.confidence = item.confidence;
-  e.provenance = item.provenance;
-  e.createdAt = item.created_at;
-  e.updatedAt = item.updated_at;
-  e.accessedAt = item.accessed_at;
-  e.accessCount = item.access_count;
-  e.deletedAt = item.deleted_at;
-  e.deletedBy = item.deleted_by;
-  return e;
-}
-
-function entityToItem(e: CanonicalMemory): MemoryItem {
-  return {
-    id: e.id,
-    mode: e.mode,
-    scope_type: e.scopeType,
-    scope_id: e.scopeId,
-    content: e.content,
-    content_format: e.contentFormat,
-    content_bytes: e.contentBytes,
-    embedding: e.embedding,
-    embedding_dim: e.embeddingDim,
-    embedding_model: e.embeddingModel,
-    embedding_status: e.embeddingStatus,
-    embedding_error: e.embeddingError,
-    tags: e.tags ?? [],
-    metadata: e.metadata ?? {},
-    file_refs: e.fileRefs ?? [],
-    tier: e.tier,
-    valid_from: e.validFrom,
-    valid_until: e.validUntil,
-    superseded_by: e.supersededBy,
-    ttl_seconds: e.ttlSeconds,
-    source_uri: e.sourceUri,
-    source_version: e.sourceVersion,
-    source_checksum: e.sourceChecksum,
-    chunk_index: e.chunkIndex,
-    chunk_total: e.chunkTotal,
-    chunk_of: e.chunkOf,
-    confidence: typeof e.confidence === 'string' ? parseFloat(e.confidence) : e.confidence,
-    provenance: e.provenance,
-    created_at: e.createdAt,
-    updated_at: e.updatedAt,
-    accessed_at: e.accessedAt,
-    access_count: e.accessCount,
-    deleted_at: e.deletedAt,
-    deleted_by: e.deletedBy,
-  };
-}
-
-/**
- * Translate a raw row from `dataSource.query()` (snake_case columns,
- * embedding as text) into the entity shape so `entityToItem` can
- * normalize it.
- */
-function rowToEntity(row: Record<string, any>): CanonicalMemory {
-  const e = new CanonicalMemory();
-  e.id = row.id;
-  e.mode = row.mode;
-  e.scopeType = row.scope_type;
-  e.scopeId = row.scope_id;
-  e.content = row.content;
-  e.contentFormat = row.content_format;
-  e.contentBytes = row.content_bytes;
-  e.embedding = row.embedding ? pgvector.fromSql(row.embedding) : null;
-  e.embeddingDim = row.embedding_dim;
-  e.embeddingModel = row.embedding_model;
-  e.embeddingStatus = row.embedding_status;
-  e.embeddingError = row.embedding_error;
-  e.tags = row.tags ?? [];
-  e.metadata = row.metadata ?? {};
-  e.fileRefs = row.file_refs ?? [];
-  e.tier = row.tier;
-  e.validFrom = row.valid_from ? new Date(row.valid_from) : null;
-  e.validUntil = row.valid_until ? new Date(row.valid_until) : null;
-  e.supersededBy = row.superseded_by;
-  e.ttlSeconds = row.ttl_seconds;
-  e.sourceUri = row.source_uri;
-  e.sourceVersion = row.source_version;
-  e.sourceChecksum = row.source_checksum;
-  e.chunkIndex = row.chunk_index;
-  e.chunkTotal = row.chunk_total;
-  e.chunkOf = row.chunk_of;
-  e.confidence = typeof row.confidence === 'string' ? parseFloat(row.confidence) : row.confidence;
-  e.provenance = row.provenance;
-  e.createdAt = new Date(row.created_at);
-  e.updatedAt = new Date(row.updated_at);
-  e.accessedAt = row.accessed_at ? new Date(row.accessed_at) : null;
-  e.accessCount = row.access_count ?? 0;
-  e.deletedAt = row.deleted_at ? new Date(row.deleted_at) : null;
-  e.deletedBy = row.deleted_by;
-  return e;
-}
+export { detectBlob, overrideOrDefault, uriSchemeAllowList, parseScheme, scopeToOrganizationId, entityToItem, rowToEntity, itemToEntity } from './canonical-memory.helpers';

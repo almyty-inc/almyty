@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { AgentManagementController } from '../agent-management.controller';
+import { AgentRunsController } from '../agent-runs.controller';
 import { AgentsController } from '../agents.controller';
+import { AgentExecutionController } from '../agent-execution.controller';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
 import { AgentRuntimeService } from '../agent-runtime.service';
@@ -11,6 +14,9 @@ import { AgentStatus } from '../../../entities/agent.entity';
 
 describe('AgentsController', () => {
   let controller: AgentsController;
+  let executionController: AgentExecutionController;
+  let mgmtController: AgentManagementController;
+  let runsController: AgentRunsController;
   let agentsService: jest.Mocked<AgentsService>;
   let executionEngine: jest.Mocked<AgentExecutionEngine>;
 
@@ -69,7 +75,7 @@ describe('AgentsController', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [AgentsController],
+      controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentRunsController],
       providers: [
         {
           provide: AgentsService,
@@ -100,6 +106,9 @@ describe('AgentsController', () => {
       .compile();
 
     controller = module.get<AgentsController>(AgentsController);
+    executionController = module.get<AgentExecutionController>(AgentExecutionController);
+    mgmtController = module.get<AgentManagementController>(AgentManagementController);
+    runsController = module.get<AgentRunsController>(AgentRunsController);
     agentsService = module.get(AgentsService);
     executionEngine = module.get(AgentExecutionEngine);
   });
@@ -285,7 +294,7 @@ describe('AgentsController', () => {
       agentsService.getAgent.mockResolvedValue(mockAgent);
       executionEngine.execute.mockResolvedValue(mockExecution);
 
-      const result = await controller.invokeAgent('agent-1', invokeDto as any, mockRequest);
+      const result = await executionController.invokeAgent('agent-1', invokeDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockExecution);
@@ -318,7 +327,7 @@ describe('AgentsController', () => {
       agentsService.getAgent.mockResolvedValue(mockAgent);
       executionEngine.execute.mockResolvedValue(mockExecution);
 
-      const result = await controller.invokeAgent('agent-1', invokeDto as any, mockRequest);
+      const result = await executionController.invokeAgent('agent-1', invokeDto as any, mockRequest);
 
       expect(result.success).toBe(false);
       expect(result.data).toBe(mockExecution);
@@ -334,7 +343,7 @@ describe('AgentsController', () => {
       agentsService.getAgent.mockResolvedValue(mockAgent);
 
       await expect(
-        controller.invokeAgent('agent-1', invokeDto as any, mockRequest),
+        executionController.invokeAgent('agent-1', invokeDto as any, mockRequest),
       ).rejects.toThrow();
     });
 
@@ -343,7 +352,7 @@ describe('AgentsController', () => {
       const invokeDto = { input: {} };
 
       await expect(
-        controller.invokeAgent('agent-1', invokeDto as any, noOrgRequest),
+        executionController.invokeAgent('agent-1', invokeDto as any, noOrgRequest),
       ).rejects.toThrow();
     });
   });
@@ -416,7 +425,7 @@ describe('AgentsController', () => {
 
       agentsService.getAgentExecutions.mockResolvedValue(mockResult as any);
 
-      const result = await controller.getAgentExecutions('agent-1', undefined, undefined, mockRequest);
+      const result = await mgmtController.getAgentExecutions('agent-1', undefined, undefined, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult.data);
@@ -432,7 +441,7 @@ describe('AgentsController', () => {
       agentsService.getAgentExecutions.mockRejectedValue(new Error('Fetch failed'));
 
       await expect(
-        controller.getAgentExecutions('agent-1', undefined, undefined, mockRequest),
+        mgmtController.getAgentExecutions('agent-1', undefined, undefined, mockRequest),
       ).rejects.toThrow();
     });
   });
@@ -471,7 +480,7 @@ describe('AgentsController', () => {
 
       agentsService.exportAgent.mockResolvedValue(mockExport);
 
-      const result = await controller.exportAgent('agent-1', mockRequest);
+      const result = await mgmtController.exportAgent('agent-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockExport);
@@ -482,7 +491,7 @@ describe('AgentsController', () => {
     it('should save version successfully', async () => {
       agentsService.saveVersion.mockResolvedValue();
 
-      const result = await controller.saveVersion(
+      const result = await mgmtController.saveVersion(
         'agent-1',
         { changelog: 'Added new node' },
         mockRequest,
@@ -502,7 +511,7 @@ describe('AgentsController', () => {
 
       agentsService.getVersionHistory.mockResolvedValue(mockVersions as any);
 
-      const result = await controller.getVersionHistory('agent-1', mockRequest);
+      const result = await mgmtController.getVersionHistory('agent-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockVersions);
@@ -514,7 +523,7 @@ describe('AgentsController', () => {
       const mockAgent = { id: 'agent-1', version: '1.0.0' } as any;
       agentsService.rollbackToVersion.mockResolvedValue(mockAgent);
 
-      const result = await controller.rollbackToVersion('agent-1', '0', mockRequest);
+      const result = await mgmtController.rollbackToVersion('agent-1', '0', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAgent);
@@ -524,7 +533,7 @@ describe('AgentsController', () => {
 
     it('should throw for invalid version index', async () => {
       await expect(
-        controller.rollbackToVersion('agent-1', 'not-a-number', mockRequest),
+        mgmtController.rollbackToVersion('agent-1', 'not-a-number', mockRequest),
       ).rejects.toThrow();
     });
   });
@@ -534,12 +543,15 @@ describe('AgentsController', () => {
       const mockEstimate = {
         estimatedLlmCalls: 2,
         estimatedToolCalls: 1,
+        hasParallelExecution: false,
         estimatedCostRange: { low: 1, high: 20 },
+        nodeCount: 4,
+        edgeCount: 3,
       };
 
       agentsService.estimateCost.mockResolvedValue(mockEstimate);
 
-      const result = await controller.getCostEstimate('agent-1', mockRequest);
+      const result = await mgmtController.getCostEstimate('agent-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockEstimate);
