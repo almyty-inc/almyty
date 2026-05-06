@@ -21,6 +21,7 @@ import { ToolsService } from './tools.service';
 import { ToolGeneratorService } from './tool-generator.service';
 import { ToolExecutorService } from './tool-executor.service';
 import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
+import { ToolStatsHelper } from './tool-stats.helper';
 import { ToolHttpExecutor } from './executors/tool-http.executor';
 import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
 import { ToolGrpcExecutor } from './executors/tool-grpc.executor';
@@ -67,6 +68,7 @@ import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
     ToolProtocolExecutor,
     ToolGrpcExecutor,
     ToolCacheRateLimitHelper,
+    ToolStatsHelper,
     ToolScriptExecutor,
     GrpcCallerService,
     ToolAuthService,

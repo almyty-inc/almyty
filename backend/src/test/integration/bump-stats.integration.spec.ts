@@ -29,6 +29,7 @@ import { Organization } from '../../entities/organization.entity';
 import { AgentExecutionEngine } from '../../modules/agents/agent-execution.engine';
 import { AgentExecutionStateHelper } from '../../modules/agents/agent-execution-state.helper';
 import { ToolExecutorService } from '../../modules/tools/tool-executor.service';
+import { ToolStatsHelper } from '../../modules/tools/tool-stats.helper';
 import { LlmProvidersService } from '../../modules/llm-providers/llm-providers.service';
 import { LlmStatsHelper } from '../../modules/llm-providers/llm-stats.helper';
 
@@ -218,6 +219,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         {} as any, // scriptExecutor
         {} as any, // auditLogService
         {} as any, // cacheRateLimit
+        new ToolStatsHelper(toolRepo, {} as any, {} as any),
       );
     });
 
@@ -230,7 +232,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
           parameters: { type: 'object', properties: {} } as any,
         } as any) as Tool;
 
-      await (executor as any).bumpToolStats(tool.id, true, 250);
+      await (executor as any).stats.bumpToolStats(tool.id, true, 250);
 
       const after = await toolRepo.findOneByOrFail({ id: tool.id });
       expect(after.usageCount).toBe(1);
@@ -250,7 +252,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
           successRate: 50, // seed to a non-zero rate so decay is observable
         } as any) as Tool;
 
-      await (executor as any).bumpToolStats(tool.id, false, 500);
+      await (executor as any).stats.bumpToolStats(tool.id, false, 500);
 
       const after = await toolRepo.findOneByOrFail({ id: tool.id });
       expect(after.usageCount).toBe(1);
@@ -267,7 +269,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
           parameters: { type: 'object', properties: {} } as any,
         } as any) as Tool;
 
-      await (executor as any).bumpToolStats(tool.id, true, 777);
+      await (executor as any).stats.bumpToolStats(tool.id, true, 777);
       const after = await toolRepo.findOneByOrFail({ id: tool.id });
       expect(after.averageResponseTime).toBe(777);
     });
@@ -282,9 +284,9 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         } as any) as Tool;
 
       // Sequential: 100, 200, 300. Running averages: 100, 150, 200.
-      await (executor as any).bumpToolStats(tool.id, true, 100);
-      await (executor as any).bumpToolStats(tool.id, true, 200);
-      await (executor as any).bumpToolStats(tool.id, true, 300);
+      await (executor as any).stats.bumpToolStats(tool.id, true, 100);
+      await (executor as any).stats.bumpToolStats(tool.id, true, 200);
+      await (executor as any).stats.bumpToolStats(tool.id, true, 300);
 
       const after = await toolRepo.findOneByOrFail({ id: tool.id });
       expect(after.usageCount).toBe(3);
@@ -302,7 +304,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
 
       await Promise.all(
         Array.from({ length: 50 }, () =>
-          (executor as any).bumpToolStats(tool.id, true, 100),
+          (executor as any).stats.bumpToolStats(tool.id, true, 100),
         ),
       );
 

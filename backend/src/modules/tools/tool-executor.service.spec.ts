@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { AxiosRequestConfig } from 'axios';
 import { ToolExecutorService } from './tool-executor.service';
 import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
+import { ToolStatsHelper } from './tool-stats.helper';
 import { ToolHttpExecutor } from './executors/tool-http.executor';
 import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
 import { ToolGrpcExecutor } from './executors/tool-grpc.executor';
@@ -78,6 +79,7 @@ describe('ToolExecutorService', () => {
       providers: [
         ToolExecutorService,
         ToolCacheRateLimitHelper,
+        ToolStatsHelper,
         // Real executor + auth instances so the dispatch in
         // ToolExecutorService can call through to them. Their
         // constructor dependencies are satisfied by the mocked
@@ -393,7 +395,7 @@ describe('ToolExecutorService', () => {
         success: true,
         data: { id: '123', name: 'John' },
       });
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
 
       const result = await service.executeTool('tool-1', { id: '123' }, {
         userId: 'user-1',
@@ -422,7 +424,7 @@ describe('ToolExecutorService', () => {
       toolRepository.findOne.mockResolvedValue(mockTool);
       userRepository.findOne.mockResolvedValue(mockUser);
 
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({
         isValid: false,
         errors: ['Missing required parameter: id'],
       });
@@ -451,7 +453,7 @@ describe('ToolExecutorService', () => {
 
       toolRepository.findOne.mockResolvedValue(mockTool);
       userRepository.findOne.mockResolvedValue(mockUser);
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit').mockResolvedValue({
         limited: true,
         message: 'Rate limit of 100 requests per minute exceeded',
@@ -486,7 +488,7 @@ describe('ToolExecutorService', () => {
       userRepository.findOne.mockResolvedValue(mockUser);
       toolExecutionRepository.create.mockReturnValue({});
       toolExecutionRepository.save.mockResolvedValue({});
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service as any, 'executeOperation').mockResolvedValue({ success: true, data: {} });
 
       const checkRateLimitSpy = jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit');
@@ -528,7 +530,7 @@ describe('ToolExecutorService', () => {
       userRepository.findOne.mockResolvedValue(mockUser);
       toolExecutionRepository.create.mockReturnValue({});
       toolExecutionRepository.save.mockResolvedValue({});
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit').mockResolvedValue({ limited: false });
       jest.spyOn(service['cacheRateLimit'] as any, 'getCachedResult').mockResolvedValue(cachedResult);
 
@@ -566,7 +568,7 @@ describe('ToolExecutorService', () => {
       userRepository.findOne.mockResolvedValue(mockUser);
       toolExecutionRepository.create.mockReturnValue({});
       toolExecutionRepository.save.mockResolvedValue({});
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit').mockResolvedValue({ limited: false });
       jest.spyOn(service as any, 'executeOperation').mockResolvedValue({ success: true, data: {} });
 
@@ -604,7 +606,7 @@ describe('ToolExecutorService', () => {
       userRepository.findOne.mockResolvedValue(mockUser);
       toolExecutionRepository.create.mockReturnValue({});
       toolExecutionRepository.save.mockResolvedValue({});
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit').mockResolvedValue({ limited: false });
 
       const executeOpSpy = jest.spyOn(service as any, 'executeOperation')
@@ -643,7 +645,7 @@ describe('ToolExecutorService', () => {
       userRepository.findOne.mockResolvedValue(mockUser);
       toolExecutionRepository.create.mockReturnValue({});
       toolExecutionRepository.save.mockResolvedValue({});
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit').mockResolvedValue({ limited: false });
       jest.spyOn(service as any, 'executeOperation').mockRejectedValue(new Error('Persistent failure'));
 
@@ -963,7 +965,7 @@ describe('ToolExecutorService', () => {
       toolExecutionRepository.create.mockReturnValue({});
       toolExecutionRepository.save.mockResolvedValue({});
 
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit').mockResolvedValue({ limited: false });
       jest.spyOn(service['cacheRateLimit'] as any, 'getCachedResult').mockResolvedValue(null);
 
@@ -1009,7 +1011,7 @@ describe('ToolExecutorService', () => {
       toolExecutionRepository.create.mockReturnValue({});
       toolExecutionRepository.save.mockResolvedValue({});
 
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit').mockResolvedValue({ limited: false });
       jest.spyOn(service['cacheRateLimit'] as any, 'getCachedResult').mockResolvedValue(null);
       jest.spyOn(service as any, 'executeOperation')
@@ -1044,7 +1046,7 @@ describe('ToolExecutorService', () => {
       toolExecutionRepository.create.mockReturnValue({});
       toolExecutionRepository.save.mockResolvedValue({});
 
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit').mockResolvedValue({ limited: false });
       jest.spyOn(service['cacheRateLimit'] as any, 'getCachedResult').mockResolvedValue(null);
       jest.spyOn(service as any, 'executeOperation')
@@ -1088,7 +1090,7 @@ describe('ToolExecutorService', () => {
       toolExecutionRepository.create.mockReturnValue({});
       toolExecutionRepository.save.mockResolvedValue({});
 
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit').mockResolvedValue({ limited: false });
 
       // First call: no cache
@@ -1151,7 +1153,7 @@ describe('ToolExecutorService', () => {
       toolExecutionRepository.create.mockReturnValue({ id: 'exec-1' });
       toolExecutionRepository.save.mockRejectedValue(new Error('Database connection failed'));
 
-      jest.spyOn(service as any, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
       jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit').mockResolvedValue({ limited: false });
       jest.spyOn(service as any, 'executeOperation').mockResolvedValue({
         success: true,
