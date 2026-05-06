@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { GatewayToolService } from './gateway-tool.service';
 import { GatewayToolTransferHelper } from './gateway-tool-transfer.helper';
+import { GatewayToolStatsHelper } from './gateway-tool-stats.helper';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
@@ -78,6 +79,7 @@ describe('GatewayToolService', () => {
           useValue: { del: jest.fn().mockResolvedValue(1) },
         },
         GatewayToolTransferHelper,
+        GatewayToolStatsHelper,
       ],
     }).compile();
 

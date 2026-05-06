@@ -11,6 +11,7 @@ import { User } from '../../entities/user.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { GatewayToolTransferHelper } from './gateway-tool-transfer.helper';
+import { GatewayToolStatsHelper } from './gateway-tool-stats.helper';
 
 export interface CreateGatewayToolDto {
   toolId: string;
@@ -121,6 +122,7 @@ export class GatewayToolService {
     private readonly auditLogService: AuditLogService,
     @InjectRedis() private readonly redis: Redis.Redis,
     private readonly transfer: GatewayToolTransferHelper,
+    private readonly stats: GatewayToolStatsHelper,
   ) {}
 
   /**
@@ -579,85 +581,12 @@ export class GatewayToolService {
     return updatedGatewayTool;
   }
 
-  async getGatewayToolStats(gatewayId: string, organizationId: string): Promise<{
-    totalTools: number;
-    activeTools: number;
-    inactiveTools: number;
-    totalUsage: number;
-    mostUsedTools: Array<{
-      gatewayTool: GatewayTool;
-      usageCount: number;
-    }>;
-    recentlyUsedTools: Array<{
-      gatewayTool: GatewayTool;
-      lastUsedAt: Date;
-    }>;
-  }> {
-    // Verify gateway exists
-    const gateway = await this.gatewayRepository.findOne({
-      where: { id: gatewayId, organizationId },
-    });
-
-    if (!gateway) {
-      throw new NotFoundException('Gateway not found');
-    }
-
-    // Get all gateway tools
-    const gatewayTools = await this.gatewayToolRepository.find({
-      where: { gatewayId },
-      relations: ['tool'],
-    });
-
-    const totalTools = gatewayTools.length;
-    const activeTools = gatewayTools.filter(gt => gt.isActive).length;
-    const inactiveTools = totalTools - activeTools;
-    const totalUsage = gatewayTools.reduce((sum, gt) => sum + gt.usageCount, 0);
-
-    // Most used tools
-    const mostUsedTools = gatewayTools
-      .filter(gt => gt.usageCount > 0)
-      .sort((a, b) => b.usageCount - a.usageCount)
-      .slice(0, 10)
-      .map(gatewayTool => ({
-        gatewayTool,
-        usageCount: gatewayTool.usageCount,
-      }));
-
-    // Recently used tools
-    const recentlyUsedTools = gatewayTools
-      .filter(gt => gt.lastUsedAt)
-      .sort((a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime())
-      .slice(0, 10)
-      .map(gatewayTool => ({
-        gatewayTool,
-        lastUsedAt: gatewayTool.lastUsedAt,
-      }));
-
-    return {
-      totalTools,
-      activeTools,
-      inactiveTools,
-      totalUsage,
-      mostUsedTools,
-      recentlyUsedTools,
-    };
+  // ── Delegations to GatewayToolStatsHelper ──
+  getGatewayToolStats(...args: Parameters<GatewayToolStatsHelper['getGatewayToolStats']>) {
+    return this.stats.getGatewayToolStats(...args);
   }
-
-  async incrementUsage(gatewayToolId: string): Promise<void> {
-    try {
-      await this.gatewayToolRepository.increment(
-        { id: gatewayToolId },
-        'usageCount',
-        1
-      );
-
-      await this.gatewayToolRepository.update(
-        { id: gatewayToolId },
-        { lastUsedAt: new Date() }
-      );
-    } catch (error) {
-      this.logger.warn(`Failed to increment usage for gateway tool ${gatewayToolId}: ${error.message}`);
-    }
+  incrementUsage(...args: Parameters<GatewayToolStatsHelper['incrementUsage']>) {
+    return this.stats.incrementUsage(...args);
   }
 
   copyToolsFromGateway(...args: Parameters<GatewayToolTransferHelper['copyToolsFromGateway']>) {
