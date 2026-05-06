@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PluginManagerService } from './plugin-manager.service';
+import { evaluateConditions, validatePlugin } from './plugin-utils';
+import * as pluginUtils from './plugin-utils';
 import { PluginStoreHelper } from './plugin-store.helper';
 import { PluginHookType } from './types/plugin.types';
 
@@ -672,7 +674,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         hooks: [],
       };
 
-      const validation = await service['validatePlugin'](pluginWithoutHooks as any);
+      const validation = await validatePlugin(pluginWithoutHooks as any, false);
 
       expect(validation.isValid).toBe(true);
       expect(validation.warnings).toContain('Plugin has no hooks defined');
@@ -698,7 +700,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         hooks: [],
       };
 
-      const validation = await service['validatePlugin'](invalidPlugin as any);
+      const validation = await validatePlugin(invalidPlugin as any, false);
 
       expect(validation.isValid).toBe(false);
       expect(validation.errors).toContain('Plugin version is required');
@@ -732,7 +734,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         ],
       };
 
-      const validation = await service['validatePlugin'](invalidPlugin as any);
+      const validation = await validatePlugin(invalidPlugin as any, false);
 
       expect(validation.isValid).toBe(false);
       expect(validation.errors.some(e => e.includes('Invalid hook type'))).toBe(true);
@@ -766,7 +768,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         ],
       };
 
-      const validation = await service['validatePlugin'](invalidPlugin as any);
+      const validation = await validatePlugin(invalidPlugin as any, false);
 
       expect(validation.isValid).toBe(false);
       expect(validation.errors.some(e => e.includes('Missing handler'))).toBe(true);
@@ -801,7 +803,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         ],
       };
 
-      const validation = await service['validatePlugin'](unsafePlugin as any);
+      const validation = await validatePlugin(unsafePlugin as any, false);
 
       expect(validation.warnings.some(w => w.includes('execute capabilities'))).toBe(true);
     });
@@ -1129,7 +1131,7 @@ describe('PluginManagerService - Real Business Logic', () => {
       const plugin = service.getPlugin(pluginId);
 
       // Mock evaluateConditions to return false
-      jest.spyOn(service as any, 'evaluateConditions').mockReturnValue(false);
+      jest.spyOn(pluginUtils, 'evaluateConditions').mockReturnValue(false);
 
       const context: any = {
         hookType: PluginHookType.PRE_REQUEST,
@@ -1374,7 +1376,7 @@ describe('PluginManagerService - Real Business Logic', () => {
         ],
       };
 
-      const validation = await service['validatePlugin'](pluginWithNetworkAccess as any);
+      const validation = await validatePlugin(pluginWithNetworkAccess as any, false);
 
       expect(validation.warnings.some(w => w.includes('network access but no host restrictions'))).toBe(true);
     });

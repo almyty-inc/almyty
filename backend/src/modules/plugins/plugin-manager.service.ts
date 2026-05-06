@@ -20,6 +20,8 @@ import {
 
 import { PluginLoaderHelper, isSafeHandlerName } from './plugin-loader.helper';
 import { PluginStoreHelper } from './plugin-store.helper';
+import * as pluginUtils from './plugin-utils';
+import { evaluateConditions, runWithTimeout, validatePlugin } from './plugin-utils';
 
 @Injectable()
 export class PluginManagerService extends EventEmitter implements OnModuleInit, OnModuleDestroy {
@@ -204,7 +206,7 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
 
     try {
       // Check plugin conditions
-      if (pluginHook.conditions && !this.evaluateConditions(pluginHook.conditions, context)) {
+      if (pluginHook.conditions && !pluginUtils.evaluateConditions(pluginHook.conditions, context)) {
         return {
           success: true,
           data: context.data,
@@ -276,7 +278,7 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
       // up to `defaultTimeout` (30s) ms afterwards. At high throughput
       // that was a steady leak of unref'd timer handles.
       const timeoutMs = plugin.configuration.settings.timeout || this.config.defaultTimeout;
-      const result: any = await this.runWithTimeout<any>(
+      const result: any = await runWithTimeout<any>(
         handlerFunction(context, plugin.configuration.settings),
         timeoutMs,
       );
@@ -350,7 +352,7 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     };
 
     // Validate plugin
-    const validation = await this.validatePlugin(plugin);
+    const validation = validatePlugin(plugin, this.config.allowUnsafePlugins ?? false);
     if (!validation.isValid) {
       throw new Error(`Plugin validation failed: ${validation.errors.join(', ')}`);
     }
@@ -449,89 +451,6 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
 
     this.logger.log(`Plugin unregistered: ${pluginId}`);
     return true;
-  }
-
-
-  // Plugin Validation
-  private async validatePlugin(plugin: Plugin): Promise<{
-    isValid: boolean;
-    errors: string[];
-    warnings: string[];
-  }> {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    // Basic validation
-    if (!plugin.name) {
-      errors.push('Plugin name is required');
-    }
-
-    if (!plugin.version) {
-      errors.push('Plugin version is required');
-    }
-
-    if (!plugin.hooks || plugin.hooks.length === 0) {
-      warnings.push('Plugin has no hooks defined');
-    }
-
-    // Validate hook types
-    for (const hook of plugin.hooks) {
-      if (!Object.values(PluginHookType).includes(hook.type)) {
-        errors.push(`Invalid hook type: ${hook.type}`);
-      }
-      
-      if (!hook.handler) {
-        errors.push(`Missing handler for hook: ${hook.type}`);
-      }
-    }
-
-    // Security validation
-    if (!this.config.allowUnsafePlugins) {
-      // Check for unsafe operations
-      if (plugin.capabilities.operations.includes('execute')) {
-        warnings.push('Plugin has execute capabilities - ensure it is trusted');
-      }
-      
-      if (plugin.configuration.security && !plugin.configuration.security.allowedHosts) {
-        warnings.push('Plugin has network access but no host restrictions');
-      }
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings,
-    };
-  }
-
-
-  // Utility Methods
-  private evaluateConditions(conditions: any[], context: PluginContext): boolean {
-    // Simplified condition evaluation - in production would use a proper expression evaluator
-    return true; // For now, always execute
-  }
-
-  /**
-   * Race a promise against a timeout, clearing the timer on either path
-   * so the timeout callback doesn't keep the event loop alive. The old
-   * `createTimeout` helper returned a standalone promise whose setTimeout
-   * fired unconditionally after N ms even after the real handler had
-   * already resolved — the race "finished", but the timer handle was
-   * leaked until it fired.
-   */
-  private runWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-    let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        const error = new Error('Plugin execution timeout');
-        (error as any).name = 'TimeoutError';
-        reject(error);
-      }, ms);
-    });
-
-    return Promise.race([promise, timeout]).finally(() => {
-      if (timer) clearTimeout(timer);
-    }) as Promise<T>;
   }
 
   private async emitPluginEvent(
