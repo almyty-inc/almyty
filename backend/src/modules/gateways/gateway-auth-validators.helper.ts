@@ -13,6 +13,7 @@ import { ApiKey } from '../../entities/api-key.entity';
 import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 import { GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { compileSafeRegex, boundRegexInput } from '../../common/security/regex-safety';
+import { hashKey, isIpInCIDR, isIpInRanges, validateAuthConfiguration, validateKeyFormat } from './gateway-auth-utils';
 
 @Injectable()
 export class GatewayAuthValidators {
@@ -135,7 +136,7 @@ export class GatewayAuthValidators {
       return { isValid: false, error: 'Gateway not found', errorCode: 'GATEWAY_NOT_FOUND' };
     }
 
-    const keyHash = this.hashKey(apiKey);
+    const keyHash = hashKey(apiKey);
     // A key counts as valid for this gateway if it's either explicitly
     // scoped to the gateway OR is an org-wide key (no gatewayId). In both
     // cases the key's organizationId MUST match the gateway's org.
@@ -216,7 +217,7 @@ export class GatewayAuthValidators {
       return { isValid: false, error: 'Gateway not found', errorCode: 'GATEWAY_NOT_FOUND' };
     }
 
-    const tokenHash = this.hashKey(token);
+    const tokenHash = hashKey(token);
     const apiKeyRecord = await this.apiKeyRepository.findOne({
       where: { keyHash: tokenHash, isActive: true, organizationId: gateway.organizationId },
       relations: ['user', 'user.organizationMemberships'],
@@ -543,129 +544,10 @@ export class GatewayAuthValidators {
     };
   }
 
-  validateKeyFormat(key: string, validationRules: any): boolean {
-    if (!validationRules) return true;
-
-    // Check length
-    if (validationRules.minKeyLength && key.length < validationRules.minKeyLength) {
-      return false;
-    }
-
-    if (validationRules.maxKeyLength && key.length > validationRules.maxKeyLength) {
-      return false;
-    }
-
-    // Check format. keyFormat is a regex supplied by the gateway owner
-    // (admin) and tested against the caller's API key on every auth
-    // request. A crafted pattern like `(a+)+$` against a long key
-    // would otherwise grind the Node event loop for seconds-to-minutes
-    // and starve every org on the instance — a single tenant admin
-    // could DoS the whole platform. Route both compilation (which
-    // rejects the textbook catastrophic shapes and caps source
-    // length) and the probe itself (which caps input length) through
-    // the shared regex-safety helper so this path stays in lock-step
-    // with the pii-filter custom-pattern path.
-    if (validationRules.keyFormat) {
-      const compiled = compileSafeRegex(validationRules.keyFormat);
-      if (!compiled.regex) {
-        return false;
-      }
-      if (!compiled.regex.test(boundRegexInput(key))) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  isIpInRanges(ip: string, ranges: string[]): boolean {
-    return ranges.some(range => {
-      if (range === '*') return true;
-      if (range.includes('/')) return this.isIpInCIDR(ip, range);
-      return ip === range;
-    });
-  }
-
-  /**
-   * IPv4 CIDR membership check. Returns false for malformed input or
-   * IPv6 addresses (unsupported — callers that need IPv6 should use a
-   * dedicated library like `ipaddr.js`).
-   */
-  isIpInCIDR(ip: string, cidr: string): boolean {
-    // Strip IPv4-in-IPv6 notation that Express commonly hands you for
-    // loopback clients on dual-stack Node (e.g. `::ffff:127.0.0.1`).
-    const normalized = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
-
-    // Only IPv4 is supported. Bail early if we see an IPv6 address —
-    // returning `false` is the safe default for an allowlist.
-    if (normalized.includes(':')) {
-      return false;
-    }
-
-    const [rangeIp, prefixLengthRaw] = cidr.split('/');
-    if (prefixLengthRaw === undefined) {
-      return normalized === rangeIp;
-    }
-
-    const prefix = Number.parseInt(prefixLengthRaw, 10);
-    if (!Number.isFinite(prefix) || prefix < 0 || prefix > 32) {
-      return false;
-    }
-
-    const parseIp = (s: string): number | null => {
-      const parts = s.split('.');
-      if (parts.length !== 4) return null;
-      let acc = 0;
-      for (const p of parts) {
-        const n = Number(p);
-        if (!Number.isInteger(n) || n < 0 || n > 255) return null;
-        acc = (acc * 256) + n;
-      }
-      return acc >>> 0;
-    };
-
-    const ipBin = parseIp(normalized);
-    const rangeBin = parseIp(rangeIp);
-    if (ipBin === null || rangeBin === null) return false;
-
-    // `/0` must match everything — the previous version computed
-    // `(-1 << 32) >>> 0` which, because JS left-shift is mod 32,
-    // gave `0xFFFFFFFF` (matching only an exact IP). Explicitly
-    // handle prefix=0 with mask=0.
-    const mask = prefix === 0 ? 0 : ((0xFFFFFFFF << (32 - prefix)) >>> 0);
-    return ((ipBin & mask) >>> 0) === ((rangeBin & mask) >>> 0);
-  }
-
-  validateAuthConfiguration(type: GatewayAuthType, configuration: Record<string, any>): void {
-    switch (type) {
-      case GatewayAuthType.API_KEY:
-        if (!configuration.keyHeader && !configuration.keyQuery) {
-          throw new BadRequestException('API key auth requires keyHeader or keyQuery configuration');
-        }
-        break;
-
-      case GatewayAuthType.JWT:
-        // Require an explicit secret. Previously we allowed falling
-        // back to process.env.JWT_SECRET, which matched validateJWT's
-        // pre-fix behaviour — but that silently accepted the backend's
-        // own login JWTs as gateway auth tokens (a cross-org bypass).
-        // Both save-time validation and request-time verification now
-        // require a gateway-specific secret.
-        if (!configuration.secret) {
-          throw new BadRequestException('JWT auth requires a gateway-specific secret in configuration.secret');
-        }
-        break;
-
-      case GatewayAuthType.CUSTOM:
-        if (!configuration.headerName && !configuration.queryName) {
-          throw new BadRequestException('Custom auth requires headerName or queryName configuration');
-        }
-        break;
-    }
-  }
-
-  private hashKey(key: string): string {
-    return crypto.createHash('sha256').update(key).digest('hex');
-  }
+  // ── Delegations to gateway-auth-utils ──
+  validateKeyFormat = validateKeyFormat;
+  isIpInRanges = isIpInRanges;
+  isIpInCIDR = isIpInCIDR;
+  validateAuthConfiguration = validateAuthConfiguration;
 
 }
