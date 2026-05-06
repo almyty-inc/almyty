@@ -4,6 +4,7 @@ import { NotFoundException, BadRequestException, ForbiddenException } from '@nes
 import { GatewayToolService } from './gateway-tool.service';
 import { GatewayToolTransferHelper } from './gateway-tool-transfer.helper';
 import { GatewayToolStatsHelper } from './gateway-tool-stats.helper';
+import { GatewayToolQueriesHelper } from './gateway-tool-queries.helper';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
@@ -80,6 +81,7 @@ describe('GatewayToolService', () => {
         },
         GatewayToolTransferHelper,
         GatewayToolStatsHelper,
+        GatewayToolQueriesHelper,
       ],
     }).compile();
 
