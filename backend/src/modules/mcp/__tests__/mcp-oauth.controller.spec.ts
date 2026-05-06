@@ -7,6 +7,7 @@ import { HttpException, HttpStatus } from '@nestjs/common';
 
 import { McpOAuthController } from '../controllers/mcp-oauth.controller';
 import { McpOAuthService } from '../services/mcp-oauth.service';
+import { McpOAuthResolveHelper } from '../controllers/mcp-oauth-resolve.helper';
 import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
 
@@ -100,6 +101,7 @@ describe('McpOAuthController', () => {
             sign: jest.fn().mockReturnValue('mock-token'),
           },
         },
+        McpOAuthResolveHelper,
       ],
     }).compile();
 

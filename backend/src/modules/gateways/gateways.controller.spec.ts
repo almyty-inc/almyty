@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GatewaysController } from './gateways.controller';
+import { GatewayAuthController } from './gateway-auth.controller';
+import { GatewayToolsController } from './gateway-tools.controller';
+import { GatewaySkillsController } from './gateway-skills.controller';
+import { GatewayInfoController } from './gateway-info.controller';
 import { GatewaysService } from './gateways.service';
 import { GatewayAuthService } from './gateway-auth.service';
 import { GatewayToolService } from './gateway-tool.service';
@@ -11,6 +15,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 
 describe('GatewaysController', () => {
+  let authController: GatewayAuthController;
+  let toolsController: GatewayToolsController;
+  let skillsController: GatewaySkillsController;
+  let infoController: GatewayInfoController;
   let controller: GatewaysController;
   let gatewaysService: jest.Mocked<GatewaysService>;
   let gatewayAuthService: jest.Mocked<GatewayAuthService>;
@@ -51,7 +59,7 @@ describe('GatewaysController', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [GatewaysController],
+      controllers: [GatewaysController, GatewayAuthController, GatewayToolsController, GatewaySkillsController, GatewayInfoController],
       providers: [
         {
           provide: GatewaysService,
@@ -90,6 +98,10 @@ describe('GatewaysController', () => {
     .compile();
 
     controller = module.get<GatewaysController>(GatewaysController);
+    authController = module.get<GatewayAuthController>(GatewayAuthController);
+    toolsController = module.get<GatewayToolsController>(GatewayToolsController);
+    skillsController = module.get<GatewaySkillsController>(GatewaySkillsController);
+    infoController = module.get<GatewayInfoController>(GatewayInfoController);
     gatewaysService = module.get(GatewaysService);
     gatewayAuthService = module.get(GatewayAuthService);
     gatewayToolService = module.get(GatewayToolService);
@@ -212,7 +224,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.performHealthCheck.mockResolvedValue(mockResult);
 
-      const result = await controller.performHealthCheck('gateway-1', mockRequest);
+      const result = await infoController.performHealthCheck('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult);
@@ -266,7 +278,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.getGatewayStats.mockResolvedValue(mockStats);
 
-      const result = await controller.getGatewayStats('gateway-1', 'day', mockRequest);
+      const result = await infoController.getGatewayStats('gateway-1', 'day', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockStats);
@@ -282,7 +294,7 @@ describe('GatewaysController', () => {
 
       (gatewayToolService as any).associateTool = jest.fn().mockResolvedValue(mockResult);
 
-      const result = await controller.associateTool('gateway-1', associateDto as any, mockRequest);
+      const result = await toolsController.associateTool('gateway-1', associateDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Tool associated with gateway successfully');
@@ -301,7 +313,7 @@ describe('GatewaysController', () => {
 
       gatewayToolService.getGatewayTools.mockResolvedValue(mockTools as any);
 
-      const result = await controller.getGatewayTools('gateway-1', query, mockRequest);
+      const result = await toolsController.getGatewayTools('gateway-1', query, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockTools);
@@ -329,7 +341,7 @@ describe('GatewaysController', () => {
 
       gatewayAuthService.createGatewayAuth.mockResolvedValue(mockAuthConfig as any);
 
-      const result = await controller.createGatewayAuth('gateway-1', authDto as any, mockRequest);
+      const result = await authController.createGatewayAuth('gateway-1', authDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAuthConfig);
@@ -346,7 +358,7 @@ describe('GatewaysController', () => {
 
       gatewayAuthService.getGatewayAuths.mockResolvedValue(mockAuthConfigs as any);
 
-      const result = await controller.getGatewayAuths('gateway-1', mockRequest);
+      const result = await authController.getGatewayAuths('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAuthConfigs);
@@ -367,7 +379,7 @@ describe('GatewaysController', () => {
 
       gatewayToolService.bulkAssociateTools.mockResolvedValue(mockResult as any);
 
-      const result = await controller.bulkAssociateTools('gateway-1', bulkDto as any, mockRequest);
+      const result = await toolsController.bulkAssociateTools('gateway-1', bulkDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult);
@@ -394,7 +406,7 @@ describe('GatewaysController', () => {
 
       (gatewayToolService as any).getAvailableTools = jest.fn().mockResolvedValue(mockTools);
 
-      const result = await controller.getAvailableTools('gateway-1', mockRequest);
+      const result = await toolsController.getAvailableTools('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockTools);
@@ -420,7 +432,7 @@ describe('GatewaysController', () => {
 
       (gatewayToolService as any).getGatewayToolStats = jest.fn().mockResolvedValue(mockStats);
 
-      const result = await controller.getGatewayToolStats('gateway-1', mockRequest);
+      const result = await toolsController.getGatewayToolStats('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockStats);
@@ -448,7 +460,7 @@ describe('GatewaysController', () => {
 
       (gatewaysService as any).getOrganizationGatewayStats = jest.fn().mockResolvedValue(mockStats);
 
-      const result = await controller.getOrganizationStats(mockRequest);
+      const result = await infoController.getOrganizationStats(mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockStats);
@@ -465,7 +477,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.searchSkillsAcrossGateways.mockResolvedValue(mockResults);
 
-      const result = await controller.searchSkills('user', mockRequest);
+      const result = await infoController.searchSkills('user', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResults);
@@ -478,7 +490,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.searchSkillsAcrossGateways.mockResolvedValue([]);
 
-      const result = await controller.searchSkills('', mockRequest);
+      const result = await infoController.searchSkills('', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual([]);
@@ -488,7 +500,7 @@ describe('GatewaysController', () => {
     it('should throw when no organization found', async () => {
       const mockRequest = { user: { organizations: [] } };
 
-      await expect(controller.searchSkills('test', mockRequest)).rejects.toThrow();
+      await expect(infoController.searchSkills('test', mockRequest)).rejects.toThrow();
     });
   });
 
@@ -517,7 +529,7 @@ describe('GatewaysController', () => {
         .mockResolvedValueOnce(mockSkills1 as any)
         .mockResolvedValueOnce(mockSkills2 as any);
 
-      const result = await controller.getAllSkills(mockRequest);
+      const result = await infoController.getAllSkills(mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toHaveLength(2);
@@ -555,7 +567,7 @@ describe('GatewaysController', () => {
       gatewaysService.getAllUserGateways.mockResolvedValue(mockGateways as any);
       skillGeneratorService.generateIndividualSkills.mockResolvedValue([]);
 
-      const result = await controller.getAllSkills(mockRequest);
+      const result = await infoController.getAllSkills(mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data[0].orgSlug).toBe('my-org-name');
@@ -566,7 +578,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.getAllUserGateways.mockResolvedValue([]);
 
-      const result = await controller.getAllSkills(mockRequest);
+      const result = await infoController.getAllSkills(mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual([]);
@@ -576,7 +588,7 @@ describe('GatewaysController', () => {
     it('should throw when no organization found', async () => {
       const mockRequest = { user: { organizations: [] } };
 
-      await expect(controller.getAllSkills(mockRequest)).rejects.toThrow();
+      await expect(infoController.getAllSkills(mockRequest)).rejects.toThrow();
     });
   });
 
@@ -596,7 +608,7 @@ describe('GatewaysController', () => {
       gatewaysService.getGateway.mockResolvedValue(mockGateway as any);
       toolExecutorService.executeTool.mockResolvedValue(mockExecutionResult as any);
 
-      const result = await controller.executeSkill(
+      const result = await skillsController.executeSkill(
         'gw-1',
         'tool-1',
         { parameters: { key: 'value' } },
@@ -628,7 +640,7 @@ describe('GatewaysController', () => {
       gatewaysService.getGateway.mockResolvedValue(mockGateway as any);
       toolExecutorService.executeTool.mockResolvedValue(mockExecutionResult as any);
 
-      const result = await controller.executeSkill(
+      const result = await skillsController.executeSkill(
         'gw-1',
         'tool-1',
         { parameters: {} },
@@ -649,7 +661,7 @@ describe('GatewaysController', () => {
       gatewaysService.getGateway.mockResolvedValue(mockGateway as any);
 
       await expect(
-        controller.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
+        skillsController.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
       ).rejects.toThrow();
     });
 
@@ -663,7 +675,7 @@ describe('GatewaysController', () => {
       gatewaysService.getGateway.mockResolvedValue(mockGateway as any);
 
       await expect(
-        controller.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
+        skillsController.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
       ).rejects.toThrow();
     });
 
@@ -671,7 +683,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', organizations: [] } };
 
       await expect(
-        controller.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
+        skillsController.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
       ).rejects.toThrow();
     });
 
@@ -686,7 +698,7 @@ describe('GatewaysController', () => {
       gatewaysService.getGateway.mockResolvedValue(mockGateway as any);
       toolExecutorService.executeTool.mockResolvedValue(mockExecutionResult as any);
 
-      await controller.executeSkill(
+      await skillsController.executeSkill(
         'gw-1',
         'tool-1',
         { parameters: undefined } as any,
@@ -786,7 +798,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.getGatewayStats.mockRejectedValue(new Error('Stats failed'));
 
-      await expect(controller.getGatewayStats('gateway-1', 'day', mockRequest))
+      await expect(infoController.getGatewayStats('gateway-1', 'day', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -797,7 +809,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.performHealthCheck.mockRejectedValue(new Error('Health check failed'));
 
-      await expect(controller.performHealthCheck('gateway-1', mockRequest))
+      await expect(infoController.performHealthCheck('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -808,7 +820,7 @@ describe('GatewaysController', () => {
 
       gatewayAuthService.createGatewayAuth.mockRejectedValue(new Error('Auth creation failed'));
 
-      await expect(controller.createGatewayAuth('gateway-1', {} as any, mockRequest))
+      await expect(authController.createGatewayAuth('gateway-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -819,7 +831,7 @@ describe('GatewaysController', () => {
 
       gatewayAuthService.getGatewayAuths.mockRejectedValue(new Error('Auth retrieval failed'));
 
-      await expect(controller.getGatewayAuths('gateway-1', mockRequest))
+      await expect(authController.getGatewayAuths('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -829,7 +841,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (gatewayToolService as any).associateTool = jest.fn().mockRejectedValue(new Error('Association failed'));
 
-      await expect(controller.associateTool('gateway-1', {} as any, mockRequest))
+      await expect(toolsController.associateTool('gateway-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -840,7 +852,7 @@ describe('GatewaysController', () => {
 
       gatewayToolService.bulkAssociateTools.mockRejectedValue(new Error('Bulk association failed'));
 
-      await expect(controller.bulkAssociateTools('gateway-1', {} as any, mockRequest))
+      await expect(toolsController.bulkAssociateTools('gateway-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -851,7 +863,7 @@ describe('GatewaysController', () => {
 
       gatewayToolService.getGatewayTools.mockRejectedValue(new Error('Tools retrieval failed'));
 
-      await expect(controller.getGatewayTools('gateway-1', {} as any, mockRequest))
+      await expect(toolsController.getGatewayTools('gateway-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -861,7 +873,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (gatewayToolService as any).getAvailableTools = jest.fn().mockRejectedValue(new Error('Available tools failed'));
 
-      await expect(controller.getAvailableTools('gateway-1', mockRequest))
+      await expect(toolsController.getAvailableTools('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -871,7 +883,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (gatewayToolService as any).getGatewayToolStats = jest.fn().mockRejectedValue(new Error('Stats failed'));
 
-      await expect(controller.getGatewayToolStats('gateway-1', mockRequest))
+      await expect(toolsController.getGatewayToolStats('gateway-1', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -881,7 +893,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (gatewaysService as any).getOrganizationGatewayStats = jest.fn().mockRejectedValue(new Error('Org stats failed'));
 
-      await expect(controller.getOrganizationStats(mockRequest))
+      await expect(infoController.getOrganizationStats(mockRequest))
         .rejects.toThrow();
     });
   });
@@ -892,7 +904,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.searchSkillsAcrossGateways.mockRejectedValue(new Error('Search failed'));
 
-      await expect(controller.searchSkills('test', mockRequest))
+      await expect(infoController.searchSkills('test', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -903,7 +915,7 @@ describe('GatewaysController', () => {
 
       gatewaysService.getAllUserGateways.mockRejectedValue(new Error('Retrieval failed'));
 
-      await expect(controller.getAllSkills(mockRequest))
+      await expect(infoController.getAllSkills(mockRequest))
         .rejects.toThrow();
     });
   });
@@ -920,7 +932,7 @@ describe('GatewaysController', () => {
       toolExecutorService.executeTool.mockRejectedValue(new Error('Execution failed'));
 
       await expect(
-        controller.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
+        skillsController.executeSkill('gw-1', 'tool-1', { parameters: {} }, mockRequest),
       ).rejects.toThrow();
     });
   });

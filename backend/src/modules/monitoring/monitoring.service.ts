@@ -10,6 +10,9 @@ import { UsageMetric } from '../../entities/usage-metric.entity';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { Api, ApiStatus } from '../../entities/api.entity';
 import { Organization } from '../../entities/organization.entity';
+import { MonitoringRedisStatsHelper } from './monitoring-redis-stats.helper';
+import { DEFAULT_ALERT_RULES } from './default-alert-rules';
+import { formatPrometheusMetrics, computeSystemHealth } from './monitoring-prometheus';
 
 export interface SystemMetrics {
   timestamp: string;
@@ -126,6 +129,7 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     @InjectRepository(Organization)
     private organizationRepository: Repository<Organization>,
     @InjectRedis() private readonly redis: Redis.Redis,
+    private readonly redisStats: MonitoringRedisStatsHelper,
   ) {
     super();
   }
@@ -193,10 +197,10 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     const totalOrganizations = await this.organizationRepository.count({ where: { isActive: true } });
 
     // Get metrics from Redis
-    const requestStats = await this.getRequestStats();
-    const protocolStats = await this.getProtocolStats();
-    const securityStats = await this.getSecurityStats();
-    const performanceStats = await this.getPerformanceStats();
+    const requestStats = await this.redisStats.getRequestStats();
+    const protocolStats = await this.redisStats.getProtocolStats();
+    const securityStats = await this.redisStats.getSecurityStats();
+    const performanceStats = await this.redisStats.getPerformanceStats();
 
     const metrics: SystemMetrics = {
       timestamp: new Date().toISOString(),
@@ -237,76 +241,6 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     return metrics;
   }
 
-  private async getRequestStats(): Promise<any> {
-    try {
-      const stats = await this.redis.get('stats:requests');
-      return stats ? JSON.parse(stats) : {
-        total: 0,
-        successful: 0,
-        failed: 0,
-        rate: 0,
-      };
-    } catch (error) {
-      return { total: 0, successful: 0, failed: 0, rate: 0 };
-    }
-  }
-
-  private async getProtocolStats(): Promise<any> {
-    try {
-      const stats = await this.redis.get('stats:protocols');
-      return stats ? JSON.parse(stats) : {
-        mcp: { sessions: 0, toolCalls: 0, responseTime: 0, errorRate: 0 },
-        utcp: { manuals: 0, directCalls: 0, proxyExecutions: 0 },
-        a2a: { activeAgents: 0, messages: 0, workflows: 0 },
-      };
-    } catch (error) {
-      return {
-        mcp: { sessions: 0, toolCalls: 0, responseTime: 0, errorRate: 0 },
-        utcp: { manuals: 0, directCalls: 0, proxyExecutions: 0 },
-        a2a: { activeAgents: 0, messages: 0, workflows: 0 },
-      };
-    }
-  }
-
-  private async getSecurityStats(): Promise<any> {
-    try {
-      const stats = await this.redis.get('stats:security');
-      return stats ? JSON.parse(stats) : {
-        threatsBlocked: 0,
-        piiFiltered: 0,
-        rateLimitsApplied: 0,
-        authFailures: 0,
-      };
-    } catch (error) {
-      return {
-        threatsBlocked: 0,
-        piiFiltered: 0,
-        rateLimitsApplied: 0,
-        authFailures: 0,
-      };
-    }
-  }
-
-  private async getPerformanceStats(): Promise<any> {
-    try {
-      const stats = await this.redis.get('stats:performance');
-      return stats ? JSON.parse(stats) : {
-        averageResponseTime: 0,
-        p95ResponseTime: 0,
-        p99ResponseTime: 0,
-        cacheHitRate: 0,
-        errorRate: 0,
-      };
-    } catch (error) {
-      return {
-        averageResponseTime: 0,
-        p95ResponseTime: 0,
-        p99ResponseTime: 0,
-        cacheHitRate: 0,
-        errorRate: 0,
-      };
-    }
-  }
 
   private async storeMetrics(metrics: SystemMetrics): Promise<void> {
     // Store in Redis with TTL
@@ -438,66 +372,12 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
 
   // Setup Default Alert Rules
   private async setupDefaultAlertRules(): Promise<void> {
-    const defaultRules: Omit<AlertRule, 'id'>[] = [
-      {
-        name: 'High Error Rate',
-        description: 'Error rate exceeds 5%',
-        metric: 'performance.errorRate',
-        condition: 'gt',
-        threshold: 0.05,
-        severity: 'error',
-        isActive: true,
-        cooldownMinutes: 10,
-      },
-      {
-        name: 'Slow Response Time',
-        description: 'Average response time exceeds 10 seconds',
-        metric: 'performance.averageResponseTime',
-        condition: 'gt',
-        threshold: 10000,
-        severity: 'warning',
-        isActive: true,
-        cooldownMinutes: 5,
-      },
-      {
-        name: 'High Memory Usage',
-        description: 'Memory usage exceeds 1GB',
-        metric: 'system.memoryUsage.heapUsed',
-        condition: 'gt',
-        threshold: 1024 * 1024 * 1024,
-        severity: 'warning',
-        isActive: true,
-        cooldownMinutes: 15,
-      },
-      {
-        name: 'Security Threats Detected',
-        description: 'Security threats blocked in last hour',
-        metric: 'security.threatsBlocked',
-        condition: 'gt',
-        threshold: 10,
-        severity: 'critical',
-        isActive: true,
-        cooldownMinutes: 30,
-      },
-      {
-        name: 'No Active Sessions',
-        description: 'No active MCP sessions',
-        metric: 'protocols.mcp.sessions',
-        condition: 'eq',
-        threshold: 0,
-        severity: 'info',
-        isActive: false, // Disabled by default
-        cooldownMinutes: 60,
-      },
-    ];
-
-    for (const ruleData of defaultRules) {
+    for (const ruleData of DEFAULT_ALERT_RULES) {
       const ruleId = `rule_${crypto.randomBytes(16).toString('hex')}`;
       const rule: AlertRule = { ...ruleData, id: ruleId };
       this.alertRules.set(ruleId, rule);
     }
-
-    this.logger.log(`Setup ${defaultRules.length} default alert rules`);
+    this.logger.log(`Setup ${DEFAULT_ALERT_RULES.length} default alert rules`);
   }
 
   private async loadAlertRules(): Promise<void> {
@@ -592,92 +472,14 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     return true;
   }
 
-  // Health Checks
-  async getSystemHealth(): Promise<{
-    status: 'healthy' | 'degraded' | 'unhealthy';
-    components: Record<string, {
-      status: 'healthy' | 'degraded' | 'unhealthy';
-      message?: string;
-      responseTime?: number;
-    }>;
-    uptime: number;
-    version: string;
-  }> {
+  async getSystemHealth() {
     const metrics = await this.getLatestMetrics();
     const alerts = await this.getActiveAlerts();
-    
-    const criticalAlerts = alerts.filter(a => a.severity === 'critical');
-    const errorAlerts = alerts.filter(a => a.severity === 'error');
-
-    let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
-    
-    if (criticalAlerts.length > 0) {
-      overallStatus = 'unhealthy';
-    } else if (errorAlerts.length > 0) {
-      overallStatus = 'degraded';
-    }
-
-    const components = {
-      database: { status: 'healthy' as const },
-      redis: { status: 'healthy' as const },
-      mcp: { status: 'healthy' as const },
-      utcp: { status: 'healthy' as const },
-      a2a: { status: 'healthy' as const },
-      plugins: { status: 'healthy' as const },
-    };
-
-    return {
-      status: overallStatus,
-      components,
-      uptime: process.uptime(),
-      version: '1.0.0',
-    };
+    return computeSystemHealth(metrics, alerts);
   }
 
-  // Prometheus Metrics Export
   async getPrometheusMetrics(): Promise<string> {
-    const metrics = await this.getLatestMetrics();
-    if (!metrics) {
-      return '';
-    }
-
-    const prometheusMetrics = [
-      `# HELP almyty_uptime_seconds Total uptime in seconds`,
-      `# TYPE almyty_uptime_seconds counter`,
-      `almyty_uptime_seconds ${metrics.system.uptime}`,
-      ``,
-      `# HELP almyty_memory_usage_bytes Memory usage in bytes`,
-      `# TYPE almyty_memory_usage_bytes gauge`,
-      `almyty_memory_usage_bytes{type="heap"} ${metrics.system.memoryUsage.heapUsed}`,
-      `almyty_memory_usage_bytes{type="heap_total"} ${metrics.system.memoryUsage.heapTotal}`,
-      ``,
-      `# HELP almyty_tools_total Total number of tools`,
-      `# TYPE almyty_tools_total gauge`,
-      `almyty_tools_total ${metrics.application.tools.total}`,
-      ``,
-      `# HELP almyty_tools_active Active tools`,
-      `# TYPE almyty_tools_active gauge`,
-      `almyty_tools_active ${metrics.application.tools.active}`,
-      ``,
-      `# HELP almyty_requests_total Total requests processed`,
-      `# TYPE almyty_requests_total counter`,
-      `almyty_requests_total{status="success"} ${metrics.application.requests.successful}`,
-      `almyty_requests_total{status="error"} ${metrics.application.requests.failed}`,
-      ``,
-      `# HELP almyty_response_time_ms Average response time in milliseconds`,
-      `# TYPE almyty_response_time_ms gauge`,
-      `almyty_response_time_ms ${metrics.performance.averageResponseTime}`,
-      ``,
-      `# HELP almyty_mcp_sessions Active MCP sessions`,
-      `# TYPE almyty_mcp_sessions gauge`,
-      `almyty_mcp_sessions ${metrics.protocols.mcp.sessions}`,
-      ``,
-      `# HELP almyty_a2a_agents Active A2A agents`,
-      `# TYPE almyty_a2a_agents gauge`,
-      `almyty_a2a_agents ${metrics.protocols.a2a.activeAgents}`,
-    ];
-
-    return prometheusMetrics.join('\n') + '\n';
+    return formatPrometheusMetrics(await this.getLatestMetrics());
   }
 
   // Cleanup

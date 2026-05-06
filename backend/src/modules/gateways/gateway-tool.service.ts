@@ -10,6 +10,9 @@ import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { User } from '../../entities/user.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { GatewayToolTransferHelper } from './gateway-tool-transfer.helper';
+import { GatewayToolStatsHelper } from './gateway-tool-stats.helper';
+import { GatewayToolQueriesHelper } from './gateway-tool-queries.helper';
 
 export interface CreateGatewayToolDto {
   toolId: string;
@@ -119,6 +122,9 @@ export class GatewayToolService {
     private userRepository: Repository<User>,
     private readonly auditLogService: AuditLogService,
     @InjectRedis() private readonly redis: Redis.Redis,
+    private readonly transfer: GatewayToolTransferHelper,
+    private readonly stats: GatewayToolStatsHelper,
+    private readonly queries: GatewayToolQueriesHelper,
   ) {}
 
   /**
@@ -295,533 +301,78 @@ export class GatewayToolService {
     gatewayId: string,
     bulkAssociateDto: BulkAssociateToolsDto,
     organizationId: string,
-    userId: string
+    userId: string,
   ): Promise<{ associated: GatewayTool[]; skipped: Array<{ toolId: string; reason: string }> }> {
-    try {
-      // Verify gateway exists and belongs to organization
-      const gateway = await this.gatewayRepository.findOne({
-        where: { id: gatewayId, organizationId },
-      });
-
-      if (!gateway) {
-        throw new NotFoundException('Gateway not found');
-      }
-
-      // Check user permissions
-      const user = await this.userRepository.findOne({
-        where: { id: userId },
-        relations: ['organizationMemberships'],
-      });
-
-      if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateway_tools')) {
-        throw new ForbiddenException('User does not have permission to manage gateway tools');
-      }
-
-      // Get all tools to associate
-      const tools = await this.toolRepository.find({
-        where: {
-          id: In(bulkAssociateDto.toolIds),
-          status: ToolStatus.ACTIVE,
-        },
-      });
-
-      // Get existing associations
-      const existingAssociations = await this.gatewayToolRepository.find({
-        where: {
-          gatewayId,
-          toolId: In(bulkAssociateDto.toolIds),
-        },
-      });
-
-      const existingToolIds = new Set(existingAssociations.map(a => a.toolId));
-      
-      const associated: GatewayTool[] = [];
-      const skipped: Array<{ toolId: string; reason: string }> = [];
-
-      for (const toolId of bulkAssociateDto.toolIds) {
-        if (existingToolIds.has(toolId)) {
-          skipped.push({
-            toolId,
-            reason: 'Already associated with gateway',
-          });
-          continue;
-        }
-
-        const tool = tools.find(t => t.id === toolId);
-        if (!tool) {
-          skipped.push({
-            toolId,
-            reason: 'Tool not found or not active',
-          });
-          continue;
-        }
-
-        try {
-          const gatewayTool = this.gatewayToolRepository.create({
-            gatewayId,
-            toolId,
-            isActive: bulkAssociateDto.isActive !== false,
-            permissions: bulkAssociateDto.permissions,
-          });
-
-          const savedAssociation = await this.gatewayToolRepository.save(gatewayTool);
-          associated.push(savedAssociation);
-        } catch (error) {
-          skipped.push({
-            toolId,
-            reason: `Failed to associate: ${error.message}`,
-          });
-        }
-      }
-
-      this.logger.log(
-        `Bulk association completed for gateway '${gateway.name}': ` +
-        `${associated.length} associated, ${skipped.length} skipped`
-      );
-
-      if (associated.length > 0) {
-        await this.invalidateUtcpManualCache(gatewayId);
-      }
-
-      return { associated, skipped };
-
-    } catch (error) {
-      this.logger.error(`Failed to bulk associate tools: ${error.message}`);
-      throw error;
-    }
+    return this.queries.bulkAssociateTools(gatewayId, bulkAssociateDto, organizationId, userId, (id) => this.invalidateUtcpManualCache(id));
   }
 
-  async getGatewayTools(filters: GatewayToolSearchFilters): Promise<{
-    gatewayTools: GatewayTool[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }> {
-    // Verify gateway exists and belongs to organization
-    const gateway = await this.gatewayRepository.findOne({
-      where: { id: filters.gatewayId, organizationId: filters.organizationId },
-    });
-
-    if (!gateway) {
-      throw new NotFoundException('Gateway not found');
-    }
-
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
-
-    const queryBuilder = this.gatewayToolRepository
-      .createQueryBuilder('gatewayTool')
-      .leftJoinAndSelect('gatewayTool.tool', 'tool')
-      .leftJoinAndSelect('gatewayTool.gateway', 'gateway')
-      .where('gatewayTool.gatewayId = :gatewayId', { gatewayId: filters.gatewayId });
-
-    // Apply filters
-    if (filters.isActive !== undefined) {
-      queryBuilder.andWhere('gatewayTool.isActive = :isActive', { isActive: filters.isActive });
-    }
-
-    if (filters.toolIds?.length > 0) {
-      queryBuilder.andWhere('gatewayTool.toolId IN (:...toolIds)', { toolIds: filters.toolIds });
-    }
-
-    if (filters.search) {
-      queryBuilder.andWhere(
-        '(tool.name ILIKE :search OR tool.description ILIKE :search)',
-        { search: `%${filters.search}%` }
-      );
-    }
-
-    // Apply sorting
-    const sortBy = filters.sortBy || 'associatedAt';
-    const sortOrder = filters.sortOrder || 'DESC';
-    
-    let orderColumn: string;
-    switch (sortBy) {
-      case 'name':
-        orderColumn = 'tool.name';
-        break;
-      default:
-        orderColumn = `gatewayTool.${sortBy}`;
-    }
-    
-    queryBuilder.orderBy(orderColumn, sortOrder);
-
-    // Get total count
-    const total = await queryBuilder.getCount();
-
-    // Apply pagination
-    const gatewayTools = await queryBuilder
-      .skip(skip)
-      .take(limit)
-      .getMany();
-
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      gatewayTools,
-      total,
-      page,
-      limit,
-      totalPages,
-    };
+  getGatewayTools(...args: Parameters<GatewayToolQueriesHelper['getGatewayTools']>) {
+    return this.queries.getGatewayTools(...args);
   }
 
-  async getGatewayTool(
+  getGatewayTool(...args: Parameters<GatewayToolQueriesHelper['getGatewayTool']>) {
+    return this.queries.getGatewayTool(...args);
+  }
+
+  getAvailableTools(...args: Parameters<GatewayToolQueriesHelper['getAvailableTools']>) {
+    return this.queries.getAvailableTools(...args);
+  }
+
+  async activateGatewayTool(gatewayToolId: string, organizationId: string, userId: string): Promise<GatewayTool> {
+    return this.setGatewayToolActive(gatewayToolId, organizationId, userId, true);
+  }
+
+  async deactivateGatewayTool(gatewayToolId: string, organizationId: string, userId: string): Promise<GatewayTool> {
+    return this.setGatewayToolActive(gatewayToolId, organizationId, userId, false);
+  }
+
+  private async setGatewayToolActive(
     gatewayToolId: string,
-    organizationId: string
-  ): Promise<GatewayTool> {
-    const gatewayTool = await this.gatewayToolRepository.findOne({
-      where: { id: gatewayToolId },
-      relations: ['gateway', 'tool'],
-    });
-
-    if (!gatewayTool || gatewayTool.gateway.organizationId !== organizationId) {
-      throw new NotFoundException('Gateway tool association not found');
-    }
-
-    return gatewayTool;
-  }
-
-  async getAvailableTools(
-    gatewayId: string,
-    organizationId: string
-  ): Promise<Tool[]> {
-    // Verify gateway exists and belongs to organization
-    const gateway = await this.gatewayRepository.findOne({
-      where: { id: gatewayId, organizationId },
-    });
-
-    if (!gateway) {
-      throw new NotFoundException('Gateway not found');
-    }
-
-    // Get already associated tool IDs
-    const associatedTools = await this.gatewayToolRepository.find({
-      where: { gatewayId },
-      select: ['toolId'],
-    });
-
-    const associatedToolIds = associatedTools.map(at => at.toolId);
-
-    // Get tools not yet associated with this gateway
-    const queryBuilder = this.toolRepository
-      .createQueryBuilder('tool')
-      .where('tool.status = :status', { status: ToolStatus.ACTIVE });
-
-    if (associatedToolIds.length > 0) {
-      queryBuilder.andWhere('tool.id NOT IN (:...associatedIds)', { associatedIds: associatedToolIds });
-    }
-
-    return queryBuilder.orderBy('tool.name', 'ASC').getMany();
-  }
-
-  async activateGatewayTool(
-    gatewayToolId: string,
-    organizationId: string,
-    userId: string
-  ): Promise<GatewayTool> {
-    const gatewayTool = await this.getGatewayTool(gatewayToolId, organizationId);
-
-    // Check permissions
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: ['organizationMemberships'],
-    });
-
-    if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateway_tools')) {
-      throw new ForbiddenException('User does not have permission to manage gateway tools');
-    }
-
-    if (gatewayTool.isActive) {
-      return gatewayTool;
-    }
-
-    gatewayTool.isActive = true;
-    const updatedGatewayTool = await this.gatewayToolRepository.save(gatewayTool);
-
-    this.logger.log(`Gateway tool ${gatewayToolId} activated`);
-    await this.invalidateUtcpManualCache(gatewayTool.gatewayId);
-
-    return updatedGatewayTool;
-  }
-
-  async deactivateGatewayTool(
-    gatewayToolId: string,
-    organizationId: string,
-    userId: string
-  ): Promise<GatewayTool> {
-    const gatewayTool = await this.getGatewayTool(gatewayToolId, organizationId);
-
-    // Check permissions
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: ['organizationMemberships'],
-    });
-
-    if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateway_tools')) {
-      throw new ForbiddenException('User does not have permission to manage gateway tools');
-    }
-
-    if (!gatewayTool.isActive) {
-      return gatewayTool;
-    }
-
-    gatewayTool.isActive = false;
-    const updatedGatewayTool = await this.gatewayToolRepository.save(gatewayTool);
-
-    this.logger.log(`Gateway tool ${gatewayToolId} deactivated`);
-    await this.invalidateUtcpManualCache(gatewayTool.gatewayId);
-
-    return updatedGatewayTool;
-  }
-
-  async getGatewayToolStats(gatewayId: string, organizationId: string): Promise<{
-    totalTools: number;
-    activeTools: number;
-    inactiveTools: number;
-    totalUsage: number;
-    mostUsedTools: Array<{
-      gatewayTool: GatewayTool;
-      usageCount: number;
-    }>;
-    recentlyUsedTools: Array<{
-      gatewayTool: GatewayTool;
-      lastUsedAt: Date;
-    }>;
-  }> {
-    // Verify gateway exists
-    const gateway = await this.gatewayRepository.findOne({
-      where: { id: gatewayId, organizationId },
-    });
-
-    if (!gateway) {
-      throw new NotFoundException('Gateway not found');
-    }
-
-    // Get all gateway tools
-    const gatewayTools = await this.gatewayToolRepository.find({
-      where: { gatewayId },
-      relations: ['tool'],
-    });
-
-    const totalTools = gatewayTools.length;
-    const activeTools = gatewayTools.filter(gt => gt.isActive).length;
-    const inactiveTools = totalTools - activeTools;
-    const totalUsage = gatewayTools.reduce((sum, gt) => sum + gt.usageCount, 0);
-
-    // Most used tools
-    const mostUsedTools = gatewayTools
-      .filter(gt => gt.usageCount > 0)
-      .sort((a, b) => b.usageCount - a.usageCount)
-      .slice(0, 10)
-      .map(gatewayTool => ({
-        gatewayTool,
-        usageCount: gatewayTool.usageCount,
-      }));
-
-    // Recently used tools
-    const recentlyUsedTools = gatewayTools
-      .filter(gt => gt.lastUsedAt)
-      .sort((a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime())
-      .slice(0, 10)
-      .map(gatewayTool => ({
-        gatewayTool,
-        lastUsedAt: gatewayTool.lastUsedAt,
-      }));
-
-    return {
-      totalTools,
-      activeTools,
-      inactiveTools,
-      totalUsage,
-      mostUsedTools,
-      recentlyUsedTools,
-    };
-  }
-
-  async incrementUsage(gatewayToolId: string): Promise<void> {
-    try {
-      await this.gatewayToolRepository.increment(
-        { id: gatewayToolId },
-        'usageCount',
-        1
-      );
-
-      await this.gatewayToolRepository.update(
-        { id: gatewayToolId },
-        { lastUsedAt: new Date() }
-      );
-    } catch (error) {
-      this.logger.warn(`Failed to increment usage for gateway tool ${gatewayToolId}: ${error.message}`);
-    }
-  }
-
-  async copyToolsFromGateway(
-    sourceGatewayId: string,
-    targetGatewayId: string,
     organizationId: string,
     userId: string,
-    overrideExisting = false
-  ): Promise<{ copied: GatewayTool[]; skipped: Array<{ toolId: string; reason: string }> }> {
-    try {
-      // Verify both gateways exist and belong to organization
-      const [sourceGateway, targetGateway] = await Promise.all([
-        this.gatewayRepository.findOne({ where: { id: sourceGatewayId, organizationId } }),
-        this.gatewayRepository.findOne({ where: { id: targetGatewayId, organizationId } }),
-      ]);
+    isActive: boolean,
+  ): Promise<GatewayTool> {
+    const gatewayTool = await this.getGatewayTool(gatewayToolId, organizationId);
 
-      if (!sourceGateway) {
-        throw new NotFoundException('Source gateway not found');
-      }
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['organizationMemberships'],
+    });
 
-      if (!targetGateway) {
-        throw new NotFoundException('Target gateway not found');
-      }
-
-      // Check permissions
-      const user = await this.userRepository.findOne({
-        where: { id: userId },
-        relations: ['organizationMemberships'],
-      });
-
-      if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateway_tools')) {
-        throw new ForbiddenException('User does not have permission to manage gateway tools');
-      }
-
-      // Get tools from source gateway
-      const sourceTools = await this.gatewayToolRepository.find({
-        where: { gatewayId: sourceGatewayId },
-        relations: ['tool'],
-      });
-
-      // Get existing tools in target gateway
-      const existingTargetTools = await this.gatewayToolRepository.find({
-        where: { gatewayId: targetGatewayId },
-        select: ['toolId'],
-      });
-
-      const existingToolIds = new Set(existingTargetTools.map(t => t.toolId));
-
-      const copied: GatewayTool[] = [];
-      const skipped: Array<{ toolId: string; reason: string }> = [];
-
-      for (const sourceTool of sourceTools) {
-        if (existingToolIds.has(sourceTool.toolId) && !overrideExisting) {
-          skipped.push({
-            toolId: sourceTool.toolId,
-            reason: 'Tool already exists in target gateway',
-          });
-          continue;
-        }
-
-        try {
-          // Remove existing if overriding
-          if (existingToolIds.has(sourceTool.toolId) && overrideExisting) {
-            await this.gatewayToolRepository.delete({
-              gatewayId: targetGatewayId,
-              toolId: sourceTool.toolId,
-            });
-          }
-
-          const newGatewayTool = this.gatewayToolRepository.create({
-            gatewayId: targetGatewayId,
-            toolId: sourceTool.toolId,
-            isActive: sourceTool.isActive,
-            overrides: sourceTool.overrides,
-            permissions: sourceTool.permissions,
-            transformations: sourceTool.transformations,
-            metadata: sourceTool.metadata,
-          });
-
-          const savedGatewayTool = await this.gatewayToolRepository.save(newGatewayTool);
-          copied.push(savedGatewayTool);
-
-        } catch (error) {
-          skipped.push({
-            toolId: sourceTool.toolId,
-            reason: `Failed to copy: ${error.message}`,
-          });
-        }
-      }
-
-      this.logger.log(
-        `Copied tools from gateway '${sourceGateway.name}' to '${targetGateway.name}': ` +
-        `${copied.length} copied, ${skipped.length} skipped`
-      );
-
-      if (copied.length > 0) {
-        await this.invalidateUtcpManualCache(targetGatewayId);
-      }
-
-      return { copied, skipped };
-
-    } catch (error) {
-      this.logger.error(`Failed to copy tools between gateways: ${error.message}`);
-      throw error;
+    if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateway_tools')) {
+      throw new ForbiddenException('User does not have permission to manage gateway tools');
     }
+
+    if (gatewayTool.isActive === isActive) {
+      return gatewayTool;
+    }
+
+    gatewayTool.isActive = isActive;
+    const updatedGatewayTool = await this.gatewayToolRepository.save(gatewayTool);
+
+    this.logger.log(`Gateway tool ${gatewayToolId} ${isActive ? 'activated' : 'deactivated'}`);
+    await this.invalidateUtcpManualCache(gatewayTool.gatewayId);
+
+    return updatedGatewayTool;
   }
 
-  async removeTool(
-    gatewayId: string,
-    toolId: string,
-    organizationId: string,
-  ): Promise<void> {
-    try {
-      // Verify gateway belongs to organization
-      const gateway = await this.gatewayRepository.findOne({
-        where: { id: gatewayId, organizationId },
-      });
-
-      if (!gateway) {
-        throw new NotFoundException('Gateway not found');
-      }
-
-      // Find and delete the gateway-tool association
-      const gatewayTool = await this.gatewayToolRepository.findOne({
-        where: { gatewayId, toolId },
-      });
-
-      if (!gatewayTool) {
-        throw new NotFoundException('Tool not assigned to this gateway');
-      }
-
-      await this.gatewayToolRepository.remove(gatewayTool);
-
-      this.logger.log(`Removed tool ${toolId} from gateway ${gatewayId}`);
-      await this.invalidateUtcpManualCache(gatewayId);
-
-      // Audit log (fire-and-forget)
-      this.auditLogService.log({ organizationId, userId: undefined, action: AuditAction.TOOL_REMOVE, resourceType: AuditResource.GATEWAY, resourceId: gatewayId, resourceName: gateway.name, details: { toolId } });
-    } catch (error) {
-      this.logger.error(`Failed to remove tool: ${error.message}`);
-      throw error;
-    }
+  // ── Delegations to GatewayToolStatsHelper ──
+  getGatewayToolStats(...args: Parameters<GatewayToolStatsHelper['getGatewayToolStats']>) {
+    return this.stats.getGatewayToolStats(...args);
+  }
+  incrementUsage(...args: Parameters<GatewayToolStatsHelper['incrementUsage']>) {
+    return this.stats.incrementUsage(...args);
   }
 
-  async removeAllTools(
-    gatewayId: string,
-    organizationId: string,
-  ): Promise<void> {
-    try {
-      // Verify gateway belongs to organization
-      const gateway = await this.gatewayRepository.findOne({
-        where: { id: gatewayId, organizationId },
-      });
+  copyToolsFromGateway(...args: Parameters<GatewayToolTransferHelper['copyToolsFromGateway']>) {
+    return this.transfer.copyToolsFromGateway(...args);
+  }
 
-      if (!gateway) {
-        throw new NotFoundException('Gateway not found');
-      }
+  removeTool(...args: Parameters<GatewayToolTransferHelper['removeTool']>) {
+    return this.transfer.removeTool(...args);
+  }
 
-      // Delete all gateway-tool associations for this gateway
-      await this.gatewayToolRepository.delete({ gatewayId });
-
-      this.logger.log(`Removed all tools from gateway ${gatewayId}`);
-      await this.invalidateUtcpManualCache(gatewayId);
-    } catch (error) {
-      this.logger.error(`Failed to remove all tools: ${error.message}`);
-      throw error;
-    }
+  removeAllTools(...args: Parameters<GatewayToolTransferHelper['removeAllTools']>) {
+    return this.transfer.removeAllTools(...args);
   }
 }
