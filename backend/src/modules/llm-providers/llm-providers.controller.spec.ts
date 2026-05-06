@@ -1,4 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { LlmSessionsController } from './llm-sessions.controller';
+import { LlmModelsHelper } from './llm-models.helper';
+import { LlmChatHelper } from './llm-chat.helper';
 import { LlmProvidersController } from './llm-providers.controller';
 import { LlmProvidersService } from './llm-providers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -6,7 +9,9 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 
 describe('LlmProvidersController', () => {
   let controller: LlmProvidersController;
+  let sessionsController: LlmSessionsController;
   let llmProvidersService: jest.Mocked<LlmProvidersService>;
+  let modelsHelper: jest.Mocked<LlmModelsHelper>;
 
   beforeEach(async () => {
     const mockLlmProvidersService = {
@@ -22,11 +27,19 @@ describe('LlmProvidersController', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [LlmProvidersController],
+      controllers: [LlmProvidersController, LlmSessionsController],
       providers: [
         {
           provide: LlmProvidersService,
           useValue: mockLlmProvidersService,
+        },
+        {
+          provide: LlmModelsHelper,
+          useValue: { fetchModelsFromProvider: jest.fn(), fetchModelsByType: jest.fn() },
+        },
+        {
+          provide: LlmChatHelper,
+          useValue: { chat: jest.fn(), chatStream: jest.fn() },
         },
       ],
     })
@@ -37,7 +50,9 @@ describe('LlmProvidersController', () => {
     .compile();
 
     controller = module.get<LlmProvidersController>(LlmProvidersController);
+    sessionsController = module.get<LlmSessionsController>(LlmSessionsController);
     llmProvidersService = module.get(LlmProvidersService);
+    modelsHelper = module.get(LlmModelsHelper);
   });
 
   describe('createProvider', () => {
@@ -238,7 +253,7 @@ describe('LlmProvidersController', () => {
 
       (llmProvidersService as any).createSession = jest.fn().mockResolvedValue(mockSession);
 
-      const result = await controller.createSession('provider-1', createDto as any, mockRequest);
+      const result = await sessionsController.createSession('provider-1', createDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockSession);
@@ -252,7 +267,7 @@ describe('LlmProvidersController', () => {
 
       (llmProvidersService as any).getSessions = jest.fn().mockResolvedValue(mockResult);
 
-      const result = await controller.getSessions('provider-1', undefined, undefined, 1, 20, mockRequest);
+      const result = await sessionsController.getSessions('provider-1', undefined, undefined, 1, 20, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult);
@@ -264,7 +279,7 @@ describe('LlmProvidersController', () => {
 
       (llmProvidersService as any).getSessions = jest.fn().mockResolvedValue(mockResult);
 
-      await controller.getSessions('provider-1', undefined, undefined, 1, 200, mockRequest);
+      await sessionsController.getSessions('provider-1', undefined, undefined, 1, 200, mockRequest);
 
       expect((llmProvidersService as any).getSessions).toHaveBeenCalledWith('org-1', 'provider-1', undefined, undefined, 1, 100);
     });
@@ -277,7 +292,7 @@ describe('LlmProvidersController', () => {
 
       (llmProvidersService as any).getSession = jest.fn().mockResolvedValue(mockSession);
 
-      const result = await controller.getSession('session-1', mockRequest);
+      const result = await sessionsController.getSession('session-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockSession);
@@ -292,7 +307,7 @@ describe('LlmProvidersController', () => {
 
       (llmProvidersService as any).updateSession = jest.fn().mockResolvedValue(mockSession);
 
-      const result = await controller.updateSession('session-1', updateDto as any, mockRequest);
+      const result = await sessionsController.updateSession('session-1', updateDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockSession);
@@ -305,7 +320,7 @@ describe('LlmProvidersController', () => {
 
       (llmProvidersService as any).deleteSession = jest.fn().mockResolvedValue(undefined);
 
-      const result = await controller.deleteSession('session-1', mockRequest);
+      const result = await sessionsController.deleteSession('session-1', mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Session deleted successfully');
@@ -322,7 +337,7 @@ describe('LlmProvidersController', () => {
       ];
 
       llmProvidersService.getProvider.mockResolvedValue(mockProvider);
-      (llmProvidersService as any).fetchModelsFromProvider.mockResolvedValue(mockModels);
+      modelsHelper.fetchModelsFromProvider.mockResolvedValue(mockModels);
 
       const result = await controller.getProviderModels('provider-1', mockRequest);
 
@@ -417,7 +432,7 @@ describe('LlmProvidersController', () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).createSession = jest.fn().mockRejectedValue(new Error('Session creation failed'));
 
-      await expect(controller.createSession('provider-1', {} as any, mockRequest))
+      await expect(sessionsController.createSession('provider-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -427,7 +442,7 @@ describe('LlmProvidersController', () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).getSessions = jest.fn().mockRejectedValue(new Error('Sessions failed'));
 
-      await expect(controller.getSessions('provider-1', undefined, undefined, 1, 20, mockRequest))
+      await expect(sessionsController.getSessions('provider-1', undefined, undefined, 1, 20, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -437,7 +452,7 @@ describe('LlmProvidersController', () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).getSession = jest.fn().mockRejectedValue(new Error('Session not found'));
 
-      await expect(controller.getSession('session-1', mockRequest))
+      await expect(sessionsController.getSession('session-1', mockRequest))
         .rejects.toThrow();
     });
   });
@@ -447,7 +462,7 @@ describe('LlmProvidersController', () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).updateSession = jest.fn().mockRejectedValue(new Error('Update failed'));
 
-      await expect(controller.updateSession('session-1', {} as any, mockRequest))
+      await expect(sessionsController.updateSession('session-1', {} as any, mockRequest))
         .rejects.toThrow();
     });
   });
@@ -457,7 +472,7 @@ describe('LlmProvidersController', () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       (llmProvidersService as any).deleteSession = jest.fn().mockRejectedValue(new Error('Deletion failed'));
 
-      await expect(controller.deleteSession('session-1', mockRequest))
+      await expect(sessionsController.deleteSession('session-1', mockRequest))
         .rejects.toThrow();
     });
   });

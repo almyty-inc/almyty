@@ -8,6 +8,7 @@ import { UserTeam } from '../../entities/user-team.entity';
 import { User } from '../../entities/user.entity';
 
 import { OrganizationsService } from './organizations.service';
+import { OrganizationsInvitesHelper } from './organizations-invites.helper';
 import { OrganizationsController } from './organizations.controller';
 import { InvitesController } from './invites.controller';
 import { GatewaysModule } from '../gateways/gateways.module';
