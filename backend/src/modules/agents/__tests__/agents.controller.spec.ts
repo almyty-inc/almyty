@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AgentManagementController } from '../agent-management.controller';
 import { AgentRunsController } from '../agent-runs.controller';
 import { AgentsController } from '../agents.controller';
+import { AgentExecutionController } from '../agent-execution.controller';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
 import { AgentRuntimeService } from '../agent-runtime.service';
@@ -13,6 +14,7 @@ import { AgentStatus } from '../../../entities/agent.entity';
 
 describe('AgentsController', () => {
   let controller: AgentsController;
+  let executionController: AgentExecutionController;
   let mgmtController: AgentManagementController;
   let runsController: AgentRunsController;
   let agentsService: jest.Mocked<AgentsService>;
@@ -73,7 +75,7 @@ describe('AgentsController', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [AgentsController, AgentManagementController, AgentRunsController],
+      controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentRunsController],
       providers: [
         {
           provide: AgentsService,
@@ -104,6 +106,7 @@ describe('AgentsController', () => {
       .compile();
 
     controller = module.get<AgentsController>(AgentsController);
+    executionController = module.get<AgentExecutionController>(AgentExecutionController);
     mgmtController = module.get<AgentManagementController>(AgentManagementController);
     runsController = module.get<AgentRunsController>(AgentRunsController);
     agentsService = module.get(AgentsService);
@@ -291,7 +294,7 @@ describe('AgentsController', () => {
       agentsService.getAgent.mockResolvedValue(mockAgent);
       executionEngine.execute.mockResolvedValue(mockExecution);
 
-      const result = await controller.invokeAgent('agent-1', invokeDto as any, mockRequest);
+      const result = await executionController.invokeAgent('agent-1', invokeDto as any, mockRequest);
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockExecution);
@@ -324,7 +327,7 @@ describe('AgentsController', () => {
       agentsService.getAgent.mockResolvedValue(mockAgent);
       executionEngine.execute.mockResolvedValue(mockExecution);
 
-      const result = await controller.invokeAgent('agent-1', invokeDto as any, mockRequest);
+      const result = await executionController.invokeAgent('agent-1', invokeDto as any, mockRequest);
 
       expect(result.success).toBe(false);
       expect(result.data).toBe(mockExecution);
@@ -340,7 +343,7 @@ describe('AgentsController', () => {
       agentsService.getAgent.mockResolvedValue(mockAgent);
 
       await expect(
-        controller.invokeAgent('agent-1', invokeDto as any, mockRequest),
+        executionController.invokeAgent('agent-1', invokeDto as any, mockRequest),
       ).rejects.toThrow();
     });
 
@@ -349,7 +352,7 @@ describe('AgentsController', () => {
       const invokeDto = { input: {} };
 
       await expect(
-        controller.invokeAgent('agent-1', invokeDto as any, noOrgRequest),
+        executionController.invokeAgent('agent-1', invokeDto as any, noOrgRequest),
       ).rejects.toThrow();
     });
   });

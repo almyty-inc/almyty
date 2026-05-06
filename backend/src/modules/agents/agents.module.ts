@@ -34,6 +34,7 @@ import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentsController } from './agents.controller';
+import { AgentExecutionController } from './agent-execution.controller';
 import { AgentManagementController } from './agent-management.controller';
 import { AgentRunsController } from './agent-runs.controller';
 import { AgentOpenAICompatController } from './agent-openai-compat.controller';
