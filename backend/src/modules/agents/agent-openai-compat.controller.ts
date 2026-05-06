@@ -21,6 +21,7 @@ import { ApiKey } from '../../entities/api-key.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
+import { AgentOpenAIStreamHelper } from './agent-openai-stream.helper';
 
 /** Maximum request body size in bytes (1 MB). */
 const MAX_BODY_SIZE_BYTES = 1 * 1024 * 1024;
@@ -57,6 +58,7 @@ export class AgentOpenAICompatController {
     private readonly executionEngine: AgentExecutionEngine,
     @InjectRepository(ApiKey)
     private readonly apiKeyRepository: Repository<ApiKey>,
+    private readonly stream: AgentOpenAIStreamHelper,
   ) {}
 
   @Post('chat/completions')
@@ -116,13 +118,13 @@ export class AgentOpenAICompatController {
 
       // 6. Execute (streaming or sync)
       if (body.stream) {
-        return this.handleStreaming(agent, input, apiKey, res, {
-          req,
-          apiKeyLast4,
-          requestStartTime,
-        });
+        return this.stream.handleStreaming(
+          agent, input, apiKey, res,
+          { req, apiKeyLast4, requestStartTime },
+          (...args) => this.logRequest(...args),
+        );
       } else {
-        const result = await this.handleSync(agent, input, apiKey, res);
+        const result = await this.stream.handleSync(agent, input, apiKey, res);
         this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 200);
         return result;
       }
@@ -396,179 +398,6 @@ export class AgentOpenAICompatController {
       max_tokens: body.max_tokens,
     };
   }
-
-  // ─── Sync Response ───────────────────────────────────────────────────
-
-  private async handleSync(
-    agent: Agent,
-    input: Record<string, any>,
-    apiKey: ApiKey,
-    res: Response,
-  ) {
-    const execution = await this.executionEngine.execute(
-      agent,
-      apiKey.organizationId,
-      apiKey.userId || null,
-      { input },
-    );
-
-    const outputContent = execution.output != null
-      ? (typeof execution.output === 'string' ? execution.output : JSON.stringify(execution.output))
-      : '';
-
-    const response = {
-      id: `chatcmpl-${execution.id}`,
-      object: 'chat.completion',
-      created: Math.floor(Date.now() / 1000),
-      model: `agent:${agent.id}`,
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: outputContent,
-          },
-          finish_reason: execution.status === 'completed' ? 'stop' : 'error',
-        },
-      ],
-      usage: {
-        prompt_tokens: execution.totalTokens > 0 ? Math.floor(execution.totalTokens * 0.6) : 0,
-        completion_tokens: execution.totalTokens > 0 ? Math.floor(execution.totalTokens * 0.4) : 0,
-        total_tokens: execution.totalTokens || 0,
-      },
-    };
-
-    return res.json(response);
-  }
-
-  // ─── Streaming Response ──────────────────────────────────────────────
-
-  private async handleStreaming(
-    agent: Agent,
-    input: Record<string, any>,
-    apiKey: ApiKey,
-    res: Response,
-    logCtx: { req: Request; apiKeyLast4: string; requestStartTime: number },
-  ) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-
-    const completionId = `chatcmpl-${Date.now()}`;
-    const created = Math.floor(Date.now() / 1000);
-
-    // Track client disconnect. This now does TWO things:
-    //   1. flips a `clientAlive` flag so we stop serialising SSE
-    //      chunks into a destroyed socket (existing behaviour)
-    //   2. fires an AbortController whose signal is threaded all
-    //      the way down through the agent-execution engine, the
-    //      LLM provider call, and the tool executor — so the
-    //      underlying axios calls are actually aborted at the
-    //      socket level rather than running to completion and
-    //      discarding the result.
-    let clientAlive = true;
-    const abortController = new AbortController();
-    const markClosed = () => {
-      clientAlive = false;
-      if (!abortController.signal.aborted) {
-        abortController.abort();
-      }
-    };
-    logCtx.req.on('close', markClosed);
-    logCtx.req.on('aborted', markClosed);
-
-    // Send initial chunk with role
-    if (clientAlive) {
-      this.writeSSE(res, {
-        id: completionId,
-        object: 'chat.completion.chunk',
-        created,
-        model: `agent:${agent.id}`,
-        choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
-      });
-    }
-
-    try {
-      await this.executionEngine.execute(
-        agent,
-        apiKey.organizationId,
-        apiKey.userId || null,
-        { input, signal: abortController.signal },
-        (event: StreamEvent) => {
-          // Client has hung up — drop the event on the floor rather
-          // than attempting to write to a closed socket.
-          if (!clientAlive) return;
-
-          if (event.type === 'node.output' || event.type === 'node.completed') {
-            const content = typeof event.data?.output === 'string'
-              ? event.data.output
-              : typeof event.data?.chunk === 'string'
-                ? event.data.chunk
-                : '';
-
-            if (content) {
-              this.writeSSE(res, {
-                id: completionId,
-                object: 'chat.completion.chunk',
-                created,
-                model: `agent:${agent.id}`,
-                choices: [{ index: 0, delta: { content }, finish_reason: null }],
-              });
-            }
-          }
-        },
-      );
-
-      if (clientAlive) {
-        // Send final chunk
-        this.writeSSE(res, {
-          id: completionId,
-          object: 'chat.completion.chunk',
-          created,
-          model: `agent:${agent.id}`,
-          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-        });
-
-        res.write('data: [DONE]\n\n');
-        res.end();
-        this.logRequest(logCtx.req, logCtx.apiKeyLast4, agent.id, logCtx.requestStartTime, 200, 'stream');
-      } else {
-        // Execution finished normally but the client is gone.
-        // Surface this in logs so we can spot patterns of disconnects.
-        this.logRequest(logCtx.req, logCtx.apiKeyLast4, agent.id, logCtx.requestStartTime, 200, 'stream-client-closed');
-      }
-    } catch (error) {
-      this.logger.error(`[STREAMING] Error during agent execution: ${error.message}`, error.stack);
-
-      if (clientAlive) {
-        // Send error chunk and terminate
-        this.writeSSE(res, {
-          id: completionId,
-          object: 'chat.completion.chunk',
-          created,
-          model: `agent:${agent.id}`,
-          choices: [{ index: 0, delta: {}, finish_reason: 'error' }],
-        });
-
-        res.write('data: [DONE]\n\n');
-        res.end();
-      }
-      // Failed streams used to vanish from access logs because the controller-
-      // level catch is unreachable once headers are sent. Log here instead.
-      this.logRequest(logCtx.req, logCtx.apiKeyLast4, agent.id, logCtx.requestStartTime, 500, 'stream-error');
-    } finally {
-      logCtx.req.off('close', markClosed);
-      logCtx.req.off('aborted', markClosed);
-    }
-  }
-
-  // ─── Helpers ─────────────────────────────────────────────────────────
-
-  private writeSSE(res: Response, data: any): void {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-  }
-
   private sendOpenAIError(
     res: Response,
     statusCode: number,

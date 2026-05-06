@@ -18,6 +18,7 @@ import { Message } from '../../entities/message.entity';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { AgentExecutionStateHelper } from './agent-execution-state.helper';
+import { AgentOpenAIStreamHelper } from './agent-openai-stream.helper';
 import { AgentNodeExecutor } from './agent-node-executor';
 import { AgentTemplateResolver } from './agent-template-resolver';
 import { AgentWebhookService } from './agent-webhook.service';
@@ -68,7 +69,7 @@ import { A2AModule } from '../a2a/a2a.module';
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
   ],
-  providers: [AgentsService, AgentExecutionEngine, AgentExecutionStateHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeProcessor],
+  providers: [AgentsService, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeProcessor],
   controllers: [AgentsController, AgentManagementController, AgentRunsController, AgentOpenAICompatController],
   exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })
