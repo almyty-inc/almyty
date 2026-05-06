@@ -42,6 +42,7 @@ import {
 import { EmbeddingService } from '../embedding.service';
 import { CanonicalSearchHelper } from './canonical-search.helper';
 import { CanonicalMemoryOpsHelper } from './canonical-ops.helper';
+import { CanonicalPutValidators } from './canonical-put-validators.helper';
 
 export const EMBEDDING_QUEUE_NAME = 'canonical-memory-embedding';
 
@@ -66,7 +67,9 @@ export class CanonicalMemoryService {
     private readonly embedding: EmbeddingService,
     private readonly searchHelper: CanonicalSearchHelper,
     @Inject(forwardRef(() => CanonicalMemoryOpsHelper))
+    @Inject(forwardRef(() => CanonicalMemoryOpsHelper))
     private readonly opsHelper: CanonicalMemoryOpsHelper,
+    private readonly putValidators: CanonicalPutValidators,
   ) {}
 
   // ════════════════════════════════════════════════════════════════════
@@ -96,160 +99,9 @@ export class CanonicalMemoryService {
     // their own auth guards. If a future PolicyService is added it
     // wraps this method.
 
-    // ── 4 & 5. Anti-dump: blob detection + compression ratio ─────────
-    const blobKind = detectBlob(input.content);
-    if (blobKind) {
-      this.auditLog.log({
-        organizationId: scopeToOrganizationId(item.scope_type, item.scope_id),
-        userId: actor.user_id,
-        action: AuditAction.MEMORY_DENIED,
-        resourceType: AuditResource.MEMORY,
-        resourceId: item.id,
-        details: { reason: 'looks_like_blob', detected: blobKind, size: contentBytes },
-      });
-      throw new MemoryError({ kind: 'looks_like_blob', detected: blobKind, suggest: 'file' });
-    }
-    if (contentBytes > 1024) {
-      // Only run gzip on non-trivial inputs — very small strings have
-      // a low compressed/raw ratio simply because of header overhead,
-      // not because the content is repetitive.
-      const ratio = gzipSync(input.content).length / contentBytes;
-      if (ratio < LIMITS.COMPRESSION_RATIO_REJECT_THRESHOLD) {
-        this.auditLog.log({
-          organizationId: scopeToOrganizationId(item.scope_type, item.scope_id),
-          userId: actor.user_id,
-          action: AuditAction.MEMORY_DENIED,
-          resourceType: AuditResource.MEMORY,
-          resourceId: item.id,
-          details: { reason: 'compression_ratio', ratio, size: contentBytes },
-        });
-        throw new MemoryError({ kind: 'looks_like_blob', detected: 'binary', suggest: 'file' });
-      }
-    }
-
-    // ── 6 & 7. Per-agent throttle / max single write ─────────────────
-    // The throttle is currently bounded only by the per-write byte
-    // ceiling — an effective stand-in for rate limiting on the
-    // synchronous write path. A BullMQ-backed sliding window can be
-    // layered on top later without changing the contract here.
-    if (item.mode === 'memory' && contentBytes > LIMITS.AGENT_MAX_SINGLE_WRITE_BYTES_DEFAULT) {
-      throw new MemoryError({
-        kind: 'too_large',
-        size: contentBytes,
-        hard_cap: LIMITS.AGENT_MAX_SINGLE_WRITE_BYTES_DEFAULT,
-        suggest: 'document',
-      });
-    }
-    if (item.mode === 'document' && contentBytes > LIMITS.AGENT_MAX_IMPORT_BYTES_DEFAULT) {
-      throw new MemoryError({
-        kind: 'too_large',
-        size: contentBytes,
-        hard_cap: LIMITS.AGENT_MAX_IMPORT_BYTES_DEFAULT,
-        suggest: 'file',
-      });
-    }
-
-    // ── 8 & 9. Workspace hard cap + system ceiling ───────────────────
+    // ── 4-10b. Validation pipeline (blob, caps, soft cap, URI) ───────
     const config = await this.getOrCreateConfig(item.scope_type, item.scope_id);
-    const hardCap =
-      item.mode === 'memory'
-        ? overrideOrDefault(config.overrides, 'hard_cap_memory_bytes', LIMITS.WORKSPACE_DEFAULT_HARD_CAP_MEMORY_BYTES)
-        : overrideOrDefault(config.overrides, 'hard_cap_document_bytes', LIMITS.WORKSPACE_DEFAULT_HARD_CAP_DOCUMENT_BYTES);
-    if (contentBytes > hardCap) {
-      throw new MemoryError({
-        kind: 'too_large',
-        size: contentBytes,
-        hard_cap: hardCap,
-        suggest: item.mode === 'memory' ? 'document' : 'file',
-      });
-    }
-    const systemCeiling =
-      item.mode === 'memory'
-        ? LIMITS.SYSTEM_CEILING_MEMORY_BYTES
-        : LIMITS.SYSTEM_CEILING_DOCUMENT_BYTES;
-    if (contentBytes > systemCeiling) {
-      throw new MemoryError({
-        kind: 'too_large',
-        size: contentBytes,
-        hard_cap: systemCeiling,
-        suggest: item.mode === 'memory' ? 'document' : 'file',
-      });
-    }
-
-    // ── 10. Per-tier soft cap with workspace behavior ────────────────
-    if (item.mode === 'memory' && item.tier !== null) {
-      const softCap = softCapForTier(item.tier);
-      if (contentBytes > softCap) {
-        const behavior: SoftCapBehavior = config.softcapBehavior;
-        if (behavior === 'reject') {
-          throw new MemoryError({
-            kind: 'too_large',
-            size: contentBytes,
-            soft_cap: softCap,
-            hard_cap: hardCap,
-            suggest: 'document',
-          });
-        }
-        if (behavior === 'warn_log') {
-          // Persist a warning row + an audit event. Both are
-          // synchronous so the operator always sees the trail; if the
-          // process crashes between these and the row insert we'd
-          // rather have the audit than a silent oversize write.
-          await this.warningRepo.save({
-            memoryId: item.id,
-            scopeType: item.scope_type,
-            scopeId: item.scope_id,
-            tier: item.tier,
-            mode: item.mode,
-            sizeBytes: contentBytes,
-            softCap,
-          } as CanonicalMemorySoftcapWarning);
-          this.auditLog.log({
-            organizationId: scopeToOrganizationId(item.scope_type, item.scope_id),
-            userId: actor.user_id,
-            action: AuditAction.MEMORY_SOFTCAP_WARNING,
-            resourceType: AuditResource.MEMORY,
-            resourceId: item.id,
-            details: { tier: item.tier, size: contentBytes, soft_cap: softCap },
-          });
-        }
-        // 'silent' → fall through.
-      }
-    }
-
-
-    // ── 10b. URI scheme allow-list (per spec §4) ─────────────────────
-    // Every URI in `file_refs` (memory + document mode) and the
-    // `source_uri` (document mode) must use a scheme the workspace
-    // permits. The default is permissive (every well-known scheme
-    // allowed); admins can restrict to e.g. only `almyty:` and
-    // `https:` if external references are unwanted.
-    const allowed = uriSchemeAllowList(config.overrides);
-    const refs: string[] = [
-      ...item.file_refs,
-      ...(item.source_uri ? [item.source_uri] : []),
-    ];
-    for (const ref of refs) {
-      const scheme = parseScheme(ref);
-      if (!scheme) continue; // bare path; the validator already vetted shape
-      if (!allowed.has(scheme)) {
-        this.auditLog.log({
-          organizationId: scopeToOrganizationId(item.scope_type, item.scope_id),
-          userId: actor.user_id,
-          action: AuditAction.MEMORY_DENIED,
-          resourceType: AuditResource.MEMORY,
-          resourceId: item.id,
-          details: { reason: 'uri_scheme_blocked', scheme, ref },
-        });
-        throw new MemoryError({
-          kind: 'validation',
-          issues: [{
-            path: item.source_uri === ref ? 'source_uri' : 'file_refs',
-            message: `URI scheme "${scheme}:" is not in this workspace's allow-list`,
-          }],
-        });
-      }
-    }
+    await this.putValidators.run(item, input, contentBytes, actor, config);
     // ── 11. Backend capability check ─────────────────────────────────
     // The native backend supports every capability declared in v1 —
     // this becomes meaningful when adapters land (Mem0 lacks

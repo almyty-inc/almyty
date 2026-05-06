@@ -20,6 +20,7 @@ import {
 } from './canonical/canonical-memory.service';
 import { CanonicalSearchHelper } from './canonical/canonical-search.helper';
 import { CanonicalMemoryOpsHelper } from './canonical/canonical-ops.helper';
+import { CanonicalPutValidators } from './canonical/canonical-put-validators.helper';
 import { CanonicalMemoryController } from './canonical/canonical-memory.controller';
 import { CanonicalMemoryEmbeddingProcessor } from './canonical/embedding-worker.processor';
 import {
@@ -83,6 +84,7 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
     CanonicalMemoryService,
     CanonicalSearchHelper,
     CanonicalMemoryOpsHelper,
+    CanonicalPutValidators,
     CanonicalMemoryEmbeddingProcessor,
     CanonicalMemoryTtlSweeperProcessor,
     CanonicalMemoryConsolidationProcessor,
