@@ -215,6 +215,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         {} as any, // protocolExecutor
         {} as any, // scriptExecutor
         {} as any, // auditLogService
+        {} as any, // cacheRateLimit
       );
     });
 

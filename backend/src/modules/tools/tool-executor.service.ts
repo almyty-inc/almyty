@@ -46,6 +46,7 @@ import { hashCacheObject, sleep } from './tool-execution-utils';
 import { ToolHttpExecutor } from './executors/tool-http.executor';
 import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
 import { ToolScriptExecutor } from './executors/tool-script.executor';
+import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
 
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
@@ -72,6 +73,7 @@ export class ToolExecutorService {
     private readonly protocolExecutor: ToolProtocolExecutor,
     private readonly scriptExecutor: ToolScriptExecutor,
     private readonly auditLogService: AuditLogService,
+    private readonly cacheRateLimit: ToolCacheRateLimitHelper,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -171,7 +173,7 @@ export class ToolExecutorService {
 
       // Rate limit.
       if (!options.skipRateLimit) {
-        const rateLimitResult = await this.checkRateLimit(tool, options);
+        const rateLimitResult = await this.cacheRateLimit.checkRateLimit(tool, options);
         if (rateLimitResult.limited) {
           rateLimited = true;
           return {
@@ -187,7 +189,7 @@ export class ToolExecutorService {
 
       // Cache lookup.
       if (!options.skipCache && tool.configuration?.cache?.enabled) {
-        const cachedResult = await this.getCachedResult(tool, parameters);
+        const cachedResult = await this.cacheRateLimit.getCachedResult(tool, parameters);
         if (cachedResult) {
           cached = true;
           await this.recordExecution(tool, parameters, cachedResult, options, {
@@ -236,7 +238,7 @@ export class ToolExecutorService {
       if (result !== undefined) {
         // Cache successful config-based tool results.
         if (tool.configuration?.cache?.enabled && result.success) {
-          await this.cacheResult(tool, parameters, result);
+          await this.cacheRateLimit.cacheResult(tool, parameters, result);
         }
         await this.recordExecution(tool, parameters, result, options, {
           executionTime: result.executionTime ?? Date.now() - startTime,
@@ -256,7 +258,7 @@ export class ToolExecutorService {
           const opResult = await this.executeOperation(tool, parameters, options);
 
           if (tool.configuration?.cache?.enabled && opResult.success) {
-            await this.cacheResult(tool, parameters, opResult);
+            await this.cacheRateLimit.cacheResult(tool, parameters, opResult);
           }
 
           await this.recordExecution(tool, parameters, opResult, options, {
@@ -407,83 +409,6 @@ export class ToolExecutorService {
     }
   }
 
-  private async checkRateLimit(
-    tool: Tool,
-    options: ToolExecutionOptions,
-  ): Promise<{ limited: boolean; message?: string }> {
-    try {
-      const rateLimitConfig = tool.configuration?.rateLimit;
-      if (!rateLimitConfig) return { limited: false };
-
-      const { userId } = options;
-      const toolId = tool.id;
-
-      if (rateLimitConfig.requestsPerMinute) {
-        const minuteKey = `rate_limit:${toolId}:${userId}:minute:${Math.floor(Date.now() / 60000)}`;
-        const currentMinuteCount = await this.redis.incr(minuteKey);
-        await this.redis.expire(minuteKey, 60);
-        if (currentMinuteCount > rateLimitConfig.requestsPerMinute) {
-          return {
-            limited: true,
-            message: `Exceeded ${rateLimitConfig.requestsPerMinute} requests per minute`,
-          };
-        }
-      }
-
-      if (rateLimitConfig.requestsPerHour) {
-        const hourKey = `rate_limit:${toolId}:${userId}:hour:${Math.floor(Date.now() / 3600000)}`;
-        const currentHourCount = await this.redis.incr(hourKey);
-        await this.redis.expire(hourKey, 3600);
-        if (currentHourCount > rateLimitConfig.requestsPerHour) {
-          return {
-            limited: true,
-            message: `Exceeded ${rateLimitConfig.requestsPerHour} requests per hour`,
-          };
-        }
-      }
-
-      return { limited: false };
-    } catch (error: any) {
-      // Fail open on Redis outage so the platform isn't taken down
-      // by a rate-limiter dependency failure.
-      this.logger.warn(`Rate limiting check failed, allowing request: ${error.message}`);
-      return { limited: false };
-    }
-  }
-
-  private async getCachedResult(
-    tool: Tool,
-    parameters: Record<string, any>,
-  ): Promise<ToolExecutionResult | null> {
-    try {
-      const cacheKey = this.generateCacheKey(tool.id, parameters);
-      const cached = await this.redis.get(cacheKey);
-      return cached ? JSON.parse(cached) : null;
-    } catch (error: any) {
-      this.logger.warn(`Cache retrieval failed: ${error.message}`);
-      return null;
-    }
-  }
-
-  private async cacheResult(
-    tool: Tool,
-    parameters: Record<string, any>,
-    result: ToolExecutionResult,
-  ): Promise<void> {
-    try {
-      const cacheConfig = tool.configuration?.cache;
-      if (!cacheConfig?.enabled) return;
-      const cacheKey = this.generateCacheKey(tool.id, parameters);
-      const ttl = cacheConfig.ttl || 300;
-      await this.redis.setex(cacheKey, ttl, JSON.stringify(result));
-    } catch (error: any) {
-      this.logger.warn(`Cache storage failed: ${error.message}`);
-    }
-  }
-
-  private generateCacheKey(toolId: string, parameters: Record<string, any>): string {
-    return `tool_cache:${toolId}:${hashCacheObject(parameters)}`;
-  }
 
   // ─── Execution recording + atomic stats ────────────────────────
 
