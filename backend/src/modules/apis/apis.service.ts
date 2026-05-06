@@ -17,6 +17,7 @@ import { SchemaParserService } from '../schema-parser/schema-parser.service';
 import { ToolsService } from '../tools/tools.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ApisImportHelper } from './apis-import.helper';
+import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
 
@@ -44,6 +45,7 @@ export class ApisService {
     private readonly dataSource: DataSource,
     @Inject(forwardRef(() => ApisImportHelper))
     private readonly importHelper: ApisImportHelper,
+    private readonly toolGen: ApisToolGeneratorHelper,
   ) {}
 
   async create(createApiData: CreateApiData): Promise<Api> {
@@ -439,7 +441,7 @@ export class ApisService {
 
       // Add authentication if configured
       if (api.authentication && api.authentication.type !== 'none') {
-        this.importHelper.applyAuthentication(config, api.authentication);
+        this.toolGen.applyAuthentication(config, api.authentication);
       }
 
       // Add default headers
@@ -488,5 +490,5 @@ export class ApisService {
   // ── Delegations to ApisImportHelper ──
   importSchema(...args: Parameters<ApisImportHelper['importSchema']>) { return this.importHelper.importSchema(...args); }
   fetchSchemaFromUrl(...args: Parameters<ApisImportHelper['fetchSchemaFromUrl']>) { return this.importHelper.fetchSchemaFromUrl(...args); }
-  generateToolsFromApi(...args: Parameters<ApisImportHelper['generateToolsFromApi']>) { return this.importHelper.generateToolsFromApi(...args); }
+  generateToolsFromApi(...args: Parameters<ApisToolGeneratorHelper['generateToolsFromApi']>) { return this.toolGen.generateToolsFromApi(...args); }
 }
