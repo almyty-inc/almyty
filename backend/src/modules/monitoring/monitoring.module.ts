@@ -6,6 +6,7 @@ import { MonitoringService } from './monitoring.service';
 import { MonitoringRedisStatsHelper } from './monitoring-redis-stats.helper';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
+import { AnalyticsExportHelper } from './analytics-export.helper';
 
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { RequestLog } from '../../entities/request-log.entity';
