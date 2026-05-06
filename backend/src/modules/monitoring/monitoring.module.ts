@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { MonitoringController } from './monitoring.controller';
 import { MonitoringService } from './monitoring.service';
+import { MonitoringRedisStatsHelper } from './monitoring-redis-stats.helper';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 
