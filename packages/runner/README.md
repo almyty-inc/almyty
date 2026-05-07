@@ -19,6 +19,8 @@ npx @almyty/runner status
 
 Stop with `npx @almyty/runner stop` or ctrl-c in the daemon's terminal.
 
+Or use the UI: log into your almyty account and head to **Runners → Start a runner**. The page generates the exact start command for you and waits for the daemon to come online before redirecting to the runner detail.
+
 ## What the runner does
 
 The runner exposes a small process surface (spawn, write, read, signal, wait_for_idle, wait, list, shell.exec, runner.info) over a persistent connection to almyty. Agents call those methods, scoped to a workspace, and the runner runs the actual processes on your machine. It does not bake in any tool-specific knowledge: there is no `claude_code.run` or `codex.run`. Tool intelligence lives in agent prompts; the runner is generic.
