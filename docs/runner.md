@@ -95,6 +95,32 @@ New package; ships as `@almyty/runner` with a `bin: almyty-runner`.
 
 The stub-driven test pins the cross-vendor wedge claim: workspace lifecycle, three subagent calls in order with the right CLI per step, files actually modified by the implementation step, verdict captured by the reviewer.
 
+## Cluster 5: Runner + Workspace UI (`frontend/src/pages`)
+
+Five pages, all conforming to the existing UI patterns in the repo (React Router v6, TanStack Query inline in pages, shadcn/ui components, custom `<table>`s with the same header/Card/empty-state shape `agents.tsx` uses):
+
+- `/runners` — list page with state badge, OS/arch, last heartbeat, capacity, labels. Polls every 15s (half the runner heartbeat interval). Empty state links to the start-a-runner page.
+- `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results), active workspaces, recent (terminated) workspaces. Deregister button only renders when state is `offline`; uses the existing `AlertDialog` confirmation pattern.
+- `/runners/new` — the adoption page. Three-step ordered list: name + labels form, exact `almyty-runner start --name X --label k=v` command (with copy buttons) ready to paste on the target machine, then a "Waiting for first heartbeat..." indicator that polls the runners list and navigates to the runner detail when the runner appears with state online and a recent heartbeat. Validates name uniqueness against existing runners and the `[a-zA-Z0-9_-]{1,64}` regex the backend enforces.
+- `/workspaces` — list page with status filter (active by default), per-runner filter, cwd substring search.
+- `/workspaces/:id` — detail page with metadata, close reason (only for terminated workspaces), Release action (only for active).
+
+Shared mappings live in `frontend/src/pages/runners-shared.ts`: runner state -> badge variant (online=success, busy=secondary, stale/draining=warning, offline=destructive), workspace status -> badge variant (active=success, released=secondary, expired=outline, stranded=destructive), and the polling cadence constant.
+
+Sidebar entry inserted in `dashboard-layout.tsx` after Agents, before Credentials. Cpu icon from lucide-react, matching the existing icon convention.
+
+### Open question deferred to follow-up: real-time updates
+
+Cluster 1 lands a Streamable HTTP transport on the backend. A natural follow-up is to use it for runner-state subscriptions in the UI (the start-page "waiting for heartbeat" experience and the detail-page state badge would both feel snappier with sub-second updates instead of 15s polling). The cleanest shape would be a per-org event subscription routed through the same `/mcp/streamable` endpoint with a runner-events worker envelope; the UI subscribes once and gets push updates. Polling stays as the conservative default until that subscription endpoint exists; this cluster doesn't add any speculative subscription code.
+
+### Anti-goals (UI cluster)
+
+- No real-time graphs, sparklines, capacity charts.
+- No bulk operations (multi-select delete/release).
+- No in-UI runner config editing — config lives in `~/.almyty/config.json`; the UI links to the README.
+- No "create runner from UI" — the UI generates the command, the user runs it on their own machine.
+- No new toast/notification system, dep, theming, or analytics.
+
 ## What's deferred to follow-up clusters
 
 - **Routing layer**: the integration point that translates a runner-backed tool call from `tool-executor.service.ts` into a Streamable HTTP envelope dispatch via `transport.push(streamableSessionId, ...)`. The data model + state machine + REST CRUD are in place; this cluster wires the existing tool dispatch path through.
