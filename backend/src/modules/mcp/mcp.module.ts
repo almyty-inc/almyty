@@ -22,6 +22,7 @@ import { McpContentHandler } from './services/mcp-content.handler';
 import { McpServerRequestService } from './services/mcp-server-request.service';
 import { SseTransport } from './transports/sse.transport';
 import { WebSocketTransport } from './transports/websocket.transport';
+import { StreamableHttpTransport } from './transports/streamable-http.transport';
 
 // Import related entities
 import { Tool } from '../../entities/tool.entity';
@@ -86,6 +87,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
     McpOAuthResolveHelper,
     SseTransport,
     WebSocketTransport,
+    StreamableHttpTransport,
   ],
   exports: [
     AlmytyMcpService,
@@ -99,6 +101,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
     GatewayResolverService,
     SseTransport,
     WebSocketTransport,
+    StreamableHttpTransport,
   ],
 })
 export class McpModule {}

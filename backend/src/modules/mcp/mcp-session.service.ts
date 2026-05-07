@@ -192,6 +192,7 @@ export class McpSessionService extends EventEmitter implements OnModuleInit, OnM
       sse: 0,
       websocket: 0,
       stdio: 0,
+      'streamable-http': 0,
     };
 
     for (const session of this.sessions.values()) {
