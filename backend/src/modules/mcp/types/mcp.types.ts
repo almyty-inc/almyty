@@ -314,7 +314,7 @@ export enum JsonRpcErrorCode {
 }
 
 // Transport Types
-export type McpTransport = 'http' | 'sse' | 'websocket' | 'stdio';
+export type McpTransport = 'http' | 'sse' | 'websocket' | 'stdio' | 'streamable-http';
 
 export interface McpSession {
   id: string;

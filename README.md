@@ -73,6 +73,21 @@ npx @almyty/skills install @acme/petstore
 
 Works with Claude Code, Cursor, Copilot, Windsurf, and [30+ more](https://docs.almyty.com/cli/skills).
 
+
+## Runners
+
+A runner is a long-running CLI daemon you start on a machine you own. Almyty agents dispatch jobs (process spawn, shell exec, file ops) over a persistent connection; the runner executes them in your environment, scoped to a workspace.
+
+This is the wedge that lets one agent workflow orchestrate any CLI coding agent (Claude Code, Codex, gemini-cli, aider) with any model on the same codebase, in one coherent session — three commands to start:
+
+```bash
+npx @almyty/auth login            # one-time browser login
+npm i -g @almyty/runner            # install once per machine
+almyty-runner start --name my-laptop
+```
+
+Then in the UI, head to `/runners/new` for a guided setup that generates the start command and waits for the runner to come online. See [docs/runner.md](docs/runner.md) for architecture.
+
 ## CLI tools
 
 ```bash
@@ -80,6 +95,7 @@ npx @almyty/auth login                    # authenticate
 npx @almyty/skills install @org/gateway   # install skills
 npx @almyty/agents list                   # list agents
 npx @almyty/chat my-agent                 # interactive agent REPL
+almyty-runner start --name laptop         # register this machine as a runner
 ```
 
 See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.

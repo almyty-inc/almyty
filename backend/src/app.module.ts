@@ -72,6 +72,8 @@ import { AcpModule } from './modules/acp/acp.module';
 import { UnifiedEndpointModule } from './modules/gateways/unified-endpoint.module';
 import { MailModule } from './modules/mail/mail.module';
 import { VersionsModule } from './modules/versions/versions.module';
+import { RunnerModule } from './modules/runner/runner.module';
+import { WorkspaceModule } from './modules/workspace/workspace.module';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -219,6 +221,8 @@ import { databaseConfig } from './config/database.config';
     FilesModule,
     AuditLogModule,
     VersionsModule,
+    RunnerModule,
+    WorkspaceModule,
     ToolHubModule,
     A2AModule,
     AcpModule,

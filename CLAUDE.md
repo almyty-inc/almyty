@@ -39,7 +39,7 @@
 
 ```
 backend/src/
-├── entities/          # 35 TypeORM entities
+├── entities/          # 38 TypeORM entities
 ├── modules/
 │   ├── agents/        # Agent CRUD, DAG execution engine, scheduler, webhooks, OpenAI-compat API
 │   ├── apis/          # API CRUD, schema import
@@ -59,6 +59,8 @@ backend/src/
 │   ├── monitoring/    # Metrics, usage tracking
 │   ├── organizations/ # Multi-tenancy, RBAC
 │   ├── plugins/       # Plugin system (5 built-in: rate-limiter, pii-filter, etc.)
+│   ├── runner/        # Runner registration, FSM, dispatch resolution (cluster 5)
+│   ├── workspace/     # Workspace lifecycle (active/released/expired/stranded), TTL sweep
 │   ├── schema-parser/ # 5 parsers: OpenAPI, GraphQL, SOAP, Protobuf, SDK
 │   ├── tool-hub/      # Tool catalog / discovery
 │   ├── tools/         # Tool CRUD, generation, execution, skill export, JS sandbox
@@ -88,14 +90,15 @@ packages/
 ├── chat-cli/          # @almyty/chat — interactive agent REPL
 ├── skills-cli/        # @almyty/skills — install API skills into 30+ AI coding agents
 ├── mcp-server/        # @almyty/mcp-server — skill-first MCP proxy
-└── cli-tests/         # Smoke tests gated behind RUN_CLI_SMOKE=1
+├── cli-tests/         # Smoke tests gated behind RUN_CLI_SMOKE=1
+└── runner/            # @almyty/runner — long-running daemon that runs CLI agents on the user's machine
 ```
 
 ---
 
 ## Key Facts
 
-- **Entities**: 35
+- **Entities**: 38
 - **Agent node types** (10): `input`, `output`, `llm_call`, `tool_call`, `condition`, `transform`, `loop`, `parallel`, `merge`, `sub_agent`
 - **Gateway types**: MCP, A2A, UTCP, Skills
 - **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed via worker_threads), GraphQL, LLM, SDK
@@ -205,7 +208,7 @@ Tokens live in httpOnly cookies only. `withCredentials: true` on every axios cal
 - Fonts: Manrope (headings), DM Sans (body), JetBrains Mono (code). Google Fonts, SIL OFL.
 - Protocol badges: MCP=violet, A2A=cyan, UTCP=emerald, SOAP=amber, GraphQL=rose, REST=blue
 - Primary CTA buttons use violet-to-cyan gradient. One gradient CTA per page max.
-- Sidebar order: Dashboard → APIs → Tools → Gateways → Agents → Credentials → Models → Memory → Analytics → Settings
+- Sidebar order: Dashboard → APIs → Tools → Gateways → Agents → Runners → Credentials → Models → Memory → Analytics → Settings
 
 <!-- BEGIN agented section v0.1.0 -->
 - For files in this project, prefer `ae open <path>` over `Read`. ae returns the same content plus annotations from prior sessions and a state_token you'll thread through subsequent writes.

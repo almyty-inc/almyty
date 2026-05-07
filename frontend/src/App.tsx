@@ -37,6 +37,11 @@ const ChatPage = lazy(() => import('@/pages/chat').then(m => ({ default: m.ChatP
 const AgentsPage = lazy(() => import('@/pages/agents').then(m => ({ default: m.AgentsPage })))
 const AgentBuilderPage = lazy(() => import('@/pages/agent-builder').then(m => ({ default: m.AgentBuilderPage })))
 const AgentDetailPage = lazy(() => import('@/pages/agent-detail').then(m => ({ default: m.AgentDetailPage })))
+const RunnersPage = lazy(() => import('@/pages/runners').then(m => ({ default: m.RunnersPage })))
+const RunnerDetailPage = lazy(() => import('@/pages/runner-detail').then(m => ({ default: m.RunnerDetailPage })))
+const RunnerNewPage = lazy(() => import('@/pages/runner-new').then(m => ({ default: m.RunnerNewPage })))
+const WorkspacesPage = lazy(() => import('@/pages/workspaces').then(m => ({ default: m.WorkspacesPage })))
+const WorkspaceDetailPage = lazy(() => import('@/pages/workspace-detail').then(m => ({ default: m.WorkspaceDetailPage })))
 const MemoriesPage = lazy(() => import('@/pages/memories').then(m => ({ default: m.MemoriesPage })))
 const DocsPage = lazy(() => import('@/pages/docs').then(m => ({ default: m.DocsPage })))
 const ToolHubPage = lazy(() => import('@/pages/tool-hub').then(m => ({ default: m.ToolHubPage })))
@@ -109,6 +114,31 @@ function App() {
         <Route path="/agents/:id/edit" element={
           <DashboardLayout>
             <AgentBuilderPage />
+          </DashboardLayout>
+        } />
+        <Route path="/runners" element={
+          <DashboardLayout>
+            <RunnersPage />
+          </DashboardLayout>
+        } />
+        <Route path="/runners/new" element={
+          <DashboardLayout>
+            <RunnerNewPage />
+          </DashboardLayout>
+        } />
+        <Route path="/runners/:id" element={
+          <DashboardLayout>
+            <RunnerDetailPage />
+          </DashboardLayout>
+        } />
+        <Route path="/workspaces" element={
+          <DashboardLayout>
+            <WorkspacesPage />
+          </DashboardLayout>
+        } />
+        <Route path="/workspaces/:id" element={
+          <DashboardLayout>
+            <WorkspaceDetailPage />
           </DashboardLayout>
         } />
         <Route path="/chat" element={
