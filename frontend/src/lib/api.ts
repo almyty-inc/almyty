@@ -622,6 +622,20 @@ export const runsApi = {
   getRun: (runId: string) => apiGet(`/agents/runs/${runId}`),
 }
 
+
+// Runners API (cluster 5)
+export const runnersApi = {
+  getAll: () => apiGet('/runners'),
+  getById: (id: string) => apiGet(`/runners/${id}`),
+  unregister: (id: string) => apiDel(`/runners/${id}`),
+}
+
+// Workspaces API (cluster 5)
+export const workspacesApi = {
+  getAll: () => apiGet('/workspaces'),
+  getById: (id: string) => apiGet(`/workspaces/${id}`),
+  release: (id: string) => apiDel(`/workspaces/${id}`),
+}
 // Canonical Memory API (v1)
 //
 // Talks to /memory/canonical/* — the canonical-schema-v1 backend.

@@ -1,0 +1,40 @@
+{
+  "name": "@almyty/runner",
+  "version": "0.1.0",
+  "description": "almyty runner: long-running CLI daemon that executes processes on a user's machine on behalf of almyty agents.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "almyty-runner": "dist/cli.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc && chmod +x dist/cli.js",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "node-pty": "^1.0.0",
+    "@almyty/client": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^4.1.0"
+  },
+  "keywords": [
+    "almyty",
+    "runner",
+    "daemon",
+    "agent",
+    "cli"
+  ],
+  "author": "almyty",
+  "license": "BSL-1.1"
+}
