@@ -12,6 +12,7 @@ import { legacyTypeToTier } from './agent-runtime.service';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import { Provenance, Tier } from '../memory/canonical/canonical.types';
 import { AgentRuntimeService } from './agent-runtime.service';
+import { ApprovalsService } from '../approvals/approvals.service';
 
 @Injectable()
 export class AgentBuiltInToolsHelper {
@@ -24,6 +25,7 @@ export class AgentBuiltInToolsHelper {
     private readonly memoryService: CanonicalMemoryService,
     @Inject(forwardRef(() => AgentRuntimeService))
     private readonly runtime: AgentRuntimeService,
+    private readonly approvals: ApprovalsService,
   ) {}
 
   async executeBuiltInTool(
@@ -162,6 +164,31 @@ export class AgentBuiltInToolsHelper {
           }
         } catch (err) {
           return { result: null, error: `Failed to invoke agent: ${err.message}` };
+        }
+      }
+
+      case 'request_approval': {
+        // Create an ApprovalRequest row + flip the run state. The run
+        // is paused at WAITING_APPROVAL until the ApprovalsService
+        // emits 'approval.decided' for this gate, at which point the
+        // listener wired in agent-runtime will resume / terminate.
+        try {
+          const approval = await this.approvals.create({
+            organizationId: run.organizationId,
+            teamId: agent.teamId ?? null,
+            runId: run.id,
+            agentId: agent.id,
+            toolCallId: parameters._toolCallId ?? null,
+            reason: parameters.reason || 'agent requested approval',
+            payload: parameters.payload ?? null,
+          });
+          run.status = AgentRunStatus.WAITING_APPROVAL;
+          return {
+            result: `Awaiting human approval (id=${approval.id}). Run paused; will resume after approve/reject.`,
+            status: 'waiting_input' as const,
+          };
+        } catch (err) {
+          return { result: null, error: `Failed to request approval: ${(err as Error).message}` };
         }
       }
 

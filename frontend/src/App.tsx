@@ -38,6 +38,7 @@ const AgentsPage = lazy(() => import('@/pages/agents').then(m => ({ default: m.A
 const AgentBuilderPage = lazy(() => import('@/pages/agent-builder').then(m => ({ default: m.AgentBuilderPage })))
 const AgentDetailPage = lazy(() => import('@/pages/agent-detail').then(m => ({ default: m.AgentDetailPage })))
 const RunnersPage = lazy(() => import('@/pages/runners').then(m => ({ default: m.RunnersPage })))
+const ApprovalsPage = lazy(() => import('@/pages/approvals').then(m => ({ default: m.ApprovalsPage })))
 const RunnerDetailPage = lazy(() => import('@/pages/runner-detail').then(m => ({ default: m.RunnerDetailPage })))
 const RunnerNewPage = lazy(() => import('@/pages/runner-new').then(m => ({ default: m.RunnerNewPage })))
 const WorkspacesPage = lazy(() => import('@/pages/workspaces').then(m => ({ default: m.WorkspacesPage })))
@@ -129,6 +130,11 @@ function App() {
         <Route path="/runners/:id" element={
           <DashboardLayout>
             <RunnerDetailPage />
+          </DashboardLayout>
+        } />
+        <Route path="/approvals" element={
+          <DashboardLayout>
+            <ApprovalsPage />
           </DashboardLayout>
         } />
         <Route path="/workspaces" element={
