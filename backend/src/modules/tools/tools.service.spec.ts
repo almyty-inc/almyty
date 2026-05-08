@@ -14,6 +14,7 @@ import { Operation } from '../../entities/operation.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 // ─── Helper factories ───────────────────────────────────────────────────────
 
@@ -119,6 +120,7 @@ describe('ToolsService', () => {
   let operationRepo: jest.Mocked<any>;
   let userRepo: jest.Mocked<any>;
   let organizationRepo: jest.Mocked<any>;
+  let accessPolicy: any;
 
   beforeEach(async () => {
     toolRepo = {
@@ -164,6 +166,10 @@ describe('ToolsService', () => {
       findOne: jest.fn(),
     };
 
+    accessPolicy = {
+      canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ToolsOperationHelper,
@@ -193,6 +199,7 @@ describe('ToolsService', () => {
             getResourceHistory: jest.fn().mockResolvedValue([]),
           },
         },
+        { provide: AccessPolicyService, useValue: accessPolicy },
       ],
     }).compile();
 
@@ -475,6 +482,7 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(service.updateTool('tool-1', updateDto, 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });
@@ -623,6 +631,7 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(service.deleteTool('tool-1', 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });
@@ -683,6 +692,7 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(service.activateTool('tool-1', 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });
@@ -733,6 +743,7 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(service.deactivateTool('tool-1', 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });

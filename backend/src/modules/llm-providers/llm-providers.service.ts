@@ -20,6 +20,7 @@ import { LlmChatHelper } from './llm-chat.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 import { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters } from './dto/llm-providers.dto';
 export type { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters };
@@ -96,6 +97,7 @@ export class LlmProvidersService {
     private readonly chatHelper: LlmChatHelper,
     private readonly statsHelper: LlmStatsHelper,
     private readonly runner: LlmChatRunnerHelper,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async createProvider(
@@ -174,14 +176,10 @@ export class LlmProvidersService {
         throw new NotFoundException('LLM provider not found');
       }
 
-      // Check permissions
-      const user = await this.userRepository.findOne({
-        where: { id: userId },
-        relations: ['organizationMemberships'],
-      });
-
-      if (!user?.hasPermissionInOrganization(organizationId, 'manage_llm_providers')) {
-        throw new ForbiddenException('User does not have permission to manage LLM providers');
+      // Authorization: org owner/admin always, team-scoped requires team lead
+      const decision = await this.accessPolicy.canAccess({ id: userId }, provider, 'manage');
+      if (!decision.allowed) {
+        throw new ForbiddenException(decision.reason);
       }
 
       // Update configuration
@@ -304,14 +302,10 @@ export class LlmProvidersService {
   ): Promise<void> {
     const provider = await this.getProvider(providerId, organizationId);
 
-    // Check permissions
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: ['organizationMemberships'],
-    });
-
-    if (!user?.hasPermissionInOrganization(organizationId, 'manage_llm_providers')) {
-      throw new ForbiddenException('User does not have permission to manage LLM providers');
+    // Authorization: org owner/admin always, team-scoped requires team lead
+    const decision = await this.accessPolicy.canAccess({ id: userId }, provider, 'manage');
+    if (!decision.allowed) {
+      throw new ForbiddenException(decision.reason);
     }
 
     await this.llmProviderRepository.remove(provider);

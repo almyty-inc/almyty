@@ -14,6 +14,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -143,6 +144,7 @@ export class GatewaysService {
     @Inject(forwardRef(() => GatewaysStatsHelper))
     private readonly statsHelper: GatewaysStatsHelper,
     private readonly init: GatewayInitHelper,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async createGateway(
@@ -248,14 +250,10 @@ export class GatewaysService {
         throw new NotFoundException('Gateway not found');
       }
 
-      // Check permissions
-      const user = await this.userRepository.findOne({
-        where: { id: userId },
-        relations: ['organizationMemberships'],
-      });
-
-      if (!user?.hasPermissionInOrganization(organizationId, 'edit_gateways')) {
-        throw new ForbiddenException('User does not have permission to edit gateways');
+      // Authorization: org owner/admin always, team-scoped requires team lead
+      const decision = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
+      if (!decision.allowed) {
+        throw new ForbiddenException(decision.reason);
       }
 
       // Capture old values for change tracking (before mutation)
@@ -427,14 +425,10 @@ export class GatewaysService {
   ): Promise<Gateway> {
     const gateway = await this.getGateway(gatewayId, organizationId, false);
 
-    // Check permissions
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: ['organizationMemberships'],
-    });
-
-    if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateways')) {
-      throw new ForbiddenException('User does not have permission to manage gateways');
+    // Authorization: org owner/admin always, team-scoped requires team lead
+    const decision = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
+    if (!decision.allowed) {
+      throw new ForbiddenException(decision.reason);
     }
 
     if (gateway.status === GatewayStatus.ACTIVE) {
@@ -459,14 +453,10 @@ export class GatewaysService {
   ): Promise<Gateway> {
     const gateway = await this.getGateway(gatewayId, organizationId, false);
 
-    // Check permissions
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: ['organizationMemberships'],
-    });
-
-    if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateways')) {
-      throw new ForbiddenException('User does not have permission to manage gateways');
+    // Authorization: org owner/admin always, team-scoped requires team lead
+    const decision2 = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
+    if (!decision2.allowed) {
+      throw new ForbiddenException(decision2.reason);
     }
 
     if (gateway.status === GatewayStatus.INACTIVE) {
@@ -508,14 +498,10 @@ export class GatewaysService {
       throw new BadRequestException('System gateways cannot be deleted');
     }
 
-    // Check permissions
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: ['organizationMemberships'],
-    });
-
-    if (!user?.hasPermissionInOrganization(organizationId, 'delete_gateways')) {
-      throw new ForbiddenException('User does not have permission to delete gateways');
+    // Authorization: org owner/admin always, team-scoped requires team lead
+    const decision3 = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
+    if (!decision3.allowed) {
+      throw new ForbiddenException(decision3.reason);
     }
 
     await this.gatewayRepository.remove(gateway);

@@ -18,6 +18,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats } from './dto/tools.dto';
 import { ToolsOperationHelper } from './tools-operation.helper';
 import { ToolsStatsHelper } from './tools-stats.helper';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
 
 @Injectable()
@@ -48,6 +49,7 @@ export class ToolsService {
     @Inject(forwardRef(() => ToolsOperationHelper))
     private readonly operationHelper: ToolsOperationHelper,
     private readonly statsHelper: ToolsStatsHelper,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async createTool(
@@ -175,14 +177,12 @@ export class ToolsService {
         throw new NotFoundException('Tool not found');
       }
 
-      // Check permissions
-      const user = await this.userRepository.findOne({
-        where: { id: userId },
-        relations: ['organizationMemberships'],
-      });
-
-      if (!user?.hasPermissionInOrganization(organizationId, 'edit_tools') && tool.createdBy !== userId) {
-        throw new ForbiddenException('User does not have permission to edit this tool');
+      // Authorization: tool creator can always edit; otherwise org admin/owner or team lead
+      if (tool.createdBy !== userId) {
+        const decision = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
+        if (!decision.allowed) {
+          throw new ForbiddenException(decision.reason);
+        }
       }
 
       // Capture old values for change tracking (before mutation)
@@ -391,14 +391,10 @@ export class ToolsService {
   ): Promise<Tool> {
     const tool = await this.getTool(toolId, organizationId, false);
 
-    // Check permissions
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: ['organizationMemberships'],
-    });
-
-    if (!user?.hasPermissionInOrganization(organizationId, 'manage_tools')) {
-      throw new ForbiddenException('User does not have permission to manage tools');
+    // Authorization: org owner/admin always, team-scoped requires team lead
+    const decision = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
+    if (!decision.allowed) {
+      throw new ForbiddenException(decision.reason);
     }
 
     if (tool.status === ToolStatus.ACTIVE) {
@@ -427,14 +423,10 @@ export class ToolsService {
   ): Promise<Tool> {
     const tool = await this.getTool(toolId, organizationId, false);
 
-    // Check permissions
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: ['organizationMemberships'],
-    });
-
-    if (!user?.hasPermissionInOrganization(organizationId, 'manage_tools')) {
-      throw new ForbiddenException('User does not have permission to manage tools');
+    // Authorization: org owner/admin always, team-scoped requires team lead
+    const decision2 = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
+    if (!decision2.allowed) {
+      throw new ForbiddenException(decision2.reason);
     }
 
     if (tool.status === ToolStatus.INACTIVE) {
@@ -463,14 +455,12 @@ export class ToolsService {
   ): Promise<void> {
     const tool = await this.getTool(toolId, organizationId, false);
 
-    // Check permissions
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: ['organizationMemberships'],
-    });
-
-    if (!user?.hasPermissionInOrganization(organizationId, 'delete_tools') && tool.createdBy !== userId) {
-      throw new ForbiddenException('User does not have permission to delete this tool');
+    // Authorization: tool creator can always delete; otherwise org admin/owner or team lead
+    if (tool.createdBy !== userId) {
+      const decision3 = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
+      if (!decision3.allowed) {
+        throw new ForbiddenException(decision3.reason);
+      }
     }
 
     // Soft delete by setting status to deleted

@@ -348,6 +348,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         stubAuditLog() as any,
         {} as any, // ToolsOperationHelper
         {} as any, // ToolsStatsHelper
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // accessPolicy
       );
 
       const toolRepo = fx.ds.getRepository(Tool);
@@ -426,6 +427,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds.getRepository(User),
         { appendAudit: jest.fn().mockResolvedValue(undefined) } as any,
         {} as any, // AgentValidationHelper
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // accessPolicy
       );
 
       const agentRepo = fx.ds.getRepository(Agent);
@@ -566,6 +568,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         stubAuditLog() as any,
         {} as any, // GatewaysStatsHelper
         {} as any, // GatewayInitHelper
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // accessPolicy
       );
 
       const gwRepo = fx.ds.getRepository(Gateway);
@@ -640,6 +643,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         {} as any, // chatHelper
         {} as any, // statsHelper
         {} as any, // runner
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // accessPolicy
       );
 
       const provRepo = fx.ds.getRepository(LlmProvider);

@@ -4,6 +4,7 @@ import { NotFoundException, BadRequestException, ForbiddenException } from '@nes
 import { AgentsService, CreateAgentInput, UpdateAgentInput } from '../agents.service';
 import { AgentAuditService } from '../agent-audit.service';
 import { AgentValidationHelper } from '../agent-validation.helper';
+import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 import { Agent, AgentStatus, AgentPipeline } from '../../../entities/agent.entity';
 import { AgentExecution } from '../../../entities/agent-execution.entity';
 import { Organization } from '../../../entities/organization.entity';
@@ -90,6 +91,7 @@ function makeUser(overrides: Partial<any> = {}): any {
 describe('AgentsService', () => {
   let service: AgentsService;
   let validation: AgentValidationHelper;
+  let accessPolicy: any;
 
   let agentRepo: jest.Mocked<any>;
   let agentExecutionRepo: jest.Mocked<any>;
@@ -135,11 +137,18 @@ describe('AgentsService', () => {
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: AgentAuditService, useValue: mockAuditService },
         AgentValidationHelper,
+        {
+          provide: AccessPolicyService,
+          useValue: {
+            canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<AgentsService>(AgentsService);
     validation = module.get<AgentValidationHelper>(AgentValidationHelper);
+    accessPolicy = module.get(AccessPolicyService);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -395,6 +404,7 @@ describe('AgentsService', () => {
         }],
       });
       userRepo.findOne.mockResolvedValue(memberUser);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(service.updateAgent('agent-1', { name: 'Nope' }, 'org-1', 'member-user'))
         .rejects.toThrow(ForbiddenException);
@@ -439,6 +449,7 @@ describe('AgentsService', () => {
         }],
       });
       userRepo.findOne.mockResolvedValue(memberUser);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(service.deleteAgent('agent-1', 'org-1', 'member-user'))
         .rejects.toThrow(ForbiddenException);

@@ -34,6 +34,7 @@ import { GatewayInfoController } from './gateway-info.controller';
 
 import { ToolsModule } from '../tools/tools.module';
 import { AgentsModule } from '../agents/agents.module';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 // Channel adapters (migrated from interfaces module)
 import { ChatWidgetAdapter } from './channels/adapters/chat-widget.adapter';
@@ -70,6 +71,7 @@ import { ChannelEventsController } from './channels/channel-events.controller';
     JwtModule,
     ToolsModule,
     forwardRef(() => AgentsModule),
+    AuthorizationModule,
   ],
   providers: [
     GatewaysService,

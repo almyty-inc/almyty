@@ -10,6 +10,7 @@ import { AgentExecution } from '../../entities/agent-execution.entity';
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { AgentAuditService } from './agent-audit.service';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 export interface AgentSearchFilters {
   search?: string;
@@ -87,6 +88,7 @@ export class AgentsService {
     private userRepository: Repository<User>,
     private auditService: AgentAuditService,
     private readonly validation: AgentValidationHelper,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async createAgent(
@@ -496,27 +498,24 @@ export class AgentsService {
 
   /**
    * Check if user has permission to modify an agent.
-   * Admin/owner roles can modify any agent. Members can only modify agents they created.
+   * Creator can always modify their own agent. Otherwise the
+   * AccessPolicyService two-tier rule applies: org owner/admin pass,
+   * team-scoped agents require team lead, others are denied.
    */
   private async checkAgentPermission(
     agent: Agent,
     organizationId: string,
     userId: string,
-    permission: string,
+    _permission: string,
   ): Promise<void> {
     // If the user created the agent, they can always modify it
     if (agent.createdBy === userId) {
       return;
     }
 
-    // Otherwise check if they have the admin-level permission
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: ['organizationMemberships'],
-    });
-
-    if (!user?.hasPermissionInOrganization(organizationId, permission)) {
-      throw new ForbiddenException('You do not have permission to modify this agent');
+    const decision = await this.accessPolicy.canAccess({ id: userId }, agent, 'manage');
+    if (!decision.allowed) {
+      throw new ForbiddenException(decision.reason);
     }
   }
 
