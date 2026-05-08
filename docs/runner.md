@@ -91,10 +91,7 @@ New package; ships as `@almyty/runner` with a `bin: almyty-runner`.
 
 ## Cluster 4: Demo + docs
 
-`examples/runner-demo/`. The orchestrator is testable end-to-end without LLMs: every external dependency (workspace, subagent CLI) is an injection point. The CLI entrypoint wires real implementations; `test/demo.spec.ts` wires stubs. Both run the same orchestrator.
-
-The stub-driven test pins the cross-vendor wedge claim: workspace lifecycle, three subagent calls in order with the right CLI per step, files actually modified by the implementation step, verdict captured by the reviewer.
-
+The walkthrough lives at [docs/runner-demo.md](runner-demo.md): start a runner with `almyty runner start`, watch capabilities auto-publish in `/tools`, execute `runner.info` and `shell.exec` from the UI, see output stream back. Every step exercises the routing path end-to-end (cluster 5.5).
 ## Cluster 5: Runner + Workspace UI (`frontend/src/pages`)
 
 Five pages, all conforming to the existing UI patterns in the repo (React Router v6, TanStack Query inline in pages, shadcn/ui components, custom `<table>`s with the same header/Card/empty-state shape `agents.tsx` uses):
