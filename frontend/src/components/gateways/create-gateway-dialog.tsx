@@ -23,6 +23,7 @@ import {
 import { agentsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import type { Agent } from '@/types'
+import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 
 interface CreateGatewayDialogProps {
   open: boolean
@@ -64,6 +65,7 @@ export function CreateGatewayDialog({
   createGatewayMutation,
 }: CreateGatewayDialogProps) {
   const [kind, setKind] = useState<'tool' | 'agent'>('tool')
+  const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const { currentOrganization } = useOrganizationStore()
 
   // Fetch agents for agent-kind gateways
@@ -93,6 +95,8 @@ export function CreateGatewayDialog({
       ...data,
       kind,
       agentId: kind === 'agent' ? createForm.getValues('agentId') : undefined,
+      visibility: visibility.visibility,
+      teamId: visibility.teamId,
     })
   }
 
@@ -245,6 +249,14 @@ export function CreateGatewayDialog({
               id="description"
               placeholder="Enter gateway description"
               {...createForm.register('description')}
+            />
+          </div>
+
+          <div className="border-t pt-4">
+            <VisibilityField
+              organizationId={currentOrganization?.id ?? ''}
+              value={visibility}
+              onChange={setVisibility}
             />
           </div>
 
