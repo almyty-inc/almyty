@@ -73,6 +73,7 @@ import { UnifiedEndpointModule } from './modules/gateways/unified-endpoint.modul
 import { MailModule } from './modules/mail/mail.module';
 import { VersionsModule } from './modules/versions/versions.module';
 import { RunnerModule } from './modules/runner/runner.module';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
 
 // Configuration
@@ -220,7 +221,8 @@ import { databaseConfig } from './config/database.config';
     MemoryModule,
     FilesModule,
     AuditLogModule,
-    VersionsModule,
+    RunnerModule,
+    ApprovalsModule,
     RunnerModule,
     WorkspaceModule,
     ToolHubModule,
