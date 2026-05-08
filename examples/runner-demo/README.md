@@ -2,6 +2,12 @@
 
 Cross-vendor multi-agent workflow on a single runner: a planner, an implementer, and a reviewer, each running through a different CLI agent (potentially using different models), all editing the same codebase.
 
+## Show this to a person
+
+The walkthrough lives at [DEMO.md](DEMO.md). It covers prerequisites, the three commands a real user runs (auth, start runner, run demo), what to watch for in the transcript, the variations (single-CLI fallback, no-CLI install hint, different model per step), and troubleshooting.
+
+The version below is the dev quick-start; for the actual show-and-tell, read DEMO.md.
+
 ## Run
 
 ```
