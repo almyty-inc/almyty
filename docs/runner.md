@@ -98,7 +98,7 @@ Five pages, all conforming to the existing UI patterns in the repo (React Router
 
 - `/runners` — list page with state badge, OS/arch, last heartbeat, capacity, labels. Polls every 15s (half the runner heartbeat interval). Empty state links to the start-a-runner page.
 - `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results), active workspaces, recent (terminated) workspaces. Deregister button only renders when state is `offline`; uses the existing `AlertDialog` confirmation pattern.
-- `/runners/new` — the adoption page. Three-step ordered list: name + labels form, exact `almyty-runner start --name X --label k=v` command (with copy buttons) ready to paste on the target machine, then a "Waiting for first heartbeat..." indicator that polls the runners list and navigates to the runner detail when the runner appears with state online and a recent heartbeat. Validates name uniqueness against existing runners and the `[a-zA-Z0-9_-]{1,64}` regex the backend enforces.
+- `/runners/new` — the adoption page. Three-step ordered list: name + labels form, exact `npx @almyty/runner start --name X --label k=v` command (with copy buttons) ready to paste on the target machine, then a "Waiting for first heartbeat..." indicator that polls the runners list and navigates to the runner detail when the runner appears with state online and a recent heartbeat. Validates name uniqueness against existing runners and the `[a-zA-Z0-9_-]{1,64}` regex the backend enforces.
 - `/workspaces` — list page with status filter (active by default), per-runner filter, cwd substring search.
 - `/workspaces/:id` — detail page with metadata, close reason (only for terminated workspaces), Release action (only for active).
 

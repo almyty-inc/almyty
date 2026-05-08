@@ -70,7 +70,7 @@ describe('RunnerNewPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Run these on the target machine/i)).toBeInTheDocument()
     })
-    expect(screen.getByText('almyty-runner start --name my-laptop --label env=dev')).toBeInTheDocument()
+    expect(screen.getByText('npx @almyty/runner start --name my-laptop --label env=dev')).toBeInTheDocument()
   })
 
   it('transitions from waiting to a navigate() call once the runner heartbeats', async () => {
