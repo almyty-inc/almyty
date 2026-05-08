@@ -226,7 +226,7 @@ describe('OrganizationsController', () => {
       const result = await controller.updateTeam('org-1', 'team-1', updateDto, mockRequest);
 
       expect(result).toEqual({ success: true, data: mockTeam, message: 'Team updated successfully' });
-      expect(organizationsService.updateTeam).toHaveBeenCalledWith('org-1', 'team-1', updateDto);
+      expect(organizationsService.updateTeam).toHaveBeenCalledWith('org-1', 'team-1', updateDto, 'user-1');
     });
   });
 
@@ -241,7 +241,7 @@ describe('OrganizationsController', () => {
       const result = await controller.addMemberToTeam('org-1', 'team-1', memberData, mockRequest);
 
       expect(result).toEqual({ success: true, data: mockTeamMember, message: 'Member added to team successfully' });
-      expect(organizationsService.addTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'user-2');
+      expect(organizationsService.addTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'user-2', undefined, 'user-1');
     });
   });
 
@@ -256,7 +256,7 @@ describe('OrganizationsController', () => {
       const result = await controller.updateTeamMemberRole('org-1', 'team-1', 'user-2', roleData, mockRequest);
 
       expect(result).toEqual({ success: true, data: mockTeamMember, message: 'Team member role updated successfully' });
-      expect(organizationsService.updateTeamMemberRole).toHaveBeenCalledWith('org-1', 'team-1', 'user-2', 'admin');
+      expect(organizationsService.updateTeamMemberRole).toHaveBeenCalledWith('org-1', 'team-1', 'user-2', 'admin', 'user-1');
     });
   });
 
@@ -269,7 +269,7 @@ describe('OrganizationsController', () => {
       const result = await controller.removeMemberFromTeam('org-1', 'team-1', 'user-2', mockRequest);
 
       expect(result).toEqual({ success: true, data: undefined, message: 'Member removed from team successfully' });
-      expect(organizationsService.removeTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'user-2');
+      expect(organizationsService.removeTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'user-2', 'user-1');
     });
   });
 
@@ -281,7 +281,7 @@ describe('OrganizationsController', () => {
       const result = await controller.deleteTeam('org-1', 'team-1', mockRequest);
 
       expect(result).toEqual({ success: true, data: undefined, message: 'Team deleted successfully' });
-      expect(organizationsService.deleteTeam).toHaveBeenCalledWith('org-1', 'team-1');
+      expect(organizationsService.deleteTeam).toHaveBeenCalledWith('org-1', 'team-1', 'user-1');
     });
   });
 

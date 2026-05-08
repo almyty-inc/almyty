@@ -346,12 +346,80 @@ export class OrganizationsService {
     return team;
   }
 
+  /**
+   * RBAC for team mutations. Two paths grant access:
+   *
+   *   1. Caller is an `owner` or `admin` of the organization the team
+   *      belongs to. They can do anything (rename, delete, member CRUD).
+   *   2. Caller has TeamRole.LEAD on this specific team (= 'team_admin'
+   *      in the GitHub-style two-tier model). They can rename the team
+   *      and manage members within it, but cannot delete the team.
+   *
+   * The action scope distinguishes (1) from (2):
+   *   - 'rename' / 'manage-members' — team_admin allowed
+   *   - 'delete' — org admin/owner only
+   *
+   * Throws ForbiddenException on denial. Caller is expected to have
+   * already proven the team belongs to the org via assertTeamInOrg().
+   *
+   * Implemented inline (rather than via AccessPolicyService) to avoid
+   * a forwardRef cycle between OrganizationsModule and AuthModule.
+   */
+  private async assertCanManageTeam(
+    actingUserId: string,
+    organizationId: string,
+    teamId: string,
+    action: 'rename' | 'manage-members' | 'delete',
+  ): Promise<void> {
+    // Org-level grant: owner/admin of THIS org can do anything.
+    const orgMembership = await this.userOrganizationRepository.findOne({
+      where: { userId: actingUserId, organizationId, isActive: true },
+    });
+
+    if (
+      orgMembership &&
+      (orgMembership.role === OrganizationRole.OWNER ||
+        orgMembership.role === OrganizationRole.ADMIN)
+    ) {
+      return;
+    }
+
+    // 'delete' is gated to org admin/owner only — team_admin cannot
+    // delete its own team. The RolesGuard normally catches this at
+    // the controller level, but enforce it here too in case an internal
+    // caller hits the service with a non-admin user.
+    if (action === 'delete') {
+      throw new ForbiddenException('Only organization admins or owners can delete teams');
+    }
+
+    // Team-level grant: lead of THIS team passes for rename + member
+    // management. Lookup is scoped by teamId, so a lead of team A
+    // cannot affect team B even within the same org.
+    const teamMembership = await this.userTeamRepository.findOne({
+      where: { userId: actingUserId, teamId, isActive: true },
+    });
+
+    if (teamMembership && teamMembership.role === TeamRole.LEAD) {
+      return;
+    }
+
+    throw new ForbiddenException('Insufficient privileges to manage this team');
+  }
+
   async updateTeam(
     organizationId: string,
     teamId: string,
     updateData: { name?: string; description?: string },
+    actingUserId?: string,
   ): Promise<Team> {
     const team = await this.assertTeamInOrg(teamId, organizationId);
+
+    // RBAC: org owner/admin OR team_admin (lead) of THIS team.
+    // actingUserId is optional so internal callers (no HTTP request)
+    // bypass the check; HTTP callers always pass it.
+    if (actingUserId) {
+      await this.assertCanManageTeam(actingUserId, organizationId, teamId, 'rename');
+    }
 
     if (updateData.name) {
       team.name = updateData.name;
@@ -377,8 +445,13 @@ export class OrganizationsService {
     teamId: string,
     userId: string,
     role: TeamRole = TeamRole.MEMBER,
+    actingUserId?: string,
   ): Promise<void> {
     await this.assertTeamInOrg(teamId, organizationId);
+
+    if (actingUserId) {
+      await this.assertCanManageTeam(actingUserId, organizationId, teamId, 'manage-members');
+    }
 
     // Check if user is already a team member
     const existingMembership = await this.userTeamRepository.findOne({
@@ -403,8 +476,13 @@ export class OrganizationsService {
     teamId: string,
     userId: string,
     newRole: string,
+    actingUserId?: string,
   ): Promise<void> {
     await this.assertTeamInOrg(teamId, organizationId);
+
+    if (actingUserId) {
+      await this.assertCanManageTeam(actingUserId, organizationId, teamId, 'manage-members');
+    }
 
     const teamMembership = await this.userTeamRepository.findOne({
       where: { teamId, userId },
@@ -427,8 +505,13 @@ export class OrganizationsService {
     organizationId: string,
     teamId: string,
     userId: string,
+    actingUserId?: string,
   ): Promise<void> {
     await this.assertTeamInOrg(teamId, organizationId);
+
+    if (actingUserId) {
+      await this.assertCanManageTeam(actingUserId, organizationId, teamId, 'manage-members');
+    }
 
     const membership = await this.userTeamRepository.findOne({
       where: { teamId, userId },
@@ -441,8 +524,17 @@ export class OrganizationsService {
     await this.userTeamRepository.remove(membership);
   }
 
-  async deleteTeam(organizationId: string, teamId: string): Promise<void> {
+  async deleteTeam(
+    organizationId: string,
+    teamId: string,
+    actingUserId?: string,
+  ): Promise<void> {
     const team = await this.assertTeamInOrg(teamId, organizationId);
+
+    // RBAC: org owner/admin only — team_admin cannot delete a team.
+    if (actingUserId) {
+      await this.assertCanManageTeam(actingUserId, organizationId, teamId, 'delete');
+    }
 
     // Default 'Everyone' team is a permanent fixture per migration
     // 1745330000000 — every org member is auto-joined to it. Refuse
