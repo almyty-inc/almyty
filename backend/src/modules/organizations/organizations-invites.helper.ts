@@ -9,6 +9,7 @@ import { UserOrganization } from '../../entities/user-organization.entity';
 import { MailService } from '../mail/mail.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { InviteUserDto } from './dto/invite-user.dto';
+import { TeamMembershipHelper } from './team-membership.helper';
 /**
  * Invitation flow extracted from OrganizationsService:
  * inviteUser, acceptInvite, getInviteDetails. The original service
@@ -29,6 +30,7 @@ export class OrganizationsInvitesHelper {
     private readonly mailService: MailService,
     @Inject(forwardRef(() => GatewaysService))
     private readonly gatewaysService: GatewaysService,
+    private readonly teamMembershipHelper: TeamMembershipHelper,
   ) {}
 
   async inviteUser(organizationId: string, inviteUserDto: InviteUserDto, invitedBy: string): Promise<{ inviteSent: boolean }> {
@@ -161,6 +163,7 @@ export class OrganizationsInvitesHelper {
       membership.inviteAccepted = true;
       membership.inviteToken = null;
       await this.userOrganizationRepository.save(membership);
+      await this.teamMembershipHelper.joinDefaultTeam(membership.organizationId, userId, membership.role);
 
       return {
         organizationId: membership.organizationId,
@@ -211,6 +214,7 @@ export class OrganizationsInvitesHelper {
           isActive: true,
         });
         await this.userOrganizationRepository.save(newMembership);
+        await this.teamMembershipHelper.joinDefaultTeam(org.id, userId, invite.role);
 
         // Remove from pending
         const updated = pendingInvites.filter((i: any) => i.inviteToken !== token);
