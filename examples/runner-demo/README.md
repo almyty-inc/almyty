@@ -1,39 +1,40 @@
 # almyty runner demo
 
-Cross-vendor multi-agent workflow on a single runner: a planner, an implementer, and a reviewer, each running through a different CLI agent (potentially using different models), all editing the same codebase.
+A live, end-to-end script that drives the routing path: spawn a runner CLI, wait for the SaaS to publish its capabilities as Tool rows, execute those tools through the SaaS, watch the response come back.
 
-## Show this to a person
+## The watchable version
 
-The walkthrough lives at [DEMO.md](DEMO.md). It covers prerequisites, the three commands a real user runs (auth, start runner, run demo), what to watch for in the transcript, the variations (single-CLI fallback, no-CLI install hint, different model per step), and troubleshooting.
+[DEMO.md](DEMO.md) is the show-and-tell walkthrough. It explains what to click in the UI, what to watch for, and how the routing path threads SaaS → runner → SaaS on every dispatch.
 
-The version below is the dev quick-start; for the actual show-and-tell, read DEMO.md.
+## The script
 
-## Run
+`src/demo.ts` does the same thing without the browser. Useful for regression testing, CI smoke checks, or just verifying the path on a fresh machine in 30 seconds:
 
 ```
+npx @almyty/auth login        # one-time per machine
 npm install
 npm run demo
 ```
 
-The demo:
+The script:
 
-1. Detects which agent CLIs are installed locally (claude, codex, gemini, aider).
-2. Copies `fixtures/sample-app` to a fresh temp dir.
-3. Runs three subagent calls in order: plan, implement, review.
-4. Prints the transcript with section headers showing model and CLI per step.
-5. Cleans up the temp dir.
+1. Resolves your credentials from `~/.almyty/credentials.json`.
+2. Spawns `npx --yes @almyty/runner start --name almyty-demo-<rand>` as a child process.
+3. Polls `GET /runners` until the runner reports `state=online`.
+4. Polls `GET /organizations/:org/tools` until the capabilities (`runner.info` + `shell.exec`) appear.
+5. Executes `runner.info` against the SaaS — that's a live RPC to your laptop.
+6. Creates a workspace at `cwd=$PWD`.
+7. Executes `shell.exec` with `command: uname -a && echo "almyty:$(date)"` against that workspace.
+8. Releases the workspace and SIGTERMs the runner subprocess.
 
-If no agent CLI is installed, prints install commands and exits 0.
-If only one is installed, runs all three steps through it.
+Every step exercises the routing path end-to-end. There is no local subprocess orchestration here — the demo proves that **the SaaS can dispatch tools onto your laptop through the runner**.
 
-## Test
+## Variations
 
-```
-npm test
-```
+- **Reuse a running runner.** If you already have a runner up via `almyty runner start`, set `ALMYTY_DEMO_RUNNER_NAME=<your-runner-name>` and the demo skips the spawn step.
+- **Different command.** Set `ALMYTY_DEMO_COMMAND='your shell command here'` to override the default `uname -a` invocation.
+- **Different backend.** The demo follows whatever URL is in your stored credentials. Set `ALMYTY_URL` + `ALMYTY_TOKEN` env vars to override (for staging or local dev).
 
-Runs the orchestrator end-to-end against a stub subagent. Verifies the workspace lifecycle, that all three steps fire in order with the right CLI, that the implementation step actually modifies files in cwd, and that the verdict is captured. No LLM calls; the test exercises the orchestrator's contract.
+## What this proves
 
-## What this demo proves
-
-The wedge: an almyty workflow can orchestrate any CLI coding agent with any model, on the user's machine, in one coherent workspace. Anthropic's subagents only call Anthropic models; OpenAI's only call OpenAI's. With a runner, you can have a Claude planner hand work to a Codex implementer hand work back to a Claude reviewer. Or any other combination, in any sequence, scoped to one workspace on one machine.
+The wedge: any tool minted on a runner is a normal Tool row in the catalog. MCP gateways list it; the agent builder can use it; OpenAI-compat routes function calls into it; the UI executes it. The runner is just *another* execution backend behind the same `Tool.execute` contract — same as HTTP, GraphQL, SDK, custom code. The difference is the executor dispatches over a Streamable HTTP envelope to a process running on your machine instead of opening an outbound HTTP connection.
