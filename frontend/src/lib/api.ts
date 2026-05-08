@@ -362,6 +362,8 @@ export const gatewaysApi = {
 
   testConnection: (id: string) => apiPost(`/gateways/${id}/health-check`),
 
+  testChannelConnection: (id: string) => apiPost(`/gateways/${id}/test-connection`),
+
   getMetrics: (id: string, params?: any) => apiGet(`/gateways/${id}/stats`, { params }),
 
   // Auth configuration

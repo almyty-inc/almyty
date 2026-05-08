@@ -29,6 +29,10 @@ import {
   type SecurityTarget,
 } from '@/components/gateways/detail/tools-tab'
 import { GatewayEventsTab } from '@/components/gateways/detail/events-tab'
+import {
+  ChannelConfigForm,
+  isChannelType,
+} from '@/components/gateways/detail/channel-config-form'
 
 export function GatewayDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -128,6 +132,20 @@ export function GatewayDetailPage() {
     },
     onError: (err: any) => {
       errorNotif('Failed to update gateway', err.response?.data?.message || 'Please try again.')
+    },
+  })
+
+  // Channel-config mutation: PATCHes only the configuration object.
+  // Used by the per-channel-type credential form.
+  const updateChannelConfigMutation = useMutation({
+    mutationFn: (configuration: Record<string, any>) =>
+      gatewaysApi.update(id!, { configuration }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['gateway', id] })
+      success('Channel configuration saved', 'Credentials have been encrypted and stored.')
+    },
+    onError: (err: any) => {
+      errorNotif('Failed to save channel config', err.response?.data?.message || 'Please try again.')
     },
   })
 
@@ -275,6 +293,26 @@ export function GatewayDetailPage() {
         onCopySuccess={success}
         onCopyError={errorNotif}
       />
+
+      {/* Channel-type credential form (per-adapter token / webhook / OAuth fields) */}
+      {isChannelType(gateway.type) && (
+        <ChannelConfigForm
+          gateway={gateway}
+          type={gateway.type}
+          isSaving={updateChannelConfigMutation.isPending}
+          onSave={async (cfg) => {
+            await updateChannelConfigMutation.mutateAsync(cfg)
+          }}
+          onTestConnection={async () => {
+            const res: any = await gatewaysApi.testChannelConnection(gateway.id)
+            // backend returns { success, data: { ok, detail } }; apiPost
+            // already unwraps `data` so we usually get { ok, detail }
+            // directly, but tolerate both shapes here.
+            const data = res?.data ?? res
+            return { ok: !!data?.ok, detail: data?.detail || '' }
+          }}
+        />
+      )}
 
       {/* Authentication */}
       {gateway.type !== 'skills' && (
