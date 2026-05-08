@@ -60,6 +60,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { ImportExternalA2ADialog } from '@/components/agents/import-external-a2a-dialog'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
+import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { Agent, ExternalAgent } from '@/types'
 
 interface AgentTemplate {
@@ -120,6 +121,8 @@ export function AgentsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [showTemplates, setShowTemplates] = useState(true)
   const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
+  const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
+  const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
   // Fetch agents
   const { data: agentsData, isLoading, isError, error: agentsError, refetch: refetchAgents } = useQuery({
@@ -158,7 +161,7 @@ export function AgentsPage() {
 
   const agents: Agent[] = Array.isArray(agentsData) ? agentsData : []
 
-  const filteredAgents = agents.filter((agent) => {
+  const filteredAgents = filterByTeamVisibility(agents as any[], teamFilter).filter((agent: Agent) => {
     const matchesSearch = !searchQuery ||
       agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (agent.description || '').toLowerCase().includes(searchQuery.toLowerCase())
@@ -421,6 +424,11 @@ export function AgentsPage() {
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
+                  <TeamFilter
+                    organizationId={currentOrganization?.id}
+                    value={teamFilter}
+                    onChange={setTeamFilter}
+                  />
                 </div>
               )}
               <table className="w-full">
@@ -451,6 +459,11 @@ export function AgentsPage() {
                       <div className="flex items-center gap-1.5">
                         <span className="font-medium text-primary hover:underline">{agent.name}</span>
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0">Native</Badge>
+                        <VisibilityBadge
+                          visibility={(agent as any).visibility}
+                          teamId={(agent as any).teamId}
+                          teamLookup={teamLookup}
+                        />
                       </div>
                       <div className="text-xs text-muted-foreground truncate max-w-[300px]">
                         {agent.description || 'No description'}

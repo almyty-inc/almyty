@@ -362,6 +362,8 @@ export const gatewaysApi = {
 
   testConnection: (id: string) => apiPost(`/gateways/${id}/health-check`),
 
+  testChannelConnection: (id: string) => apiPost(`/gateways/${id}/test-connection`),
+
   getMetrics: (id: string, params?: any) => apiGet(`/gateways/${id}/stats`, { params }),
 
   // Auth configuration
@@ -379,6 +381,10 @@ export const gatewaysApi = {
   getSkills: (id: string) => apiGet(`/gateways/${id}/skills`),
   getCliBundle: (id: string, format: 'bash' | 'node' = 'bash') => apiGet(`/gateways/${id}/cli-bundle`, { params: { format } }),
   getSdk: (id: string) => apiGet(`/gateways/${id}/sdk`),
+
+  // Channel events log (per-gateway observability surface)
+  listEvents: (gatewayId: string, limit?: number) =>
+    apiGet(`/gateways/${gatewayId}/events${limit ? `?limit=${limit}` : ''}`),
 }
 
 // External Agents API
