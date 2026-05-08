@@ -63,3 +63,4 @@ backend/.env
 
 # Agent harness leftovers (Cursor / agented / OpenAI / Anthropic auto-generated guidance files)
 AGENTS.md
+.agents/
