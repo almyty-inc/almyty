@@ -9,6 +9,7 @@ import { Api } from '../../entities/api.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 describe('CredentialsService', () => {
   let service: CredentialsService;
@@ -79,6 +80,12 @@ describe('CredentialsService', () => {
             computeChanges: jest.fn().mockReturnValue([]),
             findAll: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 }),
             getResourceHistory: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: AccessPolicyService,
+          useValue: {
+            canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
           },
         },
       ],

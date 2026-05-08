@@ -42,6 +42,7 @@ import { GraphQLParserService } from '../../modules/schema-parser/parsers/graphq
 import { SOAPParserService } from '../../modules/schema-parser/parsers/soap-parser.service';
 import { ProtobufParserService } from '../../modules/schema-parser/parsers/protobuf-parser.service';
 import { AuditLogService } from '../../modules/audit-log/audit-log.service';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { JsonSchemaTranslatorService } from '../../modules/json-schema-translator/json-schema-translator.service';
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
@@ -205,6 +206,7 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
         { provide: getRepositoryToken(ToolExecution), useValue: ds.getRepository(ToolExecution) },
         { provide: getRepositoryToken(JsonSchema), useValue: ds.getRepository(JsonSchema) },
         { provide: DataSource, useValue: ds },
+        { provide: AccessPolicyService, useValue: { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } },
       ],
     }).compile();
 

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -16,6 +17,7 @@ import { Gateway } from '../../entities/gateway.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { batchAsync } from '../../common/utils/batch-async';
 
 @Injectable()
@@ -36,6 +38,7 @@ export class CredentialsService {
     @InjectRepository(Agent)
     private agentRepository: Repository<Agent>,
     private readonly auditLogService: AuditLogService,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   // ──────────────────────────────────────────────
@@ -149,6 +152,7 @@ export class CredentialsService {
       metadata?: Record<string, any>;
     },
     organizationId: string,
+    userId?: string,
   ): Promise<Credential> {
     const credential = await this.credentialRepository.findOne({
       where: { id, organizationId },
@@ -158,6 +162,15 @@ export class CredentialsService {
       throw new NotFoundException('Credential not found');
     }
 
+    // Authorization: org owner/admin always, team-scoped requires team lead.
+    // userId may be undefined for legacy callers; skip the check in that
+    // case so the migration doesn't break existing internal callers.
+    if (userId) {
+      const decision = await this.accessPolicy.canAccess({ id: userId }, credential, 'manage');
+      if (!decision.allowed) {
+        throw new ForbiddenException(decision.reason);
+      }
+    }
     if (data.name !== undefined) credential.name = data.name;
     if (data.description !== undefined) credential.description = data.description;
     if (data.type !== undefined) credential.type = data.type as any;
@@ -183,13 +196,21 @@ export class CredentialsService {
     return this.maskCredential(saved);
   }
 
-  async delete(id: string, organizationId: string): Promise<void> {
+  async delete(id: string, organizationId: string, userId?: string): Promise<void> {
     const credential = await this.credentialRepository.findOne({
       where: { id, organizationId },
     });
 
     if (!credential) {
       throw new NotFoundException('Credential not found');
+    }
+
+    // Authorization: org owner/admin always, team-scoped requires team lead.
+    if (userId) {
+      const decision = await this.accessPolicy.canAccess({ id: userId }, credential, 'manage');
+      if (!decision.allowed) {
+        throw new ForbiddenException(decision.reason);
+      }
     }
 
     await this.credentialRepository.remove(credential);
