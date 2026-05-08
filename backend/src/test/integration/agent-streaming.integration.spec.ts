@@ -6,6 +6,7 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
 import { AgentRuntimeBuilders } from '../../modules/agents/agent-runtime-builders';
 import { AgentCollaborationHelper } from '../../modules/agents/agent-collaboration.helper';
 import { AgentBuiltInToolsHelper } from '../../modules/agents/agent-builtin-tools.helper';
+import { ApprovalsService } from '../../modules/approvals/approvals.service';
 import { AgentRuntimeEventsHelper } from '../../modules/agents/agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from '../../modules/agents/agent-runtime-misc.helper';
 import { AgentStepProcessor } from '../../modules/agents/agent-step-processor';
@@ -223,6 +224,7 @@ describe('Agent Streaming (integration)', () => {
         AgentRuntimeBuilders,
         AgentCollaborationHelper,
         AgentBuiltInToolsHelper,
+        { provide: ApprovalsService, useValue: { create: jest.fn().mockResolvedValue({ id: 'a-stub' }) } },
         AgentHeartbeatHelper,
         AgentRuntimeEventsHelper,
         AgentRuntimeMiscHelper,

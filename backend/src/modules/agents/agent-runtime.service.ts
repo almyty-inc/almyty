@@ -25,6 +25,7 @@ import { AgentBuiltInToolsHelper } from './agent-builtin-tools.helper';
 import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from './agent-runtime-misc.helper';
 import { AgentStepProcessor } from './agent-step-processor';
+import { ApprovalsService } from '../approvals/approvals.service';
 
 /**
  * Built-in tool definitions that the agent runtime injects for autonomous agents.
@@ -78,6 +79,18 @@ export const BUILT_IN_TOOLS = {
       required: ['query'],
     },
   },
+  request_approval: {
+    name: 'request_approval',
+    description: 'Pause execution and request human approval before proceeding. The run halts at WAITING_APPROVAL until an authorized user approves or rejects via the UI. On approval, this tool resolves with { approved: true, decision_reason }; on rejection the run terminates as cancelled.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', description: 'Why this action requires human approval (shown to the approver).' },
+        payload: { type: 'object', description: 'Optional structured details about what would happen on approval (the action plan, tool args, diff, etc.).' },
+      },
+      required: ['reason'],
+    },
+  },
 };
 
 /** Interval between orphaned-emitter sweeps. */
@@ -91,6 +104,14 @@ export class AgentRuntimeService implements OnModuleInit {
     // Wire the emitter cleanup hook so terminal events flush
     // collaboration-temp agents tied to the run.
     this.events.setCleanupHook((runId) => this.misc.cleanupTemporaryAgents(runId));
+    // HITL: when an approval is decided, resume or terminate the run.
+    this.approvals.on('approval.decided', async (approval: any) => {
+      try {
+        await this.handleApprovalDecided(approval);
+      } catch (err: any) {
+        this.logger.error(`approval.decided handler failed for run ${approval?.runId}: ${err?.message ?? err}`);
+      }
+    });
   }
 
   constructor(
@@ -125,6 +146,8 @@ export class AgentRuntimeService implements OnModuleInit {
     readonly misc: AgentRuntimeMiscHelper,
     @Inject(forwardRef(() => AgentStepProcessor))
     readonly processor: AgentStepProcessor,
+    @Inject(forwardRef(() => ApprovalsService))
+    readonly approvals: ApprovalsService,
   ) {}
 
   /**
@@ -388,6 +411,41 @@ export class AgentRuntimeService implements OnModuleInit {
   // ── Delegations to AgentHeartbeatHelper
   enableHeartbeat(...args: Parameters<AgentHeartbeatHelper['enableHeartbeat']>) { return this.heartbeat.enableHeartbeat(...args); }
   disableHeartbeat(...args: Parameters<AgentHeartbeatHelper['disableHeartbeat']>) { return this.heartbeat.disableHeartbeat(...args); }
+
+  /**
+   * React to an approval decision. On 'approved' the run is moved
+   * back to RUNNING and re-queued for the next step. On 'rejected'
+   * /'expired' the run is cancelled with the decision_reason.
+   */
+  private async handleApprovalDecided(approval: {
+    runId: string;
+    status: 'approved' | 'rejected' | 'expired';
+    decisionReason: string | null;
+    toolCallId: string | null;
+  }): Promise<void> {
+    const run = await this.runRepository.findOne({ where: { id: approval.runId } });
+    if (!run) return;
+    if (run.status !== AgentRunStatus.WAITING_APPROVAL) return;
+
+    if (approval.status === 'approved') {
+      run.status = AgentRunStatus.RUNNING;
+      await this.runRepository.save(run);
+      await this.runtimeQueue.add('next-step', { runId: run.id }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      });
+      this.logger.log(`run ${run.id} resumed after approval`);
+    } else {
+      run.status = AgentRunStatus.CANCELLED;
+      run.error = approval.status === 'expired'
+        ? 'approval expired'
+        : `approval rejected${approval.decisionReason ? `: ${approval.decisionReason}` : ''}`;
+      await this.runRepository.save(run);
+      this.logger.log(`run ${run.id} cancelled after approval ${approval.status}`);
+    }
+  }
 }
 
 /**
