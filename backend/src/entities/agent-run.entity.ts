@@ -15,6 +15,8 @@ export enum AgentRunStatus {
   FAILED = 'failed',
   CANCELLED = 'cancelled',
   TIMEOUT = 'timeout',
+  /** Run paused on a HITL approval gate. Resumes on approve, terminates on reject. */
+  WAITING_APPROVAL = 'waiting_approval',
 }
 
 export enum AgentMode {

@@ -6,6 +6,7 @@ import { Queue } from 'bull';
 import { Organization } from '../../entities/organization.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { Credential } from '../../entities/credential.entity';
+import { Tool } from '../../entities/tool.entity';
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
 import { CredentialsModule } from '../credentials/credentials.module';
 
@@ -44,6 +45,7 @@ import { ZepBackend } from './canonical/backends/zep.backend';
 import { SupermemoryBackend } from './canonical/backends/supermemory.backend';
 import { VertexMemoryBankBackend } from './canonical/backends/vertex-memory-bank.backend';
 import { MemoryRouter } from './canonical/memory-router.service';
+import { MemoryCapabilityPublisher } from './canonical/memory-capability.publisher';
 import { BackendCredentialsResolver } from './canonical/backend-credentials.resolver';
 import { DocumentChunkerService } from './canonical/document-chunker.service';
 
@@ -69,6 +71,7 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
       Organization,
       LlmProvider,
       Credential,
+      Tool,
     ]),
     BullModule.registerQueue(
       { name: EMBEDDING_QUEUE_NAME },
@@ -100,9 +103,10 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
     MemoryRouter,
     BackendCredentialsResolver,
     DocumentChunkerService,
+    DocumentChunkerService,
+    MemoryCapabilityPublisher,
   ],
-  controllers: [CanonicalMemoryController],
-  exports: [CanonicalMemoryService, EmbeddingService, MemoryRouter, DocumentChunkerService],
+  exports: [CanonicalMemoryService, EmbeddingService, MemoryRouter, DocumentChunkerService, MemoryCapabilityPublisher],
 })
 export class MemoryModule implements OnApplicationBootstrap {
   constructor(

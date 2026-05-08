@@ -49,6 +49,7 @@ import { ToolScriptExecutor } from './executors/tool-script.executor';
 import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
 import { ToolStatsHelper } from './tool-stats.helper';
 import { RunnerCallService, RUNNER_CALL_ERRORS, RunnerCallError } from '../runner/runner-call.service';
+import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -77,6 +78,7 @@ export class ToolExecutorService {
     private readonly cacheRateLimit: ToolCacheRateLimitHelper,
     private readonly stats: ToolStatsHelper,
     private readonly runnerCalls: RunnerCallService,
+    private readonly memoryService: CanonicalMemoryService,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -228,6 +230,8 @@ export class ToolExecutorService {
       // would invoke executors that have no idea what to do with it.
       if (tool.runnerConfig) {
         result = await this.executeRunnerCall(tool, parameters, options);
+      } else if (tool.memoryConfig) {
+        result = await this.executeMemoryCall(tool, parameters, options);
       } else if (tool.llmConfig?.providerId && tool.llmConfig?.promptTemplate) {
         result = await this.scriptExecutor.executeLlm(tool, parameters, options);
       } else if (tool.sdkConfig) {
@@ -474,6 +478,96 @@ export class ToolExecutorService {
         };
       }
       throw err;
+    }
+  }
+
+  /**
+   * Dispatch a memory-backed tool. Maps the tool's memoryConfig
+   * (method + scope) onto a CanonicalMemoryService call. The tool's
+   * input parameters carry the per-call args (content/query/tags/...);
+   * scope comes from the Tool row, not the caller.
+   */
+  private async executeMemoryCall(
+    tool: Tool,
+    parameters: Record<string, any>,
+    options: ToolExecutionOptions,
+  ): Promise<ToolExecutionResult> {
+    const startTime = Date.now();
+    const cfg = tool.memoryConfig!;
+    try {
+      const actor = { user_id: options.userId };
+      let data: any;
+      switch (cfg.method) {
+        case 'store': {
+          if (typeof parameters.content !== 'string' || !parameters.content.trim()) {
+            throw new BadRequestException("memory.store requires non-empty 'content'");
+          }
+          data = await this.memoryService.put({
+            mode: cfg.mode ?? 'memory',
+            scope: cfg.scope,
+            content: parameters.content,
+            tier: parameters.tier,
+            tags: parameters.tags,
+            confidence: parameters.confidence,
+            ttl_seconds: parameters.ttl_seconds,
+          } as any, actor);
+          break;
+        }
+        case 'recall': {
+          if (typeof parameters.query !== 'string' || !parameters.query.trim()) {
+            throw new BadRequestException("memory.recall requires non-empty 'query'");
+          }
+          data = await this.memoryService.search({
+            scope: cfg.scope,
+            query: parameters.query,
+            top_k: parameters.top_k,
+            tags: parameters.tags,
+            tier: parameters.tier,
+          } as any);
+          break;
+        }
+        case 'list': {
+          data = await this.memoryService.list({
+            scope: cfg.scope,
+            tier: parameters.tier,
+            tags: parameters.tags,
+            limit: parameters.limit,
+            cursor: parameters.cursor ?? null,
+          } as any);
+          break;
+        }
+        case 'search': {
+          if (typeof parameters.query !== 'string' || !parameters.query.trim()) {
+            throw new BadRequestException("memory.search requires non-empty 'query'");
+          }
+          data = await this.memoryService.search({
+            scope: cfg.scope,
+            query: parameters.query,
+            top_k: parameters.top_k,
+            fts_only: true,
+          } as any);
+          break;
+        }
+        default:
+          throw new BadRequestException(`unknown memory method: ${cfg.method}`);
+      }
+      return {
+        success: true,
+        data,
+        executionTime: Date.now() - startTime,
+        cached: false,
+        rateLimited: false,
+        retryCount: 0,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message ?? String(err),
+        executionTime: Date.now() - startTime,
+        cached: false,
+        rateLimited: false,
+        retryCount: 0,
+      };
     }
   }
 

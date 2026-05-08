@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { AgentRun } from '../../../entities/agent-run.entity';
+import { ChannelEvent } from '../../../entities/channel-event.entity';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { BaseAdapter, NormalizedMessage } from './adapters/base.adapter';
 import { ChatWidgetAdapter } from './adapters/chat-widget.adapter';
@@ -35,6 +36,8 @@ export class ChannelGatewayService {
     private readonly gatewayRepository: Repository<Gateway>,
     @InjectRepository(AgentRun)
     private readonly runRepository: Repository<AgentRun>,
+    @InjectRepository(ChannelEvent)
+    private readonly eventRepository: Repository<ChannelEvent>,
     @Inject(forwardRef(() => AgentRuntimeService))
     private readonly agentRuntimeService: AgentRuntimeService,
     private readonly chatWidgetAdapter: ChatWidgetAdapter,
@@ -102,12 +105,13 @@ export class ChannelGatewayService {
     const isValid = await adapter.verifyWebhook(body, headers, gateway.configuration);
     if (!isValid) {
       this.logger.warn(`Webhook signature verification failed for gateway: ${gateway.id}`);
+      await this.logEvent(gateway, 'inbound', 'failed', body, 'signature verification failed');
       return;
     }
 
     // Normalize inbound message
     const normalized: NormalizedMessage = adapter.normalizeInbound(body);
-
+    await this.logEvent(gateway, 'inbound', 'received', this.truncatePayload(body));
     // Find existing run for this thread, or start a new one
     let run: AgentRun | null = null;
 
@@ -184,12 +188,18 @@ export class ChannelGatewayService {
               : finalRun.output?.text) || 'No response';
 
           const formatted = adapter.formatOutbound({ text: responseText });
-          await adapter.sendResponse(gateway.configuration, formatted, {
-            threadId: normalized.threadId,
-            channel: normalized.metadata?.channel,
-            userId: normalized.userId,
-          });
-        } catch (err) {
+          try {
+            await adapter.sendResponse(gateway.configuration, formatted, {
+              threadId: normalized.threadId,
+              channel: normalized.metadata?.channel,
+              userId: normalized.userId,
+            });
+            await this.logEvent(gateway, 'outbound', 'processed', this.truncatePayload(formatted), null, runId);
+          } catch (sendErr: any) {
+            await this.logEvent(gateway, 'outbound', 'failed', this.truncatePayload(formatted), sendErr?.message ?? String(sendErr), runId);
+            throw sendErr;
+          }
+        } catch (err: any) {
           this.logger.error(`Failed to send response for run ${runId}: ${err.message}`);
         }
       }
@@ -309,6 +319,205 @@ export class ChannelGatewayService {
       metaGatewayId !== gatewayId
     ) {
       throw new NotFoundException('Run not found');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event log helpers
+  // ---------------------------------------------------------------------------
+
+  private static readonly MAX_PAYLOAD_BYTES = 16 * 1024;
+
+  /**
+   * Persist a single channel event. Always returns; never throws — a
+   * failure to log must not break the actual channel flow.
+   */
+  private async logEvent(
+    gateway: Gateway,
+    direction: 'inbound' | 'outbound',
+    status: 'received' | 'processed' | 'failed',
+    payload: Record<string, any> | null,
+    errorMessage?: string | null,
+    runId?: string,
+  ): Promise<void> {
+    try {
+      await this.eventRepository.save(this.eventRepository.create({
+        organizationId: gateway.organizationId,
+        gatewayId: gateway.id,
+        channelType: gateway.type,
+        direction,
+        status,
+        payload,
+        errorMessage: errorMessage ?? null,
+        runId: runId ?? null,
+      }));
+    } catch (err: any) {
+      this.logger.warn(`Failed to log channel event: ${err.message ?? err}`);
+    }
+  }
+
+  /**
+   * Defensive truncation: a webhook payload can be arbitrarily large
+   * (image attachments, full message history, etc.). We keep the JSON
+   * shape but drop the deep contents past MAX_PAYLOAD_BYTES so the
+   * audit table doesn't bloat. Truncated rows note the original size.
+   */
+  private truncatePayload(payload: any): Record<string, any> | null {
+    if (!payload) return null;
+    try {
+      const json = JSON.stringify(payload);
+      if (json.length <= ChannelGatewayService.MAX_PAYLOAD_BYTES) {
+        return JSON.parse(json);
+      }
+      return {
+        _truncated: true,
+        _originalBytes: json.length,
+        preview: json.slice(0, ChannelGatewayService.MAX_PAYLOAD_BYTES),
+      };
+    } catch {
+      return { _unserializable: true };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event log API for the controller
+  // ---------------------------------------------------------------------------
+
+  /**
+   * List events for a gateway (most recent first). Bounded by `limit`
+   * (default 100, max 500). Caller is responsible for verifying the
+   * caller has access to the gateway before calling this.
+   */
+  async listEventsForGateway(
+    gatewayId: string,
+    limit = 100,
+  ): Promise<ChannelEvent[]> {
+    return this.eventRepository.find({
+      where: { gatewayId },
+      order: { createdAt: 'DESC' },
+      take: Math.min(limit, 500),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Test connection — exercises the adapter against the saved config
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Best-effort connectivity check. Each adapter type has different
+   * "is the config plausibly correct" signals; we run a cheap call
+   * (e.g. Slack's auth.test, Telegram's getMe) and return the result
+   * without persisting anything. Caller must verify gateway access
+   * (RBAC) before invoking.
+   */
+  async testConnection(gateway: Gateway): Promise<{ ok: boolean; detail: string }> {
+    const adapter = this.getAdapter(gateway.type);
+    const cfg = gateway.configuration || {};
+    try {
+      switch (gateway.type) {
+        case GatewayType.SLACK: {
+          if (!cfg.bot_token) return { ok: false, detail: 'bot_token not configured' };
+          const res = await fetch('https://slack.com/api/auth.test', {
+            headers: { Authorization: `Bearer ${cfg.bot_token}` },
+          });
+          const json: any = await res.json().catch(() => ({}));
+          return json?.ok ? { ok: true, detail: `connected as ${json.user || '?'}` }
+                          : { ok: false, detail: json?.error || 'auth.test failed' };
+        }
+        case GatewayType.TELEGRAM: {
+          if (!cfg.bot_token) return { ok: false, detail: 'bot_token not configured' };
+          const res = await fetch(`https://api.telegram.org/bot${cfg.bot_token}/getMe`);
+          const json: any = await res.json().catch(() => ({}));
+          return json?.ok ? { ok: true, detail: `bot @${json?.result?.username || '?'}` }
+                          : { ok: false, detail: json?.description || 'getMe failed' };
+        }
+        case GatewayType.DISCORD: {
+          if (!cfg.bot_token) return { ok: false, detail: 'bot_token not configured' };
+          const res = await fetch('https://discord.com/api/v10/users/@me', {
+            headers: { Authorization: `Bot ${cfg.bot_token}` },
+          });
+          if (!res.ok) return { ok: false, detail: `users/@me ${res.status}` };
+          const json: any = await res.json().catch(() => ({}));
+          return { ok: true, detail: `bot ${json?.username || '?'}` };
+        }
+        case GatewayType.WHATSAPP: {
+          if (!cfg.twilio_account_sid || !cfg.twilio_auth_token) {
+            return { ok: false, detail: 'twilio_account_sid + twilio_auth_token required' };
+          }
+          const auth = Buffer.from(`${cfg.twilio_account_sid}:${cfg.twilio_auth_token}`).toString('base64');
+          const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${cfg.twilio_account_sid}.json`, {
+            headers: { Authorization: `Basic ${auth}` },
+          });
+          return res.ok ? { ok: true, detail: 'twilio creds ok' }
+                        : { ok: false, detail: `twilio ${res.status}` };
+        }
+        case GatewayType.MICROSOFT_TEAMS: {
+          if (!cfg.bot_id || !cfg.bot_password) return { ok: false, detail: 'bot_id + bot_password required' };
+          const tokenRes = await fetch('https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              grant_type: 'client_credentials',
+              client_id: cfg.bot_id,
+              client_secret: cfg.bot_password,
+              scope: 'https://api.botframework.com/.default',
+            }).toString(),
+          });
+          const json: any = await tokenRes.json().catch(() => ({}));
+          return json.access_token ? { ok: true, detail: 'access token issued' }
+                                   : { ok: false, detail: json.error_description || 'token request failed' };
+        }
+        case GatewayType.GOOGLE_CHAT:
+        case GatewayType.IRC:
+        case GatewayType.WEBHOOK: {
+          if (!cfg.webhook_url && !cfg.callback_url) {
+            return { ok: false, detail: 'webhook_url not configured' };
+          }
+          // For these, the only check we can perform without sending
+          // is a HEAD probe to the configured endpoint (best-effort).
+          const url = cfg.webhook_url || cfg.callback_url;
+          try {
+            const res = await fetch(url, { method: 'HEAD' });
+            return { ok: res.status < 500, detail: `HEAD ${res.status}` };
+          } catch (e: any) {
+            return { ok: false, detail: `unreachable: ${e?.message ?? e}` };
+          }
+        }
+        case GatewayType.SIGNAL: {
+          if (!cfg.api_url || !cfg.phone_number) return { ok: false, detail: 'api_url + phone_number required' };
+          try {
+            const res = await fetch(`${cfg.api_url}/v1/about`);
+            return res.ok ? { ok: true, detail: 'signal-cli reachable' }
+                          : { ok: false, detail: `about ${res.status}` };
+          } catch (e: any) {
+            return { ok: false, detail: `unreachable: ${e?.message ?? e}` };
+          }
+        }
+        case GatewayType.MATRIX: {
+          if (!cfg.homeserver_url || !cfg.access_token) return { ok: false, detail: 'homeserver_url + access_token required' };
+          const res = await fetch(`${cfg.homeserver_url}/_matrix/client/r0/account/whoami`, {
+            headers: { Authorization: `Bearer ${cfg.access_token}` },
+          });
+          const json: any = await res.json().catch(() => ({}));
+          return res.ok ? { ok: true, detail: `matrix user ${json?.user_id || '?'}` }
+                        : { ok: false, detail: json?.errcode || `whoami ${res.status}` };
+        }
+        case GatewayType.EMAIL: {
+          if (!cfg.resend_api_key) return { ok: false, detail: 'resend_api_key not configured' };
+          const res = await fetch('https://api.resend.com/domains', {
+            headers: { Authorization: `Bearer ${cfg.resend_api_key}` },
+          });
+          return res.ok ? { ok: true, detail: 'resend api key valid' }
+                        : { ok: false, detail: `resend ${res.status}` };
+        }
+        case GatewayType.CHAT_WIDGET:
+          // No outbound — widget polls. Always reachable.
+          return { ok: true, detail: 'widget mode (no outbound to test)' };
+        default:
+          return { ok: false, detail: `no test-connection check for type ${gateway.type}` };
+      }
+    } catch (err: any) {
+      return { ok: false, detail: err?.message ?? String(err) };
     }
   }
 }

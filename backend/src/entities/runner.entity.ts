@@ -118,6 +118,18 @@ export class Runner {
   @Column()
   organizationId: string;
 
+  /**
+   * Team-scoping. visibility='org' (default) is org-wide; 'team'
+   * requires teamId. Constraint enforced at DB level via
+   * 1745340000000-TeamScopingPerEntity. Listing filters use
+   * AccessPolicyService.applyListFilter.
+   */
+  @Column({ type: 'varchar', length: 8, default: 'org' })
+  visibility: 'org' | 'team';
+
+  @Column({ type: 'uuid', nullable: true })
+  teamId: string | null;
+
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ownerUserId' })
   owner?: User;

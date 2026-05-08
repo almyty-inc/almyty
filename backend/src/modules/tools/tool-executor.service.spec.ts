@@ -23,6 +23,7 @@ import { SdkCodeAssemblerService } from './node-sandbox/sdk-code-assembler.servi
 import { GrpcCallerService } from './executors/grpc-caller.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { RunnerCallService } from '../runner/runner-call.service';
+import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import axios from 'axios';
 
 jest.mock('axios', () => {
@@ -188,6 +189,14 @@ describe('ToolExecutorService', () => {
           useValue: {
             dispatch: jest.fn().mockResolvedValue({ ok: true, result: null }),
             getPendingCount: jest.fn().mockReturnValue(0),
+          },
+        },
+        {
+          provide: CanonicalMemoryService,
+          useValue: {
+            put: jest.fn().mockResolvedValue({}),
+            search: jest.fn().mockResolvedValue([]),
+            list: jest.fn().mockResolvedValue({ items: [], cursor: null, total: 0 }),
           },
         },
       ],
