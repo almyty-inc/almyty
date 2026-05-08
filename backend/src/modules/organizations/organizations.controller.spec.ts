@@ -23,6 +23,8 @@ describe('OrganizationsController', () => {
       getTeams: jest.fn(),
       createTeam: jest.fn(),
       updateTeam: jest.fn(),
+      deleteTeam: jest.fn(),
+      getTeamMembers: jest.fn(),
       addTeamMember: jest.fn(),
       updateTeamMemberRole: jest.fn(),
       removeTeamMember: jest.fn(),
@@ -268,6 +270,34 @@ describe('OrganizationsController', () => {
 
       expect(result).toEqual({ success: true, data: undefined, message: 'Member removed from team successfully' });
       expect(organizationsService.removeTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'user-2');
+    });
+  });
+
+  describe('deleteTeam', () => {
+    it('should delete team', async () => {
+      const mockRequest = { user: { id: 'user-1' } };
+      organizationsService.deleteTeam.mockResolvedValue(undefined as any);
+
+      const result = await controller.deleteTeam('org-1', 'team-1', mockRequest);
+
+      expect(result).toEqual({ success: true, data: undefined, message: 'Team deleted successfully' });
+      expect(organizationsService.deleteTeam).toHaveBeenCalledWith('org-1', 'team-1');
+    });
+  });
+
+  describe('getTeamMembers', () => {
+    it('should return team members', async () => {
+      const mockRequest = { user: { id: 'user-1' } };
+      const mockMembers = [
+        { id: 'tm-1', userId: 'user-2', email: 'a@example.com', role: 'lead' },
+        { id: 'tm-2', userId: 'user-3', email: 'b@example.com', role: 'member' },
+      ];
+      organizationsService.getTeamMembers.mockResolvedValue(mockMembers as any);
+
+      const result = await controller.getTeamMembers('org-1', 'team-1', mockRequest);
+
+      expect(result).toEqual({ success: true, data: mockMembers, message: 'Team members retrieved successfully' });
+      expect(organizationsService.getTeamMembers).toHaveBeenCalledWith('org-1', 'team-1');
     });
   });
 });

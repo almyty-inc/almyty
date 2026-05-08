@@ -172,6 +172,30 @@ export class OrganizationsController {
     return { success: true, data, message: 'Team updated successfully' };
   }
 
+  @Delete(':organizationId/teams/:teamId')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Delete a team' })
+  async deleteTeam(
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
+    @Param('teamId', ParseUUIDPipe) teamId: string,
+    @Request() req: any,
+  ) {
+    const data = await this.organizationsService.deleteTeam(organizationId, teamId);
+    return { success: true, data, message: 'Team deleted successfully' };
+  }
+
+  @Get(':organizationId/teams/:teamId/members')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'List team members' })
+  async getTeamMembers(
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
+    @Param('teamId', ParseUUIDPipe) teamId: string,
+    @Request() req: any,
+  ) {
+    const data = await this.organizationsService.getTeamMembers(organizationId, teamId);
+    return { success: true, data, message: 'Team members retrieved successfully' };
+  }
+
   @Post(':organizationId/teams/:teamId/members')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Add member to team' })
