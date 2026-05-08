@@ -22,6 +22,7 @@ import { NodeSandboxService } from './node-sandbox/node-sandbox.service';
 import { SdkCodeAssemblerService } from './node-sandbox/sdk-code-assembler.service';
 import { GrpcCallerService } from './executors/grpc-caller.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { RunnerCallService } from '../runner/runner-call.service';
 import axios from 'axios';
 
 jest.mock('axios', () => {
@@ -180,6 +181,13 @@ describe('ToolExecutorService', () => {
             computeChanges: jest.fn().mockReturnValue([]),
             findAll: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 }),
             getResourceHistory: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: RunnerCallService,
+          useValue: {
+            dispatch: jest.fn().mockResolvedValue({ ok: true, result: null }),
+            getPendingCount: jest.fn().mockReturnValue(0),
           },
         },
       ],

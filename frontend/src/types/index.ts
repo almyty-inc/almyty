@@ -342,6 +342,12 @@ export interface Tool {
   dependencies?: Record<string, string> | null
   npmRegistry?: any | null
   sdkConfig?: any | null
+  runnerConfig?: {
+    runnerId: string
+    runnerName: string
+    method: string
+    requiresWorkspace: boolean
+  } | null
 }
 
 export interface ToolTemplate {

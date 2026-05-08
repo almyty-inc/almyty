@@ -1,34 +1,23 @@
-# Live demo: cross-vendor multi-agent loop on your laptop
+# Live demo: SaaS-driven runner with auto-published capabilities
 
-A 5-minute walkthrough you can show a colleague. Three CLI agents (a planner, an implementer, a reviewer), three different LLM providers (or one with three different models if that's what you have installed), all editing the same codebase on the same machine in one workspace.
-
-If you only want to verify the wiring, the stub-driven Vitest spec at `test/demo.spec.ts` does it without LLM calls. This file is for the version a person can watch.
+A 5-minute walkthrough you can show a colleague. Start a runner on your laptop with one command, open the almyty UI, and execute a shell command on your laptop **from the browser** — through the SaaS, dispatched over Streamable HTTP, executed locally, output streamed back into the UI.
 
 ## What you'll see
 
 1. A runner registers your laptop with almyty in one terminal command.
-2. The almyty UI shows the runner online with detected binaries.
-3. A demo script copies a tiny Node app to a temp dir, then dispatches three subagents:
-   - **Plan** (default: Claude Code CLI, Anthropic) — outputs a 2-step plan to add a `/health` endpoint.
-   - **Implement** (default: Codex CLI, OpenAI) — modifies `index.js` and writes a passing test.
-   - **Review** (default: Claude Code CLI, Anthropic) — runs `git diff` + `npm test` and outputs PASS or FAIL.
-4. Each step prints to your terminal with a section header showing the CLI used. The final transcript shows the diff and the verdict.
+2. The almyty UI shows the runner online with detected binaries on **/runners**.
+3. The runner automatically publishes capabilities: `runner.<name>.runner.info` and `runner.<name>.shell.exec` appear in **/tools** within seconds, each tagged with a cyan "runner: <name>" badge.
+4. Open `runner.info` → **Test Tool** → click Execute. Output (OS, CPU, memory, detected binaries) streams back from your laptop into the UI.
+5. Create a workspace on the runner. Open `shell.exec` → pick the workspace → enter a command (`uname -a`, `ls -la`, whatever you want). Click Execute. Output comes back through the same envelope channel.
 
-The runner picks the CLI per step from what's installed on your machine. If you only have one of claude / codex / gemini / aider installed, all three steps go through that one CLI (with different model flags). If you have none, the script prints install commands and exits cleanly.
+This is the routing path end-to-end: the SaaS dispatches a tool, the backend looks up the tool's `runnerConfig`, `RunnerCallService` pushes a `request` envelope onto the runner's Streamable HTTP session, your runner executes, and the response envelope flows back to the executor and into the UI.
 
 ## Prerequisites
 
-- **Node 20+** (for the runner and the demo script).
-- **An almyty account.** If you're running this against staging or your local dev backend, log in to the corresponding URL first.
-- **At least one agent CLI on PATH.** Any one of:
-  ```
-  npm i -g @anthropic-ai/claude-code
-  npm i -g @openai/codex-cli
-  npm i -g @google/gemini-cli
-  pip install aider-chat
-  ```
-  More than one is better — that's where the cross-vendor part of the demo shines.
-- **A real LLM API key for each agent CLI you installed.** The runner doesn't proxy LLM calls; the agent CLIs make them directly with whatever credentials you have configured for them (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.).
+- **Node 20+**.
+- **An almyty account.** Use the SaaS at the URL you normally use (production, staging, or local dev — the runner config picks up the API URL from the SaaS you logged into).
+
+That's it. No agent CLIs, no API keys, no clones. The runner ships node-pty + node and that's enough for `shell.exec`.
 
 ## Step 1: Authenticate
 
@@ -36,13 +25,22 @@ The runner picks the CLI per step from what's installed on your machine. If you 
 npx @almyty/auth login
 ```
 
-Opens a browser. One-time per machine. The runner and every other almyty CLI pick this credential up automatically.
+Or, if you already have the umbrella installed:
+
+```
+almyty login
+```
+
+Opens a browser. One-time per machine. The runner picks the credential up from `~/.almyty/credentials.json` automatically.
 
 ## Step 2: Start the runner
 
+Either of these works — the umbrella delegates `runner` to `@almyty/runner`, so they produce identical output:
+
 ```
-npm i -g @almyty/runner
-almyty-runner start --name laptop --label env=demo
+almyty runner start --name laptop --label env=demo
+# or, without installing the umbrella globally:
+npx @almyty/runner start --name laptop --label env=demo
 ```
 
 You'll see the daemon log:
@@ -55,81 +53,92 @@ registered as <runner-id>
 runner online; press ctrl-c to exit
 ```
 
-Leave this terminal open. The daemon stays alive listening for jobs.
+Leave this terminal open. The daemon stays alive listening for envelopes.
 
-You can also drive this step from the UI: open **Runners → Start a runner** in the almyty app. The page generates the exact command, copies on click, and waits for the heartbeat — once the daemon registers, it auto-redirects you to the runner detail.
+You can also drive this step from the UI: open **Runners → Start a runner**. The page generates the exact command, copies on click, and waits for the heartbeat. Once the daemon registers, it auto-redirects you to the runner detail.
 
-## Step 3: Run the demo
+## Step 3: See the capabilities appear
 
-In a second terminal:
+Open **/runners/<your-runner>** in the UI. The page now has a **Published capabilities** card listing:
 
-```
-git clone https://github.com/frane/almyty.git
-cd almyty/examples/runner-demo
-npm install
-npm run demo
-```
+- `runner.info` — global metadata (OS, arch, binaries).
+- `shell.exec` — workspace-scoped shell command.
 
-The script:
-1. Detects which agent CLIs are installed locally.
-2. Copies `fixtures/sample-app` to a fresh temp directory (your real fixture stays clean).
-3. Picks plan / implement / review CLIs from what's available, prefering Claude Code → Codex → Claude Code if all are installed.
-4. Streams the transcript to your terminal.
-5. Cleans up the temp dir at the end.
+Click `runner.info` and you land on **/tools/<id>**. The detail page shows a cyan "Runner-backed tool" panel: name, method, "workspace: not required". Click **Test Tool** → **Execute Tool**. Within a second or two:
 
-Expected transcript (with claude + codex installed):
-
-```
-# fixture copied to /Users/you/almyty/examples/runner-demo/.almyty-demo-1700000000000
-# almyty runner demo
-# cwd: <temp-dir>
-# CLIs: plan=claude implement=codex review=claude
-
-## plan (claude)
-1. Add a route handler for GET /health to index.js that returns
-   { status: 'ok' } with a 200 status code.
-2. Add a test in test-health.js using node:test that asserts
-   GET /health returns 200.
-
-## implement (codex)
-Implemented /health endpoint and added a passing test.
-# files modified: ./index.js, ./test-health.js
-
-## review (claude)
-Diff looks correct, tests would pass. Verdict: PASS
-
-# verdict: PASS
+```json
+{
+  "ok": true,
+  "result": {
+    "os": "darwin",
+    "arch": "arm64",
+    "hostname": "your-laptop",
+    "cpuCount": 10,
+    "memoryMb": 16384,
+    "binaries": { "node": "v22.10.0", "git": "2.45.2", ... }
+  }
+}
 ```
 
-That's the wedge. Three CLIs from two vendors edited the same codebase in one coherent workspace.
+That's a live RPC to your laptop, dispatched through the SaaS.
+
+## Step 4: Run a workspace-scoped command
+
+Back on the runner detail page, scroll to **Workspaces** and create one (or use any existing active workspace). The default cwd is your home directory; pick whatever directory you want shell.exec to run in.
+
+Open **/tools/<id>** for `runner.<name>.shell.exec`. The Test Tool tab now shows a **Workspace** picker (red asterisk — required). Pick the workspace you just created. In the parameters area:
+
+- `command`: `ls -la`
+
+Click Execute. The result panel:
+
+```json
+{
+  "ok": true,
+  "result": {
+    "exitCode": 0,
+    "stdout": "total 32\ndrwxr-xr-x  ...\n",
+    "stderr": "",
+    "durationMs": 18
+  }
+}
+```
+
+Try a few:
+- `command: uname -a` — reports kernel info.
+- `command: git -C . log --oneline -5` — last 5 commits in the workspace dir.
+- `command: node -e "console.log(2+2)"` — proves it really is your machine.
+
+Each one is a full request/response cycle: SaaS → backend → Streamable HTTP envelope → runner → executor → response envelope → backend → UI.
 
 ## What just happened, technically
 
-- **Step 2's runner** registered with the almyty backend and opened a Streamable HTTP connection. Heartbeat every 30s.
-- **Step 3's demo** is a local-only orchestrator (it doesn't dispatch through the backend; that lands in a follow-up cluster). It calls each agent CLI as a subprocess, captures stdout, and snapshots cwd mtimes before/after to report which files changed.
-- The backend's runner state machine ticked the runner from `registered` to `online` on first heartbeat. If you'd created a workspace via the UI or API and pinned a job to the runner, it would have been dispatched over the Streamable HTTP envelope flow built in cluster 1; the demo skips that for now to keep the moving parts visible.
+- **Step 2's runner** registered with the backend over `POST /runners/register`. The backend wrote a `Runner` row, then `RunnerCapabilityPublisher` minted two `Tool` rows (one for `runner.info`, one for `shell.exec`) with `runnerConfig` pointing at the runner.
+- **Step 2's runner** also opened a Streamable HTTP session on `GET /mcp/streamable` for server→client envelopes, and the backend recorded the session in `runner_sessions`.
+- **Step 3's Execute Tool** click hit `POST /organizations/:org/tools/:id/execute`, which loaded the Tool, saw `runnerConfig`, and called `RunnerCallService.dispatch(runnerId, 'runner.info', {})`.
+- `RunnerCallService` minted a uuid v7 correlation id, pushed a `request` envelope onto the streamable session via `transport.push`, and registered a pending entry keyed by the id.
+- The runner saw the envelope on its SSE stream, dispatched `runner.info` locally (`packages/runner/src/handlers.ts`), and POSTed a `response` envelope back. The transport emitted it; `RunnerCallService` matched the id and resolved the pending promise.
+- `ToolExecutorService.executeRunnerCall` wrapped the response in a `ToolExecutionResult` and the controller returned it to the UI.
 
 ## Stop the runner
 
-In the runner terminal: `ctrl-c` for clean shutdown (the daemon sends a `runner.draining` event and exits). Or from the UI / another terminal:
+In the runner terminal: `ctrl-c` for clean shutdown (the daemon sends a `runner.draining` event and exits). Or from another terminal:
 
 ```
-almyty-runner stop
+almyty runner stop
 ```
 
-In the UI, the runner state goes to `draining` and then `offline` after the grace window.
+In the UI, the runner state goes to `draining` and then `offline` after the grace window. The published Tool rows disappear automatically (capability publisher unregisters them on `POST /runners/:id/unregister`).
 
 ## Variations to try
 
-- **Single-CLI fallback**: uninstall all but one agent CLI, re-run the demo. The transcript shows all three steps going through the same CLI; per-step model flags would differ in a real workflow.
-- **No CLI installed**: uninstall all of them, re-run. The demo prints the install commands and exits with status 0.
-- **Different model per step**: edit `examples/runner-demo/src/spawn-subagent.ts` to pass a `--model` flag per step. The orchestrator already threads it through — wire it from the script if you want to demo, e.g., Claude Sonnet → GPT-5 → Claude Opus.
+- **Re-register a runner.** Stop and restart with the same `--name`. The Tool rows are upserted (delete + insert on `runnerId` in one transaction); the IDs change but the published surface stays consistent.
+- **Multiple workspaces.** Create three workspaces with different `cwd`s. Each picks its own working directory; switch the workspace in the Test Tool picker to run the same command in different dirs.
+- **Drive it from a custom tool.** Build any almyty agent that calls `runner.<name>.shell.exec` as a tool. The agent runtime sees it as a normal function-calling tool — there's no runner-specific code path beyond the dispatch already wired in `ToolExecutorService`.
 
 ## Troubleshooting
 
-- **Demo prints "No agent CLI detected" but I have claude installed.**
-  Make sure `claude --version` works from the same shell. `npx @anthropic-ai/claude-code --version` doesn't count; we probe binaries on PATH only.
-- **Demo hangs on the implement step.**
-  Some CLIs prompt for confirmation before editing files. Check the agent CLI's docs for a flag like `--yes` / `--no-confirm` / `--auto-apply` and add it to `buildArgs()` in `src/spawn-subagent.ts`.
-- **Verdict came back FAIL.**
-  That's a real signal — the implementer's diff didn't pass the test. Run `git diff` in the temp dir before it cleans up to inspect what happened. The temp dir path is in the transcript's first line.
+- **Tool list doesn't show the capabilities.** Hard-refresh `/tools`. The backend mints the rows on register; the UI's React Query cache may be holding the prior empty list. The default refetch is on focus.
+- **Execute returns `runner_offline`.** Your runner's Streamable HTTP session has dropped (laptop sleep, network blip). The daemon auto-reconnects on the next heartbeat tick; retry the execute in 5 seconds.
+- **Execute returns `workspace_required`.** You called `shell.exec` without picking a workspace. The picker is required — the backend refuses dispatch otherwise. Pick one or create one from the runner detail page.
+- **Runner state stuck at `registered`.** No heartbeat received yet. The daemon heartbeats every 30s by default. Wait for the next interval, or run `almyty runner status` in a third terminal to confirm the daemon is alive.

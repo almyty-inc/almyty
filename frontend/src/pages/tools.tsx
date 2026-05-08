@@ -4,8 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench } from 'lucide-react'
-
+import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -448,15 +447,23 @@ return new Promise((resolve, reject) => {
       header: 'Name',
       cell: ({ row }: any) => {
         const tool = row.original
+        const isRunnerTool = !!tool.runnerConfig
         return (
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Code className="h-5 w-5 text-primary" />
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isRunnerTool ? 'bg-cyan-500/10' : 'bg-primary/10'}`}>
+              {isRunnerTool ? <Server className="h-5 w-5 text-cyan-500" /> : <Code className="h-5 w-5 text-primary" />}
             </div>
             <div className="max-w-[300px]">
-              <span className="font-medium text-primary hover:underline truncate" title={tool.name}>{tool.name}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-primary hover:underline truncate" title={tool.name}>{tool.name}</span>
+                {isRunnerTool && (
+                  <Badge variant="outline" className="text-cyan-600 border-cyan-300 dark:border-cyan-800 dark:text-cyan-400 shrink-0">
+                    runner: {tool.runnerConfig?.runnerName}
+                  </Badge>
+                )}
+              </div>
               <div className="text-sm text-muted-foreground truncate">
-                {tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'LLM Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
+                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'LLM Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
               </div>
             </div>
           </div>

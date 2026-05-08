@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Cpu, Trash2 } from 'lucide-react'
+import { ArrowLeft, Cpu, Trash2, Wrench } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,9 +18,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { runnersApi, workspacesApi } from '@/lib/api'
+import { runnersApi, workspacesApi, toolsApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
+import { useOrganizationStore } from '@/store/organization'
+import type { Tool } from '@/types'
 import { runnerStateVariant, workspaceStatusVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
 
 interface Runner {
@@ -73,6 +75,17 @@ export function RunnerDetailPage() {
     enabled: !!id,
     refetchInterval: RUNNER_HEARTBEAT_POLL_MS,
     select: (all) => all.filter(w => w.runnerId === id),
+  })
+
+  const { currentOrganization } = useOrganizationStore()
+  const capabilitiesQuery = useQuery<Tool[]>({
+    queryKey: ['runner-tools', id],
+    queryFn: () => toolsApi.getAll(currentOrganization?.id, { limit: 200 }),
+    enabled: !!id && !!currentOrganization,
+    select: (all: any) => {
+      const list = Array.isArray(all) ? all : (all?.data ?? [])
+      return list.filter((t: any) => t.runnerConfig?.runnerId === id) as Tool[]
+    },
   })
 
   const unregisterMutation = useMutation({
@@ -211,6 +224,46 @@ export function RunnerDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wrench className="h-4 w-4" />
+            Published capabilities
+            {capabilitiesQuery.data && capabilitiesQuery.data.length > 0 && (
+              <Badge variant="outline" className="ml-1">{capabilitiesQuery.data.length}</Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {capabilitiesQuery.isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : capabilitiesQuery.data && capabilitiesQuery.data.length > 0 ? (
+            <div className="space-y-2">
+              {capabilitiesQuery.data.map((tool) => (
+                <Link
+                  key={tool.id}
+                  to={`/tools/${tool.id}`}
+                  className="flex items-center justify-between border rounded-md px-3 py-2 hover:bg-muted/50 transition-colors"
+                >
+                  <div>
+                    <code className="text-sm font-mono font-medium">{tool.runnerConfig?.method}</code>
+                    <p className="text-xs text-muted-foreground mt-0.5">{tool.description ?? tool.name}</p>
+                  </div>
+                  <Badge variant={tool.runnerConfig?.requiresWorkspace ? 'default' : 'outline'} className="text-xs">
+                    {tool.runnerConfig?.requiresWorkspace ? 'workspace' : 'global'}
+                  </Badge>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No capabilities published yet. Capabilities are minted automatically when the runner registers.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>

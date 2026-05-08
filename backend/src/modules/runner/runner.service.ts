@@ -6,6 +6,7 @@ import { Runner, RunnerState, RunnerRuntimeInfo, RunnerConfig } from '../../enti
 import { RunnerSession } from '../../entities/runner-session.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { canAcceptWork, nextState, RunnerSnapshot } from './runner-state';
+import { RunnerCapabilityPublisher } from './runner-capability.publisher';
 
 /**
  * Input shape for POST /runners/register. The runner CLI sends this
@@ -47,6 +48,7 @@ export class RunnerService {
     private readonly sessions: Repository<RunnerSession>,
     @InjectRepository(Workspace)
     private readonly workspaces: Repository<Workspace>,
+    private readonly capabilities: RunnerCapabilityPublisher,
   ) {}
 
   /**
@@ -98,6 +100,11 @@ export class RunnerService {
     target.state = RunnerState.REGISTERED;
     target.lastHeartbeatAt = null;
     const saved = await this.runners.save(target);
+
+    // Publish capability tools after the runner row is durable. The
+    // publisher is idempotent (delete+insert keyed on runnerId), so
+    // re-registration after a restart correctly upserts the surface.
+    await this.capabilities.publish(saved);
 
     this.logger.log(
       `runner ${existing ? 're-registered' : 'registered'}: ` +
@@ -246,6 +253,9 @@ export class RunnerService {
 
   async unregister(runnerId: string, ownerUserId: string, organizationId: string): Promise<void> {
     const runner = await this.getOne(runnerId, ownerUserId, organizationId);
+    // Drop published capabilities first so a concurrent dispatch can't
+    // race against deletion and find a tool whose runner is gone.
+    await this.capabilities.unpublish(runner.id);
     await this.runners.remove(runner);
   }
 

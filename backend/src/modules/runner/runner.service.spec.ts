@@ -7,6 +7,7 @@ import { Runner, RunnerState, RunnerIsolationTier } from '../../entities/runner.
 import { RunnerSession } from '../../entities/runner-session.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { RunnerService } from './runner.service';
+import { RunnerCapabilityPublisher } from './runner-capability.publisher';
 import { STALE_THRESHOLD_MS, OFFLINE_GRACE_MS } from './runner-state';
 
 /**
@@ -107,12 +108,19 @@ describe('RunnerService', () => {
     };
 
 
+    const fakePublisher = {
+      publish: jest.fn().mockResolvedValue([]),
+      unpublish: jest.fn().mockResolvedValue(0),
+      listForRunner: jest.fn().mockResolvedValue([]),
+    };
+
     const moduleRef = await Test.createTestingModule({
       providers: [
         RunnerService,
         { provide: getRepositoryToken(Runner), useValue: runners },
         { provide: getRepositoryToken(RunnerSession), useValue: sessions },
         { provide: getRepositoryToken(Workspace), useValue: workspaces },
+        { provide: RunnerCapabilityPublisher, useValue: fakePublisher },
       ],
     }).compile();
     service = moduleRef.get(RunnerService);

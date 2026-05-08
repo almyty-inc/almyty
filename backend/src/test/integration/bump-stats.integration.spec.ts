@@ -220,6 +220,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         {} as any, // auditLogService
         {} as any, // cacheRateLimit
         new ToolStatsHelper(toolRepo, {} as any, {} as any),
+        {} as any, // runnerCalls
       );
     });
 
