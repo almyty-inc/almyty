@@ -379,6 +379,10 @@ export const gatewaysApi = {
   getSkills: (id: string) => apiGet(`/gateways/${id}/skills`),
   getCliBundle: (id: string, format: 'bash' | 'node' = 'bash') => apiGet(`/gateways/${id}/cli-bundle`, { params: { format } }),
   getSdk: (id: string) => apiGet(`/gateways/${id}/sdk`),
+
+  // Channel events log (per-gateway observability surface)
+  listEvents: (gatewayId: string, limit?: number) =>
+    apiGet(`/gateways/${gatewayId}/events${limit ? `?limit=${limit}` : ''}`),
 }
 
 // External Agents API
