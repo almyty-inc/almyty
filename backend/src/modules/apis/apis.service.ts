@@ -509,5 +509,20 @@ export class ApisService {
   // ── Delegations to ApisImportHelper ──
   importSchema(...args: Parameters<ApisImportHelper['importSchema']>) { return this.importHelper.importSchema(...args); }
   fetchSchemaFromUrl(...args: Parameters<ApisImportHelper['fetchSchemaFromUrl']>) { return this.importHelper.fetchSchemaFromUrl(...args); }
-  generateToolsFromApi(...args: Parameters<ApisToolGeneratorHelper['generateToolsFromApi']>) { return this.toolGen.generateToolsFromApi(...args); }
+  async generateToolsFromApi(
+    ...args: Parameters<ApisToolGeneratorHelper['generateToolsFromApi']>
+  ): ReturnType<ApisToolGeneratorHelper['generateToolsFromApi']> {
+    // Defense-in-depth: enforce the org boundary at the service layer
+    // so the tenant check is preserved even when callers wire a
+    // non-checking toolGen (e.g. a future helper refactor or a test
+    // double). The helper also performs this lookup, but doing it
+    // here means a missing org scope can never silently leak across
+    // tenants if the helper changes.
+    const [apiId, organizationId] = args;
+    const api = await this.apiRepository.findOne({ where: { id: apiId, organizationId } });
+    if (!api) {
+      throw new NotFoundException('API not found');
+    }
+    return this.toolGen.generateToolsFromApi(...args);
+  }
 }
