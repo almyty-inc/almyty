@@ -72,8 +72,14 @@ import { LocalStrategy } from '../modules/auth/strategies/local.strategy';
 import { McpOAuthController } from '../modules/mcp/controllers/mcp-oauth.controller';
 import { McpOAuthDiscoveryController } from '../modules/mcp/controllers/mcp-oauth-discovery.controller';
 import { McpOAuthService } from '../modules/mcp/services/mcp-oauth.service';
+import { McpOAuthTokensHelper } from '../modules/mcp/services/mcp-oauth-tokens.helper';
+import { McpOAuthResolveHelper } from '../modules/mcp/controllers/mcp-oauth-resolve.helper';
 import { GatewayResolverService } from '../modules/mcp/services/gateway-resolver.service';
 import { GatewayAuthService } from '../modules/gateways/gateway-auth.service';
+import { GatewayAuthValidators } from '../modules/gateways/gateway-auth-validators.helper';
+import { GatewaysStatsHelper } from '../modules/gateways/gateways-stats.helper';
+import { GatewayInitHelper } from '../modules/gateways/gateway-init.helper';
+import { AccessPolicyService } from '../common/authorization/access-policy.service';
 import { McpService } from '../modules/mcp/mcp.service';
 import { AlmytyMcpService } from '../modules/mcp/almyty-mcp.service';
 import { McpSessionService } from '../modules/mcp/mcp-session.service';
@@ -83,6 +89,8 @@ import { GatewaysService } from '../modules/gateways/gateways.service';
 
 // Organizations
 import { OrganizationsService } from '../modules/organizations/organizations.service';
+import { OrganizationsInvitesHelper } from '../modules/organizations/organizations-invites.helper';
+import { TeamMembershipHelper } from '../modules/organizations/team-membership.helper';
 
 // Audit
 import { AuditLogService } from '../modules/audit-log/audit-log.service';
@@ -195,8 +203,14 @@ const mockRedis = {
 
     // MCP
     McpOAuthService,
+    McpOAuthTokensHelper,
+    McpOAuthResolveHelper,
     GatewayResolverService,
     GatewayAuthService,
+    GatewayAuthValidators,
+    GatewaysStatsHelper,
+    GatewayInitHelper,
+    AccessPolicyService,
     AlmytyMcpService,
     McpSessionService,
 
@@ -214,6 +228,8 @@ const mockRedis = {
 
     // Organizations
     OrganizationsService,
+    OrganizationsInvitesHelper,
+    TeamMembershipHelper,
 
     // Audit (mock — just needs to exist)
     {
