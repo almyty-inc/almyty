@@ -15,6 +15,8 @@ import { credentialsApi, accessKeysApi, gatewaysApi, agentsApi } from '@/lib/api
 import { useNotifications } from '@/store/app'
 import { useCopySensitive } from '@/lib/clipboard'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
+import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
+import { useOrganizationStore } from '@/store/organization'
 import type { VaultCredential, AccessKey } from '@/types'
 
 function formatDate(date: string | null | undefined): string {
@@ -85,6 +87,8 @@ export function CredentialsPage() {
 function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen: boolean; setIsCreateOpen: (v: boolean) => void }) {
   const qc = useQueryClient(), notify = useNotifications()
   const [form, setForm] = useState({ name: '', type: 'api_key', description: '', value: '' })
+  const { currentOrganization } = useOrganizationStore()
+  const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
 
   const { data: credentialsRaw, isLoading } = useQuery({
     queryKey: ['credentials'], queryFn: () => credentialsApi.getAll(),
@@ -175,7 +179,14 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
             </>)}
             <div><label className="text-sm font-medium">Description</label>
               <Input placeholder="Optional description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
-            <Button className="w-full" disabled={!form.name || createMut.isPending} onClick={() => createMut.mutate(form)}>
+            <div className="border-t pt-4">
+              <VisibilityField
+                organizationId={currentOrganization?.id ?? ''}
+                value={visibility}
+                onChange={setVisibility}
+              />
+            </div>
+            <Button className="w-full" disabled={!form.name || createMut.isPending} onClick={() => createMut.mutate({ ...form, visibility: visibility.visibility, teamId: visibility.teamId })}>
               {createMut.isPending ? 'Creating...' : 'Create Credential'}</Button>
           </div>
         </DialogContent>
