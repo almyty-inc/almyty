@@ -160,6 +160,18 @@ export class Tool {
   @Column()
   organizationId: string;
 
+  /**
+   * Team-scoping fields. `visibility='org'` (default) is org-wide;
+   * `visibility='team'` requires `teamId` to point at a Team in the
+   * same organizationId. Constraint enforced at DB level. Listing
+   * filters use AccessPolicyService.applyListFilter.
+   */
+  @Column({ type: 'varchar', length: 8, default: 'org' })
+  visibility: 'org' | 'team';
+
+  @Column({ type: 'uuid', nullable: true })
+  teamId: string | null;
+
   @Column({ nullable: true })
   inputSchemaId: string;
 
