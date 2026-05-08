@@ -30,7 +30,7 @@
     "typeorm:migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/config/database.config.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.1",
+    "@anthropic-ai/sdk": "^0.95.0",
     "@apidevtools/swagger-parser": "^12.1.0",
     "@getzep/zep-cloud": "^3.18.0",
     "@grpc/grpc-js": "^1.14.3",
