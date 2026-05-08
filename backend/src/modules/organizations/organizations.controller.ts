@@ -160,7 +160,7 @@ export class OrganizationsController {
   }
 
   @Put(':organizationId/teams/:teamId')
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Update team' })
   async updateTeam(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
@@ -168,7 +168,16 @@ export class OrganizationsController {
     @Body() teamData: { name: string; description?: string },
     @Request() req: any
   ) {
-    const data = await this.organizationsService.updateTeam(organizationId, teamId, teamData);
+    // 'member' is permitted at the guard level so a team_admin (org
+    // role=member, team role=lead) can reach this handler. The service
+    // re-checks via assertCanManageTeam — owner/admin pass at the org
+    // level; otherwise the caller must be lead of THIS team.
+    const data = await this.organizationsService.updateTeam(
+      organizationId,
+      teamId,
+      teamData,
+      req.user.id,
+    );
     return { success: true, data, message: 'Team updated successfully' };
   }
 
@@ -180,7 +189,8 @@ export class OrganizationsController {
     @Param('teamId', ParseUUIDPipe) teamId: string,
     @Request() req: any,
   ) {
-    const data = await this.organizationsService.deleteTeam(organizationId, teamId);
+    // Deletion is gated to org owner/admin; team_admin cannot delete.
+    const data = await this.organizationsService.deleteTeam(organizationId, teamId, req.user.id);
     return { success: true, data, message: 'Team deleted successfully' };
   }
 
@@ -197,7 +207,7 @@ export class OrganizationsController {
   }
 
   @Post(':organizationId/teams/:teamId/members')
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Add member to team' })
   async addMemberToTeam(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
@@ -205,12 +215,20 @@ export class OrganizationsController {
     @Body() memberData: { userId: string; role?: string },
     @Request() req: any
   ) {
-    const data = await this.organizationsService.addTeamMember(organizationId, teamId, memberData.userId);
+    // 'member' permitted at guard level so team_admin can add members
+    // to their own team; service re-checks via assertCanManageTeam.
+    const data = await this.organizationsService.addTeamMember(
+      organizationId,
+      teamId,
+      memberData.userId,
+      undefined,
+      req.user.id,
+    );
     return { success: true, data, message: 'Member added to team successfully' };
   }
 
   @Put(':organizationId/teams/:teamId/members/:userId')
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Update team member role' })
   async updateTeamMemberRole(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
@@ -219,12 +237,18 @@ export class OrganizationsController {
     @Body() roleData: { role: string },
     @Request() req: any
   ) {
-    const data = await this.organizationsService.updateTeamMemberRole(organizationId, teamId, userId, roleData.role);
+    const data = await this.organizationsService.updateTeamMemberRole(
+      organizationId,
+      teamId,
+      userId,
+      roleData.role,
+      req.user.id,
+    );
     return { success: true, data, message: 'Team member role updated successfully' };
   }
 
   @Delete(':organizationId/teams/:teamId/members/:userId')
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Remove member from team' })
   async removeMemberFromTeam(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
@@ -232,7 +256,12 @@ export class OrganizationsController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Request() req: any
   ) {
-    const data = await this.organizationsService.removeTeamMember(organizationId, teamId, userId);
+    const data = await this.organizationsService.removeTeamMember(
+      organizationId,
+      teamId,
+      userId,
+      req.user.id,
+    );
     return { success: true, data, message: 'Member removed from team successfully' };
   }
 }
