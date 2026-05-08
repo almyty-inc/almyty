@@ -31,7 +31,9 @@ import {
 } from '@/components/ui/select'
 import { DataTable } from '@/components/ui/data-table'
 import { useNotifications } from '@/store/app'
+import { useOrganizationStore } from '@/store/organization'
 import { llmProvidersApi } from '@/lib/api'
+import { TeamFilter, useTeamLookup, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import { CreateProviderDialog } from '@/components/llm-providers/create-provider-dialog'
 import { EditProviderDialog } from '@/components/llm-providers/edit-provider-dialog'
 import { TestProviderDialog } from '@/components/llm-providers/test-provider-dialog'
@@ -63,6 +65,9 @@ export function LlmProvidersPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
+  const { currentOrganization } = useOrganizationStore()
+  const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
   // Dynamic model fetching state
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>([])
@@ -218,7 +223,7 @@ export function LlmProvidersPage() {
     }
   })
 
-  const filteredProviders = providers.filter((provider: any) => {
+  const filteredProviders = filterByTeamVisibility(providers as any[], teamFilter).filter((provider: any) => {
     const matchesSearch = provider.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (provider.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                          provider.type.toLowerCase().includes(searchQuery.toLowerCase())
@@ -247,6 +252,7 @@ export function LlmProvidersPage() {
     setAvailableModels,
     copySensitive,
     toggleProviderStatusMutation,
+    teamLookup,
   })
 
   return (
@@ -342,6 +348,11 @@ export function LlmProvidersPage() {
                   <SelectItem value="custom">Custom</SelectItem>
                 </SelectContent>
               </Select>
+              <TeamFilter
+                organizationId={currentOrganization?.id}
+                value={teamFilter}
+                onChange={setTeamFilter}
+              />
             </div>
             <DataTable
               columns={columns}

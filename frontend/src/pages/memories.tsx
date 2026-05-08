@@ -15,6 +15,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { memoriesApi, type MemoryTier, type MemoryMode } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
+import { TeamFilter, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 
 type Item = {
   id: string
@@ -57,6 +58,12 @@ export function MemoriesPage() {
   // ── browse + filters ────────────────────────────────────────────────
   const [tierFilter, setTierFilter] = useState<MemoryTier | 'all'>('all')
   const [modeFilter, setModeFilter] = useState<MemoryMode>('memory')
+  // Memory items use scope_type/scope_id (workspace) not the org/team
+  // visibility split, but the dropdown is rendered for UI parity with
+  // the other list pages. `filterByTeamVisibility` is a no-op when items
+  // lack a `visibility` field except for the 'org' filter, which would
+  // hide everything — so we only let it apply once items carry it.
+  const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
 
   const list = useQuery({
     queryKey: ['memories', 'list', orgId, modeFilter, tierFilter],
@@ -198,7 +205,8 @@ export function MemoriesPage() {
     return <div className="p-8"><EmptyState icon={Brain} title="No organization" description="Switch to an organization to view memory." /></div>
   }
 
-  const items: Item[] = (list.data?.data?.items ?? []) as Item[]
+  const rawItems: Item[] = (list.data?.data?.items ?? []) as Item[]
+  const items: Item[] = teamFilter === 'all' ? rawItems : filterByTeamVisibility(rawItems as any[], teamFilter) as Item[]
   const backends: Backend[] = (backendsQ.data?.data ?? []) as Backend[]
   const health: Record<string, { ok: boolean; latency_ms: number }> = (healthQ.data?.data ?? {}) as any
 
@@ -246,6 +254,11 @@ export function MemoriesPage() {
                 {TIERS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
               </SelectContent>
             </Select>
+            <TeamFilter
+              organizationId={orgId ?? undefined}
+              value={teamFilter}
+              onChange={setTeamFilter}
+            />
           </div>
 
           {list.isLoading ? <LoadingSpinner /> : items.length === 0 ? (

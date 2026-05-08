@@ -16,6 +16,7 @@ import {
   createSortableColumn,
 } from '@/components/ui/data-table'
 import { llmProvidersApi } from '@/lib/api'
+import { VisibilityBadge, type Team } from '@/components/ui/team-filter'
 
 import type { LlmProvider } from './schema'
 import { providerLogos, statusColors } from './provider-type-config'
@@ -32,6 +33,7 @@ interface ProviderColumnDeps {
   setAvailableModels: (models: Array<{ id: string; name: string }>) => void
   copySensitive: (value: string, label: string) => void
   toggleProviderStatusMutation: UseMutationResult<any, any, { providerId: string; status: string }, any>
+  teamLookup?: Record<string, Team>
 }
 
 export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmProvider, any>[] {
@@ -47,6 +49,7 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
     setAvailableModels,
     copySensitive,
     toggleProviderStatusMutation,
+    teamLookup,
   } = deps
 
   return [
@@ -62,7 +65,14 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
               <span className="text-lg">{providerLogos[provider.type]}</span>
             </div>
             <div>
-              <div className="font-medium">{provider.name}</div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{provider.name}</span>
+                <VisibilityBadge
+                  visibility={(provider as any).visibility}
+                  teamId={(provider as any).teamId}
+                  teamLookup={teamLookup}
+                />
+              </div>
               <div className="text-sm text-muted-foreground">{provider.description || 'No description'}</div>
             </div>
           </div>

@@ -23,6 +23,7 @@ import { ApiDetailDialog } from '@/components/apis/api-detail-dialog'
 import { ApisFilters } from '@/components/apis/apis-filters'
 import { createApisColumns } from '@/components/apis/apis-columns'
 import { CreateApiDialog } from '@/components/apis/create-api-dialog'
+import { TeamFilter, useTeamLookup, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { ImportSchemaFormData } from '@/components/apis/schema'
 
 export function ApisPage() {
@@ -60,6 +61,8 @@ export function ApisPage() {
   const [searchQuery, setSearchQuery] = React.useState('')
   const [typeFilter, setTypeFilter] = React.useState('all')
   const [healthFilter, setHealthFilter] = React.useState('all')
+  const [teamFilter, setTeamFilter] = React.useState<TeamFilterValue>('all')
+  const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
   const { data: apisData, isLoading, isError, error: apisError, refetch: refetchApis } = useQuery({
     queryKey: ['apis', currentOrganization?.id],
@@ -164,6 +167,7 @@ export function ApisPage() {
 
   const apiColumns = createApisColumns({
     allTools,
+    teamLookup,
     onEdit: (api) => {
       setEditingApi(api)
       setCreateDialogOpen(true)
@@ -194,7 +198,7 @@ export function ApisPage() {
   const operationsExtracted = apiOperations?.operations || apiOperations || []
   const operations = Array.isArray(operationsExtracted) ? operationsExtracted : []
 
-  const filteredApis = apis.filter((api: Api) => {
+  const filteredApis = filterByTeamVisibility(apis as any[], teamFilter).filter((api: Api) => {
     const matchesSearch =
       api.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (api.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -258,14 +262,23 @@ export function ApisPage() {
         <>
           <Card>
             <CardContent className="pt-6 space-y-4">
-              <ApisFilters
-                searchQuery={searchQuery}
-                onSearchQueryChange={setSearchQuery}
-                typeFilter={typeFilter}
-                onTypeFilterChange={setTypeFilter}
-                healthFilter={healthFilter}
-                onHealthFilterChange={setHealthFilter}
-              />
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <ApisFilters
+                    searchQuery={searchQuery}
+                    onSearchQueryChange={setSearchQuery}
+                    typeFilter={typeFilter}
+                    onTypeFilterChange={setTypeFilter}
+                    healthFilter={healthFilter}
+                    onHealthFilterChange={setHealthFilter}
+                  />
+                </div>
+                <TeamFilter
+                  organizationId={currentOrganization?.id}
+                  value={teamFilter}
+                  onChange={setTeamFilter}
+                />
+              </div>
 
               <DataTable
                 columns={apiColumns}

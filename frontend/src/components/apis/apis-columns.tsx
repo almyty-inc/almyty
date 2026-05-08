@@ -12,6 +12,7 @@ import {
 
 import { ApiTypeBadge } from '@/components/ui/api-type-badge'
 import { createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
+import { VisibilityBadge, type Team } from '@/components/ui/team-filter'
 import { Api, ApiAuthType, ApiHealthStatus, ApiType } from '@/types'
 
 function getApiTypeIcon(type: ApiType) {
@@ -48,6 +49,7 @@ function getAuthTypeIcon(type?: ApiAuthType) {
 
 export interface ApisColumnsOptions {
   allTools: any[]
+  teamLookup?: Record<string, Team>
   onEdit: (api: Api) => void
   onDelete: (api: Api) => void
   onViewDetails: (api: Api) => void
@@ -59,6 +61,7 @@ export interface ApisColumnsOptions {
 
 export function createApisColumns({
   allTools,
+  teamLookup,
   onEdit,
   onDelete,
   onViewDetails,
@@ -81,7 +84,14 @@ export function createApisColumns({
               <TypeIcon className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <div className="font-medium">{api.name}</div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{api.name}</span>
+                <VisibilityBadge
+                  visibility={(api as any).visibility}
+                  teamId={(api as any).teamId}
+                  teamLookup={teamLookup}
+                />
+              </div>
               <div className="text-sm text-muted-foreground">{api.baseUrl === 'internal://custom' ? 'Custom Tool' : api.baseUrl}</div>
             </div>
           </div>

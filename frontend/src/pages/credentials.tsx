@@ -13,8 +13,10 @@ import { DataTable, createActionsColumn } from '@/components/ui/data-table'
 import { cn } from '@/lib/utils'
 import { credentialsApi, accessKeysApi, gatewaysApi, agentsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { useOrganizationStore } from '@/store/organization'
 import { useCopySensitive } from '@/lib/clipboard'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
+import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { VaultCredential, AccessKey } from '@/types'
 
 function formatDate(date: string | null | undefined): string {
@@ -84,12 +86,16 @@ export function CredentialsPage() {
 
 function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen: boolean; setIsCreateOpen: (v: boolean) => void }) {
   const qc = useQueryClient(), notify = useNotifications()
+  const { currentOrganization } = useOrganizationStore()
   const [form, setForm] = useState({ name: '', type: 'api_key', description: '', value: '' })
+  const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
+  const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
   const { data: credentialsRaw, isLoading } = useQuery({
     queryKey: ['credentials'], queryFn: () => credentialsApi.getAll(),
   })
   const credentials: VaultCredential[] = Array.isArray(credentialsRaw) ? credentialsRaw : (credentialsRaw as any)?.credentials || []
+  const visibleCredentials = filterByTeamVisibility(credentials as any[], teamFilter)
   const createMut = useMutation({
     mutationFn: (data: any) => credentialsApi.create(data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setIsCreateOpen(false); setForm({ name: '', type: 'api_key', description: '', value: '' }); notify.success('Created', 'Credential created') },
@@ -105,7 +111,14 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center"><Shield className="h-4 w-4 text-primary" /></div>
         <div>
-          <span className="font-medium">{row.original.name}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{row.original.name}</span>
+            <VisibilityBadge
+              visibility={row.original.visibility}
+              teamId={row.original.teamId}
+              teamLookup={teamLookup}
+            />
+          </div>
           {row.original.description && <div className="text-xs text-muted-foreground truncate max-w-[200px]">{row.original.description}</div>}
         </div>
       </div>
@@ -143,8 +156,15 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   return (
     <>
       <Card>
-        <CardContent className="pt-6">
-          <DataTable columns={columns} data={credentials} loading={isLoading} searchKey="name" searchPlaceholder="Search credentials..." />
+        <CardContent className="pt-6 space-y-4">
+          <div className="flex items-center justify-end">
+            <TeamFilter
+              organizationId={currentOrganization?.id}
+              value={teamFilter}
+              onChange={setTeamFilter}
+            />
+          </div>
+          <DataTable columns={columns} data={visibleCredentials} loading={isLoading} searchKey="name" searchPlaceholder="Search credentials..." />
         </CardContent>
       </Card>
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
