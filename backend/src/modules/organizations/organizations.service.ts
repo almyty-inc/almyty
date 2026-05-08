@@ -441,6 +441,42 @@ export class OrganizationsService {
     await this.userTeamRepository.remove(membership);
   }
 
+  async deleteTeam(organizationId: string, teamId: string): Promise<void> {
+    const team = await this.assertTeamInOrg(teamId, organizationId);
+
+    // Default 'Everyone' team is a permanent fixture per migration
+    // 1745330000000 — every org member is auto-joined to it. Refuse
+    // to delete so that invariant cannot be broken from the API.
+    if (team.isDefault) {
+      throw new BadRequestException('Cannot delete the default team');
+    }
+
+    await this.teamRepository.remove(team);
+  }
+
+  async getTeamMembers(
+    organizationId: string,
+    teamId: string,
+  ): Promise<any[]> {
+    await this.assertTeamInOrg(teamId, organizationId);
+
+    const memberships = await this.userTeamRepository.find({
+      where: { teamId, isActive: true },
+      relations: ['user'],
+      order: { joinedAt: 'ASC' },
+    });
+
+    return memberships.map(m => ({
+      id: m.id,
+      userId: m.userId,
+      email: m.user?.email,
+      firstName: m.user?.firstName,
+      lastName: m.user?.lastName,
+      role: m.role,
+      joinedAt: m.joinedAt,
+    }));
+  }
+
   async getOrganizationStats(id: string): Promise<{
     membersCount: number;
     teamsCount: number;
