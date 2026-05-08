@@ -28,6 +28,7 @@ import {
   type ScopingPreset,
   type SecurityTarget,
 } from '@/components/gateways/detail/tools-tab'
+import { GatewayEventsTab } from '@/components/gateways/detail/events-tab'
 
 export function GatewayDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -288,6 +289,7 @@ export function GatewayDetailPage() {
           )}
           <TabsTrigger value="metrics">Metrics</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="events">Events</TabsTrigger>
         </TabsList>
 
         {!gateway.isSystem && (
@@ -348,6 +350,10 @@ export function GatewayDetailPage() {
 
         <TabsContent value="integrations" className="space-y-6">
           <IntegrationsSection gatewayId={id!} gateway={gateway} orgSlug={currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'} />
+        </TabsContent>
+
+        <TabsContent value="events" className="space-y-4">
+          <GatewayEventsTab gatewayId={id!} />
         </TabsContent>
       </Tabs>
 
