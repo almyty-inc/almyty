@@ -227,6 +227,29 @@ export class Tool {
   @Column({ type: 'jsonb', nullable: true })
   sdkConfig: any | null;
 
+  /**
+   * Runner-backed tool: dispatch through the runner subsystem (cluster
+   * 5.5 routing). When set, ToolExecutorService delegates execution to
+   * RunnerCallService which pushes an envelope on the runner's
+   * Streamable HTTP session and awaits the response. Mutually exclusive
+   * with the other *Config columns; the executor checks runnerConfig
+   * first and short-circuits on hit.
+   *
+   * - runnerId: which runner accepts the call. Resolved at publish
+   *   time (when the runner registers and we mint capability tools).
+   * - method: protocol method name (e.g. 'shell.exec', 'process.spawn').
+   * - requiresWorkspace: when true (default for process.* methods),
+   *   the call requires a workspaceId in the params and the executor
+   *   refuses without one.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  runnerConfig: {
+    runnerId: string;
+    runnerName: string;
+    method: string;
+    requiresWorkspace: boolean;
+  } | null;
+
   @Column({ type: 'varchar', length: 64, nullable: true })
   definitionHash: string | null; // SHA-256 hash of tool definition for integrity verification
 
