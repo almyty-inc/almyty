@@ -14,6 +14,7 @@ import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { runnersApi } from '@/lib/api'
 import { RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
+import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 
 interface Runner { id: string; name: string; state: string; lastHeartbeatAt: string | null }
 
@@ -35,6 +36,7 @@ export function RunnerNewPage() {
   const { success } = useNotifications()
   const [labels, setLabels] = useState<LabelEntry[]>([])
   const [waitingFor, setWaitingFor] = useState<string | null>(null)
+  const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
 
   const existingRunnersQuery = useQuery<Runner[]>({
     queryKey: ['runners', currentOrganization?.id],
@@ -60,8 +62,11 @@ export function RunnerNewPage() {
     for (const { key, value } of labels) {
       if (key && value) parts.push('--label', shellQuote(`${key}=${value}`))
     }
+    if (visibility.visibility === 'team' && visibility.teamId) {
+      parts.push('--team-id', shellQuote(visibility.teamId))
+    }
     return parts.join(' ')
-  }, [watchedName, labels])
+  }, [watchedName, labels, visibility])
 
   // Heartbeat detection: when the user has clicked "I started it",
   // poll the runners list and wait for a runner with our chosen name
@@ -172,6 +177,14 @@ export function RunnerNewPage() {
                   Add label
                 </Button>
               </div>
+            </div>
+            <div className="border-t pt-4">
+              <VisibilityField
+                organizationId={currentOrganization?.id ?? ''}
+                value={visibility}
+                onChange={setVisibility}
+                disabled={!!waitingFor}
+              />
             </div>
 
             {!waitingFor && (
