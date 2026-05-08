@@ -18,6 +18,7 @@ import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 
 import { ToolsModule } from '../tools/tools.module';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ToolsModule } from '../tools/tools.module';
       Tool,
     ]),
     ToolsModule,
+    AuthorizationModule,
   ],
   providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper],
   controllers: [LlmProvidersController, LlmSessionsController],

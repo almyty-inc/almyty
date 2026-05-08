@@ -13,6 +13,7 @@ import { Operation } from '../../../entities/operation.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { User } from '../../../entities/user.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
+import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 
 describe('ToolsService - Custom Tool Creation', () => {
   let service: ToolsService;
@@ -78,6 +79,12 @@ describe('ToolsService - Custom Tool Creation', () => {
             computeChanges: jest.fn().mockReturnValue([]),
             findAll: jest.fn().mockResolvedValue({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 }),
             getResourceHistory: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: AccessPolicyService,
+          useValue: {
+            canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
           },
         },
       ],
