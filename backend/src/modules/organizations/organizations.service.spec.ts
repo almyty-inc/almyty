@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { OrganizationsService } from './organizations.service';
 import { OrganizationsInvitesHelper } from './organizations-invites.helper';
+import { TeamMembershipHelper } from './team-membership.helper';
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
@@ -24,7 +25,7 @@ describe('OrganizationsService', () => {
       providers: [
         OrganizationsService,
         OrganizationsInvitesHelper,
-        OrganizationsInvitesHelper,
+        { provide: TeamMembershipHelper, useValue: { joinDefaultTeam: jest.fn().mockResolvedValue(undefined) } },
         {
           provide: getRepositoryToken(Organization),
           useValue: {
@@ -721,6 +722,7 @@ describe('OrganizationsService', () => {
         providers: [
           OrganizationsService,
           OrganizationsInvitesHelper,
+          { provide: TeamMembershipHelper, useValue: { joinDefaultTeam: jest.fn().mockResolvedValue(undefined) } },
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
           { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
@@ -761,6 +763,7 @@ describe('OrganizationsService', () => {
         providers: [
           OrganizationsService,
           OrganizationsInvitesHelper,
+          { provide: TeamMembershipHelper, useValue: { joinDefaultTeam: jest.fn().mockResolvedValue(undefined) } },
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
           { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
@@ -799,6 +802,7 @@ describe('OrganizationsService', () => {
         providers: [
           OrganizationsService,
           OrganizationsInvitesHelper,
+          { provide: TeamMembershipHelper, useValue: { joinDefaultTeam: jest.fn().mockResolvedValue(undefined) } },
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
           { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
@@ -864,6 +868,7 @@ describe('OrganizationsService', () => {
         providers: [
           OrganizationsService,
           OrganizationsInvitesHelper,
+          { provide: TeamMembershipHelper, useValue: { joinDefaultTeam: jest.fn().mockResolvedValue(undefined) } },
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
           { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
