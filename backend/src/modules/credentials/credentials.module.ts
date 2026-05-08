@@ -10,9 +10,10 @@ import { CredentialsController } from './credentials.controller';
 import { CredentialsService } from './credentials.service';
 import { OAuth2Controller } from './oauth2.controller';
 import { OAuth2Service } from './oauth2.service';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Credential, ApiKey, LlmProvider, Api, Gateway, Agent])],
+  imports: [TypeOrmModule.forFeature([Credential, ApiKey, LlmProvider, Api, Gateway, Agent]), AuthorizationModule],
   controllers: [CredentialsController, OAuth2Controller],
   providers: [CredentialsService, OAuth2Service],
   exports: [CredentialsService, OAuth2Service],

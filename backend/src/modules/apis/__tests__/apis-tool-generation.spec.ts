@@ -19,6 +19,7 @@ import { Organization } from '../../../entities/organization.entity';
 import { SchemaParserService } from '../../schema-parser/schema-parser.service';
 import { ToolsService } from '../../tools/tools.service';
 import { AuditLogService } from '../../audit-log/audit-log.service';
+import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 
 describe('ApisService - tool generation', () => {
   let service: ApisService;
@@ -74,6 +75,7 @@ describe('ApisService - tool generation', () => {
         { provide: ToolsService, useValue: toolsService },
         { provide: AuditLogService, useValue: { logCreate: jest.fn() } },
         { provide: DataSource, useValue: {} },
+        { provide: AccessPolicyService, useValue: { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } },
       ],
     }).compile();
 

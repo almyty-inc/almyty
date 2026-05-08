@@ -157,6 +157,7 @@ export class ApisController {
       id,
       updateApiDto,
       req.user.currentOrganizationId,
+      req.user.id,
     );
 
     return { success: true, data: result, message: 'API updated successfully' };
@@ -165,7 +166,7 @@ export class ApisController {
   @Delete(':id')
   @Roles('admin', 'owner')
   async remove(@Request() req, @Param('id') id: string) {
-    await this.apisService.remove(id, req.user.currentOrganizationId);
+    await this.apisService.remove(id, req.user.currentOrganizationId, req.user.id);
     return { success: true, data: null, message: 'API deleted successfully' };
   }
 

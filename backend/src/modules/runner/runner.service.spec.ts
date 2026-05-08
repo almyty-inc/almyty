@@ -8,6 +8,7 @@ import { RunnerSession } from '../../entities/runner-session.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { RunnerService } from './runner.service';
 import { RunnerCapabilityPublisher } from './runner-capability.publisher';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { STALE_THRESHOLD_MS, OFFLINE_GRACE_MS } from './runner-state';
 
 /**
@@ -121,6 +122,7 @@ describe('RunnerService', () => {
         { provide: getRepositoryToken(RunnerSession), useValue: sessions },
         { provide: getRepositoryToken(Workspace), useValue: workspaces },
         { provide: RunnerCapabilityPublisher, useValue: fakePublisher },
+        { provide: AccessPolicyService, useValue: { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } },
       ],
     }).compile();
     service = moduleRef.get(RunnerService);

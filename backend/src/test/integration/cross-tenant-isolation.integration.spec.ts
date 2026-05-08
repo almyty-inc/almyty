@@ -229,6 +229,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds, // DataSource for transaction support
         {} as any, // ApisImportHelper
         {} as any, // ApisToolGeneratorHelper
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // AccessPolicyService
       );
 
       const apiRepo = fx.ds.getRepository(Api);
@@ -504,6 +505,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds.getRepository(Gateway),
         fx.ds.getRepository(Agent),
         stubAuditLog() as any,
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // AccessPolicyService
       );
 
       const credRepo = fx.ds.getRepository(Credential);

@@ -91,7 +91,7 @@ export class CredentialsController {
     @Request() req: any,
   ) {
     const organizationId = this.requireOrg(req);
-    const data = await this.credentialsService.update(id, body, organizationId);
+    const data = await this.credentialsService.update(id, body, organizationId, req.user.id);
     return { success: true, data, message: 'Credential updated successfully' };
   }
 
@@ -101,7 +101,7 @@ export class CredentialsController {
   @ApiResponse({ status: 200, description: 'Credential deleted successfully' })
   async delete(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     const organizationId = this.requireOrg(req);
-    await this.credentialsService.delete(id, organizationId);
+    await this.credentialsService.delete(id, organizationId, req.user.id);
     return { success: true, data: null, message: 'Credential deleted successfully' };
   }
 

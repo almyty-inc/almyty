@@ -11,6 +11,7 @@ import { RunnerController } from './runner.controller';
 import { RunnerCallService } from './runner-call.service';
 import { RunnerCapabilityPublisher } from './runner-capability.publisher';
 import { McpModule } from '../mcp/mcp.module';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 /**
  * Runner module: registration, heartbeat, FSM, and the dispatch
@@ -33,6 +34,7 @@ import { McpModule } from '../mcp/mcp.module';
   imports: [
     TypeOrmModule.forFeature([Runner, RunnerSession, Workspace, Tool]),
     forwardRef(() => McpModule),
+    AuthorizationModule,
   ],
   providers: [RunnerService, RunnerCallService, RunnerCapabilityPublisher],
   controllers: [RunnerController],

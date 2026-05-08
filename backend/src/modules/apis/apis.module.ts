@@ -21,6 +21,7 @@ import { Credential } from '../../entities/credential.entity';
 // Modules
 import { SchemaParserModule } from '../schema-parser/schema-parser.module';
 import { ToolsModule } from '../tools/tools.module';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { ToolsModule } from '../tools/tools.module';
     }),
     SchemaParserModule,
     ToolsModule,
+    AuthorizationModule,
   ],
   controllers: [ApisController, ApisCredentialsController],
   providers: [ApisService, ApisImportHelper, ApisToolGeneratorHelper, CredentialService],
