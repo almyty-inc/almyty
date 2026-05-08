@@ -6,6 +6,7 @@ import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentRuntimeBuilders } from '../agent-runtime-builders';
 import { AgentCollaborationHelper } from '../agent-collaboration.helper';
 import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
+import { ApprovalsService } from '../../approvals/approvals.service';
 import { AgentRuntimeEventsHelper } from '../agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from '../agent-runtime-misc.helper';
 import { AgentStepProcessor } from '../agent-step-processor';
@@ -172,6 +173,8 @@ describe('AgentRuntimeService (integration)', () => {
         AgentRuntimeEventsHelper,
         AgentRuntimeMiscHelper,
         AgentStepProcessor,
+        { provide: 'ApprovalsService', useValue: { create: jest.fn().mockResolvedValue({ id: 'a-stub' }) } },
+        { provide: ApprovalsService, useValue: { create: jest.fn().mockResolvedValue({ id: 'a-stub' }) } },
         {
           provide: getRepositoryToken(AgentRun),
           useValue: mockRunRepo,

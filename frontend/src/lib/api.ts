@@ -827,4 +827,18 @@ export const toolHubApi = {
   installProvider: (provider: string, data?: any) => apiPost(`/tool-hub/providers/${provider}/install`, data || {}),
 }
 
+export const approvalsApi = {
+  list: () => apiGet('/approvals'),
+  getById: (id: string) => apiGet(`/approvals/${id}`),
+  approve: (id: string, decisionReason?: string) =>
+    apiPost(`/approvals/${id}/approve`, { decisionReason }),
+  reject: (id: string, decisionReason?: string) =>
+    apiPost(`/approvals/${id}/reject`, { decisionReason }),
+}
+
+export const teamsApi = {
+  list: (organizationId: string) =>
+    apiGet(`/organizations/${organizationId}/teams`),
+}
+
 export type ApiResponse<T = any> = AxiosResponse<T>
