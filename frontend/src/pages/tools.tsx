@@ -56,6 +56,7 @@ import {
 import { toolsApi, llmProvidersApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
+import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import { CreateToolDialog } from '@/components/tools/create-tool-dialog'
 import { ToolExecutionDialog } from '@/components/tools/tool-execution-dialog'
 import { ToolHubPage } from '@/pages/tool-hub'
@@ -132,6 +133,8 @@ export function ToolsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [apiFilter, setApiFilter] = useState('all')
+  const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
+  const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null)
@@ -407,7 +410,7 @@ return new Promise((resolve, reject) => {
 
   // Client-side filters applied to the current page of results
   // Note: for full search across all tools, backend search support is needed
-  const filteredTools = tools.filter((tool: Tool) => {
+  const filteredTools = filterByTeamVisibility(tools as any[], teamFilter).filter((tool: Tool) => {
     const matchesSearch =
       !searchQuery ||
       tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -461,6 +464,11 @@ return new Promise((resolve, reject) => {
                     runner: {tool.runnerConfig?.runnerName}
                   </Badge>
                 )}
+                <VisibilityBadge
+                  visibility={(tool as any).visibility}
+                  teamId={(tool as any).teamId}
+                  teamLookup={teamLookup}
+                />
               </div>
               <div className="text-sm text-muted-foreground truncate">
                 {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'LLM Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
@@ -639,6 +647,11 @@ return new Promise((resolve, reject) => {
                       </SelectContent>
                     </Select>
                   )}
+                  <TeamFilter
+                    organizationId={currentOrganization?.id}
+                    value={teamFilter}
+                    onChange={setTeamFilter}
+                  />
                 </div>
               }
             />
