@@ -20,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
+import { useOrganizationStore } from '@/store/organization'
 
 interface CreateProviderDialogProps {
   open: boolean
@@ -34,6 +36,8 @@ export function CreateProviderDialog({
   createForm,
   createProviderMutation,
 }: CreateProviderDialogProps) {
+  const { currentOrganization } = useOrganizationStore()
+  const [visibility, setVisibility] = React.useState<VisibilityValue>({ visibility: 'org', teamId: null })
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
@@ -44,7 +48,7 @@ export function CreateProviderDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={createForm.handleSubmit((data: any) => createProviderMutation.mutate(data))} className="space-y-4">
+        <form onSubmit={createForm.handleSubmit((data: any) => createProviderMutation.mutate({ ...data, visibility: visibility.visibility, teamId: visibility.teamId }))} className="space-y-4">
           {/* Provider Name */}
           <div>
             <Label htmlFor="providerName">Provider Name</Label>
@@ -121,6 +125,13 @@ export function CreateProviderDialog({
             </div>
           )}
 
+          <div className="border-t pt-4">
+            <VisibilityField
+              organizationId={currentOrganization?.id ?? ''}
+              value={visibility}
+              onChange={setVisibility}
+            />
+          </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel

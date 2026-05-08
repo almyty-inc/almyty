@@ -33,6 +33,8 @@ import { CredentialPicker } from '@/components/credential-picker'
 import { apisApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { Api, ApiAuthType, ApiType } from '@/types'
+import { useOrganizationStore } from '@/store/organization'
+import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 
 import {
   createApiSchema,
@@ -118,6 +120,8 @@ export function CreateApiDialog({
   const [registryUrl, setRegistryUrl] = React.useState('')
   const [registryToken, setRegistryToken] = React.useState('')
   const [registryScope, setRegistryScope] = React.useState('')
+  const { currentOrganization } = useOrganizationStore()
+  const [visibility, setVisibility] = React.useState<VisibilityValue>({ visibility: 'org', teamId: null })
 
   const createApiMutation = useMutation({
     mutationFn: apisApi.create,
@@ -224,10 +228,11 @@ export function CreateApiDialog({
   }, [editingApi])
 
   const handleCreateApi = (data: CreateApiFormData) => {
+    const visibilityFields = { visibility: visibility.visibility, teamId: visibility.teamId }
     if (editingApi) {
       // Update existing API - exclude type field as it can't be changed
       const { type, ...updateData } = data
-      updateApiMutation.mutate({ id: editingApi.id, data: updateData })
+      updateApiMutation.mutate({ id: editingApi.id, data: { ...updateData, ...visibilityFields } })
     } else if (data.type === ApiType.SDK) {
       // SDK: create with packages, skip schema import
       const dependencies: Record<string, string> = {}
@@ -236,6 +241,7 @@ export function CreateApiDialog({
         name: data.name,
         description: data.description,
         dependencies,
+        ...visibilityFields,
       }
       if (usePrivateRegistry) {
         sdkData.npmRegistry = {
@@ -247,10 +253,10 @@ export function CreateApiDialog({
       createSdkApiMutation.mutate(sdkData)
     } else if (data.type === ApiType.HTTP) {
       // Custom HTTP: create directly, skip schema import
-      createHttpApiMutation.mutate(data)
+      createHttpApiMutation.mutate({ ...data, ...visibilityFields })
     } else {
       // Create new API (goes to schema import step)
-      createApiMutation.mutate(data)
+      createApiMutation.mutate({ ...data, ...visibilityFields })
     }
   }
 
@@ -756,6 +762,13 @@ export function CreateApiDialog({
             />
           </div>
 
+          <div className="border-t pt-4">
+            <VisibilityField
+              organizationId={currentOrganization?.id ?? ''}
+              value={visibility}
+              onChange={setVisibility}
+            />
+          </div>
           <div className="flex justify-end space-x-2">
             <Button
               type="button"

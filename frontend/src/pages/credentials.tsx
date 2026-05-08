@@ -16,6 +16,7 @@ import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { useCopySensitive } from '@/lib/clipboard'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
+import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { VaultCredential, AccessKey } from '@/types'
 
@@ -88,6 +89,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   const qc = useQueryClient(), notify = useNotifications()
   const { currentOrganization } = useOrganizationStore()
   const [form, setForm] = useState({ name: '', type: 'api_key', description: '', value: '' })
+  const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
@@ -195,7 +197,14 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
             </>)}
             <div><label className="text-sm font-medium">Description</label>
               <Input placeholder="Optional description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
-            <Button className="w-full" disabled={!form.name || createMut.isPending} onClick={() => createMut.mutate(form)}>
+            <div className="border-t pt-4">
+              <VisibilityField
+                organizationId={currentOrganization?.id ?? ''}
+                value={visibility}
+                onChange={setVisibility}
+              />
+            </div>
+            <Button className="w-full" disabled={!form.name || createMut.isPending} onClick={() => createMut.mutate({ ...form, visibility: visibility.visibility, teamId: visibility.teamId })}>
               {createMut.isPending ? 'Creating...' : 'Create Credential'}</Button>
           </div>
         </DialogContent>

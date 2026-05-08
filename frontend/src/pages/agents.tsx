@@ -59,6 +59,7 @@ import { agentsApi, externalAgentsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { ImportExternalA2ADialog } from '@/components/agents/import-external-a2a-dialog'
+import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { Agent, ExternalAgent } from '@/types'
 
@@ -119,6 +120,7 @@ export function AgentsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showTemplates, setShowTemplates] = useState(true)
+  const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
@@ -182,6 +184,8 @@ export function AgentsPage() {
         name: data.name,
         description: data.description || undefined,
         pipeline: DEFAULT_PIPELINE,
+        visibility: visibility.visibility,
+        teamId: visibility.teamId,
       }
       return agentsApi.create(payload, currentOrganization?.id)
     },
@@ -595,6 +599,13 @@ export function AgentsPage() {
                 placeholder="What does this agent do?"
                 {...createForm.register('description')}
                 className="mt-1"
+              />
+            </div>
+            <div className="border-t pt-4">
+              <VisibilityField
+                organizationId={currentOrganization?.id ?? ''}
+                value={visibility}
+                onChange={setVisibility}
               />
             </div>
             <div className="flex justify-end space-x-2 pt-2">
