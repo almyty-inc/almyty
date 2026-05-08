@@ -262,6 +262,26 @@ export class Tool {
     requiresWorkspace: boolean;
   } | null;
 
+  /**
+   * Memory-backed tool: dispatch through the canonical memory subsystem.
+   * Mirrors runnerConfig — when set, ToolExecutorService delegates to
+   * CanonicalMemoryService with the configured method + scope. Mutually
+   * exclusive with the other *Config columns.
+   *
+   * - method: 'store' | 'recall' | 'list' | 'search'
+   * - scope: { scope_type, scope_id } — the canonical memory scope
+   *   the tool reads/writes from. For team-scoped published memory
+   *   tools, scope_id usually = `team:<teamId>`; for org-wide,
+   *   scope_id = `org:<organizationId>`.
+   * - mode: 'memory' (default) | 'document' — passed to backend.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  memoryConfig: {
+    method: 'store' | 'recall' | 'list' | 'search';
+    scope: { scope_type: string; scope_id: string };
+    mode?: 'memory' | 'document';
+  } | null;
+
   @Column({ type: 'varchar', length: 64, nullable: true })
   definitionHash: string | null; // SHA-256 hash of tool definition for integrity verification
 

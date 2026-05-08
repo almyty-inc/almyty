@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Tool } from '../../entities/tool.entity';
@@ -37,6 +37,7 @@ import { ToolsExportController } from './tools-export.controller';
 
 import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schema-translator.module';
 import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
+import { MemoryModule } from '../memory/memory.module';
 import { RunnerModule } from '../runner/runner.module';
 
 @Module({
@@ -59,6 +60,7 @@ import { RunnerModule } from '../runner/runner.module';
     JsonSchemaTranslatorModule,
     NodeSandboxModule,
     RunnerModule,
+    forwardRef(() => MemoryModule),
   ],
   providers: [
     ToolsService,
