@@ -56,7 +56,7 @@ export function RunnerNewPage() {
   const nameTaken = watchedName.length > 0 && existingNames.has(watchedName) && watchedName !== waitingFor
 
   const command = useMemo(() => {
-    const parts = ['almyty-runner', 'start', '--name', shellQuote(watchedName || '<name>')]
+    const parts = ['npx', '@almyty/runner', 'start', '--name', shellQuote(watchedName || '<name>')]
     for (const { key, value } of labels) {
       if (key && value) parts.push('--label', shellQuote(`${key}=${value}`))
     }

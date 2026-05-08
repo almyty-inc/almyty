@@ -63,42 +63,48 @@ See the [self-hosting guide](https://docs.almyty.com/self-hosting) for productio
 
 **Deploy** tools and agents behind gateways. One endpoint, every protocol. ([docs](https://docs.almyty.com/gateways/mcp))
 
-## Skills CLI
+## CLI
 
-Install tools as [Agent Skills](https://agentskills.io) into your coding agent:
+One install, one login, every CLI works:
+
+```bash
+npm i -g @almyty/cli
+almyty login                              # one-time browser login
+```
+
+Or invoke any individual CLI directly via `npx`:
+
+```bash
+almyty agents list                        # list agents in your org
+almyty chat my-agent                      # interactive REPL with an agent
+almyty skills install @acme/petstore      # install tools as Agent Skills into Claude Code, Cursor, etc.
+almyty mcp                                # run almyty as an MCP server proxy
+almyty runner start --name laptop         # register this machine as a runner
+```
+
+Each subcommand maps to a standalone npm package — `@almyty/auth`, `@almyty/agents`, `@almyty/chat`, `@almyty/skills`, `@almyty/mcp-server`, `@almyty/runner` — and the umbrella delegates to whichever you call. See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
+
+### Skills
+
+Install almyty tools as [Agent Skills](https://agentskills.io) into 30+ coding agents (Claude Code, Cursor, Copilot, Windsurf, …):
 
 ```bash
 npx @almyty/skills install @acme/petstore
 ```
 
-Works with Claude Code, Cursor, Copilot, Windsurf, and [30+ more](https://docs.almyty.com/cli/skills).
+### MCP
 
+Almyty serves every tool and agent as MCP at `/{org}/{gateway}` (Streamable HTTP). Point any MCP client at the URL and the gateway's tools are available. The `@almyty/mcp-server` CLI also runs almyty as a local MCP proxy if your client only speaks stdio. ([docs](https://docs.almyty.com/gateways/mcp))
 
-## Runners
+### Runners
 
-A runner is a long-running CLI daemon you start on a machine you own. Almyty agents dispatch jobs (process spawn, shell exec, file ops) over a persistent connection; the runner executes them in your environment, scoped to a workspace.
-
-This is the wedge that lets one agent workflow orchestrate any CLI coding agent (Claude Code, Codex, gemini-cli, aider) with any model on the same codebase, in one coherent session — three commands to start:
-
-```bash
-npx @almyty/auth login            # one-time browser login
-npm i -g @almyty/runner            # install once per machine
-almyty-runner start --name my-laptop
-```
-
-Then in the UI, head to `/runners/new` for a guided setup that generates the start command and waits for the runner to come online. See [docs/runner.md](docs/runner.md) for architecture.
-
-## CLI tools
+A runner is a long-running daemon that registers your machine with almyty and executes process / shell / file ops on it, scoped to a workspace. Tools published by the runner appear in the catalog automatically; agents call them like any other tool, dispatch flows over a persistent Streamable HTTP connection. The wedge: one agent workflow orchestrating any CLI coding agent (Claude Code, Codex, gemini, aider) in one coherent session.
 
 ```bash
-npx @almyty/auth login                    # authenticate
-npx @almyty/skills install @org/gateway   # install skills
-npx @almyty/agents list                   # list agents
-npx @almyty/chat my-agent                 # interactive agent REPL
-almyty-runner start --name laptop         # register this machine as a runner
+npx @almyty/runner start --name my-laptop
 ```
 
-See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
+Or open `/runners/new` in the UI for a guided setup. See [docs/runner.md](docs/runner.md) for architecture and [docs/runner-demo.md](docs/runner-demo.md) for an end-to-end walkthrough.
 
 ## Development
 
