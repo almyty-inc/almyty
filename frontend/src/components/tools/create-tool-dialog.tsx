@@ -24,6 +24,8 @@ import {
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 import { CredentialPicker } from '@/components/credential-picker'
 import { SdkToolForm } from '@/components/tools/sdk-tool-form'
+import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
+import { useOrganizationStore } from '@/store/organization'
 import { apisApi } from '@/lib/api'
 import { ApiType } from '@/types'
 import type { SdkMap } from '@/types'
@@ -129,6 +131,7 @@ export function CreateToolDialog({
   const [paginationType, setPaginationType] = useState<string>('none')
   const [paginationConfig, setPaginationConfig] = useState({ cursorPath: '', cursorParam: '', offsetParam: '', limitParam: '', defaultLimit: 20, maxPages: 5 })
   const [customHeaders, setCustomHeaders] = useState<Array<{ key: string; value: string }>>([])
+  const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
 
   // Create parameter autocomplete extension for CodeMirror
   const parameterAutocomplete = useMemo(() => {
@@ -162,7 +165,7 @@ export function CreateToolDialog({
             Create a custom tool with JavaScript code or link to an API operation.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={createForm.handleSubmit((data: any) => createToolMutation.mutate(data))} className="space-y-4">
+        <form onSubmit={createForm.handleSubmit((data: any) => createToolMutation.mutate({ ...data, visibility: visibility.visibility, teamId: visibility.teamId }))} className="space-y-4">
           <div>
             <Label htmlFor="execution-method">Execution Method</Label>
             <Select
@@ -826,6 +829,14 @@ export function CreateToolDialog({
               />
             </div>
           )}
+
+          <div className="border-t pt-4">
+            <VisibilityField
+              organizationId={useOrganizationStore.getState().currentOrganization?.id ?? ''}
+              value={visibility}
+              onChange={setVisibility}
+            />
+          </div>
 
           <div className="flex justify-end space-x-2">
             <Button
