@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Cpu, Plus } from 'lucide-react'
@@ -12,12 +13,22 @@ import { runnersApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { runnerStateVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
 import { formatRelativeTime } from '@/lib/utils'
+import {
+  TeamFilter,
+  useTeamLookup,
+  VisibilityBadge,
+  filterByTeamVisibility,
+  type TeamFilterValue,
+  type Team,
+} from '@/components/ui/team-filter'
 
 interface Runner {
   id: string
   name: string
   state: 'registered' | 'online' | 'busy' | 'stale' | 'draining' | 'offline'
   labels: Record<string, string>
+  visibility?: 'org' | 'team' | null
+  teamId?: string | null
   runtimeInfo: {
     os: string
     arch: string
@@ -37,6 +48,8 @@ interface Runner {
 export function RunnersPage() {
   const navigate = useNavigate()
   const { currentOrganization } = useOrganizationStore()
+  const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
+  const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
   const { data: runners = [], isLoading, isError, error, refetch } = useQuery<Runner[]>({
     // Polling cadence is half the runner heartbeat interval so the
@@ -59,6 +72,8 @@ export function RunnersPage() {
       </div>
     )
   }
+
+  const visibleRunners = filterByTeamVisibility(runners, teamFilter)
 
   if (!isLoading && runners.length === 0) {
     return (
@@ -87,7 +102,14 @@ export function RunnersPage() {
     <div className="space-y-6">
       <RunnersHeader onCreate={() => navigate('/runners/new')} />
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="pt-6 space-y-4">
+          <div className="flex items-center justify-end">
+            <TeamFilter
+              organizationId={currentOrganization?.id}
+              value={teamFilter}
+              onChange={setTeamFilter}
+            />
+          </div>
           {isLoading ? (
             <div className="py-12 flex justify-center">
               <LoadingSpinner size="lg" />
@@ -106,8 +128,13 @@ export function RunnersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {runners.map((r) => (
-                    <RunnerRow key={r.id} runner={r} onOpen={() => navigate(`/runners/${r.id}`)} />
+                  {visibleRunners.map((r) => (
+                    <RunnerRow
+                      key={r.id}
+                      runner={r}
+                      teamLookup={teamLookup}
+                      onOpen={() => navigate(`/runners/${r.id}`)}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -136,7 +163,15 @@ function RunnersHeader({ onCreate }: { onCreate: () => void }) {
   )
 }
 
-function RunnerRow({ runner, onOpen }: { runner: Runner; onOpen: () => void }) {
+function RunnerRow({
+  runner,
+  onOpen,
+  teamLookup,
+}: {
+  runner: Runner
+  onOpen: () => void
+  teamLookup?: Record<string, Team>
+}) {
   const inUse = 0 // capacity.inUse not in list payload; backend returns it on detail
   const max = runner.config?.maxConcurrent ?? 0
   const labelEntries = Object.entries(runner.labels ?? {})
@@ -146,7 +181,16 @@ function RunnerRow({ runner, onOpen }: { runner: Runner; onOpen: () => void }) {
       onClick={onOpen}
       className="border-b last:border-b-0 cursor-pointer hover:bg-muted/40 transition-colors"
     >
-      <td className="py-3 pr-4 font-medium">{runner.name}</td>
+      <td className="py-3 pr-4 font-medium">
+        <div className="flex items-center gap-2">
+          <span>{runner.name}</span>
+          <VisibilityBadge
+            visibility={runner.visibility}
+            teamId={runner.teamId}
+            teamLookup={teamLookup}
+          />
+        </div>
+      </td>
       <td className="py-3 pr-4">
         <Badge variant={runnerStateVariant[runner.state]}>{runner.state}</Badge>
       </td>
