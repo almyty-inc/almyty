@@ -57,6 +57,7 @@ const SUBCOMMANDS: Record<string, Subcommand> = {
   skills: { pkg: '@almyty/skills', help: 'Install API skills into AI coding agents' },
   mcp: { pkg: '@almyty/mcp-server', help: 'Run the MCP server proxy' },
   acp: { pkg: '@almyty/acp-server', help: 'Run the ACP agent server' },
+  runner: { pkg: '@almyty/runner', help: 'Long-running daemon to run agents on this machine' },
 };
 
 function printHelp(): void {
@@ -91,6 +92,10 @@ Skills:
 
 MCP:
   mcp <args>            Run the MCP server proxy
+
+Runner:
+  runner start [--name n]    Start a runner daemon, register with the SaaS
+  runner status              Show local runner status
 
 Other:
   help, --help          Show this help

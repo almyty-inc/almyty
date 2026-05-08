@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, BookOpen, Copy, Check, ChevronRight, Globe, Bot } from 'lucide-react'
+import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, BookOpen, Copy, Check, ChevronRight, Globe, Bot, Server } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 import { CodeBlock } from '@/components/ui/code-block'
-import { toolsApi } from '@/lib/api'
+import { toolsApi, workspacesApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { GatewayToolAssociation } from '@/types'
@@ -27,6 +27,7 @@ export function ToolDetailPage() {
 
   const [executionParameters, setExecutionParameters] = useState<Record<string, string>>({})
   const [executionResult, setExecutionResult] = useState<Record<string, any> | null>(null)
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('')
 
   const { data: toolData, isLoading } = useQuery({
     queryKey: ['tool', id],
@@ -37,8 +38,19 @@ export function ToolDetailPage() {
     enabled: !!id && !!currentOrganization,
   })
 
-  const [sentParameters, setSentParameters] = React.useState<Record<string, string> | null>(null)
+  const runnerId = (toolData as any)?.runnerConfig?.runnerId as string | undefined
+  const requiresWorkspace = !!(toolData as any)?.runnerConfig?.requiresWorkspace
+  const workspacesQuery = useQuery({
+    queryKey: ['workspaces', { runnerId }],
+    queryFn: () => workspacesApi.getAll(),
+    enabled: !!runnerId,
+    select: (all: any) => {
+      const list = Array.isArray(all) ? all : (all?.data ?? [])
+      return list.filter((w: any) => w.runnerId === runnerId && w.status === 'active')
+    },
+  })
 
+  const [sentParameters, setSentParameters] = React.useState<Record<string, string> | null>(null)
   const executeToolMutation = useMutation({
     mutationFn: ({ parameters }: { parameters: Record<string, string> }) => {
       if (!currentOrganization?.id) throw new Error('No organization selected')
@@ -197,6 +209,45 @@ export function ToolDetailPage() {
           </CardContent>
         </Card>
 
+        {tool.runnerConfig ? (
+          <Card className="border-cyan-200 dark:border-cyan-900">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Server className="h-4 w-4 text-cyan-500" />
+                Runner-backed tool
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Dispatched through the runner subsystem. Configuration lives on the runner; this tool row is read-only.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Runner</span>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 font-mono text-cyan-600 dark:text-cyan-400"
+                  onClick={() => navigate(`/runners/${tool.runnerConfig!.runnerId}`)}
+                >
+                  {tool.runnerConfig.runnerName}
+                </Button>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Method</span>
+                <code className="bg-muted px-2 py-0.5 rounded font-mono">{tool.runnerConfig.method}</code>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Workspace</span>
+                <Badge variant={tool.runnerConfig.requiresWorkspace ? 'default' : 'outline'}>
+                  {tool.runnerConfig.requiresWorkspace ? 'required' : 'not required'}
+                </Badge>
+              </div>
+              <p className="text-muted-foreground pt-2">
+                To stop publishing this tool, unregister the runner from <a href="/runners" className="underline">Runners</a>.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">
@@ -287,6 +338,7 @@ export function ToolDetailPage() {
             )}
           </CardContent>
         </Card>
+        )}
           </div>
         </TabsContent>
 
@@ -300,6 +352,37 @@ export function ToolDetailPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {requiresWorkspace && (
+                <div className="space-y-2 border rounded-md p-4 bg-cyan-500/5 border-cyan-200 dark:border-cyan-900">
+                  <Label className="flex items-center gap-2">
+                    <Server className="h-4 w-4 text-cyan-500" />
+                    Workspace <span className="text-red-500">*</span>
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    This runner method runs inside an active workspace. Pick one or release+create a new workspace from the runner page.
+                  </p>
+                  {workspacesQuery.isLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading workspaces…</p>
+                  ) : workspacesQuery.data && workspacesQuery.data.length > 0 ? (
+                    <select
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={selectedWorkspaceId}
+                      onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+                    >
+                      <option value="">Select workspace…</option>
+                      {workspacesQuery.data.map((w: any) => (
+                        <option key={w.id} value={w.id}>
+                          {w.cwd} ({w.isolation}, {w.id.slice(0, 8)})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No active workspaces on this runner. <Link to={`/runners/${runnerId}`} className="underline">Open the runner</Link> to create one.
+                    </p>
+                  )}
+                </div>
+              )}
               {/* Parameter Form with inline documentation */}
               {(() => {
                 const params = tool.parameters?.properties || tool.operation?.parameters?.body || {}
@@ -349,8 +432,12 @@ export function ToolDetailPage() {
               })()}
 
               <Button
-                onClick={() => executeToolMutation.mutate({ parameters: executionParameters })}
-                disabled={executeToolMutation.isPending}
+                onClick={() => executeToolMutation.mutate({
+                  parameters: requiresWorkspace && selectedWorkspaceId
+                    ? { ...executionParameters, workspaceId: selectedWorkspaceId }
+                    : executionParameters,
+                })}
+                disabled={executeToolMutation.isPending || (requiresWorkspace && !selectedWorkspaceId)}
                 className="w-full"
                 size="lg"
               >

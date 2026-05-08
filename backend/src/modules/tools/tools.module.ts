@@ -37,6 +37,7 @@ import { ToolsExportController } from './tools-export.controller';
 
 import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schema-translator.module';
 import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
+import { RunnerModule } from '../runner/runner.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
     ]),
     JsonSchemaTranslatorModule,
     NodeSandboxModule,
+    RunnerModule,
   ],
   providers: [
     ToolsService,

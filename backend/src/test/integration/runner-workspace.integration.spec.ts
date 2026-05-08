@@ -3,9 +3,11 @@ import { DataSource, Repository } from 'typeorm';
 import { Runner, RunnerState, RunnerIsolationTier } from '../../entities/runner.entity';
 import { RunnerSession } from '../../entities/runner-session.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
+import { Tool } from '../../entities/tool.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { RunnerService } from '../../modules/runner/runner.service';
+import { RunnerCapabilityPublisher } from '../../modules/runner/runner-capability.publisher';
 import { WorkspaceService } from '../../modules/workspace/workspace.service';
 import { STALE_THRESHOLD_MS, OFFLINE_GRACE_MS } from '../../modules/runner/runner-state';
 
@@ -81,10 +83,12 @@ describeIfDb('Runner + Workspace (real Postgres)', () => {
     } as any));
     userId = (user as any).id;
 
+    const toolRepo = ds.getRepository(Tool);
     runners = new RunnerService(
       ds.getRepository(Runner),
       ds.getRepository(RunnerSession),
       ds.getRepository(Workspace),
+      new RunnerCapabilityPublisher(toolRepo),
     );
     workspaces = new WorkspaceService(
       ds.getRepository(Workspace),
