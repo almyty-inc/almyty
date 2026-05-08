@@ -245,22 +245,27 @@ describe('OrganizationsService.getInviteDetails — email privacy', () => {
       createQueryBuilder: jest.fn(),
       findOne: jest.fn(),
     };
+    const teamMembershipHelper = {
+      joinDefaultTeam: jest.fn().mockResolvedValue(undefined),
+    };
     const invitesHelper = new OrganizationsInvitesHelper(
       orgRepo as any,
       membershipRepo as any,
       { findOne: jest.fn() } as any,
       { sendInvitation: jest.fn() } as any,
       { ensureSystemGateway: jest.fn() } as any,
+      teamMembershipHelper as any,
     );
     const service = new OrganizationsService(
       orgRepo as any,
       membershipRepo as any,
-      { findOne: jest.fn() } as any, // Team
-      { findOne: jest.fn() } as any, // UserTeam
+      { findOne: jest.fn(), create: jest.fn(), save: jest.fn() } as any, // Team
+      { findOne: jest.fn(), create: jest.fn(), save: jest.fn() } as any, // UserTeam
       { findOne: jest.fn() } as any, // User
       { sendInvitation: jest.fn() } as any, // MailService
       { ensureSystemGateway: jest.fn() } as any, // GatewaysService
       invitesHelper,
+      teamMembershipHelper as any,
     );
 
     const result = await service.getInviteDetails('valid-token');
