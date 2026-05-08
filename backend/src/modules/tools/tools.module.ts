@@ -39,6 +39,7 @@ import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schem
 import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
 import { MemoryModule } from '../memory/memory.module';
 import { RunnerModule } from '../runner/runner.module';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { RunnerModule } from '../runner/runner.module';
     NodeSandboxModule,
     RunnerModule,
     forwardRef(() => MemoryModule),
+    AuthorizationModule,
   ],
   providers: [
     ToolsService,

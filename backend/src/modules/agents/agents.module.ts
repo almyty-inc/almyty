@@ -47,6 +47,7 @@ import { ToolsModule } from '../tools/tools.module';
 import { MemoryModule } from '../memory/memory.module';
 import { A2AModule } from '../a2a/a2a.module';
 import { ApprovalsModule } from '../approvals/approvals.module';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 @Module({
   imports: [
@@ -71,8 +72,9 @@ import { ApprovalsModule } from '../approvals/approvals.module';
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
     forwardRef(() => ApprovalsModule),
+    AuthorizationModule,
   ],
-  providers: [AgentsService, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeProcessor],
+  providers: [AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeProcessor],
   controllers: [AgentsController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController],
   exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })
