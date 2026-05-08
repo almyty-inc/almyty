@@ -21,6 +21,7 @@ import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { OrganizationsInvitesHelper } from './organizations-invites.helper';
+import { TeamMembershipHelper } from './team-membership.helper';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { MailService } from '../mail/mail.service';
 import { GatewaysService } from '../gateways/gateways.service';
@@ -46,6 +47,7 @@ export class OrganizationsService {
     @Inject(forwardRef(() => GatewaysService))
     private readonly gatewaysService: GatewaysService,
     private readonly invitesHelper: OrganizationsInvitesHelper,
+    private readonly teamMembershipHelper: TeamMembershipHelper,
   ) {}
 
   async create(createOrganizationDto: CreateOrganizationDto, ownerId: string): Promise<Organization> {
@@ -79,6 +81,16 @@ export class OrganizationsService {
     });
 
     await this.userOrganizationRepository.save(membership);
+
+    // Auto-provision default "Everyone" team and join the owner.
+    // Helper handles creation idempotently and assigns TeamRole.LEAD
+    // for owners (= team_admin in the GitHub-style two-tier model).
+    await this.teamMembershipHelper.joinDefaultTeam(
+      savedOrganization.id,
+      ownerId,
+      OrganizationRole.OWNER,
+    );
+
 
     // Provision the system gateway so MCP OAuth works out of the box
     try {

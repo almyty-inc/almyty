@@ -9,6 +9,7 @@ import { User } from '../../entities/user.entity';
 
 import { OrganizationsService } from './organizations.service';
 import { OrganizationsInvitesHelper } from './organizations-invites.helper';
+import { TeamMembershipHelper } from './team-membership.helper';
 import { OrganizationsController } from './organizations.controller';
 import { InvitesController } from './invites.controller';
 import { GatewaysModule } from '../gateways/gateways.module';
@@ -24,7 +25,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
     ]),
     forwardRef(() => GatewaysModule),
   ],
-  providers: [OrganizationsService],
+  providers: [OrganizationsService, OrganizationsInvitesHelper, TeamMembershipHelper],
   controllers: [OrganizationsController, InvitesController],
   exports: [OrganizationsService],
 })
