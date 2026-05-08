@@ -12,6 +12,7 @@ import { Gateway } from '../../entities/gateway.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { LlmChatHelper } from './llm-chat.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
@@ -34,6 +35,7 @@ jest.mock('axios', () => {
 describe('LlmProvidersService', () => {
   let service: LlmProvidersService;
   let chatHelperInstance: LlmChatHelper;
+  let accessPolicy: any;
   let runnerInstance: LlmChatRunnerHelper;
   let llmProviderRepository: any;
   let conversationRepository: any;
@@ -142,11 +144,18 @@ describe('LlmProvidersService', () => {
         LlmChatHelper,
         LlmStatsHelper,
         LlmChatRunnerHelper,
+        {
+          provide: AccessPolicyService,
+          useValue: {
+            canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<LlmProvidersService>(LlmProvidersService);
     chatHelperInstance = module.get(LlmChatHelper);
+    accessPolicy = module.get(AccessPolicyService);
     runnerInstance = module.get(LlmChatRunnerHelper);
     llmProviderRepository = module.get(getRepositoryToken(LlmProvider));
     conversationRepository = module.get(getRepositoryToken(Conversation));
@@ -353,6 +362,7 @@ describe('LlmProvidersService', () => {
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(service.updateProvider('provider-1', updateDto, 'org-1', 'user-1'))
         .rejects
@@ -497,6 +507,7 @@ describe('LlmProvidersService', () => {
 
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(service.deleteProvider('provider-1', 'org-1', 'user-1'))
         .rejects

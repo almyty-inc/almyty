@@ -11,6 +11,7 @@ import { GatewaysService } from '../../gateways/gateways.service';
 import { GatewaysStatsHelper } from '../../gateways/gateways-stats.helper';
 import { GatewayInitHelper } from '../../gateways/gateway-init.helper';
 import { AuditLogService } from '../../audit-log/audit-log.service';
+import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 
 /**
  * Integration-style test verifying that ACP gateways can be created
@@ -89,6 +90,12 @@ describe('ACP Gateway Integration', () => {
             logUpdate: jest.fn().mockResolvedValue(null),
             logDelete: jest.fn().mockResolvedValue(null),
             computeChanges: jest.fn().mockReturnValue({}),
+          },
+        },
+        {
+          provide: AccessPolicyService,
+          useValue: {
+            canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
           },
         },
       ],

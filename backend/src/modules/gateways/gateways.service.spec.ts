@@ -10,6 +10,7 @@ import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 describe('GatewaysService', () => {
   let service: GatewaysService;
@@ -19,6 +20,7 @@ describe('GatewaysService', () => {
   let userRepository: any;
   let organizationRepository: any;
   let usageMetricRepository: any;
+  let accessPolicy: any;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -88,6 +90,12 @@ describe('GatewaysService', () => {
             getResourceHistory: jest.fn().mockResolvedValue([]),
           },
         },
+        {
+          provide: AccessPolicyService,
+          useValue: {
+            canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+          },
+        },
       ],
     }).compile();
 
@@ -98,6 +106,7 @@ describe('GatewaysService', () => {
     userRepository = module.get(getRepositoryToken(User));
     organizationRepository = module.get(getRepositoryToken(Organization));
     usageMetricRepository = module.get(getRepositoryToken(UsageMetric));
+    accessPolicy = module.get(AccessPolicyService);
   });
 
   describe('createGateway', () => {
@@ -276,6 +285,7 @@ describe('GatewaysService', () => {
 
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       userRepository.findOne.mockResolvedValue(mockUser);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(
         service.updateGateway('gateway-1', updateDto, 'org-1', 'user-1')
@@ -336,6 +346,7 @@ describe('GatewaysService', () => {
 
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       userRepository.findOne.mockResolvedValue(mockUser);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(
         service.deleteGateway('gateway-1', 'org-1', 'user-1')
@@ -411,6 +422,7 @@ describe('GatewaysService', () => {
 
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       userRepository.findOne.mockResolvedValue(mockUser);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(
         service.activateGateway('gateway-1', 'org-1', 'user-1')
@@ -478,6 +490,7 @@ describe('GatewaysService', () => {
 
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       userRepository.findOne.mockResolvedValue(mockUser);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(
         service.deactivateGateway('gateway-1', 'org-1', 'user-1')
@@ -715,6 +728,7 @@ describe('GatewaysService', () => {
 
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       userRepository.findOne.mockResolvedValue(mockUser);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
 
       await expect(
         service.updateGateway('gateway-1', updateDto, 'org-1', 'user-1')
