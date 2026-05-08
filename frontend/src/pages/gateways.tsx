@@ -31,6 +31,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { CreateGatewayDialog } from '@/components/gateways/create-gateway-dialog'
 import { GatewayDetailsSheet } from '@/components/gateways/gateway-details-sheet'
+import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { Gateway } from '@/types'
 
 // Form Schema
@@ -62,10 +63,12 @@ export function GatewaysPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [toolSearch, setToolSearch] = useState('')
   const [toolFilter, setToolFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
+  const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
 
   const { currentOrganization } = useOrganizationStore()
   const { success, error: errorNotif } = useNotifications()
   const queryClient = useQueryClient()
+  const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
   const { data: gatewaysData, isLoading, isError, error: gatewaysError, refetch: refetchGateways } = useQuery({
     queryKey: ['gateways', currentOrganization?.id],
@@ -119,7 +122,7 @@ export function GatewaysPage() {
     onError: () => errorNotif('Failed to remove tool'),
   })
 
-  const filteredGateways = gateways.filter((gateway: Gateway) => {
+  const filteredGateways = filterByTeamVisibility(gateways as any[], teamFilter).filter((gateway: Gateway) => {
     const matchesSearch =
       gateway.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (gateway.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -231,7 +234,14 @@ export function GatewaysPage() {
               <Router className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-medium text-base">{gateway.name}</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-medium text-base">{gateway.name}</h3>
+                <VisibilityBadge
+                  visibility={(gateway as any).visibility}
+                  teamId={(gateway as any).teamId}
+                  teamLookup={teamLookup}
+                />
+              </div>
               <div className="text-sm text-muted-foreground">{gateway.description || 'API Gateway'}</div>
             </div>
           </div>
@@ -440,6 +450,11 @@ export function GatewaysPage() {
                   <SelectItem value="inactive">Inactive</SelectItem>
                 </SelectContent>
               </Select>
+              <TeamFilter
+                organizationId={currentOrganization?.id}
+                value={teamFilter}
+                onChange={setTeamFilter}
+              />
             </div>
 
             <DataTable
