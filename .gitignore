@@ -57,3 +57,9 @@ test-results/
 backend/.env
 .agented/
 .cursor/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Agent harness leftovers (Cursor / agented / OpenAI / Anthropic auto-generated guidance files)
+AGENTS.md
