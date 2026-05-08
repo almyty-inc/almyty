@@ -33,7 +33,8 @@
     "@almyty/chat": "^0.1.0",
     "@almyty/skills": "^1.0.2",
     "@almyty/mcp-server": "^1.0.0",
-    "@almyty/acp-server": "^1.0.0"
+    "@almyty/acp-server": "^1.0.0",
+    "@almyty/runner": "^0.1.0"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",

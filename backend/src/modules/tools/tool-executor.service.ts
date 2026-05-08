@@ -48,7 +48,7 @@ import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
 import { ToolScriptExecutor } from './executors/tool-script.executor';
 import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
 import { ToolStatsHelper } from './tool-stats.helper';
-
+import { RunnerCallService, RUNNER_CALL_ERRORS, RunnerCallError } from '../runner/runner-call.service';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -76,6 +76,7 @@ export class ToolExecutorService {
     private readonly auditLogService: AuditLogService,
     private readonly cacheRateLimit: ToolCacheRateLimitHelper,
     private readonly stats: ToolStatsHelper,
+    private readonly runnerCalls: RunnerCallService,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -221,7 +222,13 @@ export class ToolExecutorService {
 
       let result: ToolExecutionResult | undefined;
 
-      if (tool.llmConfig?.providerId && tool.llmConfig?.promptTemplate) {
+      // runnerConfig wins before any other dispatch path. The presence
+      // of runnerConfig is the signal that this tool is owned by a
+      // registered runner; falling through to the script/HTTP paths
+      // would invoke executors that have no idea what to do with it.
+      if (tool.runnerConfig) {
+        result = await this.executeRunnerCall(tool, parameters, options);
+      } else if (tool.llmConfig?.providerId && tool.llmConfig?.promptTemplate) {
         result = await this.scriptExecutor.executeLlm(tool, parameters, options);
       } else if (tool.sdkConfig) {
         result = await this.scriptExecutor.executeSdk(tool, parameters, options);
@@ -387,6 +394,87 @@ export class ToolExecutorService {
 
   getToolExecutionStats(...args: Parameters<ToolStatsHelper['getToolExecutionStats']>) {
     return this.stats.getToolExecutionStats(...args);
+  }
+
+  /**
+   * Dispatch a runner-backed tool. Maps RunnerCallError codes onto
+   * ToolExecutionResult so the caller (controllers, agent runtime,
+   * MCP handlers) sees uniform shape regardless of how dispatch
+   * failed.
+   *
+   * Workspace handling: tools whose runnerConfig.requiresWorkspace
+   * is true require parameters.workspaceId to be set by the caller.
+   * The runner resolves workspaceId to a process-bound workspace dir
+   * and refuses if the workspace isn't ACTIVE for that runner. We
+   * surface the missing-workspace case here so the runner doesn't
+   * have to guess what the caller intended.
+   */
+  private async executeRunnerCall(
+    tool: Tool,
+    parameters: Record<string, any>,
+    options: ToolExecutionOptions,
+  ): Promise<ToolExecutionResult> {
+    const startTime = Date.now();
+    const cfg = tool.runnerConfig!;
+    const workspaceId = typeof parameters.workspaceId === 'string' ? parameters.workspaceId : undefined;
+
+    if (cfg.requiresWorkspace && !workspaceId) {
+      return {
+        success: false,
+        error: `Tool '${tool.name}' requires a workspaceId parameter; runner-backed methods scoped to a workspace cannot run without one.`,
+        executionTime: Date.now() - startTime,
+        cached: false,
+        rateLimited: false,
+        retryCount: 0,
+      };
+    }
+
+    // Strip workspaceId from the params payload — it travels in the
+    // envelope frame, not the inner method params. Otherwise the
+    // runner-side handler sees an unexpected field.
+    const { workspaceId: _ws, ...callParams } = parameters;
+
+    try {
+      const response = await this.runnerCalls.dispatch(
+        cfg.runnerId,
+        cfg.method,
+        callParams,
+        workspaceId,
+        { signal: options.signal, timeoutMs: tool.configuration?.timeout },
+      );
+      if (!response.ok) {
+        return {
+          success: false,
+          error: response.error?.message ?? `runner method ${cfg.method} reported failure`,
+          data: response.error,
+          executionTime: Date.now() - startTime,
+          cached: false,
+          rateLimited: false,
+          retryCount: 0,
+        };
+      }
+      return {
+        success: true,
+        data: response.result,
+        executionTime: Date.now() - startTime,
+        cached: false,
+        rateLimited: false,
+        retryCount: 0,
+      };
+    } catch (err: any) {
+      if (err instanceof RunnerCallError) {
+        return {
+          success: false,
+          error: `${err.code}: ${err.message}`,
+          executionTime: Date.now() - startTime,
+          cached: false,
+          rateLimited: false,
+          retryCount: 0,
+          metadata: { runnerErrorCode: err.code, cause: err.cause },
+        };
+      }
+      throw err;
+    }
   }
 
   private abortedResult(startTime: number): ToolExecutionResult {
