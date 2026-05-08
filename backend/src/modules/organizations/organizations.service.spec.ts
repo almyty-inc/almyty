@@ -1077,5 +1077,334 @@ describe('OrganizationsService', () => {
     });
   });
 
+  // ----- Team-admin RBAC (assertCanManageTeam) -----------------------
+  //
+  // PR #71 introduced team management endpoints gated only on org
+  // owner/admin. This block exercises the followup that lets a
+  // TeamRole.LEAD ('team_admin') of team X manage members and rename
+  // team X — but NOT delete it, and NOT touch other teams. The check
+  // is enforced inline inside the service to avoid a forwardRef cycle
+  // between OrganizationsService and AccessPolicyService.
+  describe('team_admin RBAC', () => {
+    const org = 'org-1';
+    const teamA = 'team-A';
+    const teamB = 'team-B';
+
+    beforeEach(() => {
+      // Most tests need the team-in-org check to pass.
+      teamRepository.findOne.mockImplementation(({ where }: any) => {
+        if (where?.id === teamA && where?.organizationId === org) {
+          return Promise.resolve({ id: teamA, organizationId: org, isDefault: false });
+        }
+        if (where?.id === teamB && where?.organizationId === org) {
+          return Promise.resolve({ id: teamB, organizationId: org, isDefault: false });
+        }
+        return Promise.resolve(null);
+      });
+    });
+
+    describe('updateTeam (rename)', () => {
+      it('allows org owner', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'owner-1',
+          organizationId: org,
+          role: OrganizationRole.OWNER,
+          isActive: true,
+        });
+        teamRepository.save.mockImplementation((t: any) => Promise.resolve(t));
+
+        await expect(
+          service.updateTeam(org, teamA, { name: 'Renamed' }, 'owner-1'),
+        ).resolves.toBeDefined();
+      });
+
+      it('allows org admin', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'admin-1',
+          organizationId: org,
+          role: OrganizationRole.ADMIN,
+          isActive: true,
+        });
+        teamRepository.save.mockImplementation((t: any) => Promise.resolve(t));
+
+        await expect(
+          service.updateTeam(org, teamA, { name: 'Renamed' }, 'admin-1'),
+        ).resolves.toBeDefined();
+      });
+
+      it('allows team_admin (lead) of THIS team', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'lead-1',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+        userTeamRepository.findOne.mockResolvedValue({
+          userId: 'lead-1',
+          teamId: teamA,
+          role: 'lead',
+          isActive: true,
+        });
+        teamRepository.save.mockImplementation((t: any) => Promise.resolve(t));
+
+        await expect(
+          service.updateTeam(org, teamA, { name: 'Renamed' }, 'lead-1'),
+        ).resolves.toBeDefined();
+      });
+
+      it('denies team_admin of a DIFFERENT team', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'lead-of-B',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+        // userTeamRepository scoped query: lead-of-B is lead of team B,
+        // so a lookup for (lead-of-B, teamA) returns null.
+        userTeamRepository.findOne.mockImplementation(({ where }: any) => {
+          if (where?.userId === 'lead-of-B' && where?.teamId === teamA) {
+            return Promise.resolve(null);
+          }
+          return Promise.resolve({
+            userId: 'lead-of-B',
+            teamId: teamB,
+            role: 'lead',
+          });
+        });
+
+        await expect(
+          service.updateTeam(org, teamA, { name: 'Renamed' }, 'lead-of-B'),
+        ).rejects.toThrow(ForbiddenException);
+      });
+
+      it('denies plain org member with no team_admin role', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'plain-member',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+        userTeamRepository.findOne.mockResolvedValue(null);
+
+        await expect(
+          service.updateTeam(org, teamA, { name: 'Renamed' }, 'plain-member'),
+        ).rejects.toThrow(ForbiddenException);
+      });
+
+      it('denies a team MEMBER (not lead) of the target team', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'tm-1',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+        userTeamRepository.findOne.mockResolvedValue({
+          userId: 'tm-1',
+          teamId: teamA,
+          role: 'member',
+          isActive: true,
+        });
+
+        await expect(
+          service.updateTeam(org, teamA, { name: 'Renamed' }, 'tm-1'),
+        ).rejects.toThrow(ForbiddenException);
+      });
+    });
+
+    describe('addTeamMember (manage-members)', () => {
+      it('allows team_admin of THIS team', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'lead-1',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+        // First findOne is the lead lookup (returns lead), second is
+        // the existing-membership lookup for the new user (returns null).
+        let callCount = 0;
+        userTeamRepository.findOne.mockImplementation(() => {
+          callCount += 1;
+          if (callCount === 1) {
+            return Promise.resolve({
+              userId: 'lead-1',
+              teamId: teamA,
+              role: 'lead',
+              isActive: true,
+            });
+          }
+          return Promise.resolve(null);
+        });
+        userTeamRepository.create.mockReturnValue({ teamId: teamA, userId: 'new-user' });
+        userTeamRepository.save.mockResolvedValue({});
+
+        await expect(
+          service.addTeamMember(org, teamA, 'new-user', undefined, 'lead-1'),
+        ).resolves.toBeUndefined();
+      });
+
+      it('denies team_admin of a different team', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'lead-of-B',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+        userTeamRepository.findOne.mockResolvedValue(null);
+
+        await expect(
+          service.addTeamMember(org, teamA, 'new-user', undefined, 'lead-of-B'),
+        ).rejects.toThrow(ForbiddenException);
+      });
+    });
+
+    describe('updateTeamMemberRole (manage-members)', () => {
+      it('allows team_admin of THIS team to change a member role', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'lead-1',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+        let call = 0;
+        userTeamRepository.findOne.mockImplementation(() => {
+          call += 1;
+          if (call === 1) {
+            // RBAC: lead lookup
+            return Promise.resolve({
+              userId: 'lead-1',
+              teamId: teamA,
+              role: 'lead',
+              isActive: true,
+            });
+          }
+          // Target membership lookup
+          return Promise.resolve({ id: 'm-1', role: 'member' });
+        });
+        userTeamRepository.save.mockResolvedValue({});
+
+        await expect(
+          service.updateTeamMemberRole(org, teamA, 'target-user', 'lead', 'lead-1'),
+        ).resolves.toBeUndefined();
+      });
+
+      it('denies plain org member with no team role', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'plain',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+        userTeamRepository.findOne.mockResolvedValue(null);
+
+        await expect(
+          service.updateTeamMemberRole(org, teamA, 'target-user', 'lead', 'plain'),
+        ).rejects.toThrow(ForbiddenException);
+      });
+    });
+
+    describe('removeTeamMember (manage-members)', () => {
+      it('allows team_admin of THIS team', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'lead-1',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+        let call = 0;
+        userTeamRepository.findOne.mockImplementation(() => {
+          call += 1;
+          if (call === 1) {
+            return Promise.resolve({
+              userId: 'lead-1',
+              teamId: teamA,
+              role: 'lead',
+              isActive: true,
+            });
+          }
+          return Promise.resolve({ id: 'm-1' });
+        });
+        userTeamRepository.remove.mockResolvedValue({});
+
+        await expect(
+          service.removeTeamMember(org, teamA, 'target-user', 'lead-1'),
+        ).resolves.toBeUndefined();
+      });
+
+      it('denies team_admin of a different team', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'lead-of-B',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+        userTeamRepository.findOne.mockResolvedValue(null);
+
+        await expect(
+          service.removeTeamMember(org, teamA, 'target-user', 'lead-of-B'),
+        ).rejects.toThrow(ForbiddenException);
+      });
+    });
+
+    describe('deleteTeam (delete)', () => {
+      it('allows org owner', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'owner-1',
+          organizationId: org,
+          role: OrganizationRole.OWNER,
+          isActive: true,
+        });
+        teamRepository.remove = jest.fn().mockResolvedValue({});
+
+        await expect(
+          service.deleteTeam(org, teamA, 'owner-1'),
+        ).resolves.toBeUndefined();
+      });
+
+      it('denies team_admin of THAT team — only org owner/admin can delete', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'lead-1',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+        userTeamRepository.findOne.mockResolvedValue({
+          userId: 'lead-1',
+          teamId: teamA,
+          role: 'lead',
+          isActive: true,
+        });
+
+        await expect(
+          service.deleteTeam(org, teamA, 'lead-1'),
+        ).rejects.toThrow(ForbiddenException);
+      });
+
+      it('denies plain org member', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue({
+          userId: 'plain',
+          organizationId: org,
+          role: OrganizationRole.MEMBER,
+          isActive: true,
+        });
+
+        await expect(
+          service.deleteTeam(org, teamA, 'plain'),
+        ).rejects.toThrow(ForbiddenException);
+      });
+    });
+
+    describe('non-member of org', () => {
+      it('denies caller who is not a member of the org at all', async () => {
+        userOrganizationRepository.findOne.mockResolvedValue(null);
+        userTeamRepository.findOne.mockResolvedValue(null);
+
+        await expect(
+          service.updateTeam(org, teamA, { name: 'X' }, 'stranger'),
+        ).rejects.toThrow(ForbiddenException);
+      });
+    });
+  });
+
+
 
 });
