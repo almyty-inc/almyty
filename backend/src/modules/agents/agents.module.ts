@@ -46,6 +46,7 @@ import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
 import { ToolsModule } from '../tools/tools.module';
 import { MemoryModule } from '../memory/memory.module';
 import { A2AModule } from '../a2a/a2a.module';
+import { ApprovalsModule } from '../approvals/approvals.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { A2AModule } from '../a2a/a2a.module';
     forwardRef(() => ToolsModule),
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
+    forwardRef(() => ApprovalsModule),
   ],
   providers: [AgentsService, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeProcessor],
   controllers: [AgentsController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController],
