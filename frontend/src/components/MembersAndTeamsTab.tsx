@@ -132,6 +132,33 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
     },
   })
 
+  // Delete team mutation. Backend refuses if isDefault=true (400);
+  // we also disable the button in that case but defend in depth.
+  const deleteTeamMutation = useMutation({
+    mutationFn: (teamId: string) =>
+      organizationsApi.deleteTeam(organizationId!, teamId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization-teams', organizationId] })
+      success('Team deleted', 'Team has been deleted successfully.')
+    },
+    onError: (err: any) => {
+      error('Failed to delete team', err.response?.data?.message || 'Please try again.')
+    },
+  })
+
+  // Remove a single user from a team.
+  const removeFromTeamMutation = useMutation({
+    mutationFn: (data: { teamId: string; userId: string }) =>
+      organizationsApi.removeTeamMember(organizationId!, data.teamId, data.userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization-teams', organizationId] })
+      success('Member removed', 'Member has been removed from the team.')
+    },
+    onError: (err: any) => {
+      error('Failed to remove member', err.response?.data?.message || 'Please try again.')
+    },
+  })
+
   if (!organizationId) {
     return (
       <Card>
@@ -387,9 +414,19 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                   <div key={team.id} className="border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <h4 className="font-medium">{team.name}</h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium">{team.name}</h4>
+                          {team.isDefault && (
+                            <Badge variant="secondary" className="text-xs">Default</Badge>
+                          )}
+                        </div>
                         {team.description && (
                           <p className="text-sm text-muted-foreground">{team.description}</p>
+                        )}
+                        {team.createdAt && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Created {new Date(team.createdAt).toLocaleDateString()}
+                          </p>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
@@ -398,6 +435,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                           variant="ghost" 
                           size="sm"
                           onClick={() => openAddToTeamDialog(team)}
+                          title="Add member"
                         >
                           <UserPlus className="h-3 w-3" />
                         </Button>
@@ -405,8 +443,23 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                           variant="ghost" 
                           size="sm"
                           onClick={() => openEditTeamDialog(team)}
+                          title="Edit team"
                         >
                           <Settings className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={team.isDefault || deleteTeamMutation.isPending}
+                          title={team.isDefault ? 'Default team cannot be deleted' : 'Delete team'}
+                          onClick={() => {
+                            if (team.isDefault) return
+                            if (confirm(`Delete team "${team.name}"? This cannot be undone.`)) {
+                              deleteTeamMutation.mutate(team.id)
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                     </div>
@@ -447,7 +500,17 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                                     <SelectItem value="lead">Lead</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                <Button variant="ghost" size="sm">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={removeFromTeamMutation.isPending}
+                                  title="Remove from team"
+                                  onClick={() => {
+                                    if (confirm(`Remove ${member.user?.firstName || 'this member'} from "${team.name}"?`)) {
+                                      removeFromTeamMutation.mutate({ teamId: team.id, userId: member.userId })
+                                    }
+                                  }}
+                                >
                                   <Trash2 className="h-3 w-3" />
                                 </Button>
                               </div>

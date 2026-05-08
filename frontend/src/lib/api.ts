@@ -305,6 +305,12 @@ export const organizationsApi = {
     
   updateTeam: (id: string, teamId: string, data: { name: string; description?: string }) =>
     apiPut(`/organizations/${id}/teams/${teamId}`, data),
+
+  deleteTeam: (id: string, teamId: string) =>
+    apiDel(`/organizations/${id}/teams/${teamId}`),
+
+  getTeamMembers: (id: string, teamId: string) =>
+    apiGet(`/organizations/${id}/teams/${teamId}/members`),
     
   addTeamMember: (orgId: string, teamId: string, data: { userId: string; role?: string }) =>
     apiPost(`/organizations/${orgId}/teams/${teamId}/members`, data),

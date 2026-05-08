@@ -999,5 +999,83 @@ describe('OrganizationsService', () => {
       expect(result.plan).toBe('pro');
     });
   });
+  describe('deleteTeam - Branch Coverage', () => {
+    it('should refuse to delete the default team with BadRequestException', async () => {
+      teamRepository.findOne.mockResolvedValue({
+        id: 'team-1',
+        organizationId: 'org-1',
+        isDefault: true,
+      });
+
+      await expect(service.deleteTeam('org-1', 'team-1'))
+        .rejects
+        .toThrow(BadRequestException);
+    });
+
+    it('should remove a non-default team', async () => {
+      const mockTeam = { id: 'team-1', organizationId: 'org-1', isDefault: false };
+      teamRepository.findOne.mockResolvedValue(mockTeam);
+      teamRepository.remove = jest.fn().mockResolvedValue(mockTeam);
+
+      await service.deleteTeam('org-1', 'team-1');
+
+      expect(teamRepository.remove).toHaveBeenCalledWith(mockTeam);
+    });
+
+    it('should throw NotFoundException when team is in a different org', async () => {
+      teamRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.deleteTeam('org-1', 'team-99'))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+  });
+
+  describe('getTeamMembers - Branch Coverage', () => {
+    it('should return active team members with user details', async () => {
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
+
+      const memberships = [
+        {
+          id: 'm-1',
+          userId: 'u-1',
+          role: 'lead',
+          joinedAt: new Date('2025-01-01'),
+          user: { id: 'u-1', email: 'a@example.com', firstName: 'Ann', lastName: 'A' },
+        },
+        {
+          id: 'm-2',
+          userId: 'u-2',
+          role: 'member',
+          joinedAt: new Date('2025-01-02'),
+          user: { id: 'u-2', email: 'b@example.com', firstName: 'Bob', lastName: 'B' },
+        },
+      ];
+      userTeamRepository.find = jest.fn().mockResolvedValue(memberships);
+
+      const result = await service.getTeamMembers('org-1', 'team-1');
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({
+        userId: 'u-1',
+        email: 'a@example.com',
+        role: 'lead',
+      });
+      expect(result[1]).toMatchObject({
+        userId: 'u-2',
+        email: 'b@example.com',
+        role: 'member',
+      });
+    });
+
+    it('should throw NotFoundException when team is not in the org', async () => {
+      teamRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getTeamMembers('org-1', 'team-99'))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+  });
+
 
 });
