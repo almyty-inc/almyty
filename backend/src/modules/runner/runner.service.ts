@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
 
@@ -7,6 +7,7 @@ import { RunnerSession } from '../../entities/runner-session.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { canAcceptWork, nextState, RunnerSnapshot } from './runner-state';
 import { RunnerCapabilityPublisher } from './runner-capability.publisher';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 /**
  * Input shape for POST /runners/register. The runner CLI sends this
@@ -49,6 +50,7 @@ export class RunnerService {
     @InjectRepository(Workspace)
     private readonly workspaces: Repository<Workspace>,
     private readonly capabilities: RunnerCapabilityPublisher,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   /**
@@ -251,8 +253,22 @@ export class RunnerService {
     return runner;
   }
 
-  async unregister(runnerId: string, ownerUserId: string, organizationId: string): Promise<void> {
-    const runner = await this.getOne(runnerId, ownerUserId, organizationId);
+  async unregister(runnerId: string, userId: string, organizationId: string): Promise<void> {
+    const runner = await this.runners.findOne({
+      where: { id: runnerId, organizationId },
+    });
+    if (!runner) throw new NotFoundException('runner not found');
+
+    // Authorization: the runner owner can always unregister their own
+    // runner. Otherwise the org owner/admin or (for team-scoped runners)
+    // a team lead may manage it via the access policy.
+    if (runner.ownerUserId !== userId) {
+      const decision = await this.accessPolicy.canAccess({ id: userId }, runner, 'manage');
+      if (!decision.allowed) {
+        throw new ForbiddenException(decision.reason);
+      }
+    }
+
     // Drop published capabilities first so a concurrent dispatch can't
     // race against deletion and find a tool whose runner is gone.
     await this.capabilities.unpublish(runner.id);

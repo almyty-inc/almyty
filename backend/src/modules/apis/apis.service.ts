@@ -1,5 +1,5 @@
 import { Inject, forwardRef } from '@nestjs/common';
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, DataSource } from 'typeorm';
 import axios from 'axios';
@@ -20,6 +20,7 @@ import { ApisImportHelper } from './apis-import.helper';
 import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
@@ -46,6 +47,7 @@ export class ApisService {
     @Inject(forwardRef(() => ApisImportHelper))
     private readonly importHelper: ApisImportHelper,
     private readonly toolGen: ApisToolGeneratorHelper,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async create(createApiData: CreateApiData): Promise<Api> {
@@ -257,6 +259,7 @@ export class ApisService {
     id: string,
     updateApiData: UpdateApiData,
     organizationId: string,
+    userId?: string,
   ): Promise<Api> {
     const api = await this.findOne(id, organizationId);
 
@@ -264,16 +267,24 @@ export class ApisService {
       throw new NotFoundException('API not found');
     }
 
+    // Authorization: org owner/admin always, team-scoped requires team lead.
+    if (userId) {
+      const decision = await this.accessPolicy.canAccess({ id: userId }, api, 'manage');
+      if (!decision.allowed) {
+        throw new ForbiddenException(decision.reason);
+      }
+    }
+
     Object.assign(api, updateApiData);
     const saved = await this.apiRepository.save(api);
 
     // Audit log (fire-and-forget)
-    this.auditLogService.logUpdate(organizationId, undefined, AuditResource.API, saved.id, saved.name);
+    this.auditLogService.logUpdate(organizationId, userId, AuditResource.API, saved.id, saved.name);
 
     return saved;
   }
 
-  async remove(id: string, organizationId: string): Promise<void> {
+  async remove(id: string, organizationId: string, userId?: string): Promise<void> {
     // DELETE with a org-scoped WHERE in a single statement so a
     // race between the findOne and the delete can't cause us to
     // drop a row that was just re-homed (paranoid, but cheap).
@@ -284,6 +295,14 @@ export class ApisService {
       throw new NotFoundException('API not found');
     }
 
+    // Authorization: org owner/admin always, team-scoped requires team lead.
+    if (userId) {
+      const decision = await this.accessPolicy.canAccess({ id: userId }, existing, 'manage');
+      if (!decision.allowed) {
+        throw new ForbiddenException(decision.reason);
+      }
+    }
+
     const result = await this.apiRepository.delete({ id, organizationId });
 
     if (result.affected === 0) {
@@ -291,7 +310,7 @@ export class ApisService {
     }
 
     // Audit log (fire-and-forget)
-    this.auditLogService.logDelete(organizationId, undefined, AuditResource.API, id, existing.name);
+    this.auditLogService.logDelete(organizationId, userId, AuditResource.API, id, existing.name);
   }
 
   async updateStatus(
