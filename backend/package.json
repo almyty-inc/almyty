@@ -110,7 +110,10 @@
     "lodash": "^4.17.24",
     "multer": "^2.1.1",
     "mem0ai": {
-      "axios": "^1.16.0"
+      "axios": "^1.16.0",
+      "@qdrant/js-client-rest": {
+        "undici": "^6.24.0"
+      }
     },
     "google-proto-files": {
       "protobufjs": "^7.5.5"
