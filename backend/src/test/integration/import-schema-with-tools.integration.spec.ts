@@ -36,6 +36,8 @@ import { ApisService } from '../../modules/apis/apis.service';
 import { ApisImportHelper } from '../../modules/apis/apis-import.helper';
 import { ApisToolGeneratorHelper } from '../../modules/apis/apis-tool-generator.helper';
 import { ToolsService } from '../../modules/tools/tools.service';
+import { ToolsOperationHelper } from '../../modules/tools/tools-operation.helper';
+import { ToolsStatsHelper } from '../../modules/tools/tools-stats.helper';
 import { SchemaParserService } from '../../modules/schema-parser/schema-parser.service';
 import { OpenAPIParserService } from '../../modules/schema-parser/parsers/openapi-parser.service';
 import { GraphQLParserService } from '../../modules/schema-parser/parsers/graphql-parser.service';
@@ -192,6 +194,8 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
         SOAPParserService,
         ProtobufParserService,
         ToolsService,
+        ToolsOperationHelper,
+        ToolsStatsHelper,
         JsonSchemaTranslatorService,
         { provide: AuditLogService, useValue: { logCreate: jest.fn(), logUpdate: jest.fn(), logAction: jest.fn() } },
         { provide: getRepositoryToken(Api), useValue: ds.getRepository(Api) },
