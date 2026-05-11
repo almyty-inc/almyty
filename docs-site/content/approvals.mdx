@@ -1,0 +1,78 @@
+# Approvals
+
+Approvals are the human-in-the-loop gate for autonomous agents. When an agent needs human sign-off before taking a non-reversible action — a payment, an external send, a destructive operation — it calls the built-in `request_approval` tool. The run pauses, an approval request appears in the **Approvals** page, and an authorized reviewer approves or rejects. The run then resumes (on approve) or terminates (on reject).
+
+![Approvals empty state](/screenshots/approvals-empty.png)
+
+## How it works
+
+1. **Agent requests approval**. While running, the agent invokes the built-in tool:
+   ```
+   request_approval(reason="Send a $500 wire to ACME Corp", payload={...})
+   ```
+   The runtime creates an `ApprovalRequest` row, flips the run to `waiting_approval`, and emits an event.
+
+2. **Reviewer is notified**. The Approvals page polls every 10 seconds. Org admins and `team_admin`s of the requesting agent's team see the pending request in their queue.
+
+3. **Reviewer decides**. They click **Approve** or **Reject** in the UI, optionally adding a decision reason. The decision is recorded with `decidedBy`, `decidedAt`, `decisionReason`.
+
+4. **Run resumes or terminates**. On approve, the run goes back to `running` and continues from where it paused, with the approval result available as the tool call's return value. On reject (or expiry), the run is cancelled with the rejection reason recorded as the cancellation reason.
+
+## Authorization
+
+Who can approve depends on the resource's team scoping:
+
+- **Org-wide agents** (`visibility='org'`) → org `owner` or `admin` can approve.
+- **Team-scoped agents** (`visibility='team'`) → org `owner`/`admin` OR the team's `team_admin` (TeamRole.LEAD) can approve. Plain team members can see the pending request but not act on it.
+
+This is enforced server-side via `AccessPolicyService.canAccess(user, approvalRequest, 'manage')`.
+
+## Expiration
+
+By default a pending approval times out after 24 hours (configurable up to 7 days when creating it via the API). A scheduled sweep flips expired requests to `'expired'` and the corresponding run is cancelled with reason `"approval expired"`.
+
+## Via the API
+
+### List pending approvals
+
+```bash
+curl /approvals \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Returns only approvals the caller can see, filtered by `AccessPolicyService.applyListFilter` (org-wide ∪ caller's teams).
+
+### Approve
+
+```bash
+curl -X POST /approvals/{id}/approve \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "decisionReason": "Looked at the line items, matches PO #4221, approved."
+  }'
+```
+
+### Reject
+
+```bash
+curl -X POST /approvals/{id}/reject \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "decisionReason": "Amount exceeds the per-vendor cap for the quarter."
+  }'
+```
+
+## Agent-side usage
+
+Inside an autonomous agent's instructions, instruct the model to gate sensitive actions:
+
+```
+You are a billing assistant. Before issuing any refund, transfer, or other
+non-reversible action, call request_approval with a clear reason summarizing
+what you intend to do and the relevant amounts/parties.
+```
+
+The tool returns when the human decides. Treat the returned value as the
+authorization to proceed.
