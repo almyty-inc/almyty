@@ -86,9 +86,9 @@ const navigation = [
   { name: 'Tools', href: '/tools', icon: Wrench },
   { name: 'Gateways', href: '/gateways', icon: Zap },
   { name: 'Agents', href: '/agents', icon: Bot },
+  { name: 'Runners', href: '/runners', icon: Cpu },
   { name: 'Credentials', href: '/credentials', icon: Key },
   { name: 'Approvals', href: '/approvals', icon: Shield },
-  // Configuration
   // Configuration
   { name: 'divider', href: '', icon: null as any },
   { name: 'Models', href: '/llm-providers', icon: Brain },
