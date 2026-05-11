@@ -64,21 +64,46 @@ Click the menu icon on a member row and select **Remove**. Removing a member rev
 
 ## Teams
 
-Teams are sub-groups within an organization for finer-grained access control.
+Teams are sub-groups within an organization for finer-grained access control. Every organization gets a default **"Everyone"** team on creation — every member is automatically a member of it. Org owners are added as `team_admin` (lead); other roles are added as `team_member`.
+
+![Teams](/screenshots/settings-teams.png)
+
+Resources (tools, agents, gateways, runners, credentials, APIs, LLM providers) can be created with one of two visibility settings:
+
+- **Org-wide** (`visibility='org'`) — visible to every member of the organization.
+- **Team** (`visibility='team'`, with a `teamId`) — visible only to members of that team.
+
+When picking a team for a new resource, you can only park it in a team you're `team_admin` (lead) of. Org owners and admins can park resources in any team.
 
 ### Creating a team
 
-1. In **Settings** > **Members & Teams**, open the **Teams** section
+1. In **Settings** → **Members & Teams**, open the **Teams** sub-tab
 2. Click **Create Team**
-3. Enter a name and description
+3. Enter a name and (optional) description
 4. Add members from the organization
+
+The default "Everyone" team cannot be deleted (its delete button is disabled), but it can be renamed.
 
 ### Team roles
 
 | Role | Description |
 |------|-------------|
-| **lead** | Can manage team members and team settings |
-| **member** | Standard team member |
+| **team_admin** (`lead`) | Manages team membership, can rename the team, and is authorized to manage team-scoped resources (incl. approving HITL gates for that team). |
+| **team_member** (`member`) | Standard team member — can read/use team-scoped resources but not manage them. |
+
+### Authorization model
+
+The full picture, for a member acting on a resource:
+
+| Caller role | Resource visibility | Read/Use | Manage |
+|---|---|---|---|
+| Org owner / admin | any | ✓ | ✓ |
+| Org member (no team) | `org` | ✓ | requires explicit org-level perm |
+| Org member, `team_admin` of resource's team | `team` | ✓ | ✓ |
+| Org member, `team_member` of resource's team | `team` | ✓ | ✗ |
+| Org member, not in resource's team | `team` | ✗ | ✗ |
+
+Resources without `teamId` are treated as `org`-wide. The default "Everyone" team is *not* the same as org-wide — putting a resource in "Everyone" means every org member can see it (same effect today), but if you ever shrink the team's membership it becomes a real boundary.
 
 ## Via the API
 
