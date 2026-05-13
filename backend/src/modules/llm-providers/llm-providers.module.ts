@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { LlmProvider } from '../../entities/llm-provider.entity';
@@ -31,10 +31,10 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
       Gateway,
       Tool,
     ]),
-    ToolsModule,
+    forwardRef(() => ToolsModule),
     AuthorizationModule,
   ],
-  providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper],
+  providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper, LlmStatsHelper, LlmChatRunnerHelper],
   controllers: [LlmProvidersController, LlmSessionsController],
   exports: [LlmProvidersService],
 })
