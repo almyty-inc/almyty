@@ -4,7 +4,7 @@ import { PluginStoreHelper } from './plugin-store.helper';
 
 @Global()
 @Module({
-  providers: [PluginManagerService],
+  providers: [PluginManagerService, PluginStoreHelper],
   exports: [PluginManagerService],
 })
 export class PluginsModule {}
