@@ -59,7 +59,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
       OAuthAccessToken,
     ]),
     forwardRef(() => ToolsModule),
-    GatewaysModule,
+    forwardRef(() => GatewaysModule),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

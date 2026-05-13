@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -29,7 +29,9 @@ export class McpToolHandler {
     private gatewayToolRepository: Repository<GatewayTool>,
     @InjectRepository(ToolCategory)
     private toolCategoryRepository: Repository<ToolCategory>,
+    @Inject(forwardRef(() => ToolsService))
     private toolsService: ToolsService,
+    @Inject(forwardRef(() => ToolExecutorService))
     private toolExecutorService: ToolExecutorService,
     @InjectRedis() private readonly redis: Redis.Redis,
   ) {}

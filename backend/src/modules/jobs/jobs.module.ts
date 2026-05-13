@@ -3,7 +3,7 @@ import { BullModule } from '@nestjs/bull';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { SchemaImportProcessor } from './processors/schema-import.processor';
-import { ApisService } from '../apis/apis.service';
+import { ApisModule } from '../apis/apis.module';
 import { ToolsModule} from '../tools/tools.module';
 import { SchemaParserModule } from '../schema-parser/schema-parser.module';
 
@@ -42,8 +42,9 @@ import { Organization } from '../../entities/organization.entity';
     ]),
     SchemaParserModule,
     ToolsModule,
+    forwardRef(() => ApisModule),
   ],
-  providers: [SchemaImportProcessor, ApisService],
+  providers: [SchemaImportProcessor],
   exports: [BullModule, SchemaImportProcessor],
 })
 export class JobsModule {}
