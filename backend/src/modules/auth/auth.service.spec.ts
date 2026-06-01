@@ -235,6 +235,74 @@ describe('AuthService', () => {
       expect(userOrganizationRepository.save).toHaveBeenCalled();
     });
 
+    it('auto-provisions the default "Everyone" team and joins the owner as LEAD on register', async () => {
+      // Capture the team + user-team rows that the register transaction
+      // tries to save. The existing transactionalManager passes Team /
+      // UserTeam saves through unchanged (returns `data`); we layer a
+      // spy on top to assert against them. Regression for the original
+      // teams-empty-for-fresh-org bug: register() used to create the
+      // user + organization + user-organization rows but never
+      // provisioned the default team, so a freshly-signed-up org owner
+      // saw an empty Teams tab and was blocked from any team-scoped
+      // visibility option in the create-API / create-tool dialogs.
+      const teamSaves: any[] = [];
+      const userTeamSaves: any[] = [];
+      const savedOrg: any = { id: 'org-123', name: createUserDto.organizationName, plan: 'free', isActive: true };
+      const userRepo: any = (service as any).userRepository;
+      const orgRepo: any = (service as any).organizationRepository;
+      // Replace the manager.transaction so we can pass our own
+      // entity-aware save spies and stamp savedTeam.id.
+      userRepo.manager.transaction = jest.fn(async (cb: any) => cb({
+        create: (entityClass: any, data: any) => data,
+        save: jest.fn(async (entityClass: any, entity: any) => {
+          const name = entityClass?.name ?? '';
+          if (name === 'User') return { ...entity, id: 'user-123' };
+          if (name === 'Organization') return savedOrg;
+          if (name === 'UserOrganization') return entity;
+          if (name === 'Team') {
+            const saved = { ...entity, id: 'team-default' };
+            teamSaves.push(saved);
+            return saved;
+          }
+          if (name === 'UserTeam') {
+            userTeamSaves.push(entity);
+            return entity;
+          }
+          return entity;
+        }),
+      }));
+
+      userRepo.findOne.mockResolvedValueOnce(null); // user not found
+      orgRepo.findOne.mockResolvedValue(null); // org name available
+      jwtService.sign.mockReturnValue('mock-token');
+      // The token generation reads the user back with memberships.
+      userRepo.findOne.mockResolvedValueOnce({
+        id: 'user-123',
+        email: createUserDto.email,
+        firstName: createUserDto.firstName,
+        lastName: createUserDto.lastName,
+        organizationMemberships: [],
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      } as any);
+
+      await service.register(createUserDto);
+
+      expect(teamSaves).toHaveLength(1);
+      expect(teamSaves[0]).toMatchObject({
+        organizationId: savedOrg.id,
+        name: 'Everyone',
+        isDefault: true,
+      });
+      expect(userTeamSaves).toHaveLength(1);
+      expect(userTeamSaves[0]).toMatchObject({
+        userId: 'user-123',
+        teamId: 'team-default',
+        role: 'lead',
+        isActive: true,
+      });
+    });
+
+
     it('should throw error if user already exists', async () => {
       const existingUser = { id: 'existing-user' } as User;
       userRepository.findOne.mockResolvedValue(existingUser);
