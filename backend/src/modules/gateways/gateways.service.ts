@@ -351,6 +351,23 @@ export class GatewaysService {
   }> {
     this.logger.log(`[GET_GATEWAYS] Fetching gateways for org=${filters.organizationId}`);
 
+    // Self-heal: ensure the org has its system gateway. createOrganization()
+    // calls ensureSystemGateway() inline, but auth.register() doesn't go
+    // through that path — so freshly-signed-up orgs would render the
+    // Gateways page as empty even though every org is supposed to ship
+    // with the platform-management gateway used by MCP OAuth. The
+    // ensureSystemGateway helper is idempotent (early-return on
+    // existing isSystem=true row), so it costs one indexed lookup once
+    // the gateway exists. Failure is logged-and-swallowed because we
+    // don't want a transient gateway-create error to break listing.
+    try {
+      await this.init.ensureSystemGateway(filters.organizationId);
+    } catch (err) {
+      this.logger.warn(
+        `[GET_GATEWAYS] ensureSystemGateway failed for org=${filters.organizationId}: ${err.message}`,
+      );
+    }
+
     const page = filters.page || 1;
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
