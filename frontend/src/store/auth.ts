@@ -28,6 +28,12 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email: string, password: string) => {
         set({ isLoading: true })
+        // Drop any prior session's org selection before we make any
+        // authenticated requests, otherwise the request interceptor
+        // stamps the stale id into X-Organization-Id on the very first
+        // /auth/profile call after login and the backend 401s "Not a
+        // member of the requested organization".
+        localStorage.removeItem('almyty-org-store')
         try {
           const response = await authApi.login({ email, password })
           const { accessToken } = response
@@ -68,6 +74,10 @@ export const useAuthStore = create<AuthState>()(
 
       register: async (email: string, password: string, firstName: string, lastName: string, organizationName: string) => {
         set({ isLoading: true })
+        // Same reasoning as login(): wipe any prior session's
+        // currentOrganization so the next /auth/profile call carries the
+        // new user's identity, not the stale id.
+        localStorage.removeItem('almyty-org-store')
         try {
           const response = await authApi.register({ email, password, firstName, lastName, organizationName })
           const { accessToken } = response
@@ -109,6 +119,13 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem('token')
         localStorage.removeItem('user')
         localStorage.removeItem('auth-storage')
+        // Drop the previously-selected currentOrganization too. Without
+        // this, a different user signing in on the same browser inherits
+        // the prior session's org id, the request interceptor stamps it
+        // into X-Organization-Id, and the backend correctly 401s with
+        // "Not a member of the requested organization" — looks to the
+        // user as an "Invalid credentials" failure.
+        localStorage.removeItem('almyty-org-store')
 
         set({
           user: null,
