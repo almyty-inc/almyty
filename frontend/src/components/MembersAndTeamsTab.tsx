@@ -248,7 +248,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                 Manage who has access to this organization
               </CardDescription>
             </div>
-            <Dialog open={inviteMemberDialogOpen} onOpenChange={setInviteMemberDialogOpen}>
+            <Dialog open={inviteMemberDialogOpen} onOpenChange={(next) => { setInviteMemberDialogOpen(next); if (!next) { inviteMemberMutation.reset(); setNewMemberEmail(""); } }}>
               <DialogTrigger asChild>
                 <Button>
                   <UserPlus className="h-4 w-4 mr-2" />
