@@ -205,10 +205,16 @@ export function MemoriesPage() {
     return <div className="p-8"><EmptyState icon={Brain} title="No organization" description="Switch to an organization to view memory." /></div>
   }
 
-  const rawItems: Item[] = (list.data?.data?.items ?? []) as Item[]
+  // `apiPost` already calls `extractData` which peels off the
+  // { success, data } envelope, so memoriesApi.list() returns the
+  // raw payload (`{ items: […], next_cursor }`). The earlier
+  // `list.data?.data?.items` double-unwrap kept returning undefined
+  // — i.e. the Memory page rendered "No memories yet" no matter how
+  // many memories the org actually had.
+  const rawItems: Item[] = (list.data?.items ?? []) as Item[]
   const items: Item[] = teamFilter === 'all' ? rawItems : filterByTeamVisibility(rawItems as any[], teamFilter) as Item[]
-  const backends: Backend[] = (backendsQ.data?.data ?? []) as Backend[]
-  const health: Record<string, { ok: boolean; latency_ms: number }> = (healthQ.data?.data ?? {}) as any
+  const backends: Backend[] = (backendsQ.data ?? []) as Backend[]
+  const health: Record<string, { ok: boolean; latency_ms: number }> = (healthQ.data ?? {}) as any
 
   return (
     <div className="space-y-6 p-8">
@@ -341,7 +347,7 @@ export function MemoriesPage() {
         {/* ── Backends ───────────────────────────────────────────── */}
         <TabsContent value="backends" className="space-y-4">
           <ConfigCard
-            config={configQ.data?.data}
+            config={configQ.data}
             backends={backends}
             credentials={credsQ.data ?? []}
             saving={updateConfigMut.isPending}
