@@ -191,7 +191,12 @@ export function OrganizationsPage() {
       accessorKey: 'plan',
       header: 'Plan',
       cell: ({ row }) => {
-        const plan = row.original.plan
+        // Plan can be undefined on freshly-created orgs whose
+        // /organizations list response trims it; the DB column has a
+        // 'free' default but the API serializer doesn't always include
+        // it. Fall back to 'free' so the column renders and the page
+        // doesn't crash with a TypeError on the .charAt call.
+        const plan = row.original.plan || 'free'
         const colors = {
           [OrganizationPlan.FREE]: 'secondary',
           [OrganizationPlan.BASIC]: 'outline',
@@ -272,7 +277,11 @@ export function OrganizationsPage() {
       accessorKey: 'role',
       header: 'Role',
       cell: ({ row }) => {
-        const role = row.original.role
+        // Same defensive treatment as the Plan column above — role
+        // can be undefined when the membership list doesn't carry it
+        // (e.g. an invitation that's been accepted but the row was
+        // built from a stripped payload). Default to 'member'.
+        const role = row.original.role || OrganizationRole.MEMBER
         const colors = {
           [OrganizationRole.OWNER]: 'destructive',
           [OrganizationRole.ADMIN]: 'default',
@@ -285,9 +294,9 @@ export function OrganizationsPage() {
           [OrganizationRole.MEMBER]: Users,
           [OrganizationRole.VIEWER]: Eye,
         }
-        const Icon = icons[role]
+        const Icon = icons[role] ?? Users
         return (
-          <Badge variant={colors[role] as any} className="flex items-center gap-1">
+          <Badge variant={(colors[role] ?? 'secondary') as any} className="flex items-center gap-1">
             <Icon className="w-3 h-3" />
             {role.charAt(0).toUpperCase() + role.slice(1)}
           </Badge>
