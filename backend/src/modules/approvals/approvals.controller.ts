@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -18,6 +19,13 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ApprovalsService } from './approvals.service';
 
 class DecisionDto {
+  // Without an explicit class-validator decorator, ValidationPipe's
+  // forbidNonWhitelisted=true strips this field and the body lands
+  // empty — or worse, NestJS rejects it as "property decisionReason
+  // should not exist". @IsOptional + @IsString opts it into the
+  // whitelist and keeps the optionality semantics.
+  @IsOptional()
+  @IsString()
   decisionReason?: string;
 }
 
