@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Layers, Trash2 } from 'lucide-react'
@@ -50,6 +50,12 @@ export function WorkspaceDetailPage() {
     enabled: !!id,
     refetchInterval: RUNNER_HEARTBEAT_POLL_MS,
   })
+
+  useEffect(() => {
+    const cwd = wsQuery.data?.cwd
+    document.title = cwd ? `${cwd.split('/').pop()} | almyty` : 'Workspace | almyty'
+    return () => { document.title = 'almyty' }
+  }, [wsQuery.data])
 
   const releaseMutation = useMutation({
     mutationFn: () => workspacesApi.release(id),
