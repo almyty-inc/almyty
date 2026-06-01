@@ -44,6 +44,11 @@ export function OrganizationsPage() {
   const { currentOrganization, organizations, setCurrentOrganization } = useOrganizationStore()
   const { success, error } = useNotifications()
   const queryClient = useQueryClient()
+
+  React.useEffect(() => {
+    document.title = 'Organizations | almyty'
+    return () => { document.title = 'almyty' }
+  }, [])
   
   const [selectedOrg, setSelectedOrg] = React.useState<Organization | null>(null)
   const [selectedOrgId, setSelectedOrgId] = React.useState<string | null>(null)
