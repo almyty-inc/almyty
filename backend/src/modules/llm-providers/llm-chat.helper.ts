@@ -322,12 +322,27 @@ export class LlmChatHelper {
         session = await this.conversationRepository.save(session);
       }
 
-      // Resolve tools
+      // Resolve tools.
+      //
+      // Agent-runtime callers pass skipToolExecution: true together
+      // with fully-inline tool defs (built-ins like request_approval /
+      // wait, plus sub-agent function shims) that have no DB Tool
+      // row. Re-resolving by name through prepareTools would silently
+      // drop those — which is how request_approval ended up unreachable
+      // in the dashboard's autonomous-agent flow. When the caller has
+      // already inlined the shape, hand it to the provider verbatim
+      // (the provider only reads .name / .description / .parameters).
       let tools: Tool[] = [];
       if (request.toolIds && request.toolIds.length > 0) {
         tools = await this.toolRepository.find({
           where: request.toolIds.map(id => ({ id, organizationId })),
         });
+      } else if (request.skipToolExecution && Array.isArray(request.tools) && request.tools.length > 0) {
+        tools = request.tools.map(t => ({
+          name: t.name,
+          description: (t as any).description ?? '',
+          parameters: (t as any).parameters ?? { type: 'object', properties: {} },
+        })) as unknown as Tool[];
       } else {
         tools = await this.runner.prepareTools(request.tools || [], organizationId);
       }
