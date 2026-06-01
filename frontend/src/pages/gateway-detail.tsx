@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Info, Router, Settings, Shield, ChevronRight } from 'lucide-react'
@@ -51,6 +51,12 @@ export function GatewayDetailPage() {
     queryFn: () => gatewaysApi.getById(id!),
     enabled: !!id,
   })
+
+  useEffect(() => {
+    const name = (gatewayData as any)?.name
+    document.title = name ? `${name} | almyty` : 'Gateway | almyty'
+    return () => { document.title = 'almyty' }
+  }, [gatewayData])
 
   const { data: gatewayToolsData, isLoading: isLoadingGatewayTools } = useQuery({
     queryKey: ['gateway-tools', id],

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, BookOpen, Copy, Check, ChevronRight, Globe, Bot, Server } from 'lucide-react'
@@ -37,6 +37,12 @@ export function ToolDetailPage() {
     },
     enabled: !!id && !!currentOrganization,
   })
+
+  useEffect(() => {
+    const name = (toolData as any)?.name
+    document.title = name ? `${name} | almyty` : 'Tool | almyty'
+    return () => { document.title = 'almyty' }
+  }, [toolData])
 
   const runnerId = (toolData as any)?.runnerConfig?.runnerId as string | undefined
   const requiresWorkspace = !!(toolData as any)?.runnerConfig?.requiresWorkspace
