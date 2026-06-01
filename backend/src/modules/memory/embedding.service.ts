@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import axios from 'axios';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import { validateUrl } from '../../common/security/url-validator';
+import { LIMITS } from './canonical/canonical.constants';
 
 @Injectable()
 export class EmbeddingService {
@@ -52,7 +53,7 @@ export class EmbeddingService {
 
     // Fallback: simple hash-based approach
     try {
-      const vector = this.simpleTextVector(text, 256);
+      const vector = this.simpleTextVector(text, LIMITS.EMBEDDING_DEFAULT_DIM);
       return vector;
     } catch (error) {
       this.logger.warn(`Failed to generate embedding: ${error.message}`);
