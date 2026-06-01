@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Check, X, Clock, AlertCircle, Bot } from 'lucide-react'
@@ -42,6 +42,11 @@ export function ApprovalsPage() {
   const { success, error: errNotif } = useNotifications()
   const [decisionFor, setDecisionFor] = useState<{ row: ApprovalRequest; intent: 'approve' | 'reject' } | null>(null)
   const [decisionReason, setDecisionReason] = useState('')
+
+  useEffect(() => {
+    document.title = 'Approvals | almyty'
+    return () => { document.title = 'almyty' }
+  }, [])
 
   const query = useQuery<{ data: ApprovalRequest[] }>({
     queryKey: ['approvals'],

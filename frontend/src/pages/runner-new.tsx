@@ -36,6 +36,11 @@ export function RunnerNewPage() {
   const { success } = useNotifications()
   const [labels, setLabels] = useState<LabelEntry[]>([])
   const [waitingFor, setWaitingFor] = useState<string | null>(null)
+
+  useEffect(() => {
+    document.title = 'Start a runner | almyty'
+    return () => { document.title = 'almyty' }
+  }, [])
   const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
 
   const existingRunnersQuery = useQuery<Runner[]>({
