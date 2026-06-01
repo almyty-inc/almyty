@@ -84,6 +84,7 @@ export class AgentRuntimeBuilders {
     }
     toolLines.push('- wait: Pause execution');
     toolLines.push('- ask_user: Ask user a question');
+    toolLines.push('- request_approval: Pause for human approval before continuing');
     toolLines.push('- store_memory: Save to long-term memory');
     toolLines.push('- recall_memory: Search long-term memory');
     parts.push(`[AVAILABLE TOOLS]\nYou have access to these tools:\n${toolLines.join('\n')}`);
@@ -131,6 +132,7 @@ export class AgentRuntimeBuilders {
     // Built-in tools
     defs.push(BUILT_IN_TOOLS.wait);
     defs.push(BUILT_IN_TOOLS.ask_user);
+    defs.push(BUILT_IN_TOOLS.request_approval);
     if (agent.memoryConfig?.enabled) {
       defs.push(BUILT_IN_TOOLS.store_memory);
       defs.push(BUILT_IN_TOOLS.recall_memory);
