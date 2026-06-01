@@ -73,6 +73,20 @@ export class CreateApiDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, any>;
+
+  // Team-scoping. The dashboard's Connect-API dialog always sends
+  // these (defaulting visibility='org' / teamId=null) so omitting them
+  // from the whitelist made every UI-driven create return 400 with
+  // "property visibility should not exist; property teamId should not
+  // exist". The entity columns already exist; the gap was only in the
+  // DTO validator.
+  @IsOptional()
+  @IsEnum(['org', 'team'])
+  visibility?: 'org' | 'team';
+
+  @IsOptional()
+  @IsString()
+  teamId?: string | null;
 }
 
 export class UpdateApiDto {
@@ -120,6 +134,15 @@ export class UpdateApiDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, any>;
+
+  // Same team-scoping fields on update so the edit dialog works too.
+  @IsOptional()
+  @IsEnum(['org', 'team'])
+  visibility?: 'org' | 'team';
+
+  @IsOptional()
+  @IsString()
+  teamId?: string | null;
 }
 
 export class ImportSchemaDto {
