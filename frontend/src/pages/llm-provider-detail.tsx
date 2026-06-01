@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -62,6 +62,12 @@ export function LlmProviderDetailPage() {
     queryFn: () => llmProvidersApi.getById(id!),
     enabled: !!id,
   })
+
+  useEffect(() => {
+    const name = (provider as any)?.name
+    document.title = name ? `${name} | almyty` : 'Provider | almyty'
+    return () => { document.title = 'almyty' }
+  }, [provider])
 
   const { data: providerMetrics } = useQuery({
     queryKey: ['provider-metrics', id],
