@@ -25,12 +25,19 @@ describe('EmbeddingService', () => {
   // ── generateEmbedding ─────────────────────────────────────────────────
 
   describe('generateEmbedding', () => {
-    it('should return a number array of 256 dimensions', async () => {
+    it('returns the canonical embedding dimension (matches the pgvector column width)', async () => {
+      // Bumped from 256 -> LIMITS.EMBEDDING_DEFAULT_DIM (1536). The
+      // canonical_memories.embedding column is vector(1536) and when
+      // the fallback emitted 256-dim while OpenAI emitted 1536-dim,
+      // any subsequent hybrid search crashed with
+      //   QueryFailedError: different vector dimensions 1536 and 256
+      // Both code paths now produce the same width so writes + reads
+      // always match the column.
       const embedding = await service.generateEmbedding('Hello world');
 
       expect(embedding).toBeDefined();
       expect(Array.isArray(embedding)).toBe(true);
-      expect(embedding).toHaveLength(256);
+      expect(embedding).toHaveLength(1536);
       embedding!.forEach(v => expect(typeof v).toBe('number'));
     });
 
