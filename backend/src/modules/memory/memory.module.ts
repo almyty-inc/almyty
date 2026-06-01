@@ -106,6 +106,7 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
     DocumentChunkerService,
     MemoryCapabilityPublisher,
   ],
+  controllers: [CanonicalMemoryController],
   exports: [CanonicalMemoryService, EmbeddingService, MemoryRouter, DocumentChunkerService, MemoryCapabilityPublisher],
 })
 export class MemoryModule implements OnApplicationBootstrap {
