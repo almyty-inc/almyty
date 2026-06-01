@@ -433,6 +433,28 @@ export class OrganizationsService {
   }
 
   async getTeams(organizationId: string): Promise<Team[]> {
+    // Self-heal: if an org somehow has no default team (the migration
+    // missed it, or the org was created via a code path that didn't
+    // call joinDefaultTeam — both gaps now fixed but pre-existing
+    // orgs remain affected until they hit this endpoint), provision
+    // one before returning. Joins every active org owner as LEAD so
+    // the UI shows the right team_admin badge on the first paint.
+    const hasDefault = (await this.teamRepository.count({
+      where: { organizationId, isDefault: true, isActive: true },
+    })) > 0;
+    if (!hasDefault) {
+      const owners = await this.userOrganizationRepository.find({
+        where: { organizationId, role: OrganizationRole.OWNER, isActive: true },
+      });
+      for (const owner of owners) {
+        await this.teamMembershipHelper.joinDefaultTeam(
+          organizationId,
+          owner.userId,
+          OrganizationRole.OWNER,
+        );
+      }
+    }
+
     return this.teamRepository.find({
       where: { organizationId, isActive: true },
       relations: ['members', 'members.user'],
