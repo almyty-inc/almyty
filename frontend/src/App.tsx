@@ -212,7 +212,12 @@ function App() {
         
         {/* Default redirect */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/auth/login" replace />} />
+        {/* Unknown path → kick users to the dashboard, NOT to the
+            login page. The dashboard is auth-protected, so an
+            unauthenticated visitor still ends up at /auth/login, but
+            an authenticated user who typo'd a URL or hit a stale
+            bookmark no longer sees an apparent logout screen. */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
       <Toaster />
     </>

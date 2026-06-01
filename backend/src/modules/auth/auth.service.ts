@@ -9,6 +9,8 @@ import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
+import { Team } from '../../entities/team.entity';
+import { UserTeam, TeamRole } from '../../entities/user-team.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
@@ -118,6 +120,29 @@ export class AuthService {
         inviteAccepted: true,
       });
       await tx.save(UserOrganization, userOrganization);
+
+      // Auto-provision the default "Everyone" team and join the owner
+      // as team_admin (LEAD). Stays inside the same transaction so a
+      // failure here rolls back the user + org creation cleanly. The
+      // helper in OrganizationsModule does the equivalent for orgs
+      // created via the dashboard's createOrganization() path; we
+      // inline the logic here to avoid an AuthModule -> OrganizationsModule
+      // dependency. Both code paths converge on the same invariant:
+      // every org has exactly one team where isDefault=true, and every
+      // org member is automatically a member of it.
+      const defaultTeam = tx.create(Team, {
+        organizationId: savedOrganization.id,
+        name: 'Everyone',
+        description: 'Default team — every organization member is automatically a member.',
+        isDefault: true,
+      });
+      const savedTeam = await tx.save(Team, defaultTeam);
+      await tx.save(UserTeam, tx.create(UserTeam, {
+        userId: saved.id,
+        teamId: savedTeam.id,
+        role: TeamRole.LEAD,
+        isActive: true,
+      }));
 
       return saved;
     });
