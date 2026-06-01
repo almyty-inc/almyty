@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Cpu, Trash2, Wrench } from 'lucide-react'
@@ -68,6 +68,12 @@ export function RunnerDetailPage() {
     enabled: !!id,
     refetchInterval: RUNNER_HEARTBEAT_POLL_MS,
   })
+
+  useEffect(() => {
+    const name = runnerQuery.data?.name
+    document.title = name ? `${name} | almyty` : 'Runner | almyty'
+    return () => { document.title = 'almyty' }
+  }, [runnerQuery.data])
 
   const workspacesQuery = useQuery<Workspace[]>({
     queryKey: ['workspaces', { runnerId: id }],
