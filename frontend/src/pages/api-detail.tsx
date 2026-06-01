@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -45,6 +45,12 @@ export function ApiDetailPage() {
     enabled: !!id,
   })
 
+
+  useEffect(() => {
+    const name = (apiData as any)?.name
+    document.title = name ? `${name} | almyty` : 'API | almyty'
+    return () => { document.title = 'almyty' }
+  }, [apiData])
   const { data: apiOperations } = useQuery({
     queryKey: ['api-operations', id],
     queryFn: () => id ? apisApi.getOperations(id) : null,
