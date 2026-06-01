@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Cpu, Layers, Search } from 'lucide-react'
@@ -34,6 +34,11 @@ export function WorkspacesPage() {
   const navigate = useNavigate()
   const [statusFilter, setStatusFilter] = useState<Set<Workspace['status']>>(new Set(['active']))
   const [runnerFilter, setRunnerFilter] = useState<string>('')
+
+  useEffect(() => {
+    document.title = 'Workspaces | almyty'
+    return () => { document.title = 'almyty' }
+  }, [])
   const [search, setSearch] = useState('')
 
   const wsQuery = useQuery<Workspace[]>({
