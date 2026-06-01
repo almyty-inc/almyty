@@ -80,6 +80,17 @@ export class CreateToolBodyDto {
   @IsOptional()
   @IsObject()
   dependencies?: Record<string, string>;
+
+  // Team-scoping fields sent by the dashboard create/update dialogs.
+  // The VisibilityField component always emits both; without these
+  // entries on the whitelist the ValidationPipe 400s the request.
+  @IsOptional()
+  @IsEnum(['org', 'team'])
+  visibility?: 'org' | 'team';
+
+  @IsOptional()
+  @IsString()
+  teamId?: string | null;
 }
 
 export class UpdateToolBodyDto {
@@ -131,6 +142,17 @@ export class UpdateToolBodyDto {
   @IsOptional()
   @IsObject()
   dependencies?: Record<string, string>;
+
+  // Team-scoping fields sent by the dashboard create/update dialogs.
+  // The VisibilityField component always emits both; without these
+  // entries on the whitelist the ValidationPipe 400s the request.
+  @IsOptional()
+  @IsEnum(['org', 'team'])
+  visibility?: 'org' | 'team';
+
+  @IsOptional()
+  @IsString()
+  teamId?: string | null;
 }
 
 export class GenerateToolsFromApiDto {
