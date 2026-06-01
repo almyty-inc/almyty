@@ -85,6 +85,17 @@ export class CreateLlmProviderBodyDto {
       currency?: string;
     };
   };
+
+  // Team-scoping fields sent by the dashboard create/update dialogs.
+  // The VisibilityField component always emits both; without these
+  // entries on the whitelist the ValidationPipe 400s the request.
+  @IsOptional()
+  @IsEnum(['org', 'team'])
+  visibility?: 'org' | 'team';
+
+  @IsOptional()
+  @IsString()
+  teamId?: string | null;
 }
 
 export class UpdateLlmProviderBodyDto {
@@ -107,6 +118,17 @@ export class UpdateLlmProviderBodyDto {
   @IsOptional()
   @IsObject()
   metadata?: Partial<CreateLlmProviderBodyDto['metadata']>;
+
+  // Team-scoping fields sent by the dashboard create/update dialogs.
+  // The VisibilityField component always emits both; without these
+  // entries on the whitelist the ValidationPipe 400s the request.
+  @IsOptional()
+  @IsEnum(['org', 'team'])
+  visibility?: 'org' | 'team';
+
+  @IsOptional()
+  @IsString()
+  teamId?: string | null;
 }
 
 export class ChatMessageDto {
