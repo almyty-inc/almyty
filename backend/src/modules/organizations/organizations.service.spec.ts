@@ -455,18 +455,61 @@ describe('OrganizationsService', () => {
   });
 
   describe('getTeams', () => {
-    it('should return organization teams', async () => {
+    it('returns organization teams when the default team already exists', async () => {
       const mockTeams = [
         { id: 'team-1', name: 'Team 1' },
         { id: 'team-2', name: 'Team 2' },
       ];
 
+      teamRepository.count.mockResolvedValue(1); // default team exists → no self-heal
       teamRepository.find.mockResolvedValue(mockTeams);
 
       const result = await service.getTeams('org-1');
 
       expect(result).toEqual(mockTeams);
       expect(teamRepository.find).toHaveBeenCalled();
+    });
+
+    it('self-heals by joining the owner to the default team when none exists', async () => {
+      // Pins the fix for #93. Before this self-heal, an org whose
+      // default team had never been provisioned (pre-migration or
+      // pre-PR-100 register flow) returned an empty teams list and
+      // the Settings → Teams page rendered an empty state forever.
+      const localHelper = { joinDefaultTeam: jest.fn().mockResolvedValue(undefined) };
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          OrganizationsService,
+          OrganizationsInvitesHelper,
+          { provide: TeamMembershipHelper, useValue: localHelper },
+          { provide: getRepositoryToken(Organization), useValue: organizationRepository },
+          { provide: getRepositoryToken(User), useValue: userRepository },
+          { provide: getRepositoryToken(UserOrganization), useValue: userOrganizationRepository },
+          { provide: getRepositoryToken(Team), useValue: teamRepository },
+          { provide: getRepositoryToken(UserTeam), useValue: userTeamRepository },
+          { provide: MailService, useValue: { send: jest.fn(), sendInvitation: jest.fn() } },
+          { provide: GatewaysService, useValue: { ensureSystemGateway: jest.fn().mockResolvedValue({}) } },
+        ],
+      }).compile();
+      const localService = module.get<OrganizationsService>(OrganizationsService);
+
+      teamRepository.count.mockResolvedValue(0); // missing default team
+      userOrganizationRepository.find.mockResolvedValue([
+        { userId: 'owner-1', role: OrganizationRole.OWNER, organizationId: 'org-1', isActive: true },
+      ]);
+      teamRepository.find.mockResolvedValue([
+        { id: 'team-default', name: 'Everyone', isDefault: true },
+      ]);
+
+      await localService.getTeams('org-1');
+
+      expect(userOrganizationRepository.find).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1', role: OrganizationRole.OWNER, isActive: true },
+      });
+      expect(localHelper.joinDefaultTeam).toHaveBeenCalledWith(
+        'org-1',
+        'owner-1',
+        OrganizationRole.OWNER,
+      );
     });
   });
 
