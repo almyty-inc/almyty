@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Key, Shield, Plus, MoreHorizontal, Copy, Trash2, Eye, Pencil, CheckCircle2 } from 'lucide-react'
+import { Key, Shield, Plus, MoreHorizontal, Copy, Trash2, CheckCircle2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -147,8 +147,9 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
       <DropdownMenu>
         <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem><Eye className="h-4 w-4 mr-2" /> View</DropdownMenuItem>
-          <DropdownMenuItem><Pencil className="h-4 w-4 mr-2" /> Edit</DropdownMenuItem>
+          {/* View + Edit had no onClick handlers and silently no-op'd;
+              drop them until a real detail/edit dialog exists. Delete
+              is the only actionable item right now. */}
           <DropdownMenuItem className="text-destructive" onClick={() => deleteMut.mutate(row.original.id)}><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
