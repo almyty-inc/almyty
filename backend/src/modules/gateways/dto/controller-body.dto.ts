@@ -14,6 +14,13 @@ export class CreateGatewayBodyDto {
   @IsEnum(GatewayType)
   type: GatewayType;
 
+  // Gateway kind ('tool' | 'agent') drives the dashboard's Tools-vs-Agent
+  // gateway type switcher. The frontend always sends this so the DTO must
+  // accept it; backend defaults to 'tool' when omitted.
+  @IsOptional()
+  @IsEnum(GatewayKind)
+  kind?: GatewayKind;
+
   @IsOptional()
   @IsString()
   agentId?: string;
