@@ -25,25 +25,26 @@ export const useOrganizationStore = create<OrganizationState>()(
   isInitialized: false,
 
   initializeFromUser: (user: User) => {
-    if (get().isInitialized) return
     const organizations = user.organizationMemberships?.map(membership => ({
       ...membership.organization,
       members: [membership],
     })) || []
 
-    // Preserve a previously-selected currentOrganization across refresh,
-    // but ONLY if the user is still a member of it. Otherwise fall back
-    // to the first membership. This matters because the backend now
-    // requires an X-Organization-Id header for multi-org users, and we
-    // read the header value from this store.
+    // Preserve the previously-selected currentOrganization across
+    // refresh and across re-init, but ONLY if the freshly-loaded user
+    // is still a member of it. Otherwise fall back to the first
+    // membership. We must NOT short-circuit on isInitialized — a
+    // different user signing in on the same browser would otherwise
+    // inherit the prior session's org id and the backend's
+    // X-Organization-Id check would 401 every request.
     const persistedCurrent = get().currentOrganization
-    const currentStillValid =
+    const stillValid =
       persistedCurrent &&
       organizations.some(o => o.id === persistedCurrent.id)
 
     set({
       organizations,
-      currentOrganization: currentStillValid ? persistedCurrent : organizations[0] || null,
+      currentOrganization: stillValid ? persistedCurrent : organizations[0] || null,
       isInitialized: true,
     })
   },

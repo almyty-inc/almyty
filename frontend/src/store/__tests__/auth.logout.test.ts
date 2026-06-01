@@ -104,4 +104,33 @@ describe('auth store logout', () => {
     expect(state.token).toBeNull()
     expect(state.isAuthenticated).toBe(false)
   })
+
+  it('clears the persisted org store so a different user signing in after logout does not inherit the prior session orgId', async () => {
+    // Seed the org store with a prior user's selection. The bug we're
+    // pinning: logout used to leave this alone, so the next login's
+    // first /auth/profile call carried the stale X-Organization-Id and
+    // the backend returned 401 "Not a member of the requested
+    // organization", visible to the user as "Invalid credentials".
+    const ls = globalThis.localStorage
+    ls.setItem(
+      'almyty-org-store',
+      JSON.stringify({
+        state: { currentOrganization: { id: 'org-from-prior-user', name: 'old' } },
+        version: 0,
+      }),
+    )
+
+    const { useAuthStore } = await import('../auth')
+    useAuthStore.getState().logout()
+
+    // Either the key is gone, or it's been rewritten by the persist
+    // middleware to currentOrganization=null. Both are acceptable —
+    // what matters is that the prior session's id is no longer
+    // retrievable.
+    const raw = ls.getItem('almyty-org-store')
+    if (raw !== null) {
+      const parsed = JSON.parse(raw)
+      expect(parsed.state?.currentOrganization?.id).toBeUndefined()
+    }
+  })
 })
