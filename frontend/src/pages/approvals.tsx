@@ -48,7 +48,13 @@ export function ApprovalsPage() {
     return () => { document.title = 'almyty' }
   }, [])
 
-  const query = useQuery<{ data: ApprovalRequest[] }>({
+  // approvalsApi.list() goes through apiGet which extracts the
+  // { success, data } envelope, so the resolved value IS the array.
+  // The earlier type declared { data: ApprovalRequest[] } and the
+  // page read query.data?.data — that extra hop was always
+  // undefined, so the dashboard rendered "No pending approvals"
+  // even when /approvals returned rows.
+  const query = useQuery<ApprovalRequest[]>({
     queryKey: ['approvals'],
     queryFn: () => approvalsApi.list(),
     refetchInterval: POLL_MS,
@@ -84,7 +90,7 @@ export function ApprovalsPage() {
     return <QueryError error={query.error} onRetry={() => query.refetch()} title="Couldn't load approvals" />
   }
 
-  const rows = (query.data?.data ?? []) as ApprovalRequest[]
+  const rows = (query.data ?? []) as ApprovalRequest[]
 
   return (
     <div className="space-y-6">
