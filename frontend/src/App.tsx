@@ -1,5 +1,7 @@
-import React, { useEffect, lazy } from 'react'
+import React, { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
+
+import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 
 // Layout components (kept eager — needed for every route).
 // Each layout owns its own <Suspense> boundary so the shell
