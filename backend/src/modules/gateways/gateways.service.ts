@@ -261,6 +261,14 @@ export class GatewaysService {
 
       // Update fields
       Object.assign(gateway, updateGatewayDto);
+      // Sanitize team-scoping after the spread so flipping back to
+      // visibility='org' clears the dangling teamId.
+      const updateAny = updateGatewayDto as any;
+      if (updateAny.visibility === 'org') {
+        gateway.teamId = null;
+      } else if (updateAny.visibility === 'team' && updateAny.teamId !== undefined) {
+        gateway.teamId = updateAny.teamId;
+      }
 
       // Validate configuration if updated
       if (updateGatewayDto.configuration) {
