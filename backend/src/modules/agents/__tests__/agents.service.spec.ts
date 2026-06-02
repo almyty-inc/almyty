@@ -141,6 +141,7 @@ describe('AgentsService', () => {
           provide: AccessPolicyService,
           useValue: {
             canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+            applyListFilter: jest.fn().mockResolvedValue({ bypass: true, teamIds: [] }),
           },
         },
       ],
@@ -1038,7 +1039,7 @@ describe('AgentsService', () => {
       const qb = makeQueryBuilder(agents, 1);
       agentRepo.createQueryBuilder.mockReturnValue(qb);
 
-      const result = await service.getAgents({ organizationId: 'org-1', page: 1, limit: 20 });
+      const result = await service.getAgents({ organizationId: 'org-1', page: 1, limit: 20, caller: { id: 'user-1' } });
 
       expect(result.data).toEqual(agents);
       expect(result.total).toBe(1);
@@ -1051,7 +1052,7 @@ describe('AgentsService', () => {
       const qb = makeQueryBuilder([], 0);
       agentRepo.createQueryBuilder.mockReturnValue(qb);
 
-      await service.getAgents({ organizationId: 'org-1', search: 'chat' });
+      await service.getAgents({ organizationId: 'org-1', search: 'chat', caller: { id: 'user-1' } });
 
       expect(qb.andWhere).toHaveBeenCalledWith(
         '(agent.name ILIKE :search OR agent.description ILIKE :search)',
@@ -1063,7 +1064,7 @@ describe('AgentsService', () => {
       const qb = makeQueryBuilder([], 0);
       agentRepo.createQueryBuilder.mockReturnValue(qb);
 
-      await service.getAgents({ organizationId: 'org-1', status: AgentStatus.ACTIVE });
+      await service.getAgents({ organizationId: 'org-1', status: AgentStatus.ACTIVE, caller: { id: 'user-1' } });
 
       expect(qb.andWhere).toHaveBeenCalledWith('agent.status = :status', { status: AgentStatus.ACTIVE });
     });

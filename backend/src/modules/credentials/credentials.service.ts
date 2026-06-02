@@ -45,23 +45,28 @@ export class CredentialsService {
   // Outbound credentials (secrets vault)
   // ──────────────────────────────────────────────
 
-  async findAll(organizationId: string): Promise<any[]> {
-    const credentials = await this.credentialRepository.find({
-      where: { organizationId },
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(caller: { id: string }, organizationId: string): Promise<any[]> {
+    // Team-scope the credentials list. Without this filter, a team
+    // member could enumerate every credential in the org including
+    // team-scoped API keys of teams they're not a member of, which
+    // is exactly what the team-scoping push was supposed to prevent.
+    const credentialsQb = this.credentialRepository
+      .createQueryBuilder('c')
+      .orderBy('c.createdAt', 'DESC');
+    await this.accessPolicy.applyListFilter(credentialsQb, caller, organizationId, 'c');
+    const credentials = await credentialsQb.getMany();
 
-    // Also surface LLM provider keys not yet linked to a credential
-    const providers = await this.llmProviderRepository.find({
-      where: { organizationId },
-    });
+    // LLM provider keys not yet linked to a credential. Apply the
+    // same team filter — provider rows carry their own visibility
+    // / teamId columns.
+    const providersQb = this.llmProviderRepository.createQueryBuilder('p');
+    await this.accessPolicy.applyListFilter(providersQb, caller, organizationId, 'p');
+    const providers = await providersQb.getMany();
 
     const results: any[] = credentials.map((cred) => this.maskCredential(cred));
 
     for (const provider of providers) {
-      // Skip if already linked to a credential
       if (provider.credentialId) continue;
-      // Skip if no API key stored inline
       if (!provider.configuration?.apiKey) continue;
 
       results.push({

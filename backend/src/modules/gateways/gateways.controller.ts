@@ -144,6 +144,7 @@ export class GatewaysController {
       const filters: GatewaySearchFilters = {
         ...query,
         organizationId,
+        caller: { id: req.user.id },
       };
 
       const result = await this.gatewaysService.getGateways(filters);
