@@ -65,6 +65,9 @@ export interface UpdateToolDto {
   metadata?: Record<string, any>;
   sdkConfig?: any;
   dependencies?: Record<string, string>;
+  // Team-scoping fields from the dashboard VisibilityField.
+  visibility?: 'org' | 'team';
+  teamId?: string | null;
 }
 
 export interface ToolSearchFilters {
