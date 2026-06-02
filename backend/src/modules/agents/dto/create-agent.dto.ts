@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsObject, IsEnum, IsArray, IsUrl } from 'class-validator';
+import { IsString, IsOptional, IsObject, IsEnum, IsArray, IsUrl, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { AgentStatus } from '../../../entities/agent.entity';
 
@@ -8,11 +8,13 @@ const stripHtml = ({ value }: { value: unknown }) =>
 export class CreateAgentDto {
   @Transform(stripHtml)
   @IsString()
+  @MaxLength(100)
   name: string;
 
   @Transform(stripHtml)
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   description?: string;
 
   @IsOptional()
