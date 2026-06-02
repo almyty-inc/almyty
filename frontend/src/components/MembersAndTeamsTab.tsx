@@ -349,6 +349,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
               <Plus className="h-4 w-4 mr-2" />
               Create Team
             </Button>
+            {createTeamDialogOpen && (
             <Dialog open={createTeamDialogOpen} onOpenChange={setCreateTeamDialogOpen}>
               <DialogContent>
                 <DialogHeader>
@@ -390,6 +391,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                 </div>
               </DialogContent>
             </Dialog>
+            )}
           </CardHeader>
           <CardContent>
             {teamsLoading ? (
