@@ -41,8 +41,10 @@ export interface CreateAgentInput {
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
   webhookUrl?: string;
+  // Team-scoping fields from the dashboard's VisibilityField.
+  visibility?: 'org' | 'team';
+  teamId?: string | null;
 }
-
 export interface UpdateAgentInput {
   name?: string;
   description?: string;
@@ -62,6 +64,9 @@ export interface UpdateAgentInput {
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
   webhookUrl?: string;
+  // Team-scoping fields from the dashboard's VisibilityField.
+  visibility?: 'org' | 'team';
+  teamId?: string | null;
 }
 
 export { AgentTemplate } from './agent-templates';
@@ -135,6 +140,12 @@ export class AgentsService {
         metadata: createDto.metadata || {},
         webhookUrl: createDto.webhookUrl || null,
         createdBy: userId,
+        // Team-scoping (#133 partial fix did credentials; this is the
+        // matching change for agents). Default to 'org' so omitted
+        // payloads keep the historical behavior; drop a stray teamId
+        // when visibility='org'.
+        visibility: createDto.visibility ?? 'org',
+        teamId: createDto.visibility === 'team' ? (createDto.teamId ?? null) : null,
       });
 
       const saved = await this.agentRepository.save(agent);
@@ -274,6 +285,13 @@ export class AgentsService {
     }
 
     Object.assign(agent, updateDto);
+    // Sanitize the team-scoping fields after the spread so a flip
+    // back to visibility='org' doesn't leave the old teamId dangling.
+    if (updateDto.visibility === 'org') {
+      agent.teamId = null;
+    } else if (updateDto.visibility === 'team' && updateDto.teamId !== undefined) {
+      agent.teamId = updateDto.teamId;
+    }
     const saved = await this.agentRepository.save(agent);
 
     this.logger.log(`[UPDATE_AGENT] Agent updated: id=${saved.id}`);

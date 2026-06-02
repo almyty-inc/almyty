@@ -258,6 +258,65 @@ describe('AgentsService', () => {
       await expect(service.createAgent(badEdgeDto, 'org-1', 'user-1'))
         .rejects.toThrow(BadRequestException);
     });
+
+    it('persists visibility="team" + teamId from the dashboard VisibilityField', async () => {
+      const org = makeOrganization();
+      const agent = makeAgent();
+      organizationRepo.findOne.mockResolvedValue(org);
+      agentRepo.create.mockReturnValue(agent);
+      agentRepo.save.mockResolvedValue(agent);
+
+      await service.createAgent(
+        { ...dto, visibility: 'team', teamId: 'team-uuid-1' },
+        'org-1',
+        'user-1',
+      );
+
+      expect(agentRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          visibility: 'team',
+          teamId: 'team-uuid-1',
+        }),
+      );
+    });
+
+    it('defaults visibility to "org" and nulls teamId when not provided', async () => {
+      const org = makeOrganization();
+      const agent = makeAgent();
+      organizationRepo.findOne.mockResolvedValue(org);
+      agentRepo.create.mockReturnValue(agent);
+      agentRepo.save.mockResolvedValue(agent);
+
+      await service.createAgent(dto, 'org-1', 'user-1');
+
+      expect(agentRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          visibility: 'org',
+          teamId: null,
+        }),
+      );
+    });
+
+    it('drops a stray teamId when visibility="org"', async () => {
+      const org = makeOrganization();
+      const agent = makeAgent();
+      organizationRepo.findOne.mockResolvedValue(org);
+      agentRepo.create.mockReturnValue(agent);
+      agentRepo.save.mockResolvedValue(agent);
+
+      await service.createAgent(
+        { ...dto, visibility: 'org', teamId: 'should-be-dropped' as any },
+        'org-1',
+        'user-1',
+      );
+
+      expect(agentRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          visibility: 'org',
+          teamId: null,
+        }),
+      );
+    });
   });
 
   // ── updateAgent ───────────────────────────────────────────────────────────
@@ -274,6 +333,28 @@ describe('AgentsService', () => {
       expect(agentRepo.findOne).toHaveBeenCalledWith({ where: { id: 'agent-1', organizationId: 'org-1' } });
       expect(agentRepo.save).toHaveBeenCalled();
       expect(result.name).toBe('Updated');
+    });
+
+    it('flips visibility from org to team and stores teamId', async () => {
+      const agent: any = makeAgent({ visibility: 'org', teamId: null } as any);
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      await service.updateAgent('agent-1', { visibility: 'team', teamId: 'team-uuid' }, 'org-1');
+
+      expect(agent.visibility).toBe('team');
+      expect(agent.teamId).toBe('team-uuid');
+    });
+
+    it('flips visibility from team back to org and clears the dangling teamId', async () => {
+      const agent: any = makeAgent({ visibility: 'team', teamId: 'team-old' } as any);
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      await service.updateAgent('agent-1', { visibility: 'org' }, 'org-1');
+
+      expect(agent.visibility).toBe('org');
+      expect(agent.teamId).toBeNull();
     });
 
     it('should auto-save version snapshot on pipeline change', async () => {
