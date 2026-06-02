@@ -220,9 +220,11 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   const { data: dynamicModels } = useQuery({
     queryKey: ['provider-models', node.data.providerId],
     queryFn: async () => {
+      // llmProvidersApi.getModels goes through apiGet → extractData,
+      // so res is already the flat array of model objects.
       const res = await llmProvidersApi.getModels(node.data.providerId as string)
-      const models = Array.isArray(res) ? res : res?.models || res?.data || []
-      return Array.isArray(models) ? models.map((m: Record<string, string>) => m.id || m.name || String(m)) : []
+      const models = Array.isArray(res) ? res : []
+      return models.map((m: Record<string, string>) => m.id || m.name || String(m))
     },
     enabled: !!node.data.providerId,
   })
