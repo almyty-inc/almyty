@@ -316,6 +316,28 @@ describe('GatewaysService', () => {
       expect(result.name).toBe('Updated Gateway');
       expect(gatewayRepository.save).toHaveBeenCalled();
     });
+
+    it('flips visibility from team back to org and clears the dangling teamId', async () => {
+      const mockGateway: any = {
+        id: 'gateway-1',
+        name: 'GW',
+        organizationId: 'org-1',
+        visibility: 'team',
+        teamId: 'team-old',
+        canAcceptRequests: jest.fn().mockReturnValue(true),
+        supportsProtocol: jest.fn().mockReturnValue(true),
+        getActiveTools: jest.fn().mockReturnValue([]),
+      };
+      const mockUser = { id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) };
+      gatewayRepository.findOne.mockResolvedValue(mockGateway);
+      userRepository.findOne.mockResolvedValue(mockUser);
+      gatewayRepository.save.mockImplementation((g: any) => Promise.resolve(g));
+
+      await service.updateGateway('gateway-1', { visibility: 'org' } as any, 'org-1', 'user-1');
+
+      expect(mockGateway.visibility).toBe('org');
+      expect(mockGateway.teamId).toBeNull();
+    });
   });
 
   describe('deleteGateway', () => {
