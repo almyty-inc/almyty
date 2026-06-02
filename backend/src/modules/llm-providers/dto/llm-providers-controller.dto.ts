@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsNumber, Min, Max, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsNumber, Min, Max, IsBoolean, MaxLength } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 import { LlmProviderType, LlmProviderStatus } from '../../../entities/llm-provider.entity';
@@ -7,10 +7,12 @@ import { ConversationStatus } from '../../../entities/conversation.entity';
 
 export class CreateLlmProviderBodyDto {
   @IsString()
+  @MaxLength(100)
   name: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   description?: string;
 
   @IsEnum(LlmProviderType)
@@ -101,10 +103,12 @@ export class CreateLlmProviderBodyDto {
 export class UpdateLlmProviderBodyDto {
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   name?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   description?: string;
 
   @IsOptional()

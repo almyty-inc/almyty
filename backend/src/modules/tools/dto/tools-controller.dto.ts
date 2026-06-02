@@ -1,13 +1,15 @@
-import { IsString, IsOptional, IsEnum, IsArray, IsObject, IsNumber, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsArray, IsObject, IsNumber, Min, Max, MaxLength } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 import { ToolType, ToolStatus, ToolExecutionMethod } from '../../../entities/tool.entity';
 
 export class CreateToolBodyDto {
   @IsString()
+  @MaxLength(100)
   name: string;
 
   @IsString()
+  @MaxLength(1000)
   description: string;
 
   @IsEnum(ToolType)
@@ -96,10 +98,12 @@ export class CreateToolBodyDto {
 export class UpdateToolBodyDto {
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   name?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   description?: string;
 
   @IsOptional()
