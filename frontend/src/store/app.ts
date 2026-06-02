@@ -85,10 +85,6 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 }))
 
-if (typeof window !== 'undefined') {
-  ;(window as any).__appStore = useAppStore
-}
-
 // Helper hook for notifications
 export const useNotifications = () => {
   const addNotification = useAppStore(s => s.addNotification)
