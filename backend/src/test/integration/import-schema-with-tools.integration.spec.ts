@@ -491,7 +491,7 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
       generateTools: true,
     });
 
-    const { apis, total } = await service.findAllByOrganization(org.id, {
+    const { apis, total } = await service.findAllByOrganization({ id: 'integration-test-user' }, org.id, {
       limit: 100,
     });
     expect(total).toBeGreaterThan(0);

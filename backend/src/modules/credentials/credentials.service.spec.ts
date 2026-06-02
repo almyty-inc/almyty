@@ -19,7 +19,7 @@ describe('CredentialsService', () => {
   let apiRepository: any;
   let gatewayRepository: any;
   let agentRepository: any;
-
+  let accessPolicy: any;
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -32,6 +32,7 @@ describe('CredentialsService', () => {
             create: jest.fn(),
             save: jest.fn(),
             remove: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {
@@ -47,6 +48,7 @@ describe('CredentialsService', () => {
           provide: getRepositoryToken(LlmProvider),
           useValue: {
             find: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {
@@ -86,6 +88,7 @@ describe('CredentialsService', () => {
           provide: AccessPolicyService,
           useValue: {
             canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+            applyListFilter: jest.fn().mockResolvedValue({ bypass: true, teamIds: [] }),
           },
         },
       ],
@@ -98,10 +101,11 @@ describe('CredentialsService', () => {
     apiRepository = module.get(getRepositoryToken(Api));
     gatewayRepository = module.get(getRepositoryToken(Gateway));
     agentRepository = module.get(getRepositoryToken(Agent));
+    accessPolicy = module.get(AccessPolicyService);
   });
 
   describe('findAll', () => {
-    it('should return all credentials for org with masked sensitive data', async () => {
+    it('returns all credentials for the caller, applies the team-scope filter, masks sensitive fields', async () => {
       const mockCredentials = [
         {
           id: 'cred-1',
@@ -117,22 +121,29 @@ describe('CredentialsService', () => {
         },
       ];
 
-      credentialRepository.find.mockResolvedValue(mockCredentials);
-      llmProviderRepository.find.mockResolvedValue([]);
+      const credQb: any = {
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockCredentials),
+      };
+      const providerQb: any = { getMany: jest.fn().mockResolvedValue([]) };
+      credentialRepository.createQueryBuilder.mockReturnValue(credQb);
+      llmProviderRepository.createQueryBuilder.mockReturnValue(providerQb);
 
-      const result = await service.findAll('org-1');
+      const result = await service.findAll({ id: 'user-1' }, 'org-1');
 
       expect(result).toHaveLength(2);
-      // Long key should be partially masked
       expect(result[0].config.apiKey).toBe('sk-1****cdef');
-      // Non-sensitive field should be untouched
       expect(result[0].config.baseUrl).toBe('https://api.example.com');
-      // Short token should be fully masked
       expect(result[1].config.token).toBe('********');
-      expect(credentialRepository.find).toHaveBeenCalledWith({
-        where: { organizationId: 'org-1' },
-        order: { createdAt: 'DESC' },
-      });
+
+      // Regression for the security audit: the team-scope filter
+      // MUST be applied to both credentials and the LLM-provider
+      // fallback rows. Without this assertion a future refactor that
+      // drops the call goes undetected and a team_member can see
+      // every credential in the org.
+      expect(accessPolicy.applyListFilter).toHaveBeenCalledTimes(2);
+      expect(accessPolicy.applyListFilter).toHaveBeenCalledWith(credQb, { id: 'user-1' }, 'org-1', 'c');
+      expect(accessPolicy.applyListFilter).toHaveBeenCalledWith(providerQb, { id: 'user-1' }, 'org-1', 'p');
     });
   });
 

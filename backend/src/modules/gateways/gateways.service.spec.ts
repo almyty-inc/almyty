@@ -94,6 +94,7 @@ describe('GatewaysService', () => {
           provide: AccessPolicyService,
           useValue: {
             canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+            applyListFilter: jest.fn().mockResolvedValue({ bypass: true, teamIds: [] }),
           },
         },
       ],
@@ -421,6 +422,7 @@ describe('GatewaysService', () => {
         organizationId: 'org-1',
         page: 1,
         limit: 10,
+        caller: { id: 'user-1' },
       });
 
       expect(result.gateways).toBe(mockGateways);
@@ -776,6 +778,7 @@ describe('GatewaysService', () => {
       await service.getGateways({
         organizationId: 'org-1',
         search: 'test gateway',
+        caller: { id: 'user-1' },
       });
 
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
@@ -801,6 +804,7 @@ describe('GatewaysService', () => {
       await service.getGateways({
         organizationId: 'org-1',
         type: 'mcp' as any,
+        caller: { id: 'user-1' },
       });
 
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('gateway.type = :type', { type: 'mcp' });
@@ -823,6 +827,7 @@ describe('GatewaysService', () => {
       await service.getGateways({
         organizationId: 'org-1',
         status: 'active' as any,
+        caller: { id: 'user-1' },
       });
 
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('gateway.status = :status', { status: 'active' });

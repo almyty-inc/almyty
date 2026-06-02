@@ -101,6 +101,9 @@ export interface GatewaySearchFilters {
   status?: GatewayStatus;
   agentId?: string;
   organizationId: string;
+  // Required so getGateways can apply the team-scope visibility
+  // filter via AccessPolicyService.applyListFilter.
+  caller: { id: string };
   page?: number;
   limit?: number;
   sortBy?: 'name' | 'createdAt' | 'updatedAt' | 'totalRequests';
@@ -385,7 +388,8 @@ export class GatewaysService {
       .leftJoinAndSelect('gateway.tools', 'gatewayTool')
       .leftJoinAndSelect('gatewayTool.tool', 'tool')
       .leftJoinAndSelect('gateway.authConfigs', 'authConfig')
-      .where('gateway.organizationId = :organizationId', { organizationId: filters.organizationId });
+      .where('1=1');
+    await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'gateway');
 
     // Apply filters
     if (filters.search) {
