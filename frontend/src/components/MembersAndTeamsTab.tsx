@@ -252,7 +252,6 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
               <UserPlus className="h-4 w-4 mr-2" />
               Invite Member
             </Button>
-            {inviteMemberDialogOpen && (
             <Dialog open={inviteMemberDialogOpen} onOpenChange={(next) => { setInviteMemberDialogOpen(next); if (!next) { inviteMemberMutation.reset(); setNewMemberEmail(""); } }}>
               <DialogContent>
                 <DialogHeader>
@@ -298,7 +297,6 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                 </div>
               </DialogContent>
             </Dialog>
-            )}
           </CardHeader>
           <CardContent>
             {membersLoading ? (
@@ -349,7 +347,6 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
               <Plus className="h-4 w-4 mr-2" />
               Create Team
             </Button>
-            {createTeamDialogOpen && (
             <Dialog open={createTeamDialogOpen} onOpenChange={setCreateTeamDialogOpen}>
               <DialogContent>
                 <DialogHeader>
@@ -391,7 +388,6 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                 </div>
               </DialogContent>
             </Dialog>
-            )}
           </CardHeader>
           <CardContent>
             {teamsLoading ? (
