@@ -30,15 +30,15 @@ interface TeamLookupResult {
  * page filter and per-row badges share one fetch.
  */
 export function useTeamLookup(organizationId?: string | null): TeamLookupResult {
-  const teamsQuery = useQuery<{ data: Team[] } | Team[]>({
+  const teamsQuery = useQuery<Team[]>({
     queryKey: ['teams', organizationId],
     queryFn: () => teamsApi.list(organizationId as string),
     enabled: !!organizationId,
   })
 
-  const teams: Team[] = Array.isArray(teamsQuery.data)
-    ? (teamsQuery.data as Team[])
-    : ((teamsQuery.data as any)?.data ?? [])
+  // teamsApi.list goes through apiGet → extractData, so teamsQuery.data
+  // is already the flat array.
+  const teams: Team[] = Array.isArray(teamsQuery.data) ? teamsQuery.data : []
 
   const byId: Record<string, Team> = {}
   for (const t of teams) byId[t.id] = t

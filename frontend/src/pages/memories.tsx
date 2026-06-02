@@ -763,7 +763,9 @@ function SoftcapAuditList({ orgId, enabled }: { orgId: string; enabled: boolean 
     enabled,
     refetchInterval: enabled ? 60_000 : false,
   })
-  const rows: SoftcapWarning[] = (q.data?.data ?? q.data ?? []) as SoftcapWarning[]
+  // listSoftcapWarnings goes through apiGet → extractData, so q.data
+  // is already the flat array.
+  const rows: SoftcapWarning[] = Array.isArray(q.data) ? (q.data as SoftcapWarning[]) : []
   if (q.isLoading) return <LoadingSpinner />
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground">No soft-cap warnings recorded for this scope.</p>
