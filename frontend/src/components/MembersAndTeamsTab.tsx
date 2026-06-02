@@ -51,8 +51,10 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
     enabled: !!organizationId,
   })
 
-  const members = Array.isArray(membersData) ? membersData : membersData?.data || membersData || []
-  const teams = Array.isArray(teamsData) ? teamsData : teamsData?.data || teamsData || []
+  // organizationsApi.{getMembers,getTeams} go through apiGet →
+  // extractData, so these values are already the flat arrays.
+  const members = Array.isArray(membersData) ? membersData : []
+  const teams = Array.isArray(teamsData) ? teamsData : []
 
   // Create team mutation
   const createTeamMutation = useMutation({
