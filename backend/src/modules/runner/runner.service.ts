@@ -26,6 +26,12 @@ export interface RegisterRunnerInput {
   labels: Record<string, string>;
   runtimeInfo: RunnerRuntimeInfo;
   config: RunnerConfig;
+  // Team-scoping fields. The runner CLI can pass --team-id to its
+  // local daemon, which forwards it on the register payload — the
+  // backend used to silently drop both fields so every runner ended
+  // up org-wide regardless of what the user picked.
+  visibility?: 'org' | 'team';
+  teamId?: string | null;
 }
 
 export interface RegisterRunnerResult {
@@ -99,6 +105,11 @@ export class RunnerService {
     target.labels = input.labels ?? {};
     target.runtimeInfo = input.runtimeInfo;
     target.config = input.config;
+    // Honor team-scoping on (re-)register so flipping the runner
+    // between org-wide and team-only sticks. Drop a stray teamId
+    // when visibility is 'org'.
+    target.visibility = input.visibility ?? 'org';
+    target.teamId = input.visibility === 'team' ? (input.teamId ?? null) : null;
     target.state = RunnerState.REGISTERED;
     target.lastHeartbeatAt = null;
     const saved = await this.runners.save(target);

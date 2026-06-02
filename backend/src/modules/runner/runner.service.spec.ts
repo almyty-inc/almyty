@@ -145,6 +145,50 @@ describe('RunnerService', () => {
     expect(result.effectiveConfig).toEqual(validConfig);
   });
 
+  it('register persists visibility="team" + teamId from the input', async () => {
+    const result = await service.register(
+      {
+        name: 'team-runner',
+        labels: {},
+        runtimeInfo: validRuntimeInfo,
+        config: validConfig,
+        visibility: 'team',
+        teamId: 'team-uuid-1',
+      },
+      ownerUserId,
+      organizationId,
+    );
+    expect(result.runner.visibility).toBe('team');
+    expect(result.runner.teamId).toBe('team-uuid-1');
+  });
+
+  it('register defaults visibility to "org" and nulls teamId when input is omitted', async () => {
+    const result = await service.register(
+      { name: 'org-runner', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
+      ownerUserId,
+      organizationId,
+    );
+    expect(result.runner.visibility).toBe('org');
+    expect(result.runner.teamId).toBeNull();
+  });
+
+  it('register drops a stray teamId when visibility="org"', async () => {
+    const result = await service.register(
+      {
+        name: 'org-stray',
+        labels: {},
+        runtimeInfo: validRuntimeInfo,
+        config: validConfig,
+        visibility: 'org',
+        teamId: 'should-be-dropped' as any,
+      },
+      ownerUserId,
+      organizationId,
+    );
+    expect(result.runner.visibility).toBe('org');
+    expect(result.runner.teamId).toBeNull();
+  });
+
   it('register rejects an invalid name', async () => {
     await expect(service.register(
       { name: 'has spaces', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
