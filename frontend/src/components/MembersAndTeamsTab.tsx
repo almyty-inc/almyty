@@ -248,13 +248,11 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                 Manage who has access to this organization
               </CardDescription>
             </div>
+            <Button onClick={() => setInviteMemberDialogOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Invite Member
+            </Button>
             <Dialog open={inviteMemberDialogOpen} onOpenChange={(next) => { setInviteMemberDialogOpen(next); if (!next) { inviteMemberMutation.reset(); setNewMemberEmail(""); } }}>
-              <DialogTrigger asChild>
-                <Button>
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Invite Member
-                </Button>
-              </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Invite Member</DialogTitle>
@@ -345,13 +343,11 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                 Organize members into teams for better collaboration
               </CardDescription>
             </div>
+            <Button onClick={() => setCreateTeamDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Team
+            </Button>
             <Dialog open={createTeamDialogOpen} onOpenChange={setCreateTeamDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Team
-                </Button>
-              </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Create Team</DialogTitle>
