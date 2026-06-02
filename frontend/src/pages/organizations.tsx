@@ -338,8 +338,13 @@ export function OrganizationsPage() {
     )
   }
 
-  const orgsExtracted = organizationsData?.data || organizations
-  const orgs = Array.isArray(orgsExtracted) ? orgsExtracted : []
+  // organizationsApi.getAll() runs through apiGet → extractData, so
+  // organizationsData is already the array. The previous `?.data`
+  // double-unwrap was always undefined, dropping us into the stale
+  // Zustand-store fallback whose 'organizations' entries miss
+  // createdAt/isActive — that's why the table showed 'Invalid Date'
+  // and 'Inactive' for the active org.
+  const orgs = Array.isArray(organizationsData) ? organizationsData : []
   const membersExtracted = membersData?.data?.members || membersData?.data || []
   const members = Array.isArray(membersExtracted) ? membersExtracted : []
 
