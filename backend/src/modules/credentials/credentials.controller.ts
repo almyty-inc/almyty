@@ -57,7 +57,7 @@ export class CredentialsController {
   @ApiResponse({ status: 200, description: 'Credentials retrieved successfully' })
   async findAll(@Request() req: any) {
     const organizationId = this.requireOrg(req);
-    const data = await this.credentialsService.findAll(organizationId);
+    const data = await this.credentialsService.findAll({ id: req.user.id }, organizationId);
     return { success: true, data, message: 'Credentials retrieved successfully' };
   }
 

@@ -145,6 +145,7 @@ export class AgentsController {
       const filters: AgentSearchFilters = {
         ...query,
         organizationId,
+        caller: { id: req.user.id },
       };
 
       const result = await this.agentsService.getAgents(filters);

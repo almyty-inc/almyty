@@ -205,7 +205,7 @@ describe('AlmytyMcpService', () => {
 
     it('list_apis calls ApisService.findAllByOrganization', async () => {
       const res = await call('tools/call', { name: 'list_apis', arguments: {} });
-      expect(mockApisService.findAllByOrganization).toHaveBeenCalledWith('org-1', { limit: 50 });
+      expect(mockApisService.findAllByOrganization).toHaveBeenCalledWith({ id: 'user-1' }, 'org-1', { limit: 50 });
       expect(res.result.isError).toBeUndefined();
     });
 
@@ -233,7 +233,7 @@ describe('AlmytyMcpService', () => {
 
     it('list_gateways calls GatewaysService.getGateways', async () => {
       await call('tools/call', { name: 'list_gateways', arguments: {} });
-      expect(mockGatewaysService.getGateways).toHaveBeenCalledWith({ organizationId: 'org-1', limit: 50 });
+      expect(mockGatewaysService.getGateways).toHaveBeenCalledWith({ organizationId: 'org-1', limit: 50, caller: { id: 'user-1' } });
     });
 
     it('create_agent calls AgentsService.createAgent with correct args', async () => {
