@@ -276,6 +276,15 @@ export class ApisService {
     }
 
     Object.assign(api, updateApiData);
+    // Sanitize team-scoping after the spread so a flip back to 'org'
+    // clears the dangling teamId (the DB constraint allows it but it
+    // leaves a stale UUID hanging on the row otherwise).
+    const updateAny = updateApiData as any;
+    if (updateAny.visibility === 'org') {
+      api.teamId = null;
+    } else if (updateAny.visibility === 'team' && updateAny.teamId !== undefined) {
+      api.teamId = updateAny.teamId;
+    }
     const saved = await this.apiRepository.save(api);
 
     // Audit log (fire-and-forget)

@@ -241,6 +241,16 @@ export class ToolsService {
         tool.dependencies = updateToolDto.dependencies;
       }
 
+      // Team-scoping fields (visibility + teamId) from the dashboard
+      // VisibilityField. Drop a stray teamId if visibility flips back
+      // to 'org' so we don't leave a dangling team reference.
+      if (updateToolDto.visibility !== undefined) {
+        tool.visibility = updateToolDto.visibility;
+        tool.teamId = updateToolDto.visibility === 'team' ? (updateToolDto.teamId ?? null) : null;
+      } else if (updateToolDto.teamId !== undefined && tool.visibility === 'team') {
+        tool.teamId = updateToolDto.teamId;
+      }
+
       // Increment version
       const versionParts = tool.version.split('.').map(Number);
       versionParts[2]++; // Increment patch version

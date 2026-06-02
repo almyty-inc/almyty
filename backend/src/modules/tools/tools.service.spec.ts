@@ -597,6 +597,41 @@ describe('ToolsService', () => {
 
       expect(tool.version).toBe('1.2.4');
     });
+
+    it('flips visibility from org to team and stores teamId', async () => {
+      const tool = makeTool({ visibility: 'org', teamId: null } as any);
+      const user = makeUser();
+      toolRepo.findOne.mockResolvedValue(tool);
+      userRepo.findOne.mockResolvedValue(user);
+      toolRepo.save.mockImplementation((t: any) => Promise.resolve(t));
+      toolVersionRepo.create.mockReturnValue({});
+      toolVersionRepo.save.mockResolvedValue({});
+
+      await service.updateTool(
+        'tool-1',
+        { visibility: 'team', teamId: 'team-uuid' },
+        'org-1',
+        'user-1',
+      );
+
+      expect((tool as any).visibility).toBe('team');
+      expect((tool as any).teamId).toBe('team-uuid');
+    });
+
+    it('flips visibility from team back to org and clears the dangling teamId', async () => {
+      const tool = makeTool({ visibility: 'team', teamId: 'team-old' } as any);
+      const user = makeUser();
+      toolRepo.findOne.mockResolvedValue(tool);
+      userRepo.findOne.mockResolvedValue(user);
+      toolRepo.save.mockImplementation((t: any) => Promise.resolve(t));
+      toolVersionRepo.create.mockReturnValue({});
+      toolVersionRepo.save.mockResolvedValue({});
+
+      await service.updateTool('tool-1', { visibility: 'org' }, 'org-1', 'user-1');
+
+      expect((tool as any).visibility).toBe('org');
+      expect((tool as any).teamId).toBeNull();
+    });
   });
 
   // ─── deleteTool ────────────────────────────────────────────────────────────
