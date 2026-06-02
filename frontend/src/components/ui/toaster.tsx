@@ -131,7 +131,8 @@ type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
 type ToastActionElement = React.ReactElement<typeof ToastAction>
 
 function Toaster() {
-  const { notifications, removeNotification } = useAppStore()
+  const notifications = useAppStore(s => s.notifications)
+  const removeNotification = useAppStore(s => s.removeNotification)
 
   return (
     <ToastProvider>
