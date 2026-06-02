@@ -198,6 +198,16 @@ export class LlmProvidersService {
         provider.metadata = { ...provider.metadata, ...updateDto.metadata };
       }
 
+      // Team-scoping fields (visibility + teamId) from the dashboard
+      // VisibilityField. Clear a dangling teamId when visibility flips
+      // back to 'org'.
+      if (updateDto.visibility !== undefined) {
+        provider.visibility = updateDto.visibility;
+        provider.teamId = updateDto.visibility === 'team' ? (updateDto.teamId ?? null) : null;
+      } else if (updateDto.teamId !== undefined && provider.visibility === 'team') {
+        provider.teamId = updateDto.teamId;
+      }
+
       const updatedProvider = await this.llmProviderRepository.save(provider);
 
       // Perform health check after update, scoped to the same org
