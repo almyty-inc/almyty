@@ -40,15 +40,15 @@ interface Props {
  * share one fetch).
  */
 export function VisibilityField({ organizationId, value, onChange, teamAdminOf, disabled }: Props) {
-  const teamsQuery = useQuery<{ data: Team[] } | Team[]>({
+  const teamsQuery = useQuery<Team[]>({
     queryKey: ['teams', organizationId],
     queryFn: () => teamsApi.list(organizationId),
     enabled: !!organizationId,
   })
 
-  const allTeams: Team[] = Array.isArray(teamsQuery.data)
-    ? teamsQuery.data as Team[]
-    : (teamsQuery.data as any)?.data ?? []
+  // teamsApi.list goes through apiGet → extractData, so teamsQuery.data
+  // is already the flat array.
+  const allTeams: Team[] = Array.isArray(teamsQuery.data) ? teamsQuery.data : []
 
   const pickableTeams = teamAdminOf
     ? allTeams.filter(t => teamAdminOf.includes(t.id))
