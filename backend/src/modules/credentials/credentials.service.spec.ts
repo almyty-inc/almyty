@@ -201,6 +201,85 @@ describe('CredentialsService', () => {
       // Returned value should have masked config
       expect(result.config.apiKey).toBe('sk-r****7890');
     });
+
+    it('persists visibility="team" + teamId from the dashboard VisibilityField payload', async () => {
+      const createData = {
+        name: 'Team Credential',
+        type: 'api_key',
+        config: { apiKey: 'sk-team-key-1234567890' },
+        visibility: 'team' as const,
+        teamId: 'team-uuid-1',
+      };
+      const mockCreated = {
+        id: 'cred-team',
+        ...createData,
+        organizationId: 'org-1',
+        encryptSensitiveData: jest.fn(),
+      };
+      credentialRepository.create.mockReturnValue(mockCreated);
+      credentialRepository.save.mockResolvedValue(mockCreated);
+
+      await service.create(createData, 'org-1');
+
+      expect(credentialRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          visibility: 'team',
+          teamId: 'team-uuid-1',
+        }),
+      );
+    });
+
+    it('defaults visibility to "org" and clears teamId when visibility is omitted', async () => {
+      const createData = {
+        name: 'Default Visibility',
+        type: 'api_key',
+        config: { apiKey: 'sk-org-key-1234567890' },
+      };
+      const mockCreated = {
+        id: 'cred-org',
+        ...createData,
+        organizationId: 'org-1',
+        encryptSensitiveData: jest.fn(),
+      };
+      credentialRepository.create.mockReturnValue(mockCreated);
+      credentialRepository.save.mockResolvedValue(mockCreated);
+
+      await service.create(createData, 'org-1');
+
+      expect(credentialRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          visibility: 'org',
+          teamId: null,
+        }),
+      );
+    });
+
+    it('drops a stray teamId when visibility="org"', async () => {
+      const createData = {
+        name: 'Org Visibility With Stray TeamId',
+        type: 'api_key',
+        config: { apiKey: 'sk-org-key-1234567890' },
+        visibility: 'org' as const,
+        teamId: 'team-uuid-should-be-dropped',
+      };
+      const mockCreated = {
+        id: 'cred-org-stray',
+        ...createData,
+        organizationId: 'org-1',
+        encryptSensitiveData: jest.fn(),
+      };
+      credentialRepository.create.mockReturnValue(mockCreated);
+      credentialRepository.save.mockResolvedValue(mockCreated);
+
+      await service.create(createData, 'org-1');
+
+      expect(credentialRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          visibility: 'org',
+          teamId: null,
+        }),
+      );
+    });
   });
 
   describe('update', () => {
@@ -225,6 +304,46 @@ describe('CredentialsService', () => {
       expect(existing.name).toBe('Updated Name');
       expect(existing.encryptSensitiveData).toHaveBeenCalled();
       expect(credentialRepository.save).toHaveBeenCalledWith(existing);
+    });
+
+    it('flips visibility to "team" and stores teamId', async () => {
+      const existing: any = {
+        id: 'cred-1',
+        organizationId: 'org-1',
+        visibility: 'org',
+        teamId: null,
+        config: {},
+        encryptSensitiveData: jest.fn(),
+      };
+      credentialRepository.findOne.mockResolvedValue(existing);
+      credentialRepository.save.mockResolvedValue(existing);
+
+      await service.update(
+        'cred-1',
+        { visibility: 'team', teamId: 'team-uuid-1' },
+        'org-1',
+      );
+
+      expect(existing.visibility).toBe('team');
+      expect(existing.teamId).toBe('team-uuid-1');
+    });
+
+    it('flips visibility back to "org" and clears the dangling teamId', async () => {
+      const existing: any = {
+        id: 'cred-1',
+        organizationId: 'org-1',
+        visibility: 'team',
+        teamId: 'team-uuid-old',
+        config: {},
+        encryptSensitiveData: jest.fn(),
+      };
+      credentialRepository.findOne.mockResolvedValue(existing);
+      credentialRepository.save.mockResolvedValue(existing);
+
+      await service.update('cred-1', { visibility: 'org' }, 'org-1');
+
+      expect(existing.visibility).toBe('org');
+      expect(existing.teamId).toBeNull()
     });
 
     it('should throw NotFoundException when credential not found', async () => {
