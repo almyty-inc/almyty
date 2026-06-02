@@ -16,6 +16,11 @@ export interface AgentSearchFilters {
   search?: string;
   status?: AgentStatus;
   organizationId: string;
+  // Required so getAgents can apply the team-scope visibility filter
+  // via AccessPolicyService.applyListFilter. Without this, a
+  // team_member sees every team-scoped agent in the org instead of
+  // just the agents on their own teams.
+  caller: { id: string };
   page?: number;
   limit?: number;
   sortBy?: 'name' | 'createdAt' | 'updatedAt' | 'totalExecutions';
@@ -222,8 +227,11 @@ export class AgentsService {
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.agentRepository.createQueryBuilder('agent')
-      .where('agent.organizationId = :organizationId', { organizationId: filters.organizationId })
       .andWhere('agent.isTemporary = false');
+    // Apply team-scope visibility BEFORE the additional filters
+    // (status, search, sort, paging) so the filter participates in
+    // the same WHERE block as the rest of the query.
+    await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'agent');
 
     if (filters.search) {
       queryBuilder.andWhere(
