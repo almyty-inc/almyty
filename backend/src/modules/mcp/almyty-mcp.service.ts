@@ -101,7 +101,7 @@ export class AlmytyMcpService {
     const get = <T>(cls: new (...a: any[]) => T): T => this.moduleRef.get(cls, { strict: false });
     switch (name) {
       case 'list_apis': {
-        const { apis, total } = await get(ApisService).findAllByOrganization(orgId, { limit: 50 });
+        const { apis, total } = await get(ApisService).findAllByOrganization({ id: userId }, orgId, { limit: 50 });
         return { total, apis: apis.map(a => ({ id: a.id, name: a.name, type: a.type, status: a.status, baseUrl: a.baseUrl })) };
       }
       case 'create_api': return get(ApisService).create({ ...args, organizationId: orgId, userId });
@@ -153,7 +153,7 @@ export class AlmytyMcpService {
         return { deleted: true, toolId: args.toolId };
       }
       case 'list_gateways': {
-        const gwResult = await get(GatewaysService).getGateways({ organizationId: orgId, limit: 50 });
+        const gwResult = await get(GatewaysService).getGateways({ organizationId: orgId, limit: 50, caller: { id: userId } });
         return { total: gwResult.total, gateways: gwResult.gateways.map(g => ({ id: g.id, name: g.name, type: g.type, kind: g.kind, status: g.status, endpoint: g.endpoint, isSystem: g.isSystem })) };
       }
       case 'delete_gateway': {
@@ -238,7 +238,7 @@ export class AlmytyMcpService {
         return { deleted: true, authId: args.authId };
       }
       case 'list_agents': {
-        const agResult: any = await get(AgentsService).getAgents({ organizationId: orgId, limit: 50 });
+        const agResult: any = await get(AgentsService).getAgents({ organizationId: orgId, limit: 50, caller: { id: userId } });
         const agents = Array.isArray(agResult) ? agResult : (agResult?.data || agResult?.agents || []);
         return { total: agResult?.total || agResult?.pagination?.total || agents.length, agents: agents.map((a: any) => ({ id: a.id, name: a.name, mode: a.mode, status: a.status, slug: a.name?.toLowerCase().replace(/\s+/g, '-') })) };
       }

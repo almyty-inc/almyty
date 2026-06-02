@@ -56,7 +56,7 @@ export class ApisController {
       throw new BadRequestException('Organization ID is required');
     }
 
-    const result = await this.apisService.findAllByOrganization(orgId, {
+    const result = await this.apisService.findAllByOrganization({ id: req.user.id }, orgId, {
       type,
       status,
       page: parseInt(page.toString()),

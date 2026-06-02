@@ -322,7 +322,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
     });
 
     it('findAllByOrganization(orgA) only returns org-A rows', async () => {
-      const { apis } = await service.findAllByOrganization(fx.orgA.id);
+      const { apis } = await service.findAllByOrganization({ id: fx.userA.id }, fx.orgA.id);
       expect(apis.every((a) => a.organizationId === fx.orgA.id)).toBe(true);
       expect(apis.map((a) => a.id)).not.toContain(apiB.id);
     });
@@ -505,7 +505,13 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds.getRepository(Gateway),
         fx.ds.getRepository(Agent),
         stubAuditLog() as any,
-        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // AccessPolicyService
+        {
+          canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+          applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => {
+            qb.andWhere(`${alias}.\"organizationId\" = :_orgId`, { _orgId: organizationId });
+            return { bypass: true, teamIds: [] };
+          }),
+        } as any, // AccessPolicyService
       );
 
       const credRepo = fx.ds.getRepository(Credential);
@@ -536,7 +542,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
     });
 
     it('findAll(orgA) only returns org-A rows', async () => {
-      const result = await service.findAll(fx.orgA.id);
+      const result = await service.findAll({ id: fx.userA.id }, fx.orgA.id);
       expect(result.every((r: any) => r.organizationId === fx.orgA.id)).toBe(true);
       expect(result.map((r: any) => r.id)).not.toContain(credB.id);
     });
