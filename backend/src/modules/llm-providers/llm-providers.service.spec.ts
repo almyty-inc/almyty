@@ -368,6 +368,44 @@ describe('LlmProvidersService', () => {
         .rejects
         .toThrow(ForbiddenException);
     });
+
+    it('flips visibility from org to team and stores teamId', async () => {
+      const mockProvider: any = {
+        id: 'provider-1',
+        type: LlmProviderType.OPENAI,
+        configuration: { apiKey: 'sk-test' } as any,
+        visibility: 'org',
+        teamId: null,
+      };
+      const mockUser = { id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) };
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      userRepository.findOne.mockResolvedValue(mockUser);
+      llmProviderRepository.save.mockImplementation((p: any) => Promise.resolve(p));
+
+      await service.updateProvider('provider-1', { visibility: 'team', teamId: 'team-uuid' }, 'org-1', 'user-1');
+
+      expect(mockProvider.visibility).toBe('team');
+      expect(mockProvider.teamId).toBe('team-uuid');
+    });
+
+    it('flips visibility from team back to org and clears the dangling teamId', async () => {
+      const mockProvider: any = {
+        id: 'provider-1',
+        type: LlmProviderType.OPENAI,
+        configuration: { apiKey: 'sk-test' } as any,
+        visibility: 'team',
+        teamId: 'team-old',
+      };
+      const mockUser = { id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) };
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      userRepository.findOne.mockResolvedValue(mockUser);
+      llmProviderRepository.save.mockImplementation((p: any) => Promise.resolve(p));
+
+      await service.updateProvider('provider-1', { visibility: 'org' }, 'org-1', 'user-1');
+
+      expect(mockProvider.visibility).toBe('org');
+      expect(mockProvider.teamId).toBeNull();
+    });
   });
 
   describe('getProvider', () => {

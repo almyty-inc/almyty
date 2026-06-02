@@ -10,6 +10,9 @@ export interface CreateLlmProviderDto {
   configuration: LlmProviderConfig;
   capabilities?: LlmProvider['capabilities'];
   metadata?: LlmProvider['metadata'];
+  // Team-scoping fields from the dashboard VisibilityField.
+  visibility?: 'org' | 'team';
+  teamId?: string | null;
 }
 
 export interface UpdateLlmProviderDto {
@@ -18,6 +21,8 @@ export interface UpdateLlmProviderDto {
   configuration?: Partial<LlmProviderConfig>;
   capabilities?: Partial<LlmProvider['capabilities']>;
   metadata?: Partial<LlmProvider['metadata']>;
+  visibility?: 'org' | 'team';
+  teamId?: string | null;
 }
 
 export interface ChatRequest {
