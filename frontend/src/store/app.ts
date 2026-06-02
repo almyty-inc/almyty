@@ -87,7 +87,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
 // Helper hook for notifications
 export const useNotifications = () => {
-  const { addNotification } = useAppStore()
+  const addNotification = useAppStore(s => s.addNotification)
 
   return {
     success: (title: string, message?: string) =>
