@@ -107,6 +107,12 @@ export class CredentialsService {
       scopes?: string[];
       expiresAt?: string;
       metadata?: Record<string, any>;
+      // Team-scoping fields sent by the dashboard's VisibilityField.
+      // Both columns exist on the Credential entity; the service used
+      // to silently drop them so every UI-created credential ended up
+      // org-visible regardless of what the user picked.
+      visibility?: 'org' | 'team';
+      teamId?: string | null;
     },
     organizationId: string,
   ): Promise<Credential> {
@@ -122,6 +128,8 @@ export class CredentialsService {
       scopes: data.scopes,
       expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
       metadata: data.metadata,
+      visibility: data.visibility ?? 'org',
+      teamId: data.visibility === 'team' ? (data.teamId ?? null) : null,
     });
 
     // Encrypt sensitive data before saving
@@ -150,6 +158,9 @@ export class CredentialsService {
       expiresAt?: string;
       isActive?: boolean;
       metadata?: Record<string, any>;
+      // Team-scoping fields sent by the dashboard's VisibilityField.
+      visibility?: 'org' | 'team';
+      teamId?: string | null;
     },
     organizationId: string,
     userId?: string,
@@ -181,6 +192,14 @@ export class CredentialsService {
     if (data.expiresAt !== undefined) credential.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
     if (data.isActive !== undefined) credential.isActive = data.isActive;
     if (data.metadata !== undefined) credential.metadata = data.metadata;
+    if (data.visibility !== undefined) {
+      credential.visibility = data.visibility;
+      // Clear teamId when flipping back to 'org' so we don't leave a
+      // dangling team reference on a now-org-wide credential.
+      credential.teamId = data.visibility === 'team' ? (data.teamId ?? null) : null;
+    } else if (data.teamId !== undefined && credential.visibility === 'team') {
+      credential.teamId = data.teamId;
+    }
 
     if (data.config !== undefined) {
       credential.config = data.config;
