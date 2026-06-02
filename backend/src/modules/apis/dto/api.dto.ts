@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsObject, IsNumber, IsBoolean, ValidateNested, Matches } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsObject, IsNumber, IsBoolean, ValidateNested, Matches, MaxLength } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiType } from '../../../entities/api.entity';
 
@@ -30,11 +30,13 @@ export class RateLimitsDto {
 export class CreateApiDto {
   @Transform(stripHtml)
   @IsString()
+  @MaxLength(100)
   name: string;
 
   @Transform(stripHtml)
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   description?: string;
 
   @Matches(/^https?:\/\/.+/, { message: 'baseUrl must be a valid HTTP or HTTPS URL' })
@@ -93,11 +95,13 @@ export class UpdateApiDto {
   @Transform(stripHtml)
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   name?: string;
 
   @Transform(stripHtml)
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   description?: string;
 
   @IsOptional()
