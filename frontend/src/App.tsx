@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 
@@ -51,6 +51,21 @@ const ToolHubPage = lazy(() => import('@/pages/tool-hub').then(m => ({ default: 
 const AcceptInvitePage = lazy(() => import('@/pages/accept-invite').then(m => ({ default: m.AcceptInvitePage })))
 const CliLoginPage = lazy(() => import('@/pages/cli-login').then(m => ({ default: m.CliLoginPage })))
 
+// Layout wrapper that mounts once via parent Route + Outlet, so
+// useLocation() inside the layout always reflects the *current*
+// child route. The previous pattern wrapped every Route's element
+// in <DashboardLayout>{<Page/>}</DashboardLayout> and reused the
+// same layout instance across pages — useLocation would freeze on
+// whichever pathname rendered the layout first, leaving the
+// sidebar's active-item highlight stuck on the previous page.
+function DashboardLayoutOutlet() {
+  return (
+    <DashboardLayout>
+      <Outlet />
+    </DashboardLayout>
+  )
+}
+
 function App() {
   const { checkAuth } = useAuthStore()
 
@@ -62,138 +77,39 @@ function App() {
   return (
     <>
       <Routes>
-        {/* Dashboard routes - protected */}
-        <Route path="/dashboard" element={
-          <DashboardLayout>
-            <DashboardPage />
-          </DashboardLayout>
-        } />
-        <Route path="/gateways" element={
-          <DashboardLayout>
-            <GatewaysPage />
-          </DashboardLayout>
-        } />
-        <Route path="/gateways/:id" element={
-          <DashboardLayout>
-            <GatewayDetailPage />
-          </DashboardLayout>
-        } />
-        <Route path="/apis" element={
-          <DashboardLayout>
-            <ApisPage />
-          </DashboardLayout>
-        } />
-        <Route path="/apis/:id" element={
-          <DashboardLayout>
-            <ApiDetailPage />
-          </DashboardLayout>
-        } />
-        <Route path="/tools" element={
-          <DashboardLayout>
-            <ToolsPage />
-          </DashboardLayout>
-        } />
-        <Route path="/tools/:id" element={
-          <DashboardLayout>
-            <ToolDetailPage />
-          </DashboardLayout>
-        } />
-        <Route path="/tool-hub" element={<Navigate to="/tools?tab=hub" replace />} />
-        <Route path="/agents" element={
-          <DashboardLayout>
-            <AgentsPage />
-          </DashboardLayout>
-        } />
-        <Route path="/agents/new" element={
-          <DashboardLayout>
-            <AgentBuilderPage />
-          </DashboardLayout>
-        } />
-        <Route path="/agents/:id" element={
-          <DashboardLayout>
-            <AgentDetailPage />
-          </DashboardLayout>
-        } />
-        <Route path="/agents/:id/edit" element={
-          <DashboardLayout>
-            <AgentBuilderPage />
-          </DashboardLayout>
-        } />
-        <Route path="/runners" element={
-          <DashboardLayout>
-            <RunnersPage />
-          </DashboardLayout>
-        } />
-        <Route path="/runners/new" element={
-          <DashboardLayout>
-            <RunnerNewPage />
-          </DashboardLayout>
-        } />
-        <Route path="/runners/:id" element={
-          <DashboardLayout>
-            <RunnerDetailPage />
-          </DashboardLayout>
-        } />
-        <Route path="/approvals" element={
-          <DashboardLayout>
-            <ApprovalsPage />
-          </DashboardLayout>
-        } />
-        <Route path="/workspaces" element={
-          <DashboardLayout>
-            <WorkspacesPage />
-          </DashboardLayout>
-        } />
-        <Route path="/workspaces/:id" element={
-          <DashboardLayout>
-            <WorkspaceDetailPage />
-          </DashboardLayout>
-        } />
-        <Route path="/chat" element={
-          <DashboardLayout>
-            <ChatPage />
-          </DashboardLayout>
-        } />
-        <Route path="/llm-providers" element={
-          <DashboardLayout>
-            <LlmProvidersPage />
-          </DashboardLayout>
-        } />
-        <Route path="/llm-providers/:id" element={
-          <DashboardLayout>
-            <LlmProviderDetailPage />
-          </DashboardLayout>
-        } />
-        <Route path="/analytics/*" element={
-          <DashboardLayout>
-            <AnalyticsPage />
-          </DashboardLayout>
-        } />
-        <Route path="/memories" element={
-          <DashboardLayout>
-            <MemoriesPage />
-          </DashboardLayout>
-        } />
-        <Route path="/credentials/*" element={
-          <DashboardLayout>
-            <CredentialsPage />
-          </DashboardLayout>
-        } />
-        <Route path="/settings/*" element={
-          <DashboardLayout>
-            <SettingsPage />
-          </DashboardLayout>
-        } />
-        <Route path="/organizations" element={
-          <DashboardLayout>
-            <OrganizationsPage />
-          </DashboardLayout>
-        } />
-        <Route path="/docs" element={
-          <DashboardLayout>
-            <DocsPage />
-          </DashboardLayout>
-        } />
+        {/* Dashboard routes - protected. Single parent route with
+            <DashboardLayoutOutlet /> means the layout mounts ONCE
+            and the child route swaps via <Outlet />. useLocation()
+            inside the layout reliably reflects the active child. */}
+        <Route element={<DashboardLayoutOutlet />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/gateways" element={<GatewaysPage />} />
+          <Route path="/gateways/:id" element={<GatewayDetailPage />} />
+          <Route path="/apis" element={<ApisPage />} />
+          <Route path="/apis/:id" element={<ApiDetailPage />} />
+          <Route path="/tools" element={<ToolsPage />} />
+          <Route path="/tools/:id" element={<ToolDetailPage />} />
+          <Route path="/tool-hub" element={<Navigate to="/tools?tab=hub" replace />} />
+          <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/agents/new" element={<AgentBuilderPage />} />
+          <Route path="/agents/:id" element={<AgentDetailPage />} />
+          <Route path="/agents/:id/edit" element={<AgentBuilderPage />} />
+          <Route path="/runners" element={<RunnersPage />} />
+          <Route path="/runners/new" element={<RunnerNewPage />} />
+          <Route path="/runners/:id" element={<RunnerDetailPage />} />
+          <Route path="/approvals" element={<ApprovalsPage />} />
+          <Route path="/workspaces" element={<WorkspacesPage />} />
+          <Route path="/workspaces/:id" element={<WorkspaceDetailPage />} />
+          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/llm-providers" element={<LlmProvidersPage />} />
+          <Route path="/llm-providers/:id" element={<LlmProviderDetailPage />} />
+          <Route path="/analytics/*" element={<AnalyticsPage />} />
+          <Route path="/memories" element={<MemoriesPage />} />
+          <Route path="/credentials/*" element={<CredentialsPage />} />
+          <Route path="/settings/*" element={<SettingsPage />} />
+          <Route path="/organizations" element={<OrganizationsPage />} />
+          <Route path="/docs" element={<DocsPage />} />
+        </Route>
 
         {/* Invite accept */}
         <Route path="/invite/accept" element={<AcceptInvitePage />} />
