@@ -7,6 +7,8 @@ import {
   Body,
   Param,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
   Request,
   ParseUUIDPipe,
   HttpException,
@@ -14,6 +16,11 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ExternalAgentsService } from './external-agents.service';
+import {
+  PreviewExternalAgentDto,
+  CreateExternalAgentDto,
+  UpdateExternalAgentDto,
+} from './dto/external-agent.dto';
 
 @Controller('external-agents')
 @UseGuards(JwtAuthGuard)
@@ -36,7 +43,8 @@ export class ExternalAgentsController {
   }
 
   @Post('preview')
-  async preview(@Request() req: any, @Body() body: { url: string }) {
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async preview(@Request() req: any, @Body() body: PreviewExternalAgentDto) {
     const orgId = this.requireOrg(req);
     const userId = req.user?.id;
     const data = await this.externalAgentsService.importFromUrl(orgId, userId, body.url);
@@ -44,7 +52,8 @@ export class ExternalAgentsController {
   }
 
   @Post()
-  async create(@Request() req: any, @Body() body: any) {
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async create(@Request() req: any, @Body() body: CreateExternalAgentDto) {
     const orgId = this.requireOrg(req);
     const agent = await this.externalAgentsService.create(orgId, body);
     return { success: true, data: agent };
@@ -65,13 +74,14 @@ export class ExternalAgentsController {
   }
 
   @Patch(':id')
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async update(
     @Request() req: any,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: any,
+    @Body() body: UpdateExternalAgentDto,
   ) {
     const orgId = this.requireOrg(req);
-    const agent = await this.externalAgentsService.update(id, orgId, body);
+    const agent = await this.externalAgentsService.update(id, orgId, body as any);
     return { success: true, data: agent };
   }
 
