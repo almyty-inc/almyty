@@ -168,3 +168,80 @@ export class ImportSchemaDto {
   @IsBoolean()
   generateTools?: boolean;
 }
+export class CreateHttpApiDto {
+  @Transform(stripHtml)
+  @IsString()
+  @MaxLength(100)
+  name!: string;
+
+  @Matches(/^https?:\/\/.+/, { message: 'baseUrl must be a valid HTTP or HTTPS URL' })
+  @IsString()
+  @MaxLength(2048)
+  baseUrl!: string;
+
+  @Transform(stripHtml)
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
+  @IsOptional()
+  @IsObject()
+  headers?: Record<string, string>;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AuthenticationConfigDto)
+  authentication?: AuthenticationConfigDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RateLimitsDto)
+  rateLimits?: RateLimitsDto;
+
+  @IsOptional()
+  @IsNumber()
+  timeoutMs?: number;
+
+  @IsOptional()
+  @IsNumber()
+  retryAttempts?: number;
+
+  @IsOptional()
+  @IsEnum(['org', 'team'])
+  visibility?: 'org' | 'team';
+
+  @IsOptional()
+  @IsString()
+  teamId?: string | null;
+}
+
+export class CreateSdkApiDto {
+  @Transform(stripHtml)
+  @IsString()
+  @MaxLength(100)
+  name!: string;
+
+  @Transform(stripHtml)
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
+  // Map of npm package name -> version range. Validated by the
+  // installer at import time; the DTO just bounds shape.
+  @IsObject()
+  dependencies!: Record<string, string>;
+
+  @IsOptional()
+  @IsObject()
+  npmRegistry?: Record<string, any>;
+
+  @IsOptional()
+  @IsEnum(['org', 'team'])
+  visibility?: 'org' | 'team';
+
+  @IsOptional()
+  @IsString()
+  teamId?: string | null;
+}
