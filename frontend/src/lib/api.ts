@@ -297,6 +297,13 @@ export const organizationsApi = {
   removeMember: (id: string, userId: string) =>
     apiDel(`/organizations/${id}/members/${userId}`),
 
+  // Pending invites
+  getPendingInvites: (id: string) =>
+    apiGet(`/organizations/${id}/invites`),
+
+  revokePendingInvite: (id: string, inviteId: string) =>
+    apiDel(`/organizations/${id}/invites/${inviteId}`),
+
   // Teams
   getTeams: (id: string) => apiGet(`/organizations/${id}/teams`),
   
