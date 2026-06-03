@@ -198,4 +198,52 @@ describe('ToolsService - Custom Tool Creation', () => {
     await expect(service.createTool(createDto as any, 'org-123', 'user-123')).rejects.toThrow();
     expect(toolRepository.save).not.toHaveBeenCalled();
   });
+
+  it('flows llmConfig through to entity for LLM-execution tools', async () => {
+    const llmConfig = {
+      providerId: 'prov-1',
+      promptTemplate: 'Summarize: {{input.text}}',
+      model: 'gpt-4o-mini',
+      outputMode: 'text',
+    };
+    await service.createTool(
+      {
+        name: 'LLM Tool',
+        description: 'LLM-backed summarizer',
+        type: ToolType.FUNCTION,
+        parameters: { type: 'object', properties: {} },
+        executionMethod: 'llm',
+        llmConfig,
+      } as any,
+      'org-123',
+      'user-123',
+    );
+    expect(toolRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ llmConfig }),
+    );
+  });
+
+  it('flows graphqlConfig + soapConfig + grpcConfig + examples through to entity', async () => {
+    const graphqlConfig = { query: 'query { user { id } }', variables: {} };
+    const soapConfig = { operation: 'GetUser', namespace: 'http://example.com' };
+    const grpcConfig = { serviceName: 'UserSvc', methodName: 'Get' };
+    const examples = [{ name: 'minimal', input: { id: '1' } }];
+    await service.createTool(
+      {
+        name: 'Multi-Protocol Tool',
+        description: 'one config per protocol',
+        type: ToolType.QUERY,
+        parameters: { type: 'object', properties: {} },
+        graphqlConfig,
+        soapConfig,
+        grpcConfig,
+        examples,
+      } as any,
+      'org-123',
+      'user-123',
+    );
+    expect(toolRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ graphqlConfig, soapConfig, grpcConfig, examples }),
+    );
+  });
 });

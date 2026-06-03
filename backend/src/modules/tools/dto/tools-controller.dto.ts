@@ -83,6 +83,36 @@ export class CreateToolBodyDto {
   @IsObject()
   dependencies?: Record<string, string>;
 
+  // Protocol-specific execution configs. Each entity column accepts
+  // an arbitrary-shape JSON object; the executor (tool-protocol +
+  // tool-grpc + tool-script) validates structure server-side via the
+  // GraphqlConfig / SoapConfig / GrpcConfig / HttpConfig interfaces.
+  // Without these on the whitelist, ValidationPipe drops them and
+  // non-HTTP tool types cannot be created via the public REST API.
+  @IsOptional()
+  @IsObject()
+  httpConfig?: any;
+
+  @IsOptional()
+  @IsObject()
+  llmConfig?: any;
+
+  @IsOptional()
+  @IsObject()
+  graphqlConfig?: any;
+
+  @IsOptional()
+  @IsObject()
+  soapConfig?: any;
+
+  @IsOptional()
+  @IsObject()
+  grpcConfig?: any;
+
+  @IsOptional()
+  @IsArray()
+  examples?: Array<{ name: string; description?: string; input: Record<string, any>; expectedOutput?: any }>;
+
   // Team-scoping fields sent by the dashboard create/update dialogs.
   // The VisibilityField component always emits both; without these
   // entries on the whitelist the ValidationPipe 400s the request.
@@ -146,6 +176,31 @@ export class UpdateToolBodyDto {
   @IsOptional()
   @IsObject()
   dependencies?: Record<string, string>;
+
+  // Protocol-specific execution configs — same rationale as CreateToolBodyDto.
+  @IsOptional()
+  @IsObject()
+  httpConfig?: any;
+
+  @IsOptional()
+  @IsObject()
+  llmConfig?: any;
+
+  @IsOptional()
+  @IsObject()
+  graphqlConfig?: any;
+
+  @IsOptional()
+  @IsObject()
+  soapConfig?: any;
+
+  @IsOptional()
+  @IsObject()
+  grpcConfig?: any;
+
+  @IsOptional()
+  @IsArray()
+  examples?: Array<{ name: string; description?: string; input: Record<string, any>; expectedOutput?: any }>;
 
   // Team-scoping fields sent by the dashboard create/update dialogs.
   // The VisibilityField component always emits both; without these

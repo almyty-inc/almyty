@@ -42,6 +42,22 @@ export interface CreateToolDto {
    */
   sdkConfig?: any;
   dependencies?: Record<string, string>;
+
+  // Non-HTTP protocol execution configs. Entity columns are typed via
+  // GraphqlConfig / SoapConfig / GrpcConfig in tool.entity.ts; we keep
+  // the service-side shape `any` because the executor validates
+  // structure when it dispatches.
+  llmConfig?: any;
+  graphqlConfig?: any;
+  soapConfig?: any;
+  grpcConfig?: any;
+  examples?: Array<{ name: string; description?: string; input: Record<string, any>; expectedOutput?: any }>;
+
+  // Team-scoping fields from the dashboard VisibilityField.
+  visibility?: 'org' | 'team';
+  teamId?: string | null;
+  executionMethod?: ToolExecutionMethod;
+  authConfig?: any;
 }
 
 export interface UpdateToolDto {
@@ -65,6 +81,14 @@ export interface UpdateToolDto {
   metadata?: Record<string, any>;
   sdkConfig?: any;
   dependencies?: Record<string, string>;
+
+  // Non-HTTP protocol execution configs — same rationale as CreateToolDto.
+  httpConfig?: any;
+  llmConfig?: any;
+  graphqlConfig?: any;
+  soapConfig?: any;
+  grpcConfig?: any;
+  examples?: Array<{ name: string; description?: string; input: Record<string, any>; expectedOutput?: any }>;
   // Team-scoping fields from the dashboard VisibilityField.
   visibility?: 'org' | 'team';
   teamId?: string | null;
