@@ -94,11 +94,16 @@ import { ChannelEventsController } from './channels/channel-events.controller';
     IrcAdapter,
   ],
   controllers: [
+    // GatewayInfoController has literal-path routes (all-skills,
+    // stats/overview, resolve/:org/:gateway, skills/search). It MUST
+    // be registered before GatewaysController, because the latter has
+    // `@Get(':gatewayId')` with a UUID pipe that would otherwise eat
+    // any non-UUID path segment and 400 with 'uuid is expected'.
+    GatewayInfoController,
     GatewaysController,
     GatewayAuthController,
     GatewayToolsController,
     GatewaySkillsController,
-    GatewayInfoController,
     ChannelEventsController,
   ],
   exports: [
