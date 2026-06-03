@@ -127,6 +127,14 @@ export class LlmProvidersService {
       // Validate configuration
       this.runner.validateProviderConfiguration(createDto.type, createDto.configuration);
 
+      // Validate team scoping before persisting.
+      await this.accessPolicy.assertCanScopeToTeam(
+        userId,
+        organizationId,
+        (createDto as any).visibility,
+        (createDto as any).teamId,
+      );
+
       // Set default capabilities if not provided
       const capabilities = createDto.capabilities || this.modelsHelper.getDefaultCapabilities(createDto.type);
 
@@ -180,6 +188,14 @@ export class LlmProvidersService {
       const decision = await this.accessPolicy.canAccess({ id: userId }, provider, 'manage');
       if (!decision.allowed) {
         throw new ForbiddenException(decision.reason);
+      }
+
+      // Re-validate team scoping if it's being changed.
+      const updateAnyEarly = updateDto as any;
+      if (updateAnyEarly.visibility !== undefined || updateAnyEarly.teamId !== undefined) {
+        const nextVis = updateAnyEarly.visibility ?? provider.visibility;
+        const nextTeamId = updateAnyEarly.teamId !== undefined ? updateAnyEarly.teamId : provider.teamId;
+        await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, nextVis, nextTeamId);
       }
 
       // Update configuration

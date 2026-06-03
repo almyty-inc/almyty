@@ -95,6 +95,13 @@ export class RunnerService {
       );
     }
 
+    await this.accessPolicy.assertCanScopeToTeam(
+      ownerUserId,
+      organizationId,
+      input.visibility,
+      input.teamId,
+    );
+
     const target: Runner = existing ?? this.runners.create({
       name: input.name,
       ownerUserId,

@@ -122,7 +122,7 @@ describe('RunnerService', () => {
         { provide: getRepositoryToken(RunnerSession), useValue: sessions },
         { provide: getRepositoryToken(Workspace), useValue: workspaces },
         { provide: RunnerCapabilityPublisher, useValue: fakePublisher },
-        { provide: AccessPolicyService, useValue: { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } },
+        { provide: AccessPolicyService, useValue: { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
     service = moduleRef.get(RunnerService);

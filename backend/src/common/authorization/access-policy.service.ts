@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Brackets, SelectQueryBuilder, ObjectLiteral } from 'typeorm';
 
@@ -97,6 +97,62 @@ export class AccessPolicyService {
       out.set(row.teamId, row.role as TeamRole);
     }
     return out;
+    return out;
+  }
+
+  /**
+   * Validate that the caller can scope a resource to the given teamId.
+   * - The team must exist in the org (prevents cross-org teamId attacks
+   *   where a user mints a resource with a teamId pointing at a team
+   *   in a different org and then reads it back via the listing path).
+   * - The caller must either be an org owner/admin or have a team
+   *   membership in that team. Otherwise the create/update path lets
+   *   a member grant team-admin reach by setting visibility=team +
+   *   teamId=<a team they don't belong to>.
+   *
+   * Throws NotFoundException when the team isn't in the org so we
+   * don't leak the existence of teams in other orgs.
+   * Throws ForbiddenException when the caller has no path to that
+   * team.
+   *
+   * Pass through when visibility !== 'team' OR teamId is null —
+   * org-wide resources don't need the check.
+   */
+  async assertCanScopeToTeam(
+    userId: string,
+    organizationId: string,
+    visibility: 'org' | 'team' | undefined,
+    teamId: string | null | undefined,
+  ): Promise<void> {
+    if (visibility !== 'team' || teamId == null) return;
+
+    // 1. Org owner/admin bypass — they can create/manage anything.
+    const orgRole = await this.getOrgRole(userId, organizationId);
+    if (orgRole === OrganizationRole.OWNER || orgRole === OrganizationRole.ADMIN) {
+      // Still verify the team is in this org; otherwise an admin
+      // could accidentally bind a resource to a team in another org
+      // they happen to also be an admin of.
+      const teamCount = await this.userOrgs.manager
+        .getRepository('Team')
+        .count({ where: { id: teamId, organizationId, isActive: true } });
+      if (teamCount === 0) {
+        throw new NotFoundException('Team not found');
+      }
+      return;
+    }
+
+    // 2. Non-admin path — the caller must be a member of the team
+    //    AND the team must be in the org. We can verify both with
+    //    one query: the join in getTeamMemberships filters by
+    //    organizationId already, so the map only contains in-org
+    //    teams the caller belongs to.
+    const memberships = await this.getTeamMemberships(userId, organizationId);
+    if (!memberships.has(teamId)) {
+      // Surface as NotFound to avoid leaking 'this team exists but
+      // you're not on it' to a non-admin — consistent with
+      // assertTeamInOrg's existing behavior in OrganizationsService.
+      throw new NotFoundException('Team not found');
+    }
   }
 
   /**

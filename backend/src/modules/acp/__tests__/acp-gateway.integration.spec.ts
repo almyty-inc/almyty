@@ -96,6 +96,7 @@ describe('ACP Gateway Integration', () => {
           provide: AccessPolicyService,
           useValue: {
             canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+            assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

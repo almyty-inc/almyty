@@ -118,6 +118,16 @@ export class AgentsService {
         throw new NotFoundException('Organization not found');
       }
 
+      // Validate team scoping before persisting — without this a
+      // caller can mint an agent bound to a team they don't belong
+      // to (or a team in a different org).
+      await this.accessPolicy.assertCanScopeToTeam(
+        userId,
+        organizationId,
+        createDto.visibility,
+        createDto.teamId,
+      );
+
       // Validate pipeline (only for workflow mode)
       const mode = createDto.mode || 'workflow';
       if (mode === 'workflow' && createDto.pipeline) {
@@ -272,6 +282,13 @@ export class AgentsService {
     // Permission check: admin+ can update any agent, members can only update their own
     if (userId) {
       await this.checkAgentPermission(agent, organizationId, userId, 'edit_agents');
+    }
+
+    // Re-validate team scoping if it's being changed on this update.
+    if (userId && (updateDto.visibility !== undefined || updateDto.teamId !== undefined)) {
+      const nextVis = updateDto.visibility ?? (agent as any).visibility;
+      const nextTeamId = updateDto.teamId !== undefined ? updateDto.teamId : (agent as any).teamId;
+      await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, nextVis, nextTeamId);
     }
 
     // If pipeline is being updated, validate it (only for workflow mode) and auto-save a version snapshot

@@ -119,6 +119,14 @@ export class ToolsService {
         }
       }
 
+      // Validate team scoping before persisting.
+      await this.accessPolicy.assertCanScopeToTeam(
+        userId,
+        organizationId,
+        (createToolDto as any).visibility,
+        (createToolDto as any).teamId,
+      );
+
       // Create the tool
       // Custom tools (with code or httpConfig) are ACTIVE by default, auto-generated are DRAFT
       const isCustomTool = (!!createToolDto.code || !!createToolDto.httpConfig) && !createToolDto.operationId;
@@ -183,6 +191,14 @@ export class ToolsService {
         if (!decision.allowed) {
           throw new ForbiddenException(decision.reason);
         }
+      }
+
+      // Re-validate team scoping if it's being changed.
+      const updateAnyEarly = updateToolDto as any;
+      if (updateAnyEarly.visibility !== undefined || updateAnyEarly.teamId !== undefined) {
+        const nextVis = updateAnyEarly.visibility ?? tool.visibility;
+        const nextTeamId = updateAnyEarly.teamId !== undefined ? updateAnyEarly.teamId : tool.teamId;
+        await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, nextVis, nextTeamId);
       }
 
       // Capture old values for change tracking (before mutation)
