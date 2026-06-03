@@ -154,11 +154,15 @@ export class NodeSandboxService {
           settled = true;
           clearTimeout(timer);
           cleanupSignal();
+          // Worker threads can linger past their last 'message' if their
+          // script's event loop has unsettled microtasks (open timers,
+          // dangling promises). Force-terminate so jest --detectOpenHandles
+          // stays clean and prod processes don't accumulate zombie workers.
+          worker.terminate();
           resolve(r);
         };
 
         const timer = setTimeout(() => {
-          worker.terminate();
           settle({
             success: false,
             error: `Execution timed out after ${timeoutMs}ms`,
@@ -169,7 +173,6 @@ export class NodeSandboxService {
         // Wire up the caller's AbortSignal. If it fires mid-flight,
         // terminate the worker and resolve as cancelled.
         const onAbort = () => {
-          worker.terminate();
           settle({
             success: false,
             error: 'Sandbox execution cancelled',
