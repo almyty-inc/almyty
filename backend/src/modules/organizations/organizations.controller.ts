@@ -9,6 +9,8 @@ import {
   Param,
   Query,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
   Request,
   ParseUUIDPipe,
   BadRequestException,
@@ -22,6 +24,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { OrganizationsService } from './organizations.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { CreateTeamDto } from './dto/create-team.dto';
+import { CreateOrganizationDto } from './dto/create-organization.dto';
+import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 
 @Controller('organizations')
@@ -44,7 +48,8 @@ export class OrganizationsController {
   @UseGuards(JwtAuthGuard)  // Any authenticated user can create an org (no roles guard)
   @ApiOperation({ summary: 'Create organization' })
   @ApiResponse({ status: 201, description: 'Organization created successfully' })
-  async createOrganization(@Body() createOrgDto: any, @Request() req: any) {
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async createOrganization(@Body() createOrgDto: CreateOrganizationDto, @Request() req: any) {
     const data = await this.organizationsService.create(createOrgDto, req.user.id);
     return { success: true, data, message: 'Organization created successfully' };
   }
@@ -74,12 +79,13 @@ export class OrganizationsController {
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update organization' })
   @ApiResponse({ status: 200, description: 'Organization updated successfully' })
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async updateOrganization(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
-    @Body() updateOrgDto: any,
+    @Body() updateOrgDto: UpdateOrganizationDto,
     @Request() req: any,
   ) {
-    const data = await this.organizationsService.update(organizationId, updateOrgDto);
+    const data = await this.organizationsService.update(organizationId, updateOrgDto as any);
     return { success: true, data, message: 'Organization updated successfully' };
   }
 
