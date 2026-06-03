@@ -5,6 +5,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** Returns 'word' when n === 1, else 'words' (or a custom plural form). */
+export function pluralize(n: number, word: string, plural?: string): string {
+  return n === 1 ? word : (plural ?? word + 's');
+}
+
+/** Returns 'n word(s)' with correct pluralization. */
+export function pluralized(n: number, word: string, plural?: string): string {
+  return n + ' ' + pluralize(n, word, plural);
+}
+
 export function formatDate(date: Date | string): string {
   const d = new Date(date)
   return d.toLocaleDateString('en-US', {
