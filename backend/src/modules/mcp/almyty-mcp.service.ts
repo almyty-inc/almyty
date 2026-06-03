@@ -144,7 +144,7 @@ export class AlmytyMcpService {
         return { deleted: true, apiId: args.apiId };
       }
       case 'list_tools': {
-        const toolResult = await get(ToolsService).getTools({ organizationId: orgId, limit: 100 });
+        const toolResult = await get(ToolsService).getTools({ organizationId: orgId, limit: 100, caller: { id: userId } });
         const tools = Array.isArray(toolResult) ? toolResult : (toolResult as any).tools || [];
         return { total: (toolResult as any).total || tools.length, tools: tools.map((t: any) => ({ id: t.id, name: t.name, type: t.type, status: t.status, description: t.description?.substring(0, 100) })) };
       }
@@ -182,7 +182,7 @@ export class AlmytyMcpService {
           try {
             const GatewayToolService = require('../gateways/gateway-tool.service').GatewayToolService;
             const gwToolService = this.moduleRef.get(GatewayToolService, { strict: false });
-            const toolResult = await get(ToolsService).getTools({ organizationId: orgId, limit: 500 });
+            const toolResult = await get(ToolsService).getTools({ organizationId: orgId, limit: 500, caller: { id: userId } });
             const allTools = Array.isArray(toolResult) ? toolResult : (toolResult as any).tools || [];
 
             let toolIds: string[] = [];
@@ -214,7 +214,7 @@ export class AlmytyMcpService {
         let toolIds: string[] = args.toolIds || [];
         if (args.apiName && toolIds.length === 0) {
           // Find all tools from this API by name
-          const toolResult = await get(ToolsService).getTools({ organizationId: orgId, limit: 500 });
+          const toolResult = await get(ToolsService).getTools({ organizationId: orgId, limit: 500, caller: { id: userId } });
           const tools = Array.isArray(toolResult) ? toolResult : (toolResult as any).tools || [];
           const apiTools = tools.filter((t: any) => t.api?.name?.toLowerCase() === args.apiName.toLowerCase() || t.name?.toLowerCase().startsWith(args.apiName.toLowerCase().replace(/[^a-z0-9]/g, '_')));
           toolIds = apiTools.map((t: any) => t.id);
@@ -243,7 +243,7 @@ export class AlmytyMcpService {
         return { total: agResult?.total || agResult?.pagination?.total || agents.length, agents: agents.map((a: any) => ({ id: a.id, name: a.name, mode: a.mode, status: a.status, slug: a.name?.toLowerCase().replace(/\s+/g, '-') })) };
       }
       case 'create_agent': return get(AgentsService).createAgent({ ...args }, orgId, userId);
-      case 'list_providers': return get(LlmProvidersService).getProviders({ organizationId: orgId });
+      case 'list_providers': return get(LlmProvidersService).getProviders({ organizationId: orgId, caller: { id: userId } });
       case 'add_provider': return get(LlmProvidersService).createProvider({ name: args.name, type: args.type, configuration: { apiKey: args.apiKey } }, orgId, userId);
 
       // ── Memory (canonical) ─────────────────────────────────────

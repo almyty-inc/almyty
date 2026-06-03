@@ -112,6 +112,7 @@ export class LlmProvidersController {
       const filters: LlmProviderSearchFilters = {
         ...query,
         organizationId,
+        caller: { id: req.user.id },
       };
 
       const result = await this.llmProvidersService.getProviders(filters);

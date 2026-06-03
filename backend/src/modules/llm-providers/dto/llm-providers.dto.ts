@@ -87,6 +87,12 @@ export interface LlmProviderSearchFilters {
   type?: LlmProviderType;
   status?: LlmProviderStatus;
   organizationId: string;
+  // Required so getProviders can apply the team-scope visibility
+  // filter via AccessPolicyService.applyListFilter. System contexts
+  // (almyty-mcp list_providers, internal callers) set
+  // bypassTeamFilter=true to opt out explicitly.
+  caller?: { id: string };
+  bypassTeamFilter?: boolean;
   page?: number;
   limit?: number;
   sortBy?: 'name' | 'createdAt' | 'lastUsedAt' | 'totalRequests';

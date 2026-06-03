@@ -257,9 +257,14 @@ export class LlmProvidersService {
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.llmProviderRepository
-      .createQueryBuilder('provider')
-      .where('provider.organizationId = :organizationId', { organizationId: filters.organizationId });
+    const queryBuilder = this.llmProviderRepository.createQueryBuilder('provider');
+    if (filters.bypassTeamFilter) {
+      queryBuilder.where('provider.organizationId = :_orgId', { _orgId: filters.organizationId });
+    } else if (filters.caller) {
+      await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'provider');
+    } else {
+      throw new Error('getProviders requires either caller or bypassTeamFilter');
+    }
 
     // Apply filters
     if (filters.search) {
