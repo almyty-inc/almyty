@@ -33,6 +33,7 @@ import { DataTable } from '@/components/ui/data-table'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { llmProvidersApi } from '@/lib/api'
+import { pluralized } from '@/lib/utils'
 import { TeamFilter, useTeamLookup, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import { CreateProviderDialog } from '@/components/llm-providers/create-provider-dialog'
 import { EditProviderDialog } from '@/components/llm-providers/edit-provider-dialog'
@@ -261,7 +262,7 @@ export function LlmProvidersPage() {
         <div>
           <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">AI Models</h1>
           <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${providers.length} providers (${providers.filter((p: any) => p.status === 'active').length} active) \u00B7 $${totalCost.toFixed(2)} total cost \u00B7 ${totalRequests.toLocaleString()} requests`}
+            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(providers.length, 'provider')} (${providers.filter((p: any) => p.status === 'active').length} active) \u00B7 $${totalCost.toFixed(2)} total cost \u00B7 ${pluralized(totalRequests, 'request')}`}
           </p>
         </div>
         {/* Only show Add Provider button when not in empty state */}
