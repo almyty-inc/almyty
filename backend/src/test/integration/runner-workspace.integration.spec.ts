@@ -89,7 +89,10 @@ describeIfDb('Runner + Workspace (real Postgres)', () => {
       ds.getRepository(RunnerSession),
       ds.getRepository(Workspace),
       new RunnerCapabilityPublisher(toolRepo),
-      { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any,
+      {
+        canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+        assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined),
+      } as any,
     );
     workspaces = new WorkspaceService(
       ds.getRepository(Workspace),

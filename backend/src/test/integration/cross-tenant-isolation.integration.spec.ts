@@ -229,7 +229,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds, // DataSource for transaction support
         {} as any, // ApisImportHelper
         {} as any, // ApisToolGeneratorHelper
-        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // AccessPolicyService
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => { qb.andWhere(`${alias}."organizationId" = :_orgId`, { _orgId: organizationId }); return { bypass: true, teamIds: [] }; }) } as any, // AccessPolicyService
       );
 
       const apiRepo = fx.ds.getRepository(Api);
@@ -349,7 +349,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         stubAuditLog() as any,
         {} as any, // ToolsOperationHelper
         {} as any, // ToolsStatsHelper
-        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // accessPolicy
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => { qb.andWhere(`${alias}."organizationId" = :_orgId`, { _orgId: organizationId }); return { bypass: true, teamIds: [] }; }) } as any, // accessPolicy
       );
 
       const toolRepo = fx.ds.getRepository(Tool);
@@ -380,7 +380,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
     });
 
     it('getTools({orgA}) only returns org-A rows', async () => {
-      const { tools } = await service.getTools({ organizationId: fx.orgA.id } as any);
+      const { tools } = await service.getTools({ organizationId: fx.orgA.id, caller: { id: fx.userA.id } } as any);
       expect(tools.every((t) => t.organizationId === fx.orgA.id)).toBe(true);
       expect(tools.map((t) => t.id)).not.toContain(toolB.id);
     });
@@ -428,7 +428,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         fx.ds.getRepository(User),
         { appendAudit: jest.fn().mockResolvedValue(undefined) } as any,
         {} as any, // AgentValidationHelper
-        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // accessPolicy
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => { qb.andWhere(`${alias}."organizationId" = :_orgId`, { _orgId: organizationId }); return { bypass: true, teamIds: [] }; }) } as any, // accessPolicy
       );
 
       const agentRepo = fx.ds.getRepository(Agent);
@@ -462,7 +462,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
     });
 
     it('getAgents({orgA}) only returns org-A rows', async () => {
-      const { data } = await service.getAgents({ organizationId: fx.orgA.id } as any);
+      const { data } = await service.getAgents({ organizationId: fx.orgA.id, caller: { id: fx.userA.id } } as any);
       expect(data.every((a) => a.organizationId === fx.orgA.id)).toBe(true);
       expect(data.map((a) => a.id)).not.toContain(agentB.id);
     });
@@ -507,6 +507,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         stubAuditLog() as any,
         {
           canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+          assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined),
           applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => {
             qb.andWhere(`${alias}.\"organizationId\" = :_orgId`, { _orgId: organizationId });
             return { bypass: true, teamIds: [] };
@@ -576,7 +577,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         stubAuditLog() as any,
         {} as any, // GatewaysStatsHelper
         {} as any, // GatewayInitHelper
-        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // accessPolicy
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => { qb.andWhere(`${alias}."organizationId" = :_orgId`, { _orgId: organizationId }); return { bypass: true, teamIds: [] }; }) } as any, // accessPolicy
       );
 
       const gwRepo = fx.ds.getRepository(Gateway);
@@ -607,7 +608,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
     });
 
     it('getGateways({orgA}) only returns org-A rows', async () => {
-      const { gateways } = await service.getGateways({ organizationId: fx.orgA.id } as any);
+      const { gateways } = await service.getGateways({ organizationId: fx.orgA.id, caller: { id: fx.userA.id } } as any);
       expect(gateways.every((g) => g.organizationId === fx.orgA.id)).toBe(true);
       expect(gateways.map((g) => g.id)).not.toContain(gwB.id);
     });
@@ -651,7 +652,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         {} as any, // chatHelper
         {} as any, // statsHelper
         {} as any, // runner
-        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // accessPolicy
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => { qb.andWhere(`${alias}."organizationId" = :_orgId`, { _orgId: organizationId }); return { bypass: true, teamIds: [] }; }) } as any, // accessPolicy
       );
 
       const provRepo = fx.ds.getRepository(LlmProvider);
@@ -680,6 +681,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
     it('getProviders({orgA}) only returns org-A rows', async () => {
       const { providers } = await service.getProviders({
         organizationId: fx.orgA.id,
+        caller: { id: fx.userA.id },
       } as any);
       expect(providers.every((p) => p.organizationId === fx.orgA.id)).toBe(true);
       expect(providers.map((p) => p.id)).not.toContain(provB.id);
