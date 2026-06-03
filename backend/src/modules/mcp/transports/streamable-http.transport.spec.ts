@@ -177,6 +177,22 @@ describe('StreamableHttpTransport', () => {
     expect(transport.getStats().sessions).toBe(1);
   });
 
+  it('POST with a known Mcp-Session-Id from a different org refuses with UNKNOWN_SESSION (no cross-tenant reuse)', async () => {
+    mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: 'ok' });
+    const r1 = mockRes();
+    await transport.handlePost(mockReq({}, { jsonrpc: '2.0', id: 1, method: 'a' }), r1, 'org-a', 'user-a');
+    const sid = r1._headers['Mcp-Session-Id'];
+
+    const r2 = mockRes();
+    await transport.handlePost(mockReq({ 'Mcp-Session-Id': sid }, { jsonrpc: '2.0', id: 2, method: 'b' }), r2, 'org-b', 'user-b');
+
+    expect(r2._statusCode).toBe(404);
+    expect(r2._jsonBody.payload.code).toBe(WORKER_ERROR_CODES.UNKNOWN_SESSION);
+    // The original session must NOT be hijacked or re-orged.
+    expect(mcpService.handleJsonRpc).toHaveBeenCalledTimes(1);
+    expect(mcpService.handleJsonRpc.mock.calls[0][1]).toBe('org-a');
+  });
+
   // ── GET stream + Last-Event-ID replay ───────────────────────────────
 
   it('GET without Mcp-Session-Id returns 404 with UNKNOWN_SESSION', () => {
