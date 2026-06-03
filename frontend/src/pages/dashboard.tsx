@@ -130,7 +130,8 @@ export function DashboardPage() {
   const recentLogs = recentLogsData?.data || []
 
   // Onboarding: show checklist when not all steps are complete
-  const allStepsComplete = apis.length > 0 && tools.length > 0 && gateways.length > 0 && agents.length > 0
+  const userGateways = gateways.filter((g: any) => !g.isSystem)
+  const allStepsComplete = apis.length > 0 && tools.length > 0 && userGateways.length > 0 && agents.length > 0
   const showOnboarding = !allStepsComplete
 
   // Action items: APIs with no generated tools
@@ -189,7 +190,7 @@ export function DashboardPage() {
                 </p>
               </div>
               {(() => {
-                const done = [apis.length > 0, tools.length > 0, gateways.length > 0, agents.length > 0].filter(Boolean).length
+                const done = [apis.length > 0, tools.length > 0, userGateways.length > 0, agents.length > 0].filter(Boolean).length
                 const pct = Math.round((done / 4) * 100)
                 return (
                   <div className="flex flex-col items-end gap-1 min-w-[140px]">
@@ -229,7 +230,7 @@ export function DashboardPage() {
                 action={() => navigate('/tools')}
               />
               <ChecklistItem
-                done={gateways.length > 0}
+                done={userGateways.length > 0}
                 label="Create a gateway"
                 description="Serve your tools and agents via MCP, UTCP, A2A, Agent Skills, and more"
                 action={() => navigate('/gateways?new=1')}
