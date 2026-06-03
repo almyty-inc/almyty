@@ -113,6 +113,27 @@ export class OrganizationsController {
     return { success: true, data, message: 'User invited successfully' };
   }
 
+  @Get(':organizationId/invites')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'List pending invites for the organization' })
+  async listPendingInvites(
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
+  ) {
+    const data = await this.organizationsService.listPendingInvites(organizationId);
+    return { success: true, data, message: 'Pending invites retrieved successfully' };
+  }
+
+  @Delete(':organizationId/invites/:inviteId')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Revoke a pending invite' })
+  async revokePendingInvite(
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
+    @Param('inviteId') inviteId: string,
+  ) {
+    const data = await this.organizationsService.revokePendingInvite(organizationId, inviteId);
+    return { success: true, data, message: 'Invite revoked' };
+  }
+
   @Put(':organizationId/members/:userId')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update member role' })

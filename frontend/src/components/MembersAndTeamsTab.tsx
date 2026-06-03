@@ -51,10 +51,18 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
     enabled: !!organizationId,
   })
 
+  // Fetch pending invites
+  const { data: pendingInvitesData } = useQuery({
+    queryKey: ['organization-pending-invites', organizationId],
+    queryFn: () => organizationsApi.getPendingInvites(organizationId!),
+    enabled: !!organizationId,
+  })
+
   // organizationsApi.{getMembers,getTeams} go through apiGet →
   // extractData, so these values are already the flat arrays.
   const members = Array.isArray(membersData) ? membersData : []
   const teams = Array.isArray(teamsData) ? teamsData : []
+  const pendingInvites = Array.isArray(pendingInvitesData) ? pendingInvitesData : []
 
   // Create team mutation
   const createTeamMutation = useMutation({
@@ -78,6 +86,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       organizationsApi.addMember(organizationId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization-members', organizationId] })
+      queryClient.invalidateQueries({ queryKey: ['organization-pending-invites', organizationId] })
       success('Member invited', 'Invitation has been sent.')
       setInviteMemberDialogOpen(false)
       setNewMemberEmail('')
@@ -85,6 +94,20 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
     },
     onError: (err: any) => {
       error('Failed to invite member', err.response?.data?.message || 'Please try again.')
+    },
+  })
+
+  // Revoke pending invite mutation
+  const revokeInviteMutation = useMutation({
+    mutationFn: (inviteId: string) =>
+      organizationsApi.revokePendingInvite(organizationId!, inviteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization-pending-invites', organizationId] })
+      queryClient.invalidateQueries({ queryKey: ['organization-members', organizationId] })
+      success('Invite revoked', 'The pending invite has been revoked.')
+    },
+    onError: (err: any) => {
+      error('Failed to revoke invite', err.response?.data?.message || 'Please try again.')
     },
   })
 
@@ -334,6 +357,44 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             )}
           </CardContent>
         </Card>
+
+        {pendingInvites.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Invites</CardTitle>
+              <CardDescription>
+                Invitations waiting for the recipient to accept
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {pendingInvites.map((invite: any) => (
+                  <div key={invite.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <div className="font-medium">{invite.email}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {invite.isExpired ? 'Expired' : `Expires ${new Date(invite.inviteExpiresAt).toLocaleDateString()}`}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{invite.role}</Badge>
+                      {invite.isExpired && <Badge variant="destructive">expired</Badge>}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => revokeInviteMutation.mutate(invite.id)}
+                        disabled={revokeInviteMutation.isPending}
+                        title="Revoke invite"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </TabsContent>
 
       <TabsContent value="teams" className="space-y-4">

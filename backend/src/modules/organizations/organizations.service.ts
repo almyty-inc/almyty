@@ -252,6 +252,8 @@ export class OrganizationsService {
   inviteUser(...args: Parameters<OrganizationsInvitesHelper['inviteUser']>) { return this.invitesHelper.inviteUser(...args); }
   acceptInvite(...args: Parameters<OrganizationsInvitesHelper['acceptInvite']>) { return this.invitesHelper.acceptInvite(...args); }
   getInviteDetails(...args: Parameters<OrganizationsInvitesHelper['getInviteDetails']>) { return this.invitesHelper.getInviteDetails(...args); }
+  listPendingInvites(...args: Parameters<OrganizationsInvitesHelper['listPendingInvites']>) { return this.invitesHelper.listPendingInvites(...args); }
+  revokePendingInvite(...args: Parameters<OrganizationsInvitesHelper['revokePendingInvite']>) { return this.invitesHelper.revokePendingInvite(...args); }
 
   async removeMember(organizationId: string, userId: string): Promise<void> {
     const membership = await this.userOrganizationRepository.findOne({
