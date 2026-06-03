@@ -67,7 +67,7 @@ export class CredentialsController {
   @ApiResponse({ status: 201, description: 'Credential created successfully' })
   async create(@Body() body: any, @Request() req: any) {
     const organizationId = this.requireOrg(req);
-    const data = await this.credentialsService.create(body, organizationId);
+    const data = await this.credentialsService.create(body, organizationId, req.user.id);
     return { success: true, data, message: 'Credential created successfully' };
   }
 
