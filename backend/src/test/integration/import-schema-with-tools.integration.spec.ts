@@ -210,7 +210,7 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
         { provide: getRepositoryToken(ToolExecution), useValue: ds.getRepository(ToolExecution) },
         { provide: getRepositoryToken(JsonSchema), useValue: ds.getRepository(JsonSchema) },
         { provide: DataSource, useValue: ds },
-        { provide: AccessPolicyService, useValue: { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } },
+        { provide: AccessPolicyService, useValue: { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), applyListFilter: jest.fn().mockResolvedValue({ bypass: true, teamIds: [] }) } },
       ],
     }).compile();
 
