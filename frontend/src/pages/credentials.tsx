@@ -101,7 +101,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   const createMut = useMutation({
     mutationFn: (data: any) => credentialsApi.create(data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setIsCreateOpen(false); setForm({ name: '', type: 'api_key', description: '', value: '' }); notify.success('Created', 'Credential created') },
-    onError: () => notify.error('Error', 'Failed to create credential'),
+    onError: (err: any) => notify.error('Error', err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to create credential'),
   })
   const deleteMut = useMutation({
     mutationFn: (id: string) => credentialsApi.delete(id),
@@ -205,7 +205,17 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
                 onChange={setVisibility}
               />
             </div>
-            <Button className="w-full" disabled={!form.name || createMut.isPending} onClick={() => createMut.mutate({ ...form, visibility: visibility.visibility, teamId: visibility.teamId })}>
+            <Button className="w-full" disabled={!form.name || createMut.isPending} onClick={() => {
+              // Backend's CreateCredentialDto (PR #154) expects { name, type, description?, config: object, visibility, teamId? }.
+              // The legacy flat 'value' shape is rejected by forbidNonWhitelisted.
+              const { value: secret, ...rest } = form
+              createMut.mutate({
+                ...rest,
+                config: secret ? { value: secret } : {},
+                visibility: visibility.visibility,
+                teamId: visibility.teamId,
+              })
+            }}>
               {createMut.isPending ? 'Creating...' : 'Create Credential'}</Button>
           </div>
         </DialogContent>
