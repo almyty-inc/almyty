@@ -7,6 +7,8 @@ import {
   Body,
   Param,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
   Request,
   ParseUUIDPipe,
   HttpException,
@@ -17,6 +19,11 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CredentialsService } from './credentials.service';
+import {
+  CreateCredentialDto,
+  UpdateCredentialDto,
+  CreateAccessKeyDto,
+} from './dto/credentials.dto';
 
 @Controller()
 @ApiTags('Credentials')
@@ -65,7 +72,8 @@ export class CredentialsController {
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Create a new credential' })
   @ApiResponse({ status: 201, description: 'Credential created successfully' })
-  async create(@Body() body: any, @Request() req: any) {
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async create(@Body() body: CreateCredentialDto, @Request() req: any) {
     const organizationId = this.requireOrg(req);
     const data = await this.credentialsService.create(body, organizationId, req.user.id);
     return { success: true, data, message: 'Credential created successfully' };
@@ -85,9 +93,10 @@ export class CredentialsController {
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update a credential' })
   @ApiResponse({ status: 200, description: 'Credential updated successfully' })
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: any,
+    @Body() body: UpdateCredentialDto,
     @Request() req: any,
   ) {
     const organizationId = this.requireOrg(req);
@@ -146,7 +155,8 @@ export class CredentialsController {
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Create a new access key' })
   @ApiResponse({ status: 201, description: 'Access key created successfully' })
-  async createAccessKey(@Body() body: any, @Request() req: any) {
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async createAccessKey(@Body() body: CreateAccessKeyDto, @Request() req: any) {
     const organizationId = this.requireOrg(req);
     const userId = req.user.id;
     const { key, plainTextKey } = await this.credentialsService.createAccessKey(
