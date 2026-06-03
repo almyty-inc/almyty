@@ -19,7 +19,7 @@ describe('ToolsService - Custom Tool Creation', () => {
   let service: ToolsService;
   let toolRepository: any;
   let apiRepository: any;
-
+  let accessPolicy: any;
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -95,6 +95,7 @@ describe('ToolsService - Custom Tool Creation', () => {
     service = module.get<ToolsService>(ToolsService);
     toolRepository = module.get(getRepositoryToken(Tool));
     apiRepository = module.get(getRepositoryToken(Api));
+    accessPolicy = module.get(AccessPolicyService);
   });
 
   it('should create custom JavaScript tool with executionMethod', async () => {
@@ -179,5 +180,22 @@ describe('ToolsService - Custom Tool Creation', () => {
         }),
       })
     );
+  });
+  it('rejects createTool when assertCanScopeToTeam throws (regression bait: if the call is removed, this fails)', async () => {
+    accessPolicy.assertCanScopeToTeam.mockRejectedValueOnce(new Error('Team not found'));
+    const createDto = {
+      name: 'Hostile Tool',
+      description: 'attempt',
+      protocol: 'javascript',
+      operation: 'GET',
+      executionMethod: { type: 'javascript', code: 'return 1;' },
+      inputSchema: {},
+      outputSchema: {},
+      visibility: 'team',
+      teamId: 'someone-elses-team',
+    };
+
+    await expect(service.createTool(createDto as any, 'org-123', 'user-123')).rejects.toThrow();
+    expect(toolRepository.save).not.toHaveBeenCalled();
   });
 });

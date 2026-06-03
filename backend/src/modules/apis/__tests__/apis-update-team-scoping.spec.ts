@@ -79,4 +79,26 @@ describe('ApisService.update team-scoping sanitize', () => {
     expect(existing.visibility).toBe('team')
     expect(existing.teamId).toBe('team-uuid')
   })
+
+  it('rejects update when assertCanScopeToTeam throws (regression bait: if the call is removed, this fails)', async () => {
+    const existing: any = { id: 'api-1', organizationId: 'org-1', visibility: 'org', teamId: null }
+    apiRepository.findOne.mockResolvedValue(existing)
+    accessPolicy.assertCanScopeToTeam.mockRejectedValueOnce(new Error('Team not found'))
+
+    await expect(
+      service.update('api-1', { visibility: 'team', teamId: 'someone-elses-team' } as any, 'org-1', 'user-1'),
+    ).rejects.toThrow()
+    expect(apiRepository.save).not.toHaveBeenCalled()
+  })
+
+  it('rejects update when canAccess returns allowed=false (regression bait: if canAccess is removed, this fails)', async () => {
+    const existing: any = { id: 'api-1', organizationId: 'org-1', visibility: 'team', teamId: 'team-1' }
+    apiRepository.findOne.mockResolvedValue(existing)
+    accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'forbidden' })
+
+    await expect(
+      service.update('api-1', { name: 'rename attempt' } as any, 'org-1', 'user-1'),
+    ).rejects.toThrow()
+    expect(apiRepository.save).not.toHaveBeenCalled()
+  })
 })
