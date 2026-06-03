@@ -56,6 +56,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { agentsApi, externalAgentsApi } from '@/lib/api'
+import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { ImportExternalA2ADialog } from '@/components/agents/import-external-a2a-dialog'
@@ -304,7 +305,7 @@ export function AgentsPage() {
         <div>
           <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Agents</h1>
           <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${agents.length} agents (${activeCount} active)${externalAgents.length > 0 ? ` + ${externalAgents.length} external` : ''}`}
+            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(agents.length, 'agent')} (${activeCount} active)${externalAgents.length > 0 ? ` + ${externalAgents.length} external` : ''}`}
           </p>
         </div>
         <div className="flex items-center gap-2">

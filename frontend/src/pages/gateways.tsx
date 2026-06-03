@@ -27,6 +27,7 @@ import { DataTable, createSelectColumn, createActionsColumn, createSortableColum
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { gatewaysApi, toolsApi } from '@/lib/api'
+import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { CreateGatewayDialog } from '@/components/gateways/create-gateway-dialog'
@@ -365,7 +366,7 @@ export function GatewaysPage() {
         <div>
           <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Gateways</h1>
           <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${gateways.length} gateways (${gateways.filter((g: Gateway) => g.status === 'active').length} active) \u00B7 ${gateways.filter((g: Gateway) => !g.isSystem).reduce((sum: number, g: Gateway) => sum + (g.tools?.length || 0), 0)} tool assignments`}
+            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(gateways.length, 'gateway')} (${gateways.filter((g: Gateway) => g.status === 'active').length} active) \u00B7 ${pluralized(gateways.filter((g: Gateway) => !g.isSystem).reduce((sum: number, g: Gateway) => sum + (g.tools?.length || 0), 0), 'tool assignment')}`}
           </p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>
