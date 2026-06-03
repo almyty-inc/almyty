@@ -288,4 +288,117 @@ export class OrganizationsInvitesHelper {
     throw new NotFoundException('Invalid invitation');
   }
 
+  /**
+   * List all pending invites for an organization. Aggregates both
+   * sources — UserOrganization rows where the recipient is already a
+   * registered user, and the org.settings.pendingInvites array where
+   * the recipient hasn't signed up yet.
+   *
+   * Tokens are NOT returned; only enough info to display and revoke
+   * (the token would let anyone with read-access accept the invite on
+   * the recipient's behalf, defeating the email-binding check in
+   * acceptInvite). Revocation uses a server-side ID instead.
+   */
+  async listPendingInvites(organizationId: string): Promise<Array<{
+    id: string;
+    email: string;
+    role: string;
+    invitedBy: string;
+    inviteExpiresAt: string;
+    source: 'membership' | 'settings';
+    isExpired: boolean;
+  }>> {
+    const now = new Date();
+
+    // 1. Membership-based invites (existing users, not yet accepted).
+    const pendingMemberships = await this.userOrganizationRepository
+      .createQueryBuilder('uo')
+      .leftJoinAndSelect('uo.user', 'user')
+      .where('uo.organizationId = :organizationId', { organizationId })
+      .andWhere('uo.inviteAccepted = :accepted', { accepted: false })
+      .andWhere('uo.inviteToken IS NOT NULL')
+      .getMany();
+
+    const membershipInvites = pendingMemberships.map((m) => ({
+      id: 'mem:' + m.id,
+      email: m.user?.email || '',
+      role: m.role,
+      invitedBy: m.invitedBy || '',
+      inviteExpiresAt: m.inviteExpiresAt ? m.inviteExpiresAt.toISOString() : '',
+      source: 'membership' as const,
+      isExpired: m.inviteExpiresAt ? m.inviteExpiresAt < now : false,
+    }));
+
+    // 2. Settings-based invites (new users not yet registered).
+    const org = await this.organizationRepository.findOne({ where: { id: organizationId } });
+    const settingsInvites: any[] = (org?.settings as any)?.pendingInvites || [];
+    const settingsInviteRows = settingsInvites.map((i) => ({
+      // Short hash of the token so the UI has a stable revoke handle
+      // without exposing the token itself. The same hashing is repeated
+      // in revokePendingInvite below.
+      id: 'set:' + crypto.createHash('sha256').update(i.inviteToken).digest('hex').slice(0, 16),
+      email: i.email,
+      role: i.role,
+      invitedBy: i.invitedBy || '',
+      inviteExpiresAt: i.inviteExpiresAt,
+      source: 'settings' as const,
+      isExpired: new Date(i.inviteExpiresAt) < now,
+    }));
+
+    return [...membershipInvites, ...settingsInviteRows].sort((a, b) =>
+      a.email.localeCompare(b.email),
+    );
+  }
+
+  /**
+   * Revoke a pending invite. The id is the opaque handle returned by
+   * listPendingInvites (`mem:<uuid>` or `set:<hash>`).
+   *
+   * Revoking a membership invite clears the token and marks the row
+   * inactive; the recipient would just see "invitation expired" on
+   * their next attempt. Revoking a settings invite removes it from
+   * the org.settings.pendingInvites array.
+   */
+  async revokePendingInvite(organizationId: string, inviteId: string): Promise<{ revoked: boolean }> {
+    if (!inviteId || (!inviteId.startsWith('mem:') && !inviteId.startsWith('set:'))) {
+      throw new BadRequestException('Invalid invite id');
+    }
+
+    if (inviteId.startsWith('mem:')) {
+      const membershipId = inviteId.slice(4);
+      const membership = await this.userOrganizationRepository.findOne({
+        where: { id: membershipId, organizationId, inviteAccepted: false },
+      });
+      if (!membership) {
+        throw new NotFoundException('Invite not found');
+      }
+      membership.inviteToken = null;
+      membership.inviteExpiresAt = null;
+      membership.isActive = false;
+      await this.userOrganizationRepository.save(membership);
+      this.logger.log(`Revoked membership invite ${membershipId} in org ${organizationId}`);
+      return { revoked: true };
+    }
+
+    // settings-based revoke: match by sha256(token).slice(0,16)
+    const targetHash = inviteId.slice(4);
+    const org = await this.organizationRepository.findOne({ where: { id: organizationId } });
+    if (!org) {
+      throw new NotFoundException('Organization not found');
+    }
+    const pendingInvites: any[] = (org.settings as any)?.pendingInvites || [];
+    const matchIdx = pendingInvites.findIndex(
+      (i) => crypto.createHash('sha256').update(i.inviteToken).digest('hex').slice(0, 16) === targetHash,
+    );
+    if (matchIdx === -1) {
+      throw new NotFoundException('Invite not found');
+    }
+    const updated = pendingInvites.filter((_, idx) => idx !== matchIdx);
+    await this.organizationRepository.update(organizationId, {
+      settings: { ...(org.settings as any || {}), pendingInvites: updated },
+    });
+    this.logger.log(`Revoked settings invite ${targetHash} in org ${organizationId}`);
+    return { revoked: true };
+  }
+
 }
