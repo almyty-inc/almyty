@@ -9,6 +9,8 @@ import {
   Query,
   Res,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
   Request,
   BadRequestException,
   NotFoundException,
@@ -27,7 +29,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ApisService } from './apis.service';
 import { CredentialService, CreateCredentialDto, UpdateCredentialDto } from './credential.service';
-import { CreateApiDto, UpdateApiDto, ImportSchemaDto } from './dto/api.dto';
+import { CreateApiDto, UpdateApiDto, ImportSchemaDto, CreateHttpApiDto, CreateSdkApiDto } from './dto/api.dto';
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
 import { SchemaParserService } from '../schema-parser/schema-parser.service';
 
@@ -68,7 +70,8 @@ export class ApisController {
 
   @Post('http')
   @Roles('member', 'admin', 'owner')
-  async createHttpApi(@Body() body: any, @Request() req: any) {
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async createHttpApi(@Body() body: CreateHttpApiDto, @Request() req: any) {
     try {
       const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
@@ -86,7 +89,8 @@ export class ApisController {
 
   @Post('sdk')
   @Roles('member', 'admin', 'owner')
-  async createSdkApi(@Body() body: any, @Request() req: any) {
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async createSdkApi(@Body() body: CreateSdkApiDto, @Request() req: any) {
     try {
       const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
