@@ -64,12 +64,23 @@ export function ToolDetailPage() {
       return toolsApi.execute(id!, { parameters }, currentOrganization.id)
     },
     onSuccess: (response: any) => {
-      // API returns clean data directly
+      // API returns { success, data?, error?, message?, metadata? }.
+      // A 200 OK with success:false means the executor refused (tool
+      // in draft state, parameter validation, rate-limited, etc.).
+      // Don't surface that as a green Success toast.
+      const ok = response?.success !== false
       setExecutionResult({
-        success: true,
-        data: response,
+        success: ok,
+        data: ok ? response : undefined,
+        error: ok ? undefined : (response?.error || 'Tool execution failed'),
+        message: response?.message,
+        fullError: ok ? undefined : response,
       })
-      notifications.success('Success', 'Tool executed successfully')
+      if (ok) {
+        notifications.success('Success', 'Tool executed successfully')
+      } else {
+        notifications.error('Execution failed', response?.error || response?.message || 'Tool execution returned success=false')
+      }
     },
     onError: (error: Error & { response?: { data?: Record<string, any>; status?: number }; config?: { url?: string; method?: string } }) => {
       notifications.error('Error', error.message || 'Failed to execute tool')
