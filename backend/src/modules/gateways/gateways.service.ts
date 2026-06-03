@@ -209,6 +209,14 @@ export class GatewaysService {
       // Validate configuration based on gateway type
       this.init.validateGatewayConfiguration(createGatewayDto.type, createGatewayDto.configuration);
 
+      // Validate team scoping before persisting.
+      await this.accessPolicy.assertCanScopeToTeam(
+        userId,
+        organizationId,
+        (createGatewayDto as any).visibility,
+        (createGatewayDto as any).teamId,
+      );
+
       // Create the gateway
       const gateway = this.gatewayRepository.create({
         ...createGatewayDto,
@@ -257,6 +265,14 @@ export class GatewaysService {
       const decision = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
       if (!decision.allowed) {
         throw new ForbiddenException(decision.reason);
+      }
+
+      // Re-validate team scoping if it's being changed.
+      const updateAnyEarly = updateGatewayDto as any;
+      if (updateAnyEarly.visibility !== undefined || updateAnyEarly.teamId !== undefined) {
+        const nextVis = updateAnyEarly.visibility ?? gateway.visibility;
+        const nextTeamId = updateAnyEarly.teamId !== undefined ? updateAnyEarly.teamId : gateway.teamId;
+        await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, nextVis, nextTeamId);
       }
 
       // Capture old values for change tracking (before mutation)

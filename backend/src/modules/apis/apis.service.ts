@@ -50,7 +50,7 @@ export class ApisService {
     private readonly accessPolicy: AccessPolicyService,
   ) {}
 
-  async create(createApiData: CreateApiData): Promise<Api> {
+  async create(createApiData: CreateApiData, userId?: string): Promise<Api> {
     // Check if organization exists
     const organization = await this.organizationRepository.findOne({
       where: { id: createApiData.organizationId },
@@ -80,6 +80,15 @@ export class ApisService {
 
     if (existingApi) {
       throw new BadRequestException('API with this name already exists in the organization');
+    }
+
+    if (userId) {
+      await this.accessPolicy.assertCanScopeToTeam(
+        userId,
+        createApiData.organizationId,
+        (createApiData as any).visibility,
+        (createApiData as any).teamId,
+      );
     }
 
     const api = this.apiRepository.create({
@@ -259,6 +268,14 @@ export class ApisService {
       if (!decision.allowed) {
         throw new ForbiddenException(decision.reason);
       }
+    }
+
+    // Re-validate team scoping if it's being changed.
+    if (userId && ((updateApiData as any).visibility !== undefined || (updateApiData as any).teamId !== undefined)) {
+      const updateAnyEarly = updateApiData as any;
+      const nextVis = updateAnyEarly.visibility ?? (api as any).visibility;
+      const nextTeamId = updateAnyEarly.teamId !== undefined ? updateAnyEarly.teamId : (api as any).teamId;
+      await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, nextVis, nextTeamId);
     }
 
     Object.assign(api, updateApiData);

@@ -142,6 +142,7 @@ describe('AgentsService', () => {
           useValue: {
             canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
             applyListFilter: jest.fn().mockResolvedValue({ bypass: true, teamIds: [] }),
+            assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

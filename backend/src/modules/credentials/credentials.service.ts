@@ -120,7 +120,20 @@ export class CredentialsService {
       teamId?: string | null;
     },
     organizationId: string,
+    userId?: string,
   ): Promise<Credential> {
+    // Validate the team scoping before persisting — without this a
+    // caller can mint a credential bound to a team they don't belong
+    // to (or worse, a team in a different org) and then read it back
+    // via the list endpoint.
+    if (userId) {
+      await this.accessPolicy.assertCanScopeToTeam(
+        userId,
+        organizationId,
+        data.visibility,
+        data.teamId,
+      );
+    }
     const credential = this.credentialRepository.create({
       name: data.name,
       description: data.description,
@@ -186,6 +199,12 @@ export class CredentialsService {
       if (!decision.allowed) {
         throw new ForbiddenException(decision.reason);
       }
+    }
+    // Re-validate team scoping if it's being changed.
+    if (userId && (data.visibility !== undefined || data.teamId !== undefined)) {
+      const nextVis = data.visibility ?? credential.visibility;
+      const nextTeamId = data.teamId !== undefined ? data.teamId : credential.teamId;
+      await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, nextVis, nextTeamId);
     }
     if (data.name !== undefined) credential.name = data.name;
     if (data.description !== undefined) credential.description = data.description;
