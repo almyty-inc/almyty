@@ -89,6 +89,7 @@ describe('CredentialsService', () => {
           useValue: {
             canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
             applyListFilter: jest.fn().mockResolvedValue({ bypass: true, teamIds: [] }),
+            assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -291,6 +292,20 @@ describe('CredentialsService', () => {
         }),
       );
     });
+
+    it('rejects when assertCanScopeToTeam throws on create (regression bait: if the assertCanScopeToTeam call is removed, this fails)', async () => {
+      const createData = {
+        name: 'Hostile',
+        type: 'api_key',
+        config: { apiKey: 'sk-xxx' },
+        visibility: 'team' as const,
+        teamId: 'someone-elses-team',
+      };
+      accessPolicy.assertCanScopeToTeam.mockRejectedValueOnce(new Error('Team not found'));
+
+      await expect(service.create(createData, 'org-1', 'user-1')).rejects.toThrow();
+      expect(credentialRepository.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('update', () => {
@@ -355,6 +370,43 @@ describe('CredentialsService', () => {
 
       expect(existing.visibility).toBe('org');
       expect(existing.teamId).toBeNull()
+    });
+
+    it('rejects when AccessPolicy.canAccess returns allowed=false (regression bait: if the canAccess call is removed, this fails)', async () => {
+      const existing: any = {
+        id: 'cred-1',
+        organizationId: 'org-1',
+        visibility: 'team',
+        teamId: 'team-1',
+        config: {},
+        encryptSensitiveData: jest.fn(),
+      };
+      credentialRepository.findOne.mockResolvedValue(existing);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'forbidden' });
+
+      await expect(
+        service.update('cred-1', { name: 'attempt' }, 'org-1', 'user-1'),
+      ).rejects.toThrow();
+      expect(credentialRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects when assertCanScopeToTeam throws (regression bait: if the assertCanScopeToTeam call is removed, this fails)', async () => {
+      const existing: any = {
+        id: 'cred-1',
+        organizationId: 'org-1',
+        visibility: 'org',
+        teamId: null,
+        config: {},
+        encryptSensitiveData: jest.fn(),
+      };
+      credentialRepository.findOne.mockResolvedValue(existing);
+      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: true, reason: 'ok' });
+      accessPolicy.assertCanScopeToTeam.mockRejectedValueOnce(new Error('Team not found'));
+
+      await expect(
+        service.update('cred-1', { visibility: 'team', teamId: 'someone-elses-team' }, 'org-1', 'user-1'),
+      ).rejects.toThrow();
+      expect(credentialRepository.save).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when credential not found', async () => {
