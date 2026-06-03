@@ -141,7 +141,7 @@ export class ApisController {
     const result = await this.apisService.create({
       ...createApiDto,
       organizationId: req.user.currentOrganizationId,
-    });
+    }, req.user.id);
 
     return { success: true, data: result, message: 'API created successfully' };
   }

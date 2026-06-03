@@ -25,7 +25,7 @@ import { AccessPolicyService } from '../../../common/authorization/access-policy
 describe('ApisService.update team-scoping sanitize', () => {
   let service: ApisService
   let apiRepository: any
-  let accessPolicy: { canAccess: jest.Mock }
+  let accessPolicy: { canAccess: jest.Mock; assertCanScopeToTeam: jest.Mock }
 
   beforeEach(async () => {
     apiRepository = {
@@ -35,7 +35,7 @@ describe('ApisService.update team-scoping sanitize', () => {
       save: jest.fn(),
       count: jest.fn(),
     }
-    accessPolicy = { canAccess: jest.fn().mockResolvedValue({ allowed: true }) }
+    accessPolicy = { canAccess: jest.fn().mockResolvedValue({ allowed: true }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined) }
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
