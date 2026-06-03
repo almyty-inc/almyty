@@ -103,6 +103,15 @@ export class StreamableHttpTransport extends EventEmitter {
     userId?: string,
   ): Promise<void> {
     const sessionId = (req.header('Mcp-Session-Id') || '').trim() || null;
+    if (sessionId) {
+      const existing = this.sessions.get(sessionId);
+      if (existing && existing.organizationId !== organizationId) {
+        // Cross-tenant attempt: refuse rather than reuse the prior session
+        // or silently mint a new one with the attacker's claimed id.
+        this.sendErrorResponse(res, WORKER_ERROR_CODES.UNKNOWN_SESSION, 'session not in this org');
+        return;
+      }
+    }
     const session = sessionId
       ? this.sessions.get(sessionId) ?? this.createSession(organizationId, userId, sessionId)
       : this.createSession(organizationId, userId);
