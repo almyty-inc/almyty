@@ -140,15 +140,9 @@ export function LoginPage() {
           <Button
             type="submit"
             className="w-full"
-            disabled={isLoading || !isValid}
-            aria-disabled={isLoading || !isValid}
-            title={
-              isLoading
-                ? 'Signing you in…'
-                : !isValid
-                  ? 'Enter a valid email and password'
-                  : undefined
-            }
+            disabled={isLoading}
+            aria-disabled={isLoading}
+            title={isLoading ? 'Signing you in…' : undefined}
           >
             {isLoading ? 'Signing in...' : 'Sign in'}
           </Button>
