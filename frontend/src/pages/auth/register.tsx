@@ -227,15 +227,9 @@ export function RegisterPage() {
           <Button
             type="submit"
             className="w-full"
-            disabled={isLoading || !isValid}
-            aria-disabled={isLoading || !isValid}
-            title={
-              isLoading
-                ? 'Creating your account…'
-                : !isValid
-                  ? 'Fill in every required field to continue'
-                  : undefined
-            }
+            disabled={isLoading}
+            aria-disabled={isLoading}
+            title={isLoading ? 'Creating your account…' : undefined}
           >
             {isLoading ? 'Creating account...' : 'Create account'}
           </Button>
