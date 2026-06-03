@@ -168,6 +168,7 @@ describe('ToolsService', () => {
 
     accessPolicy = {
       canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+      applyListFilter: jest.fn().mockResolvedValue({ bypass: true, teamIds: [] }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -787,7 +788,7 @@ describe('ToolsService', () => {
   // ─── getTools ─────────────────────────────────────────────────────────────
 
   describe('getTools', () => {
-    const baseFilters: ToolSearchFilters = { organizationId: 'org-1' };
+    const baseFilters: ToolSearchFilters = { organizationId: 'org-1', caller: { id: 'user-1' } };
 
     it('should return paginated tools with defaults', async () => {
       const tools = [makeTool(), makeTool({ id: 'tool-2', name: 'Tool 2' })];

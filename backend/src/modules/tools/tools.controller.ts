@@ -100,6 +100,7 @@ export class ToolsController {
       const filters: ToolSearchFilters = {
         ...query,
         organizationId,
+        caller: { id: req.user.id },
       };
 
       const result = await this.toolsService.getTools(filters);
