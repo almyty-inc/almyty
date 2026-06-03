@@ -57,7 +57,7 @@ export class McpToolHandler {
       tools = gatewayTools.map((gt: any) => gt.tool).filter(Boolean);
       this.logger.log(`[GATEWAY-SCOPE] Returning ${tools.length} tools for gateway ${gatewayId}`);
     } else {
-      const result = await this.toolsService.getTools({ organizationId });
+      const result = await this.toolsService.getTools({ organizationId, bypassTeamFilter: true });
       tools = result.tools;
     }
 
@@ -163,6 +163,7 @@ export class McpToolHandler {
       status: ToolStatus.ACTIVE,
       page,
       limit,
+      bypassTeamFilter: true,
     });
 
     let tools = result.tools;
@@ -242,7 +243,7 @@ export class McpToolHandler {
     let tool = await this.toolsService.findByName(params.name, organizationId);
 
     if (!tool) {
-      const allTools = await this.toolsService.getTools({ organizationId });
+      const allTools = await this.toolsService.getTools({ organizationId, bypassTeamFilter: true });
       tool = allTools.tools.find(t => this.sanitizeToolName(t.name) === params.name);
 
       if (!tool) {
@@ -338,7 +339,7 @@ export class McpToolHandler {
       });
       return gatewayTools.map((gt: any) => gt.tool).filter(Boolean);
     }
-    const result = await this.toolsService.getTools({ organizationId, status: ToolStatus.ACTIVE });
+    const result = await this.toolsService.getTools({ organizationId, status: ToolStatus.ACTIVE, bypassTeamFilter: true });
     return result.tools;
   }
 
