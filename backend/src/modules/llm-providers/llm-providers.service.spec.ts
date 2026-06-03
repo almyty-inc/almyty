@@ -148,6 +148,7 @@ describe('LlmProvidersService', () => {
           provide: AccessPolicyService,
           useValue: {
             canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
+            applyListFilter: jest.fn().mockResolvedValue({ bypass: true, teamIds: [] }),
           },
         },
       ],
@@ -479,6 +480,7 @@ describe('LlmProvidersService', () => {
 
       const result = await service.getProviders({
         organizationId: 'org-1',
+        caller: { id: 'user-1' },
         page: 1,
         limit: 10,
       });
@@ -505,6 +507,7 @@ describe('LlmProvidersService', () => {
 
       const result = await service.getProviders({
         organizationId: 'org-1',
+        caller: { id: 'user-1' },
         search: 'OpenAI',
         type: LlmProviderType.OPENAI,
         status: LlmProviderStatus.ACTIVE,

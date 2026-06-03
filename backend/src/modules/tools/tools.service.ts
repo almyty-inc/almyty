@@ -322,8 +322,17 @@ export class ToolsService {
       .leftJoinAndSelect('tool.operation', 'operation')
       .leftJoinAndSelect('operation.api', 'api')
       .leftJoinAndSelect('tool.gatewayAssociations', 'gatewayAssociation')
-      .leftJoinAndSelect('gatewayAssociation.gateway', 'gateway')
-      .where('tool.organizationId = :organizationId', { organizationId: filters.organizationId });
+      .leftJoinAndSelect('gatewayAssociation.gateway', 'gateway');
+    if (filters.bypassTeamFilter) {
+      // System context — gateway-tool resolution already gates access
+      // by gateway membership, so the team-scope filter would
+      // double-filter and hide legitimately-shared tools.
+      queryBuilder.where('tool.organizationId = :_orgId', { _orgId: filters.organizationId });
+    } else if (filters.caller) {
+      await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'tool');
+    } else {
+      throw new Error('getTools requires either caller or bypassTeamFilter');
+    }
 
     // Apply filters
     if (filters.search) {

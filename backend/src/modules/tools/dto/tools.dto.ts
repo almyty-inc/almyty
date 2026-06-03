@@ -78,6 +78,14 @@ export interface ToolSearchFilters {
   apiId?: string;
   tags?: string[];
   organizationId: string;
+  // The caller is required so getTools applies the team-scope
+  // visibility filter via AccessPolicyService.applyListFilter.
+  // System contexts that legitimately need the unscoped org-wide
+  // listing (gateway tool resolution, MCP tools/list, audit jobs)
+  // set bypassTeamFilter=true instead — making the bypass loud at
+  // the callsite rather than silent like the old org-only filter.
+  caller?: { id: string };
+  bypassTeamFilter?: boolean;
   page?: number;
   limit?: number;
   sortBy?: 'name' | 'createdAt' | 'updatedAt' | 'usage';

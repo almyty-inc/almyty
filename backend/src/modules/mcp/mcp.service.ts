@@ -338,7 +338,7 @@ export class McpService {
   }
 
   async getToolsAsMcp(organizationId: string): Promise<McpTool[]> {
-    const { tools } = await this.toolsService.getTools({ organizationId });
+    const { tools } = await this.toolsService.getTools({ organizationId, bypassTeamFilter: true });
 
     return tools.map(tool => ({
       name: tool.name,
