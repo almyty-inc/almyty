@@ -7,6 +7,8 @@ import {
   Param,
   Request,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
   HttpException,
   HttpStatus,
   ParseUUIDPipe,
@@ -14,6 +16,7 @@ import {
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RunnerService, RegisterRunnerInput } from './runner.service';
+import { RegisterRunnerDto } from './dto/register-runner.dto';
 
 @Controller('runners')
 @UseGuards(JwtAuthGuard)
@@ -21,7 +24,8 @@ export class RunnerController {
   constructor(private readonly service: RunnerService) {}
 
   @Post('register')
-  async register(@Request() req: any, @Body() body: RegisterRunnerInput) {
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async register(@Request() req: any, @Body() body: RegisterRunnerDto) {
     const ownerUserId = req.user?.id;
     const organizationId = req.user?.currentOrganizationId;
     if (!ownerUserId || !organizationId) {
