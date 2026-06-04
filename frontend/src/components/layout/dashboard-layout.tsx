@@ -292,7 +292,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           )}
 
           {/* Navigation */}
-          <nav className={cn("flex-1 py-4 space-y-1 overflow-y-auto", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation">
+          <nav key={location.pathname} className={cn("flex-1 py-4 space-y-1 overflow-y-auto", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation">
             {navigation.map((item) => {
               if (item.name === 'divider') {
                 return <div key="divider" className="my-2 mx-3 border-t border-border/40" />
