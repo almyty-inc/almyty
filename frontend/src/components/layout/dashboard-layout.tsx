@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Building,
@@ -297,13 +297,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               if (item.name === 'divider') {
                 return <div key="divider" className="my-2 mx-3 border-t border-border/40" />
               }
-              const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/')
+              // NavLink computes `isActive` per-render against the live
+              // router location, sidestepping the React reconciliation
+              // edge cases that left a manual useLocation()-based check
+              // stuck on the previous page across SPA navigation.
               return (
-                <Link
+                <NavLink
                   key={item.name}
                   to={item.href}
+                  end={item.href === '/dashboard'}
                   title={sidebarCollapsed ? item.name : undefined}
-                  className={cn(
+                  className={({ isActive }) => cn(
                     "group flex items-center rounded-md transition-colors",
                     sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-1.5 text-[13px]",
                     isActive
@@ -311,15 +315,19 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       : "text-muted-foreground hover:bg-accent hover:text-foreground"
                   )}
                 >
-                  <item.icon
-                    className={cn(
-                      "flex-shrink-0 h-5 w-5",
-                      !sidebarCollapsed && "mr-3",
-                      isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
-                    )}
-                  />
-                  {!sidebarCollapsed && item.name}
-                </Link>
+                  {({ isActive }) => (
+                    <>
+                      <item.icon
+                        className={cn(
+                          "flex-shrink-0 h-5 w-5",
+                          !sidebarCollapsed && "mr-3",
+                          isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                        )}
+                      />
+                      {!sidebarCollapsed && item.name}
+                    </>
+                  )}
+                </NavLink>
               )
             })}
           </nav>
