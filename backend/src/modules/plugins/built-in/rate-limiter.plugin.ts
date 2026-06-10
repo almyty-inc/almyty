@@ -4,6 +4,7 @@ import {
   PluginContext,
   PluginResult,
 } from '../types/plugin.types';
+import * as Redis from 'ioredis';
 
 interface RateLimitWindow {
   count: number;
@@ -18,6 +19,15 @@ export class RateLimiterPlugin {
   // (e.g. one entry per tool×org×user combination).
   private readonly windows = new Map<string, RateLimitWindow>();
   private static readonly MAX_WINDOWS = 10_000;
+
+  // Optional Redis client. When present, counters are shared across
+  // replicas (atomic INCR + EXPIRE on a fixed minute window); otherwise we
+  // fall back to the per-process map. A Redis error at request time also
+  // falls back, so a transient blip degrades to local limiting rather than
+  // failing the request.
+  constructor(private readonly redis?: Redis.Redis) {}
+
+  private static readonly WINDOW_MS = 60_000;
 
   getPluginDefinition(): Omit<Plugin, 'id' | 'metadata'> {
     return {
@@ -210,6 +220,22 @@ export class RateLimiterPlugin {
     const windowSizeMs = 60 * 1000; // 1 minute
     const limit = settings.limits.requestsPerMinute;
 
+    // Redis fast-path: shared, atomic fixed-window counter.
+    if (this.redis) {
+      try {
+        const windowId = Math.floor(now / RateLimiterPlugin.WINDOW_MS);
+        const redisKey = `${key}:${windowId}`;
+        const count = await this.redis.incr(redisKey);
+        if (count === 1) {
+          // TTL slightly longer than the window absorbs clock skew.
+          await this.redis.expire(redisKey, 70);
+        }
+        return count <= limit;
+      } catch {
+        // Redis unavailable — fall through to the per-process counter.
+      }
+    }
+
     // Get or create window
     let window = this.windows.get(key);
     
@@ -245,8 +271,11 @@ export class RateLimiterPlugin {
 
     return true;
   }
-
   private getResetTime(key: string): number {
+    if (this.redis) {
+      // Fixed-window boundary (matches the Redis counter's window).
+      return (Math.floor(Date.now() / RateLimiterPlugin.WINDOW_MS) + 1) * RateLimiterPlugin.WINDOW_MS;
+    }
     const window = this.windows.get(key);
     return window ? window.resetTime : Date.now() + 60000;
   }
