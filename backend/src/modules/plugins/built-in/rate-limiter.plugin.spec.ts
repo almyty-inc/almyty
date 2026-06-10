@@ -366,4 +366,37 @@ describe('RateLimiterPlugin - Real Business Logic', () => {
       jest.useRealTimers();
     });
   });
+
+  describe('Redis-backed counters', () => {
+    it('uses Redis INCR/EXPIRE and allows under the limit', async () => {
+      const redis: any = { incr: jest.fn().mockResolvedValue(1), expire: jest.fn().mockResolvedValue(1) };
+      const p = new RateLimiterPlugin(redis);
+
+      const result = await p.enforceRateLimit(mockContext, mockSettings);
+
+      expect(result.success).toBe(true);
+      expect(redis.incr).toHaveBeenCalledWith(expect.stringContaining('ratelimit:user:user-1:org-1'));
+      expect(redis.expire).toHaveBeenCalledWith(expect.any(String), 70);
+    });
+
+    it('blocks when the shared Redis counter exceeds the limit', async () => {
+      // limit is 5; return 6 → over the limit.
+      const redis: any = { incr: jest.fn().mockResolvedValue(6), expire: jest.fn().mockResolvedValue(1) };
+      const p = new RateLimiterPlugin(redis);
+
+      const result = await p.enforceRateLimit(mockContext, mockSettings);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('RATE_LIMIT_EXCEEDED');
+    });
+
+    it('falls back to the in-memory counter when Redis throws', async () => {
+      const redis: any = { incr: jest.fn().mockRejectedValue(new Error('conn refused')), expire: jest.fn() };
+      const p = new RateLimiterPlugin(redis);
+
+      // First request under the in-memory limit still succeeds.
+      const result = await p.enforceRateLimit(mockContext, mockSettings);
+      expect(result.success).toBe(true);
+    });
+  });
 });

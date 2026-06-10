@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as Redis from 'ioredis';
 
 import { Plugin } from './types/plugin.types';
 import { PiiFilterPlugin } from './built-in/pii-filter.plugin';
@@ -49,6 +50,10 @@ export function isSafeHandlerName(name: string): boolean {
 export class PluginLoaderHelper {
   private readonly logger = new Logger(PluginLoaderHelper.name);
   private readonly pluginModules = new Map<string, any>();
+
+  // Optional Redis client, threaded down to the built-in plugins (the
+  // rate limiter uses it for cross-replica counters; others ignore the arg).
+  constructor(private readonly redis?: Redis.Redis) {}
 
   async loadBuiltInPlugins(register: RegisterPluginFn): Promise<void> {
     const builtInPlugins = [
