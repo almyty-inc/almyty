@@ -62,6 +62,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
+    // Reject access tokens minted before a tokenVersion bump (password
+    // change/reset revokes all outstanding sessions). A missing claim is
+    // treated as 0 so tokens issued before this field existed stay valid
+    // until the user's first bump.
+    if (((payload as any).tv ?? 0) !== (user.tokenVersion ?? 0)) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
+
     // Attach the user's org list.
     (user as any).organizations = user.organizationMemberships?.map(membership => ({
       id: membership.organizationId || membership.organization?.id,

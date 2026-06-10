@@ -28,6 +28,8 @@ export interface JwtPayload {
     name: string;
     role: OrganizationRole;
   }>;
+  /** Token version — see User.tokenVersion. Absent on legacy tokens (=> 0). */
+  tv?: number;
   iat?: number;
   exp?: number;
 }
@@ -235,11 +237,12 @@ export class AuthService {
         name: membership.organization.name,
         role: membership.role,
       })),
+      tv: userWithOrgs.tokenVersion ?? 0,
     };
 
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(
-      { sub: user.id, type: 'refresh' },
+      { sub: user.id, type: 'refresh', tv: userWithOrgs.tokenVersion ?? 0 },
       { expiresIn: '7d' }
     );
 
@@ -265,6 +268,12 @@ export class AuthService {
 
       if (!user || !user.isActive) {
         throw new UnauthorizedException('User not found or inactive');
+      }
+
+      // Reject refresh tokens minted before a tokenVersion bump (password
+      // change/reset). Missing claim => 0 for legacy-token compatibility.
+      if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+        throw new UnauthorizedException('Refresh token has been revoked');
       }
 
       return this.generateTokens(user);
@@ -386,6 +395,8 @@ export class AuthService {
     user.passwordHash = await bcrypt.hash(newPassword, saltRounds);
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
+    // Revoke all outstanding access/refresh tokens for this user.
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
 
     await this.userRepository.save(user);
   }
@@ -404,6 +415,8 @@ export class AuthService {
 
     const saltRounds = 12;
     user.passwordHash = await bcrypt.hash(newPassword, saltRounds);
+    // Revoke all outstanding access/refresh tokens for this user.
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     
     await this.userRepository.save(user);
   }

@@ -654,6 +654,20 @@ describe('AuthService', () => {
 
       await expect(service.refreshToken('token')).rejects.toThrow(UnauthorizedException);
     });
+
+    it('should reject a refresh token whose tv is stale (revoked)', async () => {
+      const mockPayload = { sub: 'user-1', type: 'refresh', tv: 0 };
+      const mockUser = {
+        id: 'user-1',
+        isActive: true,
+        tokenVersion: 1, // bumped after the token was issued
+        organizationMemberships: [],
+      } as any;
+      jwtService.verify.mockReturnValue(mockPayload);
+      userRepository.findOne.mockResolvedValue(mockUser);
+
+      await expect(service.refreshToken('token')).rejects.toThrow(UnauthorizedException);
+    });
   });
 
   describe('createApiKey', () => {
@@ -765,6 +779,7 @@ describe('AuthService', () => {
       // Verify new password was hashed
       expect(savedUser.passwordHash).toBeDefined();
       expect(savedUser.passwordHash).not.toBe(newPassword);
+      expect(savedUser.tokenVersion).toBe(1); // revokes existing sessions
 
       // Verify the hash is valid
       const isPasswordValid = await bcrypt.compare(newPassword, savedUser.passwordHash);
@@ -831,6 +846,7 @@ describe('AuthService', () => {
       // Verify new password was hashed
       expect(savedUser.passwordHash).toBeDefined();
       expect(savedUser.passwordHash).not.toBe(newPassword);
+      expect(savedUser.tokenVersion).toBe(1); // revokes existing sessions
       expect(savedUser.passwordHash).not.toBe(passwordHash);
 
       // Verify new password validates correctly
