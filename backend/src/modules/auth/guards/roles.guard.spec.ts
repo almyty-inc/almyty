@@ -106,7 +106,7 @@ describe('RolesGuard', () => {
         expect(result).toBe(true);
       });
 
-      it('should extract organization ID from query', () => {
+      it('should resolve organization from currentOrganizationId', () => {
         jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key) => {
           if (key === ROLES_KEY) return [OrganizationRole.MEMBER];
           return undefined;
@@ -115,22 +115,18 @@ describe('RolesGuard', () => {
         const mockContext = createMockContext({
           user: {
             id: 'user-1',
+            currentOrganizationId: 'org-1',
             organizationMemberships: [
-              {
-                organization: { id: 'org-1' },
-                role: OrganizationRole.MEMBER,
-              },
+              { organization: { id: 'org-1' }, role: OrganizationRole.MEMBER },
             ],
           },
           params: {},
-          query: { organizationId: 'org-1' },
         });
 
-        const result = guard.canActivate(mockContext);
-        expect(result).toBe(true);
+        expect(guard.canActivate(mockContext)).toBe(true);
       });
 
-      it('should extract organization ID from body', () => {
+      it('should resolve organization from path params', () => {
         jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key) => {
           if (key === ROLES_KEY) return [OrganizationRole.MEMBER];
           return undefined;
@@ -140,22 +136,16 @@ describe('RolesGuard', () => {
           user: {
             id: 'user-1',
             organizationMemberships: [
-              {
-                organization: { id: 'org-1' },
-                role: OrganizationRole.MEMBER,
-              },
+              { organization: { id: 'org-1' }, role: OrganizationRole.MEMBER },
             ],
           },
-          params: {},
-          query: {},
-          body: { organizationId: 'org-1' },
+          params: { organizationId: 'org-1' },
         });
 
-        const result = guard.canActivate(mockContext);
-        expect(result).toBe(true);
+        expect(guard.canActivate(mockContext)).toBe(true);
       });
 
-      it('should extract organization ID from headers', () => {
+      it('should prioritize path params over currentOrganizationId', () => {
         jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key) => {
           if (key === ROLES_KEY) return [OrganizationRole.MEMBER];
           return undefined;
@@ -164,45 +154,44 @@ describe('RolesGuard', () => {
         const mockContext = createMockContext({
           user: {
             id: 'user-1',
+            currentOrganizationId: 'org-other',
             organizationMemberships: [
-              {
-                organization: { id: 'org-1' },
-                role: OrganizationRole.MEMBER,
-              },
-            ],
-          },
-          params: {},
-          query: {},
-          body: {},
-          headers: { 'x-organization-id': 'org-1' },
-        });
-
-        const result = guard.canActivate(mockContext);
-        expect(result).toBe(true);
-      });
-
-      it('should prioritize params over query when both present', () => {
-        jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key) => {
-          if (key === ROLES_KEY) return [OrganizationRole.MEMBER];
-          return undefined;
-        });
-
-        const mockContext = createMockContext({
-          user: {
-            id: 'user-1',
-            organizationMemberships: [
-              {
-                organization: { id: 'org-from-params' },
-                role: OrganizationRole.MEMBER,
-              },
+              { organization: { id: 'org-from-params' }, role: OrganizationRole.MEMBER },
             ],
           },
           params: { organizationId: 'org-from-params' },
-          query: { organizationId: 'org-from-query' },
         });
 
-        const result = guard.canActivate(mockContext);
-        expect(result).toBe(true);
+        expect(guard.canActivate(mockContext)).toBe(true);
+      });
+
+      it('should NOT trust a query/body/header org id for the role check (cross-tenant escalation)', () => {
+        // The attacker is OWNER of their own auto-created org (org-A) but only
+        // a VIEWER of the victim org (org-B). The handler acts on
+        // currentOrganizationId = org-B; the attacker tries to pass the role
+        // check by pointing query/body/header at org-A where they are OWNER.
+        jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key) => {
+          if (key === ROLES_KEY) return [OrganizationRole.OWNER];
+          return undefined;
+        });
+
+        const mockContext = createMockContext({
+          user: {
+            id: 'attacker',
+            currentOrganizationId: 'org-B',
+            organizationMemberships: [
+              { organization: { id: 'org-A' }, role: OrganizationRole.OWNER },
+              { organization: { id: 'org-B' }, role: OrganizationRole.VIEWER },
+            ],
+          },
+          params: {},
+          query: { organizationId: 'org-A' },
+          body: { organizationId: 'org-A' },
+          headers: { 'x-organization-id': 'org-A' },
+        });
+
+        // Must be checked against org-B (where they are only VIEWER), not org-A.
+        expect(() => guard.canActivate(mockContext)).toThrow(ForbiddenException);
       });
     });
 

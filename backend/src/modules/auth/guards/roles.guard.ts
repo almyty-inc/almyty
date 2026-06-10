@@ -33,7 +33,7 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // Check organization context (from path params, query, or body)
+    // Resolve the org to authorize against (path param or validated current org)
     const organizationId = this.extractOrganizationId(request);
     
     if (!organizationId) {
@@ -42,7 +42,7 @@ export class RolesGuard implements CanActivate {
 
     // Find user's membership in the organization
     const membership = user.organizationMemberships?.find(
-      (m: any) => m.organization.id === organizationId
+      (m: any) => (m.organizationId ?? m.organization?.id) === organizationId
     );
 
     if (!membership) {
@@ -69,26 +69,20 @@ export class RolesGuard implements CanActivate {
   }
 
   private extractOrganizationId(request: any): string | null {
-    // Try explicit organizationId sources first
-    const explicit = (
-      request.params?.organizationId ||
-      request.query?.organizationId ||
-      request.body?.organizationId ||
-      request.headers?.['x-organization-id']
-    );
+    // SECURITY: the role check must run against the SAME organization the
+    // handler acts on. Handlers use either the `:organizationId` path param
+    // (organizations routes) or `req.user.currentOrganizationId` — the latter
+    // is set AND membership-validated by JwtStrategy from the
+    // X-Organization-Id header. We deliberately do NOT consult
+    // query/body/header org ids here: trusting a caller-supplied org for the
+    // role check while the handler mutated `currentOrganizationId` let any
+    // member of their own auto-created org pass admin/owner checks against a
+    // victim org (cross-tenant privilege escalation).
+    const pathOrg = request.params?.organizationId;
+    if (pathOrg) return pathOrg;
 
-    if (explicit) return explicit;
-
-    // Use currentOrganizationId set by JWT strategy
     if (request.user?.currentOrganizationId) {
       return request.user.currentOrganizationId;
-    }
-
-    // Fallback: use the user's org from JWT, but ONLY if they belong to exactly one org.
-    // If they have multiple orgs, require explicit org context to prevent cross-org leaks.
-    const userOrgs = request.user?.organizations;
-    if (userOrgs?.length === 1) {
-      return userOrgs[0].id;
     }
 
     return null;
