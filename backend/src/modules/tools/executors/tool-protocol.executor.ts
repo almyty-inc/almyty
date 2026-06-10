@@ -118,6 +118,7 @@ export class ToolProtocolExecutor {
       timeout: tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
+      maxRedirects: 0,
       signal: options.signal,
     };
 
@@ -177,6 +178,7 @@ export class ToolProtocolExecutor {
       timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
+      maxRedirects: 0,
       signal: options.signal,
       headers: {
         'Content-Type': 'application/json',
@@ -275,6 +277,7 @@ export class ToolProtocolExecutor {
       timeout: tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
+      maxRedirects: 0,
       signal: options.signal,
     };
 
@@ -353,6 +356,7 @@ export class ToolProtocolExecutor {
       timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
+      maxRedirects: 0,
       signal: options.signal,
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',

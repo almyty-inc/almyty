@@ -395,62 +395,83 @@ describe('OrganizationsService', () => {
 
   describe('updateMemberRole', () => {
     it('should update member role successfully', async () => {
-      const mockMembership = {
-        id: 'membership-1',
-        role: OrganizationRole.MEMBER
-      };
+      const actor = { id: 'actor-m', role: OrganizationRole.OWNER };
+      const target = { id: 'membership-1', role: OrganizationRole.MEMBER };
 
-      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+      userOrganizationRepository.findOne
+        .mockResolvedValueOnce(actor)
+        .mockResolvedValueOnce(target);
       userOrganizationRepository.save.mockResolvedValue({
-        ...mockMembership,
-        role: OrganizationRole.ADMIN
+        ...target,
+        role: OrganizationRole.ADMIN,
       });
 
-      await service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN);
+      await service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN, 'actor-1');
 
+      expect(target.role).toBe(OrganizationRole.ADMIN);
       expect(userOrganizationRepository.save).toHaveBeenCalled();
     });
 
-    it('should update member role with permissions', async () => {
-      const mockMembership = {
-        id: 'membership-1',
-        role: OrganizationRole.MEMBER,
-        permissions: []
-      };
+    it('should forbid assigning a role higher than the actor own', async () => {
+      const actor = { id: 'actor-m', role: OrganizationRole.ADMIN };
+      const target = { id: 'membership-1', role: OrganizationRole.MEMBER };
 
-      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
-      userOrganizationRepository.save.mockResolvedValue({
-        ...mockMembership,
-        role: OrganizationRole.ADMIN,
-        permissions: ['manage_apis']
-      });
+      userOrganizationRepository.findOne
+        .mockResolvedValueOnce(actor)
+        .mockResolvedValueOnce(target);
 
-      await service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN, ['manage_apis']);
+      await expect(
+        service.updateMemberRole('org-1', 'user-1', OrganizationRole.OWNER, 'actor-1'),
+      )
+        .rejects.toThrow(ForbiddenException);
+      expect(userOrganizationRepository.save).not.toHaveBeenCalled();
+    });
 
-      expect(mockMembership.permissions).toEqual(['manage_apis']);
-      expect(userOrganizationRepository.save).toHaveBeenCalled();
+    it('should forbid changing the role of a member who outranks the actor', async () => {
+      const actor = { id: 'actor-m', role: OrganizationRole.ADMIN };
+      const target = { id: 'membership-1', role: OrganizationRole.OWNER };
+
+      userOrganizationRepository.findOne
+        .mockResolvedValueOnce(actor)
+        .mockResolvedValueOnce(target);
+
+      await expect(
+        service.updateMemberRole('org-1', 'user-1', OrganizationRole.MEMBER, 'actor-1'),
+      )
+        .rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException when actor is not a member', async () => {
+      userOrganizationRepository.findOne.mockResolvedValueOnce(null);
+
+      await expect(
+        service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN, 'actor-1'),
+      )
+        .rejects.toThrow(ForbiddenException);
     });
 
     it('should throw NotFoundException when member not found', async () => {
-      userOrganizationRepository.findOne.mockResolvedValue(null);
+      const actor = { id: 'actor-m', role: OrganizationRole.OWNER };
+      userOrganizationRepository.findOne
+        .mockResolvedValueOnce(actor)
+        .mockResolvedValueOnce(null);
 
-      await expect(service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN))
-        .rejects
-        .toThrow(NotFoundException);
+      await expect(
+        service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN, 'actor-1'),
+      )
+        .rejects.toThrow(NotFoundException);
     });
 
     it('should throw ForbiddenException when changing role of last owner', async () => {
-      const mockMembership = {
-        id: 'membership-1',
-        role: OrganizationRole.OWNER
-      };
+      const ownerMembership = { id: 'membership-1', role: OrganizationRole.OWNER };
 
-      userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
+      userOrganizationRepository.findOne.mockResolvedValue(ownerMembership);
       userOrganizationRepository.count.mockResolvedValue(1); // Only one owner
 
-      await expect(service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN))
-        .rejects
-        .toThrow(ForbiddenException);
+      await expect(
+        service.updateMemberRole('org-1', 'user-1', OrganizationRole.ADMIN, 'actor-1'),
+      )
+        .rejects.toThrow(ForbiddenException);
     });
   });
 

@@ -149,6 +149,20 @@ describe('NodeSandboxService', () => {
       expect(result.error).toMatch(/Allowed built-ins:.*crypto/);
       expect(result.error).toMatch(/Allowed built-ins:.*buffer/);
     }, 10_000);
+
+    it('refuses dangerous builtins even when the tool ships dependencies (allowlist-before-resolve)', async () => {
+      // Regression: with a non-empty modulePaths, createRequire(depPath)
+      // .resolve('child_process') resolves the builtin to its bare name and
+      // previously returned the REAL module before the allowlist check ran —
+      // a full sandbox escape for any tool that declares a dependency.
+      for (const mod of ['child_process', 'net', 'fs', 'node:child_process']) {
+        const result = await exec(`require(${JSON.stringify(mod)})`, {
+          dependencies: { 'left-pad': '1.3.0' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('not allowed');
+      }
+    }, 20_000);
   });
 
   // ── Regression: process.env scrub ────────────────────────────────────

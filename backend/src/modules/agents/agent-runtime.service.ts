@@ -185,8 +185,18 @@ export class AgentRuntimeService implements OnModuleInit {
     //
     // Also added a hard iteration cap (MAX_PARENT_WALK) so a corrupted
     // parent chain with a cycle can't loop forever.
-    if (options?.parentRunId && agent.collaboration?.rules?.maxChainDepth) {
-      const maxChainDepth = agent.collaboration.rules.maxChainDepth;
+    if (options?.parentRunId) {
+      // Hard, unconditional ceiling on recursive run nesting. A per-agent
+      // collaboration.rules.maxChainDepth may tighten this but never loosen
+      // it. Without an absolute cap, an autonomous agent with
+      // canCallAgents/canCreateAgents (or a cycle A->B->A) could spawn child
+      // runs without bound — a fork-bomb that exhausts the worker pool, DB,
+      // and LLM budget.
+      const HARD_MAX_CHAIN_DEPTH = 10;
+      const configured = agent.collaboration?.rules?.maxChainDepth;
+      const maxChainDepth = configured
+        ? Math.min(configured, HARD_MAX_CHAIN_DEPTH)
+        : HARD_MAX_CHAIN_DEPTH;
       const MAX_PARENT_WALK = 1000;
       let depth = 1;
       let currentParentId: string | null = options.parentRunId;
