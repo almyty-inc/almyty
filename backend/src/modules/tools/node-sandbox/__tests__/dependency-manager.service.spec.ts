@@ -118,6 +118,34 @@ describe('DependencyManagerService', () => {
     expect(npmrcContent).toContain('//npm.example.com/:_authToken=secret-token-123');
   }, 60_000);
 
+  describe('dependency-spec validation (regression)', () => {
+    it.each([
+      ['git url', { evil: 'git+https://attacker.example/repo' }],
+      ['tarball url', { evil: 'https://attacker.example/evil.tgz' }],
+      ['file spec', { evil: 'file:../../etc' }],
+      ['github shorthand', { evil: 'attacker/repo' }],
+      ['git protocol', { evil: 'git://attacker.example/repo' }],
+    ])('rejects a %s version spec', async (_label, deps) => {
+      await expect(service.ensureInstalled(deps as any)).rejects.toThrow(
+        /Unsupported version spec/,
+      );
+    });
+
+    it('rejects an invalid package name', async () => {
+      await expect(
+        service.ensureInstalled({ '../escape': '1.0.0' } as any),
+      ).rejects.toThrow(/Invalid dependency name/);
+    });
+
+    it('rejects a registry config with a newline', async () => {
+      await expect(
+        service.ensureInstalled({ 'is-odd': '3.0.1' }, {
+          url: 'https://npm.example.com\n//evil/:_authToken=x',
+        } as any),
+      ).rejects.toThrow(/must not contain newlines/);
+    });
+  });
+
   it('should list cached entries', async () => {
     const cached = service.listCached();
     expect(cached.length).toBeGreaterThan(0);

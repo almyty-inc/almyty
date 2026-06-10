@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { validateUrl } from '../../../common/security/url-validator';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 
 /**
  * Single entry point for every outbound HTTP call to an LLM
@@ -43,6 +44,10 @@ const LLM_HTTP_DEFAULTS: AxiosRequestConfig = {
   // Never follow redirects across the SSRF gate. A provider that
   // legitimately 302s must be configured with its final URL.
   maxRedirects: 0,
+  // DNS-pinning agents: re-validate the resolved IP so a provider name
+  // that rebinds to an internal/metadata address is refused at connect.
+  httpAgent: ssrfSafeHttpAgent,
+  httpsAgent: ssrfSafeHttpsAgent,
 };
 
 export async function callLlmProviderHttp<T = any>(
