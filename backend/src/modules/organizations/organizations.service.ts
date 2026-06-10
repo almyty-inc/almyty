@@ -286,14 +286,38 @@ export class OrganizationsService {
     organizationId: string,
     userId: string,
     role: OrganizationRole,
-    permissions?: string[],
+    actorUserId: string,
   ): Promise<void> {
+    // Lower rank value = more privilege.
+    const RANK: Record<OrganizationRole, number> = {
+      [OrganizationRole.OWNER]: 0,
+      [OrganizationRole.ADMIN]: 1,
+      [OrganizationRole.MEMBER]: 2,
+      [OrganizationRole.VIEWER]: 3,
+    };
+
+    const actorMembership = await this.userOrganizationRepository.findOne({
+      where: { organizationId, userId: actorUserId, isActive: true },
+    });
+    if (!actorMembership) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
+
     const membership = await this.userOrganizationRepository.findOne({
       where: { organizationId, userId },
     });
-
     if (!membership) {
       throw new NotFoundException('User is not a member of this organization');
+    }
+
+    // An actor may never grant a role more privileged than their own,
+    // nor act on a member who already outranks them. This stops an
+    // admin from self-escalating (or promoting anyone) to owner.
+    if (RANK[role] < RANK[actorMembership.role]) {
+      throw new ForbiddenException('Cannot assign a role higher than your own');
+    }
+    if (RANK[membership.role] < RANK[actorMembership.role]) {
+      throw new ForbiddenException('Cannot change the role of a member who outranks you');
     }
 
     // Check if trying to remove last owner
@@ -312,10 +336,6 @@ export class OrganizationsService {
     }
 
     membership.role = role;
-    if (permissions) {
-      membership.permissions = permissions;
-    }
-
     await this.userOrganizationRepository.save(membership);
   }
 

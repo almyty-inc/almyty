@@ -173,6 +173,8 @@ export class ToolHttpExecutor {
         signal: options.signal,
         maxContentLength: MAX_CONTENT_LENGTH,
         maxBodyLength: MAX_BODY_LENGTH,
+        // SSRF: never follow redirects past the validateUrl gate.
+        maxRedirects: 0,
         headers: safeHeaders,
         params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
         paramsSerializer: (params: any) => {
@@ -361,6 +363,8 @@ export class ToolHttpExecutor {
         signal: options.signal,
         maxContentLength: MAX_CONTENT_LENGTH,
         maxBodyLength: MAX_BODY_LENGTH,
+        // SSRF: never follow redirects past the validateUrl gate.
+        maxRedirects: 0,
         params: queryParams,
         paramsSerializer: (params: any) => {
           const parts: string[] = [];
