@@ -366,6 +366,11 @@ function patchSocketConnect(): void {
       } else {
         host = first.host ?? '127.0.0.1';
         port = first.port;
+        // A caller-supplied `lookup` bypasses our patched dns.lookup
+        // (and therefore the post-resolution IP ban check), letting a
+        // hostname resolve to an internal/metadata IP unchecked. Force
+        // the default (patched) resolver.
+        if (first.lookup) delete first.lookup;
       }
     } else if (typeof first === 'number') {
       port = first;

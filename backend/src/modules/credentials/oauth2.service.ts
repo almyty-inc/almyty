@@ -319,6 +319,8 @@ export class OAuth2Service {
 
     const tokenResponse = await fetch(tokenUrl, {
       method: 'POST',
+      // SSRF: refuse redirects so a 302 from the token endpoint can't bounce this credential-bearing POST to an internal host.
+      redirect: 'manual',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Accept: 'application/json',
@@ -411,6 +413,8 @@ export class OAuth2Service {
 
     const tokenResponse = await fetch(tokenUrl, {
       method: 'POST',
+      // SSRF: refuse redirects so a 302 from the token endpoint can't bounce this credential-bearing POST to an internal host.
+      redirect: 'manual',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Accept: 'application/json',
