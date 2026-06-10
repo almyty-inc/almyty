@@ -13,12 +13,14 @@ import { UserOrganization, OrganizationRole } from '../../entities/user-organiza
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { MailService } from '../mail/mail.service';
 
 // Unmock bcrypt from global setup to test actual hashing
 jest.unmock('bcryptjs');
 
 describe('AuthService', () => {
   let service: AuthService;
+  let mailService: any;
   let userRepository: jest.Mocked<Repository<User>>;
   let apiKeyRepository: jest.Mocked<Repository<ApiKey>>;
   let organizationRepository: jest.Mocked<Repository<Organization>>;
@@ -120,6 +122,10 @@ describe('AuthService', () => {
             getResourceHistory: jest.fn().mockResolvedValue([]),
           },
         },
+        {
+          provide: MailService,
+          useValue: { sendPasswordReset: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true), send: jest.fn().mockResolvedValue(true) },
+        },
       ],
     }).compile();
 
@@ -129,6 +135,7 @@ describe('AuthService', () => {
     organizationRepository = module.get(getRepositoryToken(Organization));
     userOrganizationRepository = module.get(getRepositoryToken(UserOrganization));
     jwtService = module.get(JwtService);
+    mailService = module.get(MailService);
 
     // Reset repository mocks but not bcrypt mocks
     userRepository.findOne.mockReset();
@@ -654,6 +661,20 @@ describe('AuthService', () => {
 
       await expect(service.refreshToken('token')).rejects.toThrow(UnauthorizedException);
     });
+
+    it('should reject a refresh token whose tv is stale (revoked)', async () => {
+      const mockPayload = { sub: 'user-1', type: 'refresh', tv: 0 };
+      const mockUser = {
+        id: 'user-1',
+        isActive: true,
+        tokenVersion: 1, // bumped after the token was issued
+        organizationMemberships: [],
+      } as any;
+      jwtService.verify.mockReturnValue(mockPayload);
+      userRepository.findOne.mockResolvedValue(mockUser);
+
+      await expect(service.refreshToken('token')).rejects.toThrow(UnauthorizedException);
+    });
   });
 
   describe('createApiKey', () => {
@@ -726,6 +747,7 @@ describe('AuthService', () => {
       expect(userRepository.save).toHaveBeenCalled();
       expect(mockUser.resetPasswordToken).toBeDefined();
       expect(mockUser.resetPasswordExpires).toBeDefined();
+      expect(mailService.sendPasswordReset).toHaveBeenCalledWith('test@example.com', expect.any(String));
     });
 
     it('should not reveal if user does not exist', async () => {
@@ -734,6 +756,7 @@ describe('AuthService', () => {
       await service.resetPassword('nonexistent@example.com');
 
       expect(userRepository.save).not.toHaveBeenCalled();
+      expect(mailService.sendPasswordReset).not.toHaveBeenCalled();
     });
   });
 
@@ -765,6 +788,7 @@ describe('AuthService', () => {
       // Verify new password was hashed
       expect(savedUser.passwordHash).toBeDefined();
       expect(savedUser.passwordHash).not.toBe(newPassword);
+      expect(savedUser.tokenVersion).toBe(1); // revokes existing sessions
 
       // Verify the hash is valid
       const isPasswordValid = await bcrypt.compare(newPassword, savedUser.passwordHash);
@@ -831,6 +855,7 @@ describe('AuthService', () => {
       // Verify new password was hashed
       expect(savedUser.passwordHash).toBeDefined();
       expect(savedUser.passwordHash).not.toBe(newPassword);
+      expect(savedUser.tokenVersion).toBe(1); // revokes existing sessions
       expect(savedUser.passwordHash).not.toBe(passwordHash);
 
       // Verify new password validates correctly

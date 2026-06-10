@@ -78,6 +78,12 @@ export interface GrpcCallInput {
   protoSource: string;
   /** Host[:port] or full https:// URL. Port defaults: 443 for https, 80 for http. */
   baseUrl: string;
+  /**
+   * Explicit TLS override. When set, forces a secure (true) or insecure
+   * (false) channel regardless of the baseUrl heuristic. Leave undefined to
+   * keep scheme-based behaviour (https:// => TLS) and the bare-host default.
+   */
+  tls?: boolean;
   /** Service name (e.g. "TranslationService"). Namespace optional; we search recursively. */
   serviceName: string;
   /** Method name (e.g. "DetectLanguage"). */
@@ -134,7 +140,7 @@ export class GrpcCallerService {
     let target: string;
     let useTls: boolean;
     try {
-      ({ target, useTls } = this.resolveTarget(input.baseUrl));
+      ({ target, useTls } = this.resolveTarget(input.baseUrl, input.tls));
     } catch (err: any) {
       return { success: false, error: `Invalid baseUrl: ${err.message}` };
     }
@@ -169,6 +175,13 @@ export class GrpcCallerService {
       };
     }
 
+    if (!useTls) {
+      this.logger.warn(
+        `gRPC connecting to ${target} over an insecure (plaintext) channel — ` +
+          'metadata/credentials are sent unencrypted. Use an https:// baseUrl or ' +
+          'set tls:true to enable TLS.',
+      );
+    }
     const channelCreds = useTls
       ? credentials.createSsl()
       : credentials.createInsecure();
@@ -416,23 +429,33 @@ export class GrpcCallerService {
    * or `x.example.com:50051`. gRPC channels expect `host:port`, not a
    * scheme-prefixed URL, so we normalize.
    */
-  private resolveTarget(baseUrl: string): { target: string; useTls: boolean } {
+  private resolveTarget(
+    baseUrl: string,
+    tlsOverride?: boolean,
+  ): { target: string; useTls: boolean } {
     if (!baseUrl) throw new Error('empty baseUrl');
+
+    let target: string;
+    let useTls: boolean;
     if (baseUrl.includes('://')) {
       const u = new URL(baseUrl);
-      const useTls = u.protocol === 'https:';
+      useTls = u.protocol === 'https:';
       const port = u.port || (useTls ? '443' : '80');
-      const host = u.hostname;
-      return { target: `${host}:${port}`, useTls };
+      target = `${u.hostname}:${port}`;
+    } else {
+      // Bare host[:port] — assume TLS if no port given (most production
+      // gRPC servers run TLS), insecure when explicit port suggests
+      // local dev.
+      const hasPort = /:\d+$/.test(baseUrl);
+      target = hasPort ? baseUrl : `${baseUrl}:443`;
+      useTls = !hasPort;
     }
-    // Bare host[:port] — assume TLS if no port given (most production
-    // gRPC servers run TLS), insecure when explicit port suggests
-    // local dev.
-    const hasPort = /:\d+$/.test(baseUrl);
-    return {
-      target: hasPort ? baseUrl : `${baseUrl}:443`,
-      useTls: hasPort ? false : true,
-    };
+
+    // An explicit override always wins over the heuristic.
+    if (tlsOverride !== undefined) {
+      useTls = tlsOverride;
+    }
+    return { target, useTls };
   }
 
   /**

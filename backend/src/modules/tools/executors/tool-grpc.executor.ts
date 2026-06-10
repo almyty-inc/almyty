@@ -161,6 +161,7 @@ export class ToolGrpcExecutor {
     const callRes = await this.grpcCaller.call({
       protoSource: schemaRow.rawSchema,
       baseUrl: api.baseUrl,
+      tls: (api as any).configuration?.tls,
       serviceName,
       methodName,
       request: parameters || {},

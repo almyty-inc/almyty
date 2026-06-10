@@ -85,6 +85,7 @@ function buildService(opts: {
     { findOne: jest.fn() } as any, // userOrganizationRepository
     jwt,
     { log: jest.fn(), logCreate: jest.fn(), logUpdate: jest.fn(), logDelete: jest.fn() } as any,
+    { sendPasswordReset: jest.fn().mockResolvedValue(true) } as any, // mailService
   );
 
   return { service, jwt };

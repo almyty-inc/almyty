@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -14,6 +14,18 @@ import {
 const DEFAULT_DEPS_PATH = path.join(os.tmpdir(), 'almyty-tool-deps');
 const DEFAULT_INSTALL_TIMEOUT = 120_000; // 2 minutes
 const DEFAULT_MAX_CACHE_SIZE_MB = 2048; // 2 GB
+
+// npm package-name grammar (scoped or unscoped). Names can't start with
+// `.` or `_`, must be lowercase, and may not contain URL/path characters.
+const NPM_NAME_RE =
+  /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
+// Version specifiers we accept: semver ranges and dist-tags only. The
+// character class deliberately excludes `/` and `:`, which rejects every
+// dangerous npm "version" form that fetches arbitrary code from outside
+// the registry — git+, git:, https:, file:, link:, and `user/repo`
+// GitHub shorthand. Those resolve to code that runs when required in the
+// worker, so they must not be installable from a user-supplied spec.
+const SAFE_VERSION_RE = /^[A-Za-z0-9.\-_+~^*<>=|\sxX]+$/;
 
 @Injectable()
 export class DependencyManagerService {
@@ -35,6 +47,8 @@ export class DependencyManagerService {
     dependencies: Record<string, string>,
     registry?: NpmRegistryConfig,
   ): Promise<DependencyInstallResult> {
+    this.validateDependencies(dependencies);
+    if (registry) this.validateRegistry(registry);
     const hash = this.hashDeps(dependencies);
     const installDir = path.join(this.basePath(), hash);
 
@@ -113,6 +127,55 @@ export class DependencyManagerService {
   /** Check whether a directory has been fully installed */
   private isInstalled(dir: string): boolean {
     return fs.existsSync(path.join(dir, '.installed'));
+  }
+
+  /**
+   * Reject any dependency whose name isn't a valid npm package name or
+   * whose version isn't a plain semver range / dist-tag. This blocks
+   * git/url/file/path/GitHub-shorthand "versions" that npm would fetch
+   * and run code from outside the registry.
+   */
+  private validateDependencies(dependencies: Record<string, string>): void {
+    for (const [name, version] of Object.entries(dependencies ?? {})) {
+      if (typeof name !== 'string' || name.length === 0 || name.length > 214) {
+        throw new BadRequestException(`Invalid dependency name: ${JSON.stringify(name)}`);
+      }
+      if (!NPM_NAME_RE.test(name)) {
+        throw new BadRequestException(`Invalid dependency name: ${name}`);
+      }
+      if (typeof version !== 'string' || version.trim().length === 0) {
+        throw new BadRequestException(`Invalid version for dependency "${name}"`);
+      }
+      if (!SAFE_VERSION_RE.test(version)) {
+        throw new BadRequestException(
+          `Unsupported version spec for "${name}": ${version}. ` +
+            'Only semver ranges and dist-tags are allowed (no git/url/file/path specs).',
+        );
+      }
+    }
+  }
+
+  /**
+   * Validate a private-registry config. Reject CR/LF in any field (which
+   * would inject arbitrary directives into the generated .npmrc) and
+   * require an http(s) registry URL.
+   */
+  private validateRegistry(registry: NpmRegistryConfig): void {
+    const fields = [registry.url, registry.scope, registry.authToken];
+    for (const f of fields) {
+      if (typeof f === 'string' && /[\r\n]/.test(f)) {
+        throw new BadRequestException('Registry config must not contain newlines');
+      }
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(registry.url);
+    } catch {
+      throw new BadRequestException(`Invalid registry URL: ${registry.url}`);
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new BadRequestException(`Registry URL must be http(s): ${registry.url}`);
+    }
   }
 
   /** Run the actual npm install */

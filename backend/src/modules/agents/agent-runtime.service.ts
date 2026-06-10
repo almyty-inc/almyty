@@ -185,8 +185,18 @@ export class AgentRuntimeService implements OnModuleInit {
     //
     // Also added a hard iteration cap (MAX_PARENT_WALK) so a corrupted
     // parent chain with a cycle can't loop forever.
-    if (options?.parentRunId && agent.collaboration?.rules?.maxChainDepth) {
-      const maxChainDepth = agent.collaboration.rules.maxChainDepth;
+    if (options?.parentRunId) {
+      // Hard, unconditional ceiling on recursive run nesting. A per-agent
+      // collaboration.rules.maxChainDepth may tighten this but never loosen
+      // it. Without an absolute cap, an autonomous agent with
+      // canCallAgents/canCreateAgents (or a cycle A->B->A) could spawn child
+      // runs without bound — a fork-bomb that exhausts the worker pool, DB,
+      // and LLM budget.
+      const HARD_MAX_CHAIN_DEPTH = 10;
+      const configured = agent.collaboration?.rules?.maxChainDepth;
+      const maxChainDepth = configured
+        ? Math.min(configured, HARD_MAX_CHAIN_DEPTH)
+        : HARD_MAX_CHAIN_DEPTH;
       const MAX_PARENT_WALK = 1000;
       let depth = 1;
       let currentParentId: string | null = options.parentRunId;
@@ -267,7 +277,8 @@ export class AgentRuntimeService implements OnModuleInit {
     this.events.ensureRunEmitter(savedRun.id);
 
     // Enqueue first step
-    await this.runtimeQueue.add('next-step', { runId: savedRun.id }, {
+    await this.runtimeQueue.add('next-step', { runId: savedRun.id, seq: 0 }, {
+      jobId: `step:${savedRun.id}:0`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
       removeOnComplete: 100,
@@ -371,8 +382,12 @@ export class AgentRuntimeService implements OnModuleInit {
     run.status = AgentRunStatus.RUNNING;
     await this.runRepository.save(run);
 
-    // Resume execution
-    await this.runtimeQueue.add('next-step', { runId }, {
+    // Resume execution. Seed the seq from a timestamp so the resumed
+    // job's id sits outside the sequential range used before the pause,
+    // and a duplicate resume within the same tick still collapses to one.
+    const resumeSeq = Date.now();
+    await this.runtimeQueue.add('next-step', { runId, seq: resumeSeq }, {
+      jobId: `step:${runId}:${resumeSeq}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
     });

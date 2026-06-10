@@ -224,3 +224,30 @@ describeIfRun('GrpcCallerService (real @grpc/grpc-js server)', () => {
     expect(result.streamMessageCount).toBe(2);
   });
 });
+
+// Pure target/TLS resolution — no server needed, always runs.
+describe('GrpcCallerService.resolveTarget', () => {
+  const resolve = (baseUrl: string, tls?: boolean) =>
+    (new GrpcCallerService() as any).resolveTarget(baseUrl, tls);
+
+  it('uses TLS for https:// and plaintext for http://', () => {
+    expect(resolve('https://x.example.com')).toEqual({ target: 'x.example.com:443', useTls: true });
+    expect(resolve('http://x.example.com')).toEqual({ target: 'x.example.com:80', useTls: false });
+  });
+
+  it('defaults bare host (no port) to TLS:443 and bare host:port to plaintext', () => {
+    expect(resolve('x.example.com')).toEqual({ target: 'x.example.com:443', useTls: true });
+    expect(resolve('internal-host:50051')).toEqual({ target: 'internal-host:50051', useTls: false });
+  });
+
+  it('honors an explicit tls override over the heuristic', () => {
+    // bare host:port would default to plaintext — force TLS.
+    expect(resolve('internal-host:50051', true).useTls).toBe(true);
+    // https:// would default to TLS — force plaintext.
+    expect(resolve('https://x.example.com', false).useTls).toBe(false);
+  });
+
+  it('throws on empty baseUrl', () => {
+    expect(() => resolve('')).toThrow();
+  });
+});

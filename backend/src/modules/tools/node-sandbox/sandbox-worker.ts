@@ -29,7 +29,7 @@
  */
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { parentPort, workerData } from 'worker_threads';
-import { createRequire } from 'module';
+import { createRequire, builtinModules } from 'module';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { WorkerInput, WorkerOutput } from './types';
@@ -169,6 +169,26 @@ async function run() {
   const originalRequire = createRequire(__filename);
 
   const sandboxRequire = (id: string) => {
+    // Node built-ins must clear the allowlist BEFORE we try the
+    // dependency module paths. createRequire(depPath).resolve('net')
+    // resolves a built-in to its bare specifier and returns the real
+    // module, so without this guard any tool that ships a dependency
+    // (non-empty modulePaths) could require('child_process') /
+    // require('net') / require('fs') and bypass the entire allowlist.
+    // Strip a node: prefix for the built-in test.
+    const bareId = id.startsWith('node:') ? id.slice(5) : id;
+    if (builtinModules.includes(bareId)) {
+      if (!ALLOWED_MODULES.has(id)) {
+        throw new Error(
+          `Module "${id}" is not allowed in the sandbox. Allowed built-ins: ${Array.from(
+            ALLOWED_MODULES,
+          )
+            .filter((m) => !m.startsWith('node:'))
+            .join(', ')}.`,
+        );
+      }
+      return originalRequire(id);
+    }
     for (const mp of modulePaths) {
       try {
         const depRequire = createRequire(

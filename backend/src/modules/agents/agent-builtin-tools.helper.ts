@@ -39,8 +39,11 @@ export class AgentBuiltInToolsHelper {
         const seconds = Math.min(Math.max(Number(parameters.seconds) || 10, 1), 3600);
         run.status = AgentRunStatus.SLEEPING;
 
-        // Enqueue the next step with a delay
-        await this.runtimeQueue.add('next-step', { runId: run.id }, {
+        // Enqueue the delayed wake. Seed seq from a timestamp so it sits
+        // outside the sequential range and duplicate wakes collapse to one.
+        const wakeSeq = Date.now();
+        await this.runtimeQueue.add('next-step', { runId: run.id, seq: wakeSeq }, {
+          jobId: `step:${run.id}:${wakeSeq}`,
           delay: seconds * 1000,
           attempts: 3,
           backoff: { type: 'exponential', delay: 2000 },

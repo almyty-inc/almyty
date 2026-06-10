@@ -20,8 +20,8 @@ export class AgentRuntimeProcessor {
   ) {}
 
   @Process('next-step')
-  async handleNextStep(job: Job<{ runId: string }>) {
-    const { runId } = job.data;
+  async handleNextStep(job: Job<{ runId: string; seq?: number }>) {
+    const { runId, seq = 0 } = job.data;
     this.logger.debug(`Processing step for run ${runId}`);
 
     try {
@@ -29,7 +29,12 @@ export class AgentRuntimeProcessor {
 
       if (result === 'continue') {
         // Enqueue the next step
-        await this.runtimeQueue.add('next-step', { runId }, {
+        // Deterministic jobId so a duplicate continuation of the same step
+        // (e.g. two workers that both processed this step) collapses to one
+        // queued job instead of double-executing. The seq only ever
+        // increments, so sequential steps never collide and can't stall.
+        await this.runtimeQueue.add('next-step', { runId, seq: seq + 1 }, {
+          jobId: `step:${runId}:${seq + 1}`,
           delay: 100, // Small delay to avoid tight loops
           attempts: 3,
           backoff: { type: 'exponential', delay: 2000 },

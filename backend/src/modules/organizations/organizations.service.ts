@@ -151,35 +151,19 @@ export class OrganizationsService {
   async update(id: string, updateOrganizationDto: UpdateOrganizationDto): Promise<Organization> {
     const organization = await this.findOne(id);
 
-    console.log('[UPDATE_ORG] Updating org:', {
-      id,
-      currentName: organization.name,
-      currentSlug: organization.slug,
-      newName: updateOrganizationDto.name,
-      newSlug: updateOrganizationDto.slug,
-    });
-
     // Check for conflicts if name or slug is being updated
     if (updateOrganizationDto.name || updateOrganizationDto.slug) {
       const conflictWhere: any[] = [];
 
       // Only check for conflicts if the name is actually changing
       if (updateOrganizationDto.name && updateOrganizationDto.name !== organization.name) {
-        console.log('[UPDATE_ORG] Name is changing, will check for conflicts');
         conflictWhere.push({ name: updateOrganizationDto.name });
-      } else if (updateOrganizationDto.name) {
-        console.log('[UPDATE_ORG] Name NOT changing (same value), skip conflict check');
       }
 
       // Only check for conflicts if the slug is actually changing
       if (updateOrganizationDto.slug && updateOrganizationDto.slug !== organization.slug) {
-        console.log('[UPDATE_ORG] Slug is changing, will check for conflicts');
         conflictWhere.push({ slug: updateOrganizationDto.slug });
-      } else if (updateOrganizationDto.slug) {
-        console.log('[UPDATE_ORG] Slug NOT changing (same value), skip conflict check');
       }
-
-      console.log('[UPDATE_ORG] conflictWhere array length:', conflictWhere.length);
 
       // Only perform the conflict check if there are fields to check
       if (conflictWhere.length > 0) {
@@ -187,10 +171,7 @@ export class OrganizationsService {
           where: conflictWhere,
         });
 
-        console.log('[UPDATE_ORG] Conflict check result:', existingOrg ? `Found org ${existingOrg.id}` : 'No conflict');
-
         if (existingOrg && existingOrg.id !== id) {
-          console.log('[UPDATE_ORG] ERROR: Conflict detected!');
           throw new ConflictException('Organization with this name or slug already exists');
         }
       }
@@ -286,14 +267,38 @@ export class OrganizationsService {
     organizationId: string,
     userId: string,
     role: OrganizationRole,
-    permissions?: string[],
+    actorUserId: string,
   ): Promise<void> {
+    // Lower rank value = more privilege.
+    const RANK: Record<OrganizationRole, number> = {
+      [OrganizationRole.OWNER]: 0,
+      [OrganizationRole.ADMIN]: 1,
+      [OrganizationRole.MEMBER]: 2,
+      [OrganizationRole.VIEWER]: 3,
+    };
+
+    const actorMembership = await this.userOrganizationRepository.findOne({
+      where: { organizationId, userId: actorUserId, isActive: true },
+    });
+    if (!actorMembership) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
+
     const membership = await this.userOrganizationRepository.findOne({
       where: { organizationId, userId },
     });
-
     if (!membership) {
       throw new NotFoundException('User is not a member of this organization');
+    }
+
+    // An actor may never grant a role more privileged than their own,
+    // nor act on a member who already outranks them. This stops an
+    // admin from self-escalating (or promoting anyone) to owner.
+    if (RANK[role] < RANK[actorMembership.role]) {
+      throw new ForbiddenException('Cannot assign a role higher than your own');
+    }
+    if (RANK[membership.role] < RANK[actorMembership.role]) {
+      throw new ForbiddenException('Cannot change the role of a member who outranks you');
     }
 
     // Check if trying to remove last owner
@@ -312,10 +317,6 @@ export class OrganizationsService {
     }
 
     membership.role = role;
-    if (permissions) {
-      membership.permissions = permissions;
-    }
-
     await this.userOrganizationRepository.save(membership);
   }
 

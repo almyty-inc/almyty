@@ -10,10 +10,13 @@ import {
   UnauthorizedException,
   NotFoundException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import * as Redis from 'ioredis';
 import { Response, Request } from 'express';
 import * as crypto from 'crypto';
 
@@ -59,6 +62,10 @@ export class AgentOpenAICompatController {
     @InjectRepository(ApiKey)
     private readonly apiKeyRepository: Repository<ApiKey>,
     private readonly stream: AgentOpenAIStreamHelper,
+    // Optional so unit tests (and any Redis-less boot) construct cleanly and
+    // fall back to the per-pod in-memory counter. In production Redis is
+    // wired by RedisModule, giving a window shared across replicas.
+    @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
   ) {}
 
   @Post('chat/completions')
@@ -89,7 +96,7 @@ export class AgentOpenAICompatController {
       apiKeyLast4 = this.getKeyLast4(auth);
 
       // Rate limit tracking
-      const rateLimitInfo = this.trackRequestCount(apiKey.id);
+      const rateLimitInfo = await this.trackRequestCount(apiKey.id);
       this.setRateLimitHeaders(res, rateLimitInfo);
 
       if (rateLimitInfo.remaining <= 0) {
@@ -236,7 +243,46 @@ export class AgentOpenAICompatController {
 
   // ─── Rate Limiting ──────────────────────────────────────────────────
 
-  private trackRequestCount(apiKeyId: string): { remaining: number; limit: number; resetAt: number } {
+  /**
+   * Per-key fixed-window rate limit. Uses Redis (atomic INCR + EXPIRE) so
+   * the 60 rpm window is shared across replicas; falls back to a per-pod
+   * in-memory counter when Redis is absent or unreachable so a transient
+   * Redis blip degrades to local limiting rather than removing the limit
+   * or failing the request.
+   */
+  private async trackRequestCount(
+    apiKeyId: string,
+  ): Promise<{ remaining: number; limit: number; resetAt: number }> {
+    if (!this.redis) {
+      return this.trackRequestCountInMemory(apiKeyId);
+    }
+    const windowMs = 60_000;
+    const now = Date.now();
+    const windowId = Math.floor(now / windowMs);
+    const resetAt = (windowId + 1) * windowMs;
+    try {
+      const key = `openai_rl:${apiKeyId}:${windowId}`;
+      const count = await this.redis.incr(key);
+      // Set the TTL once, on the first increment of the window. A slightly
+      // longer TTL than the window absorbs clock skew without leaking keys.
+      if (count === 1) {
+        await this.redis.expire(key, 70);
+      }
+      const remaining = Math.max(0, RATE_LIMIT_RPM - count);
+      return { remaining, limit: RATE_LIMIT_RPM, resetAt };
+    } catch (err: any) {
+      this.logger.warn(
+        `Rate-limit Redis unavailable, falling back to per-pod counter: ${err?.message}`,
+      );
+      return this.trackRequestCountInMemory(apiKeyId);
+    }
+  }
+
+  private trackRequestCountInMemory(apiKeyId: string): {
+    remaining: number;
+    limit: number;
+    resetAt: number;
+  } {
     const now = Date.now();
     const existing = this.requestCounts.get(apiKeyId);
 

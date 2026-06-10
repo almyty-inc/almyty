@@ -114,6 +114,10 @@ export class UnifiedEndpointController {
       throw new HttpException('Invalid API key', HttpStatus.UNAUTHORIZED);
     }
 
+    if (!apiKey.canMakeRequest()) {
+      throw new HttpException('API key expired or inactive', HttpStatus.UNAUTHORIZED);
+    }
+
     // Find the gateway this key belongs to
     const gateway = await this.gatewayRepository.findOne({
       where: apiKey.gatewayId
@@ -189,6 +193,14 @@ export class UnifiedEndpointController {
         jsonrpc: '2.0',
         id: body?.id ?? null,
         error: { code: -32600, message: 'Invalid API key' },
+      });
+    }
+
+    if (!apiKey.canMakeRequest()) {
+      return res.status(401).json({
+        jsonrpc: '2.0',
+        id: body?.id ?? null,
+        error: { code: -32600, message: 'API key expired or inactive' },
       });
     }
 
