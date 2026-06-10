@@ -16,6 +16,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { Repository } from 'typeorm';
 import { Tool } from '../../../entities/tool.entity';
 import { Api } from '../../../entities/api.entity';
@@ -119,6 +120,8 @@ export class ToolProtocolExecutor {
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
+      httpAgent: ssrfSafeHttpAgent,
+      httpsAgent: ssrfSafeHttpsAgent,
       signal: options.signal,
     };
 
@@ -179,6 +182,8 @@ export class ToolProtocolExecutor {
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
+      httpAgent: ssrfSafeHttpAgent,
+      httpsAgent: ssrfSafeHttpsAgent,
       signal: options.signal,
       headers: {
         'Content-Type': 'application/json',
@@ -278,6 +283,8 @@ export class ToolProtocolExecutor {
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
+      httpAgent: ssrfSafeHttpAgent,
+      httpsAgent: ssrfSafeHttpsAgent,
       signal: options.signal,
     };
 
@@ -357,6 +364,8 @@ export class ToolProtocolExecutor {
       maxContentLength: MAX_CONTENT_LENGTH,
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
+      httpAgent: ssrfSafeHttpAgent,
+      httpsAgent: ssrfSafeHttpsAgent,
       signal: options.signal,
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',
