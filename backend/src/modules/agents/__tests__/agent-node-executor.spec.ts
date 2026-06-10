@@ -552,6 +552,26 @@ describe('AgentNodeExecutor', () => {
       );
       expect(result.output).toBe('real');
     });
+
+    it('selects the input from its incoming edge, not insertion order', async () => {
+      // Two upstreams present; only `b` feeds this parallel node. The old
+      // heuristic returned whichever appeared first in context.nodes (here
+      // `a`); the edge-aware version must return `b` deterministically.
+      const edges: AgentPipelineEdge[] = [
+        { id: 'b-p', source: 'b', target: 'p' } as AgentPipelineEdge,
+      ];
+      const result = await executor.execute(
+        node('parallel', {}, 'p'),
+        buildContext({
+          input: { fallback: true },
+          nodes: { a: { output: 'A' }, b: { output: 'B' } },
+        }),
+        'org-1',
+        undefined,
+        { organizationId: 'org-1', edges },
+      );
+      expect(result.output).toBe('B');
+    });
   });
 
   // ==========================================================================
