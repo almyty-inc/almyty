@@ -93,7 +93,7 @@ export class AgentNodeExecutor {
         return this.executeLoopNode(node, context);
 
       case 'parallel':
-        return this.executeParallelNode(node, context);
+        return this.executeParallelNode(node, context, execOptions);
 
       case 'merge':
         return this.executeMergeNode(node, context, execOptions);
@@ -370,8 +370,19 @@ export class AgentNodeExecutor {
   }
 
   /**
-   * Execute a loop node — iterates over an array expression,
-   * exposing {{loop.item}} and {{loop.index}} for downstream nodes.
+   * Execute a loop node.
+   *
+   * Resolves `iterableExpression` to an array and outputs it (capped at
+   * `maxIterations`). Downstream nodes consume the collected array via
+   * `{{nodes.<loopId>.output}}`.
+   *
+   * NOTE: this does NOT yet run the downstream sub-graph once per item —
+   * the engine executes by layer, not by per-item sub-execution, so true
+   * fan-out is a separate engine feature. We intentionally do not expose a
+   * `{{loop.item}}`/`{{loop.index}}` context here, because any value set on
+   * `context` would be gone by the time a later layer runs and would
+   * silently resolve to nothing. Outputting the array is the honest,
+   * usable behaviour; per-item fan-out is tracked separately.
    */
   private async executeLoopNode(
     node: AgentPipelineNode,
@@ -397,21 +408,9 @@ export class AgentNodeExecutor {
       ? this.templateResolver.resolveValue(singleRefMatch[1], context)
       : this.templateResolver.resolve(expression, context);
     const items = Array.isArray(resolved) ? resolved : [resolved];
-    const limitedItems = items.slice(0, maxIterations);
-
-    // Store loop results — downstream nodes can reference {{nodes.<loopId>.output}}
-    const results: any[] = [];
-    for (let i = 0; i < limitedItems.length; i++) {
-      // Make loop context available for template resolution
-      (context as any).loop = { item: limitedItems[i], index: i };
-      results.push(limitedItems[i]);
-    }
-
-    // Clean up loop context
-    delete (context as any).loop;
 
     return {
-      output: results,
+      output: items.slice(0, maxIterations),
     };
   }
 
@@ -421,13 +420,18 @@ export class AgentNodeExecutor {
   private async executeParallelNode(
     node: AgentPipelineNode,
     context: ExecutionContext,
+    options?: NodeExecutionOptions,
   ): Promise<NodeExecutionResult> {
-    // Find the first input that has been resolved
-    const inputNodeId = this.getInputNodeId(node, context);
-    const output = inputNodeId ? context.nodes[inputNodeId]?.output : context.input;
+    // Resolve this node's input from its incoming edge (deterministic),
+    // not "the first node that happens to have an output" — under parallel
+    // fan-out, context.nodes insertion order is the nondeterministic
+    // Promise.all settle order, so the old heuristic picked an arbitrary
+    // upstream. Fall back to context.input when no edge output is present.
+    const incoming = this.getIncomingOutputs(node, context, options?.edges);
+    const output = incoming.length > 0 ? incoming[0] : context.input;
 
     return {
-      output: output || context.input,
+      output: output ?? context.input,
     };
   }
 
@@ -524,15 +528,6 @@ export class AgentNodeExecutor {
           executionTime: Date.now() - startTime,
         };
     }
-  }
-
-  private getInputNodeId(node: AgentPipelineNode, context: ExecutionContext): string | null {
-    for (const [nodeId, nodeResult] of Object.entries(context.nodes)) {
-      if (nodeResult.output !== undefined) {
-        return nodeId;
-      }
-    }
-    return null;
   }
 
   /**
