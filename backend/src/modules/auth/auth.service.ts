@@ -16,6 +16,7 @@ import { LoginDto } from './dto/login.dto';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { MailService } from '../mail/mail.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 export interface JwtPayload {
@@ -53,6 +54,7 @@ export class AuthService {
     private userOrganizationRepository: Repository<UserOrganization>,
     private jwtService: JwtService,
     private readonly auditLogService: AuditLogService,
+    private readonly mailService: MailService,
   ) {}
 
   async register(createUserDto: CreateUserDto): Promise<AuthTokens> {
@@ -366,8 +368,10 @@ export class AuthService {
     
     await this.userRepository.save(user);
 
-    // In production, send email with reset link
-    // await this.emailService.sendPasswordResetEmail(user.email, resetToken);
+    // Deliver the reset link. MailService fails soft (logs in dev, returns
+    // false on provider error, never throws), so a mail outage can't break
+    // the request or leak whether the address exists.
+    await this.mailService.sendPasswordReset(user.email, resetToken);
   }
 
   async confirmPasswordReset(token: string, newPassword: string): Promise<void> {
