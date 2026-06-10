@@ -187,24 +187,84 @@ export class McpOAuthController {
       return res.redirect(302, loginUrl);
     }
 
-    // --- User is authenticated — auto-consent for now ---
-    // TODO: Add consent screen UI in the future
-    const authorizationCode = await this.mcpOAuthService.createAuthorizationCode(
-      clientId,
-      user.sub || user.id,
-      gateway.id,
-      organization.id,
-      { redirectUri, codeChallenge, codeChallengeMethod, scope: scope || 'mcp:*' },
-    );
+    // --- User is authenticated — show the consent screen ---
+    // OAuth 2.1 best practice: do NOT silently mint a code. Validate the
+    // request up front (so an invalid client_id / redirect_uri is rejected
+    // here, before the user interacts), then hand off to the front-end
+    // consent page. The code is only issued after the user explicitly
+    // approves, via POST .../authorize.
+    await this.mcpOAuthService.getConsentInfo(clientId, gateway.id, redirectUri, scope);
 
-    // Redirect back to client with the authorization code
-    const redirectUrl = new URL(redirectUri);
-    redirectUrl.searchParams.set('code', authorizationCode);
-    if (state) {
-      redirectUrl.searchParams.set('state', state);
+    const consentUrl = `${this.resolve.getFrontendUrl()}/oauth/consent?${new URLSearchParams({
+      org: orgSlug,
+      gateway: gatewaySlug,
+      response_type: responseType,
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: codeChallenge,
+      code_challenge_method: codeChallengeMethod,
+      ...(scope ? { scope } : {}),
+      ...(state ? { state } : {}),
+      ...(resource ? { resource } : {}),
+    }).toString()}`;
+
+    return res.redirect(302, consentUrl);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3b. Consent details (GET — used by the front-end consent screen)
+  // GET /:orgSlug/:gatewaySlug/oauth-consent
+  //
+  // Returns the human-facing details (client name, gateway name, requested
+  // scopes) for a pending authorization request, after validating it the
+  // same way the code-issuing step does. Requires the user to be logged in
+  // (cookie/Bearer). Returns NO secrets.
+  // ---------------------------------------------------------------------------
+  @Get(':orgSlug/:gatewaySlug/oauth-consent')
+  @Header('Cache-Control', 'no-store')
+  async consentInfo(
+    @Param('orgSlug') orgSlug: string,
+    @Param('gatewaySlug') gatewaySlug: string,
+    @Query('client_id') clientId: string,
+    @Query('redirect_uri') redirectUri: string,
+    @Query('scope') scope: string,
+    @Req() req: any,
+    @Res() res: Response,
+  ) {
+    const { gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
+
+    const user = await this.resolve.tryExtractUser(req);
+    if (!user) {
+      return res
+        .status(HttpStatus.UNAUTHORIZED)
+        .json({ error: 'unauthorized', error_description: 'Login required' });
     }
 
-    return res.redirect(302, redirectUrl.toString());
+    if (!clientId || !redirectUri) {
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        error: 'invalid_request',
+        error_description: 'client_id and redirect_uri are required',
+      });
+    }
+
+    try {
+      const info = await this.mcpOAuthService.getConsentInfo(
+        clientId,
+        gateway.id,
+        redirectUri,
+        scope,
+      );
+      return res.json({
+        clientName: info.clientName,
+        gatewayName: gateway.name,
+        scopes: info.scopes,
+      });
+    } catch (e: any) {
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        error: 'invalid_request',
+        error_description: e?.message || 'Invalid authorization request',
+      });
+    }
   }
 
   // ---------------------------------------------------------------------------

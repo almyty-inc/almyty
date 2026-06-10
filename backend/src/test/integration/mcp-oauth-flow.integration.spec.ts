@@ -143,7 +143,9 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     const codeVerifier = crypto.randomBytes(32).toString('base64url');
     const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
 
-    const authRes = await request(app.getHttpServer())
+    // GET authorize now lands on the consent screen instead of minting a
+    // code directly. Confirm that, then approve via POST to obtain the code.
+    const consentRes = await request(app.getHttpServer())
       .get(`/${ORG_SLUG}/almyty/authorize`)
       .set('Cookie', accessTokenCookie)
       .query({
@@ -155,9 +157,20 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
         state: 'setup',
       })
       .expect(302);
+    expect(consentRes.headers.location).toContain('/oauth/consent');
 
-    const callbackUrl = new URL(authRes.headers.location);
-    const authCode = callbackUrl.searchParams.get('code');
+    const approveRes = await request(app.getHttpServer())
+      .post(`/${ORG_SLUG}/almyty/authorize`)
+      .set('Cookie', accessTokenCookie)
+      .send({
+        response_type: 'code',
+        client_id: clientId,
+        redirect_uri: 'http://localhost:12345/callback',
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+        state: 'setup',
+      });
+    const authCode = approveRes.body.code;
 
     const tokenRes = await request(app.getHttpServer())
       .post(`/${ORG_SLUG}/almyty/token`)
@@ -262,7 +275,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
       expect(res.headers.location).toMatch(/\/auth\/login\?/);
     });
 
-    it('issues auth code when user has JWT cookie', async () => {
+    it('redirects an authenticated user to the consent screen (no code yet)', async () => {
       // First register a real client
       const regRes = await request(app.getHttpServer())
         .post(`/${ORG_SLUG}/almyty/register`)
@@ -290,10 +303,24 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
         })
         .expect(302);
 
-      // Should redirect to callback with code
-      expect(res.headers.location).toContain('http://localhost:9999/callback');
-      expect(res.headers.location).toContain('code=');
-      expect(res.headers.location).toContain('state=test-state');
+      // SECURITY: GET must land on the consent screen, NOT mint a code.
+      expect(res.headers.location).toContain('/oauth/consent');
+      expect(res.headers.location).toContain(`client_id=${clientId}`);
+      expect(res.headers.location).not.toContain('code=');
+
+      // Approving via POST issues the code and redirects back to the client.
+      const approve = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/authorize`)
+        .set('Cookie', accessTokenCookie)
+        .send({
+          response_type: 'code',
+          client_id: clientId,
+          redirect_uri: 'http://localhost:9999/callback',
+          code_challenge: codeChallenge,
+          code_challenge_method: 'S256',
+          state: 'test-state',
+        });
+      expect(approve.body.code).toBeTruthy();
     });
   });
 

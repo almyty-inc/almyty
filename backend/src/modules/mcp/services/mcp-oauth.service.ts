@@ -302,6 +302,33 @@ export class McpOAuthService {
     return response;
   }
 
+
+  // -----------------------------------------------------------------------
+  // 3c. Consent info — validate a pending authorization request and return
+  // the human-facing details the consent screen needs. Validates the same
+  // way createAuthorizationCode does (client active for this gateway,
+  // redirect_uri registered) so the consent screen never displays — and a
+  // user can never approve — a request that the code-issuing step would
+  // reject. Returns NO secrets.
+  // -----------------------------------------------------------------------
+  async getConsentInfo(
+    clientId: string,
+    gatewayId: string,
+    redirectUri: string,
+    scope?: string,
+  ): Promise<{ clientName: string; scopes: string[] }> {
+    const client = await this.oauthClientRepository.findOne({
+      where: { clientId, gatewayId, isActive: true },
+    });
+    if (!client) {
+      throw new BadRequestException('Invalid or inactive client');
+    }
+    if (!client.redirectUris.includes(redirectUri)) {
+      throw new BadRequestException('redirect_uri does not match any registered URI');
+    }
+    const scopes = (scope || 'mcp:*').split(/\s+/).filter(Boolean);
+    return { clientName: client.clientName, scopes };
+  }
   // -----------------------------------------------------------------------
   // 4. Create Authorization Code
   // -----------------------------------------------------------------------

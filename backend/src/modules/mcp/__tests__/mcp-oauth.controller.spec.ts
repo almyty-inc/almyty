@@ -77,6 +77,7 @@ describe('McpOAuthController', () => {
           provide: McpOAuthService,
           useValue: {
             createAuthorizationCode: jest.fn(),
+            getConsentInfo: jest.fn().mockResolvedValue({ clientName: 'Test Client', scopes: ['mcp:tools'] }),
             exchangeCode: jest.fn(),
             refreshToken: jest.fn(),
             registerClient: jest.fn(),
@@ -964,144 +965,145 @@ describe('McpOAuthController', () => {
       expect(returnTo).toContain('code_challenge_method=S256');
     });
 
-    it('should redirect to client with authorization code when user is authenticated', async () => {
+    it('redirects to the consent screen when the user is authenticated', async () => {
       const res = mockRes();
-      const mockAuthCode = 'auth-code-abc123';
-
-      jest.spyOn(mcpOAuthService, 'createAuthorizationCode').mockResolvedValue(mockAuthCode);
 
       await controller.authorize(
-        orgSlug,
-        gatewaySlug,
-        validQuery.responseType,
-        validQuery.clientId,
-        validQuery.redirectUri,
-        validQuery.codeChallenge,
-        validQuery.codeChallengeMethod,
-        validQuery.scope,
-        validQuery.state,
-        validQuery.resource,
-        mockReq({ id: 'user-1' }),
-        res,
+        orgSlug, gatewaySlug,
+        validQuery.responseType, validQuery.clientId, validQuery.redirectUri,
+        validQuery.codeChallenge, validQuery.codeChallengeMethod,
+        validQuery.scope, validQuery.state, validQuery.resource,
+        mockReq({ id: 'user-1' }), res,
       );
 
-      expect(res.redirect).toHaveBeenCalledWith(
-        302,
-        expect.stringContaining(`code=${mockAuthCode}`),
-      );
+      const url = res.redirect.mock.calls[0][1];
+      expect(res.redirect).toHaveBeenCalledWith(302, expect.stringContaining('/oauth/consent?'));
+      expect(url).toContain(`client_id=${validQuery.clientId}`);
+      // SECURITY: GET must NOT mint a code — consent happens first.
+      expect(url).not.toContain('code=');
+      expect(mcpOAuthService.createAuthorizationCode).not.toHaveBeenCalled();
     });
 
-    it('should include state in redirect when user is authenticated', async () => {
+    it('validates the request before redirecting to consent (rejects an invalid client)', async () => {
       const res = mockRes();
-      const mockAuthCode = 'auth-code-abc123';
+      jest
+        .spyOn(mcpOAuthService, 'getConsentInfo')
+        .mockRejectedValueOnce(new Error('Invalid or inactive client'));
 
-      jest.spyOn(mcpOAuthService, 'createAuthorizationCode').mockResolvedValue(mockAuthCode);
-
-      await controller.authorize(
-        orgSlug,
-        gatewaySlug,
-        validQuery.responseType,
-        validQuery.clientId,
-        validQuery.redirectUri,
-        validQuery.codeChallenge,
-        validQuery.codeChallengeMethod,
-        validQuery.scope,
-        'my-state-value',
-        validQuery.resource,
-        mockReq({ id: 'user-1' }),
-        res,
-      );
-
-      const redirectUrl = res.redirect.mock.calls[0][1];
-      expect(redirectUrl).toContain('state=my-state-value');
+      await expect(
+        controller.authorize(
+          orgSlug, gatewaySlug,
+          validQuery.responseType, validQuery.clientId, validQuery.redirectUri,
+          validQuery.codeChallenge, validQuery.codeChallengeMethod,
+          validQuery.scope, validQuery.state, validQuery.resource,
+          mockReq({ id: 'user-1' }), res,
+        ),
+      ).rejects.toThrow('Invalid or inactive client');
+      expect(res.redirect).not.toHaveBeenCalled();
     });
 
-    it('should not include state in redirect when state is not provided', async () => {
+    it('carries the OAuth params + state through to the consent URL', async () => {
       const res = mockRes();
-      const mockAuthCode = 'auth-code-abc123';
-
-      jest.spyOn(mcpOAuthService, 'createAuthorizationCode').mockResolvedValue(mockAuthCode);
 
       await controller.authorize(
-        orgSlug,
-        gatewaySlug,
-        validQuery.responseType,
-        validQuery.clientId,
-        validQuery.redirectUri,
-        validQuery.codeChallenge,
-        validQuery.codeChallengeMethod,
-        validQuery.scope,
-        undefined as any,
-        validQuery.resource,
-        mockReq({ id: 'user-1' }),
-        res,
+        orgSlug, gatewaySlug,
+        validQuery.responseType, validQuery.clientId, validQuery.redirectUri,
+        validQuery.codeChallenge, validQuery.codeChallengeMethod,
+        validQuery.scope, 'my-state-value', validQuery.resource,
+        mockReq({ id: 'user-1' }), res,
       );
 
-      const redirectUrl = res.redirect.mock.calls[0][1];
-      expect(redirectUrl).not.toContain('state=');
+      const url = new URL(res.redirect.mock.calls[0][1]);
+      const q = url.searchParams;
+      expect(url.pathname).toBe('/oauth/consent');
+      expect(q.get('org')).toBe(orgSlug);
+      expect(q.get('gateway')).toBe(gatewaySlug);
+      expect(q.get('response_type')).toBe('code');
+      expect(q.get('client_id')).toBe(validQuery.clientId);
+      expect(q.get('redirect_uri')).toBe(validQuery.redirectUri);
+      expect(q.get('code_challenge_method')).toBe('S256');
+      expect(q.get('state')).toBe('my-state-value');
     });
 
-    it('should use mcp:* as default scope when scope is not provided', async () => {
+    it('omits state from the consent URL when none is provided', async () => {
       const res = mockRes();
 
-      jest.spyOn(mcpOAuthService, 'createAuthorizationCode').mockResolvedValue('auth-code');
-
       await controller.authorize(
-        orgSlug,
-        gatewaySlug,
-        validQuery.responseType,
-        validQuery.clientId,
-        validQuery.redirectUri,
-        validQuery.codeChallenge,
-        validQuery.codeChallengeMethod,
-        undefined as any,
-        validQuery.state,
-        validQuery.resource,
-        mockReq({ id: 'user-1' }),
-        res,
+        orgSlug, gatewaySlug,
+        validQuery.responseType, validQuery.clientId, validQuery.redirectUri,
+        validQuery.codeChallenge, validQuery.codeChallengeMethod,
+        validQuery.scope, undefined as any, validQuery.resource,
+        mockReq({ id: 'user-1' }), res,
       );
 
-      expect(mcpOAuthService.createAuthorizationCode).toHaveBeenCalledWith(
-        validQuery.clientId,
-        'user-1',
-        mockGateway.id,
-        mockOrganization.id,
-        expect.objectContaining({ scope: 'mcp:*' }),
-      );
+      const url = new URL(res.redirect.mock.calls[0][1]);
+      expect(url.searchParams.has('state')).toBe(false);
     });
 
-    it('should call createAuthorizationCode with correct parameters', async () => {
+    it('validates with the default scope when scope is omitted', async () => {
       const res = mockRes();
-
-      jest.spyOn(mcpOAuthService, 'createAuthorizationCode').mockResolvedValue('auth-code');
+      const spy = jest.spyOn(mcpOAuthService, 'getConsentInfo');
 
       await controller.authorize(
-        orgSlug,
-        gatewaySlug,
-        validQuery.responseType,
-        validQuery.clientId,
-        validQuery.redirectUri,
-        validQuery.codeChallenge,
-        validQuery.codeChallengeMethod,
-        validQuery.scope,
-        validQuery.state,
-        validQuery.resource,
-        mockReq({ id: 'user-1' }),
-        res,
+        orgSlug, gatewaySlug,
+        validQuery.responseType, validQuery.clientId, validQuery.redirectUri,
+        validQuery.codeChallenge, validQuery.codeChallengeMethod,
+        undefined as any, validQuery.state, validQuery.resource,
+        mockReq({ id: 'user-1' }), res,
       );
 
-      expect(mcpOAuthService.createAuthorizationCode).toHaveBeenCalledWith(
-        validQuery.clientId,
-        'user-1',
-        mockGateway.id,
-        mockOrganization.id,
-        {
-          redirectUri: validQuery.redirectUri,
-          codeChallenge: validQuery.codeChallenge,
-          codeChallengeMethod: validQuery.codeChallengeMethod,
-          scope: validQuery.scope,
-        },
+      expect(spy).toHaveBeenCalledWith(
+        validQuery.clientId, mockGateway.id, validQuery.redirectUri, undefined,
       );
+    });
+  });
+
+  describe('consentInfo', () => {
+    const jsonRes = () => {
+      const res: any = {};
+      res.status = jest.fn().mockReturnValue(res);
+      res.json = jest.fn().mockReturnValue(res);
+      return res;
+    };
+
+    it('returns client name, gateway name, and scopes for a valid request', async () => {
+      const res = jsonRes();
+      jest
+        .spyOn(mcpOAuthService, 'getConsentInfo')
+        .mockResolvedValue({ clientName: 'Acme', scopes: ['mcp:tools'] });
+
+      await controller.consentInfo(
+        orgSlug, gatewaySlug, 'client-1', 'https://example.com/cb', 'mcp:tools',
+        { user: { id: 'user-1' } }, res,
+      );
+
+      expect(res.json).toHaveBeenCalledWith({
+        clientName: 'Acme',
+        gatewayName: mockGateway.name,
+        scopes: ['mcp:tools'],
+      });
+    });
+
+    it('returns 401 when the user is not authenticated', async () => {
+      const res = jsonRes();
+      await controller.consentInfo(
+        orgSlug, gatewaySlug, 'client-1', 'https://example.com/cb', 'mcp:tools',
+        { /* no user, no cookie */ }, res,
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    it('returns 400 for an invalid client/redirect', async () => {
+      const res = jsonRes();
+      jest
+        .spyOn(mcpOAuthService, 'getConsentInfo')
+        .mockRejectedValue(new Error('redirect_uri does not match any registered URI'));
+
+      await controller.consentInfo(
+        orgSlug, gatewaySlug, 'client-1', 'https://evil.example/cb', 'mcp:tools',
+        { user: { id: 'user-1' } }, res,
+      );
+      expect(res.status).toHaveBeenCalledWith(400);
     });
   });
 
