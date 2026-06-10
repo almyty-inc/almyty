@@ -16,6 +16,7 @@ import { Toaster } from '@/components/ui/toaster'
 
 // Auth pages (kept eager — first thing users see)
 import { LoginPage } from '@/pages/auth/login'
+import { OAuthConsentPage } from '@/pages/oauth/consent'
 import { RegisterPage } from '@/pages/auth/register'
 
 // Store
@@ -127,6 +128,9 @@ function App() {
             </Routes>
           </AuthLayout>
         } />
+
+        {/* OAuth consent screen — standalone, self-contained auth handling */}
+        <Route path="/oauth/consent" element={<OAuthConsentPage />} />
         
         {/* Default redirect */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
