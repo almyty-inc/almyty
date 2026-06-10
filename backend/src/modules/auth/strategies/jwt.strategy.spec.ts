@@ -72,6 +72,51 @@ describe('JwtStrategy', () => {
       expect((result as any).currentOrganizationId).toBe('org-1');
     });
 
+    it('rejects a token whose tv is stale (revoked by password change)', async () => {
+      const payload = {
+        sub: 'user-1',
+        email: 't@example.com',
+        firstName: 'T',
+        lastName: 'U',
+        organizations: [],
+        tv: 0,
+      } as any;
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        isActive: true,
+        tokenVersion: 1, // bumped after this token was minted
+        organizationMemberships: [],
+      } as any);
+
+      await expect(
+        strategy.validate({ headers: {} } as any, payload),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('accepts a token whose tv matches the current tokenVersion', async () => {
+      const payload = {
+        sub: 'user-1',
+        email: 't@example.com',
+        firstName: 'T',
+        lastName: 'U',
+        organizations: [],
+        tv: 3,
+      } as any;
+      const mockUser = {
+        id: 'user-1',
+        isActive: true,
+        tokenVersion: 3,
+        organizationMemberships: [
+          { organizationId: 'org-1', role: 'admin', organization: { id: 'org-1', name: 'O' } },
+        ],
+      } as any;
+      userRepository.findOne.mockResolvedValue(mockUser);
+
+      await expect(
+        strategy.validate({ headers: {} } as any, payload),
+      ).resolves.toBe(mockUser);
+    });
+
     it('should honor X-Organization-Id header for multi-org users', async () => {
       const payload = {
         sub: 'user-1',

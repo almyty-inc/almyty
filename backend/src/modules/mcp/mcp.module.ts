@@ -63,11 +63,20 @@ import { GatewaysModule } from '../gateways/gateways.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get('JWT_SECRET', 'dev-jwt-secret'),
-        signOptions: { issuer: 'almyty', audience: 'almyty-api' },
-        verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
-      }),
+      useFactory: (config: ConfigService) => {
+        const secret = config.get<string>('JWT_SECRET');
+        if (!secret && process.env.NODE_ENV === 'production') {
+          throw new Error(
+            'JWT_SECRET environment variable is required in production. ' +
+              'Refusing to start the MCP module with an undefined signing key.',
+          );
+        }
+        return {
+          secret: secret || 'dev-jwt-secret',
+          signOptions: { issuer: 'almyty', audience: 'almyty-api' },
+          verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
+        };
+      },
     }),
   ],
   controllers: [McpOAuthDiscoveryController, McpOAuthController, McpController, McpTransportController],

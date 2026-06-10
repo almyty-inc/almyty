@@ -22,6 +22,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { Tool } from '../../../entities/tool.entity';
 import { Api } from '../../../entities/api.entity';
 import { Operation } from '../../../entities/operation.entity';
@@ -173,6 +174,10 @@ export class ToolHttpExecutor {
         signal: options.signal,
         maxContentLength: MAX_CONTENT_LENGTH,
         maxBodyLength: MAX_BODY_LENGTH,
+        // SSRF: never follow redirects past the validateUrl gate.
+        maxRedirects: 0,
+        httpAgent: ssrfSafeHttpAgent,
+        httpsAgent: ssrfSafeHttpsAgent,
         headers: safeHeaders,
         params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
         paramsSerializer: (params: any) => {
@@ -361,6 +366,10 @@ export class ToolHttpExecutor {
         signal: options.signal,
         maxContentLength: MAX_CONTENT_LENGTH,
         maxBodyLength: MAX_BODY_LENGTH,
+        // SSRF: never follow redirects past the validateUrl gate.
+        maxRedirects: 0,
+        httpAgent: ssrfSafeHttpAgent,
+        httpsAgent: ssrfSafeHttpsAgent,
         params: queryParams,
         paramsSerializer: (params: any) => {
           const parts: string[] = [];

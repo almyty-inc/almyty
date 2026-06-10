@@ -277,6 +277,57 @@ describe('AgentOpenAICompatController', () => {
     });
   });
 
+  describe('rate limit (Redis-backed)', () => {
+    const makeRedisController = (redis: any) =>
+      new AgentOpenAICompatController(
+        { getAgent: jest.fn().mockResolvedValue({ id: 'agent-1', name: 'T', status: 'active' }), findByName: jest.fn(), findAllActive: jest.fn() } as any,
+        { execute: jest.fn().mockResolvedValue({ id: 'exec-1', output: 'hi', status: 'completed', totalTokens: 1 }) } as any,
+        { findOne: jest.fn().mockResolvedValue(makeApiKey()), update: jest.fn().mockResolvedValue({ affected: 1 }) } as any,
+        { handleSync: jest.fn(), handleStreaming: jest.fn() } as any,
+        redis,
+      );
+
+    it('uses Redis INCR and sets the window TTL on first request', async () => {
+      const redis = { incr: jest.fn().mockResolvedValue(1), expire: jest.fn().mockResolvedValue(1) };
+      const res = makeRes();
+      await makeRedisController(redis).chatCompletions(
+        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        'Bearer test-key-123',
+        makeReq(),
+        res,
+      );
+      expect(redis.incr).toHaveBeenCalledWith(expect.stringContaining('openai_rl:'));
+      expect(redis.expire).toHaveBeenCalledWith(expect.any(String), 70);
+      expect(res.setHeader).toHaveBeenCalledWith('X-RateLimit-Remaining', '59');
+    });
+
+    it('returns 429 when the shared Redis counter exceeds the limit', async () => {
+      const redis = { incr: jest.fn().mockResolvedValue(61), expire: jest.fn().mockResolvedValue(1) };
+      const res = makeRes();
+      await makeRedisController(redis).chatCompletions(
+        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        'Bearer test-key-123',
+        makeReq(),
+        res,
+      );
+      expect(res.status).toHaveBeenCalledWith(429);
+    });
+
+    it('falls back to the in-memory counter when Redis throws', async () => {
+      const redis = { incr: jest.fn().mockRejectedValue(new Error('conn refused')), expire: jest.fn() };
+      const res = makeRes();
+      await makeRedisController(redis).chatCompletions(
+        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        'Bearer test-key-123',
+        makeReq(),
+        res,
+      );
+      // Still served (first in-memory hit), headers present, not a 429.
+      expect(res.setHeader).toHaveBeenCalledWith('X-RateLimit-Limit', '60');
+      expect(res.status).not.toHaveBeenCalledWith(429);
+    });
+  });
+
   // ── HTTP status codes ───────────────────────────────────────────────
 
   describe('HTTP status codes', () => {

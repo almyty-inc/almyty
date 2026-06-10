@@ -23,7 +23,7 @@ const BLOCKED_IP_PATTERNS = [
   /^100\.(6[4-9]|[7-9]\d|1[0-2][0-7])\./, // Shared address space
   /^198\.1[89]\./,             // Benchmark testing
   /^::1$/,                     // IPv6 loopback
-  /^fc00:/i,                   // IPv6 unique local
+  /^f[cd][0-9a-f]{2}:/i,       // IPv6 unique local (fc00::/7)
   /^fe80:/i,                   // IPv6 link-local
 ];
 
@@ -31,6 +31,11 @@ const BLOCKED_HOSTNAMES = [
   'localhost',
   'metadata.google.internal',
   'metadata.google.com',
+  'metadata.aws.internal',
+  'instance-data',
+  'instance-data.ec2.internal',
+  'metadata.azure.com',
+  'metadata.azure.net',
   'kubernetes.default',
   'kubernetes.default.svc',
 ];
@@ -85,16 +90,37 @@ export function validateUrl(urlString: string): UrlValidationResult {
     }
   }
 
+  // Normalise IPv4-mapped IPv6 (::ffff:127.0.0.1) to its embedded v4
+  // so the v4 ban patterns below catch it. net.isIP returns 6 for the
+  // mapped form, so without this it skips the v4 checks entirely.
+  let ipForCheck = hostname;
+  const mapped = hostname.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
+  if (mapped) {
+    ipForCheck = mapped[1];
+  }
+
+  // Reject ambiguous / non-canonical numeric host forms — decimal
+  // (2130706433), hex (0x7f000001), or short-dotted (127.1) integers.
+  // net.isIP returns 0 for these, so they'd otherwise sail past the
+  // IP-range checks as "hostnames", yet the OS resolver expands them
+  // to real (often loopback/internal) addresses. Canonical dotted
+  // quads already match net.isIP === 4.
+  if (
+    net.isIP(ipForCheck) === 0 &&
+    /^(?:0x[0-9a-f]+|\d+|\d{1,3}(?:\.\d{1,3}){1,3})$/i.test(ipForCheck)
+  ) {
+    return { valid: false, error: `Blocked ambiguous numeric host: ${hostname}` };
+  }
   // Check if hostname is an IP address
-  if (net.isIP(hostname)) {
+  if (net.isIP(ipForCheck)) {
     // Check cloud metadata endpoints first (more specific match)
-    if (CLOUD_METADATA_IPS.includes(hostname)) {
+    if (CLOUD_METADATA_IPS.includes(ipForCheck)) {
       return { valid: false, error: `Blocked cloud metadata endpoint: ${hostname}` };
     }
 
     // Check against blocked IP patterns
     for (const pattern of BLOCKED_IP_PATTERNS) {
-      if (pattern.test(hostname)) {
+      if (pattern.test(ipForCheck)) {
         return { valid: false, error: `Blocked private/reserved IP: ${hostname}` };
       }
     }

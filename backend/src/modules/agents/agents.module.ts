@@ -34,6 +34,7 @@ import { AgentStepProcessor } from './agent-step-processor';
 import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
 import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
+import { AgentRunReaperService } from './agent-run-reaper.service';
 import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentsController } from './agents.controller';
 import { AgentExecutionController } from './agent-execution.controller';

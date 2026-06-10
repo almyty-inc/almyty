@@ -144,4 +144,36 @@ export class MailService {
         .replace(/[\r\n]+/g, ' '),
     });
   }
+
+  async sendPasswordReset(to: string, resetToken: string): Promise<boolean> {
+    const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
+    const encodedToken = encodeURIComponent(resetToken);
+    const resetUrl = `${baseUrl}/auth/reset-password?token=${encodedToken}`;
+    const safeUrl = this.escapeHtml(resetUrl);
+
+    return this.send({
+      to,
+      subject: 'Reset your almyty password',
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+          <h2 style="color: #8b5cf6; margin-bottom: 8px;">almyty</h2>
+          <p style="font-size: 16px; color: #18181b;">
+            We received a request to reset your password. Click below to choose a new one.
+          </p>
+          <a href="${safeUrl}"
+             style="display: inline-block; background: #8b5cf6; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 24px 0;">
+            Reset Password
+          </a>
+          <p style="font-size: 13px; color: #71717a;">
+            This link expires in 1 hour. If you didn't request a reset, you can safely ignore this email.
+          </p>
+          <p style="font-size: 12px; color: #a1a1aa; margin-top: 32px;">
+            almyty — The open platform for AI agents
+          </p>
+        </div>
+      `,
+      text: `Reset your almyty password: ${resetUrl} (expires in 1 hour). If you didn't request this, ignore this email.`
+        .replace(/[\r\n]+/g, ' '),
+    });
+  }
 }
