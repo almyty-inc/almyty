@@ -151,35 +151,19 @@ export class OrganizationsService {
   async update(id: string, updateOrganizationDto: UpdateOrganizationDto): Promise<Organization> {
     const organization = await this.findOne(id);
 
-    console.log('[UPDATE_ORG] Updating org:', {
-      id,
-      currentName: organization.name,
-      currentSlug: organization.slug,
-      newName: updateOrganizationDto.name,
-      newSlug: updateOrganizationDto.slug,
-    });
-
     // Check for conflicts if name or slug is being updated
     if (updateOrganizationDto.name || updateOrganizationDto.slug) {
       const conflictWhere: any[] = [];
 
       // Only check for conflicts if the name is actually changing
       if (updateOrganizationDto.name && updateOrganizationDto.name !== organization.name) {
-        console.log('[UPDATE_ORG] Name is changing, will check for conflicts');
         conflictWhere.push({ name: updateOrganizationDto.name });
-      } else if (updateOrganizationDto.name) {
-        console.log('[UPDATE_ORG] Name NOT changing (same value), skip conflict check');
       }
 
       // Only check for conflicts if the slug is actually changing
       if (updateOrganizationDto.slug && updateOrganizationDto.slug !== organization.slug) {
-        console.log('[UPDATE_ORG] Slug is changing, will check for conflicts');
         conflictWhere.push({ slug: updateOrganizationDto.slug });
-      } else if (updateOrganizationDto.slug) {
-        console.log('[UPDATE_ORG] Slug NOT changing (same value), skip conflict check');
       }
-
-      console.log('[UPDATE_ORG] conflictWhere array length:', conflictWhere.length);
 
       // Only perform the conflict check if there are fields to check
       if (conflictWhere.length > 0) {
@@ -187,10 +171,7 @@ export class OrganizationsService {
           where: conflictWhere,
         });
 
-        console.log('[UPDATE_ORG] Conflict check result:', existingOrg ? `Found org ${existingOrg.id}` : 'No conflict');
-
         if (existingOrg && existingOrg.id !== id) {
-          console.log('[UPDATE_ORG] ERROR: Conflict detected!');
           throw new ConflictException('Organization with this name or slug already exists');
         }
       }
