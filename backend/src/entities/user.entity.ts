@@ -36,6 +36,17 @@ export class User {
   @Column({ default: false })
   isVerified: boolean;
 
+  /**
+   * Bumped to invalidate all previously issued access/refresh tokens for
+   * this user (password change, password reset). JWTs carry the value
+   * they were minted with; the JWT strategy and refresh path reject any
+   * token whose `tv` claim doesn't match. A missing claim is treated as 0
+   * so tokens issued before this column existed stay valid until the
+   * first bump.
+   */
+  @Column({ default: 0 })
+  tokenVersion: number;
+
   @Column({ nullable: true })
   verificationToken: string;
 
