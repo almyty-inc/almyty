@@ -277,7 +277,8 @@ export class AgentRuntimeService implements OnModuleInit {
     this.events.ensureRunEmitter(savedRun.id);
 
     // Enqueue first step
-    await this.runtimeQueue.add('next-step', { runId: savedRun.id }, {
+    await this.runtimeQueue.add('next-step', { runId: savedRun.id, seq: 0 }, {
+      jobId: `step:${savedRun.id}:0`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
       removeOnComplete: 100,
@@ -381,8 +382,12 @@ export class AgentRuntimeService implements OnModuleInit {
     run.status = AgentRunStatus.RUNNING;
     await this.runRepository.save(run);
 
-    // Resume execution
-    await this.runtimeQueue.add('next-step', { runId }, {
+    // Resume execution. Seed the seq from a timestamp so the resumed
+    // job's id sits outside the sequential range used before the pause,
+    // and a duplicate resume within the same tick still collapses to one.
+    const resumeSeq = Date.now();
+    await this.runtimeQueue.add('next-step', { runId, seq: resumeSeq }, {
+      jobId: `step:${runId}:${resumeSeq}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
     });
