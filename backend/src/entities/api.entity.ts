@@ -126,6 +126,10 @@ export class Api {
   })
   operations: Operation[];
 
+  // Virtual — populated by loadRelationCountAndMap in list queries so the
+  // table can show an operation count without loading the heavy relation.
+  operationCount?: number;
+
   @OneToMany(() => Resource, resource => resource.api, {
     cascade: true,
   })
