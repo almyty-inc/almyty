@@ -11,7 +11,7 @@ export function ToolCallNode({ data, selected }: NodeProps) {
         <span className="text-xs font-semibold text-purple-700 dark:text-purple-300">Tool Call</span>
       </div>
       <div className="p-3">
-        <div className="text-sm font-medium truncate">{(data.toolName as string) || 'Select tool'}</div>
+        <div className="text-sm font-medium truncate">{(data.toolName as string) || (data.label as string) || 'Select tool'}</div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
           {data.toolId ? 'Configured' : 'Not configured'}
         </div>
