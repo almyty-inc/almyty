@@ -13,6 +13,7 @@ import { VersionedEntity } from 'typeorm-versions';
 import { Organization } from './organization.entity';
 import { Credential } from './credential.entity';
 import { sanitizeHeaders } from '../common/security/url-validator';
+import { encryptField, decryptField, isEncrypted } from '../common/security/field-crypto';
 import { Conversation } from './conversation.entity';
 import { UsageMetric } from './usage-metric.entity';
 
@@ -306,8 +307,33 @@ export class LlmProvider {
     }
   }
 
+  /**
+   * Encrypt the API key before it's persisted. Call from the service layer
+   * right before save() (idempotent — already-encrypted values are left
+   * alone). Mirrors Credential.encryptSensitiveData().
+   */
+  encryptSensitiveData(): void {
+    const key = this.configuration?.apiKey;
+    if (typeof key === 'string' && key.length > 0 && !isEncrypted(key)) {
+      this.configuration.apiKey = encryptField(key);
+    }
+  }
+
+  /**
+   * The plaintext API key for use in an outbound request. Transparently
+   * decrypts the stored value; a legacy plaintext value passes through
+   * unchanged. Every read site must go through this, never
+   * configuration.apiKey directly.
+   */
+  getDecryptedApiKey(): string | undefined {
+    const key = this.configuration?.apiKey;
+    if (typeof key !== 'string' || key.length === 0) return undefined;
+    return decryptField(key);
+  }
+
   getAuthHeaders(): Record<string, string> {
     const headers: Record<string, string> = {};
+    const apiKey = this.getDecryptedApiKey();
 
     switch (this.type) {
       case LlmProviderType.OPENAI:
@@ -319,28 +345,28 @@ export class LlmProvider {
       case LlmProviderType.TOGETHER:
       case LlmProviderType.COHERE:
       case LlmProviderType.HUGGINGFACE:
-        if (this.configuration.apiKey) {
-          headers['Authorization'] = `Bearer ${this.configuration.apiKey}`;
+        if (apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`;
         }
         break;
 
       case LlmProviderType.OPENROUTER:
-        if (this.configuration.apiKey) {
-          headers['Authorization'] = `Bearer ${this.configuration.apiKey}`;
+        if (apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`;
           headers['HTTP-Referer'] = 'https://almyty.com';
           headers['X-Title'] = 'almyty';
         }
         break;
 
       case LlmProviderType.ANTHROPIC:
-        if (this.configuration.apiKey) {
-          headers['x-api-key'] = this.configuration.apiKey;
+        if (apiKey) {
+          headers['x-api-key'] = apiKey;
           headers['anthropic-version'] = this.configuration.apiVersion || '2023-06-01';
         }
         break;
 
       case LlmProviderType.GOOGLE:
-        if (this.configuration.apiKey) {
+        if (apiKey) {
           // Google uses query parameter for API key
           // headers will be handled differently in the service
         }
@@ -353,10 +379,10 @@ export class LlmProvider {
           // the same guard the HTTP/gRPC tool executors already apply.
           Object.assign(headers, sanitizeHeaders(this.configuration.custom.headers));
         }
-        if (this.configuration.custom?.authMethod === 'bearer' && this.configuration.apiKey) {
-          headers['Authorization'] = `Bearer ${this.configuration.apiKey}`;
-        } else if (this.configuration.custom?.authMethod === 'api_key' && this.configuration.apiKey) {
-          headers['X-API-Key'] = this.configuration.apiKey;
+        if (this.configuration.custom?.authMethod === 'bearer' && apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`;
+        } else if (this.configuration.custom?.authMethod === 'api_key' && apiKey) {
+          headers['X-API-Key'] = apiKey;
         }
         break;
     }

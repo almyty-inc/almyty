@@ -40,8 +40,9 @@ export class EmbeddingService {
     if (organizationId) {
       try {
         const provider = await this.getOpenAIProvider(organizationId);
-        if (provider?.configuration?.apiKey) {
-          const embedding = await this.callOpenAIEmbedding(text, provider.configuration.apiKey, provider.configuration.apiUrl);
+        const apiKey = provider?.getDecryptedApiKey();
+        if (apiKey) {
+          const embedding = await this.callOpenAIEmbedding(text, apiKey, provider.configuration.apiUrl);
           if (embedding) {
             return embedding;
           }
