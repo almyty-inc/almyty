@@ -58,7 +58,7 @@ export class LlmModelsHelper {
       method: 'GET',
       url: `${apiUrl}/models`,
       headers: {
-        'Authorization': `Bearer ${provider.configuration.apiKey}`,
+        'Authorization': `Bearer ${provider.getDecryptedApiKey()}`,
       },
       timeout: 10000,
     });
@@ -104,7 +104,7 @@ export class LlmModelsHelper {
       method: 'GET',
       url: `${apiUrl}/models`,
       headers: {
-        'x-api-key': provider.configuration.apiKey,
+        'x-api-key': provider.getDecryptedApiKey(),
         'anthropic-version': provider.configuration.apiVersion || '2023-06-01',
       },
       timeout: 10000,
@@ -133,7 +133,7 @@ export class LlmModelsHelper {
     created?: number;
     owned_by?: string;
   }>> {
-    const apiKey = provider.configuration.apiKey;
+    const apiKey = provider.getDecryptedApiKey();
     // URL-encode the apiKey. The previous shape interpolated it raw,
     // so a key containing `&`, `#`, or a newline would have broken
     // URL parsing or injected extra query params. Google keys are
