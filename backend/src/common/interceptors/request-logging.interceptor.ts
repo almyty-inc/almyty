@@ -11,6 +11,7 @@ import { Observable } from 'rxjs';
 import { tap, catchError } from 'rxjs/operators';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric, MetricType, MetricStatus } from '../../entities/usage-metric.entity';
+import { getProtocolContext } from './protocol-context';
 
 @Injectable()
 export class RequestLoggingInterceptor implements NestInterceptor {
@@ -29,12 +30,10 @@ export class RequestLoggingInterceptor implements NestInterceptor {
     const response = httpContext.getResponse();
     const startTime = Date.now();
 
-    // Skip health checks and static assets
-    const path = request.path || request.url;
-    if (this.shouldSkip(path)) {
-      return next.handle();
-    }
-
+    // The log/skip decision happens AFTER the handler ran (in logRequest),
+    // not here: protocol traffic to the unified endpoint
+    // (`/:orgSlug/:resourceSlug`) is only recognizable once the handler
+    // has resolved the gateway and attached a ProtocolContext.
     return next.handle().pipe(
       tap(async (responseBody) => {
         await this.logRequest(request, response, startTime, responseBody, null);
@@ -46,17 +45,6 @@ export class RequestLoggingInterceptor implements NestInterceptor {
     );
   }
 
-  private shouldSkip(path: string): boolean {
-    // Only log protocol/gateway requests and tool executions — NOT internal management API calls.
-    // Internal calls (GET /apis, GET /tools, GET /analytics, etc.) are the frontend
-    // talking to itself and would pollute analytics with noise.
-    const isProtocolRequest = this.isProtocolRequest(path);
-    if (isProtocolRequest) return false; // Always log protocol requests
-
-    // Skip everything else — internal management API, health, docs, etc.
-    return true;
-  }
-
   private async logRequest(
     request: any,
     response: any,
@@ -65,15 +53,28 @@ export class RequestLoggingInterceptor implements NestInterceptor {
     error: any,
   ): Promise<void> {
     try {
+      const path = request.path || request.url;
+      const protocolContext = getProtocolContext(request);
+
+      // Only log protocol/gateway requests and tool executions — NOT internal
+      // management API calls. Internal calls (GET /apis, GET /gateways, etc.)
+      // are the frontend talking to its own API and would pollute analytics.
+      if (!protocolContext && !this.isProtocolRequest(path)) {
+        return;
+      }
+
       const responseTime = Date.now() - startTime;
       const statusCode = error?.status || error?.getStatus?.() || response.statusCode || 500;
-      const path = request.path || request.url;
 
-      // Extract gateway and tool context from the request
-      const gatewayId = request.params?.gatewayId || this.extractGatewayId(path);
-      const toolId = request.params?.toolId || this.extractToolId(path, request.body);
+      // Attribution: prefer the context set by the handler that resolved the
+      // gateway — the URL alone can't identify gateway or protocol for
+      // multi-tenant paths like /acme/petstore-mcp.
+      const gatewayId = protocolContext?.gatewayId || request.params?.gatewayId || null;
+      const toolId = request.params?.toolId || this.extractToolId(path) || null;
       const userId = request.user?.id || null;
-      const organizationId = request.user?.currentOrganizationId || null;
+      const organizationId =
+        request.user?.currentOrganizationId || protocolContext?.organizationId || null;
+      const protocol = protocolContext?.protocol || this.detectProtocol(path);
 
       // Create request log
       const log = new RequestLog();
@@ -95,7 +96,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
       log.responseSize = this.estimateSize(responseBody);
       log.timestamp = new Date();
       log.metadata = {
-        protocol: this.detectProtocol(path),
+        protocol,
         organizationId,
         controller: this.extractController(path),
       };
@@ -105,49 +106,48 @@ export class RequestLoggingInterceptor implements NestInterceptor {
         this.logger.warn(`Failed to save request log: ${err.message}`);
       });
 
-      // Also record usage metric for gateway/tool requests
-      if (gatewayId || toolId || this.isProtocolRequest(path)) {
-        const metric = new UsageMetric();
-        metric.type = MetricType.REQUEST_COUNT;
-        metric.value = 1;
-        metric.status = statusCode < 400 ? MetricStatus.SUCCESS :
-                        statusCode === 429 ? MetricStatus.RATE_LIMITED :
-                        statusCode === 401 || statusCode === 403 ? MetricStatus.UNAUTHORIZED :
-                        MetricStatus.ERROR;
-        metric.gatewayId = gatewayId;
-        metric.toolId = toolId;
-        metric.userId = userId;
-        metric.organizationId = organizationId;
-        metric.timestamp = new Date();
-        metric.metadata = {
-          endpoint: path,
-          method: request.method,
-          statusCode,
-          responseSize: this.estimateSize(responseBody),
-          requestSize: this.estimateSize(request.body),
-          userAgent: request.headers?.['user-agent'],
-          ipAddress: request.ip,
-        };
+      // Also record usage metrics
+      const metric = new UsageMetric();
+      metric.type = MetricType.REQUEST_COUNT;
+      metric.value = 1;
+      metric.status = statusCode < 400 ? MetricStatus.SUCCESS :
+                      statusCode === 429 ? MetricStatus.RATE_LIMITED :
+                      statusCode === 401 || statusCode === 403 ? MetricStatus.UNAUTHORIZED :
+                      MetricStatus.ERROR;
+      metric.gatewayId = gatewayId;
+      metric.toolId = toolId;
+      metric.userId = userId;
+      metric.organizationId = organizationId;
+      metric.timestamp = new Date();
+      metric.metadata = {
+        endpoint: path,
+        method: request.method,
+        protocol,
+        statusCode,
+        responseSize: this.estimateSize(responseBody),
+        requestSize: this.estimateSize(request.body),
+        userAgent: request.headers?.['user-agent'],
+        ipAddress: request.ip,
+      };
 
-        this.usageMetricRepository.save(metric).catch(err => {
-          this.logger.warn(`Failed to save usage metric: ${err.message}`);
-        });
+      this.usageMetricRepository.save(metric).catch(err => {
+        this.logger.warn(`Failed to save usage metric: ${err.message}`);
+      });
 
-        // Record response time metric separately
-        const timeMetric = new UsageMetric();
-        timeMetric.type = MetricType.RESPONSE_TIME;
-        timeMetric.value = responseTime;
-        timeMetric.status = metric.status;
-        timeMetric.gatewayId = gatewayId;
-        timeMetric.toolId = toolId;
-        timeMetric.userId = userId;
-        timeMetric.organizationId = organizationId;
-        timeMetric.timestamp = new Date();
+      // Record response time metric separately
+      const timeMetric = new UsageMetric();
+      timeMetric.type = MetricType.RESPONSE_TIME;
+      timeMetric.value = responseTime;
+      timeMetric.status = metric.status;
+      timeMetric.gatewayId = gatewayId;
+      timeMetric.toolId = toolId;
+      timeMetric.userId = userId;
+      timeMetric.organizationId = organizationId;
+      timeMetric.timestamp = new Date();
 
-        this.usageMetricRepository.save(timeMetric).catch(err => {
-          this.logger.warn(`Failed to save response time metric: ${err.message}`);
-        });
-      }
+      this.usageMetricRepository.save(timeMetric).catch(err => {
+        this.logger.warn(`Failed to save response time metric: ${err.message}`);
+      });
     } catch (err) {
       this.logger.warn(`Request logging error: ${err.message}`);
     }
@@ -177,33 +177,28 @@ export class RequestLoggingInterceptor implements NestInterceptor {
     return Buffer.byteLength(str, 'utf8');
   }
 
-  private extractGatewayId(path: string): string | null {
-    // Match gateway protocol paths: /gateways/:endpoint, /:org/:gateway, etc.
-    const gatewayMatch = path.match(/\/gateways\/([^/]+)/);
-    if (gatewayMatch) return null; // Endpoint, not ID — let the controller resolve it
-    return null;
-  }
-
-  private extractToolId(path: string, body: any): string | null {
+  private extractToolId(path: string): string | null {
     // Match tool execution paths
     const toolMatch = path.match(/\/tools\/([0-9a-f-]{36})/);
     if (toolMatch) return toolMatch[1];
-    // MCP tool_call in body
-    if (body?.method === 'tools/call' && body?.params?.name) return null;
     return null;
   }
 
   private detectProtocol(path: string): string | null {
-    if (path.startsWith('/mcp/') || path.includes('/mcp')) return 'mcp';
-    if (path.startsWith('/utcp/') || path.includes('/utcp')) return 'utcp';
-    if (path.startsWith('/a2a/') || path.includes('/a2a')) return 'a2a';
+    // Fallback for fixed protocol routes. Slug-based paths
+    // (/:orgSlug/:resourceSlug) are covered by ProtocolContext instead.
+    if (path === '/mcp' || path.startsWith('/mcp/')) return 'mcp';
+    if (path === '/utcp' || path.startsWith('/utcp/')) return 'utcp';
+    if (path === '/a2a' || path.startsWith('/a2a/')) return 'a2a';
     if (path.includes('/skills') || path.includes('/skill')) return 'skills';
     return null;
   }
 
   private isProtocolRequest(path: string): boolean {
+    // NOTE: management calls under /gateways/* (CRUD, auth config, key
+    // management) are deliberately NOT logged — they used to be, which
+    // filled the analytics Request Log with the dashboard's own API calls.
     return this.detectProtocol(path) !== null ||
-           path.startsWith('/gateways/') ||
            path.match(/\/tools\/[^/]+\/execute/) !== null;
   }
 

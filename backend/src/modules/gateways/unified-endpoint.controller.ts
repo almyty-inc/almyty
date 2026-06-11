@@ -18,6 +18,7 @@ import * as crypto from 'crypto';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../entities/gateway.entity';
 import { Agent } from '../../entities/agent.entity';
+import { setProtocolContext } from '../../common/interceptors/protocol-context';
 import { ApiKey } from '../../entities/api-key.entity';
 import { GatewayResolverService } from '../mcp/services/gateway-resolver.service';
 import { A2AServerService } from '../a2a/a2a-server.service';
@@ -146,6 +147,11 @@ export class UnifiedEndpointController {
       throw new HttpException('Organization not found', HttpStatus.NOT_FOUND);
     }
 
+    setProtocolContext(req, {
+      gatewayId: gateway.id,
+      organizationId: apiKey.organizationId,
+      protocol: 'a2a',
+    });
     const baseUrl = this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
     const card = this.a2aAgentCardService.buildAgentCard(gateway, agent, organization, baseUrl);
     res.setHeader('Cache-Control', 'public, max-age=300');
@@ -220,6 +226,11 @@ export class UnifiedEndpointController {
     }
 
     // Delegate to A2A server
+    setProtocolContext(req, {
+      gatewayId: gateway.id,
+      organizationId: apiKey.organizationId,
+      protocol: 'a2a',
+    });
     return this.a2aServerService.handleJsonRpc(gateway, req, body, res);
   }
 
