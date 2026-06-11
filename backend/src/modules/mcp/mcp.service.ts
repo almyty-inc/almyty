@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
@@ -25,6 +25,8 @@ import { ToolsService } from '../tools/tools.service';
 import { McpToolHandler } from './services/mcp-tool.handler';
 import { McpContentHandler } from './services/mcp-content.handler';
 import { McpServerRequestService } from './services/mcp-server-request.service';
+import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
+import { MetricType } from '../../entities/usage-metric.entity';
 
 @Injectable()
 export class McpService {
@@ -44,6 +46,7 @@ export class McpService {
     private toolHandler: McpToolHandler,
     private contentHandler: McpContentHandler,
     private serverRequestService: McpServerRequestService,
+    @Optional() private readonly metrics?: MetricsRecorderService,
   ) {}
 
   async handleJsonRpc(requestBody: any, organizationId: string, userId?: string, gatewayId?: string): Promise<JsonRpcResponse> {
@@ -235,6 +238,11 @@ export class McpService {
 
     this.sessions.set(sessionId, session);
     this.logger.log(`MCP session initialized: ${sessionId} for org: ${organizationId}`);
+    this.metrics?.record(MetricType.MCP_SESSION, {
+      organizationId,
+      userId: userId || null,
+      gatewayId: gatewayId || null,
+    });
 
     // Resolve gateway name for serverInfo
     let serverName = 'almyty';

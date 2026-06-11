@@ -124,13 +124,46 @@ describe('MonitoringRedisStatsHelper (Postgres-backed)', () => {
   });
 
   describe('getProtocolStats', () => {
-    it('returns the zero-valued protocol shape without touching the DB', async () => {
+    it('maps per-protocol counters and derives mcp latency + error rate', async () => {
+      query
+        .mockResolvedValueOnce([
+          {
+            mcp_sessions: '5',
+            mcp_tool_calls: '40',
+            utcp_manuals: '3',
+            utcp_direct_calls: '11',
+            a2a_messages: '20',
+            a2a_workflows: '8',
+            a2a_active_agents: '2',
+          },
+        ]) // semantic counters
+        .mockResolvedValueOnce([{ avg_rt: '150', total: '50', errors: '5' }]); // mcp request_logs
+
+      await expect(helper.getProtocolStats()).resolves.toEqual({
+        mcp: { sessions: 5, toolCalls: 40, responseTime: 150, errorRate: 0.1 },
+        utcp: { manuals: 3, directCalls: 11, proxyExecutions: 0 },
+        a2a: { activeAgents: 2, messages: 20, workflows: 8 },
+      });
+    });
+
+    it('returns errorRate 0 for mcp when there is no mcp traffic', async () => {
+      query
+        .mockResolvedValueOnce([{}])
+        .mockResolvedValueOnce([{ avg_rt: null, total: '0', errors: '0' }]);
+
+      const stats = await helper.getProtocolStats();
+      expect(stats.mcp.errorRate).toBe(0);
+      expect(stats.mcp.responseTime).toBe(0);
+      expect(stats.utcp.proxyExecutions).toBe(0);
+    });
+
+    it('falls back to the zero shape on query error', async () => {
+      query.mockRejectedValue(new Error('boom'));
       await expect(helper.getProtocolStats()).resolves.toEqual({
         mcp: { sessions: 0, toolCalls: 0, responseTime: 0, errorRate: 0 },
         utcp: { manuals: 0, directCalls: 0, proxyExecutions: 0 },
         a2a: { activeAgents: 0, messages: 0, workflows: 0 },
       });
-      expect(query).not.toHaveBeenCalled();
     });
   });
 

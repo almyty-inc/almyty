@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -17,6 +17,8 @@ import { GatewayTool } from '../../../entities/gateway-tool.entity';
 import { ToolCategory } from '../../../entities/tool-category.entity';
 import { ToolsService } from '../../tools/tools.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
+import { MetricsRecorderService } from '../../../common/metrics/metrics-recorder.service';
+import { MetricType, MetricStatus } from '../../../entities/usage-metric.entity';
 
 @Injectable()
 export class McpToolHandler {
@@ -34,6 +36,7 @@ export class McpToolHandler {
     @Inject(forwardRef(() => ToolExecutorService))
     private toolExecutorService: ToolExecutorService,
     @InjectRedis() private readonly redis: Redis.Redis,
+    @Optional() private readonly metrics?: MetricsRecorderService,
   ) {}
 
   async handleToolsList(params: any, organizationId: string, gatewayId?: string): Promise<any> {
@@ -258,6 +261,13 @@ export class McpToolHandler {
         { userId: userId || null, organizationId },
       );
 
+      this.metrics?.record(MetricType.MCP_TOOL_CALL, {
+        organizationId,
+        userId: userId || null,
+        toolId: tool.id,
+        status: result.success ? MetricStatus.SUCCESS : MetricStatus.ERROR,
+      });
+
       const textContent = !result.success && result.error
         ? result.error
         : typeof result.data === 'string'
@@ -269,6 +279,12 @@ export class McpToolHandler {
         isError: !result.success,
       };
     } catch (error) {
+      this.metrics?.record(MetricType.MCP_TOOL_CALL, {
+        organizationId,
+        userId: userId || null,
+        toolId: tool.id,
+        status: MetricStatus.ERROR,
+      });
       return {
         content: [{ type: 'text', text: `Tool execution failed: ${error.message}` }],
         isError: true,
