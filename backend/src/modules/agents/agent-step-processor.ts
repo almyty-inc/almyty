@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { In } from 'typeorm';
 
-import { AgentRunStatus } from '../../entities/agent-run.entity';
+import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { ConversationStatus } from '../../entities/conversation.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message, MessageRole } from '../../entities/message.entity';
@@ -40,6 +40,12 @@ export class AgentStepProcessor {
       this.s.logger.debug(`Run ${runId} already done (${run.status}), skipping`);
       return 'done';
     }
+
+    // Optimistic-lock token: the step number we believe we're processing.
+    // Every step-completing write is guarded on this via commitStep(), so a
+    // duplicate/concurrent processing of the same step can't double-count
+    // cost or steps — the loser's UPDATE matches 0 rows and it aborts.
+    const expectedStep = run.currentStep;
 
     // Enforce limits
     const limitCheck = this.s.misc.checkLimits(run);
@@ -262,7 +268,7 @@ export class AgentStepProcessor {
               });
               run.currentStep++;
               run.executionTime += stepDuration;
-              await this.s.runRepository.save(run);
+              if (!(await this.commitStep(run, expectedStep))) return 'done';
               this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'sleeping' });
               return 'waiting';
             }
@@ -280,7 +286,7 @@ export class AgentStepProcessor {
               });
               run.currentStep++;
               run.executionTime += stepDuration;
-              await this.s.runRepository.save(run);
+              if (!(await this.commitStep(run, expectedStep))) return 'done';
               this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'waiting_input' });
               return 'waiting';
             }
@@ -457,7 +463,7 @@ export class AgentStepProcessor {
 
         run.currentStep++;
         run.executionTime += stepDuration;
-        await this.s.runRepository.save(run);
+        if (!(await this.commitStep(run, expectedStep))) return 'done';
 
         // Auto-save memory if enabled
         if (agent.memoryConfig?.autoSave) {
@@ -495,11 +501,12 @@ export class AgentStepProcessor {
         run.currentStep++;
         run.executionTime += stepDuration;
 
-        // Update agent stats atomically (see bumpAgentStats
-        // rationale — same race as the engine used to have).
-        await this.s.misc.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost);
+        // Commit the completion with a CAS first: if another worker already
+        // advanced this step, abort without double-counting stats/cost.
+        if (!(await this.commitStep(run, expectedStep))) return 'done';
 
-        await this.s.runRepository.save(run);
+        // Update agent stats atomically (see bumpAgentStats rationale).
+        await this.s.misc.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost);
 
         // Auto-save memory if enabled
         if (agent.memoryConfig?.autoSave) {
@@ -523,13 +530,39 @@ export class AgentStepProcessor {
       run.error = error.message;
       run.executionTime += stepDuration;
 
-      // Update agent stats (failure). bumpAgentStats already
-      // swallows DB errors internally so no outer try/catch needed.
-      await this.s.misc.bumpAgentStats(agent.id, false, run.executionTime, run.totalCost);
+      // Commit the failure with a CAS first: a worker that lost the step
+      // race must not also bump stats or clobber a concurrent success.
+      if (!(await this.commitStep(run, expectedStep))) return 'done';
 
-      await this.s.runRepository.save(run);
+      // bumpAgentStats swallows DB errors internally; no outer try/catch.
+      await this.s.misc.bumpAgentStats(agent.id, false, run.executionTime, run.totalCost);
       this.s.emitEvent(runId, 'run.failed', { error: error.message });
       return 'done';
     }
+  }
+
+  /**
+   * Persist the current run state with an optimistic compare-and-swap on
+   * currentStep. If another worker already advanced this step (duplicate
+   * enqueue or concurrent processing), the guarded UPDATE matches 0 rows
+   * and we return false so the caller aborts without re-counting cost or
+   * steps. Returns true when this worker won the step.
+   */
+  private async commitStep(run: AgentRun, expectedStep: number): Promise<boolean> {
+    const res = await this.s.runRepository.update(
+      { id: run.id, currentStep: expectedStep },
+      {
+        status: run.status,
+        currentStep: run.currentStep,
+        totalCost: run.totalCost,
+        totalTokens: run.totalTokens,
+        executionTime: run.executionTime,
+        steps: run.steps,
+        output: run.output,
+        error: run.error,
+        workingMemory: run.workingMemory,
+      },
+    );
+    return (res.affected ?? 0) > 0;
   }
 }

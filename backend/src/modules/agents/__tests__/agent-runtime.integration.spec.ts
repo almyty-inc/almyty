@@ -111,6 +111,10 @@ describe('AgentRuntimeService (integration)', () => {
         return Promise.resolve([paged, filtered.length]);
       }),
       findByIds: jest.fn().mockResolvedValue([]),
+      // commitStep() guards step writes with a CAS via update(); findOne
+      // returns the stored object by reference so mutations are already
+      // visible — the mock just needs to report the row was updated.
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     // bumpAgentStats uses a queryBuilder chain for an atomic
@@ -499,6 +503,29 @@ describe('AgentRuntimeService (integration)', () => {
       // LLM returns no tool calls, so run completes with currentStep incremented
       expect(updatedRun!.currentStep).toBe(4);
       expect(updatedRun!.executionTime).toBeGreaterThanOrEqual(500);
+    });
+
+    it('guards the step-completion write with an optimistic CAS on currentStep', async () => {
+      const run = await service.startRun('agent-1', 'org-1', 'user-1', 'cas');
+      const startStep = run.currentStep;
+      mockRunRepo.update.mockClear();
+
+      await service.processStep(run.id);
+
+      expect(mockRunRepo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ id: run.id, currentStep: startStep }),
+        expect.objectContaining({ currentStep: expect.any(Number) }),
+      );
+    });
+
+    it('aborts (returns done) when another worker already advanced the step', async () => {
+      const run = await service.startRun('agent-1', 'org-1', 'user-1', 'race');
+      // Simulate the CAS losing the race: the guarded UPDATE matches 0 rows.
+      mockRunRepo.update.mockResolvedValueOnce({ affected: 0 });
+
+      const result = await service.processStep(run.id);
+
+      expect(result).toBe('done');
     });
   });
 
