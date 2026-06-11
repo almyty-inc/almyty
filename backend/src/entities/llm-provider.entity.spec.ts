@@ -39,6 +39,42 @@ describe('LlmProvider Entity', () => {
     provider.isHealthy = true;
   });
 
+  describe('API key encryption at rest', () => {
+    it('encryptSensitiveData encrypts a plaintext key and is idempotent', () => {
+      provider.configuration.apiKey = 'sk-plain';
+      provider.encryptSensitiveData();
+      const enc = provider.configuration.apiKey;
+      expect(enc).toMatch(/^encrypted:gcm:/);
+      // Running again must not double-encrypt.
+      provider.encryptSensitiveData();
+      expect(provider.configuration.apiKey).toBe(enc);
+    });
+
+    it('getDecryptedApiKey returns the original plaintext after encryption', () => {
+      provider.configuration.apiKey = 'sk-roundtrip';
+      provider.encryptSensitiveData();
+      expect(provider.getDecryptedApiKey()).toBe('sk-roundtrip');
+    });
+
+    it('getDecryptedApiKey passes through a legacy plaintext value', () => {
+      provider.configuration.apiKey = 'sk-legacy-plain';
+      expect(provider.getDecryptedApiKey()).toBe('sk-legacy-plain');
+    });
+
+    it('getAuthHeaders uses the decrypted key for an encrypted provider', () => {
+      provider.type = LlmProviderType.OPENAI;
+      provider.configuration.apiKey = 'sk-encrypted-me';
+      provider.encryptSensitiveData();
+      expect(provider.getAuthHeaders()['Authorization']).toBe('Bearer sk-encrypted-me');
+    });
+
+    it('encryptSensitiveData is a no-op when no key is set', () => {
+      provider.configuration.apiKey = undefined as any;
+      expect(() => provider.encryptSensitiveData()).not.toThrow();
+      expect(provider.getDecryptedApiKey()).toBeUndefined();
+    });
+  });
+
   describe('getAuthHeaders', () => {
     it('sets the bearer token for OpenAI-style providers', () => {
       provider.type = LlmProviderType.OPENAI;

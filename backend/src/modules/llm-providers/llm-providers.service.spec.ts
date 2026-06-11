@@ -199,6 +199,7 @@ describe('LlmProvidersService', () => {
 
       organizationRepository.findOne.mockResolvedValue(mockOrganization);
       userRepository.findOne.mockResolvedValue(mockUser);
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.create.mockReturnValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
 
@@ -264,6 +265,7 @@ describe('LlmProvidersService', () => {
         hasPermissionInOrganization: jest.fn().mockReturnValue(true),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
       llmProviderRepository.save.mockResolvedValue({ ...mockProvider, ...updateDto });
@@ -300,6 +302,7 @@ describe('LlmProvidersService', () => {
         hasPermissionInOrganization: jest.fn().mockReturnValue(true),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
@@ -323,6 +326,7 @@ describe('LlmProvidersService', () => {
         hasPermissionInOrganization: jest.fn().mockReturnValue(true),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
@@ -346,6 +350,7 @@ describe('LlmProvidersService', () => {
         hasPermissionInOrganization: jest.fn().mockReturnValue(true),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
@@ -362,6 +367,7 @@ describe('LlmProvidersService', () => {
         hasPermissionInOrganization: jest.fn().mockReturnValue(false),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
       accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
@@ -380,6 +386,7 @@ describe('LlmProvidersService', () => {
         teamId: null,
       };
       const mockUser = { id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
       llmProviderRepository.save.mockImplementation((p: any) => Promise.resolve(p));
@@ -399,6 +406,7 @@ describe('LlmProvidersService', () => {
         teamId: 'team-old',
       };
       const mockUser = { id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
       llmProviderRepository.save.mockImplementation((p: any) => Promise.resolve(p));
@@ -420,6 +428,7 @@ describe('LlmProvidersService', () => {
         maskSensitiveData: jest.fn().mockReturnThis(),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
 
       const result = await service.getProvider('provider-1', 'org-1');
@@ -441,6 +450,7 @@ describe('LlmProvidersService', () => {
         maskSensitiveData: jest.fn().mockReturnThis(),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
 
       const result = await service.getProvider('provider-1', 'org-1', true);
@@ -531,6 +541,7 @@ describe('LlmProvidersService', () => {
         hasPermissionInOrganization: jest.fn().mockReturnValue(true),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
       llmProviderRepository.remove.mockResolvedValue();
@@ -547,6 +558,7 @@ describe('LlmProvidersService', () => {
         hasPermissionInOrganization: jest.fn().mockReturnValue(false),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
       accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
@@ -596,6 +608,7 @@ describe('LlmProvidersService', () => {
         responseTime: 1200,
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
       conversationRepository.findOne.mockResolvedValue(mockSession);
@@ -632,6 +645,7 @@ describe('LlmProvidersService', () => {
         },
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
 
       const requestWithoutSession = {
@@ -672,6 +686,7 @@ describe('LlmProvidersService', () => {
         responseTime: 1200,
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
       conversationRepository.save.mockResolvedValue(mockSession);
@@ -698,6 +713,7 @@ describe('LlmProvidersService', () => {
         configuration: {},
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       conversationRepository.findOne.mockResolvedValue(null);
 
@@ -737,6 +753,7 @@ describe('LlmProvidersService', () => {
         responseTime: 1200,
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
       conversationRepository.findOne.mockResolvedValue(mockSession);
@@ -801,6 +818,7 @@ describe('LlmProvidersService', () => {
         updateHealthStatus: jest.fn(),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue({
         message: { role: MessageRole.ASSISTANT, content: 'Test response' },
@@ -834,6 +852,7 @@ describe('LlmProvidersService', () => {
         updateHealthStatus: jest.fn(),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
       llmProviderRepository.update.mockResolvedValue({ affected: 1 });
@@ -873,6 +892,7 @@ describe('LlmProvidersService', () => {
         organizationId: 'org-1',
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
       llmProviderRepository.update.mockRejectedValue(new Error('Database error'));
@@ -895,6 +915,7 @@ describe('LlmProvidersService', () => {
         status: ConversationStatus.ACTIVE,
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       conversationRepository.save.mockResolvedValue(mockSession);
 
@@ -1316,6 +1337,7 @@ describe('LlmProvidersService', () => {
         status: LlmProviderStatus.ACTIVE,
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(
         new Error('API rate limit exceeded')
@@ -1389,6 +1411,7 @@ describe('LlmProvidersService', () => {
         addToolCall: jest.fn(),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
       conversationRepository.save.mockResolvedValue(mockSession);
@@ -1469,6 +1492,7 @@ describe('LlmProvidersService', () => {
         addToolCall: jest.fn(),
       };
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       llmProviderRepository.save.mockResolvedValue(mockProvider);
       conversationRepository.findOne.mockResolvedValue(mockSession);
@@ -1740,6 +1764,7 @@ describe('LlmProvidersService', () => {
 
       jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       const result = await callGoogle(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
 
       expect(result.message.content).toBe('Response from Gemini');
@@ -1774,6 +1799,7 @@ describe('LlmProvidersService', () => {
 
       jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
 
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       const result = await callGoogle(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
 
       expect(result.usage.inputTokens).toBe(0);

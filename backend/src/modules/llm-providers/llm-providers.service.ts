@@ -146,6 +146,8 @@ export class LlmProvidersService {
         status: LlmProviderStatus.ACTIVE,
       });
 
+      // Encrypt the API key at rest before it touches the DB.
+      provider.encryptSensitiveData();
       const savedProvider = await this.llmProviderRepository.save(provider);
 
       // Perform initial health check. Pass the org we just created
@@ -224,6 +226,9 @@ export class LlmProvidersService {
         provider.teamId = updateDto.teamId;
       }
 
+      // Re-encrypt before persisting (idempotent for an already-encrypted
+      // key that wasn't changed in this update).
+      provider.encryptSensitiveData();
       const updatedProvider = await this.llmProviderRepository.save(provider);
 
       // Perform health check after update, scoped to the same org
