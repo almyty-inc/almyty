@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -9,6 +9,7 @@ import { Agent } from '../../entities/agent.entity';
 import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
 import { MetricType, MetricStatus } from '../../entities/usage-metric.entity';
+import { setProtocolContext } from '../../common/interceptors/protocol-context';
 import { Organization } from '../../entities/organization.entity';
 import { McpService } from '../mcp/mcp.service';
 import { AlmytyMcpService } from '../mcp/almyty-mcp.service';
@@ -28,9 +29,13 @@ import { AcpDiscoveryService } from '../acp/acp-discovery.service';
  */
 @Injectable()
 export class UnifiedGatewayDelegation {
+  private readonly logger = new Logger(UnifiedGatewayDelegation.name);
+
   constructor(
     @InjectRepository(Agent)
     private readonly agentRepository: Repository<Agent>,
+    @InjectRepository(Gateway)
+    private readonly gatewayRepository: Repository<Gateway>,
     private readonly mcpService: McpService,
     private readonly almytyMcpService: AlmytyMcpService,
     private readonly mcpOAuthService: McpOAuthService,
@@ -56,6 +61,14 @@ export class UnifiedGatewayDelegation {
     const afterGateway = req.path.replace(`/${orgSlug}/${resourceSlug}`, '');
     const action = afterGateway.replace(/^\//, '') || '';
 
+    // Tag the request so the logging interceptor can attribute it — the
+    // slug path alone identifies neither gateway nor protocol.
+    setProtocolContext(req, {
+      gatewayId: gateway.id,
+      organizationId: organization.id,
+      protocol: gateway.type,
+    });
+
     const isDiscovery =
       action.startsWith('.well-known/') ||
       (action === '' && req.method === 'GET' && [GatewayType.A2A, GatewayType.ACP].includes(gateway.type));
@@ -72,13 +85,23 @@ export class UnifiedGatewayDelegation {
 
     switch (gateway.type) {
       case GatewayType.MCP:
+        // MCP bumps the gateway request counters inside McpService.
         return this.delegateMcp(gateway, auth, body, req, res);
-      case GatewayType.UTCP:
-        return this.delegateUtcp(gateway, organization, action, auth, req, res, body);
-      case GatewayType.A2A:
-        return this.delegateA2A(gateway, organization, action, req, res, body);
-      case GatewayType.ACP:
-        return this.delegateACP(gateway, organization, action, req, res, body);
+      case GatewayType.UTCP: {
+        const out = await this.delegateUtcp(gateway, organization, action, auth, req, res, body);
+        this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
+        return out;
+      }
+      case GatewayType.A2A: {
+        const out = await this.delegateA2A(gateway, organization, action, req, res, body);
+        this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
+        return out;
+      }
+      case GatewayType.ACP: {
+        const out = await this.delegateACP(gateway, organization, action, req, res, body);
+        this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
+        return out;
+      }
       // TODO: Channel gateway types (slack, discord, telegram, etc.)
       // will be routed to ChannelGatewayService.handleInboundMessage here.
       default:
@@ -262,5 +285,29 @@ export class UnifiedGatewayDelegation {
     }
 
     throw new HttpException(`Unknown UTCP action: ${action}`, HttpStatus.NOT_FOUND);
+  }
+
+  /**
+   * Bump the per-gateway request counters shown on the gateway list page.
+   * MCP traffic already does this in McpService; UTCP / A2A / ACP used to
+   * skip it, so those gateways permanently showed "0 requests".
+   * Fire-and-forget — counter loss is preferable to slowing the response.
+   */
+  private bumpGatewayCounters(gatewayId: string, success: boolean): void {
+    this.gatewayRepository
+      .createQueryBuilder()
+      .update(Gateway)
+      .set({
+        totalRequests: () => '"totalRequests" + 1',
+        successfulRequests: success
+          ? () => '"successfulRequests" + 1'
+          : () => '"successfulRequests"',
+        lastRequestAt: new Date(),
+      })
+      .where('id = :id', { id: gatewayId })
+      .execute()
+      .catch((err: any) => {
+        this.logger.warn(`Failed to bump gateway counters: ${err.message}`);
+      });
   }
 }
