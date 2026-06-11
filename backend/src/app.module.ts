@@ -177,10 +177,15 @@ import { databaseConfig } from './config/database.config';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const host = configService.get('REDIS_HOST');
+        // @nestjs/throttler v5+ takes ttl in MILLISECONDS. RATE_LIMIT_TTL
+        // stays in seconds (that's what the deploy configs set), so convert
+        // here. Passing seconds straight through made the window 60ms —
+        // 100 requests per 60ms — i.e. the global rate limit never fired.
+        const ttlSeconds = Number(configService.get('RATE_LIMIT_TTL', 60));
         const config: any = {
           throttlers: [{
-            ttl: configService.get('RATE_LIMIT_TTL', 60),
-            limit: configService.get('RATE_LIMIT_MAX', 100),
+            ttl: ttlSeconds * 1000,
+            limit: Number(configService.get('RATE_LIMIT_MAX', 100)),
           }],
         };
         if (host) {
