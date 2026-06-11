@@ -143,6 +143,34 @@ describe('dispatchHandler', () => {
     expect(r.runtime.os).toBeTruthy();
   });
 
+  it('shell.exec is refused by the execution policy (installBlocked)', async () => {
+    const blockedCtx: HandlerContext = {
+      ...ctx,
+      config: { ...ctx.config, installBlocked: true },
+    };
+    const resp = await dispatchHandler(blockedCtx, {
+      method: 'shell.exec',
+      workspaceId: 'ws-1',
+      params: { cmd: 'npm install left-pad' },
+    });
+    expect(resp.ok).toBe(false);
+    expect(resp.error?.data).toMatchObject({ code: RUNNER_ERROR_CODES.COMMAND_DENIED });
+  });
+
+  it('shell.exec fails closed under unimplemented container isolation', async () => {
+    const containerCtx: HandlerContext = {
+      ...ctx,
+      config: { ...ctx.config, defaultIsolation: 'container' },
+    };
+    const resp = await dispatchHandler(containerCtx, {
+      method: 'shell.exec',
+      workspaceId: 'ws-1',
+      params: { cmd: 'ls' },
+    });
+    expect(resp.ok).toBe(false);
+    expect(resp.error?.data).toMatchObject({ code: RUNNER_ERROR_CODES.COMMAND_DENIED });
+  });
+
   it('process.signal rejects unsupported signals', async () => {
     const spawn = await dispatchHandler(ctx, {
       method: 'process.spawn',
