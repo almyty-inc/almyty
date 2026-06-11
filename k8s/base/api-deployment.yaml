@@ -151,6 +151,11 @@ spec:
             configMapKeyRef:
               name: almyty-config
               key: RATE_LIMIT_MAX
+        - name: METRICS_RETENTION_DAYS
+          valueFrom:
+            configMapKeyRef:
+              name: almyty-config
+              key: METRICS_RETENTION_DAYS
         - name: SWAGGER_ENABLED
           valueFrom:
             configMapKeyRef:
