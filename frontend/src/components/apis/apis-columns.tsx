@@ -140,7 +140,7 @@ export function createApisColumns({
       accessorKey: 'operations',
       header: 'Operations',
       cell: ({ row }) => {
-        const opCount = row.original.operations?.length || 0
+        const opCount = (row.original as any).operationCount ?? row.original.operations?.length ?? 0
         return (
           <div className="text-center">
             <span className="font-medium">{opCount}</span>
