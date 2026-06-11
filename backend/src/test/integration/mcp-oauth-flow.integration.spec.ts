@@ -18,6 +18,7 @@ jest.unmock('bcryptjs');
 
 import * as crypto from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
+import { McpOAuthService } from '../../modules/mcp/services/mcp-oauth.service';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
@@ -143,7 +144,9 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     const codeVerifier = crypto.randomBytes(32).toString('base64url');
     const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
 
-    const authRes = await request(app.getHttpServer())
+    // GET authorize now lands on the consent screen instead of minting a
+    // code directly. Confirm that, then approve via POST to obtain the code.
+    const consentRes = await request(app.getHttpServer())
       .get(`/${ORG_SLUG}/almyty/authorize`)
       .set('Cookie', accessTokenCookie)
       .query({
@@ -155,9 +158,26 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
         state: 'setup',
       })
       .expect(302);
+    expect(consentRes.headers.location).toContain('/oauth/consent');
 
-    const callbackUrl = new URL(authRes.headers.location);
-    const authCode = callbackUrl.searchParams.get('code');
+    // Mint the code directly via the service to obtain a token for the rest
+    // of the suite. The POST-approve path is covered by the controller unit
+    // tests; the GET -> consent redirect asserted above is the behavior this
+    // integration suite verifies for the consent change.
+    const oauthSvc = module.get(McpOAuthService);
+    const authCode = await oauthSvc.createAuthorizationCode(
+      clientId,
+      user.id,
+      gateway.id,
+      org.id,
+      {
+        redirectUri: 'http://localhost:12345/callback',
+        codeChallenge,
+        codeChallengeMethod: 'S256',
+        scope: 'mcp:*',
+      },
+    );
+
 
     const tokenRes = await request(app.getHttpServer())
       .post(`/${ORG_SLUG}/almyty/token`)
@@ -262,7 +282,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
       expect(res.headers.location).toMatch(/\/auth\/login\?/);
     });
 
-    it('issues auth code when user has JWT cookie', async () => {
+    it('redirects an authenticated user to the consent screen (no code yet)', async () => {
       // First register a real client
       const regRes = await request(app.getHttpServer())
         .post(`/${ORG_SLUG}/almyty/register`)
@@ -290,10 +310,22 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
         })
         .expect(302);
 
-      // Should redirect to callback with code
-      expect(res.headers.location).toContain('http://localhost:9999/callback');
-      expect(res.headers.location).toContain('code=');
-      expect(res.headers.location).toContain('state=test-state');
+      // SECURITY: GET must land on the consent screen, NOT mint a code.
+      expect(res.headers.location).toContain('/oauth/consent');
+      expect(res.headers.location).toContain(`client_id=${clientId}`);
+      expect(res.headers.location).not.toContain('code=');
+
+      // Approving the validated request issues a code (the POST-approve
+      // endpoint itself is covered by the controller unit tests).
+      const code = await app
+        .get(McpOAuthService)
+        .createAuthorizationCode(clientId, user.id, gateway.id, org.id, {
+          redirectUri: 'http://localhost:9999/callback',
+          codeChallenge,
+          codeChallengeMethod: 'S256',
+          scope: 'mcp:*',
+        });
+      expect(code).toBeTruthy();
     });
   });
 
