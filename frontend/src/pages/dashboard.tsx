@@ -17,6 +17,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { gatewaysApi, toolsApi, apisApi, agentsApi, analyticsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useAuthStore } from '@/store/auth'
+import { pluralize } from '@/lib/utils'
 import type { RequestLog } from '@/types'
 
 // Helper to humanize a log path
@@ -252,22 +253,22 @@ export function DashboardPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
                 <button onClick={() => navigate('/apis')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-violet-500/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{apisTotal}</div>
-                  <div className="text-sm text-muted-foreground">APIs Connected</div>
+                  <div className="text-sm text-muted-foreground">{pluralize(apisTotal, 'API')} Connected</div>
                 </button>
                 <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
                 <button onClick={() => navigate('/tools')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-violet-500/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{toolsTotal}</div>
-                  <div className="text-sm text-muted-foreground">Tools Generated</div>
+                  <div className="text-sm text-muted-foreground">{pluralize(toolsTotal, 'Tool')} Generated</div>
                 </button>
                 <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
                 <button onClick={() => navigate('/gateways')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-cyan-400/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{gatewaysTotal}</div>
-                  <div className="text-sm text-muted-foreground">Gateways Serving</div>
+                  <div className="text-sm text-muted-foreground">{pluralize(gatewaysTotal, 'Gateway')} Serving</div>
                 </button>
                 <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
                 <button onClick={() => navigate('/agents')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-cyan-400/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{agents.length}</div>
-                  <div className="text-sm text-muted-foreground">Agents Running</div>
+                  <div className="text-sm text-muted-foreground">{pluralize(agents.length, 'Agent')} Running</div>
                 </button>
               </div>
             </CardContent>
