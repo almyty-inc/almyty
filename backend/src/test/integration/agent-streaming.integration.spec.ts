@@ -110,6 +110,9 @@ describe('Agent Streaming (integration)', () => {
         }
         return Promise.resolve(run);
       }),
+      // commitStep() guards step writes via update(); findOne returns the
+      // stored object by reference so mutations are visible — just report success.
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
       findOne: jest.fn().mockImplementation(({ where, relations }: any) => {
         const found = runStore.find(r => {
           if (where.id && r.id !== where.id) return false;

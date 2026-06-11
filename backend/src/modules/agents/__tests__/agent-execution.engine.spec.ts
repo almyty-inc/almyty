@@ -601,6 +601,46 @@ describe('AgentExecutionEngine', () => {
       expect(result.status).toBe(AgentExecutionStatus.FAILED);
       expect(result.error).toContain('Budget limit');
     });
+
+    it('trips the layer abort mid-flight so parallel siblings can stop when over budget', async () => {
+      // input fans out to two parallel llm nodes in the same layer.
+      const pipeline: AgentPipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          { id: 'llm_a', type: 'llm_call', config: {}, data: { providerId: 'p-1', userPromptTemplate: 'hi' } },
+          { id: 'llm_b', type: 'llm_call', config: {}, data: { providerId: 'p-2', userPromptTemplate: 'hi' } },
+          { id: 'output_1', type: 'output', config: {}, data: { mapping: '{{nodes.llm_a.output}}' } },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'llm_a' },
+          { id: 'e2', source: 'input_1', target: 'llm_b' },
+          { id: 'e3', source: 'llm_a', target: 'output_1' },
+          { id: 'e4', source: 'llm_b', target: 'output_1' },
+        ],
+      };
+      const agent = makeAgent({ pipeline, settings: { budgetLimit: 0.01 } });
+      const execution = makeExecution();
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const signals: (AbortSignal | undefined)[] = [];
+      nodeExecutor.execute.mockImplementation(async (node: any, _c: any, _o: any, _u: any, opts: any) => {
+        signals.push(opts?.signal);
+        if (node.type === 'llm_call') {
+          return { output: 'text', cost: 0.05, tokens: 100, executionTime: 50 };
+        }
+        return { output: {}, cost: 0, tokens: 0, executionTime: 0 };
+      });
+
+      const result = await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+
+      expect(result.status).toBe(AgentExecutionStatus.FAILED);
+      expect(result.error).toContain('Budget limit');
+      // The fan-out layer's abort signal was tripped once the budget was
+      // crossed, so an in-flight sibling would receive the abort.
+      expect(signals.some((s) => s?.aborted)).toBe(true);
+    });
   });
 
   // ── Variables merging ─────────────────────────────────────────────────────
