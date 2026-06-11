@@ -244,6 +244,10 @@ export class ApisController {
         // and have their own internal guards, but a hung downstream tool
         // generation could otherwise hold a worker forever.
         timeout: 5 * 60 * 1000, // 5 minutes
+        // Retry transient failures (brief DB/network blips) with backoff
+        // rather than permanently failing a large import on the first hiccup.
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
         removeOnComplete: 100,
         removeOnFail: 50,
       },

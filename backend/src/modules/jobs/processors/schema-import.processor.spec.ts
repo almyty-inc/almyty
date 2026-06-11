@@ -385,4 +385,31 @@ describe('SchemaImportProcessor', () => {
       });
     });
   });
+
+  describe('onFailed', () => {
+    const makeJob = (attemptsMade: number, attempts: number) =>
+      ({ id: 'j1', attemptsMade, opts: { attempts }, data: { apiId: 'api-1', organizationId: 'org-1' } }) as any;
+
+    it('logs a permanent failure once retries are exhausted', () => {
+      const err = (processor as any).logger;
+      const errorSpy = jest.spyOn(err, 'error').mockImplementation(() => {});
+      const warnSpy = jest.spyOn(err, 'warn').mockImplementation(() => {});
+
+      processor.onFailed(makeJob(3, 3), new Error('boom'));
+
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('PERMANENTLY FAILED'));
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('logs a retry warning while attempts remain', () => {
+      const err = (processor as any).logger;
+      const errorSpy = jest.spyOn(err, 'error').mockImplementation(() => {});
+      const warnSpy = jest.spyOn(err, 'warn').mockImplementation(() => {});
+
+      processor.onFailed(makeJob(1, 3), new Error('blip'));
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('will retry'));
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -23,6 +23,7 @@ describe('MonitoringService', () => {
       incr: jest.fn(),
       expire: jest.fn(),
       keys: jest.fn().mockResolvedValue([]),
+      ping: jest.fn().mockResolvedValue('PONG'),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -36,6 +37,7 @@ describe('MonitoringService', () => {
             create: jest.fn(),
             save: jest.fn(),
             createQueryBuilder: jest.fn(),
+            query: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
           },
         },
         {
@@ -1236,6 +1238,31 @@ describe('MonitoringService', () => {
         expect(health.status).toBe('degraded');
       });
     });
+
+      it('reports redis unhealthy and overall unhealthy when the redis ping fails', async () => {
+        (mockRedis.ping as jest.Mock).mockRejectedValueOnce(new Error('conn refused'));
+
+        const health = await service.getSystemHealth();
+
+        expect(health.components.redis.status).toBe('unhealthy');
+        expect(health.status).toBe('unhealthy');
+      });
+
+      it('reports database unhealthy when the DB ping throws', async () => {
+        const repo: any = service['usageMetricRepository'];
+        repo.query.mockRejectedValueOnce(new Error('db down'));
+
+        const health = await service.getSystemHealth();
+
+        expect(health.components.database.status).toBe('unhealthy');
+        expect(health.status).toBe('unhealthy');
+      });
+
+      it('reports healthy components when both pings succeed and no alerts', async () => {
+        const health = await service.getSystemHealth();
+        expect(health.components.database.status).toBe('healthy');
+        expect(health.components.redis.status).toBe('healthy');
+      });
 
     describe('getPrometheusMetrics with real metrics', () => {
       it('should format metrics in Prometheus format', async () => {
