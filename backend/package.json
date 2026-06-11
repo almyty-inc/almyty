@@ -33,7 +33,7 @@
     "@anthropic-ai/sdk": "^0.95.0",
     "@apidevtools/swagger-parser": "^12.1.0",
     "@getzep/zep-cloud": "^3.18.0",
-    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/grpc-js": "^1.14.4",
     "@grpc/proto-loader": "^0.8.0",
     "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs-modules/ioredis": "^2.2.1",
