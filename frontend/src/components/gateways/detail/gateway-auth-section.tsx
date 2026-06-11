@@ -283,8 +283,8 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-y-3">
+          <div className="min-w-0">
             <CardTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5" />
               Authentication
@@ -293,7 +293,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
               Configure how clients authenticate with this gateway
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {hasApiKeyAuth && (
               <Button
                 size="sm"
