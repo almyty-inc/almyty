@@ -878,11 +878,14 @@ describe('MonitoringService', () => {
         service['organizationRepository'] = mockOrgRepository as any;
 
         // The stats helper aggregates usage_metrics via raw SQL. Drive its
-        // queries in call order: request counts, then security counts, then
+        // queries in call order: request counts, the two protocol queries
+        // (semantic counters, then mcp request_logs), security counts, then
         // the two performance queries (latency, then error rate).
         const statsQuery = service['redisStats']['usageMetricRepository'].query as jest.Mock;
         statsQuery
           .mockResolvedValueOnce([{ total: '1000', successful: '950' }]) // getRequestStats
+          .mockResolvedValueOnce([{ mcp_sessions: '5', mcp_tool_calls: '40', a2a_messages: '20' }]) // protocol counters
+          .mockResolvedValueOnce([{ avg_rt: '150', total: '50', errors: '5' }]) // protocol mcp request_logs
           .mockResolvedValueOnce([{ rate_limited: '10', unauthorized: '5', threats: '4', pii: '9' }]) // getSecurityStats
           .mockResolvedValueOnce([{ avg: '250', p95: '500', p99: '800' }]) // perf latency
           .mockResolvedValueOnce([{ total: '1000', errored: '50' }]); // perf error rate
@@ -900,8 +903,11 @@ describe('MonitoringService', () => {
         expect(metrics.application.apis.active).toBe(18);
         expect(metrics.application.requests.total).toBe(1000);
         expect(metrics.application.requests.successful).toBe(950);
-        // Per-protocol breakdown has no source yet — honest zeros.
-        expect(metrics.protocols.mcp.sessions).toBe(0);
+        // Per-protocol breakdown now reflects real counters.
+        expect(metrics.protocols.mcp.sessions).toBe(5);
+        expect(metrics.protocols.mcp.toolCalls).toBe(40);
+        expect(metrics.protocols.mcp.responseTime).toBe(150);
+        expect(metrics.protocols.a2a.messages).toBe(20);
         expect(metrics.security.rateLimitsApplied).toBe(10);
         expect(metrics.security.authFailures).toBe(5);
         expect(metrics.security.threatsBlocked).toBe(4);
