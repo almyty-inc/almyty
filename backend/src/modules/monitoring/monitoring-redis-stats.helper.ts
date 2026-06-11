@@ -102,18 +102,21 @@ export class MonitoringRedisStatsHelper {
     try {
       const rows = await this.usageMetricRepository.query(
         `SELECT
-           COUNT(*) FILTER (WHERE status = 'rate_limited')::bigint AS rate_limited,
-           COUNT(*) FILTER (WHERE status = 'unauthorized')::bigint AS unauthorized
+           COUNT(*) FILTER (WHERE type = 'request_count' AND status = 'rate_limited')::bigint AS rate_limited,
+           COUNT(*) FILTER (WHERE type = 'request_count' AND status = 'unauthorized')::bigint AS unauthorized,
+           COALESCE(SUM(value) FILTER (WHERE type = 'security_threat_blocked'), 0) AS threats,
+           COALESCE(SUM(value) FILTER (WHERE type = 'pii_filtered'), 0) AS pii
          FROM usage_metrics
-         WHERE type = 'request_count' AND timestamp >= $1`,
+         WHERE timestamp >= $1
+           AND type IN ('request_count', 'security_threat_blocked', 'pii_filtered')`,
         [this.windowStart()],
       );
       const row = Array.isArray(rows) ? rows[0] : undefined;
       return {
-        // threatsBlocked / piiFiltered have no metric source yet; report 0
-        // honestly rather than fabricate them.
-        threatsBlocked: 0,
-        piiFiltered: 0,
+        // threatsBlocked / piiFiltered are emitted by PluginManager when the
+        // security scanner blocks a threat / the PII filter redacts a value.
+        threatsBlocked: this.num(row?.threats),
+        piiFiltered: this.num(row?.pii),
         rateLimitsApplied: this.num(row?.rate_limited),
         authFailures: this.num(row?.unauthorized),
       };

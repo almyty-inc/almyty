@@ -23,6 +23,9 @@ export enum MetricType {
   CONCURRENT_USERS = 'concurrent_users',
   API_CALLS = 'api_calls',
   TOOL_EXECUTIONS = 'tool_executions',
+  // Security plugin counters (emitted by PluginManager.executeHook)
+  SECURITY_THREAT_BLOCKED = 'security_threat_blocked',
+  PII_FILTERED = 'pii_filtered',
 }
 
 export enum MetricStatus {
