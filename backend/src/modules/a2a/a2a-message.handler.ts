@@ -6,6 +6,8 @@ import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { Message } from '../../entities/message.entity';
 
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
+import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
+import { MetricType } from '../../entities/usage-metric.entity';
 import { agentRunToTask } from './a2a-task.mapper';
 import { a2aPartsToAgentInput } from './a2a-part.mapper';
 import type { Task, JsonRpcResponse } from './types/a2a-spec.types';
@@ -23,7 +25,16 @@ export class A2AMessageHandler {
       writeSseEvent: (res: Response, eventName: string, data: any) => void;
       jsonRpcError: (id: string | number | null, code: number, message: string, data?: any) => JsonRpcResponse;
     },
+    private readonly metrics?: MetricsRecorderService,
   ) {}
+
+  /** A new agent run started via A2A is one workflow execution. */
+  private recordWorkflow(gateway: Gateway): void {
+    this.metrics?.record(MetricType.A2A_WORKFLOW, {
+      organizationId: gateway.organizationId,
+      dimensions: { agentId: gateway.agentId },
+    });
+  }
 
   /**
    * Start or continue an agent run and wait for completion (with timeout).
@@ -64,6 +75,7 @@ export class A2AMessageHandler {
         text,
         existingRun.conversationId ? { conversationId: existingRun.conversationId } : undefined,
       );
+      this.recordWorkflow(gateway);
       // Return task with the ORIGINAL task ID (the one the client sent)
       const messages = await this.helpers.getRunMessages(newRun);
       const task = agentRunToTask(newRun, messages);
@@ -108,6 +120,7 @@ export class A2AMessageHandler {
       null, // no user context in A2A calls
       text,
     );
+    this.recordWorkflow(gateway);
 
     // If the A2A message carries a contextId, store it so we can round-trip
     // it in ListTasks / GetTask responses and filter by it later.
@@ -172,6 +185,7 @@ export class A2AMessageHandler {
           null,
           text,
         );
+        this.recordWorkflow(gateway);
       }
     } else {
       run = await this.agentRuntimeService.startRun(
@@ -180,6 +194,7 @@ export class A2AMessageHandler {
         null,
         text,
       );
+      this.recordWorkflow(gateway);
     }
 
     // Stream events from the run emitter

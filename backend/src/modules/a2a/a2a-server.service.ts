@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Request, Response } from 'express';
@@ -13,6 +13,8 @@ import { A2AAgentCardService } from './a2a-agent-card.service';
 import { agentRunToTask } from './a2a-task.mapper';
 import { A2AMessageHandler } from './a2a-message.handler';
 import { A2ATaskHandler } from './a2a-task.handler';
+import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
+import { MetricType } from '../../entities/usage-metric.entity';
 import type {
   JsonRpcRequest,
   JsonRpcResponse,
@@ -39,6 +41,7 @@ export class A2AServerService {
     private readonly conversationRepository: Repository<Conversation>,
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
+    @Optional() private readonly metrics?: MetricsRecorderService,
   ) {
     const helpers = {
       pollForCompletion: this.pollForCompletion.bind(this),
@@ -53,6 +56,7 @@ export class A2AServerService {
       runRepository,
       messageRepository,
       helpers,
+      this.metrics,
     );
 
     this.taskHandler = new A2ATaskHandler(
@@ -115,6 +119,10 @@ export class A2AServerService {
       switch (method) {
         case 'message/send':
         case 'SendMessage': {
+          this.metrics?.record(MetricType.A2A_MESSAGE, {
+            organizationId: gateway.organizationId,
+            dimensions: { agentId: gateway.agentId },
+          });
           const task = await this.messageHandler.handleMessageSend(gateway, rpcReq.params, rpcReq.id);
           // v1.0 (PascalCase) wraps in { task }, v0.2.x returns task directly
           const result = method === 'SendMessage' ? { task } : task;
@@ -124,6 +132,10 @@ export class A2AServerService {
 
         case 'message/stream':
         case 'StreamMessage': {
+          this.metrics?.record(MetricType.A2A_MESSAGE, {
+            organizationId: gateway.organizationId,
+            dimensions: { agentId: gateway.agentId },
+          });
           await this.messageHandler.handleMessageStream(gateway, rpcReq.params, rpcReq.id, req, res);
           return;
         }

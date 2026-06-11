@@ -59,6 +59,7 @@ import { JsonSchemaTranslatorModule } from './modules/json-schema-translator/jso
 import { LlmProvidersModule } from './modules/llm-providers/llm-providers.module';
 import { McpModule } from './modules/mcp/mcp.module';
 import { PluginsModule } from './modules/plugins/plugins.module';
+import { MetricsModule } from './common/metrics/metrics.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { HealthModule } from './modules/health/health.module';
 import { JobsModule } from './modules/jobs/jobs.module';
@@ -232,6 +233,7 @@ import { databaseConfig } from './config/database.config';
     McpModule,
     JobsModule,
     PluginsModule,
+    MetricsModule,
     MonitoringModule,
     HealthModule,
     MailModule,
