@@ -193,12 +193,22 @@ export class RunnerDaemon {
   }
 
   private async handleRequest(req: WorkerEnvelope<RequestPayload>): Promise<void> {
+    // Trust model: inbound requests are trusted at the CHANNEL level. The
+    // runner authenticates itself to the backend at registration, the
+    // command stream rides the resulting authenticated session, and the
+    // backend URL is required to be https for any non-loopback host (see
+    // config.ts), which closes the MITM / stream-injection vectors. We do
+    // NOT additionally verify a per-request signature here — that would
+    // defend against a *compromised backend* and needs a coordinated
+    // backend signing scheme (tracked separately). Each command is still
+    // gated by the execution policy (isolation/deny/cwd/env) before it runs.
     if (!this.processes || !this.client || !this.resolved) return;
     const ctx: HandlerContext = {
       processes: this.processes,
       runnerName: this.resolved.name,
       labels: this.resolved.labels,
       maxConcurrent: this.resolved.config.maxConcurrent,
+      config: this.resolved.config,
     };
     const response: ResponsePayload = await dispatchHandler(ctx, req.payload);
     await this.client.send(envelope('response', response, req.id));
