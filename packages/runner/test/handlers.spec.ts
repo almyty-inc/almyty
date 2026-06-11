@@ -45,6 +45,16 @@ describe('dispatchHandler', () => {
       runnerName: 'r1',
       labels: { env: 'dev' },
       maxConcurrent: 4,
+      // Host isolation so the policy permits execution in these tests; the
+      // policy itself is covered by policy.spec.ts.
+      config: {
+        defaultIsolation: 'host',
+        maxConcurrent: 4,
+        allowedCwdRoots: [],
+        denyPatterns: [],
+        networkBlocked: false,
+        installBlocked: false,
+      },
     };
   });
 

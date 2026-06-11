@@ -1,10 +1,12 @@
 import { ProcessManager, shellExec } from './process-manager.js';
+import { enforceSpawnPolicy, enforceShellPolicy } from './policy.js';
 import { detectRuntimeInfo, RUNNER_VERSION } from './runtime-info.js';
 import { RequestPayload, ResponsePayload, WORKER_ERROR_CODES } from './protocol.js';
 import {
   ProcessSignal,
   RUNNER_ERROR_CODES,
   RunnerError,
+  RunnerConfig,
   SpawnOptions,
 } from './types.js';
 
@@ -31,6 +33,8 @@ export interface HandlerContext {
   runnerName: string;
   labels: Record<string, string>;
   maxConcurrent: number;
+  /** Runner execution policy (isolation, denyPatterns, cwd roots, …). */
+  config: RunnerConfig;
   /** Test injection point for runner.info; returns the cached probe map. */
   cachedRuntimeInfo?: Awaited<ReturnType<typeof detectRuntimeInfo>>;
 }
@@ -76,6 +80,10 @@ async function spawn(ctx: HandlerContext, req: RequestPayload): Promise<unknown>
     pty: p.pty !== false,
     cwd: typeof p.cwd === 'string' ? p.cwd : undefined,
   };
+  // Enforce the runner execution policy (isolation/deny/cwd/install) and
+  // use the sanitized env — refuses, rather than silently running, anything
+  // the config forbids.
+  opts.env = enforceSpawnPolicy(ctx.config, opts).env;
   const handle = await ctx.processes.spawn(ws, opts);
   return { processId: handle.processId };
 }
