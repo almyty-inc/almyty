@@ -1,4 +1,4 @@
-import { Process, Processor } from '@nestjs/bull';
+import { OnQueueFailed, Process, Processor } from '@nestjs/bull';
 import { Logger, NotFoundException } from '@nestjs/common';
 import { Job } from 'bull';
 
@@ -82,6 +82,27 @@ export class SchemaImportProcessor {
     } catch (error) {
       this.logger.error(`[JOB ${job.id}] Schema import failed: ${error.message}`, error.stack);
       throw error;
+    }
+  }
+
+  /**
+   * Surface job failures. Bull retries (attempts/backoff) mean this fires
+   * once per failed attempt; we log a distinct, alert-friendly line only
+   * once retries are exhausted so a permanently-failed import is visible
+   * to ops instead of silently landing in the (capped, evicted) failed set.
+   */
+  @OnQueueFailed()
+  onFailed(job: Job<SchemaImportJob>, err: Error) {
+    const attempts = job.opts?.attempts ?? 1;
+    if (job.attemptsMade >= attempts) {
+      this.logger.error(
+        `[JOB ${job.id}] PERMANENTLY FAILED after ${job.attemptsMade} attempt(s): ` +
+          `schema import for API ${job.data?.apiId} (org ${job.data?.organizationId}) — ${err.message}`,
+      );
+    } else {
+      this.logger.warn(
+        `[JOB ${job.id}] attempt ${job.attemptsMade}/${attempts} failed, will retry: ${err.message}`,
+      );
     }
   }
 }
