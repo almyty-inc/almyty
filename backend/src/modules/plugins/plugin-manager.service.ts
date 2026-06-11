@@ -35,7 +35,7 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
   
   private readonly installations = new Map<string, PluginInstallation>();
   private readonly executionSemaphore = new Map<string, number>(); // Concurrent execution tracking
-  private readonly loader = new PluginLoaderHelper();
+  private readonly loader: PluginLoaderHelper;
   private readonly config: PluginManagerConfig = {
     maxConcurrentExecutions: 10,
     defaultTimeout: 30000,
@@ -49,6 +49,9 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     private readonly store: PluginStoreHelper,
   ) {
     super();
+    // Construct the loader with our Redis client so built-in plugins (the
+    // rate limiter) can share counters across replicas.
+    this.loader = new PluginLoaderHelper(this.redis);
     this.setupEventHandlers();
   }
 
