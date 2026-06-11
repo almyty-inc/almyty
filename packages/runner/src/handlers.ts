@@ -138,13 +138,19 @@ async function waitH(ctx: HandlerContext, req: RequestPayload): Promise<unknown>
   return ctx.processes.wait(ws, requireString(p.processId, 'processId'), p.timeoutMs);
 }
 
-async function shell(_ctx: HandlerContext, req: RequestPayload): Promise<unknown> {
+async function shell(ctx: HandlerContext, req: RequestPayload): Promise<unknown> {
   // shell.exec is workspace-scoped for audit but doesn't depend on
   // the process manager's bookkeeping; one-shot execution returns
   // stdout+stderr+exit and forgets.
   requireWorkspace(req);
   const p = req.params as { cmd?: string; env?: Record<string, string>; timeoutMs?: number };
-  return shellExec(requireString(p.cmd, 'cmd'), p.env, p.timeoutMs);
+  const cmd = requireString(p.cmd, 'cmd');
+  // Enforce the same execution policy as process.spawn — isolation
+  // fail-closed, denyPatterns, installBlocked — and run with the
+  // sanitized env. Without this, shell.exec was a hole straight past
+  // every protection spawn honours.
+  const { env } = enforceShellPolicy(ctx.config, cmd, p.env);
+  return shellExec(cmd, env, p.timeoutMs);
 }
 
 async function info(ctx: HandlerContext): Promise<unknown> {
