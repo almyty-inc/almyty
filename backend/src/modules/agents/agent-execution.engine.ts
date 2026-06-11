@@ -240,6 +240,21 @@ export class AgentExecutionEngine {
 
         if (activeNodes.length === 0) continue;
 
+        // Budget-aware cancellation for this layer. A fan-out layer runs all
+        // its nodes in parallel, so without this a single layer could blow
+        // well past budgetLimit before the between-layer check fires. We trip
+        // this AbortSignal the moment accumulated cost crosses the limit, so
+        // in-flight LLM/tool calls abort instead of running to completion.
+        // It also mirrors the caller's cancellation signal, so nodes get one
+        // signal covering both client-cancel and budget.
+        const layerAbort = new AbortController();
+        const forwardCallerAbort = () => layerAbort.abort();
+        if (options.signal) {
+          if (options.signal.aborted) layerAbort.abort();
+          else options.signal.addEventListener('abort', forwardCallerAbort, { once: true });
+        }
+        let layerRunningCost = totalCost;
+
         // Execute all nodes in this layer in parallel — each wrapped in try/catch
         const layerPromises = activeNodes.map(async (nodeId) => {
           const node = nodeMap.get(nodeId);
@@ -272,11 +287,18 @@ export class AgentExecutionEngine {
                 edges: pipeline.edges,
                 nestingDepth: internalOptions?.nestingDepth,
                 maxNestingDepth: internalOptions?.maxNestingDepth,
-                signal: options.signal,
+                signal: layerAbort.signal,
               },
             );
 
             const nodeCompletedAt = Date.now();
+
+            // Accumulate this node's cost and trip the layer abort if we've
+            // crossed the budget, so any still-running siblings stop early.
+            layerRunningCost += result.cost || 0;
+            if (budgetLimit !== Infinity && layerRunningCost > budgetLimit) {
+              layerAbort.abort();
+            }
 
             return {
               nodeId,
@@ -337,6 +359,9 @@ export class AgentExecutionEngine {
 
           return execution;
         }
+
+        // Done with this layer's abort; the next layer installs its own.
+        options.signal?.removeEventListener('abort', forwardCallerAbort);
 
         // Track whether any node in this layer failed
         let layerHasFailure = false;
@@ -447,6 +472,27 @@ export class AgentExecutionEngine {
             });
           }
         }
+      }
+
+      // Final budget check. The between-layer check only fires before a NEXT
+      // layer, so a last layer that crossed the limit (mid-flight abort or
+      // not) is classified here as BUDGET_EXCEEDED instead of falling through
+      // to the generic node-failure path below.
+      if (totalCost > budgetLimit) {
+        execution.status = AgentExecutionStatus.FAILED;
+        execution.error = `Budget limit ($${budgetLimit}) exceeded: $${totalCost.toFixed(4)}`;
+        execution.executionTime = Date.now() - startTime;
+        execution.totalCost = totalCost;
+        execution.totalTokens = totalTokens;
+        execution.nodeResults = nodeResults;
+        await this.agentExecutionRepository.save(execution);
+        await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
+        this.state.emitEvent(onEvent, {
+          type: 'execution.failed',
+          data: { error: execution.error, errorType: ExecutionErrorType.BUDGET_EXCEEDED, executionId: execution.id },
+          timestamp: Date.now(),
+        });
+        return execution;
       }
 
       const executionTime = Date.now() - startTime;
