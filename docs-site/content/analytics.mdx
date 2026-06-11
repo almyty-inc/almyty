@@ -89,4 +89,4 @@ curl "/usage-metrics/export?startDate=2026-04-01&endDate=2026-04-09&format=csv" 
 
 ## Retention
 
-Request logs and audit entries are retained for 90 days by default. Self-hosted deployments can configure retention via the `ANALYTICS_RETENTION_DAYS` environment variable.
+Usage metrics and request logs are retained for 90 days by default, then pruned by a background sweep. Self-hosted deployments can change the window with the `METRICS_RETENTION_DAYS` environment variable, or set it to `0` to keep everything. See [Self-Hosting](/self-hosting) for the full list of environment variables.
