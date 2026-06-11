@@ -103,7 +103,12 @@ import { databaseConfig } from './config/database.config';
             database: configService.get<string>('DATABASE_NAME', 'almyty'),
             entities: [__dirname + '/entities/*.entity{.ts,.js}'],
             migrations: [__dirname + '/migrations/*{.ts,.js}'],
-            migrationsRun: true,
+            // Pods migrate on boot only when explicitly enabled (the local
+            // default). In the cluster DB_MIGRATIONS_RUN=false: a single
+            // gated migration Job runs before the rollout, so the N replicas
+            // don't race each other running the same migrations on startup.
+            migrationsRun:
+              configService.get('DB_MIGRATIONS_RUN', 'true') !== 'false',
             synchronize: false,
             logging: configService.get('NODE_ENV') === 'development',
             ssl: dbSsl ? { rejectUnauthorized: false } : false,
