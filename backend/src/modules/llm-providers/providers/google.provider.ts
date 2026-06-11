@@ -19,7 +19,7 @@ export async function callGoogle(
 ): Promise<ChatResponse> {
   // Google Gemini API implementation
   const apiUrl = provider.getApiUrl();
-  const apiKey = provider.configuration.apiKey;
+  const apiKey = provider.getDecryptedApiKey();
 
   const googleRequest: Record<string, unknown> = {
     contents: request.messages.map(msg => ({
