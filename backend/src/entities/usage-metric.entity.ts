@@ -26,6 +26,15 @@ export enum MetricType {
   // Security plugin counters (emitted by PluginManager.executeHook)
   SECURITY_THREAT_BLOCKED = 'security_threat_blocked',
   PII_FILTERED = 'pii_filtered',
+  // Per-protocol semantic counters (emitted by the protocol controllers).
+  // The agentId of A2A events is carried in `dimensions.agentId` so the
+  // monitoring loop can count distinct active agents over the window.
+  MCP_SESSION = 'mcp_session',
+  MCP_TOOL_CALL = 'mcp_tool_call',
+  UTCP_MANUAL = 'utcp_manual',
+  UTCP_DIRECT_CALL = 'utcp_direct_call',
+  A2A_MESSAGE = 'a2a_message',
+  A2A_WORKFLOW = 'a2a_workflow',
 }
 
 export enum MetricStatus {
