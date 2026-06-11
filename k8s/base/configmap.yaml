@@ -28,6 +28,10 @@ data:
   RATE_LIMIT_TTL: "60"
   RATE_LIMIT_MAX: "100"
 
+  # How long telemetry rows (usage_metrics, request_logs) are kept before
+  # the retention sweep prunes them. Set to "0" to disable pruning.
+  METRICS_RETENTION_DAYS: "90"
+
   # JWT Configuration
   JWT_EXPIRES_IN: "24h"
 

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { MonitoringController } from './monitoring.controller';
 import { MonitoringService } from './monitoring.service';
 import { MonitoringRedisStatsHelper } from './monitoring-redis-stats.helper';
+import { MetricsRetentionService } from './metrics-retention.service';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsExportHelper } from './analytics-export.helper';
@@ -36,7 +37,7 @@ import { AgentRun } from '../../entities/agent-run.entity';
     ]),
   ],
   controllers: [MonitoringController, AnalyticsController],
-  providers: [MonitoringService, AnalyticsService, MonitoringRedisStatsHelper, AnalyticsExportHelper, AnalyticsSummariesHelper],
+  providers: [MonitoringService, AnalyticsService, MonitoringRedisStatsHelper, MetricsRetentionService, AnalyticsExportHelper, AnalyticsSummariesHelper],
   exports: [MonitoringService, AnalyticsService],
 })
 export class MonitoringModule {}
