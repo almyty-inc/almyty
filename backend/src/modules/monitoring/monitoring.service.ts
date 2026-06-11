@@ -475,7 +475,30 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
   async getSystemHealth() {
     const metrics = await this.getLatestMetrics();
     const alerts = await this.getActiveAlerts();
-    return computeSystemHealth(metrics, alerts);
+    const [database, redis] = await Promise.all([
+      this.pingDatabase(),
+      this.pingRedis(),
+    ]);
+    return computeSystemHealth(metrics, alerts, { database, redis });
+  }
+
+  /** Live readiness ping of Redis for the health rollup. */
+  private async pingRedis(): Promise<'healthy' | 'unhealthy'> {
+    try {
+      return (await this.redis.ping()) === 'PONG' ? 'healthy' : 'unhealthy';
+    } catch {
+      return 'unhealthy';
+    }
+  }
+
+  /** Live readiness ping of Postgres for the health rollup. */
+  private async pingDatabase(): Promise<'healthy' | 'unhealthy'> {
+    try {
+      await this.usageMetricRepository.query('SELECT 1');
+      return 'healthy';
+    } catch {
+      return 'unhealthy';
+    }
   }
 
   async getPrometheusMetrics(): Promise<string> {

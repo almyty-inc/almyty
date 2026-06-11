@@ -47,19 +47,32 @@ export function formatPrometheusMetrics(metrics: SystemMetrics | null): string {
 }
 
 /**
- * Compute system health rollup from metrics + active alerts.
+ * Compute the system-health rollup from metrics, active alerts, and the
+ * (real) status of critical dependencies. database/redis are pinged live
+ * by the caller; the protocol/plugin sub-systems don't expose a cheap
+ * health probe here, so they're reported optimistically until one is wired.
  */
-export function computeSystemHealth(_metrics: SystemMetrics | null, alerts: Alert[]) {
+type DepStatus = 'healthy' | 'unhealthy';
+
+export function computeSystemHealth(
+  _metrics: SystemMetrics | null,
+  alerts: Alert[],
+  deps?: { database?: DepStatus; redis?: DepStatus },
+) {
   const criticalAlerts = alerts.filter(a => a.severity === 'critical');
   const errorAlerts = alerts.filter(a => a.severity === 'error');
 
+  const database: DepStatus = deps?.database ?? 'healthy';
+  const redis: DepStatus = deps?.redis ?? 'healthy';
+  const depDown = database === 'unhealthy' || redis === 'unhealthy';
+
   let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
-  if (criticalAlerts.length > 0) overallStatus = 'unhealthy';
+  if (criticalAlerts.length > 0 || depDown) overallStatus = 'unhealthy';
   else if (errorAlerts.length > 0) overallStatus = 'degraded';
 
   const components = {
-    database: { status: 'healthy' as const },
-    redis: { status: 'healthy' as const },
+    database: { status: database },
+    redis: { status: redis },
     mcp: { status: 'healthy' as const },
     utcp: { status: 'healthy' as const },
     a2a: { status: 'healthy' as const },
