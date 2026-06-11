@@ -877,15 +877,15 @@ describe('MonitoringService', () => {
         service['apiRepository'] = mockApiRepository as any;
         service['organizationRepository'] = mockOrgRepository as any;
 
-        mockRedis.get
-          .mockResolvedValueOnce(JSON.stringify({ total: 1000, successful: 950, failed: 50, rate: 10 }))
-          .mockResolvedValueOnce(JSON.stringify({
-            mcp: { sessions: 5, toolCalls: 100, responseTime: 150, errorRate: 0.02 },
-            utcp: { manuals: 10, directCalls: 50, proxyExecutions: 30 },
-            a2a: { activeAgents: 3, messages: 200, workflows: 5 },
-          }))
-          .mockResolvedValueOnce(JSON.stringify({ threatsBlocked: 15, piiFiltered: 25, rateLimitsApplied: 10, authFailures: 5 }))
-          .mockResolvedValueOnce(JSON.stringify({ averageResponseTime: 250, p95ResponseTime: 500, p99ResponseTime: 800, cacheHitRate: 0.75, errorRate: 0.05 }));
+        // The stats helper aggregates usage_metrics via raw SQL. Drive its
+        // queries in call order: request counts, then security counts, then
+        // the two performance queries (latency, then error rate).
+        const statsQuery = service['redisStats']['usageMetricRepository'].query as jest.Mock;
+        statsQuery
+          .mockResolvedValueOnce([{ total: '1000', successful: '950' }]) // getRequestStats
+          .mockResolvedValueOnce([{ rate_limited: '10', unauthorized: '5' }]) // getSecurityStats
+          .mockResolvedValueOnce([{ avg: '250', p95: '500', p99: '800' }]) // perf latency
+          .mockResolvedValueOnce([{ total: '1000', errored: '50' }]); // perf error rate
 
         const metrics = await service['collectSystemMetrics']();
 
@@ -899,9 +899,13 @@ describe('MonitoringService', () => {
         expect(metrics.application.apis.total).toBe(20);
         expect(metrics.application.apis.active).toBe(18);
         expect(metrics.application.requests.total).toBe(1000);
-        expect(metrics.protocols.mcp.sessions).toBe(5);
-        expect(metrics.security.threatsBlocked).toBe(15);
+        expect(metrics.application.requests.successful).toBe(950);
+        // Per-protocol breakdown has no source yet — honest zeros.
+        expect(metrics.protocols.mcp.sessions).toBe(0);
+        expect(metrics.security.rateLimitsApplied).toBe(10);
+        expect(metrics.security.authFailures).toBe(5);
         expect(metrics.performance.averageResponseTime).toBe(250);
+        expect(metrics.performance.errorRate).toBe(0.05);
       });
 
       it('should handle database query errors gracefully', async () => {
@@ -960,47 +964,11 @@ describe('MonitoringService', () => {
       });
     });
 
-    describe('Redis Stats Helper Methods', () => {
-      it('should return default request stats when Redis returns null', async () => {
-        mockRedis.get.mockResolvedValue(null);
-
-        const stats = await service['redisStats'].getRequestStats();
-
-        expect(stats).toEqual({
-          total: 0,
-          successful: 0,
-          failed: 0,
-          rate: 0,
-        });
-      });
-
-      it('should parse request stats from Redis', async () => {
-        mockRedis.get.mockResolvedValue(JSON.stringify({ total: 100, successful: 95, failed: 5, rate: 5 }));
-
-        const stats = await service['redisStats'].getRequestStats();
-
-        expect(stats.total).toBe(100);
-        expect(stats.successful).toBe(95);
-        expect(stats.failed).toBe(5);
-        expect(stats.rate).toBe(5);
-      });
-
-      it('should handle Redis errors in getRequestStats', async () => {
-        mockRedis.get.mockRejectedValue(new Error('Redis error'));
-
-        const stats = await service['redisStats'].getRequestStats();
-
-        expect(stats).toEqual({
-          total: 0,
-          successful: 0,
-          failed: 0,
-          rate: 0,
-        });
-      });
-
-      it('should return default protocol stats when Redis returns null', async () => {
-        mockRedis.get.mockResolvedValue(null);
-
+    // The stats helper is now Postgres-backed and covered by its own spec
+    // (monitoring-redis-stats.helper.spec.ts). Here we only assert the
+    // service degrades gracefully when those getters return zero shapes.
+    describe('Stats Helper Methods', () => {
+      it('exposes the zero-valued protocol shape (no per-protocol source yet)', async () => {
         const stats = await service['redisStats'].getProtocolStats();
 
         expect(stats).toEqual({
@@ -1008,100 +976,6 @@ describe('MonitoringService', () => {
           utcp: { manuals: 0, directCalls: 0, proxyExecutions: 0 },
           a2a: { activeAgents: 0, messages: 0, workflows: 0 },
         });
-      });
-
-      it('should parse protocol stats from Redis', async () => {
-        mockRedis.get.mockResolvedValue(JSON.stringify({
-          mcp: { sessions: 10, toolCalls: 500, responseTime: 200, errorRate: 0.01 },
-          utcp: { manuals: 20, directCalls: 300, proxyExecutions: 100 },
-          a2a: { activeAgents: 5, messages: 1000, workflows: 15 },
-        }));
-
-        const stats = await service['redisStats'].getProtocolStats();
-
-        expect(stats.mcp.sessions).toBe(10);
-        expect(stats.utcp.directCalls).toBe(300);
-        expect(stats.a2a.workflows).toBe(15);
-      });
-
-      it('should handle Redis errors in getProtocolStats', async () => {
-        mockRedis.get.mockRejectedValue(new Error('Redis error'));
-
-        const stats = await service['redisStats'].getProtocolStats();
-
-        expect(stats.mcp.sessions).toBe(0);
-      });
-
-      it('should return default security stats when Redis returns null', async () => {
-        mockRedis.get.mockResolvedValue(null);
-
-        const stats = await service['redisStats'].getSecurityStats();
-
-        expect(stats).toEqual({
-          threatsBlocked: 0,
-          piiFiltered: 0,
-          rateLimitsApplied: 0,
-          authFailures: 0,
-        });
-      });
-
-      it('should parse security stats from Redis', async () => {
-        mockRedis.get.mockResolvedValue(JSON.stringify({
-          threatsBlocked: 50,
-          piiFiltered: 100,
-          rateLimitsApplied: 25,
-          authFailures: 10,
-        }));
-
-        const stats = await service['redisStats'].getSecurityStats();
-
-        expect(stats.threatsBlocked).toBe(50);
-        expect(stats.piiFiltered).toBe(100);
-      });
-
-      it('should handle Redis errors in getSecurityStats', async () => {
-        mockRedis.get.mockRejectedValue(new Error('Redis error'));
-
-        const stats = await service['redisStats'].getSecurityStats();
-
-        expect(stats.threatsBlocked).toBe(0);
-      });
-
-      it('should return default performance stats when Redis returns null', async () => {
-        mockRedis.get.mockResolvedValue(null);
-
-        const stats = await service['redisStats'].getPerformanceStats();
-
-        expect(stats).toEqual({
-          averageResponseTime: 0,
-          p95ResponseTime: 0,
-          p99ResponseTime: 0,
-          cacheHitRate: 0,
-          errorRate: 0,
-        });
-      });
-
-      it('should parse performance stats from Redis', async () => {
-        mockRedis.get.mockResolvedValue(JSON.stringify({
-          averageResponseTime: 300,
-          p95ResponseTime: 600,
-          p99ResponseTime: 900,
-          cacheHitRate: 0.8,
-          errorRate: 0.02,
-        }));
-
-        const stats = await service['redisStats'].getPerformanceStats();
-
-        expect(stats.averageResponseTime).toBe(300);
-        expect(stats.cacheHitRate).toBe(0.8);
-      });
-
-      it('should handle Redis errors in getPerformanceStats', async () => {
-        mockRedis.get.mockRejectedValue(new Error('Redis error'));
-
-        const stats = await service['redisStats'].getPerformanceStats();
-
-        expect(stats.errorRate).toBe(0);
       });
     });
 
