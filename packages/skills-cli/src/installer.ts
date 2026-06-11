@@ -11,7 +11,7 @@
  */
 
 import { writeFileSync, mkdirSync, existsSync, readdirSync, rmSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { join, resolve, sep } from 'path';
 import type { SkillFile } from './client.js';
 import type { AgentTarget } from './agents.js';
 
@@ -21,6 +21,35 @@ const LEGACY_SKILL_PREFIX = 'almyty-';
 
 /** Marker line we expect inside every SKILL.md frontmatter we wrote. */
 const ALMYTY_MARKER = /^\s*author:\s*almyty\s*$/m;
+
+/**
+ * Skill names come from the backend/gateway and are used to build
+ * filesystem paths under skillsDir. A malicious or compromised gateway
+ * could return `name: "../../../.ssh/authorized_keys"` and have the
+ * installer write — or, via the legacy-dir cleanup, recursively delete —
+ * arbitrary files on the user's machine (and the daemon/watch modes do
+ * this automatically on a timer). Restrict names to a single safe path
+ * segment.
+ */
+const SAFE_SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+function isSafeSkillName(name: unknown): name is string {
+  return (
+    typeof name === 'string' &&
+    name !== '.' &&
+    name !== '..' &&
+    !name.includes('/') &&
+    !name.includes('\\') &&
+    SAFE_SKILL_NAME.test(name)
+  );
+}
+
+/** Defence in depth: assert a built path stays inside skillsDir. */
+function isInside(baseDir: string, candidate: string): boolean {
+  const base = resolve(baseDir);
+  const target = resolve(candidate);
+  return target === base || target.startsWith(base + sep);
+}
 
 export interface InstallResult {
   agent: string;
@@ -68,6 +97,14 @@ export function installSkills(
   mkdirSync(target.skillsDir, { recursive: true });
 
   for (const skill of skills) {
+    // Reject backend-supplied names that aren't a single safe path
+    // segment — skip rather than throw so one bad entry can't break the
+    // whole install (e.g. in daemon/watch mode).
+    if (!isSafeSkillName(skill.name)) {
+      console.warn(`Skipping skill with unsafe name: ${JSON.stringify(skill.name)}`);
+      continue;
+    }
+
     const dirName = skill.name;
     const skillDir = join(target.skillsDir, dirName);
     const skillFile = join(skillDir, 'SKILL.md');
@@ -76,6 +113,11 @@ export function installSkills(
     // shape, remove it before writing the new shape so the agent
     // doesn't see two copies of the same skill.
     const legacyDir = join(target.skillsDir, `${LEGACY_SKILL_PREFIX}${skill.name}`);
+    // Containment guard (defence in depth) before any write/delete.
+    if (!isInside(target.skillsDir, skillDir) || !isInside(target.skillsDir, legacyDir)) {
+      console.warn(`Skipping skill whose path escapes the skills directory: ${skill.name}`);
+      continue;
+    }
     if (legacyDir !== skillDir && existsSync(legacyDir)) {
       rmSync(legacyDir, { recursive: true, force: true });
     }

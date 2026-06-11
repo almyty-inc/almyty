@@ -135,6 +135,26 @@ export function loadConfig(inputs: LoadConfigInputs = {}): ResolvedConfig {
     // fail with a less-helpful message.
     throw new Error('runner name is required (set via --name, ALMYTY_RUNNER_NAME, or config.name)');
   }
+
+  // The runner's command channel (RCE-capable) and its bearer token ride
+  // this URL — refuse plaintext http:// to a remote host. http is allowed
+  // only for loopback (local dev).
+  try {
+    const u = new URL(resolved.backendUrl);
+    const host = u.hostname;
+    const loopback =
+      host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.localhost');
+    if (u.protocol !== 'https:' && !loopback) {
+      throw new Error(
+        `Refusing an insecure ${u.protocol}// backend URL for a remote host: ${resolved.backendUrl}. ` +
+          'Use https:// (http is only allowed for localhost).',
+      );
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith('Refusing')) throw e;
+    throw new Error(`Invalid backend URL: ${resolved.backendUrl}`);
+  }
+
   return resolved;
 }
 

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, chmodSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
@@ -212,9 +212,13 @@ export class RunnerDaemon {
   }
 
   private writeState(s: DaemonStatus): void {
-    mkdirSync(STATE_DIR, { recursive: true });
+    // status.json holds the sessionId (bearer-equivalent for the command
+    // channel) — keep the dir and file owner-only.
+    mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
+    try { chmodSync(STATE_DIR, 0o700); } catch { /* best-effort */ }
     writeFileSync(PID_FILE, String(s.pid));
-    writeFileSync(STATUS_FILE, JSON.stringify(s, null, 2));
+    writeFileSync(STATUS_FILE, JSON.stringify(s, null, 2), { mode: 0o600 });
+    try { chmodSync(STATUS_FILE, 0o600); } catch { /* best-effort */ }
     this.status = s;
   }
 
