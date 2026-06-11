@@ -3,6 +3,7 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { CacheModule } from '@nestjs/cache-manager';
 import { BullModule } from '@nestjs/bull';
 import { RedisModule } from '@nestjs-modules/ioredis';
@@ -162,15 +163,28 @@ import { databaseConfig } from './config/database.config';
       ExternalAgent,
     ]),
 
-    // Rate limiting
+    // Rate limiting — backed by Redis so limits are shared across replicas
+    // (in-memory storage would multiply the effective limit by the pod count
+    // and reset on every restart). Falls back to in-memory only if no Redis
+    // host is configured (e.g. a single-process local run).
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        throttlers: [{
-          ttl: configService.get('RATE_LIMIT_TTL', 60),
-          limit: configService.get('RATE_LIMIT_MAX', 100),
-        }],
-      }),
+      useFactory: (configService: ConfigService) => {
+        const host = configService.get('REDIS_HOST');
+        const config: any = {
+          throttlers: [{
+            ttl: configService.get('RATE_LIMIT_TTL', 60),
+            limit: configService.get('RATE_LIMIT_MAX', 100),
+          }],
+        };
+        if (host) {
+          const port = configService.get('REDIS_PORT', 6379);
+          config.storage = new ThrottlerStorageRedisService(
+            `redis://${host}:${port}`,
+          );
+        }
+        return config;
+      },
     }),
 
     // Caching
