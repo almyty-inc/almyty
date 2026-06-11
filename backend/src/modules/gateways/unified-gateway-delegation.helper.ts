@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -7,6 +7,8 @@ import * as crypto from 'crypto';
 
 import { Agent } from '../../entities/agent.entity';
 import { Gateway, GatewayType } from '../../entities/gateway.entity';
+import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
+import { MetricType, MetricStatus } from '../../entities/usage-metric.entity';
 import { Organization } from '../../entities/organization.entity';
 import { McpService } from '../mcp/mcp.service';
 import { AlmytyMcpService } from '../mcp/almyty-mcp.service';
@@ -39,6 +41,7 @@ export class UnifiedGatewayDelegation {
     private readonly acpServerService: AcpServerService,
     private readonly acpDiscoveryService: AcpDiscoveryService,
     private readonly configService: ConfigService,
+    @Optional() private readonly metrics?: MetricsRecorderService,
   ) {}
 
   async handleGatewayRequest(
@@ -235,17 +238,27 @@ export class UnifiedGatewayDelegation {
     }
 
     if (action === 'manual') {
-      return res.json(
-        await this.utcpService.generateManual({
-          organizationId: organization.id,
-          gateway,
-        }),
-      );
+      const manual = await this.utcpService.generateManual({
+        organizationId: organization.id,
+        gateway,
+      });
+      this.metrics?.record(MetricType.UTCP_MANUAL, {
+        organizationId: organization.id,
+        gatewayId: gateway.id,
+      });
+      return res.json(manual);
     }
 
     if (action === 'execute' && req.method === 'POST') {
       const userId = auth?.userId || (req as any).user?.sub || null;
-      return res.json(await this.utcpService.executeUtcpTool(body, organization.id, userId));
+      const result = await this.utcpService.executeUtcpTool(body, organization.id, userId);
+      this.metrics?.record(MetricType.UTCP_DIRECT_CALL, {
+        organizationId: organization.id,
+        gatewayId: gateway.id,
+        userId,
+        status: result?.success === false ? MetricStatus.ERROR : MetricStatus.SUCCESS,
+      });
+      return res.json(result);
     }
 
     throw new HttpException(`Unknown UTCP action: ${action}`, HttpStatus.NOT_FOUND);

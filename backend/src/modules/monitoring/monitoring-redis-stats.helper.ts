@@ -77,14 +77,69 @@ export class MonitoringRedisStatsHelper {
   }
 
   async getProtocolStats(): Promise<any> {
-    // Per-protocol breakdown isn't cleanly queryable yet (protocol lives only
-    // in RequestLog JSON metadata, not as an indexed column), so keep the
-    // zero-valued shape rather than emit misleading numbers.
-    return {
+    const zero = {
       mcp: { sessions: 0, toolCalls: 0, responseTime: 0, errorRate: 0 },
       utcp: { manuals: 0, directCalls: 0, proxyExecutions: 0 },
       a2a: { activeAgents: 0, messages: 0, workflows: 0 },
     };
+    try {
+      const since = this.windowStart();
+      // Semantic counters emitted by the protocol controllers, plus mcp
+      // latency/error rate from request_logs (the only place per-protocol
+      // response time and status live). proxyExecutions has no distinct
+      // source in this codebase, so it stays an honest 0.
+      const [counters, mcpReq] = await Promise.all([
+        this.usageMetricRepository.query(
+          `SELECT
+             COUNT(*) FILTER (WHERE type = 'mcp_session')      AS mcp_sessions,
+             COUNT(*) FILTER (WHERE type = 'mcp_tool_call')    AS mcp_tool_calls,
+             COUNT(*) FILTER (WHERE type = 'utcp_manual')      AS utcp_manuals,
+             COUNT(*) FILTER (WHERE type = 'utcp_direct_call') AS utcp_direct_calls,
+             COUNT(*) FILTER (WHERE type = 'a2a_message')      AS a2a_messages,
+             COUNT(*) FILTER (WHERE type = 'a2a_workflow')     AS a2a_workflows,
+             COUNT(DISTINCT (dimensions->>'agentId'))
+               FILTER (WHERE type IN ('a2a_message', 'a2a_workflow')) AS a2a_active_agents
+           FROM usage_metrics
+           WHERE timestamp >= $1
+             AND type IN ('mcp_session','mcp_tool_call','utcp_manual',
+                          'utcp_direct_call','a2a_message','a2a_workflow')`,
+          [since],
+        ),
+        this.usageMetricRepository.query(
+          `SELECT
+             AVG("responseTime") AS avg_rt,
+             COUNT(*)::bigint AS total,
+             COUNT(*) FILTER (WHERE "statusCode" >= 400)::bigint AS errors
+           FROM request_logs
+           WHERE timestamp >= $1 AND metadata->>'protocol' = 'mcp'`,
+          [since],
+        ),
+      ]);
+      const c = Array.isArray(counters) ? counters[0] : undefined;
+      const m = Array.isArray(mcpReq) ? mcpReq[0] : undefined;
+      const mcpTotal = this.num(m?.total);
+      return {
+        mcp: {
+          sessions: this.num(c?.mcp_sessions),
+          toolCalls: this.num(c?.mcp_tool_calls),
+          responseTime: this.num(m?.avg_rt),
+          errorRate: mcpTotal > 0 ? this.num(m?.errors) / mcpTotal : 0,
+        },
+        utcp: {
+          manuals: this.num(c?.utcp_manuals),
+          directCalls: this.num(c?.utcp_direct_calls),
+          proxyExecutions: 0,
+        },
+        a2a: {
+          activeAgents: this.num(c?.a2a_active_agents),
+          messages: this.num(c?.a2a_messages),
+          workflows: this.num(c?.a2a_workflows),
+        },
+      };
+    } catch (err: any) {
+      this.logger.warn(`getProtocolStats failed: ${err?.message}`);
+      return zero;
+    }
   }
 
   async getSecurityStats(): Promise<{
