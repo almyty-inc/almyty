@@ -39,6 +39,49 @@ describe('LlmProvider Entity', () => {
     provider.isHealthy = true;
   });
 
+  describe('getAuthHeaders', () => {
+    it('sets the bearer token for OpenAI-style providers', () => {
+      provider.type = LlmProviderType.OPENAI;
+      provider.configuration.apiKey = 'sk-abc';
+      expect(provider.getAuthHeaders()['Authorization']).toBe('Bearer sk-abc');
+    });
+
+    it('sanitizes tenant-supplied custom headers (strips dangerous + CRLF)', () => {
+      provider.type = LlmProviderType.CUSTOM;
+      provider.configuration.custom = {
+        authMethod: 'none',
+        headers: {
+          'X-Safe': 'ok',
+          Host: 'internal.svc',
+          'X-Forwarded-For': '127.0.0.1',
+          'Proxy-Authorization': 'Basic abc',
+          'X-Inject': 'a\r\nX-Evil: 1',
+        },
+      } as any;
+
+      const headers = provider.getAuthHeaders();
+
+      expect(headers['X-Safe']).toBe('ok');
+      expect(headers['Host']).toBeUndefined();
+      expect(headers['X-Forwarded-For']).toBeUndefined();
+      expect(headers['Proxy-Authorization']).toBeUndefined();
+      expect(headers['X-Inject']).toBeUndefined();
+    });
+
+    it('still applies the custom bearer auth method after sanitizing headers', () => {
+      provider.type = LlmProviderType.CUSTOM;
+      provider.configuration.apiKey = 'key-123';
+      provider.configuration.custom = {
+        authMethod: 'bearer',
+        headers: { Connection: 'upgrade' },
+      } as any;
+
+      const headers = provider.getAuthHeaders();
+      expect(headers['Connection']).toBeUndefined();
+      expect(headers['Authorization']).toBe('Bearer key-123');
+    });
+  });
+
   describe('isActive', () => {
     it('should return true when status is ACTIVE', () => {
       expect(provider.isActive()).toBe(true);
