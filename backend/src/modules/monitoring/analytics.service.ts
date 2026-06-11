@@ -63,10 +63,11 @@ export class AnalyticsService {
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // RequestLog has no direct organizationId column — scope via the
-    // gateway join, same pattern as getRequestLogs(). Before this the
-    // dashboard's overview tiles (request count, avg response time,
-    // error count) were GLOBAL across every org.
+    // RequestLog has no direct organizationId column. Scope via the gateway
+    // join where a gateway was attributed, falling back to the org id the
+    // logging interceptor stores in metadata — org-wide protocol routes
+    // (e.g. POST /mcp) have no single gateway, and an inner join silently
+    // dropped every such request from the tiles.
     const [
       totalRequests24h,
       totalRequests7d,
@@ -80,16 +81,16 @@ export class AnalyticsService {
       // Only count protocol requests (MCP, UTCP, A2A, Skills), not internal management API calls
       this.requestLogRepository
         .createQueryBuilder('log')
-        .innerJoin('log.gateway', 'gw')
-        .where('gw.organizationId = :orgId', { orgId: organizationId })
+        .leftJoin('log.gateway', 'gw')
+        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getCount()
         .catch(() => 0),
       this.requestLogRepository
         .createQueryBuilder('log')
-        .innerJoin('log.gateway', 'gw')
-        .where('gw.organizationId = :orgId', { orgId: organizationId })
+        .leftJoin('log.gateway', 'gw')
+        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: organizationId })
         .andWhere('log.timestamp >= :since', { since: last7d })
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getCount()
@@ -102,9 +103,9 @@ export class AnalyticsService {
       }).catch(() => 0),
       this.requestLogRepository
         .createQueryBuilder('log')
-        .innerJoin('log.gateway', 'gw')
+        .leftJoin('log.gateway', 'gw')
         .select('AVG(log.responseTime)', 'avg')
-        .where('gw.organizationId = :orgId', { orgId: organizationId })
+        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getRawOne()
@@ -112,8 +113,8 @@ export class AnalyticsService {
         .catch(() => 0),
       this.requestLogRepository
         .createQueryBuilder('log')
-        .innerJoin('log.gateway', 'gw')
-        .where('gw.organizationId = :orgId', { orgId: organizationId })
+        .leftJoin('log.gateway', 'gw')
+        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
         .andWhere('log.statusCode >= 500')
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
@@ -150,21 +151,21 @@ export class AnalyticsService {
 
   async getRequestLogs(query: RequestLogQuery) {
     // CRITICAL: RequestLog has no direct `organizationId` column — the
-    // only link is via its `gateway` relation. The previous query was
-    // unscoped, so any authenticated caller could see every request
-    // log in the database across every organization.
+    // links are the `gateway` relation and the org id the logging
+    // interceptor stores in metadata. The original query was unscoped,
+    // so any authenticated caller could see every request log in the
+    // database across every organization.
     //
-    // Scope via INNER JOIN on gateway so a request log only shows up
-    // for members of the gateway's org. A request log with no
-    // associated gateway (system-level / health-check traffic) is
-    // never returned through this endpoint.
+    // Scope on (gateway org OR metadata org) so logs only show up for
+    // members of that org. Org-wide protocol routes (e.g. POST /mcp)
+    // have no gateway row, so a bare gateway join dropped them.
     if (!query.organizationId) {
       throw new Error('getRequestLogs requires organizationId');
     }
     const qb = this.requestLogRepository
       .createQueryBuilder('log')
-      .innerJoin('log.gateway', 'gw')
-      .andWhere('gw.organizationId = :orgId', { orgId: query.organizationId })
+      .leftJoin('log.gateway', 'gw')
+      .andWhere("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: query.organizationId })
       .orderBy('log.timestamp', 'DESC')
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
@@ -324,12 +325,12 @@ export class AnalyticsService {
 
     const results = await this.requestLogRepository
       .createQueryBuilder('log')
-      .innerJoin('log.gateway', 'gw')
+      .leftJoin('log.gateway', 'gw')
       .select(`date_trunc('${truncInterval}', log.timestamp)`, 'bucket')
       .addSelect('COUNT(*)', 'requests')
       .addSelect('SUM(CASE WHEN log.statusCode >= 400 THEN 1 ELSE 0 END)', 'errors')
       .addSelect('AVG(log.responseTime)', 'avgResponseTime')
-      .where('gw.organizationId = :orgId', { orgId: organizationId })
+      .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: organizationId })
       .andWhere('log.timestamp >= :since', { since })
       .andWhere("log.metadata->>'protocol' IS NOT NULL")
       .groupBy('bucket')

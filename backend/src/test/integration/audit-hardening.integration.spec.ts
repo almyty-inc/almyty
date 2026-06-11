@@ -290,7 +290,17 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
 
   function buildController(apiKeyRow?: any) {
     const orgRepo: any = { findOne: jest.fn() };
-    const gatewayRepo: any = { findOne: jest.fn().mockResolvedValue(null) };
+    const gatewayRepo: any = {
+      findOne: jest.fn().mockResolvedValue(null),
+      // bumpGatewayCounters chain (UTCP/A2A/ACP request counters)
+      createQueryBuilder: jest.fn(() => ({
+        update: () => ({
+          set: () => ({
+            where: () => ({ execute: jest.fn().mockResolvedValue(undefined) }),
+          }),
+        }),
+      })),
+    };
     const agentRepo: any = {
       findOne: jest.fn().mockResolvedValue({
         id: 'agent-1',
@@ -353,6 +363,7 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
     );
     const gatewayDelegation = new UnifiedGatewayDelegation(
       agentRepo,
+      gatewayRepo,
       mcpServiceStub,
       almytyMcpStub,
       mcpOAuthStub,
