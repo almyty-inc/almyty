@@ -66,6 +66,14 @@ export class RequestLoggingInterceptor implements NestInterceptor {
       const responseTime = Date.now() - startTime;
       const statusCode = error?.status || error?.getStatus?.() || response.statusCode || 500;
 
+      // Handlers that inject @Res() return the Express response object
+      // itself (res.json(...) returns res). Serializing it throws on the
+      // circular structure, which used to abort the whole log write for
+      // every unified-endpoint request. Don't try to record that body.
+      if (responseBody === response) {
+        responseBody = null;
+      }
+
       // Attribution: prefer the context set by the handler that resolved the
       // gateway — the URL alone can't identify gateway or protocol for
       // multi-tenant paths like /acme/petstore-mcp.
@@ -166,14 +174,26 @@ export class RequestLoggingInterceptor implements NestInterceptor {
 
   private truncateBody(body: any): string | null {
     if (!body) return null;
-    const str = typeof body === 'string' ? body : JSON.stringify(body);
+    let str: string;
+    try {
+      str = typeof body === 'string' ? body : JSON.stringify(body);
+    } catch {
+      return '[unserializable]';
+    }
+    if (str === undefined || str === null) return null;
     if (str.length > 10000) return str.substring(0, 10000) + '... [truncated]';
     return str;
   }
 
   private estimateSize(data: any): number {
     if (!data) return 0;
-    const str = typeof data === 'string' ? data : JSON.stringify(data);
+    let str: string;
+    try {
+      str = typeof data === 'string' ? data : JSON.stringify(data);
+    } catch {
+      return 0;
+    }
+    if (!str) return 0;
     return Buffer.byteLength(str, 'utf8');
   }
 

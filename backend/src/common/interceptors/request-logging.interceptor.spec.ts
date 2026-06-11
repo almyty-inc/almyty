@@ -7,18 +7,18 @@ describe('RequestLoggingInterceptor', () => {
   let requestLogRepository: { save: jest.Mock };
   let usageMetricRepository: { save: jest.Mock };
 
-  const makeContext = (request: any, statusCode = 200) => ({
+  const makeContext = (request: any, statusCode = 200, response?: any) => ({
     switchToHttp: () => ({
       getRequest: () => request,
-      getResponse: () => ({ statusCode }),
+      getResponse: () => response ?? { statusCode },
     }),
   });
 
-  const run = async (request: any, statusCode = 200) => {
-    const next = { handle: () => of({ ok: true }) };
+  const run = async (request: any, statusCode = 200, response?: any, body?: any) => {
+    const next = { handle: () => of(body ?? { ok: true }) };
     await new Promise<void>((resolve, reject) => {
       interceptor
-        .intercept(makeContext(request, statusCode) as any, next as any)
+        .intercept(makeContext(request, statusCode, response) as any, next as any)
         .subscribe({ complete: resolve, error: reject });
     });
     // logRequest fires in the tap; the repository saves are fire-and-forget
@@ -95,6 +95,29 @@ describe('RequestLoggingInterceptor', () => {
     const log = requestLogRepository.save.mock.calls[0][0];
     expect(log.metadata.protocol).toBe('mcp');
     expect(log.metadata.organizationId).toBe('org-1');
+  });
+
+  it('logs @Res handlers that return the circular response object', async () => {
+    // res.json(...) returns the Express response — a circular structure
+    // that JSON.stringify rejects. The interceptor must not let that
+    // abort the write.
+    const response: any = { statusCode: 200 };
+    response.self = response;
+    const request: any = {
+      method: 'POST',
+      path: '/acme/petstore-mcp',
+      headers: {},
+      body: { jsonrpc: '2.0', method: 'tools/list' },
+    };
+    setProtocolContext(request, { gatewayId: 'gw-1', organizationId: 'org-1', protocol: 'mcp' });
+
+    await run(request, 200, response, response);
+
+    expect(requestLogRepository.save).toHaveBeenCalledTimes(1);
+    const log = requestLogRepository.save.mock.calls[0][0];
+    expect(log.responseBody).toBeNull();
+    expect(log.gatewayId).toBe('gw-1');
+    expect(usageMetricRepository.save).toHaveBeenCalledTimes(2);
   });
 
   it('records unauthorized status for 403 responses', async () => {
