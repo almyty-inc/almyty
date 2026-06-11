@@ -56,12 +56,14 @@ describe('MonitoringRedisStatsHelper (Postgres-backed)', () => {
   });
 
   describe('getSecurityStats', () => {
-    it('maps rate-limited and unauthorized request counts', async () => {
-      query.mockResolvedValue([{ rate_limited: '7', unauthorized: '3' }]);
+    it('maps rate-limit, auth-failure, threat, and PII counts', async () => {
+      query.mockResolvedValue([
+        { rate_limited: '7', unauthorized: '3', threats: '12', pii: '40' },
+      ]);
 
       await expect(helper.getSecurityStats()).resolves.toEqual({
-        threatsBlocked: 0,
-        piiFiltered: 0,
+        threatsBlocked: 12,
+        piiFiltered: 40,
         rateLimitsApplied: 7,
         authFailures: 3,
       });
