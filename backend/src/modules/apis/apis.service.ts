@@ -149,6 +149,9 @@ export class ApisService {
     await this.accessPolicy.applyListFilter(qb, caller, organizationId, 'api');
     if (type) qb.andWhere('api.type = :type', { type });
     if (status) qb.andWhere('api.status = :status', { status });
+    // Count, don't load: a Stripe-class API has hundreds of operations
+    // with large JSON columns — the list only needs the number.
+    qb.loadRelationCountAndMap('api.operationCount', 'api.operations');
     qb.orderBy('api.createdAt', 'DESC').skip((page - 1) * limit).take(limit);
 
     const [apis, total] = await qb.getManyAndCount();
