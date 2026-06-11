@@ -1,7 +1,11 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { InjectRedis } from '@nestjs-modules/ioredis';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import * as Redis from 'ioredis';
+
+import { UsageMetric, MetricType, MetricStatus } from '../../entities/usage-metric.entity';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
@@ -47,6 +51,11 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
   constructor(
     @InjectRedis() private readonly redis: Redis.Redis,
     private readonly store: PluginStoreHelper,
+    // Optional so unit tests (and any DB-less context) construct the manager
+    // without a repository; security counters are simply not recorded then.
+    @Optional()
+    @InjectRepository(UsageMetric)
+    private readonly usageMetricRepository?: Repository<UsageMetric>,
   ) {
     super();
     // Construct the loader with our Redis client so built-in plugins (the
@@ -120,6 +129,8 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
         const pluginResult = await this.executePlugin(plugin, hookType, currentContext);
         results.push({ pluginId: plugin.id, result: pluginResult });
 
+        this.recordSecurityCounters(plugin, pluginResult, currentContext);
+
         if (pluginResult.success && pluginResult.nextAction !== 'stop') {
           // Apply plugin modifications
           currentContext.data = pluginResult.data;
@@ -161,6 +172,52 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     }
 
     return currentContext;
+  }
+
+  /**
+   * Record security telemetry from a plugin result so the monitoring
+   * dashboard reflects real activity (these used to be hard-coded zeros).
+   *
+   * - A blocked threat is self-identifying via the result error code, so any
+   *   plugin that blocks on a detected threat is counted.
+   * - PII redactions come from the built-in PII Filter, which reports each
+   *   redaction in `modifications`.
+   *
+   * Writes are fire-and-forget and no-op when no repository is wired.
+   */
+  private recordSecurityCounters(
+    plugin: Plugin,
+    result: PluginResult,
+    context: PluginContext,
+  ): void {
+    if (!this.usageMetricRepository) return;
+
+    if (result?.error?.code === 'SECURITY_THREAT_DETECTED') {
+      const threats = result.error.details?.threats;
+      const count = Array.isArray(threats) && threats.length > 0 ? threats.length : 1;
+      this.recordMetric(MetricType.SECURITY_THREAT_BLOCKED, count, context);
+    }
+
+    if (plugin?.name === 'PII Filter' && result?.success) {
+      const redactions = result.metadata?.modifications?.length ?? 0;
+      if (redactions > 0) {
+        this.recordMetric(MetricType.PII_FILTERED, redactions, context);
+      }
+    }
+  }
+
+  private recordMetric(type: MetricType, value: number, context: PluginContext): void {
+    const metric = new UsageMetric();
+    metric.type = type;
+    metric.value = value;
+    metric.status = MetricStatus.SUCCESS;
+    metric.organizationId = context.organizationId || null;
+    metric.userId = context.userId || null;
+    metric.timestamp = new Date();
+    metric.metadata = { requestId: context.requestId };
+    this.usageMetricRepository!.save(metric).catch((err) =>
+      this.logger.warn(`Failed to record ${type} metric: ${err.message}`),
+    );
   }
 
   // Execute Individual Plugin

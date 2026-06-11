@@ -883,7 +883,7 @@ describe('MonitoringService', () => {
         const statsQuery = service['redisStats']['usageMetricRepository'].query as jest.Mock;
         statsQuery
           .mockResolvedValueOnce([{ total: '1000', successful: '950' }]) // getRequestStats
-          .mockResolvedValueOnce([{ rate_limited: '10', unauthorized: '5' }]) // getSecurityStats
+          .mockResolvedValueOnce([{ rate_limited: '10', unauthorized: '5', threats: '4', pii: '9' }]) // getSecurityStats
           .mockResolvedValueOnce([{ avg: '250', p95: '500', p99: '800' }]) // perf latency
           .mockResolvedValueOnce([{ total: '1000', errored: '50' }]); // perf error rate
 
@@ -904,6 +904,8 @@ describe('MonitoringService', () => {
         expect(metrics.protocols.mcp.sessions).toBe(0);
         expect(metrics.security.rateLimitsApplied).toBe(10);
         expect(metrics.security.authFailures).toBe(5);
+        expect(metrics.security.threatsBlocked).toBe(4);
+        expect(metrics.security.piiFiltered).toBe(9);
         expect(metrics.performance.averageResponseTime).toBe(250);
         expect(metrics.performance.errorRate).toBe(0.05);
       });
