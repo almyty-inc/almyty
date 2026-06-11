@@ -12,6 +12,7 @@ import {
 import { VersionedEntity } from 'typeorm-versions';
 import { Organization } from './organization.entity';
 import { Credential } from './credential.entity';
+import { sanitizeHeaders } from '../common/security/url-validator';
 import { Conversation } from './conversation.entity';
 import { UsageMetric } from './usage-metric.entity';
 
@@ -347,7 +348,10 @@ export class LlmProvider {
 
       case LlmProviderType.CUSTOM:
         if (this.configuration.custom?.headers) {
-          Object.assign(headers, this.configuration.custom.headers);
+          // Tenant-supplied — strip hop-by-hop/forwarding headers and any
+          // CRLF-injection values before they reach the upstream request,
+          // the same guard the HTTP/gRPC tool executors already apply.
+          Object.assign(headers, sanitizeHeaders(this.configuration.custom.headers));
         }
         if (this.configuration.custom?.authMethod === 'bearer' && this.configuration.apiKey) {
           headers['Authorization'] = `Bearer ${this.configuration.apiKey}`;
