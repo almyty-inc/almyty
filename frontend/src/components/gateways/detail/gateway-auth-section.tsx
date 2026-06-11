@@ -156,8 +156,10 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
 
   const authConfigsRaw = authConfigsData?.authConfigs || authConfigsData || []
   const authConfigs = Array.isArray(authConfigsRaw) ? authConfigsRaw : []
-  const keysExtracted = keysData?.keys || keysData || []
-  const keys = Array.isArray(keysExtracted) ? keysExtracted : []
+  // The endpoint returns the keys as a bare array. Don't probe `keysData?.keys`
+  // first: on an array that resolves to Array.prototype.keys (a function, so
+  // truthy), which swallowed the data and always rendered the empty state.
+  const keys = Array.isArray(keysData) ? keysData : Array.isArray((keysData as any)?.keys) ? (keysData as any).keys : []
 
   const hasApiKeyAuth = authConfigs.some((c: any) => c.type === 'api_key')
   const existingTypes = authConfigs.map((c: any) => c.type)
