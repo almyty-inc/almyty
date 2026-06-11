@@ -92,6 +92,7 @@ export class UsageMetric {
     ipAddress?: string;
     endpoint?: string;
     method?: string;
+    protocol?: string;
     statusCode?: number;
     errorMessage?: string;
     responseSize?: number;
