@@ -101,6 +101,11 @@ spec:
             configMapKeyRef:
               name: almyty-config
               key: DATABASE_NAME
+        - name: DB_MIGRATIONS_RUN
+          valueFrom:
+            configMapKeyRef:
+              name: almyty-config
+              key: DB_MIGRATIONS_RUN
         - name: REDIS_URL
           valueFrom:
             secretKeyRef:

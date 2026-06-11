@@ -10,6 +10,9 @@ data:
   DATABASE_NAME: "almyty"
   DB_SSL: "false"
   DB_SYNC: "false"
+  # Pods do NOT migrate on boot — the deploy workflow runs a single gated
+  # migration Job before the rollout (avoids replicas racing migrations).
+  DB_MIGRATIONS_RUN: "false"
 
   # Redis Configuration
   REDIS_HOST: "almyty-redis"
