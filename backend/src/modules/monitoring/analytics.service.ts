@@ -82,7 +82,7 @@ export class AnalyticsService {
       this.requestLogRepository
         .createQueryBuilder('log')
         .leftJoin('log.gateway', 'gw')
-        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: organizationId })
+        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getCount()
@@ -90,7 +90,7 @@ export class AnalyticsService {
       this.requestLogRepository
         .createQueryBuilder('log')
         .leftJoin('log.gateway', 'gw')
-        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: organizationId })
+        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
         .andWhere('log.timestamp >= :since', { since: last7d })
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getCount()
@@ -105,7 +105,7 @@ export class AnalyticsService {
         .createQueryBuilder('log')
         .leftJoin('log.gateway', 'gw')
         .select('AVG(log.responseTime)', 'avg')
-        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: organizationId })
+        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getRawOne()
@@ -114,7 +114,7 @@ export class AnalyticsService {
       this.requestLogRepository
         .createQueryBuilder('log')
         .leftJoin('log.gateway', 'gw')
-        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: organizationId })
+        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
         .andWhere('log.statusCode >= 500')
         .andWhere("log.metadata->>'protocol' IS NOT NULL")
@@ -165,7 +165,7 @@ export class AnalyticsService {
     const qb = this.requestLogRepository
       .createQueryBuilder('log')
       .leftJoin('log.gateway', 'gw')
-      .andWhere("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: query.organizationId })
+      .andWhere("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: query.organizationId, orgIdText: query.organizationId })
       .orderBy('log.timestamp', 'DESC')
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
@@ -330,7 +330,7 @@ export class AnalyticsService {
       .addSelect('COUNT(*)', 'requests')
       .addSelect('SUM(CASE WHEN log.statusCode >= 400 THEN 1 ELSE 0 END)', 'errors')
       .addSelect('AVG(log.responseTime)', 'avgResponseTime')
-      .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)", { orgId: organizationId })
+      .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
       .andWhere('log.timestamp >= :since', { since })
       .andWhere("log.metadata->>'protocol' IS NOT NULL")
       .groupBy('bucket')
