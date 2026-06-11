@@ -95,7 +95,7 @@ The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt
 | `REDIS_HOST` | Redis hostname | `localhost` |
 | `REDIS_PORT` | Redis port | `6379` |
 | `JWT_SECRET` | Secret for signing JWT tokens | Random 64+ char string |
-| `ENCRYPTION_KEY` | AES-256 key for encrypting credentials | Random 32-byte hex string |
+| `ENCRYPTION_KEY` | AES-256 key for encrypting stored secrets — credentials and LLM provider API keys | Random 32-byte hex string |
 
 ### Optional variables
 
@@ -104,7 +104,11 @@ The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt
 | `PORT` | Backend listen port | `3000` |
 | `FRONTEND_URL` | Frontend origin for CORS | `http://localhost:3002` |
 | `VITE_API_BASE_URL` | API origin for the frontend (cross-domain deploys) | (same origin) |
-| `ANALYTICS_RETENTION_DAYS` | How long to keep request/audit logs | `90` |
+| `METRICS_RETENTION_DAYS` | How long usage metrics and request logs are kept before the retention sweep prunes them (`0` disables pruning) | `90` |
+| `MONITORING_STATS_WINDOW_SECONDS` | Rolling window the live monitoring dashboard aggregates over | `300` |
+| `DB_MIGRATIONS_RUN` | Whether the API runs pending migrations on startup (see [Database migrations](#database-migrations)) | `true` |
+| `RATE_LIMIT_TTL` | Rate-limit window in seconds | `60` |
+| `RATE_LIMIT_MAX` | Requests allowed per window | `100` |
 | `BULL_REDIS_HOST` | Separate Redis for BullMQ (if desired) | Falls back to `REDIS_HOST` |
 | `MAIL_HOST` | SMTP host for outbound email | -- |
 | `MAIL_PORT` | SMTP port | `587` |
@@ -139,6 +143,20 @@ readinessProbe:
   periodSeconds: 10
 ```
 
+## Database migrations
+
+How migrations run depends on how you deploy.
+
+On a single-node or Docker Compose setup the API applies any pending migrations itself when it starts (`DB_MIGRATIONS_RUN` defaults to `true`). There's only one process, so there's nothing to coordinate.
+
+In a cluster you don't want several replicas racing to run the same migrations as they boot. Set `DB_MIGRATIONS_RUN=false` and run migrations once, before the new pods roll out — as a Kubernetes `Job`, an init container, or `npm run typeorm migration:run`. The provided GitHub Actions deploy workflow already does this: it runs a one-off migration Job to completion and only continues the rollout if it succeeds, so a failed migration stops the deploy instead of shipping pods against a schema they don't expect.
+
+Either way, back up the database before upgrading.
+
+## Rate limiting
+
+Rate limits are backed by Redis, so the configured limit (`RATE_LIMIT_MAX` per `RATE_LIMIT_TTL` seconds) is shared across every API replica rather than counted per process. Point all replicas at the same Redis and the limit holds for the cluster as a whole.
+
 ## Upgrades
 
 ```bash
@@ -146,4 +164,4 @@ docker-compose pull
 docker-compose up -d
 ```
 
-TypeORM runs pending migrations automatically on startup (`migrationsRun: true`). Back up the database before upgrading.
+Review the [Database migrations](#database-migrations) note above before upgrading a clustered deployment.
