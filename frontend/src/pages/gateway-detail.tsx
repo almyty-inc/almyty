@@ -246,9 +246,10 @@ export function GatewayDetailPage() {
         <span className="text-foreground">{gateway.name}</span>
       </div>
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+      {/* Header — wraps on narrow viewports so the actions don't
+          run off the right edge on mobile */}
+      <div className="flex flex-wrap items-center justify-between gap-y-3">
+        <div className="flex items-center space-x-4 min-w-0">
           <Button variant="outline" size="sm" onClick={() => navigate('/gateways')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -257,12 +258,12 @@ export function GatewayDetailPage() {
               <Router className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-4xl font-heading font-extrabold tracking-tight">{gateway.name}</h1>
+              <h1 className="text-2xl sm:text-4xl font-heading font-extrabold tracking-tight break-words">{gateway.name}</h1>
               <p className="text-muted-foreground">{gateway.description || 'API Gateway'}</p>
             </div>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
             <Settings className="h-4 w-4 mr-2" />
             Edit Gateway
