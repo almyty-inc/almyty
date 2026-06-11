@@ -1,5 +1,6 @@
 import React, { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   LayoutDashboard,
   Building,
@@ -102,6 +103,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const navigate = useNavigate()
   const { user, isAuthenticated, logout, hasHydrated } = useAuthStore()
   const { currentOrganization, organizations, setCurrentOrganization, fetchOrganizations } = useOrganizationStore()
+  const queryClient = useQueryClient()
   const { sidebarOpen, setSidebarOpen, toggleSidebar, sidebarCollapsed, toggleSidebarCollapse } = useAppStore()
   const [darkMode, setDarkMode] = useState(() => {
     // Dark is the default; only light if explicitly stored
@@ -181,6 +183,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const handleOrgChange = (org: any) => {
     setCurrentOrganization(org)
+    // Every cached query belongs to the previous organization (the
+    // X-Organization-Id header changes with the store). Without this,
+    // pages keep showing the old org's data — e.g. the dashboard
+    // onboarding checklist carried its progress over to a brand-new
+    // empty org until a hard reload.
+    queryClient.invalidateQueries()
   }
 
   return (
@@ -227,7 +235,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           {/* Organization Selector */}
           {currentOrganization && !sidebarCollapsed && (
             <div className="p-4 border-b">
-              <DropdownMenu>
+              <DropdownMenu onOpenChange={(open) => { if (open) fetchOrganizations().catch(() => null) }}>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="w-full justify-between">
                     <div className="flex items-center space-x-2">
