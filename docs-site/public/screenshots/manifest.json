@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-04-11T19:34:31.787Z",
+  "capturedAt": "2026-06-11T18:30:00.000Z",
   "baseUrl": "https://app.staging.almyty.com",
   "theme": "dark",
   "viewport": {
@@ -121,6 +121,21 @@
       "id": "keyboard-shortcuts",
       "title": "Keyboard shortcuts help dialog",
       "path": "screenshots/keyboard-shortcuts.png"
+    },
+    {
+      "id": "analytics-tools",
+      "title": "Analytics → Tools tab with live execution stats",
+      "path": "screenshots/analytics-tools.png"
+    },
+    {
+      "id": "analytics-gateways",
+      "title": "Analytics → Gateways tab with per-protocol traffic",
+      "path": "screenshots/analytics-gateways.png"
+    },
+    {
+      "id": "analytics-agents",
+      "title": "Analytics → Agents tab with execution metrics",
+      "path": "screenshots/analytics-agents.png"
     }
   ]
 }

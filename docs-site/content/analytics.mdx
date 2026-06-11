@@ -1,6 +1,6 @@
 # Analytics
 
-The analytics dashboard gives you real-time visibility into usage across all protocols, tools, agents, and LLM providers. Seven tabs cover different aspects of your organization's activity.
+The analytics dashboard gives you real-time visibility into usage across all protocols, tools, agents, and LLM providers. Seven tabs cover different aspects of your organization's activity. The numbers are live — gateway traffic, tool executions, and agent runs feed the tiles and charts as they happen, with a 30-second refresh on the Overview tab.
 
 ![Analytics overview](/screenshots/analytics-overview.png)
 
@@ -24,11 +24,15 @@ Paginated list of every gateway request with timestamp, tool name, protocol, sta
 
 ### Tools
 
-Per-tool breakdown: call count, success rate, average duration, and error rate. Sorted by most-used by default.
+Per-tool breakdown: execution count, success rate, average duration, and last-used time. Sorted by most-used by default. Counts every execution path — direct test runs, MCP `tools/call`, UTCP `execute`, and agent `tool_call` nodes all roll up here.
+
+![Tools tab](/screenshots/analytics-tools.png)
 
 ### Gateways
 
-Per-gateway breakdown: total requests, unique callers, bandwidth, and error rate. Useful for spotting misconfigured or underused gateways.
+Per-gateway breakdown: total requests, success and error counts, and success rate, attributed by protocol (MCP, UTCP, A2A, Skills). Useful for spotting misconfigured or underused gateways.
+
+![Gateways tab](/screenshots/analytics-gateways.png)
 
 ### LLM
 
@@ -36,7 +40,9 @@ Per-provider usage: total calls, token counts (input and output), estimated cost
 
 ### Agents
 
-Per-agent execution metrics: run count, success rate, average duration, and node-level breakdowns for pipeline agents.
+Per-agent execution metrics: run count (24h and 7d), success rate, average duration, and estimated cost, with a recent-failures list below the table.
+
+![Agents tab](/screenshots/analytics-agents.png)
 
 ### Audit Trail
 
