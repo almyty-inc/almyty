@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { BrowserRouter } from 'react-router-dom'
 
 import App from './App.tsx'
+import { ErrorBoundary } from '@/components/ui/error-boundary'
 import './index.css'
 
 // Sentry error tracking — install @sentry/react and set VITE_SENTRY_DSN to enable

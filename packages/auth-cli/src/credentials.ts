@@ -32,18 +32,25 @@ export function loadCredentials(): StoredCredentials | null {
 }
 
 export function saveCredentials(creds: StoredCredentials): void {
-  mkdirSync(CREDENTIALS_DIR, { recursive: true });
-  writeFileSync(CREDENTIALS_FILE, JSON.stringify(creds, null, 2));
-  // Ensure the file is owner-only readable. writeFileSync's `mode` option
-  // only applies on creation; chmod is idempotent and safer when the file
-  // already exists with looser permissions.
+  // Owner-only directory (0700). mkdir's mode only applies on creation, so
+  // chmod an existing dir too — best-effort (no-op/throw on Windows).
+  mkdirSync(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
+  try {
+    chmodSync(CREDENTIALS_DIR, 0o700);
+  } catch {
+    /* best-effort */
+  }
+
+  // Create the file 0600 from the start (closes the brief world-readable
+  // window that exists when a file is created with default perms and only
+  // chmod'd afterwards). chmod again for the already-exists case.
+  writeFileSync(CREDENTIALS_FILE, JSON.stringify(creds, null, 2), { mode: 0o600 });
   try {
     chmodSync(CREDENTIALS_FILE, 0o600);
   } catch {
-    // Best-effort on platforms (Windows) where chmod may not apply.
+    /* best-effort on platforms where chmod may not apply */
   }
 }
-
 export function clearCredentials(): boolean {
   if (!existsSync(CREDENTIALS_FILE)) return false;
   try {
