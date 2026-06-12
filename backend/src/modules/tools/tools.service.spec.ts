@@ -423,6 +423,28 @@ describe('ToolsService', () => {
       );
     });
 
+    it('persists protocol config changes (httpConfig et al.)', async () => {
+      // Regression: httpConfig/llmConfig/graphql/soap/grpc updates were
+      // silently dropped — the PUT returned 200 with the old target URL.
+      const tool = makeTool({ httpConfig: { method: 'GET', path: 'https://old.example/' } });
+      toolRepo.findOne.mockResolvedValue(tool);
+      userRepo.findOne.mockResolvedValue(makeUser());
+      toolRepo.save.mockImplementation(async (t: any) => t);
+      toolVersionRepo.create.mockReturnValue({});
+      toolVersionRepo.save.mockResolvedValue({});
+
+      await service.updateTool(
+        'tool-1',
+        { httpConfig: { method: 'GET', path: 'https://new.example/' } },
+        'org-1',
+        'user-1',
+      );
+
+      expect(tool.httpConfig).toEqual({ method: 'GET', path: 'https://new.example/' });
+      const saved = toolRepo.save.mock.calls[0][0];
+      expect(saved.httpConfig.path).toBe('https://new.example/');
+    });
+
     it('should throw NotFoundException when tool is not found', async () => {
       toolRepo.findOne.mockResolvedValue(null);
 

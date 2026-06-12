@@ -89,6 +89,7 @@ export interface UpdateToolDto {
   soapConfig?: any;
   grpcConfig?: any;
   examples?: Array<{ name: string; description?: string; input: Record<string, any>; expectedOutput?: any }>;
+  authConfig?: any;
   // Team-scoping fields from the dashboard VisibilityField.
   visibility?: 'org' | 'team';
   teamId?: string | null;
