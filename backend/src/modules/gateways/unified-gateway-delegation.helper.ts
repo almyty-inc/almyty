@@ -10,6 +10,7 @@ import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
 import { MetricType, MetricStatus } from '../../entities/usage-metric.entity';
 import { setProtocolContext } from '../../common/interceptors/protocol-context';
+import { GatewayRateLimitService } from './gateway-rate-limit.service';
 import { Organization } from '../../entities/organization.entity';
 import { McpService } from '../mcp/mcp.service';
 import { AlmytyMcpService } from '../mcp/almyty-mcp.service';
@@ -46,6 +47,7 @@ export class UnifiedGatewayDelegation {
     private readonly acpServerService: AcpServerService,
     private readonly acpDiscoveryService: AcpDiscoveryService,
     private readonly configService: ConfigService,
+    private readonly gatewayRateLimit: GatewayRateLimitService,
     @Optional() private readonly metrics?: MetricsRecorderService,
   ) {}
 
@@ -68,6 +70,16 @@ export class UnifiedGatewayDelegation {
       organizationId: organization.id,
       protocol: gateway.type,
     });
+
+    // Per-gateway rate limits (configured in the dashboard). Enforced
+    // here so every protocol behind the unified endpoint honors them.
+    const rate = await this.gatewayRateLimit.check(gateway);
+    if (rate.limited) {
+      if (rate.retryAfterSeconds) {
+        res.setHeader('Retry-After', String(rate.retryAfterSeconds));
+      }
+      throw new HttpException(rate.message ?? 'Gateway rate limit exceeded', HttpStatus.TOO_MANY_REQUESTS);
+    }
 
     const isDiscovery =
       action.startsWith('.well-known/') ||
