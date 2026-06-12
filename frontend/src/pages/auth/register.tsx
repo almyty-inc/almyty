@@ -237,20 +237,15 @@ export function RegisterPage() {
       </form>
 
       <div className="mt-6">
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-card text-muted-foreground">Or continue with</span>
-          </div>
-        </div>
+        {/* No OAuth providers are wired up yet — a bare divider here
+            used to read "Or continue with" followed by nothing. */}
+        <div className="border-t border-border" />
 
         <div className="mt-6 text-center">
           <p className="text-sm text-muted-foreground">
             Already have an account?{' '}
             <Link
-              to="/login"
+              to="/auth/login"
               className="font-medium text-primary hover:text-primary/80"
             >
               Sign in
