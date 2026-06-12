@@ -102,6 +102,7 @@ import { MailService } from '../modules/mail/mail.service';
 import { UnifiedEndpointController } from '../modules/gateways/unified-endpoint.controller';
 import { UnifiedAgentHelper } from '../modules/gateways/unified-agent.helper';
 import { UnifiedGatewayDelegation } from '../modules/gateways/unified-gateway-delegation.helper';
+import { GatewayRateLimitService } from '../modules/gateways/gateway-rate-limit.service';
 import { AgentExecutionEngine } from '../modules/agents/agent-execution.engine';
 import { A2AServerService } from '../modules/a2a/a2a-server.service';
 import { A2AAgentCardService } from '../modules/a2a/a2a-agent-card.service';
@@ -264,6 +265,7 @@ const mockRedis = {
     { provide: AgentRuntimeService, useValue: { startRun: () => ({}), getRun: () => ({}), listRuns: () => ([]), getRunEmitter: () => null, subscribeRunEvents: () => ({}), sendInput: () => ({}), cancelRun: () => ({}) } },
     UnifiedAgentHelper,
     UnifiedGatewayDelegation,
+    { provide: GatewayRateLimitService, useValue: { check: async () => ({ limited: false }) } },
 
     // Redis mock
     { provide: 'default_IORedisModuleConnectionToken', useValue: mockRedis },
