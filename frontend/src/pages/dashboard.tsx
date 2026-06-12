@@ -20,16 +20,18 @@ import { useAuthStore } from '@/store/auth'
 import { pluralize } from '@/lib/utils'
 import type { RequestLog } from '@/types'
 
-// Helper to humanize a log path
+// Helper to humanize a log path. The activity feed only receives
+// protocol traffic (MCP/UTCP/A2A requests and tool executions), so
+// describe the action rather than guessing from loose substrings —
+// the old heuristics labeled creates as "Tools listing" and matched
+// any path merely containing "/mcp".
 const humanizePath = (path: string, method: string) => {
-  if (path.includes('/mcp/') || path.includes('/mcp')) return `MCP ${method} request`
-  if (path.includes('/a2a/') || path.includes('/a2a')) return `A2A agent discovery`
-  if (path.includes('/utcp/') || path.includes('/utcp')) return `UTCP manifest request`
-  if (path.includes('/auth/api-keys')) return `API key check`
-  if (path.includes('/auth')) return `Auth check on gateway`
-  if (path.includes('/tools')) return `Tools listing`
+  if (path === '/mcp' || path.startsWith('/mcp/')) return `MCP ${method} request`
+  if (path.includes('/.well-known/agent-card')) return 'A2A agent discovery'
+  if (path.endsWith('/manual')) return 'UTCP manual fetch'
+  if (path.endsWith('/execute')) return `Tool execution`
   // Truncate UUIDs
-  return `${method} ${path.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '...')}`
+  return `${method} ${path.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '…')}`
 }
 
 function ChecklistItem({ done, label, description, action }: {
