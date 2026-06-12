@@ -16,6 +16,7 @@ import { AgentRun } from '../../entities/agent-run.entity';
 import { ChannelEvent } from '../../entities/channel-event.entity';
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
+import { GatewayRateLimitService } from './gateway-rate-limit.service';
 import { GatewayAuthService } from './gateway-auth.service';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
@@ -76,6 +77,7 @@ import { ChannelEventsController } from './channels/channel-events.controller';
   providers: [
     GatewaysService,
     GatewayProtocolService,
+    GatewayRateLimitService,
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper, GatewayInitHelper,
     GatewayToolService, GatewayToolTransferHelper, GatewayToolStatsHelper, GatewayToolQueriesHelper,
     // Channel adapters
@@ -109,6 +111,7 @@ import { ChannelEventsController } from './channels/channel-events.controller';
   exports: [
     GatewaysService,
     GatewayProtocolService,
+    GatewayRateLimitService,
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,
     GatewayToolService,
     ChannelGatewayService,
