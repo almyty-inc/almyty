@@ -374,6 +374,7 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
       acpServerStub,
       acpDiscoveryStub,
       { get: jest.fn().mockReturnValue(null) } as any,
+      { check: jest.fn().mockResolvedValue({ limited: false }) } as any,
     );
 
     return new UnifiedEndpointController(
