@@ -257,6 +257,37 @@ export class ToolsService {
         tool.dependencies = updateToolDto.dependencies;
       }
 
+      // Protocol configs. These were missing from the update path, so a
+      // PUT that changed e.g. httpConfig returned 200 but silently kept
+      // the old target URL.
+      if (updateToolDto.httpConfig !== undefined) {
+        tool.httpConfig = updateToolDto.httpConfig;
+      }
+
+      if (updateToolDto.llmConfig !== undefined) {
+        tool.llmConfig = updateToolDto.llmConfig;
+      }
+
+      if (updateToolDto.graphqlConfig !== undefined) {
+        tool.graphqlConfig = updateToolDto.graphqlConfig;
+      }
+
+      if (updateToolDto.soapConfig !== undefined) {
+        tool.soapConfig = updateToolDto.soapConfig;
+      }
+
+      if (updateToolDto.grpcConfig !== undefined) {
+        tool.grpcConfig = updateToolDto.grpcConfig;
+      }
+
+      if (updateToolDto.examples !== undefined) {
+        tool.examples = updateToolDto.examples;
+      }
+
+      if (updateToolDto.authConfig !== undefined) {
+        tool.authConfig = updateToolDto.authConfig;
+      }
+
       // Team-scoping fields (visibility + teamId) from the dashboard
       // VisibilityField. Drop a stray teamId if visibility flips back
       // to 'org' so we don't leave a dangling team reference.
