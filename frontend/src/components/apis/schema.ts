@@ -21,10 +21,10 @@ export const createApiSchema = z.object({
   // a plain `string`).
   baseUrl: z.string().default(''),
   version: z.string().optional(),
-  configuration: z.record(z.any()).optional(),
+  configuration: z.record(z.string(), z.any()).optional(),
   authentication: z.object({
     type: z.nativeEnum(ApiAuthType),
-    config: z.record(z.any()),
+    config: z.record(z.string(), z.any()),
   }).optional(),
 }).refine((data) => {
   // SDK type doesn't require a baseUrl
