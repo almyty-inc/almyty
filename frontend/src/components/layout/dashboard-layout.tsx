@@ -237,7 +237,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="p-4 border-b">
               <DropdownMenu onOpenChange={(open) => { if (open) fetchOrganizations().catch(() => null) }}>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="w-full justify-between">
+                  <Button variant="outline" className="w-full justify-between" aria-label={`Switch organization, current: ${currentOrganization.name}`}>
                     <div className="flex items-center space-x-2">
                       <div className="w-6 h-6 bg-muted rounded flex items-center justify-center">
                         <span className="text-xs font-medium">
