@@ -1,5 +1,5 @@
 # Stage 1: Base - install deps and build
-FROM node:24-alpine AS base
+FROM node:26-alpine AS base
 WORKDIR /app
 
 COPY package*.json ./
@@ -13,7 +13,7 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npx vite build
 
 # Stage 2: Development
-FROM node:24-alpine AS development
+FROM node:26-alpine AS development
 WORKDIR /app
 
 COPY package*.json ./
@@ -28,7 +28,7 @@ EXPOSE 3000
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
 
 # Stage 3: Production - serve with nginx
-FROM nginx:1.29-alpine AS production
+FROM nginx:1.31-alpine AS production
 
 # Remove default nginx config
 RUN rm /etc/nginx/conf.d/default.conf

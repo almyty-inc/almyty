@@ -11,20 +11,20 @@
     "start": "next start"
   },
   "dependencies": {
-    "next": "^16.2.4",
+    "next": "^16.2.6",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
   },
   "overrides": {
     "cross-spawn": "^7.0.6",
     "postcss": "^8.5.10"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
-    "@types/node": "25.6.0",
-    "@types/react": "19.2.14",
+    "@playwright/test": "^1.60.0",
+    "@types/node": "25.9.1",
+    "@types/react": "19.2.15",
     "typescript": "^6.0.3"
   }
 }

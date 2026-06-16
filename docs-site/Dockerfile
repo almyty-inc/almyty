@@ -1,11 +1,11 @@
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:24-alpine
+FROM node:26-alpine
 WORKDIR /app
 # Copy with explicit ownership so the Next.js standalone bundle
 # is readable by the non-root `node` user (uid 1000, created by
