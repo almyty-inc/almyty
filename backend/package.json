@@ -99,7 +99,7 @@
     "typeorm": "^0.3.28",
     "typeorm-versions": "^0.6.0",
     "typescript": "^6.0.3",
-    "uuid": "^13.0.0",
+    "uuid": "^14.0.0",
     "winston": "^3.19.0",
     "ws": "^8.20.0",
     "xml2js": "^0.6.2"
