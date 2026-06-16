@@ -48,6 +48,10 @@ export function ApisPage() {
   const allToolsExtracted = allToolsData?.tools || allToolsData || []
   const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
   const allToolsTotal = allToolsData?.total ?? allTools.length
+  // "X generated" on the APIs page should only count tools that came
+  // from an API operation, not custom JS/HTTP/SDK tools created
+  // manually. operationId is the entity field that distinguishes them.
+  const generatedToolsTotal = allTools.filter((t: any) => t.operationId).length
 
   const [selectedApi, setSelectedApi] = React.useState<Api | null>(null)
   const [editingApi, setEditingApi] = React.useState<Api | null>(null)
@@ -217,7 +221,7 @@ export function ApisPage() {
         <div>
           <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">APIs</h1>
           <p className="text-muted-foreground">
-            {apis.length} connected &middot; {pluralized(apis.reduce((sum: number, a: any) => sum + (a.operationCount ?? a.operations?.length ?? 0), 0), 'operation')} &middot; {pluralized(allToolsTotal, 'tool')} generated
+            {apis.length} connected &middot; {pluralized(apis.reduce((sum: number, a: any) => sum + (a.operationCount ?? a.operations?.length ?? 0), 0), 'operation')} &middot; {pluralized(generatedToolsTotal, 'tool')} generated
           </p>
         </div>
         <div className="flex items-center space-x-2">
