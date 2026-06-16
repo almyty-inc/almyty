@@ -254,7 +254,7 @@ function CommandBlock({ label, command, hint }: { label: string; command: string
       {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
       <div className="mt-2 flex items-center gap-2 rounded border bg-muted/40 px-3 py-2 font-mono text-xs overflow-x-auto">
         <code className="flex-1 whitespace-nowrap">{command}</code>
-        <Button type="button" variant="ghost" size="icon" onClick={onCopy} className="shrink-0">
+        <Button type="button" variant="ghost" size="icon" onClick={onCopy} className="shrink-0" aria-label={`Copy ${label.toLowerCase()} command`} title="Copy command">
           <Copy className="h-3.5 w-3.5" />
         </Button>
       </div>
