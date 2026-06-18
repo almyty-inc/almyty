@@ -210,7 +210,7 @@ export function rowToEntity(row: Record<string, any>): CanonicalMemory {
   e.content = row.content;
   e.contentFormat = row.content_format;
   e.contentBytes = row.content_bytes;
-  e.embedding = row.embedding ? pgvector.fromSql(row.embedding) : null;
+  e.embedding = row.embedding ? pgvector.fromSql(row.embedding) as number[] : null;
   e.embeddingDim = row.embedding_dim;
   e.embeddingModel = row.embedding_model;
   e.embeddingStatus = row.embedding_status;
