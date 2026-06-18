@@ -65,7 +65,7 @@ export class CanonicalMemory {
       to: (val: number[] | null): string | null =>
         val === null || val === undefined ? null : pgvector.toSql(val),
       from: (val: unknown): number[] | null =>
-        val === null || val === undefined ? null : pgvector.fromSql(val as string),
+        val === null || val === undefined ? null : pgvector.fromSql(val as string) as number[],
     },
   })
   embedding: number[] | null;
