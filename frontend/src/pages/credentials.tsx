@@ -18,6 +18,8 @@ import { useCopySensitive } from '@/lib/clipboard'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
+import { createCredentialSchema } from '@/components/credentials/schema'
+import { getApiErrorMessage } from '@/lib/api-error'
 import type { VaultCredential, AccessKey } from '@/types'
 
 function formatDate(date: string | null | undefined): string {
@@ -89,6 +91,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   const qc = useQueryClient(), notify = useNotifications()
   const { currentOrganization } = useOrganizationStore()
   const [form, setForm] = useState({ name: '', type: 'api_key', description: '', value: '' })
+  const [formError, setFormError] = useState<string | null>(null)
   const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
@@ -101,7 +104,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   const createMut = useMutation({
     mutationFn: (data: any) => credentialsApi.create(data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setIsCreateOpen(false); setForm({ name: '', type: 'api_key', description: '', value: '' }); notify.success('Created', 'Credential created') },
-    onError: (err: any) => notify.error('Error', err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to create credential'),
+    onError: (err) => notify.error('Error', getApiErrorMessage(err, 'Failed to create credential')),
   })
   const deleteMut = useMutation({
     mutationFn: (id: string) => credentialsApi.delete(id),
@@ -170,7 +173,14 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
           <DataTable columns={columns} data={visibleCredentials} loading={isLoading} searchKey="name" searchPlaceholder="Search credentials..." />
         </CardContent>
       </Card>
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <Dialog open={isCreateOpen} onOpenChange={(open) => {
+        setIsCreateOpen(open)
+        if (!open) {
+          setForm({ name: '', type: 'api_key', description: '', value: '' })
+          setFormError(null)
+          createMut.reset()
+        }
+      }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add Credential</DialogTitle>
@@ -205,7 +215,14 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
                 onChange={setVisibility}
               />
             </div>
+            {formError && <p className="text-sm text-destructive">{formError}</p>}
             <Button className="w-full" disabled={!form.name || createMut.isPending} onClick={() => {
+              const parsed = createCredentialSchema.safeParse(form)
+              if (!parsed.success) {
+                setFormError(parsed.error.issues[0].message)
+                return
+              }
+              setFormError(null)
               // Backend's CreateCredentialDto (PR #154) expects { name, type, description?, config: object, visibility, teamId? }.
               // The legacy flat 'value' shape is rejected by forbidNonWhitelisted.
               const { value: secret, ...rest } = form
