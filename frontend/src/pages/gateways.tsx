@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { Router, Plus, Search, Zap } from 'lucide-react'
 
 import { Card, CardContent } from '@/components/ui/card'
@@ -36,14 +36,7 @@ import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, typ
 import type { Gateway } from '@/types'
 
 // Form Schema
-const createGatewaySchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  type: z.string().min(1, 'Type is required'),
-  endpoint: z.string().min(1, 'Endpoint path is required').regex(/^\/[a-zA-Z0-9-_/]*$/, 'Must start with / and contain only alphanumeric, -, _, /'),
-  description: z.string().optional(),
-})
-
-type CreateGatewayForm = z.infer<typeof createGatewaySchema>
+import { createGatewaySchema, type CreateGatewayForm } from '@/components/gateways/schema'
 
 export function GatewaysPage() {
   useEffect(() => {
@@ -202,8 +195,8 @@ export function GatewaysPage() {
       createForm.reset()
       setCreateDialogOpen(false)
     },
-    onError: (err: Error & { response?: { data?: { message?: string } }; message?: string }) => {
-      errorNotif('Error', err?.response?.data?.message || err?.message || 'Failed to create gateway')
+    onError: (err: unknown) => {
+      errorNotif('Error', getApiErrorMessage(err, 'Failed to create gateway'))
     }
   })
 
@@ -218,8 +211,8 @@ export function GatewaysPage() {
       setDeleteGatewayDialogOpen(false)
       setGatewayToDelete(null)
     },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      errorNotif('Failed to delete gateway', err.response?.data?.message || 'Please try again.')
+    onError: (err: unknown) => {
+      errorNotif('Failed to delete gateway', getApiErrorMessage(err, 'Please try again.'))
     }
   })
 
@@ -477,7 +470,13 @@ export function GatewaysPage() {
       {/* Create Gateway Dialog */}
       <CreateGatewayDialog
         open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
+        onOpenChange={(open) => {
+          setCreateDialogOpen(open)
+          if (!open) {
+            createForm.reset()
+            createGatewayMutation.reset()
+          }
+        }}
         createForm={createForm}
         onSubmit={handleCreateGateway}
         createGatewayMutation={createGatewayMutation}
