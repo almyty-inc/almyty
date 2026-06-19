@@ -19,17 +19,17 @@
     },
     {
       "id": "dashboard-empty",
-      "title": "Empty-org dashboard — first-run onboarding checklist",
+      "title": "Empty-org dashboard \u2014 first-run onboarding checklist",
       "path": "screenshots/dashboard-empty.png"
     },
     {
       "id": "command-palette",
-      "title": "Global ⌘K command palette",
+      "title": "Global \u2318K command palette",
       "path": "screenshots/command-palette.png"
     },
     {
       "id": "apis-empty",
-      "title": "APIs page — empty state",
+      "title": "APIs page \u2014 empty state",
       "path": "screenshots/apis-empty.png"
     },
     {
@@ -44,12 +44,12 @@
     },
     {
       "id": "tools-empty",
-      "title": "Tools page — empty state",
+      "title": "Tools page \u2014 empty state",
       "path": "screenshots/tools-empty.png"
     },
     {
       "id": "tools-create-dialog",
-      "title": "Create Tool dialog — 5 execution methods",
+      "title": "Create Tool dialog \u2014 5 execution methods",
       "path": "screenshots/tools-create-dialog.png"
     },
     {
@@ -59,7 +59,7 @@
     },
     {
       "id": "gateways-empty",
-      "title": "Gateways page — empty state",
+      "title": "Gateways page \u2014 empty state",
       "path": "screenshots/gateways-empty.png"
     },
     {
@@ -69,12 +69,12 @@
     },
     {
       "id": "gateway-detail-tools",
-      "title": "Gateway detail — Tools tab with scoping",
+      "title": "Gateway detail \u2014 Tools tab with scoping",
       "path": "screenshots/gateway-detail-tools.png"
     },
     {
       "id": "agents-empty",
-      "title": "Agents page — empty state",
+      "title": "Agents page \u2014 empty state",
       "path": "screenshots/agents-empty.png"
     },
     {
@@ -84,7 +84,7 @@
     },
     {
       "id": "llm-providers-empty",
-      "title": "Models page — empty state",
+      "title": "Models page \u2014 empty state",
       "path": "screenshots/llm-providers-empty.png"
     },
     {
@@ -109,7 +109,7 @@
     },
     {
       "id": "analytics-audit",
-      "title": "Analytics → Audit trail tab",
+      "title": "Analytics \u2192 Audit trail tab",
       "path": "screenshots/analytics-audit.png"
     },
     {
@@ -124,17 +124,17 @@
     },
     {
       "id": "analytics-tools",
-      "title": "Analytics → Tools tab with live execution stats",
+      "title": "Analytics \u2192 Tools tab with live execution stats",
       "path": "screenshots/analytics-tools.png"
     },
     {
       "id": "analytics-gateways",
-      "title": "Analytics → Gateways tab with per-protocol traffic",
+      "title": "Analytics \u2192 Gateways tab with per-protocol traffic",
       "path": "screenshots/analytics-gateways.png"
     },
     {
       "id": "analytics-agents",
-      "title": "Analytics → Agents tab with execution metrics",
+      "title": "Analytics \u2192 Agents tab with execution metrics",
       "path": "screenshots/analytics-agents.png"
     }
   ]
