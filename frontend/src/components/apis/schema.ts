@@ -9,8 +9,8 @@ import { z } from 'zod'
 import { ApiAuthType, ApiType } from '@/types'
 
 export const createApiSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  description: z.string().optional(),
+  name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name must be 100 characters or fewer'),
+  description: z.string().max(1000, 'Description must be 1000 characters or fewer').optional(),
   type: z.nativeEnum(ApiType),
   // NOT .optional() — `.default('')` already makes the input
   // optional but produces a `string` output, which is what the

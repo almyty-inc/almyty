@@ -31,6 +31,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { CredentialPicker } from '@/components/credential-picker'
 
 import { apisApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { Api, ApiAuthType, ApiType } from '@/types'
 import { useOrganizationStore } from '@/store/organization'
@@ -133,7 +134,7 @@ export function CreateApiDialog({
       setCreateStep('schema')
     },
     onError: (err: any) => {
-      error('Failed to create API', err.response?.data?.message || 'Please try again.')
+      error('Failed to create API', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -146,7 +147,7 @@ export function CreateApiDialog({
       onOpenChange(false)
     },
     onError: (err: any) => {
-      error('Failed to update API', err.response?.data?.message || 'Please try again.')
+      error('Failed to update API', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -159,7 +160,7 @@ export function CreateApiDialog({
       setCreateStep('details')
     },
     onError: (err: any) => {
-      error('Failed to create API', err.response?.data?.message || 'Please try again.')
+      error('Failed to create API', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -183,7 +184,7 @@ export function CreateApiDialog({
       }
     },
     onError: (err: any) => {
-      error('Failed to create SDK API', err.response?.data?.message || 'Please try again.')
+      error('Failed to create SDK API', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -265,6 +266,23 @@ export function CreateApiDialog({
     if (!next) {
       setCreateStep('details')
       setCreatedApiForSchema(null)
+      createForm.reset()
+      createApiMutation.reset()
+      updateApiMutation.reset()
+      createHttpApiMutation.reset()
+      createSdkApiMutation.reset()
+      setSelectedAuthType(ApiAuthType.NONE)
+      setSelectedApiType(ApiType.OPENAPI)
+      setApiKeyCredentialId('')
+      setBearerCredentialId('')
+      setOauthCredentialId('')
+      setSdkPackages([])
+      setNewPkgName('')
+      setNewPkgVersion('*')
+      setUsePrivateRegistry(false)
+      setRegistryUrl('')
+      setRegistryToken('')
+      setRegistryScope('')
     }
   }
 
