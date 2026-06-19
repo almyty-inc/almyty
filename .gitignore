@@ -9,35 +9,33 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+backend/.env
 
 # Build outputs
 dist/
 build/
-*.log
+*.tsbuildinfo
 
-# IDE
+# Test artifacts
+coverage/
+*.lcov
+test-results/
+playwright-report/
+backend/src/temp-coverage/
+
+# IDE / OS
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
 .DS_Store
 
-# Test results
-test-results/
-playwright-report/
-coverage/
-*.lcov
-
 # Temporary files
 tmp/
 temp/
 *.tmp
-
-# Docker
-.docker/
-
-# Logs
 logs/
 *.log
 
@@ -45,22 +43,14 @@ logs/
 *.sqlite
 *.db
 
-# Playwright MCP/CLI artifacts
-.playwright-mcp/
-.playwright-cli/
+# Docker
+.docker/
 
-# Claude Code
+# Agent / scratchpad
 .claude/
+.agented/
+.agents/
+AGENTS.md
 _internal/
 .playwright-mcp/
-test-results/
-backend/.env
-.agented/
-.cursor/
-
-# TypeScript incremental build cache
-*.tsbuildinfo
-
-# Agent harness leftovers (Cursor / agented / OpenAI / Anthropic auto-generated guidance files)
-AGENTS.md
-.agents/
+.playwright-cli/
