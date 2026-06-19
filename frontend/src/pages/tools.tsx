@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
 import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -70,12 +69,7 @@ import { githubLight } from '@uiw/codemirror-theme-github'
 import { useMemo } from 'react'
 
 // Form Schema for manual tool creation
-const createToolSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  description: z.string().optional(),
-})
-
-type CreateToolForm = z.infer<typeof createToolSchema>
+import { createToolSchema, type CreateToolForm } from '@/components/tools/schema'
 
 interface Tool {
   id: string
@@ -379,7 +373,11 @@ return new Promise((resolve, reject) => {
       setExecutionMethod('http')
     },
     onError: (error: any) => {
-      notifications.error('Error', error.response?.data?.message || 'Failed to create tool')
+      const msg = error.response?.data?.error?.message
+        ?? error.response?.data?.message
+        ?? error.message
+        ?? 'Failed to create tool'
+      notifications.error('Error', msg)
     },
   })
 
@@ -975,7 +973,18 @@ return new Promise((resolve, reject) => {
       {/* Create Tool Dialog */}
       <CreateToolDialog
         open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
+        onOpenChange={(open) => {
+          setIsCreateDialogOpen(open)
+          if (!open) {
+            createForm.reset()
+            createToolMutation.reset()
+            setToolParameters({ type: 'object', properties: {} })
+            setToolCode('')
+            setHttpConfig({ method: 'GET', url: '', headers: {}, body: '' })
+            setSdkConfig(null)
+            setExecutionMethod('http')
+          }
+        }}
         createForm={createForm}
         createToolMutation={createToolMutation}
         executionMethod={executionMethod}
