@@ -33,8 +33,7 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "migrate": "cd backend && npm run typeorm:migration:run",
-    "migrate:generate": "cd backend && npm run typeorm:migration:generate",
-    "seed": "cd backend && npm run seed"
+    "migrate:generate": "cd backend && npm run typeorm:migration:generate"
   },
   "keywords": [
     "almyty",
@@ -61,8 +60,5 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/frane/almyty.git"
-  },
-  "dependencies": {
-    "form-data": "^4.0.5"
   }
 }
