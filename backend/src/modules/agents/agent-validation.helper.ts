@@ -120,6 +120,33 @@ export class AgentValidationHelper {
           }
           break;
         }
+
+        case 'verify': {
+          const verifyData = node.data || node.config || {};
+          const checkers = verifyData.checkers;
+          if (!Array.isArray(checkers) || checkers.length === 0) {
+            throw new BadRequestException(
+              `Verify node '${node.id}' must have a non-empty 'checkers' array in config`,
+            );
+          }
+          checkers.forEach((checker: any, i: number) => {
+            if (!checker || !checker.providerId) {
+              throw new BadRequestException(
+                `Verify node '${node.id}' checker #${i + 1} must have a 'providerId'`,
+              );
+            }
+          });
+          const policy = verifyData.policy;
+          if (
+            policy &&
+            !['all_pass', 'majority', 'any_fail_blocks'].includes(policy)
+          ) {
+            throw new BadRequestException(
+              `Verify node '${node.id}' has invalid policy '${policy}' (expected all_pass | majority | any_fail_blocks)`,
+            );
+          }
+          break;
+        }
       }
     }
 

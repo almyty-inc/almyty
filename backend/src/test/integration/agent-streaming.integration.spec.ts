@@ -10,6 +10,7 @@ import { ApprovalsService } from '../../modules/approvals/approvals.service';
 import { AgentRuntimeEventsHelper } from '../../modules/agents/agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from '../../modules/agents/agent-runtime-misc.helper';
 import { AgentStepProcessor } from '../../modules/agents/agent-step-processor';
+import { AgentVerifierHelper } from '../../modules/agents/agent-verifier.helper';
 import { AgentHeartbeatHelper } from '../../modules/agents/agent-heartbeat.helper';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
@@ -232,6 +233,7 @@ describe('Agent Streaming (integration)', () => {
         AgentRuntimeEventsHelper,
         AgentRuntimeMiscHelper,
         AgentStepProcessor,
+        AgentVerifierHelper,
         { provide: getRepositoryToken(AgentRun), useValue: mockRunRepo },
         { provide: getRepositoryToken(Agent), useValue: mockAgentRepo },
         { provide: getRepositoryToken(Tool), useValue: mockToolRepo },
