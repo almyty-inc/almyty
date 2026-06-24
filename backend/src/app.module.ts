@@ -66,6 +66,7 @@ import { JobsModule } from './modules/jobs/jobs.module';
 import { CredentialsModule } from './modules/credentials/credentials.module';
 import { AgentsModule } from './modules/agents/agents.module';
 import { PromotedSkillsModule } from './modules/promoted-skills/promoted-skills.module';
+import { PromotedSkillReplayModule } from './modules/promoted-skills/promoted-skill-replay.module';
 import { AgentConstraintsModule } from './modules/agent-constraints/agent-constraints.module';
 import { MemoryModule } from './modules/memory/memory.module';
 import { FilesModule } from './modules/files/files.module';
@@ -247,6 +248,7 @@ import { databaseConfig } from './config/database.config';
     CredentialsModule,
     AgentsModule,
     PromotedSkillsModule,
+    PromotedSkillReplayModule,
     AgentConstraintsModule,
     MemoryModule,
     FilesModule,
