@@ -32,6 +32,7 @@ import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from './agent-runtime-misc.helper';
 import { AgentStepProcessor } from './agent-step-processor';
 import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
+import { AgentVerifierHelper } from './agent-verifier.helper';
 import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentRunReaperService } from './agent-run-reaper.service';
@@ -75,7 +76,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     forwardRef(() => ApprovalsModule),
     AuthorizationModule,
   ],
-  providers: [AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors],
+  providers: [AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper],
   controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController],
   exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })
