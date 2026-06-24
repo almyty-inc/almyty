@@ -11,6 +11,7 @@ import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.servic
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
 import { Agent } from '../../entities/agent.entity';
 import { AgentVerifierHelper, VerifyPanelResult } from './agent-verifier.helper';
+import { AgentContextCompactor } from './agent-context-compactor.helper';
 /**
  * `processStep` was the bulk of AgentRuntimeService — a single 500-line
  * method orchestrating the autonomous-agent inner loop. Splitting it
@@ -29,6 +30,7 @@ export class AgentStepProcessor {
     @Inject(forwardRef(() => AgentRuntimeService))
     private readonly s: AgentRuntimeService,
     private readonly verifier: AgentVerifierHelper,
+    private readonly compactor: AgentContextCompactor,
   ) {}
 
   async processStep(runId: string): Promise<'continue' | 'done' | 'waiting'> {
@@ -121,7 +123,23 @@ export class AgentStepProcessor {
       const org = await this.s.organizationRepository.findOne({ where: { id: run.organizationId } });
 
       // Build messages for the LLM
-      const messages = await this.s.builders.buildMessages(agent, run, tools, memoryContext, org);
+      let messages = await this.s.builders.buildMessages(agent, run, tools, memoryContext, org);
+
+      // Compact long-running context (off unless the agent opts in). Folds the
+      // old prefix into a summary so per-step token cost doesn't grow unbounded.
+      const compaction = agent.modelConfig?.compaction;
+      if (compaction?.enabled) {
+        const compacted = await this.compactor.compact(
+          messages,
+          run,
+          { ...compaction, providerId: compaction.providerId ?? agent.modelConfig?.providerId },
+          run.organizationId,
+          run.userId,
+        );
+        messages = compacted.messages;
+        run.totalCost += compacted.cost;
+        run.totalTokens += compacted.tokens;
+      }
 
       // Build tool definitions for the LLM (user tools + built-in tools)
       const llmTools = this.s.builders.buildToolDefinitions(tools, agent);
