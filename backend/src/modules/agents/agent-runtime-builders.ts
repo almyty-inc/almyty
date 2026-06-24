@@ -8,12 +8,14 @@ import { Tool } from '../../entities/tool.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Message } from '../../entities/message.entity';
 import { BUILT_IN_TOOLS } from './agent-runtime.service';
+import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 
 @Injectable()
 export class AgentRuntimeBuilders {
   constructor(
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
+    private readonly constraintsService: AgentConstraintsService,
   ) {}
 
   async buildMessages(agent: Agent, run: AgentRun, tools: Tool[], memoryContext: string, org?: Organization): Promise<any[]> {
@@ -69,6 +71,22 @@ export class AgentRuntimeBuilders {
 
     // [INSTRUCTIONS] — what to do
     parts.push(`[INSTRUCTIONS]\n${agent.instructions || 'You are a helpful autonomous agent.'}`);
+
+    // [CONSTRAINTS] — hard rules learned from past failures (opt-in)
+    if (agent.agentConfig?.constraints?.enabled && run.organizationId) {
+      try {
+        const rules = await this.constraintsService.listActiveRules(run.organizationId, agent.id);
+        if (rules.length > 0) {
+          parts.push(
+            `[CONSTRAINTS]\nHard rules learned from past failures — never violate:\n${rules
+              .map((r) => `- ${r}`)
+              .join('\n')}`,
+          );
+        }
+      } catch {
+        /* constraints are best-effort; never block message building */
+      }
+    }
 
     // [MEMORY] — relevant memories
     if (memoryContext) {

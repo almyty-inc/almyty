@@ -54,6 +54,36 @@ export interface PaginatedAgentRuns {
   totalPages: number
 }
 
+export interface PromotedSkill {
+  id: string
+  organizationId: string
+  agentId?: string
+  sourceRunId?: string
+  name: string
+  slug: string
+  description?: string
+  content: string
+  frontmatter?: Record<string, any>
+  inputExample?: any
+  version: number
+  createdBy?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AgentConstraint {
+  id: string
+  organizationId: string
+  agentId: string
+  rule: string
+  sourceRunId?: string
+  active: boolean
+  origin: 'learned' | 'manual'
+  createdBy?: string
+  createdAt: string
+  updatedAt: string
+}
+
 // ── Memory System ──
 
 export type MemoryType = 'fact' | 'preference' | 'context' | 'episode' | 'instruction'
