@@ -12,6 +12,7 @@ import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executo
 import { Agent } from '../../entities/agent.entity';
 import { AgentVerifierHelper, VerifyPanelResult } from './agent-verifier.helper';
 import { AgentContextCompactor } from './agent-context-compactor.helper';
+import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 /**
  * `processStep` was the bulk of AgentRuntimeService — a single 500-line
  * method orchestrating the autonomous-agent inner loop. Splitting it
@@ -31,6 +32,7 @@ export class AgentStepProcessor {
     private readonly s: AgentRuntimeService,
     private readonly verifier: AgentVerifierHelper,
     private readonly compactor: AgentContextCompactor,
+    private readonly constraints: AgentConstraintsService,
   ) {}
 
   async processStep(runId: string): Promise<'continue' | 'done' | 'waiting'> {
@@ -638,6 +640,11 @@ export class AgentStepProcessor {
 
       // bumpAgentStats swallows DB errors internally; no outer try/catch.
       await this.s.misc.bumpAgentStats(agent.id, false, run.executionTime, run.totalCost);
+
+      // Learn a failure-memory constraint from this failed run (opt-in).
+      if (agent.agentConfig?.constraints?.autoLearn) {
+        await this.constraints.recordFromRun(run, { distill: agent.agentConfig.constraints.distill });
+      }
       this.s.emitEvent(runId, 'run.failed', { error: error.message });
       return 'done';
     }

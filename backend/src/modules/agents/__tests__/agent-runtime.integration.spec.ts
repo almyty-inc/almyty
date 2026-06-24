@@ -23,6 +23,7 @@ import { CanonicalMemoryService } from '../../memory/canonical/canonical-memory.
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { AgentVerifierHelper } from '../agent-verifier.helper';
 import { AgentContextCompactor } from '../agent-context-compactor.helper';
+import { AgentConstraintsService } from '../../agent-constraints/agent-constraints.service';
 
 /**
  * Integration tests for AgentRuntimeService.
@@ -182,6 +183,7 @@ describe('AgentRuntimeService (integration)', () => {
         AgentStepProcessor,
         AgentVerifierHelper,
         AgentContextCompactor,
+        { provide: AgentConstraintsService, useValue: { listActiveRules: jest.fn().mockResolvedValue([]), recordFromRun: jest.fn().mockResolvedValue(null) } },
         { provide: 'ApprovalsService', useValue: { create: jest.fn().mockResolvedValue({ id: 'a-stub' }) } },
         { provide: ApprovalsService, useValue: { create: jest.fn().mockResolvedValue({ id: 'a-stub' }) } },
         {
