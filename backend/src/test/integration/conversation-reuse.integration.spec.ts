@@ -10,6 +10,7 @@ import { ApprovalsService } from '../../modules/approvals/approvals.service';
 import { AgentRuntimeEventsHelper } from '../../modules/agents/agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from '../../modules/agents/agent-runtime-misc.helper';
 import { AgentStepProcessor } from '../../modules/agents/agent-step-processor';
+import { AgentVerifierHelper } from '../../modules/agents/agent-verifier.helper';
 import { AgentHeartbeatHelper } from '../../modules/agents/agent-heartbeat.helper';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -194,6 +195,7 @@ describe('Conversation reuse (integration)', () => {
         AgentRuntimeEventsHelper,
         AgentRuntimeMiscHelper,
         AgentStepProcessor,
+        AgentVerifierHelper,
         { provide: getRepositoryToken(AgentRun), useValue: mockRunRepo },
         { provide: getRepositoryToken(Agent), useValue: mockAgentRepo },
         { provide: getRepositoryToken(Tool), useValue: { find: jest.fn().mockResolvedValue([]) } },

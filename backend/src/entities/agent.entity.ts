@@ -135,6 +135,27 @@ export class Agent {
   agentConfig: {
     canCallAgents?: boolean;
     canCreateAgents?: boolean;
+    /**
+     * Autonomous verify: a refute-only checker panel reviews the agent's final
+     * answer. On failure (within the revision budget) the failures are fed back
+     * as synthetic user feedback and the agent loops again. Checkers pick their
+     * vendor per-checker via providerId (multi-vendor = different-vendor
+     * provider entities). Mirrors the pipeline `verify` node's config.
+     */
+    verify?: {
+      enabled?: boolean;
+      checkers: Array<{
+        name?: string;
+        providerId: string;
+        model?: string;
+        instructions?: string;
+        temperature?: number;
+        maxTokens?: number;
+      }>;
+      policy?: 'all_pass' | 'majority' | 'any_fail_blocks';
+      spec?: string;
+      maxReviseLoops?: number;
+    };
   };
 
   @Column({ default: false })

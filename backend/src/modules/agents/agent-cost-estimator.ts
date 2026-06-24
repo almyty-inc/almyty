@@ -38,17 +38,31 @@ export function estimateAgentCost(agent: Agent): EstimatedCost {
     totalHigh += high;
   }
 
+  // Verify nodes fan out to N refute-only checkers — each is its own LLM call.
+  let verifyCheckerCalls = 0;
+  const verifyNodes = agent.pipeline.nodes.filter((n: any) => n.type === 'verify');
+  for (const node of verifyNodes) {
+    const checkers = (node.data?.checkers || node.config?.checkers || []) as any[];
+    for (const checker of checkers) {
+      verifyCheckerCalls++;
+      const model = ((checker?.model as string) || '').toLowerCase();
+      const { low, high } = estimateNodeCost(model, '');
+      totalLow += low;
+      totalHigh += high;
+    }
+  }
+
   const toolCost = toolCallNodes.length * 0.1;
   totalLow += toolCost;
   totalHigh += toolCost;
 
-  if (llmNodes.length === 0 && toolCallNodes.length === 0) {
+  if (llmNodes.length === 0 && toolCallNodes.length === 0 && verifyCheckerCalls === 0) {
     totalLow = 0;
     totalHigh = 0;
   }
 
   return {
-    estimatedLlmCalls: llmNodes.length,
+    estimatedLlmCalls: llmNodes.length + verifyCheckerCalls,
     estimatedToolCalls: toolCallNodes.length,
     hasParallelExecution: parallelNodes.length > 0,
     estimatedCostRange: {
