@@ -26,6 +26,7 @@ import { formatDateTime } from '@/lib/utils'
 import { runStatusVariant, formatDuration } from './constants'
 import type { AgentRun } from '@/types'
 import { VerifyStepCard, VerifySummary } from './verify-step'
+import { PromoteRunDialog } from './promote-run-dialog'
 
 interface RunsTabProps {
   runs: AgentRun[]
@@ -180,6 +181,12 @@ export function RunsTab({ runs }: RunsTabProps) {
                                 <div className="bg-muted rounded p-2 text-xs whitespace-pre-wrap max-h-[200px] overflow-auto">
                                   {typeof run.output === 'string' ? run.output : JSON.stringify(run.output, null, 2)}
                                 </div>
+                              </div>
+                            )}
+                            {/* Promote a completed run to a reusable skill */}
+                            {run.status === 'completed' && (
+                              <div className="flex justify-end pt-1">
+                                <PromoteRunDialog runId={run.id} />
                               </div>
                             )}
                           </div>
