@@ -122,6 +122,20 @@ export class Agent {
     model?: string;
     temperature?: number;
     maxTokens?: number;
+    /**
+     * Context compaction for long autonomous runs (off unless enabled). When the
+     * assembled context exceeds maxContextTokens, the old prefix is summarized
+     * (or truncated) and folded into the system prompt while a recent tail is
+     * kept verbatim. See AgentContextCompactor.
+     */
+    compaction?: {
+      enabled?: boolean;
+      maxContextTokens?: number;
+      keepRecentMessages?: number;
+      strategy?: 'summarize' | 'truncate';
+      providerId?: string;
+      model?: string;
+    };
   };
 
   @Column({ type: 'json', nullable: true })
