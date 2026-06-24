@@ -47,8 +47,6 @@ import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
 import { AgentConstraintsModule } from '../agent-constraints/agent-constraints.module';
-import { PromotedSkillsModule } from '../promoted-skills/promoted-skills.module';
-import { PromotedSkillReplayController } from './promoted-skill-replay.controller';
 import { ToolsModule } from '../tools/tools.module';
 import { MemoryModule } from '../memory/memory.module';
 import { A2AModule } from '../a2a/a2a.module';
@@ -80,10 +78,9 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     forwardRef(() => ApprovalsModule),
     AuthorizationModule,
     AgentConstraintsModule,
-    forwardRef(() => PromotedSkillsModule),
   ],
   providers: [AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor],
-  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, PromotedSkillReplayController],
+  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController],
   exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })
 export class AgentsModule {}

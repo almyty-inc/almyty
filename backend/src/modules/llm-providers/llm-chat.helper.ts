@@ -32,6 +32,7 @@ export class LlmChatHelper {
     private readonly messageRepository: Repository<Message>,
     @InjectRepository(Tool)
     private readonly toolRepository: Repository<Tool>,
+    @Inject(forwardRef(() => ToolExecutorService))
     private readonly toolExecutorService: ToolExecutorService,
     private readonly auditLogService: AuditLogService,
     private readonly modelsHelper: LlmModelsHelper,
