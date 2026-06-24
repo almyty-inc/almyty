@@ -641,6 +641,15 @@ export const runsApi = {
   getRun: (runId: string) => apiGet(`/agents/runs/${runId}`),
 }
 
+// Promoted Skills API (run -> skill)
+export const promotedSkillsApi = {
+  promote: (body: { runId: string; name?: string; description?: string; distill?: { providerId: string; model?: string } }) =>
+    apiPost('/promoted-skills', body),
+  list: () => apiGet('/promoted-skills'),
+  get: (id: string) => apiGet(`/promoted-skills/${id}`),
+  remove: (id: string) => apiDel(`/promoted-skills/${id}`),
+}
+
 
 // Runners API (cluster 5)
 export const runnersApi = {

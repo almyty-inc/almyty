@@ -32,6 +32,7 @@ import { RunsTab } from '@/components/agents/detail/runs-tab'
 import { MemoryTab } from '@/components/agents/detail/memory-tab'
 import { FilesTab } from '@/components/agents/detail/files-tab'
 import { InterfacesTab } from '@/components/agents/detail/interfaces-tab'
+import { PromotedSkillsTab } from '@/components/agents/detail/promoted-skills-tab'
 import { InvokeDialog } from '@/components/agents/detail/invoke-dialog'
 
 export function AgentDetailPage() {
@@ -283,12 +284,13 @@ export function AgentDetailPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="runs">Runs</TabsTrigger>
           <TabsTrigger value="memory">Memory</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="interfaces">Interfaces</TabsTrigger>
+          <TabsTrigger value="skills">Skills</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -324,6 +326,10 @@ export function AgentDetailPage() {
 
         <TabsContent value="interfaces" className="space-y-4">
           <InterfacesTab agentId={id!} interfaces={interfaces} />
+        </TabsContent>
+
+        <TabsContent value="skills" className="space-y-4">
+          <PromotedSkillsTab agentId={id!} />
         </TabsContent>
       </Tabs>
 
