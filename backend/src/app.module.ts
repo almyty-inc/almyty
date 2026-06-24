@@ -65,6 +65,7 @@ import { HealthModule } from './modules/health/health.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { CredentialsModule } from './modules/credentials/credentials.module';
 import { AgentsModule } from './modules/agents/agents.module';
+import { PromotedSkillsModule } from './modules/promoted-skills/promoted-skills.module';
 import { MemoryModule } from './modules/memory/memory.module';
 import { FilesModule } from './modules/files/files.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
@@ -244,6 +245,7 @@ import { databaseConfig } from './config/database.config';
     MailModule,
     CredentialsModule,
     AgentsModule,
+    PromotedSkillsModule,
     MemoryModule,
     FilesModule,
     AuditLogModule,
