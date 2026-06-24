@@ -484,6 +484,10 @@ export class AgentStepProcessor {
 
         run.currentStep++;
         run.executionTime += stepDuration;
+
+        // Advisory mid-run verification (every_n_steps / on_tool_result). May
+        // append a course-correction message + verify step before we commit.
+        await this.maybeMidLoopVerify(run, agent, responseMessage, runId);
         if (!(await this.commitStep(run, expectedStep))) return 'done';
 
         // Auto-save memory if enabled
@@ -680,6 +684,10 @@ export class AgentStepProcessor {
     if (!cfg?.enabled || !Array.isArray(cfg.checkers) || cfg.checkers.length === 0) {
       return null;
     }
+    // on_final_output is the default trigger; skip the gate if it's not configured.
+    if (!(cfg.triggers ?? ['on_final_output']).includes('on_final_output')) {
+      return null;
+    }
     if (!finalContent.trim()) {
       // Nothing to check (e.g. the agent ended with an empty message).
       return null;
@@ -692,5 +700,76 @@ export class AgentStepProcessor {
     run.totalCost += panel.cost;
     run.totalTokens += panel.tokens;
     return panel;
+  }
+
+  /**
+   * Advisory mid-run verification. Unlike the final-output gate (which can send
+   * the answer back for revision), this reviews in-progress work on the
+   * configured triggers (`every_n_steps`, `on_tool_result`) and, on failure,
+   * injects a synthetic user note so the agent can course-correct on the next
+   * step — it never ends or revises the run. Runs inside the current step,
+   * before commitStep, so its cost and the synthetic message persist together.
+   */
+  private async maybeMidLoopVerify(
+    run: AgentRun,
+    agent: Agent,
+    responseMessage: any,
+    runId: string,
+  ): Promise<void> {
+    const cfg = agent.agentConfig?.verify;
+    if (!cfg?.enabled || !Array.isArray(cfg.checkers) || cfg.checkers.length === 0) return;
+    const triggers = cfg.triggers ?? ['on_final_output'];
+    const everyN = cfg.everyNSteps ?? 5;
+
+    const hadToolResults =
+      Array.isArray(responseMessage?.toolCalls) &&
+      responseMessage.toolCalls.some((tc: any) => tc.result !== undefined || tc.error);
+    const fires =
+      (triggers.includes('every_n_steps') && everyN > 0 && run.currentStep % everyN === 0) ||
+      (triggers.includes('on_tool_result') && hadToolResults);
+    if (!fires) return;
+
+    // Target = this step's assistant content plus the tool results it produced.
+    const toolSummary = (responseMessage?.toolCalls || [])
+      .map((tc: any) => `${tc.name}: ${tc.error ? `ERROR ${tc.error}` : this.stringifyResult(tc.result)}`)
+      .join('\n');
+    const target = `Assistant: ${responseMessage?.content || ''}\n\nTool results:\n${toolSummary}`.trim();
+
+    const panel = await this.verifier.runPanel(
+      { target, spec: cfg.spec, checkers: cfg.checkers, policy: cfg.policy },
+      run.organizationId,
+      run.userId,
+    );
+    run.totalCost += panel.cost;
+    run.totalTokens += panel.tokens;
+
+    run.steps.push({
+      type: 'verify',
+      input: { mode: 'mid_loop', policy: panel.policy, checkers: panel.checkers.length },
+      output: { verdict: panel.verdict, advisory: true, failures: panel.failures },
+      cost: panel.cost,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!panel.passed) {
+      const note =
+        `Mid-run verification flagged issues with your progress so far:\n\n` +
+        panel.failures
+          .map((f, i) => `${i + 1}. ${f.rule}${f.evidence ? ` — ${f.evidence}` : ''}`)
+          .join('\n') +
+        `\n\nAccount for these as you continue; do not repeat them.`;
+      if (run.conversationId) {
+        const msg = Message.createUserMessage(run.conversationId, note);
+        msg.runId = run.id;
+        await this.s.messageRepository.save(msg);
+      }
+      this.s.emitEvent(runId, 'verify.advisory', { step: run.currentStep, failures: panel.failures });
+    }
+  }
+
+  private stringifyResult(r: any): string {
+    if (r === undefined || r === null) return '';
+    const s = typeof r === 'string' ? r : JSON.stringify(r);
+    return s.length > 500 ? `${s.slice(0, 500)}…` : s;
   }
 }

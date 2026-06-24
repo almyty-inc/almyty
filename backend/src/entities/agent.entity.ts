@@ -169,6 +169,14 @@ export class Agent {
       policy?: 'all_pass' | 'majority' | 'any_fail_blocks';
       spec?: string;
       maxReviseLoops?: number;
+      /**
+       * When verify fires. `on_final_output` (default) gates the final answer
+       * and can send it back for revision. `every_n_steps` and `on_tool_result`
+       * are advisory mid-run checks that inject course-correction feedback
+       * without ending the run.
+       */
+      triggers?: Array<'on_final_output' | 'every_n_steps' | 'on_tool_result'>;
+      everyNSteps?: number;
     };
   };
 
