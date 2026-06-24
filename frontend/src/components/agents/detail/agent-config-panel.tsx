@@ -14,11 +14,15 @@ import { llmProvidersApi } from '@/lib/api'
 import type { Agent } from '@/types'
 
 export function AgentConfigPanel({ agent }: { agent: Agent }) {
-  const { data: providers } = useQuery<any[]>({
+  const { data: providersData } = useQuery<any>({
     queryKey: ['llm-providers'],
     queryFn: () => llmProvidersApi.getAll(),
   })
-  const provMap = new Map<string, any>((providers || []).map((p: any) => [p.id, p]))
+  // getAll() may return a bare array or a { providers: [...] } envelope.
+  const providers: any[] = Array.isArray(providersData)
+    ? providersData
+    : providersData?.providers || []
+  const provMap = new Map<string, any>(providers.map((p: any) => [p.id, p]))
   const vendorOf = (id?: string) => (id && provMap.get(id)?.type) || id || ''
   const labelOf = (id?: string) => {
     const p = id ? provMap.get(id) : undefined
