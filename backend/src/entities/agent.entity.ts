@@ -178,6 +178,16 @@ export class Agent {
       triggers?: Array<'on_final_output' | 'every_n_steps' | 'on_tool_result'>;
       everyNSteps?: number;
     };
+    /**
+     * Failure-memory constraints. `enabled` injects active constraints into the
+     * system prompt; `autoLearn` records a new constraint when a run fails.
+     * See AgentConstraint / AgentConstraintsService.
+     */
+    constraints?: {
+      enabled?: boolean;
+      autoLearn?: boolean;
+      distill?: { providerId: string; model?: string };
+    };
   };
 
   @Column({ default: false })
