@@ -10,6 +10,7 @@ import { AgentExecutionEngine } from './agent-execution.engine';
 import { A2AClientService } from '../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../a2a/external-agents.service';
 import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
+import { AgentVerifierHelper, VerifyPolicy } from './agent-verifier.helper';
 
 export interface NodeExecutionResult {
   output: any;
@@ -35,6 +36,8 @@ export interface NodeExecutionOptions {
   signal?: AbortSignal;
 }
 
+// Verify-node types (VerifyPolicy, etc.) now live with the shared verifier.
+
 @Injectable()
 export class AgentNodeExecutor {
   private readonly logger = new Logger(AgentNodeExecutor.name);
@@ -50,11 +53,12 @@ export class AgentNodeExecutor {
     private readonly a2aClientService: A2AClientService,
     private readonly externalAgentsService: ExternalAgentsService,
     private readonly subAgents: AgentSubAgentExecutors,
+    private readonly verifier: AgentVerifierHelper,
   ) {}
 
   /**
    * Executes a single pipeline node and returns the result.
-   * Supports: input, output, llm_call, tool_call, condition, transform, loop, parallel, merge, sub_agent
+   * Supports: input, output, llm_call, tool_call, condition, transform, loop, parallel, merge, sub_agent, verify
    */
   async execute(
     node: AgentPipelineNode,
@@ -100,6 +104,9 @@ export class AgentNodeExecutor {
 
       case 'sub_agent':
         return this.subAgents.executeSubAgentNode(node, context, execOptions);
+
+      case 'verify':
+        return this.executeVerifyNode(node, context, organizationId, userId, execOptions);
 
       default:
         throw new Error(`Unsupported node type: ${node.type}`);
@@ -562,4 +569,80 @@ export class AgentNodeExecutor {
 
     return outputs;
   }
+
+  /**
+   * Execute a verify node — runs N refute-only checkers in parallel, each its
+   * own vendor/model (per checker.providerId), then merges their verdicts per
+   * policy. A checker's only job is to refute: it sees the target + spec and
+   * returns structured JSON. The node never throws on a failing verdict — it
+   * emits the failure list so a downstream `condition` node can branch
+   * (retry / escalate / halt).
+   *
+   * Config (node.data || node.config): {
+   *   target?: any | string   // value or template; defaults to the incoming node output
+   *   spec?: any | string     // validation rules (template-resolved)
+   *   checkers: Array<{ name?, providerId, model?, instructions?, temperature?, maxTokens? }>
+   *   policy?: 'all_pass' | 'majority' | 'any_fail_blocks'   // default: any_fail_blocks
+   * }
+   */
+  private async executeVerifyNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+    organizationId: string,
+    userId?: string,
+    options?: NodeExecutionOptions,
+  ): Promise<NodeExecutionResult> {
+    const config = node.data || node.config || {};
+    const startTime = Date.now();
+
+    const checkers = Array.isArray(config.checkers) ? config.checkers : [];
+    if (checkers.length === 0) {
+      throw new Error(`Verify node '${node.id}' requires at least one checker`);
+    }
+    const policy: VerifyPolicy = config.policy || 'any_fail_blocks';
+
+    // Resolve the target to check: an explicit template/value wins, else fall
+    // back to the upstream node output(s) reaching this node.
+    let target: any;
+    if (config.target !== undefined) {
+      target =
+        typeof config.target === 'string'
+          ? this.templateResolver.resolve(config.target, context)
+          : config.target;
+    } else {
+      const incoming = this.getIncomingOutputs(node, context, options?.edges);
+      target = incoming.length === 1 ? incoming[0] : incoming;
+    }
+
+    const spec = config.spec
+      ? typeof config.spec === 'string'
+        ? this.templateResolver.resolve(config.spec, context)
+        : JSON.stringify(config.spec, null, 2)
+      : '';
+
+    // The checker panel (fan-out, per-checker provider/model, verdict merge)
+    // is owned by the shared verifier so the autonomous step processor reuses
+    // the same logic.
+    const panel = await this.verifier.runPanel(
+      { target, spec, checkers, policy },
+      organizationId,
+      userId,
+      options?.signal,
+    );
+
+    return {
+      output: {
+        verdict: panel.verdict,
+        passed: panel.passed,
+        policy: panel.policy,
+        failures: panel.failures,
+        passed_rules: panel.passedRules,
+        checkers: panel.checkers,
+      },
+      cost: panel.cost,
+      tokens: panel.tokens,
+      executionTime: Date.now() - startTime,
+    };
+  }
+
 }

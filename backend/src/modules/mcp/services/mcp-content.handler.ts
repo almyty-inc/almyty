@@ -17,6 +17,7 @@ import { Tool, ToolStatus } from '../../../entities/tool.entity';
 import { Resource } from '../../../entities/resource.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
 import { SkillGeneratorService } from '../../tools/skill-generator.service';
+import { PromotedSkillsService } from '../../promoted-skills/promoted-skills.service';
 import { McpToolHandler } from './mcp-tool.handler';
 import { batchAsync } from '../../../common/utils/batch-async';
 
@@ -33,6 +34,7 @@ export class McpContentHandler {
     private gatewayToolRepository: Repository<GatewayTool>,
     private skillGeneratorService: SkillGeneratorService,
     private toolHandler: McpToolHandler,
+    private promotedSkillsService: PromotedSkillsService,
   ) {}
 
   async handleResourcesList(params: any, organizationId: string, gatewayId?: string): Promise<any> {
@@ -234,11 +236,17 @@ export class McpContentHandler {
       }
     });
 
-    return { skills: skills.filter(Boolean) };
+    const promoted = await this.promotedSkillsService.listForServing(organizationId);
+    return { skills: [...skills.filter(Boolean), ...promoted] };
   }
 
   async handleSkillGet(params: any, organizationId: string): Promise<any> {
-    const { toolId, gatewayId } = params || {};
+    const { toolId, gatewayId, promotedSkillId } = params || {};
+
+    if (promotedSkillId) {
+      const skill = await this.promotedSkillsService.get(promotedSkillId, organizationId);
+      return { name: skill.slug, content: skill.content };
+    }
 
     if (gatewayId) {
       return this.skillGeneratorService.generateGatewaySkills(gatewayId, organizationId);
@@ -248,7 +256,7 @@ export class McpContentHandler {
       return this.skillGeneratorService.generateToolSkill(toolId, organizationId);
     }
 
-    throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Either toolId or gatewayId is required');
+    throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'toolId, gatewayId, or promotedSkillId is required');
   }
 
   private createError(code: JsonRpcErrorCode, message: string): any {
