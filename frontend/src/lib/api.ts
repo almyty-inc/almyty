@@ -648,6 +648,16 @@ export const promotedSkillsApi = {
   list: () => apiGet('/promoted-skills'),
   get: (id: string) => apiGet(`/promoted-skills/${id}`),
   remove: (id: string) => apiDel(`/promoted-skills/${id}`),
+  replay: (id: string, input?: any) => apiPost(`/promoted-skills/${id}/replay`, { input }),
+}
+
+// Agent Constraints API (failure memory)
+export const agentConstraintsApi = {
+  list: (agentId: string) => apiGet(`/agents/${agentId}/constraints`),
+  add: (agentId: string, rule: string) => apiPost(`/agents/${agentId}/constraints`, { rule }),
+  setActive: (agentId: string, id: string, active: boolean) =>
+    apiPatch(`/agents/${agentId}/constraints/${id}`, { active }),
+  remove: (agentId: string, id: string) => apiDel(`/agents/${agentId}/constraints/${id}`),
 }
 
 

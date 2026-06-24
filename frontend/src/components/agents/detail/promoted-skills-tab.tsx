@@ -4,7 +4,7 @@
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Sparkles, Eye, Trash2, Loader2 } from 'lucide-react'
+import { Sparkles, Eye, Trash2, Play, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -44,6 +44,13 @@ export function PromotedSkillsTab({ agentId }: PromotedSkillsTabProps) {
       queryClient.invalidateQueries({ queryKey: ['promoted-skills'] })
     },
     onError: (e: any) => errorNotif('Delete failed', e?.response?.data?.message || e?.message),
+  })
+
+  const replayMutation = useMutation({
+    mutationFn: (id: string) => promotedSkillsApi.replay(id),
+    onSuccess: (res: any) =>
+      success('Replay started', res?.runId ? `Run ${res.runId} is running` : undefined),
+    onError: (e: any) => errorNotif('Replay failed', e?.response?.data?.message || e?.message),
   })
 
   return (
@@ -98,6 +105,16 @@ export function PromotedSkillsTab({ agentId }: PromotedSkillsTabProps) {
                       <Button size="sm" variant="ghost" className="gap-1" onClick={() => setViewing(skill)}>
                         <Eye className="h-3.5 w-3.5" />
                         View
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="gap-1"
+                        disabled={replayMutation.isPending}
+                        onClick={() => replayMutation.mutate(skill.id)}
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                        Replay
                       </Button>
                       <Button
                         size="sm"

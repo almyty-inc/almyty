@@ -71,6 +71,19 @@ export interface PromotedSkill {
   updatedAt: string
 }
 
+export interface AgentConstraint {
+  id: string
+  organizationId: string
+  agentId: string
+  rule: string
+  sourceRunId?: string
+  active: boolean
+  origin: 'learned' | 'manual'
+  createdBy?: string
+  createdAt: string
+  updatedAt: string
+}
+
 // ── Memory System ──
 
 export type MemoryType = 'fact' | 'preference' | 'context' | 'episode' | 'instruction'
