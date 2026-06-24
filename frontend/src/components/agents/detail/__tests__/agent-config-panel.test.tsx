@@ -40,7 +40,8 @@ const agent = (over: any = {}): Agent =>
 describe('AgentConfigPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(llmProvidersApi.getAll as any).mockResolvedValue(providers)
+    // Real endpoint returns a { providers: [...] } envelope, not a bare array.
+    ;(llmProvidersApi.getAll as any).mockResolvedValue({ providers })
   })
 
   it('surfaces the multi-vendor verifier panel with resolved provider names', async () => {
