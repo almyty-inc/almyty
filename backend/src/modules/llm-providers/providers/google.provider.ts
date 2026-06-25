@@ -38,7 +38,7 @@ export async function callGoogle(
   // interpolated raw, so a model id like `../../v1beta/chat` or a key
   // containing `&` / `#` would break URL parsing or inject extra
   // query params.
-  const safeModel = encodeURIComponent(request.model || 'gemini-pro');
+  const safeModel = encodeURIComponent(request.model || provider.configuration.model || 'gemini-2.0-flash');
   const safeKey = encodeURIComponent(apiKey || '');
   const config: AxiosRequestConfig = {
     method: 'POST',
@@ -72,7 +72,7 @@ export async function callGoogle(
       totalTokens: usage.totalTokenCount || 0,
     },
     cost,
-    model: request.model || 'gemini-pro',
+    model: request.model || provider.configuration.model || 'gemini-2.0-flash',
     conversationId: conversation.id,
     messageId: '',
     responseTime,

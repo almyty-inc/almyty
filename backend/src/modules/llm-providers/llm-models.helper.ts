@@ -138,7 +138,7 @@ export class LlmModelsHelper {
     // so a key containing `&`, `#`, or a newline would have broken
     // URL parsing or injected extra query params. Google keys are
     // normally `[A-Za-z0-9_-]` only, but defence in depth.
-    const target = `https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(apiKey || '')}`;
+    const target = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey || '')}`;
     const response = await callLlmProviderHttp({
       method: 'GET',
       url: target,
