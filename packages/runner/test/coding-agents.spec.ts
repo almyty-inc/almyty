@@ -55,18 +55,24 @@ describe('registry', () => {
 
   it('resolves a spec by binary name or alias', () => {
     expect(findByBinary('cursor-agent')?.id).toBe('cursor');
-    expect(findByBinary('agent')?.id).toBe('cursor'); // alias
     expect(findByBinary('mistral-vibe')?.id).toBe('mistral_vibe'); // alias
+    expect(findByBinary('vibe')?.id).toBe('mistral_vibe'); // primary
     expect(findByBinary('claude')?.id).toBe('claude');
     expect(findByBinary('nope')).toBeUndefined();
+  });
+
+  it('does not register the bare "agent" alias (collides with other tools)', () => {
+    // Regression: a generic `agent` binary (e.g. grok's) must NOT resolve to cursor.
+    expect(findByBinary('agent')).toBeUndefined();
+    expect(allProbeBinaries()).not.toContain('agent');
   });
 
   it('allProbeBinaries includes primaries and aliases, deduped', () => {
     const bins = allProbeBinaries();
     expect(bins).toContain('claude');
     expect(bins).toContain('cursor-agent');
-    expect(bins).toContain('agent');
     expect(bins).toContain('vibe');
+    expect(bins).toContain('mistral-vibe');
     expect(new Set(bins).size).toBe(bins.length); // no dupes
   });
 });
@@ -187,10 +193,10 @@ describe('detection', () => {
   });
 
   it('resolves a platform via its alias binary', async () => {
-    const found = await detectCodingAgents(stubExec({ agent: '2026.6' })); // cursor's alias
+    const found = await detectCodingAgents(stubExec({ 'mistral-vibe': '0.3.1' })); // vibe's alias
     expect(found).toHaveLength(1);
-    expect(found[0].id).toBe('cursor');
-    expect(found[0].resolvedBinary).toBe('agent');
+    expect(found[0].id).toBe('mistral_vibe');
+    expect(found[0].resolvedBinary).toBe('mistral-vibe');
   });
 
   it('returns empty when nothing is installed', async () => {

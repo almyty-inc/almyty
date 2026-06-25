@@ -85,7 +85,10 @@ export const CODING_AGENTS: Record<CodingAgentId, CodingAgentSpec> = {
     displayName: 'Cursor Agent',
     shortCode: 'cu',
     binary: 'cursor-agent',
-    binaryAliases: ['agent'],
+    // NOTE: no bare 'agent' alias — it collides with other tools that install
+    // an `agent` binary (e.g. grok), causing false-positive detection. The real
+    // Cursor CLI binary is `cursor-agent`.
+    binaryAliases: [],
     providerFamily: 'cursor',
     apiKeyEnvVars: ['CURSOR_API_KEY'],
     configDirEnvVar: null,
