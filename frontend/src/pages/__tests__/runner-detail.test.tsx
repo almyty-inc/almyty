@@ -78,6 +78,31 @@ describe('RunnerDetailPage', () => {
     await waitFor(() => expect(unregister).toHaveBeenCalledWith('r1'))
   })
 
+  it('renders detected coding agents with provider + capability badges', async () => {
+    getRunner.mockResolvedValue(makeRunner({
+      runtimeInfo: {
+        os: 'darwin', arch: 'arm64', hostname: 'host',
+        cpuCount: 8, memoryMb: 16000, runnerVersion: '0.1.0',
+        binaries: { node: 'v20' },
+        codingAgents: [
+          { id: 'claude', displayName: 'Claude Code', version: '1.2.3', providerFamily: 'anthropic', supportsMcp: true, canManage: true },
+          { id: 'codex', displayName: 'Codex', version: '0.9', providerFamily: 'openai', supportsMcp: true, canManage: true },
+        ],
+      },
+    }))
+    render(<RunnerDetailPage />)
+    await waitFor(() => expect(screen.getByText('Claude Code')).toBeInTheDocument())
+    expect(screen.getByText('Codex')).toBeInTheDocument()
+    expect(screen.getByText('anthropic')).toBeInTheDocument()
+    expect(screen.getByText('openai')).toBeInTheDocument()
+  })
+
+  it('shows an empty hint when no coding agents are detected', async () => {
+    getRunner.mockResolvedValue(makeRunner({ state: 'online' })) // no codingAgents
+    render(<RunnerDetailPage />)
+    await waitFor(() => expect(screen.getByText(/no coding agents detected/i)).toBeInTheDocument())
+  })
+
   it('lists active workspaces with a link to workspace detail', async () => {
     getRunner.mockResolvedValue(makeRunner({ state: 'busy' }))
     getWorkspaces.mockResolvedValue([
