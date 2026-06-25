@@ -5,322 +5,130 @@ which tools to call and how to answer. There is no pipeline to draw; the model
 controls the flow. (For the opposite approach, where you wire each step
 yourself, see [workflow agents](/agents/builder).)
 
-On top of that loop, almyty adds verification by other models, per-agent
-constraints that persist between runs, promotion of good runs into reusable
-skills, and embedding-based memory. The rest of this page covers each.
+What makes them more than a prompt: several models collaborate inside one agent,
+the output is verified before it returns, the agent keeps memory and constraints
+across runs, and good runs become reusable skills. You set all of this up on the
+agent's detail page.
 
 ![Autonomous agent detail](/screenshots/agent-detail-overview.png)
 
 ## Multiple models in one agent
 
 An autonomous agent has one **primary** model that does the work and any number
-of **verifier** models that review it. Each model can use a different provider,
-so a single agent can span vendors.
-
-- **Primary** (`modelConfig.providerId` / `modelConfig.model`) plans, calls
-  tools, and writes the answer.
-- **Verifiers** (`agentConfig.verify.checkers[]`) review the result. Each checker
-  has its own provider and model.
-
-The **Customer Support Orchestrator** agent uses GPT-4o as primary, with a Claude
-reviewer and a second GPT-4o reviewer. The **Models & Verification** panel on the
-agent detail page shows the lineup, and its **Configure** dialog sets the merge
-policy, triggers, revise budget, and the reviewer list — each reviewer gets a
-provider, a model, and optional focus instructions. It saves to
-`agentConfig.verify`, so the API stays in sync.
-
-![Verifier configuration dialog](/screenshots/agent-verify-config-dialog.png)
+of **verifier** models that review it. Each can use a different provider, so one
+agent can span vendors — the Customer Support Orchestrator above runs GPT-4o as
+primary with a Claude reviewer and a second GPT-4o reviewer. The **Models &
+Verification** panel on the detail page shows the lineup.
 
 ## Verification
 
-Verification is configured per agent under `agentConfig.verify`:
+Open the **Models & Verification** panel and click **Configure** to set up
+verification: add reviewer models (each with its own provider and focus
+instructions), choose how their verdicts combine, decide when they run, and set
+how many times the agent may revise.
 
-```json
-{
-  "verify": {
-    "enabled": true,
-    "checkers": [
-      { "name": "policy-reviewer", "providerId": "<anthropic-provider>", "model": "claude-sonnet-4-6", "instructions": "Refute the answer if it violates support policy or promises a refund over $500." },
-      { "name": "factual-reviewer", "providerId": "<openai-provider>", "model": "gpt-4o" }
-    ],
-    "policy": "any_fail_blocks",
-    "maxReviseLoops": 2,
-    "triggers": ["on_final_output"]
-  }
-}
-```
+![Configure the verifier panel](/screenshots/agent-verify-config-dialog.png)
 
-**Checkers** are refute-only: each one tries to find a reason the answer is
-wrong. How their verdicts combine is set by **`policy`**:
+Reviewers are refute-only — each tries to find a reason the answer is wrong. How
+their verdicts combine:
 
-| Policy | Passes when |
-|--------|-------------|
-| `all_pass` | every checker approves |
-| `majority` | most checkers approve |
-| `any_fail_blocks` *(default)* | a single failure blocks |
+| Policy | The answer passes when |
+|--------|------------------------|
+| All pass | every reviewer approves |
+| Majority | most reviewers approve |
+| Any fail blocks *(default)* | a single failure blocks it |
 
-**Triggers** decide when verification fires:
+When verification runs:
 
-- **`on_final_output`** is a gate. The final answer is reviewed before it is
-  returned. If a checker fails and the agent still has `maxReviseLoops` budget
-  (default 2), the failures are fed back as a message and the agent revises. When
-  it passes, or the budget runs out, the run completes and records the outcome
-  under `run.metadata.verify`.
-- **`every_n_steps`** and **`on_tool_result`** are advisory. They inject a
-  course-correction note mid-run without ending it, so the agent can adjust
-  before going further.
+- **On final output** is a gate. The answer is reviewed before it returns. On a
+  failure the agent gets the feedback and revises, up to the revise budget
+  (default two), then completes. The run records the verdict, how many revisions
+  it used, and whether it ran out of budget.
+- **Mid-run** (every N steps, or after a tool result) is advisory: it injects a
+  course-correction note without ending the run, so the agent can adjust before
+  going further.
 
-Workflow (DAG) agents have the same capability as a `verify` node; the logic is
-shared between the two modes.
-
-### What a verify cycle records
-
-The outcome is stored on the run. `run.metadata.verify` is a summary:
-
-```json
-{ "verdict": "fail", "revisions": 2, "exhausted": true }
-```
-
-- `verdict` — `pass` or `fail`
-- `revisions` — how many revise loops were used
-- `exhausted` — `true` if it hit `maxReviseLoops` without passing
-
-Per-reviewer detail lives in the run's `verify` steps. Each step records which
-reviewer raised what, and why:
-
-```json
-{
-  "verdict": "fail",
-  "revision": 1,
-  "failures": [
-    {
-      "rule": "completeness",
-      "evidence": "The customer's name is missing in the greeting: 'Dear [Customer's Name]'.",
-      "checker": "GPT-4o reviewer"
-    }
-  ]
-}
-```
-
-Advisory (mid-run) steps are marked with `input.mode = "mid_loop"` and
-`output.advisory = true`.
-
-![A real verify and revise loop](/screenshots/agent-run-verify-loop.png)
-
-### A second example: majority vote with mid-run checks
-
-The **Market Research Analyst** agent runs Claude as its primary, with an OpenAI
-and a Gemini fact-checker. It uses `majority` (the answer ships when most
-checkers approve) and adds an `every_n_steps` advisory check so factual drift is
-caught partway through a long run, not only at the end:
-
-```json
-{
-  "verify": {
-    "enabled": true,
-    "policy": "majority",
-    "maxReviseLoops": 3,
-    "triggers": ["on_final_output", "every_n_steps"],
-    "everyNSteps": 4,
-    "checkers": [
-      { "name": "openai-factcheck", "providerId": "<openai-provider>", "model": "gpt-4o", "instructions": "Refute any claim that is not supported by a cited source." },
-      { "name": "gemini-factcheck", "providerId": "<gemini-provider>", "model": "gemini-2.0-flash" }
-    ]
-  }
-}
-```
+Workflow agents get the same capability as a verify node; the logic is shared
+between the two modes.
 
 ## Collaboration
 
 Verification puts several models inside one agent. Collaboration goes the other
-way: point an agent at several other agents (`agent.collaboration`) and choose
-how they work together. Each member can be a different model, and the judge that
-settles the result can be a different model again.
+way: point an agent at several other agents and choose how they work together.
+Each member can be a different model, and the judge that settles the result can
+be a different model again.
 
-| Strategy | What it does |
-|----------|--------------|
-| `sequential` | Members run one after another, each fed the previous member's output — a chain. |
-| `parallel` | All members run at once on the same input. A judge merges their outputs into one answer; without a judge they are returned together. |
-| `race` | All members run at once; the first to finish wins. Every racer's cost is still counted, so a budget cap holds. |
-| `debate` | Members argue over multiple rounds (`maxRounds`, default 3), each round seeing all prior responses. After the last round a judge reads the debate and writes the final answer. |
+| Mode | What it does |
+|------|--------------|
+| Sequential | Members run one after another, each fed the previous member's output — a chain. |
+| Parallel | All members run at once on the same input. A judge merges their outputs into one answer; without a judge they are returned together. |
+| Race | All members run at once; the first to finish wins. Every racer's cost is still counted, so a budget cap holds. |
+| Debate | Members argue over several rounds, each round seeing all prior responses. A judge then reads the debate and writes the final answer. |
 
-The judge is any agent (`collaboration.judgeAgentId`), so a Claude debate can be
-settled by GPT-4o, or the reverse. It is used by `parallel` and `debate`.
+The judge is any agent you choose, so a Claude debate can be settled by GPT-4o,
+or the reverse.
 
-```json
-{
-  "collaboration": {
-    "strategy": "debate",
-    "maxRounds": 3,
-    "judgeAgentId": "<judge-agent>",
-    "agents": [
-      { "agentId": "<claude-analyst>", "role": "skeptic" },
-      { "agentId": "<gpt4o-analyst>", "role": "proponent" }
-    ]
-  }
-}
-```
-
-> Workflow (DAG) agents have a separate `consensus` **merge node** — a judge LLM
-> that combines branch outputs, configured via `judgeConfig`. That is a node, not
-> a collaboration strategy.
+(Workflow agents have a separate **consensus** merge node — a judge that combines
+branch outputs. That is a node, not a collaboration mode.)
 
 ## Constraints
 
-Constraints are per-agent rules that keep an agent from repeating mistakes. They
-are plain text, and they come from two places:
-
-- **User-authored** — add them on the agent's **Constraints** tab.
-- **Auto-learned** — with `agentConfig.constraints.autoLearn`, a failed run is
-  distilled into a new constraint (deterministically from the error, or via an
-  LLM distiller).
-
-Active constraints are injected into the autonomous system prompt as a
-`[CONSTRAINTS]` block on every run, so they are always-on guidance rather than a
-gate. They are distinct from [Memory](/memory): constraints are prompt rules,
-memory is embedding-based recall.
-
-For the Support Orchestrator, the block looks like this at run time:
-
-```text
-[CONSTRAINTS]
-- Never promise a refund above $500 without calling request_approval first.
-- Enterprise customers on the Scale plan get a 4-hour first-response SLA.
-- Keep replies under 150 words unless the customer asks for detail.
-```
-
-An auto-learned constraint is the same shape, written from a failed run. If a run
-once issued a $900 refund and the verify gate blocked it, the next save can
-record:
-
-```text
-- A run was blocked for issuing a $900 refund without approval; gate refunds
-  over $500 through request_approval.
-```
+Constraints are per-agent rules that keep an agent from repeating mistakes. Add
+them on the agent's **Constraints** tab, or let the agent learn them: when a run
+fails, the lesson is distilled into a new constraint automatically. Active
+constraints are always-on — applied on every run — which makes them distinct from
+[memory](/memory), which is recalled by relevance.
 
 ![Constraints tab](/screenshots/agent-constraints.png)
 
+For the Support Orchestrator the active rules read like "never promise a refund
+over $500 without approval," "Scale-plan customers get a four-hour SLA," and
+"keep replies under 150 words." A blocked run can add its own: "a run was blocked
+for issuing a $900 refund without approval — gate refunds over $500."
+
 ## Promote a run to a skill
 
-A **promoted skill** is an [Agent Skills](https://agentskills.io) `SKILL.md`
-distilled from a completed run (its tool sequence and output), stored and
-versioned. Re-promoting bumps the version. The skill is served over the
-[Skills gateway](/gateways/skills) path and over REST, so another agent, or your
-editor via [`@almyty/skills`](/cli/skills), can call it directly instead of
-re-deriving the steps.
-
-From the agent's **Skills** tab you can view a skill's `SKILL.md`, delete it, or
-**replay** it. Promotion itself happens from the **Promote to skill** dialog on a
-completed run.
-
-```bash
-# Promote a completed run to a reusable skill
-curl -X POST https://api.almyty.com/promoted-skills \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{ "runId": "<run-uuid>" }'
-
-# Replay the source agent (defaults to the captured input)
-curl -X POST https://api.almyty.com/promoted-skills/{id}/replay \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{ "input": { "query": "..." } }'
-```
-
-The result is a standard Agent Skill. The deterministic distiller writes the
-frontmatter and the procedure from the run itself. This one was promoted from a
-real Support Orchestrator run:
-
-```markdown
----
-name: draft-support-reply-with-policy-citation
-description: Triage a delayed-order ticket, draft a policy-grounded reply, and decide escalation.
-metadata:
-  author: almyty
-  generated: "true"
-  source: agent-run
-  version: "1"
----
-
-# Customer Support Orchestrator
-
-Triage a delayed-order ticket, draft a policy-grounded reply, and decide escalation.
-
-## When to use
-Use this skill for tasks like the one this run solved successfully: triage inbound
-tickets, draft replies, and escalate edge cases, with a verifier panel checking
-every answer before it returns.
-
-## Procedure
-Classify each ticket, draft an accurate, empathetic reply grounded in policy, and
-escalate anything involving refunds over $500 or legal risk. Always cite the
-policy you relied on. (This run reached its answer through reasoning alone, with
-no tool calls.)
-```
-
-When the source run did call tools, the procedure lists them in order — for
-example "1. Use Lookup Order Status, 2. Use Search Knowledge Base, …" — so the
-skill captures the actual steps, not just the prose.
+When a run goes well, promote it from the **Promote to skill** dialog. almyty
+distills the run — its tool sequence and output — into an
+[Agent Skills](https://agentskills.io) `SKILL.md`, stored and versioned. From the
+**Skills** tab you can view it, replay it, or delete it. The skill is served over
+the [Skills gateway](/gateways/skills) and REST, so another agent, or your editor
+via [`@almyty/skills`](/cli/skills), can call it instead of re-deriving the steps.
 
 ![Skills tab with promoted skills](/screenshots/agent-skills.png)
 
 ![SKILL.md viewer with the tool procedure](/screenshots/agent-skill-viewer.png)
 
+A reasoning-only run produces the procedure in prose; a run that called tools
+lists them in order ("1. Look up order status, 2. Search the knowledge base, …"),
+so the skill captures the real steps.
+
 ## Memory
 
-With memory enabled, the agent stores facts, preferences, and context and
-recalls them on later runs by embedding search. See [Memory](/memory) for the
-full model.
+With memory enabled, the agent stores facts, preferences, and context and recalls
+them on later runs by embedding search. See [Memory](/memory) for the full model.
 
 ## Context compaction
 
-Long autonomous runs can outgrow the model's context window. Compaction
-(`modelConfig.compaction`) keeps them bounded:
-
-```json
-{
-  "compaction": {
-    "enabled": true,
-    "maxContextTokens": 120000,
-    "keepRecentMessages": 20,
-    "strategy": "summarize"
-  }
-}
-```
-
-When the run exceeds the budget, the older prefix is folded into a cached summary
-in the system prompt and the recent tail is kept verbatim (`strategy` selects
-`summarize` or `truncate`). It runs automatically; there is no UI for it.
+Long runs can outgrow the model's context window. Turn on compaction and almyty
+keeps the run bounded: once it goes over a token budget, the older history is
+folded into a cached summary while the recent messages are kept verbatim. It runs
+automatically; there is nothing to watch.
 
 ## Create an autonomous agent
 
-In the UI: **Agents → Create Agent → Autonomous**, give it instructions, attach
-tools, enable memory, and add constraints. Via the API:
+In the UI: **Agents → Create Agent → Autonomous**, enter instructions, attach
+tools, enable memory, add constraints, and configure the verifier panel — all
+from the form.
+
+A minimal version over the API:
 
 ```bash
 curl -X POST https://api.almyty.com/agents \
   -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Customer Support Orchestrator",
-    "mode": "autonomous",
-    "instructions": "Triage support tickets. Draft replies. Escalate via request_approval before refunds over $500.",
-    "toolIds": ["<tool-uuid-1>", "<tool-uuid-2>"],
-    "memoryEnabled": true,
-    "modelConfig": { "providerId": "<openai-provider>", "model": "gpt-4o" },
-    "agentConfig": {
-      "verify": {
-        "enabled": true,
-        "policy": "any_fail_blocks",
-        "maxReviseLoops": 2,
-        "triggers": ["on_final_output"],
-        "checkers": [
-          { "providerId": "<anthropic-provider>", "model": "claude-sonnet-4-6" },
-          { "providerId": "<openai-provider>", "model": "gpt-4o" }
-        ]
-      }
-    }
-  }'
+  -d '{ "name": "Support Orchestrator", "mode": "autonomous",
+        "instructions": "Triage tickets, draft replies, escalate refunds over $500.",
+        "toolIds": ["<tool-id>"], "memoryEnabled": true }'
 ```
 
 ## Related
