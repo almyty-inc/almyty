@@ -11,6 +11,7 @@ import { Cpu, ShieldCheck, ShieldAlert, Repeat, Brain } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { llmProvidersApi } from '@/lib/api'
+import { VerifyConfigDialog } from './verify-config-dialog'
 import type { Agent } from '@/types'
 
 export function AgentConfigPanel({ agent }: { agent: Agent }) {
@@ -47,7 +48,10 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
           <CardTitle className="text-base flex items-center gap-2">
             <Cpu className="h-4 w-4 text-primary" /> Models &amp; Verification
           </CardTitle>
-          <Badge variant="outline" className="capitalize">{agent.mode} mode</Badge>
+          <div className="flex items-center gap-2">
+            <VerifyConfigDialog agent={agent} />
+            <Badge variant="outline" className="capitalize">{agent.mode} mode</Badge>
+          </div>
         </div>
         {multiVendor && (
           <CardDescription className="text-xs">
