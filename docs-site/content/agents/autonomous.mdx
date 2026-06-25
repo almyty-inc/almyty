@@ -130,6 +130,41 @@ caught partway through a long run, not only at the end:
 }
 ```
 
+## Collaboration
+
+Verification puts several models inside one agent. Collaboration goes the other
+way: point an agent at several other agents (`agent.collaboration`) and choose
+how they work together. Each member can be a different model, and the judge that
+settles the result can be a different model again.
+
+| Strategy | What it does |
+|----------|--------------|
+| `sequential` | Members run one after another, each fed the previous member's output — a chain. |
+| `parallel` | All members run at once on the same input. A judge merges their outputs into one answer; without a judge they are returned together. |
+| `race` | All members run at once; the first to finish wins. Every racer's cost is still counted, so a budget cap holds. |
+| `debate` | Members argue over multiple rounds (`maxRounds`, default 3), each round seeing all prior responses. After the last round a judge reads the debate and writes the final answer. |
+
+The judge is any agent (`collaboration.judgeAgentId`), so a Claude debate can be
+settled by GPT-4o, or the reverse. It is used by `parallel` and `debate`.
+
+```json
+{
+  "collaboration": {
+    "strategy": "debate",
+    "maxRounds": 3,
+    "judgeAgentId": "<judge-agent>",
+    "agents": [
+      { "agentId": "<claude-analyst>", "role": "skeptic" },
+      { "agentId": "<gpt4o-analyst>", "role": "proponent" }
+    ]
+  }
+}
+```
+
+> Workflow (DAG) agents have a separate `consensus` **merge node** — a judge LLM
+> that combines branch outputs, configured via `judgeConfig`. That is a node, not
+> a collaboration strategy.
+
 ## Constraints
 
 Constraints are per-agent rules that keep an agent from repeating mistakes. They
