@@ -402,7 +402,7 @@ describe('LlmProvider Entity', () => {
     it('should return Google URL', () => {
       provider.type = LlmProviderType.GOOGLE;
 
-      expect(provider.getApiUrl()).toBe('https://generativelanguage.googleapis.com/v1');
+      expect(provider.getApiUrl()).toBe('https://generativelanguage.googleapis.com/v1beta');
     });
 
     it('should return Cohere URL', () => {
