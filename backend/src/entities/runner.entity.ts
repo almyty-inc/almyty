@@ -59,6 +59,23 @@ export enum RunnerIsolationTier {
  * a routing tag, while `runtimeInfo.os: 'darwin'` is what the runner
  * reports. Both can coexist; routing rules can match either.
  */
+/**
+ * One coding-agent CLI the runner detected on its host and can drive as an
+ * unattended member (claude, codex, gemini, cursor, …). Mirrors the runner
+ * package's DetectedCodingAgent. Lets routing/UI know which CLIs a runner can
+ * actually orchestrate, not just which binaries are on PATH.
+ */
+export interface DetectedCodingAgent {
+  id: string;
+  displayName: string;
+  binary: string;
+  resolvedBinary: string;
+  version: string;
+  providerFamily: string;
+  supportsMcp: boolean;
+  canManage: boolean;
+}
+
 export interface RunnerRuntimeInfo {
   os: string;             // 'darwin' | 'linux' | 'win32'
   arch: string;           // 'x64' | 'arm64' | etc.
@@ -73,6 +90,12 @@ export interface RunnerRuntimeInfo {
    * or null when the binary is not on PATH or `--version` failed.
    */
   binaries: Record<string, string | null>;
+  /**
+   * Coding-agent platforms this runner can drive (detected at startup).
+   * Optional for backward compatibility with runners that don't report it.
+   * The runner sends this in its registration runtimeInfo.
+   */
+  codingAgents?: DetectedCodingAgent[];
 }
 
 /**
