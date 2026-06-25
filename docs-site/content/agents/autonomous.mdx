@@ -1,0 +1,290 @@
+# Autonomous Agents
+
+An autonomous agent gets instructions, a set of tools, and a goal, then decides
+which tools to call and how to answer. There is no pipeline to draw; the model
+controls the flow. (For the opposite approach, where you wire each step
+yourself, see [workflow agents](/agents/builder).)
+
+On top of that loop, almyty adds verification by other models, per-agent
+constraints that persist between runs, promotion of good runs into reusable
+skills, and embedding-based memory. The rest of this page covers each.
+
+![Autonomous agent detail](/screenshots/agent-detail-overview.png)
+
+## Multiple models in one agent
+
+An autonomous agent has one **primary** model that does the work and any number
+of **verifier** models that review it. Each model can use a different provider,
+so a single agent can span vendors.
+
+- **Primary** (`modelConfig.providerId` / `modelConfig.model`) plans, calls
+  tools, and writes the answer.
+- **Verifiers** (`agentConfig.verify.checkers[]`) review the result. Each checker
+  has its own provider and model.
+
+The **Customer Support Orchestrator** agent uses GPT-4o as primary, with a Claude
+reviewer and a second GPT-4o reviewer. The **Models & Verification** panel on the
+agent detail page shows the lineup, and its **Configure** dialog sets the merge
+policy, triggers, revise budget, and the reviewer list — each reviewer gets a
+provider, a model, and optional focus instructions. It saves to
+`agentConfig.verify`, so the API stays in sync.
+
+![Verifier configuration dialog](/screenshots/agent-verify-config-dialog.png)
+
+## Verification
+
+Verification is configured per agent under `agentConfig.verify`:
+
+```json
+{
+  "verify": {
+    "enabled": true,
+    "checkers": [
+      { "name": "policy-reviewer", "providerId": "<anthropic-provider>", "model": "claude-sonnet-4-6", "instructions": "Refute the answer if it violates support policy or promises a refund over $500." },
+      { "name": "factual-reviewer", "providerId": "<openai-provider>", "model": "gpt-4o" }
+    ],
+    "policy": "any_fail_blocks",
+    "maxReviseLoops": 2,
+    "triggers": ["on_final_output"]
+  }
+}
+```
+
+**Checkers** are refute-only: each one tries to find a reason the answer is
+wrong. How their verdicts combine is set by **`policy`**:
+
+| Policy | Passes when |
+|--------|-------------|
+| `all_pass` | every checker approves |
+| `majority` | most checkers approve |
+| `any_fail_blocks` *(default)* | a single failure blocks |
+
+**Triggers** decide when verification fires:
+
+- **`on_final_output`** is a gate. The final answer is reviewed before it is
+  returned. If a checker fails and the agent still has `maxReviseLoops` budget
+  (default 2), the failures are fed back as a message and the agent revises. When
+  it passes, or the budget runs out, the run completes and records the outcome
+  under `run.metadata.verify`.
+- **`every_n_steps`** and **`on_tool_result`** are advisory. They inject a
+  course-correction note mid-run without ending it, so the agent can adjust
+  before going further.
+
+Workflow (DAG) agents have the same capability as a `verify` node; the logic is
+shared between the two modes.
+
+### What a verify cycle records
+
+The outcome is stored on the run. `run.metadata.verify` is a summary:
+
+```json
+{ "verdict": "fail", "revisions": 2, "exhausted": true }
+```
+
+- `verdict` — `pass` or `fail`
+- `revisions` — how many revise loops were used
+- `exhausted` — `true` if it hit `maxReviseLoops` without passing
+
+Per-reviewer detail lives in the run's `verify` steps. Each step records which
+reviewer raised what, and why:
+
+```json
+{
+  "verdict": "fail",
+  "revision": 1,
+  "failures": [
+    {
+      "rule": "completeness",
+      "evidence": "The customer's name is missing in the greeting: 'Dear [Customer's Name]'.",
+      "checker": "GPT-4o reviewer"
+    }
+  ]
+}
+```
+
+Advisory (mid-run) steps are marked with `input.mode = "mid_loop"` and
+`output.advisory = true`.
+
+![A real verify and revise loop](/screenshots/agent-run-verify-loop.png)
+
+### A second example: majority vote with mid-run checks
+
+The **Market Research Analyst** agent runs Claude as its primary, with an OpenAI
+and a Gemini fact-checker. It uses `majority` (the answer ships when most
+checkers approve) and adds an `every_n_steps` advisory check so factual drift is
+caught partway through a long run, not only at the end:
+
+```json
+{
+  "verify": {
+    "enabled": true,
+    "policy": "majority",
+    "maxReviseLoops": 3,
+    "triggers": ["on_final_output", "every_n_steps"],
+    "everyNSteps": 4,
+    "checkers": [
+      { "name": "openai-factcheck", "providerId": "<openai-provider>", "model": "gpt-4o", "instructions": "Refute any claim that is not supported by a cited source." },
+      { "name": "gemini-factcheck", "providerId": "<gemini-provider>", "model": "gemini-2.0-flash" }
+    ]
+  }
+}
+```
+
+## Constraints
+
+Constraints are per-agent rules that keep an agent from repeating mistakes. They
+are plain text, and they come from two places:
+
+- **User-authored** — add them on the agent's **Constraints** tab.
+- **Auto-learned** — with `agentConfig.constraints.autoLearn`, a failed run is
+  distilled into a new constraint (deterministically from the error, or via an
+  LLM distiller).
+
+Active constraints are injected into the autonomous system prompt as a
+`[CONSTRAINTS]` block on every run, so they are always-on guidance rather than a
+gate. They are distinct from [Memory](/memory): constraints are prompt rules,
+memory is embedding-based recall.
+
+For the Support Orchestrator, the block looks like this at run time:
+
+```text
+[CONSTRAINTS]
+- Never promise a refund above $500 without calling request_approval first.
+- Enterprise customers on the Scale plan get a 4-hour first-response SLA.
+- Keep replies under 150 words unless the customer asks for detail.
+```
+
+An auto-learned constraint is the same shape, written from a failed run. If a run
+once issued a $900 refund and the verify gate blocked it, the next save can
+record:
+
+```text
+- A run was blocked for issuing a $900 refund without approval; gate refunds
+  over $500 through request_approval.
+```
+
+![Constraints tab](/screenshots/agent-constraints.png)
+
+## Promote a run to a skill
+
+A **promoted skill** is an [Agent Skills](https://agentskills.io) `SKILL.md`
+distilled from a completed run (its tool sequence and output), stored and
+versioned. Re-promoting bumps the version. The skill is served over the
+[Skills gateway](/gateways/skills) path and over REST, so another agent, or your
+editor via [`@almyty/skills`](/cli/skills), can call it directly instead of
+re-deriving the steps.
+
+From the agent's **Skills** tab you can view a skill's `SKILL.md`, delete it, or
+**replay** it. Promotion itself happens from the **Promote to skill** dialog on a
+completed run.
+
+```bash
+# Promote a completed run to a reusable skill
+curl -X POST https://api.almyty.com/promoted-skills \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "runId": "<run-uuid>" }'
+
+# Replay the source agent (defaults to the captured input)
+curl -X POST https://api.almyty.com/promoted-skills/{id}/replay \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "input": { "query": "..." } }'
+```
+
+The result is a standard Agent Skill. The deterministic distiller writes the
+frontmatter and the procedure from the run itself. This one was promoted from a
+real Support Orchestrator run:
+
+```markdown
+---
+name: draft-support-reply-with-policy-citation
+description: Triage a delayed-order ticket, draft a policy-grounded reply, and decide escalation.
+metadata:
+  author: almyty
+  generated: "true"
+  source: agent-run
+  version: "1"
+---
+
+# Customer Support Orchestrator
+
+Triage a delayed-order ticket, draft a policy-grounded reply, and decide escalation.
+
+## When to use
+Use this skill for tasks like the one this run solved successfully: triage inbound
+tickets, draft replies, and escalate edge cases, with a verifier panel checking
+every answer before it returns.
+
+## Procedure
+Classify each ticket, draft an accurate, empathetic reply grounded in policy, and
+escalate anything involving refunds over $500 or legal risk. Always cite the
+policy you relied on. (This run reached its answer through reasoning alone, with
+no tool calls.)
+```
+
+![Skills tab with a promoted skill](/screenshots/agent-skills.png)
+
+## Memory
+
+With memory enabled, the agent stores facts, preferences, and context and
+recalls them on later runs by embedding search. See [Memory](/memory) for the
+full model.
+
+## Context compaction
+
+Long autonomous runs can outgrow the model's context window. Compaction
+(`modelConfig.compaction`) keeps them bounded:
+
+```json
+{
+  "compaction": {
+    "enabled": true,
+    "maxContextTokens": 120000,
+    "keepRecentMessages": 20,
+    "strategy": "summarize"
+  }
+}
+```
+
+When the run exceeds the budget, the older prefix is folded into a cached summary
+in the system prompt and the recent tail is kept verbatim (`strategy` selects
+`summarize` or `truncate`). It runs automatically; there is no UI for it.
+
+## Create an autonomous agent
+
+In the UI: **Agents → Create Agent → Autonomous**, give it instructions, attach
+tools, enable memory, and add constraints. Via the API:
+
+```bash
+curl -X POST https://api.almyty.com/agents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Customer Support Orchestrator",
+    "mode": "autonomous",
+    "instructions": "Triage support tickets. Draft replies. Escalate via request_approval before refunds over $500.",
+    "toolIds": ["<tool-uuid-1>", "<tool-uuid-2>"],
+    "memoryEnabled": true,
+    "modelConfig": { "providerId": "<openai-provider>", "model": "gpt-4o" },
+    "agentConfig": {
+      "verify": {
+        "enabled": true,
+        "policy": "any_fail_blocks",
+        "maxReviseLoops": 2,
+        "triggers": ["on_final_output"],
+        "checkers": [
+          { "providerId": "<anthropic-provider>", "model": "claude-sonnet-4-6" },
+          { "providerId": "<openai-provider>", "model": "gpt-4o" }
+        ]
+      }
+    }
+  }'
+```
+
+## Related
+
+- [Approvals](/approvals) — pause a run for human sign-off before irreversible actions
+- [Memory](/memory) — persistent, embedding-based recall
+- [Gateways: Skills](/gateways/skills) — serve promoted skills to any client
+- [Workflow builder](/agents/builder) — the deterministic alternative
