@@ -17,6 +17,7 @@ import {
   WaitForIdleResult,
   WaitResult,
 } from './types.js';
+import { lastFrameResetIndex } from './coding-agents/index.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -53,12 +54,21 @@ interface RunningProcess {
   adapter: ProcessAdapter;
   /** Output buffer; bytes accumulate here between read() calls. */
   buffer: string;
+  /**
+   * Rolling tail of recent output, capped and NOT drained by read(). Used for
+   * non-destructive status snapshots (coding-agent status classification needs
+   * to see the current screen even after the agent has drained `buffer`).
+   */
+  recentTail: string;
   /** Last time we observed any output activity from the child. */
   lastOutputAt: number;
   /** Resolved when the child exits, with the final exit info. */
   exitPromise: Promise<WaitResult>;
   exitInfo: WaitResult | null;
 }
+
+/** Cap on the retained status tail (~ a couple of screenfuls). */
+const RECENT_TAIL_CAP = 8192;
 
 /**
  * Per-runner process orchestrator.
@@ -128,6 +138,7 @@ export class ProcessManager {
       handle,
       adapter,
       buffer: '',
+      recentTail: '',
       lastOutputAt: Date.now(),
       exitPromise,
       exitInfo: null,
@@ -136,6 +147,15 @@ export class ProcessManager {
     adapter.on('data', (chunk: string | Buffer) => {
       const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
       running.buffer += text;
+      // Maintain the status tail as the latest repaint frame. If this chunk
+      // contains a frame-reset (erase-display / cursor-home), the prior frame
+      // is stale — keep only from the last reset so a since-cleared status line
+      // can't falsely read as busy.
+      const reset = lastFrameResetIndex(text);
+      running.recentTail =
+        reset >= 0
+          ? text.slice(reset).slice(-RECENT_TAIL_CAP)
+          : (running.recentTail + text).slice(-RECENT_TAIL_CAP);
       running.lastOutputAt = Date.now();
     });
     adapter.on('exit', (info: { exitCode: number | null; signal: string | null }) => {
@@ -194,6 +214,25 @@ export class ProcessManager {
     const data = proc.buffer;
     proc.buffer = '';
     return { data, moreAvailable: false };
+  }
+
+  /**
+   * Non-destructive peek at the recent output tail. Unlike read(), this does
+   * NOT drain anything — it's for status classification, which must work even
+   * after the agent has drained `buffer` via read(). Returns the rolling tail
+   * (capped at RECENT_TAIL_CAP) plus the process status and idle interval.
+   */
+  snapshot(
+    workspaceId: string,
+    processId: string,
+  ): { tail: string; binary: string; status: ProcessStatus; idleMs: number } {
+    const proc = this.getOrThrow(workspaceId, processId);
+    return {
+      tail: proc.recentTail,
+      binary: proc.handle.binary,
+      status: proc.handle.status,
+      idleMs: Date.now() - proc.lastOutputAt,
+    };
   }
 
   async waitForIdle(

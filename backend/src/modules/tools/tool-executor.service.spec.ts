@@ -424,6 +424,41 @@ describe('ToolExecutorService', () => {
       expect(result.cached).toBe(false);
       expect(result.rateLimited).toBe(false);
     });
+
+    it('returns a clear error (not a null-deref crash) when a tool has no config and no operation', async () => {
+      // Regression: a custom tool with none of the structured *Config fields
+      // AND no imported operation fell through to the legacy operation path,
+      // where `tool.operation!` then `operation.api` threw
+      // "Cannot read properties of null (reading 'api')". That cryptic crash
+      // surfaced into agent runs as a failed step. The fix returns a typed,
+      // human-readable error instead.
+      const brokenTool = {
+        id: 'tool-1',
+        name: 'Lookup Order Status',
+        status: ToolStatus.ACTIVE,
+        operation: null,
+        // no runnerConfig / httpConfig / code / llmConfig / etc.
+        configuration: {},
+      } as any;
+
+      const mockUser = {
+        id: 'user-1',
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      } as any;
+
+      toolRepository.findOne.mockResolvedValue(brokenTool);
+      userRepository.findOne.mockResolvedValue(mockUser);
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+
+      const result = await service.executeTool('tool-1', {}, {
+        userId: 'user-1',
+        organizationId: 'org-1',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('no executable configuration');
+      expect(result.error).not.toContain('reading'); // not the null-deref message
+    });
   });
 
   describe('parameter validation', () => {

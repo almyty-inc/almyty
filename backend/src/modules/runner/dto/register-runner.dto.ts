@@ -16,6 +16,38 @@ import {
 
 import { RunnerIsolationTier } from '../../../entities/runner.entity';
 
+export class DetectedCodingAgentDto {
+  @IsString()
+  @MaxLength(64)
+  id!: string;
+
+  @IsString()
+  @MaxLength(120)
+  displayName!: string;
+
+  @IsString()
+  @MaxLength(120)
+  binary!: string;
+
+  @IsString()
+  @MaxLength(120)
+  resolvedBinary!: string;
+
+  @IsString()
+  @MaxLength(255)
+  version!: string;
+
+  @IsString()
+  @MaxLength(64)
+  providerFamily!: string;
+
+  @IsBoolean()
+  supportsMcp!: boolean;
+
+  @IsBoolean()
+  canManage!: boolean;
+}
+
 export class RunnerRuntimeInfoDto {
   @IsString()
   @MaxLength(32)
@@ -44,6 +76,12 @@ export class RunnerRuntimeInfoDto {
 
   @IsObject()
   binaries!: Record<string, string | null>;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DetectedCodingAgentDto)
+  codingAgents?: DetectedCodingAgentDto[];
 }
 
 export class RunnerConfigDto {

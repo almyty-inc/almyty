@@ -189,7 +189,7 @@ Add the almyty MCP endpoint to your client:
 
 Claude Code:
 ```bash
-claude mcp add almyty --url https://api.almyty.com/mcp
+claude mcp add almyty --transport http https://api.almyty.com/mcp
 ```
 
 Cursor / Windsurf (`.cursor/mcp.json`):
@@ -215,8 +215,11 @@ https://api.almyty.com/{org}/{gateway-slug}
 
 Claude Code:
 ```bash
-claude mcp add petstore --url https://api.almyty.com/acme/petstore
+claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
 ```
+
+Pass your gateway key as an `x-api-key` header (generate it in the gateway's
+**Authentication** panel).
 
 ### Discovery
 

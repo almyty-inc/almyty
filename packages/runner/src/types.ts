@@ -4,6 +4,7 @@
  * importing from the backend so the runner can be installed and
  * versioned without dragging the backend's dep graph in.
  */
+import type { DetectedCodingAgent } from './coding-agents/index.js';
 
 export type RunnerIsolationTier = 'container' | 'host';
 
@@ -15,6 +16,12 @@ export interface RunnerRuntimeInfo {
   memoryMb: number;
   runnerVersion: string;
   binaries: Record<string, string | null>;
+  /**
+   * Coding-agent platforms detected on this machine (claude, codex, gemini,
+   * …). Lets the backend route an agent to a runner that can actually drive
+   * the requested CLI, rather than just inferring it from the binary map.
+   */
+  codingAgents: DetectedCodingAgent[];
 }
 
 export interface RunnerConfig {
