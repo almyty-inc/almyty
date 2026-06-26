@@ -20,6 +20,11 @@ AI Models connect language model providers to your agent pipelines and LLM-power
 
 The provider now appears in the Models list and is available in agent pipeline LLM Call nodes and LLM-type tools.
 
+> **Pick from the live model list.** The dropdown is populated from the
+> provider's current models (`GET /llm-providers/:id/models`), not a hardcoded
+> list. Providers deprecate models quickly, so prefer the live list over pasting
+> a model string by hand — a name that worked last quarter may already 404.
+
 ## Via the API
 
 ### Add a provider

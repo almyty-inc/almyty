@@ -25,6 +25,15 @@ import { useOrganizationStore } from '@/store/organization'
 import type { Tool } from '@/types'
 import { runnerStateVariant, workspaceStatusVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
 
+interface CodingAgent {
+  id: string
+  displayName: string
+  version: string
+  providerFamily: string
+  supportsMcp: boolean
+  canManage: boolean
+}
+
 interface Runner {
   id: string
   name: string
@@ -38,6 +47,7 @@ interface Runner {
     memoryMb: number
     runnerVersion: string
     binaries: Record<string, string | null>
+    codingAgents?: CodingAgent[]
   } | null
   config: { maxConcurrent: number } | null
   lastHeartbeatAt: string | null
@@ -211,6 +221,20 @@ export function RunnerDetailPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            Coding agents
+            {(runner.runtimeInfo?.codingAgents?.length ?? 0) > 0 && (
+              <Badge variant="outline" className="ml-1">{runner.runtimeInfo!.codingAgents!.length}</Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CodingAgentsGrid agents={runner.runtimeInfo?.codingAgents ?? []} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">Active workspaces ({active.length})</CardTitle>
         </CardHeader>
         <CardContent>
@@ -329,6 +353,34 @@ function BinariesGrid({ binaries }: { binaries: Record<string, string | null> })
           <span className={version ? 'text-muted-foreground' : 'text-muted-foreground/60 italic'}>
             {version ?? 'not detected'}
           </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CodingAgentsGrid({ agents }: { agents: CodingAgent[] }) {
+  if (agents.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No coding agents detected on this host. Install a CLI (claude, codex, gemini, cursor, …) and it
+        appears here on the next heartbeat.
+      </p>
+    )
+  }
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+      {agents.map((a) => (
+        <div key={a.id} className="flex flex-col gap-1 border rounded px-3 py-2">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">{a.displayName}</span>
+            <span className="text-muted-foreground">{a.version}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{a.providerFamily}</Badge>
+            {a.supportsMcp && <Badge variant="outline" className="text-[10px] px-1.5 py-0">MCP</Badge>}
+            {a.canManage && <Badge variant="outline" className="text-[10px] px-1.5 py-0">manager</Badge>}
+          </div>
         </div>
       ))}
     </div>

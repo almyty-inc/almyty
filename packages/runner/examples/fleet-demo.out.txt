@@ -1,0 +1,28 @@
+
+  almyty runner — coding-agent fleet on this host
+
+  CLI                 VERSION               PROVIDER   MCP  MANAGER
+  ─────────────────────────────────────────────────────────────────
+  Claude Code         2.1.176 (Claude Code) anthropic  yes  yes
+  Codex               codex-cli 0.141.0     openai     yes  yes
+  Gemini CLI          0.46.0                google     yes  yes
+  OpenCode            1.17.5                unknown    yes  yes
+  Crush               crush version v0.79.1 unknown    yes  yes
+  GitHub Copilot CLI  GitHub Copilot CLI 1… github     yes  yes
+  Grok CLI            grok 0.2.56 (4d4448c… xai        yes  yes
+  Hermes              Hermes Agent v0.16.0… nous       yes  yes
+  Mistral Vibe        vibe 2.16.1           mistral    yes  yes
+  OpenClaw            OpenClaw 2026.4.27 (… unknown    yes  yes
+
+  10 coding CLIs the runner can drive as unattended members (reported in runner.info → codingAgents).
+
+  Orchestrate the fleet over the agent.* surface:
+    agent.spawn  { platform, apiKey, configDir } — launch a CLI as a member
+                 (headless auth + isolated config home + auto-approve + resume)
+    agent.status { processId } — classify its live pane:
+                 busy / idle / awaiting_input / awaiting_auth / error
+
+  Fan one task across vendors in parallel (Anthropic + OpenAI + Google), each in
+  its own isolated home, and watch agent.status to drive the loop. See
+  docs/coding-agents.md for the full multi-vendor orchestration walkthrough.
+
