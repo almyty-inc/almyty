@@ -361,7 +361,20 @@ export class ToolExecutorService {
     parameters: Record<string, any>,
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
-    const operation = tool.operation!;
+    // A tool reaches this legacy path only when none of the structured
+    // *Config dispatch branches matched. If it also has no operation/api
+    // (e.g. a custom tool whose config was never set or was lost), the old
+    // `tool.operation!` assertion crashed with a cryptic
+    // "Cannot read properties of null (reading 'api')" that surfaced into
+    // agent runs. Fail with a clear, typed error instead of a null-deref.
+    const operation = tool.operation;
+    if (!operation || !operation.api) {
+      throw new BadRequestException(
+        `Tool '${tool.name}' has no executable configuration ` +
+          `(no HTTP/JS/GraphQL/SOAP/gRPC/LLM/SDK/runner config and no imported API operation). ` +
+          `Re-import its API or set a tool configuration.`,
+      );
+    }
     const api = operation.api;
 
     switch (api.type) {
