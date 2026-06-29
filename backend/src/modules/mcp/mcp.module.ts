@@ -19,6 +19,7 @@ import { McpOAuthTokensHelper } from './services/mcp-oauth-tokens.helper';
 import { McpOAuthResolveHelper } from './controllers/mcp-oauth-resolve.helper';
 import { McpToolHandler } from './services/mcp-tool.handler';
 import { McpContentHandler } from './services/mcp-content.handler';
+import { PromotedSkillsModule } from '../promoted-skills/promoted-skills.module';
 import { McpServerRequestService } from './services/mcp-server-request.service';
 import { SseTransport } from './transports/sse.transport';
 import { WebSocketTransport } from './transports/websocket.transport';
@@ -60,6 +61,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
     ]),
     forwardRef(() => ToolsModule),
     forwardRef(() => GatewaysModule),
+    PromotedSkillsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

@@ -8,7 +8,7 @@
  * Navbar/Footer props below.
  */
 import { Footer, Layout, Navbar } from 'nextra-theme-docs'
-import { Banner, Head } from 'nextra/components'
+import { Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
 import 'nextra-theme-docs/style.css'
 
@@ -45,7 +45,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <Head />
       <body>
         <Layout
-          banner={<Banner storageKey="almyty-docs-banner">almyty docs — v1</Banner>}
           navbar={navbar}
           footer={footer}
           pageMap={pageMap}

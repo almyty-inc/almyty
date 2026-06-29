@@ -9,6 +9,10 @@ import { batchAsync } from '../../common/utils/batch-async';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
+import { Agent } from '../../entities/agent.entity';
+import { AgentVerifierHelper, VerifyPanelResult } from './agent-verifier.helper';
+import { AgentContextCompactor } from './agent-context-compactor.helper';
+import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 /**
  * `processStep` was the bulk of AgentRuntimeService — a single 500-line
  * method orchestrating the autonomous-agent inner loop. Splitting it
@@ -26,6 +30,9 @@ export class AgentStepProcessor {
   constructor(
     @Inject(forwardRef(() => AgentRuntimeService))
     private readonly s: AgentRuntimeService,
+    private readonly verifier: AgentVerifierHelper,
+    private readonly compactor: AgentContextCompactor,
+    private readonly constraints: AgentConstraintsService,
   ) {}
 
   async processStep(runId: string): Promise<'continue' | 'done' | 'waiting'> {
@@ -118,7 +125,23 @@ export class AgentStepProcessor {
       const org = await this.s.organizationRepository.findOne({ where: { id: run.organizationId } });
 
       // Build messages for the LLM
-      const messages = await this.s.builders.buildMessages(agent, run, tools, memoryContext, org);
+      let messages = await this.s.builders.buildMessages(agent, run, tools, memoryContext, org);
+
+      // Compact long-running context (off unless the agent opts in). Folds the
+      // old prefix into a summary so per-step token cost doesn't grow unbounded.
+      const compaction = agent.modelConfig?.compaction;
+      if (compaction?.enabled) {
+        const compacted = await this.compactor.compact(
+          messages,
+          run,
+          { ...compaction, providerId: compaction.providerId ?? agent.modelConfig?.providerId },
+          run.organizationId,
+          run.userId,
+        );
+        messages = compacted.messages;
+        run.totalCost += compacted.cost;
+        run.totalTokens += compacted.tokens;
+      }
 
       // Build tool definitions for the LLM (user tools + built-in tools)
       const llmTools = this.s.builders.buildToolDefinitions(tools, agent);
@@ -463,6 +486,10 @@ export class AgentStepProcessor {
 
         run.currentStep++;
         run.executionTime += stepDuration;
+
+        // Advisory mid-run verification (every_n_steps / on_tool_result). May
+        // append a course-correction message + verify step before we commit.
+        await this.maybeMidLoopVerify(run, agent, responseMessage, runId);
         if (!(await this.commitStep(run, expectedStep))) return 'done';
 
         // Auto-save memory if enabled
@@ -482,6 +509,83 @@ export class AgentStepProcessor {
           const finalMsg = Message.createAssistantMessage(run.conversationId, finalContent);
           finalMsg.runId = run.id;
           await this.s.messageRepository.save(finalMsg);
+        }
+
+        // Autonomous verify gate: a refute-only checker panel reviews the
+        // final answer. On failure within the revision budget, the failures
+        // are fed back as synthetic user feedback and the agent loops again
+        // instead of completing.
+        const verifyPanel = await this.runAutonomousVerify(run, agent, finalContent);
+        if (verifyPanel) {
+          const cfg = agent.agentConfig?.verify;
+          const maxLoops = cfg?.maxReviseLoops ?? 2;
+          const revisions = run.workingMemory?.verifyRevisions ?? 0;
+          const verifyStepDuration = Date.now() - stepStart;
+
+          if (!verifyPanel.passed && revisions < maxLoops) {
+            // Send the answer back for revision.
+            run.workingMemory = { ...(run.workingMemory || {}), verifyRevisions: revisions + 1 };
+            const critique = this.verifier.formatFailuresForRevision(
+              verifyPanel.failures,
+              revisions + 1,
+              maxLoops,
+            );
+            if (run.conversationId) {
+              const critiqueMsg = Message.createUserMessage(run.conversationId, critique);
+              critiqueMsg.runId = run.id;
+              await this.s.messageRepository.save(critiqueMsg);
+            }
+            run.steps.push({
+              type: 'llm_call',
+              input: { messageCount: messages.length, toolCount: allToolDefs.length },
+              output: { status: 'revising', content: finalContent.substring(0, 200) },
+              cost: stepCost,
+              tokens: { input: stepInputTokens, output: stepOutputTokens },
+              duration: verifyStepDuration,
+              timestamp: new Date().toISOString(),
+            });
+            run.steps.push({
+              type: 'verify',
+              input: { policy: verifyPanel.policy, checkers: verifyPanel.checkers.length },
+              output: { verdict: 'fail', revision: revisions + 1, failures: verifyPanel.failures },
+              cost: verifyPanel.cost,
+              duration: verifyStepDuration,
+              timestamp: new Date().toISOString(),
+            });
+            run.currentStep++;
+            run.executionTime += verifyStepDuration;
+            if (!(await this.commitStep(run, expectedStep))) return 'done';
+            this.s.emitEvent(runId, 'verify.failed', {
+              step: run.currentStep,
+              revision: revisions + 1,
+              failures: verifyPanel.failures,
+            });
+            this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'revising' });
+            return 'continue';
+          }
+
+          // Passed, or the revision budget is exhausted: record the verdict and
+          // let the run complete with this answer.
+          run.steps.push({
+            type: 'verify',
+            input: { policy: verifyPanel.policy, checkers: verifyPanel.checkers.length },
+            output: {
+              verdict: verifyPanel.verdict,
+              exhausted: !verifyPanel.passed && revisions >= maxLoops,
+              failures: verifyPanel.failures,
+            },
+            cost: verifyPanel.cost,
+            duration: verifyStepDuration,
+            timestamp: new Date().toISOString(),
+          });
+          run.metadata = {
+            ...(run.metadata || {}),
+            verify: {
+              verdict: verifyPanel.verdict,
+              revisions,
+              exhausted: !verifyPanel.passed && revisions >= maxLoops,
+            },
+          };
         }
 
         run.status = AgentRunStatus.COMPLETED;
@@ -536,6 +640,11 @@ export class AgentStepProcessor {
 
       // bumpAgentStats swallows DB errors internally; no outer try/catch.
       await this.s.misc.bumpAgentStats(agent.id, false, run.executionTime, run.totalCost);
+
+      // Learn a failure-memory constraint from this failed run (opt-in).
+      if (agent.agentConfig?.constraints?.autoLearn) {
+        await this.constraints.recordFromRun(run, { distill: agent.agentConfig.constraints.distill });
+      }
       this.s.emitEvent(runId, 'run.failed', { error: error.message });
       return 'done';
     }
@@ -561,8 +670,113 @@ export class AgentStepProcessor {
         output: run.output,
         error: run.error,
         workingMemory: run.workingMemory,
+        metadata: run.metadata,
       },
     );
     return (res.affected ?? 0) > 0;
+  }
+
+  /**
+   * Run the autonomous verify panel against a candidate final answer. Returns
+   * the merged panel result, or null when verify is not configured/enabled or
+   * has no checkers (so the caller completes normally). Aggregate checker
+   * cost/tokens are added to the run here so the caller doesn't double-count.
+   */
+  private async runAutonomousVerify(
+    run: AgentRun,
+    agent: Agent,
+    finalContent: string,
+  ): Promise<VerifyPanelResult | null> {
+    const cfg = agent.agentConfig?.verify;
+    if (!cfg?.enabled || !Array.isArray(cfg.checkers) || cfg.checkers.length === 0) {
+      return null;
+    }
+    // on_final_output is the default trigger; skip the gate if it's not configured.
+    if (!(cfg.triggers ?? ['on_final_output']).includes('on_final_output')) {
+      return null;
+    }
+    if (!finalContent.trim()) {
+      // Nothing to check (e.g. the agent ended with an empty message).
+      return null;
+    }
+    const panel = await this.verifier.runPanel(
+      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers, policy: cfg.policy },
+      run.organizationId,
+      run.userId,
+    );
+    run.totalCost += panel.cost;
+    run.totalTokens += panel.tokens;
+    return panel;
+  }
+
+  /**
+   * Advisory mid-run verification. Unlike the final-output gate (which can send
+   * the answer back for revision), this reviews in-progress work on the
+   * configured triggers (`every_n_steps`, `on_tool_result`) and, on failure,
+   * injects a synthetic user note so the agent can course-correct on the next
+   * step — it never ends or revises the run. Runs inside the current step,
+   * before commitStep, so its cost and the synthetic message persist together.
+   */
+  private async maybeMidLoopVerify(
+    run: AgentRun,
+    agent: Agent,
+    responseMessage: any,
+    runId: string,
+  ): Promise<void> {
+    const cfg = agent.agentConfig?.verify;
+    if (!cfg?.enabled || !Array.isArray(cfg.checkers) || cfg.checkers.length === 0) return;
+    const triggers = cfg.triggers ?? ['on_final_output'];
+    const everyN = cfg.everyNSteps ?? 5;
+
+    const hadToolResults =
+      Array.isArray(responseMessage?.toolCalls) &&
+      responseMessage.toolCalls.some((tc: any) => tc.result !== undefined || tc.error);
+    const fires =
+      (triggers.includes('every_n_steps') && everyN > 0 && run.currentStep % everyN === 0) ||
+      (triggers.includes('on_tool_result') && hadToolResults);
+    if (!fires) return;
+
+    // Target = this step's assistant content plus the tool results it produced.
+    const toolSummary = (responseMessage?.toolCalls || [])
+      .map((tc: any) => `${tc.name}: ${tc.error ? `ERROR ${tc.error}` : this.stringifyResult(tc.result)}`)
+      .join('\n');
+    const target = `Assistant: ${responseMessage?.content || ''}\n\nTool results:\n${toolSummary}`.trim();
+
+    const panel = await this.verifier.runPanel(
+      { target, spec: cfg.spec, checkers: cfg.checkers, policy: cfg.policy },
+      run.organizationId,
+      run.userId,
+    );
+    run.totalCost += panel.cost;
+    run.totalTokens += panel.tokens;
+
+    run.steps.push({
+      type: 'verify',
+      input: { mode: 'mid_loop', policy: panel.policy, checkers: panel.checkers.length },
+      output: { verdict: panel.verdict, advisory: true, failures: panel.failures },
+      cost: panel.cost,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!panel.passed) {
+      const note =
+        `Mid-run verification flagged issues with your progress so far:\n\n` +
+        panel.failures
+          .map((f, i) => `${i + 1}. ${f.rule}${f.evidence ? ` — ${f.evidence}` : ''}`)
+          .join('\n') +
+        `\n\nAccount for these as you continue; do not repeat them.`;
+      if (run.conversationId) {
+        const msg = Message.createUserMessage(run.conversationId, note);
+        msg.runId = run.id;
+        await this.s.messageRepository.save(msg);
+      }
+      this.s.emitEvent(runId, 'verify.advisory', { step: run.currentStep, failures: panel.failures });
+    }
+  }
+
+  private stringifyResult(r: any): string {
+    if (r === undefined || r === null) return '';
+    const s = typeof r === 'string' ? r : JSON.stringify(r);
+    return s.length > 500 ? `${s.slice(0, 500)}…` : s;
   }
 }

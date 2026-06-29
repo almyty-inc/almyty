@@ -10,6 +10,7 @@ import { AgentExecutionEngine } from '../agent-execution.engine';
 import { Agent, AgentPipelineNode, AgentPipelineEdge } from '../../../entities/agent.entity';
 import { A2AClientService } from '../../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../../a2a/external-agents.service';
+import { AgentVerifierHelper } from '../agent-verifier.helper';
 
 /**
  * Unit tests for AgentNodeExecutor — every node type × multiple input shapes,
@@ -82,6 +83,7 @@ describe('AgentNodeExecutor', () => {
         { provide: A2AClientService, useValue: a2aClientService },
         { provide: ExternalAgentsService, useValue: externalAgentsService },
         AgentSubAgentExecutors,
+        AgentVerifierHelper,
       ],
     }).compile();
 
@@ -853,6 +855,190 @@ describe('AgentNodeExecutor', () => {
         // The engine must NEVER be invoked for a cross-org reference.
         expect(executionEngine.execute).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  // ==========================================================================
+  // verify (refute-only checker panel; multi-vendor via per-checker providerId)
+  // ==========================================================================
+
+  describe('verify node', () => {
+    const chatReply = (content: string, cost = 0.01, tokens = 10) =>
+      ({ message: { content }, cost, usage: { totalTokens: tokens } }) as any;
+
+    const checker = (providerId: string, over: any = {}) => ({
+      name: providerId,
+      providerId,
+      model: 'm',
+      ...over,
+    });
+
+    const verifyNode = (checkers: any[], over: any = {}) =>
+      node('verify', { checkers, ...over });
+
+    const ctxWithUpstream = () =>
+      buildContext({ nodes: { up: { output: 'the answer' } } });
+
+    it('throws when no checkers are configured', async () => {
+      await expect(
+        executor.execute(verifyNode([]), buildContext(), 'org-1'),
+      ).rejects.toThrow(/at least one checker/);
+    });
+
+    it('passes when every checker returns pass (default policy)', async () => {
+      llmProvidersService.chat.mockResolvedValue(
+        chatReply('{"verdict":"pass","failures":[],"passed_rules":["r1"]}'),
+      );
+      const res = await executor.execute(
+        verifyNode([checker('vendor-a'), checker('vendor-b')]),
+        ctxWithUpstream(),
+        'org-1',
+      );
+      expect(res.output.verdict).toBe('pass');
+      expect(res.output.passed).toBe(true);
+      expect(res.output.failures).toEqual([]);
+      expect(res.output.passed_rules).toContain('r1');
+    });
+
+    it('does NOT throw on fail — emits the failure list (any_fail_blocks default)', async () => {
+      llmProvidersService.chat.mockImplementation((providerId: string) =>
+        Promise.resolve(
+          providerId === 'vendor-b'
+            ? chatReply(
+                '{"verdict":"fail","failures":[{"rule":"no source","evidence":"para 2"}]}',
+              )
+            : chatReply('{"verdict":"pass","failures":[]}'),
+        ),
+      );
+      const res = await executor.execute(
+        verifyNode([checker('vendor-a'), checker('vendor-b')]),
+        ctxWithUpstream(),
+        'org-1',
+      );
+      expect(res.output.verdict).toBe('fail');
+      expect(res.output.passed).toBe(false);
+      expect(res.output.failures).toEqual([
+        { rule: 'no source', evidence: 'para 2', checker: 'vendor-b' },
+      ]);
+    });
+
+    it('runs each checker on its own provider/model in parallel', async () => {
+      llmProvidersService.chat.mockResolvedValue(chatReply('{"verdict":"pass"}'));
+      await executor.execute(
+        verifyNode([
+          checker('vendor-a', { model: 'claude' }),
+          checker('vendor-b', { model: 'gpt-4o' }),
+        ]),
+        ctxWithUpstream(),
+        'org-1',
+      );
+      expect(llmProvidersService.chat).toHaveBeenCalledTimes(2);
+      const providers = llmProvidersService.chat.mock.calls.map((c: any[]) => c[0]);
+      expect(providers).toEqual(expect.arrayContaining(['vendor-a', 'vendor-b']));
+      const models = llmProvidersService.chat.mock.calls.map((c: any[]) => c[1].model);
+      expect(models).toEqual(expect.arrayContaining(['claude', 'gpt-4o']));
+    });
+
+    it('prompts checkers to refute, not praise', async () => {
+      llmProvidersService.chat.mockResolvedValue(chatReply('{"verdict":"pass"}'));
+      await executor.execute(
+        verifyNode([checker('vendor-a')]),
+        ctxWithUpstream(),
+        'org-1',
+      );
+      const system = llmProvidersService.chat.mock.calls[0][1].messages[0].content;
+      expect(system).toMatch(/find what is WRONG/i);
+      expect(system).toMatch(/do not praise/i);
+    });
+
+    it('all_pass policy: an errored checker blocks the overall pass', async () => {
+      llmProvidersService.chat.mockImplementation((providerId: string) =>
+        providerId === 'vendor-b'
+          ? Promise.reject(new Error('upstream 500'))
+          : Promise.resolve(chatReply('{"verdict":"pass"}')),
+      );
+      const res = await executor.execute(
+        verifyNode([checker('vendor-a'), checker('vendor-b')], {
+          policy: 'all_pass',
+        }),
+        ctxWithUpstream(),
+        'org-1',
+      );
+      expect(res.output.verdict).toBe('fail');
+      const errored = res.output.checkers.find((c: any) => c.checker === 'vendor-b');
+      expect(errored.error).toMatch(/500/);
+    });
+
+    it('any_fail_blocks policy: an errored checker does NOT veto a pass', async () => {
+      llmProvidersService.chat.mockImplementation((providerId: string) =>
+        providerId === 'vendor-b'
+          ? Promise.reject(new Error('upstream 500'))
+          : Promise.resolve(chatReply('{"verdict":"pass"}')),
+      );
+      const res = await executor.execute(
+        verifyNode([checker('vendor-a'), checker('vendor-b')]),
+        ctxWithUpstream(),
+        'org-1',
+      );
+      expect(res.output.verdict).toBe('pass');
+    });
+
+    it('majority policy: 2 pass vs 1 fail resolves to pass but still surfaces failures', async () => {
+      llmProvidersService.chat.mockImplementation((providerId: string) =>
+        Promise.resolve(
+          providerId === 'c3'
+            ? chatReply('{"verdict":"fail","failures":[{"rule":"x","evidence":"y"}]}')
+            : chatReply('{"verdict":"pass"}'),
+        ),
+      );
+      const res = await executor.execute(
+        verifyNode([checker('c1'), checker('c2'), checker('c3')], {
+          policy: 'majority',
+        }),
+        ctxWithUpstream(),
+        'org-1',
+      );
+      expect(res.output.verdict).toBe('pass');
+      expect(res.output.failures.length).toBe(1);
+    });
+
+    it('fails when no checker returns a usable verdict (verification unavailable)', async () => {
+      llmProvidersService.chat.mockResolvedValue(chatReply('not json at all'));
+      const res = await executor.execute(
+        verifyNode([checker('vendor-a')]),
+        ctxWithUpstream(),
+        'org-1',
+      );
+      expect(res.output.verdict).toBe('fail');
+      expect(res.output.failures[0].rule).toBe('verification_unavailable');
+    });
+
+    it('parses a JSON verdict wrapped in code fences', async () => {
+      llmProvidersService.chat.mockResolvedValue(
+        chatReply(
+          '```json\n{"verdict":"fail","failures":[{"rule":"r","evidence":"e"}]}\n```',
+        ),
+      );
+      const res = await executor.execute(
+        verifyNode([checker('vendor-a')]),
+        ctxWithUpstream(),
+        'org-1',
+      );
+      expect(res.output.verdict).toBe('fail');
+      expect(res.output.failures[0].rule).toBe('r');
+    });
+
+    it('sums cost and tokens across checkers', async () => {
+      llmProvidersService.chat.mockResolvedValue(
+        chatReply('{"verdict":"pass"}', 0.02, 5),
+      );
+      const res = await executor.execute(
+        verifyNode([checker('c1'), checker('c2')]),
+        ctxWithUpstream(),
+        'org-1',
+      );
+      expect(res.cost).toBeCloseTo(0.04);
+      expect(res.tokens).toBe(10);
     });
   });
 });

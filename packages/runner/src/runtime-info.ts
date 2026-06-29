@@ -1,6 +1,7 @@
 import { hostname, arch as osArch, platform as osPlatform, cpus, totalmem } from 'os';
 
 import { probeAll, ProbeExec, realExec } from './binaries.js';
+import { detectCodingAgents } from './coding-agents/index.js';
 import { RunnerRuntimeInfo } from './types.js';
 
 /**
@@ -27,7 +28,10 @@ export interface DetectInputs {
 
 export async function detectRuntimeInfo(inputs: DetectInputs): Promise<RunnerRuntimeInfo> {
   const exec = inputs.exec ?? realExec;
-  const binaries = await probeAll(inputs.binaries, exec);
+  const [binaries, codingAgents] = await Promise.all([
+    probeAll(inputs.binaries, exec),
+    detectCodingAgents(exec),
+  ]);
   return {
     os: osPlatform(),
     arch: osArch(),
@@ -36,5 +40,6 @@ export async function detectRuntimeInfo(inputs: DetectInputs): Promise<RunnerRun
     memoryMb: Math.round(totalmem() / (1024 * 1024)),
     runnerVersion: RUNNER_VERSION,
     binaries,
+    codingAgents,
   };
 }

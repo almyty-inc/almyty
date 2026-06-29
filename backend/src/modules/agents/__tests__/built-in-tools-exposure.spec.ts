@@ -22,7 +22,7 @@ const minimalAgent = (overrides: Partial<Agent> = {}): Agent => ({
 } as Agent)
 
 describe('AgentRuntimeBuilders.buildToolDefinitions — built-in exposure', () => {
-  const builders = new AgentRuntimeBuilders({} as any)
+  const builders = new AgentRuntimeBuilders({} as any, { listActiveRules: async () => [] } as any)
 
   it('exposes wait, ask_user, and request_approval to every agent', () => {
     const defs = builders.buildToolDefinitions([], minimalAgent())

@@ -744,6 +744,87 @@ describe('AgentsService', () => {
       expect(() => validation.validatePipeline(pipeline)).toThrow('at least 2 outgoing edges');
     });
 
+    it('should reject verify node with no checkers', () => {
+      const pipeline: AgentPipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          { id: 'verify_1', type: 'verify', config: { checkers: [] } },
+          { id: 'output_1', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'verify_1' },
+          { id: 'e2', source: 'verify_1', target: 'output_1' },
+        ],
+      };
+
+      expect(() => validation.validatePipeline(pipeline)).toThrow(BadRequestException);
+      expect(() => validation.validatePipeline(pipeline)).toThrow(/non-empty 'checkers'/);
+    });
+
+    it('should reject verify checker missing a providerId', () => {
+      const pipeline: AgentPipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          { id: 'verify_1', type: 'verify', config: { checkers: [{ model: 'm' }] } },
+          { id: 'output_1', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'verify_1' },
+          { id: 'e2', source: 'verify_1', target: 'output_1' },
+        ],
+      };
+
+      expect(() => validation.validatePipeline(pipeline)).toThrow(BadRequestException);
+      expect(() => validation.validatePipeline(pipeline)).toThrow(/must have a 'providerId'/);
+    });
+
+    it('should reject verify node with an invalid policy', () => {
+      const pipeline: AgentPipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          {
+            id: 'verify_1',
+            type: 'verify',
+            config: { checkers: [{ providerId: 'p1' }], policy: 'sometimes' },
+          },
+          { id: 'output_1', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'verify_1' },
+          { id: 'e2', source: 'verify_1', target: 'output_1' },
+        ],
+      };
+
+      expect(() => validation.validatePipeline(pipeline)).toThrow(BadRequestException);
+      expect(() => validation.validatePipeline(pipeline)).toThrow(/invalid policy/);
+    });
+
+    it('should accept a valid verify node with checkers and a known policy', () => {
+      const pipeline: AgentPipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          {
+            id: 'verify_1',
+            type: 'verify',
+            config: {
+              checkers: [
+                { providerId: 'p1', model: 'm1' },
+                { providerId: 'p2', model: 'm2' },
+              ],
+              policy: 'any_fail_blocks',
+            },
+          },
+          { id: 'output_1', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'verify_1' },
+          { id: 'e2', source: 'verify_1', target: 'output_1' },
+        ],
+      };
+
+      expect(() => validation.validatePipeline(pipeline)).not.toThrow();
+    });
+
     it('should accept a valid pipeline with condition branching', () => {
       const pipeline: AgentPipeline = {
         nodes: [

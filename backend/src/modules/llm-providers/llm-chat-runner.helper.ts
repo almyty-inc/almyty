@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -35,6 +35,7 @@ export class LlmChatRunnerHelper {
   constructor(
     @InjectRepository(Tool)
     private readonly toolRepository: Repository<Tool>,
+    @Inject(forwardRef(() => ToolExecutorService))
     private readonly toolExecutorService: ToolExecutorService,
     private readonly modelsHelper: LlmModelsHelper,
   ) {}

@@ -64,9 +64,9 @@ describe('RunnerCapabilityPublisher', () => {
     const repo = new FakeRepo();
     const pub = new RunnerCapabilityPublisher(repo as any);
     const rows = await pub.publish(makeRunner());
-    expect(rows.length).toBeGreaterThanOrEqual(2);
+    expect(rows.length).toBeGreaterThanOrEqual(3);
     const methods = rows.map((r) => r.runnerConfig?.method).sort();
-    expect(methods).toEqual(['runner.info', 'shell.exec']);
+    expect(methods).toEqual(['agent.list', 'runner.info', 'shell.exec']);
     for (const row of rows) {
       expect(row.runnerConfig?.runnerId).toBe('runner-1');
       expect(row.runnerConfig?.runnerName).toBe('laptop');
@@ -98,9 +98,10 @@ describe('RunnerCapabilityPublisher', () => {
     const repo = new FakeRepo();
     const pub = new RunnerCapabilityPublisher(repo as any);
     await pub.publish(makeRunner());
-    expect(repo.rows.length).toBeGreaterThan(0);
+    const beforeCount = repo.rows.length;
+    expect(beforeCount).toBeGreaterThan(0);
     const dropped = await pub.unpublish('runner-1');
-    expect(dropped).toBe(repo.rows.length === 0 ? 2 : repo.rows.length);
+    expect(dropped).toBe(beforeCount);
     expect(repo.rows.length).toBe(0);
   });
 

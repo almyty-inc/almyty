@@ -90,6 +90,7 @@ export class LlmProvidersService {
     private gatewayRepository: Repository<Gateway>,
     @InjectRepository(Tool)
     private toolRepository: Repository<Tool>,
+    @Inject(forwardRef(() => ToolExecutorService))
     private toolExecutorService: ToolExecutorService,
     private readonly auditLogService: AuditLogService,
     private readonly modelsHelper: LlmModelsHelper,

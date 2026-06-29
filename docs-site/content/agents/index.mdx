@@ -1,170 +1,103 @@
 # Agents
 
-Agents orchestrate LLM calls, tool executions, conditional logic, and data
-transformations into repeatable pipelines. almyty supports two agent modes:
-**Workflow** agents defined as visual DAGs, and **Autonomous** agents configured
-with instructions, tools, and memory.
+An agent takes an input, does work with one or more LLMs and tools, and returns
+a result. almyty has two kinds:
 
-![Agents list empty state](/screenshots/agents-empty.png)
+- **[Autonomous](/agents/autonomous)** — you give it instructions and tools, and
+  the model decides what to do. Several models can collaborate in one agent, the
+  output is verified before it returns, and good runs become reusable skills.
+  This is the default for open-ended work.
+- **[Workflow](/agents/builder)** — you draw the steps as a graph. Use it when a
+  task must run the same way every time.
 
-## Agent Modes
+![Agents list](/screenshots/agents-list.png)
+
+## Modes
 
 | Mode | Best for | How it works |
 |------|----------|--------------|
-| **Workflow** | Deterministic multi-step pipelines | Visual DAG builder with 10 node types connected by edges |
-| **Autonomous** | Open-ended reasoning tasks | Form-based config: system instructions, attached tools, memory, and optional collaboration with other agents |
+| **Autonomous** | Open-ended reasoning | Instructions, tools, memory, and a verifier panel; the model drives. See [Autonomous agents](/agents/autonomous). |
+| **Workflow** | Deterministic pipelines | A visual DAG of typed nodes connected by edges. See the [Builder](/agents/builder). |
 
-## In the UI
+Both modes share the same building blocks underneath — tools, LLM providers,
+memory, verification, scheduling, and the OpenAI-compatible endpoint — so you can
+pick per agent without giving anything up.
 
-### Creating a Workflow Agent
+## Create an agent
 
-1. Click **Agents** in the sidebar
-2. Click **Create Agent**
-3. Select the **Workflow** tab
-4. Enter a name and optional description
-5. The canvas opens with a default Input, LLM Call, and Output pipeline
-6. Drag nodes from the left palette, connect them, and configure each node in the right panel
-7. Click **Save** to store the agent as a draft
+In the UI: **Agents → Create Agent**, then pick **Autonomous** or **Workflow**.
 
-### Creating an Autonomous Agent
+- **Autonomous** — enter instructions, attach tools, enable memory, add
+  constraints, and configure the verifier panel. Full detail in
+  [Autonomous agents](/agents/autonomous).
+- **Workflow** — the canvas opens with a default Input → LLM → Output pipeline.
+  Drag nodes from the palette, connect them, and configure each in the side
+  panel. Full detail in the [Builder](/agents/builder).
 
-1. Click **Agents** in the sidebar
-2. Click **Create Agent**
-3. Select the **Autonomous** tab
-4. Enter a name and system instructions describing the agent's behavior
-5. Attach tools the agent can call
-6. Optionally enable memory and configure collaboration with other agents
-7. Click **Save**
+From the list you can activate or deactivate an agent, duplicate it, import one
+from JSON, or delete it.
 
-### Managing Agents
-
-From the agents list you can:
-
-- **Activate / Deactivate** an agent using the status toggle
-- **Duplicate** an agent to create a copy
-- **Import** an agent from JSON using the **Import** button in the top bar
-- **Delete** an agent from its detail page
-
-## Via the API
-
-### Create a Workflow Agent
+### Via the API
 
 ```bash
-curl -X POST /agents \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Research Agent",
-    "description": "Searches and summarizes information",
-    "mode": "workflow",
-    "pipeline": {
-      "nodes": [
-        { "id": "input_1", "type": "input", "data": {
-          "schema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] }
-        }},
-        { "id": "llm_1", "type": "llm_call", "data": {
-          "providerId": "provider-uuid",
-          "systemPrompt": "You are a research assistant.",
-          "userPromptTemplate": "Research: {{input.query}}"
-        }},
-        { "id": "output_1", "type": "output", "data": {
-          "mapping": "{{nodes.llm_1.output}}"
-        }}
-      ],
-      "edges": [
-        { "id": "e1", "source": "input_1", "target": "llm_1" },
-        { "id": "e2", "source": "llm_1", "target": "output_1" }
-      ]
-    }
-  }'
-```
-
-### Create an Autonomous Agent
-
-```bash
-curl -X POST /agents \
+# Autonomous
+curl -X POST https://api.almyty.com/agents \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Support Agent",
     "mode": "autonomous",
-    "instructions": "You are a customer support agent. Answer questions using the knowledge base tool.",
+    "instructions": "Answer support questions using the knowledge-base tool.",
     "toolIds": ["tool-uuid-1", "tool-uuid-2"],
     "memoryEnabled": true
   }'
-```
 
-### Invoke an Agent
-
-```bash
-curl -X POST /agents/{id}/invoke \
+# Workflow (abbreviated — see the Builder for the full pipeline shape)
+curl -X POST https://api.almyty.com/agents \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "input": { "query": "What is the weather in Berlin?" }
-  }'
+  -d '{ "name": "Research Agent", "mode": "workflow", "pipeline": { "nodes": [], "edges": [] } }'
 ```
 
-Response:
+### Invoke an agent
 
-```json
-{
-  "success": true,
-  "data": {
-    "output": "The current weather in Berlin is 12C with partly cloudy skies.",
-    "executionId": "exec-uuid",
-    "duration": 2340,
-    "tokensUsed": 156
-  }
-}
-```
-
-### Import and Export
+Every agent, whichever mode, answers on the same endpoint:
 
 ```bash
-# Export
-curl /agents/{id}/export \
-  -H "Authorization: Bearer $TOKEN" > agent.json
-
-# Import
-curl -X POST /agents/import \
+curl -X POST https://api.almyty.com/agents/{id}/invoke \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d @agent.json
+  -d '{ "input": { "query": "What is the weather in Berlin?" } }'
 ```
 
-## Agent Lifecycle
+Agents are also reachable through the
+[OpenAI-compatible API](/api-reference/openai-compatible), so an existing OpenAI
+SDK can call them by changing the base URL.
+
+## Lifecycle
 
 | Status | Description |
 |--------|-------------|
-| `draft` | Agent is being built, not yet invokable |
-| `active` | Agent is live and accepting invocations |
-| `inactive` | Agent is paused, invocations will be rejected |
-| `error` | Agent has a configuration issue |
+| `draft` | Being built, not yet invokable |
+| `active` | Live and accepting invocations |
+| `inactive` | Paused; invocations are rejected |
+| `error` | Has a configuration issue |
 
-## Execution Model
+## Execution model
 
-When a workflow agent is invoked, almyty:
+An **autonomous** agent sends the input to the primary model with its
+instructions and tools, lets the model call tools and reason, runs the
+[verifier panel](/agents/autonomous#verification) over the result, and revises if
+a checker fails.
 
-1. Validates the input against the Input node's schema
-2. Topologically sorts the pipeline nodes
-3. Executes each node in dependency order, passing data along edges
-4. Resolves template expressions (`{{nodes.llm_1.output}}`) at runtime
-5. Returns the Output node's result
+A **workflow** agent validates the input against the Input node's schema,
+topologically sorts the pipeline, executes each node in dependency order, resolves
+[template expressions](/agents/template-expressions) at runtime, and returns the
+Output node's result.
 
-When an autonomous agent is invoked, almyty sends the input to the LLM with the
-configured instructions and tools, letting the model decide which tools to call
-and how to compose the final response.
+## Related
 
-## Templates
-
-almyty ships with built-in templates to get started quickly:
-
-| Template | Description |
-|----------|-------------|
-| **Simple Chat** | Input, LLM, Output -- the simplest possible agent |
-| **Research Agent** | Chains multiple LLM calls with web search tools |
-| **Tool-Augmented** | LLM with tool calling for dynamic API interaction |
-| **Multi-Step Pipeline** | Conditional branching with data transformations |
-
-Select a template when creating an agent to get a pre-wired pipeline.
+- [Autonomous agents](/agents/autonomous) — verification, constraints, skills, memory
+- [Workflow builder](/agents/builder) — the visual DAG and its node types
+- [Scheduling](/agents/scheduling) and [Webhooks](/agents/webhooks) — run agents on a timer or an event
+- [Versioning](/agents/versioning) — snapshot and roll back an agent

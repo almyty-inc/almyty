@@ -3,6 +3,15 @@ import { enforceSpawnPolicy, enforceShellPolicy } from './policy.js';
 import { detectRuntimeInfo, RUNNER_VERSION } from './runtime-info.js';
 import { RequestPayload, ResponsePayload, WORKER_ERROR_CODES } from './protocol.js';
 import {
+  buildAgentSpawn,
+  classifyStatus,
+  findByBinary,
+  getCodingAgent,
+  listCodingAgents,
+  stripVtEscapes,
+  type AgentSpawnInput,
+} from './coding-agents/index.js';
+import {
   ProcessSignal,
   RUNNER_ERROR_CODES,
   RunnerError,
@@ -52,6 +61,9 @@ export async function dispatchHandler(ctx: HandlerContext, req: RequestPayload):
       case 'process.wait': return ok(await waitH(ctx, req));
       case 'shell.exec': return ok(await shell(ctx, req));
       case 'runner.info': return ok(await info(ctx));
+      case 'agent.list': return ok(agentList());
+      case 'agent.spawn': return ok(await agentSpawn(ctx, req));
+      case 'agent.status': return ok(agentStatus(ctx, req));
       default:
         return err(WORKER_ERROR_CODES.MALFORMED_ENVELOPE, `unknown method ${req.method}`);
     }
@@ -166,6 +178,87 @@ async function info(ctx: HandlerContext): Promise<unknown> {
     runnerVersion: RUNNER_VERSION,
     binaries: runtime.binaries,
     capacity: { maxConcurrent: ctx.maxConcurrent, inUse: ctx.processes.inUse() },
+  };
+}
+
+// ── coding-agent surface ────────────────────────────────────────────
+
+/**
+ * Catalog of coding-agent platforms this runner knows how to drive. Static —
+ * what's actually installed is in runner.info's runtime.codingAgents. The
+ * catalog tells an orchestrator what it COULD ask for and the levers per CLI.
+ */
+function agentList(): unknown {
+  return {
+    platforms: listCodingAgents().map((s) => ({
+      id: s.id,
+      displayName: s.displayName,
+      binary: s.binary,
+      providerFamily: s.providerFamily,
+      apiKeyEnvVars: s.apiKeyEnvVars,
+      configDirEnvVar: s.configDirEnvVar,
+      supportsMcp: s.supportsMcp,
+      canManage: s.canManage,
+      resume: s.session.kind,
+    })),
+  };
+}
+
+/**
+ * Launch a coding-agent CLI as an unattended member. Builds the platform's
+ * spawn spec (headless auth + isolated config home + auto-approve + resume),
+ * then runs it through the SAME execution policy as process.spawn — the coding
+ * agent gets no privilege the generic surface wouldn't.
+ */
+async function agentSpawn(ctx: HandlerContext, req: RequestPayload): Promise<unknown> {
+  const ws = requireWorkspace(req);
+  const p = req.params as { platform?: string } & AgentSpawnInput;
+  const spec = getCodingAgent(requireString(p.platform, 'platform'));
+  if (!spec) {
+    throw new RunnerError(`unknown coding-agent platform ${p.platform}`, RUNNER_ERROR_CODES.PATH_DENIED);
+  }
+  const opts = buildAgentSpawn(spec, {
+    apiKey: p.apiKey,
+    apiKeyEnvVar: p.apiKeyEnvVar,
+    configDir: p.configDir,
+    autoApprove: p.autoApprove,
+    model: p.model,
+    resumeSessionId: p.resumeSessionId,
+    extraArgs: Array.isArray(p.extraArgs) ? p.extraArgs.map(String) : undefined,
+    cwd: p.cwd,
+  });
+  // Same policy gate as process.spawn — isolation/deny/cwd/install all apply.
+  opts.env = enforceSpawnPolicy(ctx.config, opts).env;
+  const handle = await ctx.processes.spawn(ws, opts);
+  return { processId: handle.processId, platform: spec.id, binary: spec.binary, args: opts.args };
+}
+
+/**
+ * Non-destructively classify a spawned agent's pane: busy / idle /
+ * awaiting_input / awaiting_auth / error. Resolves the platform from the
+ * process's binary (or an explicit `platform` override), strips VT escapes
+ * from the recent tail, and runs the per-CLI status table. Does NOT drain the
+ * agent's own read() buffer.
+ */
+function agentStatus(ctx: HandlerContext, req: RequestPayload): unknown {
+  const ws = requireWorkspace(req);
+  const p = req.params as { processId?: string; platform?: string };
+  const snap = ctx.processes.snapshot(ws, requireString(p.processId, 'processId'));
+  const spec = p.platform ? getCodingAgent(p.platform) : findByBinary(snap.binary);
+  if (!spec) {
+    throw new RunnerError(
+      `cannot resolve coding-agent platform for binary ${snap.binary}`,
+      RUNNER_ERROR_CODES.PATH_DENIED,
+    );
+  }
+  const screen = stripVtEscapes(snap.tail);
+  const agentStatusValue =
+    snap.status !== 'running' ? 'exited' : classifyStatus(spec.status, screen);
+  return {
+    platform: spec.id,
+    processStatus: snap.status,
+    status: agentStatusValue,
+    idleMs: snap.idleMs,
   };
 }
 
