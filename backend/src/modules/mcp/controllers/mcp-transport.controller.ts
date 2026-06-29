@@ -48,13 +48,13 @@ export class McpTransportController {
 
   @Get('/streamable')
   @UseGuards(JwtAuthGuard)
-  streamableStream(@Request() req, @Response() res): void {
+  async streamableStream(@Request() req, @Response() res): Promise<void> {
     const organizationId = req.user?.currentOrganizationId;
     const userId = req.user?.id;
     if (!organizationId) {
       throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
-    this.streamable.handleStream(req, res, organizationId, userId);
+    await this.streamable.handleStream(req, res, organizationId, userId);
   }
   // Server-Sent Events endpoint
   @Get('/sse')
