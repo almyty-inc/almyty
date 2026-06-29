@@ -2,8 +2,6 @@
 
 Approvals are the human-in-the-loop gate for autonomous agents. When an agent needs human sign-off before taking a non-reversible action — a payment, an external send, a destructive operation — it calls the built-in `request_approval` tool. The run pauses, an approval request appears in the **Approvals** page, and an authorized reviewer approves or rejects. The run then resumes (on approve) or terminates (on reject).
 
-![Approvals empty state](/screenshots/approvals-empty.png)
-
 ## How it works
 
 1. **Agent requests approval**. While running, the agent invokes the built-in tool:

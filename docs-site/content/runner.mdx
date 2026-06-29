@@ -54,8 +54,11 @@ when it is released, so one job cannot reach another's files.
 ## Notes
 
 - **One runner per account** in v1.0; multi-machine scheduling is on the way.
-- The runner **never calls LLM providers** — those go through the backend. It
-  only executes local processes, which keeps the security boundary clean.
+- **Where LLM calls happen.** almyty's own agents run their LLM calls through the
+  backend, not the runner — the runner just executes local processes. The
+  exception is the coding-agent CLIs you spawn on the runner: they authenticate
+  to their provider directly with a key you supply, so those calls leave from the
+  machine itself.
 
 ## Related
 
