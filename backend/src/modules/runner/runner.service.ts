@@ -259,6 +259,20 @@ export class RunnerService {
     return row ?? null;
   }
 
+  /**
+   * Resolve the runner that owns a Streamable HTTP session. Used by the
+   * envelope handler to route a heartbeat (which is keyed only by session)
+   * back to its runner row. Reads from the shared RunnerSession table so it
+   * works regardless of which backend replica linked the session.
+   */
+  async runnerIdForSession(streamableSessionId: string): Promise<string | null> {
+    const row = await this.sessions.findOne({
+      where: { streamableSessionId },
+      order: { connectedAt: 'DESC' },
+    });
+    return row?.runnerId ?? null;
+  }
+
   async listForOwner(ownerUserId: string, organizationId: string): Promise<Runner[]> {
     return this.runners.find({ where: { ownerUserId, organizationId } });
   }
