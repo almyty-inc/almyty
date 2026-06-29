@@ -123,11 +123,21 @@ export class RunnerDaemon {
     await this.client.send(envelope('event', { kind: 'runner.hello', runnerId: this.runnerId }));
     await this.client.openStream();
 
-    // Heartbeat loop.
+    // Heartbeat loop. This timer is deliberately REF'd: it is the daemon's
+    // keep-alive. The GET command stream can briefly drop (e.g. a reconnect
+    // after a wrong-replica 404), and during that gap the fetch handle is
+    // gone; if the heartbeat timer were unref'd, the event loop would drain
+    // and the process would exit(0) BEFORE the first heartbeat ever fired —
+    // so the runner could never report online. Keeping it ref'd holds the
+    // process up across stream gaps; SIGINT/SIGTERM clears it for a clean exit.
     this.heartbeatTimer = setInterval(() => this.heartbeat().catch(err => {
       process.stderr.write(`heartbeat failed: ${err.message}\n`);
     }), HEARTBEAT_INTERVAL_MS);
-    this.heartbeatTimer.unref?.();
+    // Send one immediately so the runner reports online within seconds rather
+    // than waiting a full interval for the first beat.
+    void this.heartbeat().catch(err => {
+      process.stderr.write(`initial heartbeat failed: ${err.message}\n`);
+    });
 
     this.installSignalHandlers();
     this.writeState({
