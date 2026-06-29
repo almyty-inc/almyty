@@ -276,8 +276,104 @@ describe('StreamableHttpTransport', () => {
 
     // Reconnect with an event id we never sent.
     const stream2 = mockRes();
-    transport.handleStream(mockReq({ 'Mcp-Session-Id': sid, 'Last-Event-ID': 'totally-fake-id' }), stream2, 'org');
+    await transport.handleStream(mockReq({ 'Mcp-Session-Id': sid, 'Last-Event-ID': 'totally-fake-id' }), stream2, 'org');
     const frames = parseEventFrames(stream2._writes);
     expect(frames.find(f => f.event === 'error')?.data.payload.code).toBe(WORKER_ERROR_CODES.REPLAY_UNAVAILABLE);
+  });
+
+  // ── multi-replica: Redis-backed cross-pod delivery ──────────────────
+
+  describe('with Redis (multi-replica)', () => {
+    // A tiny in-process pub/sub + kv that models the slice of ioredis the
+    // transport uses. duplicate() returns a subscriber bound to the same bus.
+    function makeRedisBus() {
+      const kv = new Map<string, string>();
+      const bus = new EventEmitter();
+      bus.setMaxListeners(0);
+      function makeClient(isSub = false): any {
+        const subs = new Set<string>();
+        const client: any = {
+          isSub,
+          async set(k: string, v: string) { kv.set(k, v); return 'OK'; },
+          async get(k: string) { return kv.get(k) ?? null; },
+          async publish(ch: string, msg: string) { bus.emit(ch, msg); return 1; },
+          async subscribe(...chs: string[]) { chs.forEach(c => subs.add(c)); return chs.length; },
+          on(ev: string, cb: any) {
+            if (ev === 'message') {
+              bus.on('__any__', (ch: string, msg: string) => { if (subs.has(ch)) cb(ch, msg); });
+            }
+            return client;
+          },
+          async quit() { return 'OK'; },
+          duplicate() { return makeClient(true); },
+        };
+        return client;
+      }
+      // Route every channel emit through a single '__any__' fan so subscribers
+      // can filter by their subscribed set.
+      const origEmit = bus.emit.bind(bus);
+      bus.emit = ((ch: string, msg: string) => origEmit('__any__', ch, msg)) as any;
+      return makeClient(false);
+    }
+
+    function makeTransport(redis: any) {
+      return new StreamableHttpTransport(mcpService as any, sessionService as any, redis);
+    }
+
+    it('adopts a session from the registry so a GET on another pod does not 404', async () => {
+      const redis = makeRedisBus();
+      // Pod A mints the session.
+      const podA = makeTransport(redis);
+      const reqA = mockReq({}, { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e1', ts: 1, payload: { kind: 'runner.hello' } });
+      const resA = mockRes();
+      await podA.handlePost(reqA, resA, 'org', 'user');
+      const sid = resA._headers['Mcp-Session-Id'];
+      expect(sid).toBeTruthy();
+
+      // Pod B (no local session) opens the GET stream — must adopt, not 404.
+      const podB = makeTransport(redis);
+      const resB = mockRes();
+      await podB.handleStream(mockReq({ 'Mcp-Session-Id': sid }), resB, 'org');
+      expect(resB._statusCode).not.toBe(404);
+      expect(resB._headers['Content-Type']).toBe('text/event-stream');
+      await podA.shutdown(); await podB.shutdown();
+    });
+
+    it('delivers a push from one pod to the stream held on another pod', async () => {
+      const redis = makeRedisBus();
+      const podA = makeTransport(redis); // will dispatch (push)
+      const podB = makeTransport(redis); // holds the stream
+
+      // Mint on A, then open the stream on B (adopts).
+      const resMint = mockRes();
+      await podA.handlePost(mockReq({}, { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e', ts: 1, payload: {} }), resMint, 'org');
+      const sid = resMint._headers['Mcp-Session-Id'];
+      const streamB = mockRes();
+      await podB.handleStream(mockReq({ 'Mcp-Session-Id': sid }), streamB, 'org');
+
+      // Push from A (no local stream) -> must reach B's stream via Redis.
+      podA.push(sid, 'request', { method: 'runner.info', params: {} }, 'corr-1');
+      const frames = parseEventFrames(streamB._writes);
+      expect(frames.some(f => f.data?.payload?.method === 'runner.info')).toBe(true);
+      await podA.shutdown(); await podB.shutdown();
+    });
+
+    it('fans a response envelope to other pods so a remote pending call can match', async () => {
+      const redis = makeRedisBus();
+      const podA = makeTransport(redis);
+      const podB = makeTransport(redis);
+      // A listens for envelopes (its RunnerCallService would).
+      const seenOnA: any[] = [];
+      podA.on('envelope', (env) => seenOnA.push(env));
+
+      // A response POST lands on B; A must see it via the CH_RESP fan-out.
+      const resB = mockRes();
+      await podB.handlePost(
+        mockReq({}, { v: WORKER_PROTOCOL_VERSION, type: 'response', id: 'corr-1', ts: 1, payload: { ok: true } }),
+        resB, 'org', 'user',
+      );
+      expect(seenOnA.some(e => e.id === 'corr-1' && e.type === 'response')).toBe(true);
+      await podA.shutdown(); await podB.shutdown();
+    });
   });
 });
