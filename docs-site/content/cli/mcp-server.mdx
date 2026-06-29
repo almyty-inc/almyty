@@ -2,6 +2,8 @@
 
 The `@almyty/mcp-server` package connects an almyty **gateway** to any MCP-compatible LLM client. You create a gateway in the almyty UI, assign tools to it, then point this server at that gateway. The LLM sees your tools as native MCP tools.
 
+![@almyty/mcp-server CLI help](/screenshots/cli/mcp-server-help.png)
+
 **Prerequisites:**
 1. Create a gateway in the UI (type: MCP, A2A, UTCP, or Skills — the MCP server works with all types)
 2. Assign tools to the gateway
@@ -87,13 +89,13 @@ Restart Claude Desktop. Tools appear under the hammer icon.
 ### Claude Code
 
 ```bash
-$ claude mcp add almyty --url https://api.almyty.com/mcp
+$ claude mcp add almyty --transport http https://api.almyty.com/mcp
 ```
 
 Or for a specific gateway:
 
 ```bash
-$ claude mcp add petstore --url https://api.almyty.com/acme/petstore
+$ claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
 ```
 
 ### Cursor

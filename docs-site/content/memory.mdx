@@ -1,8 +1,15 @@
 # Memory
 
-Memory lets agents store and recall information across conversations. Agents can persist facts, preferences, context, and instructions that survive between runs, making them more useful over time.
+Memory gives an agent recall across runs. It stores facts, preferences, context,
+past episodes, and standing instructions, and pulls the relevant ones back into
+the prompt by **semantic (embedding) search** — so the agent remembers what
+matters without you restating it every time.
 
-![Memories page](/screenshots/memories.png)
+Memory is distinct from [constraints](/agents/autonomous#constraints):
+constraints are always-on prompt rules that gate behavior; memory is retrieved
+per turn by relevance.
+
+![Memory](/screenshots/memory.png)
 
 ## In the UI
 

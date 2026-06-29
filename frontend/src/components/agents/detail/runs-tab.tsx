@@ -25,6 +25,8 @@ import {
 import { formatDateTime } from '@/lib/utils'
 import { runStatusVariant, formatDuration } from './constants'
 import type { AgentRun } from '@/types'
+import { VerifyStepCard, VerifySummary } from './verify-step'
+import { PromoteRunDialog } from './promote-run-dialog'
 
 interface RunsTabProps {
   runs: AgentRun[]
@@ -107,12 +109,17 @@ export function RunsTab({ runs }: RunsTabProps) {
                       <TableRow>
                         <TableCell colSpan={8} className="bg-muted/30 p-4">
                           <div className="space-y-4">
+                            {/* Verification verdict (if the agent ran a verify gate) */}
+                            <VerifySummary run={run} />
                             {/* Steps */}
                             {run.steps && run.steps.length > 0 && (
                               <div>
                                 <h4 className="text-sm font-medium mb-2">Steps</h4>
                                 <div className="space-y-2">
                                   {run.steps.map((step, idx) => (
+                                    step.type === 'verify' ? (
+                                      <VerifyStepCard key={idx} step={step} index={idx} />
+                                    ) : (
                                     <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background border text-sm">
                                       <div className="flex items-center gap-2 shrink-0">
                                         <span className="text-xs font-mono text-muted-foreground">#{idx + 1}</span>
@@ -140,6 +147,7 @@ export function RunsTab({ runs }: RunsTabProps) {
                                         {step.cost ? ` / $${step.cost.toFixed(4)}` : ''}
                                       </div>
                                     </div>
+                                    )
                                   ))}
                                 </div>
                               </div>
@@ -173,6 +181,12 @@ export function RunsTab({ runs }: RunsTabProps) {
                                 <div className="bg-muted rounded p-2 text-xs whitespace-pre-wrap max-h-[200px] overflow-auto">
                                   {typeof run.output === 'string' ? run.output : JSON.stringify(run.output, null, 2)}
                                 </div>
+                              </div>
+                            )}
+                            {/* Promote a completed run to a reusable skill */}
+                            {run.status === 'completed' && (
+                              <div className="flex justify-end pt-1">
+                                <PromoteRunDialog runId={run.id} />
                               </div>
                             )}
                           </div>

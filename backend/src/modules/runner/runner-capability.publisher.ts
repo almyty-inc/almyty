@@ -49,6 +49,16 @@ export class RunnerCapabilityPublisher {
       },
     },
     {
+      method: 'agent.list',
+      description: 'List the coding-agent CLIs this runner can drive (claude, codex, gemini, cursor, copilot, …), with each platform\'s provider family, auth/config levers, MCP support, and resume mechanism.',
+      requiresWorkspace: false,
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+    {
       method: 'shell.exec',
       description: 'Execute a one-shot shell command on the runner host. Captures stdout/stderr and exit code. Workspace-scoped.',
       requiresWorkspace: true,
