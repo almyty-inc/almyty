@@ -1,0 +1,64 @@
+# Runners
+
+A runner is a small daemon you start on a machine — your laptop, a cloud VM, a
+Kubernetes pod, a Docker container, an edge device — anywhere Node runs. It
+connects that machine to almyty and exposes it to your agents: they run commands
+and use the local tools and files there, while every LLM call still goes through
+the backend. Your code and credentials never leave the machine.
+
+![A runner's detail page — detected binaries and the Coding agents card](/screenshots/runner-detail.png)
+
+## Start a runner
+
+Authenticate once, then start the daemon. It registers with almyty, reports the
+binaries it finds on the machine, and stays online listening for work.
+
+```bash
+npx @almyty/auth login
+npx @almyty/runner start --name my-laptop
+npx @almyty/runner status
+```
+
+It appears in the **Runners** page as online. Stop it with `npx @almyty/runner
+stop` or Ctrl-C in its terminal.
+
+## What an agent can do on it
+
+The runner exposes a generic process surface — spawn, shell, read, write,
+signal — scoped to a [workspace](#workspaces). So an agent can do whatever the
+machine can: run a build, query data that only lives there, operate a server, or
+drive a CLI it detects. The orchestration lives in the agent's prompts; the
+runner just runs the processes.
+
+Its capabilities (such as `shell.exec` and `runner.info`) are published as tools,
+tagged with the runner's name. Attach them to a [gateway](/gateways) and any
+agent can call them — one you built, or a Claude Code session over MCP.
+
+## Coding agents
+
+The runner natively drives the major coding-agent CLIs — Claude Code, Codex,
+Gemini, Cursor, aider, and more. It detects which are installed at startup
+(shown in the **Coding agents** card above) and can launch them as unattended
+members: it injects the provider key for headless auth, isolates each one's
+config and session, enables auto-approve, and reports live status
+(busy / idle / awaiting input). That is the building block for a multi-vendor
+coding team — one agent driving several CLIs on the same codebase. You compose
+the orchestration; the runner runs the members.
+
+## Workspaces
+
+Work happens inside a **workspace**: a reservation of a working directory on the
+runner, with a time limit. Processes are isolated per workspace and cleaned up
+when it is released, so one job cannot reach another's files.
+
+## Notes
+
+- **One runner per account** in v1.0; multi-machine scheduling is on the way.
+- The runner **never calls LLM providers** — those go through the backend. It
+  only executes local processes, which keeps the security boundary clean.
+
+## Related
+
+- [Gateways](/gateways) — publish a runner's capabilities as callable tools
+- [CLI: the runner](/cli) — install and flags
+- [Self-hosting](/self-hosting) — run almyty itself on your own infrastructure
