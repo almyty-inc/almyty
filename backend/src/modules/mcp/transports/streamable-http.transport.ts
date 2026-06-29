@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import * as Redis from 'ioredis';
 import { Request, Response } from 'express';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
@@ -67,19 +69,54 @@ interface StreamableSession {
 
 const REPLAY_BUFFER_MAX = 256;
 const STALE_AFTER_MS = 5 * 60 * 1000;
+/** TTL for the cross-pod session registry; refreshed on activity. */
+const SESSION_REGISTRY_TTL_S = 600;
+/** Redis channels for cross-replica delivery (see the multi-replica note). */
+const CH_OUT = 'strm:out';   // server->client frames, fan to the stream-holding pod
+const CH_RESP = 'strm:resp'; // client->server responses, fan to the dispatching pod
+
+/**
+ * Multi-replica correctness
+ * -------------------------
+ * The live SSE GET stream is a TCP connection held by ONE pod, and the
+ * in-memory `sessions` Map is pod-local. With >1 backend replica behind a
+ * round-robin LB that breaks three ways:
+ *   1. the GET stream lands on a pod that never minted the session -> 404.
+ *   2. a server->client push (e.g. runner dispatch) runs on a different pod
+ *      than the one holding the stream -> never delivered.
+ *   3. a client->server response POST lands on a different pod than the one
+ *      with the pending dispatch call -> never matched.
+ *
+ * When a Redis client is present we fix all three without making the live
+ * stream itself shared:
+ *   1. a shared session registry (strm:sess:<id>) lets any pod ADOPT a session
+ *      it didn't mint, so the GET stream opens anywhere.
+ *   2. push() PUBLISHES frames to CH_OUT; whichever pod holds the stream
+ *      (subscribed) writes them.
+ *   3. response/error envelopes are PUBLISHED to CH_RESP; every pod re-emits
+ *      them locally so the pod with the pending call matches by correlation id
+ *      (load-and-delete dedups the same-pod double-delivery).
+ *
+ * Redis is OPTIONAL: with no client (tests, single-pod dev) the transport is
+ * exactly the in-memory implementation it always was.
+ */
 
 @Injectable()
 export class StreamableHttpTransport extends EventEmitter {
   private readonly logger = new Logger(StreamableHttpTransport.name);
   private readonly sessions = new Map<string, StreamableSession>();
   private gcInterval?: NodeJS.Timeout;
+  /** Dedicated subscriber connection (ioredis requires one for sub mode). */
+  private subscriber?: Redis.Redis;
 
   constructor(
     private readonly mcpService: McpService,
     private readonly mcpSessionService: McpSessionService,
+    @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
   ) {
     super();
     this.startGcLoop();
+    if (this.redis) this.startRedisBridge();
   }
 
   /**
@@ -117,6 +154,7 @@ export class StreamableHttpTransport extends EventEmitter {
       : this.createSession(organizationId, userId);
 
     session.lastActivity = new Date();
+    this.registerSession(session); // refresh cross-pod registry TTL on activity
     res.setHeader('Mcp-Session-Id', session.id);
 
     const body = req.body;
@@ -133,6 +171,15 @@ export class StreamableHttpTransport extends EventEmitter {
       // Requests can elicit a server-side response later via the GET stream;
       // the POST itself just acknowledges receipt.
       this.emit('envelope', body, session);
+      // A response/error may belong to a dispatch whose pending call lives on
+      // a DIFFERENT pod (the one that issued the request). Fan it out so that
+      // pod can match by correlation id. (heartbeat/hello stay local — they're
+      // processed wherever they land and a broadcast would double-write.)
+      if (this.redis && (body.type === 'response' || body.type === 'error')) {
+        this.redis
+          .publish(CH_RESP, JSON.stringify(body))
+          .catch((err) => this.logger.warn(`CH_RESP publish failed: ${err?.message ?? err}`));
+      }
       res.status(202).end();
       return;
     }
@@ -181,18 +228,21 @@ export class StreamableHttpTransport extends EventEmitter {
    * the spec's stance that the server-to-client stream is singular per
    * session.
    */
-  handleStream(
+  async handleStream(
     req: Request,
     res: Response,
     organizationId: string,
-    userId?: string,
-  ): void {
+    _userId?: string,
+  ): Promise<void> {
     const sessionId = (req.header('Mcp-Session-Id') || '').trim();
     if (!sessionId) {
       this.sendErrorResponse(res, WORKER_ERROR_CODES.UNKNOWN_SESSION, 'Mcp-Session-Id required');
       return;
     }
-    const session = this.sessions.get(sessionId);
+    // Local first; otherwise adopt from the shared registry so a GET stream
+    // that round-robins to a pod which didn't mint the session still opens
+    // (instead of 404-flapping on multi-replica).
+    const session = this.sessions.get(sessionId) ?? await this.adoptSession(sessionId, organizationId);
     if (!session) {
       this.sendErrorResponse(res, WORKER_ERROR_CODES.UNKNOWN_SESSION, 'unknown session');
       return;
@@ -249,8 +299,35 @@ export class StreamableHttpTransport extends EventEmitter {
    * messages it missed.
    */
   push<T>(sessionId: string, type: WorkerEnvelope['type'], payload: T, correlationId?: string): WorkerEnvelope<T> | null {
-    const session = this.sessions.get(sessionId);
-    if (!session) return null;
+    const local = this.sessions.get(sessionId);
+    // Fast path: this pod holds the live stream — deliver directly.
+    if (local && local.stream && !local.stream.destroyed) {
+      return this.deliverLocal(local, type, payload, correlationId);
+    }
+    // No local stream here. If Redis is wired, the stream may live on another
+    // pod — publish and let the holder write it. (Offline is already checked
+    // by the caller via the RunnerSession table before push.)
+    if (this.redis) {
+      const env: WorkerEnvelope<T> = {
+        v: WORKER_PROTOCOL_VERSION,
+        type,
+        id: correlationId ?? `${sessionId}:${randomUUID().slice(0, 8)}`,
+        ts: Date.now(),
+        payload,
+      };
+      this.redis
+        .publish(CH_OUT, JSON.stringify({ sessionId, type, payload, correlationId }))
+        .catch((err) => this.logger.warn(`CH_OUT publish failed: ${err?.message ?? err}`));
+      return env;
+    }
+    // No Redis and no local stream: buffer locally for replay if the session
+    // exists here, else report not-deliverable.
+    if (!local) return null;
+    return this.deliverLocal(local, type, payload, correlationId);
+  }
+
+  /** Build, buffer, and write an envelope to a locally-held session's stream. */
+  private deliverLocal<T>(session: StreamableSession, type: WorkerEnvelope['type'], payload: T, correlationId?: string): WorkerEnvelope<T> {
     const env = this.envelope(session, type, payload, correlationId);
     const frame = this.formatEvent(env.id, type, env);
     this.buffer(session, env.id, env.seq!, frame);
@@ -259,7 +336,7 @@ export class StreamableHttpTransport extends EventEmitter {
         this.writeRaw(session.stream, frame);
       } catch (err: any) {
         this.logger.warn(`stream write failed for session=${session.id}: ${err.message}`);
-        if (session.stream === session.stream) session.stream = null;
+        session.stream = null;
       }
     }
     return env;
@@ -278,6 +355,10 @@ export class StreamableHttpTransport extends EventEmitter {
 
   async shutdown(): Promise<void> {
     if (this.gcInterval) clearInterval(this.gcInterval);
+    if (this.subscriber) {
+      try { await this.subscriber.quit(); } catch { /* */ }
+      this.subscriber = undefined;
+    }
     for (const session of this.sessions.values()) {
       if (session.stream && !session.stream.destroyed) {
         try { session.stream.end(); } catch { /* */ }
@@ -310,6 +391,49 @@ export class StreamableHttpTransport extends EventEmitter {
       lastActivity: new Date(),
     };
     this.sessions.set(id, session);
+    this.registerSession(session); // cross-pod registry (no-op without redis)
+    return session;
+  }
+
+  /** Publish a session's existence so any replica can adopt it. */
+  private registerSession(session: StreamableSession): void {
+    if (!this.redis) return;
+    this.redis
+      .set(`strm:sess:${session.id}`, JSON.stringify({ org: session.organizationId, userId: session.userId ?? null }), 'EX', SESSION_REGISTRY_TTL_S)
+      .catch((err) => this.logger.warn(`session registry write failed: ${err?.message ?? err}`));
+  }
+
+  /**
+   * Adopt a session this pod didn't mint, using the shared registry. Returns
+   * a fresh local session entry, or null if the registry has no record (truly
+   * unknown) or the org doesn't match (cross-tenant).
+   */
+  private async adoptSession(
+    sessionId: string,
+    organizationId: string,
+  ): Promise<StreamableSession | null> {
+    if (!this.redis) return null;
+    let raw: string | null;
+    try {
+      raw = await this.redis.get(`strm:sess:${sessionId}`);
+    } catch (err: any) {
+      this.logger.warn(`session registry read failed: ${err?.message ?? err}`);
+      return null;
+    }
+    if (!raw) return null;
+    let meta: { org: string; userId: string | null };
+    try { meta = JSON.parse(raw); } catch { return null; }
+    if (meta.org !== organizationId) return null;
+    const session: StreamableSession = {
+      id: sessionId,
+      stream: null,
+      organizationId: meta.org,
+      userId: meta.userId ?? undefined,
+      seq: 0,
+      buffer: [],
+      lastActivity: new Date(),
+    };
+    this.sessions.set(sessionId, session);
     return session;
   }
 
@@ -394,6 +518,43 @@ export class StreamableHttpTransport extends EventEmitter {
 
   private looksLikeJsonRpc(body: unknown): boolean {
     return !!body && typeof body === 'object' && (body as any).jsonrpc === '2.0';
+  }
+
+  /**
+   * Wire the cross-replica bridge: a dedicated subscriber connection (ioredis
+   * requires one for sub mode) listening on CH_OUT (deliver to a locally-held
+   * stream) and CH_RESP (re-emit so a local pending dispatch can match).
+   */
+  private startRedisBridge(): void {
+    try {
+      this.subscriber = this.redis!.duplicate();
+      this.subscriber.on('error', (err) => this.logger.warn(`subscriber error: ${err?.message ?? err}`));
+      this.subscriber.subscribe(CH_OUT, CH_RESP).catch((err) =>
+        this.logger.error(`failed to subscribe to streamable channels: ${err?.message ?? err}`),
+      );
+      this.subscriber.on('message', (channel, message) => this.onRedisMessage(channel, message));
+      this.logger.log('streamable cross-replica bridge active (CH_OUT/CH_RESP)');
+    } catch (err: any) {
+      this.logger.error(`failed to start redis bridge: ${err?.message ?? err}`);
+    }
+  }
+
+  private onRedisMessage(channel: string, message: string): void {
+    let parsed: any;
+    try { parsed = JSON.parse(message); } catch { return; }
+    if (channel === CH_OUT) {
+      // Another pod wants to push to this session; write it only if WE hold
+      // the live stream. Other pods ignore it.
+      const { sessionId, type, payload, correlationId } = parsed;
+      const session = this.sessions.get(sessionId);
+      if (session && session.stream && !session.stream.destroyed) {
+        this.deliverLocal(session, type, payload, correlationId);
+      }
+    } else if (channel === CH_RESP) {
+      // A response/error from any pod; re-emit locally so the pod with the
+      // matching pending dispatch call resolves it (load-and-delete dedups).
+      this.emit('envelope', parsed, undefined);
+    }
   }
 
   private startGcLoop(): void {
