@@ -261,7 +261,12 @@ export class StreamableHttpTransport extends EventEmitter {
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    // `no-transform` tells the compression() middleware NOT to gzip-buffer this
+    // response. Without it, SSE events + keep-alives sit in the compression
+    // buffer, never flush to nginx, and the stream both stalls (dispatch never
+    // arrives) and gets closed at the proxy read-timeout. This is the load-
+    // bearing header for streaming behind compression + nginx.
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Mcp-Session-Id', session.id);
     // Tell nginx/proxies NOT to buffer this response — without it the
