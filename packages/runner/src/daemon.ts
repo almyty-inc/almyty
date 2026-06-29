@@ -16,6 +16,10 @@ const STATE_DIR = join(homedir(), '.almyty', 'runner');
 const PID_FILE = join(STATE_DIR, 'daemon.pid');
 const STATUS_FILE = join(STATE_DIR, 'status.json');
 const HEARTBEAT_INTERVAL_MS = 30_000;
+/** Backoff between session re-establish attempts after a 404 session-lost. */
+const SESSION_LOST_BACKOFF_MS = [500, 1_000, 2_000, 5_000, 10_000];
+/** Consecutive session-lost failures tolerated before exiting fatal. */
+const MAX_SESSION_LOST_STREAK = 8;
 
 export interface DaemonStatus {
   pid: number;
@@ -51,6 +55,10 @@ export class RunnerDaemon {
   private runnerId: string | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private status: DaemonStatus | null = null;
+  /** Guards against overlapping re-establish attempts. */
+  private reestablishing = false;
+  /** Consecutive failed re-establish attempts; bounds the retry loop. */
+  private sessionLostStreak = 0;
 
   /**
    * Bootstraps the daemon. Returns when the runner has registered and
@@ -186,9 +194,15 @@ export class RunnerDaemon {
       this.updateState({ connectionState: 'online', sessionId: this.client?.getSessionId() ?? null });
     });
     this.client.on('session-lost', () => {
-      process.stderr.write('backend session lost; will re-register on next start\n');
-      this.updateState({ connectionState: 'fatal' });
-      process.exit(2);
+      // The backend forgot our session (404 UNKNOWN_SESSION). The common
+      // cause is a multi-replica backend with pod-local streamable sessions:
+      // our mint-POST landed on one pod and the GET stream load-balanced to
+      // another that never saw the session. Exiting here was too fragile —
+      // a single wrong-replica hit killed the runner permanently. Instead,
+      // re-establish a fresh session (re-mint + reopen the stream). The
+      // client already cleared its session id, so the next send mints a new
+      // one; with backoff this lands on a consistent pod and stays online.
+      void this.reestablishSession();
     });
   }
 
@@ -219,6 +233,50 @@ export class RunnerDaemon {
     const inUse = this.processes.inUse();
     await this.client.send(envelope('heartbeat', { ts: Date.now(), inUse }));
     this.updateState({ inUseProcesses: inUse });
+  }
+
+  /**
+   * Re-establish the command stream after a session-lost (404). Re-mints a
+   * session (hello envelope) and reopens the GET stream, with backoff. Only
+   * gives up — exiting fatal — after MAX_SESSION_LOST_STREAK consecutive
+   * failures, so a transient wrong-replica hit recovers transparently while a
+   * genuinely-down backend still terminates rather than spinning forever.
+   */
+  private async reestablishSession(): Promise<void> {
+    if (this.reestablishing || !this.client) return;
+    this.reestablishing = true;
+    this.updateState({ connectionState: 'reconnecting' });
+    try {
+      this.sessionLostStreak++;
+      if (this.sessionLostStreak > MAX_SESSION_LOST_STREAK) {
+        process.stderr.write(
+          `backend session lost ${this.sessionLostStreak}x in a row; giving up\n`,
+        );
+        this.updateState({ connectionState: 'fatal' });
+        process.exit(2);
+      }
+      const delay = SESSION_LOST_BACKOFF_MS[
+        Math.min(this.sessionLostStreak - 1, SESSION_LOST_BACKOFF_MS.length - 1)
+      ];
+      process.stderr.write(
+        `backend session lost; re-establishing in ${delay}ms (attempt ${this.sessionLostStreak})\n`,
+      );
+      await new Promise(r => setTimeout(r, delay));
+      // Re-mint a session (client already cleared the stale id) and reopen.
+      await this.client.send(envelope('event', { kind: 'runner.hello', runnerId: this.runnerId }));
+      await this.client.openStream();
+      // openStream's 'open' event resets connectionState to 'online'; a clean
+      // reopen means the streak is broken.
+      this.sessionLostStreak = 0;
+      this.updateState({ connectionState: 'online', sessionId: this.client.getSessionId() });
+      process.stdout.write('backend session re-established\n');
+    } catch (err: any) {
+      process.stderr.write(`re-establish failed: ${err?.message ?? err}\n`);
+      // Retry: openStream/send failures schedule the client's own reconnect,
+      // and another session-lost will re-enter here; release the guard so it can.
+    } finally {
+      this.reestablishing = false;
+    }
   }
 
   private writeState(s: DaemonStatus): void {
