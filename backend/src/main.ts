@@ -48,8 +48,20 @@ async function bootstrap() {
     },
   }));
 
-  // Performance middleware
-  app.use(compression());
+  // Performance middleware. Skip Server-Sent Events: compression buffers the
+  // response to gzip it, which stalls SSE (events never flush to the client)
+  // and leaves long-lived streams idle until the proxy closes them. The
+  // streamable transport also sets `Cache-Control: no-transform`; this filter
+  // is the belt-and-suspenders that covers every SSE endpoint.
+  app.use(
+    compression({
+      filter: (req, res) => {
+        const ct = String(res.getHeader('Content-Type') ?? '');
+        if (ct.includes('text/event-stream')) return false;
+        return compression.filter(req, res);
+      },
+    }),
+  );
   app.use(cookieParser());
 
   // CORS configuration — origin allowlist from env, NOT `origin: true`.
