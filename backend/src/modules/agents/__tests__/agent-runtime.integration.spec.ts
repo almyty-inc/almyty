@@ -21,6 +21,9 @@ import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { CanonicalMemoryService } from '../../memory/canonical/canonical-memory.service';
 import { AuditLogService } from '../../audit-log/audit-log.service';
+import { AgentVerifierHelper } from '../agent-verifier.helper';
+import { AgentContextCompactor } from '../agent-context-compactor.helper';
+import { AgentConstraintsService } from '../../agent-constraints/agent-constraints.service';
 
 /**
  * Integration tests for AgentRuntimeService.
@@ -41,6 +44,7 @@ describe('AgentRuntimeService (integration)', () => {
   let mockMessageRepo: any;
   let mockQueue: any;
   let messageStore: Message[];
+  let llmService: any;
 
   const makeAgent = (overrides: Partial<Agent> = {}): Agent => {
     const agent = new Agent();
@@ -177,6 +181,9 @@ describe('AgentRuntimeService (integration)', () => {
         AgentRuntimeEventsHelper,
         AgentRuntimeMiscHelper,
         AgentStepProcessor,
+        AgentVerifierHelper,
+        AgentContextCompactor,
+        { provide: AgentConstraintsService, useValue: { listActiveRules: jest.fn().mockResolvedValue([]), recordFromRun: jest.fn().mockResolvedValue(null) } },
         { provide: 'ApprovalsService', useValue: { create: jest.fn().mockResolvedValue({ id: 'a-stub' }) } },
         { provide: ApprovalsService, useValue: { create: jest.fn().mockResolvedValue({ id: 'a-stub' }) } },
         {
@@ -276,6 +283,7 @@ describe('AgentRuntimeService (integration)', () => {
     }).compile();
 
     service = module.get<AgentRuntimeService>(AgentRuntimeService);
+    llmService = module.get(LlmProvidersService) as any;
   });
 
   describe('startRun', () => {
@@ -718,6 +726,156 @@ describe('AgentRuntimeService (integration)', () => {
     it('should return null for unknown run id', () => {
       const emitter = service.getRunEmitter('unknown');
       expect(emitter).toBeNull();
+    });
+  });
+
+  describe('autonomous verify', () => {
+    const verifyAgent = (over: any = {}) =>
+      makeAgent({
+        id: 'verify-agent',
+        agentConfig: {
+          verify: {
+            enabled: true,
+            checkers: [{ name: 'c1', providerId: 'provider-1' }],
+            ...over,
+          },
+        },
+      });
+
+    const checkerReply = (content: string) => ({
+      message: { role: 'assistant', content },
+      usage: { totalTokens: 5 },
+      cost: 0.001,
+    });
+
+    it('completes the run when the checker panel passes', async () => {
+      agentStore.push(verifyAgent());
+      llmService.chat.mockResolvedValue(checkerReply('{"verdict":"pass"}'));
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+
+      const result = await service.processStep(run.id);
+
+      expect(result).toBe('done');
+      const stored = runStore.find(r => r.id === run.id)!;
+      expect(stored.status).toBe(AgentRunStatus.COMPLETED);
+      expect(stored.metadata?.verify?.verdict).toBe('pass');
+      expect(stored.steps.some(s => s.type === 'verify')).toBe(true);
+      // No revision feedback message was injected.
+      expect(
+        messageStore.some(m => m.role === 'user' && String(m.content).includes('verification panel')),
+      ).toBe(false);
+    });
+
+    it('sends the answer back for revision when the panel fails (within budget)', async () => {
+      agentStore.push(verifyAgent());
+      llmService.chat.mockResolvedValue(
+        checkerReply('{"verdict":"fail","failures":[{"rule":"missing total","evidence":"no sum line"}]}'),
+      );
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+
+      const result = await service.processStep(run.id);
+
+      expect(result).toBe('continue');
+      const stored = runStore.find(r => r.id === run.id)!;
+      expect(stored.status).toBe(AgentRunStatus.RUNNING);
+      expect(stored.workingMemory?.verifyRevisions).toBe(1);
+      const critique = messageStore.find(
+        m => m.role === 'user' && String(m.content).includes('verification panel'),
+      );
+      expect(critique).toBeDefined();
+      expect(String(critique!.content)).toContain('missing total');
+    });
+
+    it('completes anyway once the revision budget is exhausted', async () => {
+      agentStore.push(verifyAgent({ maxReviseLoops: 1 }));
+      llmService.chat.mockResolvedValue(
+        checkerReply('{"verdict":"fail","failures":[{"rule":"still wrong","evidence":"x"}]}'),
+      );
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+      // Pretend one revision already happened so we are at the cap.
+      run.workingMemory = { verifyRevisions: 1 };
+      await mockRunRepo.save(run);
+
+      const result = await service.processStep(run.id);
+
+      expect(result).toBe('done');
+      const stored = runStore.find(r => r.id === run.id)!;
+      expect(stored.status).toBe(AgentRunStatus.COMPLETED);
+      expect(stored.metadata?.verify?.exhausted).toBe(true);
+    });
+
+    it('does not run the panel when verify is disabled', async () => {
+      agentStore.push(
+        makeAgent({
+          id: 'plain-agent',
+          agentConfig: { verify: { enabled: false, checkers: [{ providerId: 'provider-1' }] } },
+        }),
+      );
+      const run = await service.startRun('plain-agent', 'org-1', 'user-1', 'do it');
+
+      const result = await service.processStep(run.id);
+
+      expect(result).toBe('done');
+      expect(llmService.chat).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('mid-loop verify', () => {
+    const midAgent = (over: any) =>
+      makeAgent({
+        id: 'mid-agent',
+        agentConfig: {
+          verify: { enabled: true, checkers: [{ providerId: 'provider-1' }], ...over },
+        },
+      });
+
+    it('injects advisory feedback mid-run on every_n_steps without ending the run', async () => {
+      agentStore.push(midAgent({ triggers: ['every_n_steps'], everyNSteps: 1 }));
+      // Agent emits a tool call (so the tool branch runs), and the checker fails.
+      llmService.chatStream.mockResolvedValueOnce({
+        message: {
+          role: 'assistant',
+          content: 'working on it',
+          toolCalls: [{ id: 't1', name: 'x', parameters: {} }],
+        },
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        cost: 0,
+      });
+      llmService.chat.mockResolvedValue({
+        message: {
+          role: 'assistant',
+          content: '{"verdict":"fail","failures":[{"rule":"off track","evidence":"wrong tool"}]}',
+        },
+        usage: { totalTokens: 5 },
+        cost: 0.001,
+      });
+      const run = await service.startRun('mid-agent', 'org-1', 'user-1', 'go');
+
+      const result = await service.processStep(run.id);
+
+      expect(result).toBe('continue');
+      const stored = runStore.find(r => r.id === run.id)!;
+      expect(stored.status).toBe(AgentRunStatus.RUNNING);
+      expect(stored.steps.some(s => s.type === 'verify' && s.input?.mode === 'mid_loop')).toBe(true);
+      const advisory = messageStore.find(
+        m => m.role === 'user' && String(m.content).includes('Mid-run verification flagged'),
+      );
+      expect(advisory).toBeDefined();
+      expect(String(advisory!.content)).toContain('off track');
+    });
+
+    it('skips the final-output gate when on_final_output is not a configured trigger', async () => {
+      agentStore.push(midAgent({ triggers: ['every_n_steps'], everyNSteps: 5 }));
+      // Default chatStream → final answer, no tool calls.
+      const run = await service.startRun('mid-agent', 'org-1', 'user-1', 'go');
+
+      const result = await service.processStep(run.id);
+
+      expect(result).toBe('done');
+      const stored = runStore.find(r => r.id === run.id)!;
+      expect(stored.status).toBe(AgentRunStatus.COMPLETED);
+      // Final-output verify gate did not fire — no checker call.
+      expect(llmService.chat).not.toHaveBeenCalled();
     });
   });
 });

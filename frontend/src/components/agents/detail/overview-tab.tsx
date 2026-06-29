@@ -52,6 +52,7 @@ import { useNotifications } from '@/store/app'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 import { execStatusVariant, diffObjects, formatDiffValue } from './constants'
 import { IntegrationSnippets } from './integration-snippets'
+import { AgentConfigPanel } from './agent-config-panel'
 import type { Agent, AgentExecution, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
 
 interface OverviewTabProps {
@@ -138,6 +139,8 @@ export function OverviewTab({
 
   return (
     <>
+      {/* Models & Verification — the autonomous multi-LLM story */}
+      {agent.mode === 'autonomous' && <AgentConfigPanel agent={agent} />}
       {/* Try It + Integration */}
       <div className="grid gap-6 md:grid-cols-2">
         {/* Try It */}

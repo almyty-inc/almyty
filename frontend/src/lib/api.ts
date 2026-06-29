@@ -641,6 +641,25 @@ export const runsApi = {
   getRun: (runId: string) => apiGet(`/agents/runs/${runId}`),
 }
 
+// Promoted Skills API (run -> skill)
+export const promotedSkillsApi = {
+  promote: (body: { runId: string; name?: string; description?: string; distill?: { providerId: string; model?: string } }) =>
+    apiPost('/promoted-skills', body),
+  list: () => apiGet('/promoted-skills'),
+  get: (id: string) => apiGet(`/promoted-skills/${id}`),
+  remove: (id: string) => apiDel(`/promoted-skills/${id}`),
+  replay: (id: string, input?: any) => apiPost(`/promoted-skills/${id}/replay`, { input }),
+}
+
+// Agent Constraints API (failure memory)
+export const agentConstraintsApi = {
+  list: (agentId: string) => apiGet(`/agents/${agentId}/constraints`),
+  add: (agentId: string, rule: string) => apiPost(`/agents/${agentId}/constraints`, { rule }),
+  setActive: (agentId: string, id: string, active: boolean) =>
+    apiPatch(`/agents/${agentId}/constraints/${id}`, { active }),
+  remove: (agentId: string, id: string) => apiDel(`/agents/${agentId}/constraints/${id}`),
+}
+
 
 // Runners API (cluster 5)
 export const runnersApi = {

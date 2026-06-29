@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join, isAbsolute, resolve as pathResolve } from 'path';
 
+import { allProbeBinaries } from './coding-agents/index.js';
 import { ResolvedConfig, RunnerConfig, RunnerIsolationTier } from './types.js';
 
 /**
@@ -26,10 +27,13 @@ import { ResolvedConfig, RunnerConfig, RunnerIsolationTier } from './types.js';
  */
 
 export const DEFAULT_BINARY_PROBE_LIST = [
+  // language runtimes, VCS, package managers, container runtimes
   'node', 'python', 'python3', 'git',
-  'claude', 'codex', 'gemini', 'aider',
   'npm', 'pip', 'cargo', 'go', 'rustc',
   'docker', 'podman',
+  // every coding-agent CLI we support (claude, codex, gemini, cursor-agent,
+  // opencode, crush, copilot, grok, hermes, vibe, openclaw, aider, + aliases)
+  ...allProbeBinaries(),
 ];
 
 export const DEFAULT_BACKEND_URL = 'https://api.almyty.com';

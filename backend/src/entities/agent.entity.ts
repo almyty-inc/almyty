@@ -122,6 +122,20 @@ export class Agent {
     model?: string;
     temperature?: number;
     maxTokens?: number;
+    /**
+     * Context compaction for long autonomous runs (off unless enabled). When the
+     * assembled context exceeds maxContextTokens, the old prefix is summarized
+     * (or truncated) and folded into the system prompt while a recent tail is
+     * kept verbatim. See AgentContextCompactor.
+     */
+    compaction?: {
+      enabled?: boolean;
+      maxContextTokens?: number;
+      keepRecentMessages?: number;
+      strategy?: 'summarize' | 'truncate';
+      providerId?: string;
+      model?: string;
+    };
   };
 
   @Column({ type: 'json', nullable: true })
@@ -135,6 +149,45 @@ export class Agent {
   agentConfig: {
     canCallAgents?: boolean;
     canCreateAgents?: boolean;
+    /**
+     * Autonomous verify: a refute-only checker panel reviews the agent's final
+     * answer. On failure (within the revision budget) the failures are fed back
+     * as synthetic user feedback and the agent loops again. Checkers pick their
+     * vendor per-checker via providerId (multi-vendor = different-vendor
+     * provider entities). Mirrors the pipeline `verify` node's config.
+     */
+    verify?: {
+      enabled?: boolean;
+      checkers: Array<{
+        name?: string;
+        providerId: string;
+        model?: string;
+        instructions?: string;
+        temperature?: number;
+        maxTokens?: number;
+      }>;
+      policy?: 'all_pass' | 'majority' | 'any_fail_blocks';
+      spec?: string;
+      maxReviseLoops?: number;
+      /**
+       * When verify fires. `on_final_output` (default) gates the final answer
+       * and can send it back for revision. `every_n_steps` and `on_tool_result`
+       * are advisory mid-run checks that inject course-correction feedback
+       * without ending the run.
+       */
+      triggers?: Array<'on_final_output' | 'every_n_steps' | 'on_tool_result'>;
+      everyNSteps?: number;
+    };
+    /**
+     * Failure-memory constraints. `enabled` injects active constraints into the
+     * system prompt; `autoLearn` records a new constraint when a run fails.
+     * See AgentConstraint / AgentConstraintsService.
+     */
+    constraints?: {
+      enabled?: boolean;
+      autoLearn?: boolean;
+      distill?: { providerId: string; model?: string };
+    };
   };
 
   @Column({ default: false })

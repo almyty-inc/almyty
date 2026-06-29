@@ -276,7 +276,7 @@ export class LlmProvider {
       case LlmProviderType.ANTHROPIC:
         return this.configuration.apiUrl || 'https://api.anthropic.com/v1';
       case LlmProviderType.GOOGLE:
-        return this.configuration.apiUrl || 'https://generativelanguage.googleapis.com/v1';
+        return this.configuration.apiUrl || 'https://generativelanguage.googleapis.com/v1beta';
       case LlmProviderType.MISTRAL:
         return this.configuration.apiUrl || 'https://api.mistral.ai/v1';
       case LlmProviderType.XAI:

@@ -281,6 +281,19 @@ export interface Agent {
   agentConfig?: {
     canCallAgents?: boolean
     canCreateAgents?: boolean
+    verify?: {
+      enabled?: boolean
+      checkers?: Array<{ name?: string; providerId?: string; model?: string; instructions?: string }>
+      policy?: 'all_pass' | 'majority' | 'any_fail_blocks'
+      spec?: string
+      maxReviseLoops?: number
+      triggers?: Array<'on_final_output' | 'every_n_steps' | 'on_tool_result'>
+      everyNSteps?: number
+    }
+    constraints?: {
+      enabled?: boolean
+      autoLearn?: boolean
+    }
   }
   isTemporary?: boolean
   collaboration?: {
