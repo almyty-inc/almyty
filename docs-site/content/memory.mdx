@@ -1,116 +1,111 @@
 # Memory
 
-Memory gives an agent recall across runs. It stores facts, preferences, context,
-past episodes, and standing instructions, and pulls the relevant ones back into
-the prompt by **semantic (embedding) search** — so the agent remembers what
-matters without you restating it every time.
+Memory gives an agent recall across runs. Each memory is a piece of context —
+content plus an embedding — stored with a **scope**, a **tier**, and a validity
+period. At run time the agent retrieves the relevant ones by meaning and folds
+them into the prompt, so it remembers what matters without you restating it.
 
 Memory is distinct from [constraints](/agents/autonomous#constraints):
-constraints are always-on prompt rules that gate behavior; memory is retrieved
-per turn by relevance.
+constraints are always-on prompt rules; memory is retrieved per turn by
+relevance.
 
-![Memory](/screenshots/memory.png)
+![The Memory page — entries with their tier and bi-temporal/backend views](/screenshots/memory.png)
 
-## In the UI
+## Tiers: short-term to long-term
 
-1. Navigate to **Agents** in the sidebar and open an agent's detail page
-2. Click the **Memory** tab to view all memories associated with this agent
-3. Click **Add Memory** to create a memory manually
-4. Enter the content, select a type and scope, and click **Save**
-5. To edit or delete a memory, click the row and use the action buttons
+The backend organizes memory into **tiers**, not fixed types. The tier decides
+how long a memory lives and how it is used.
 
-Agents can also create memories automatically during conversations when configured with memory-enabled instructions.
+| Tier | What it holds | Retention |
+|------|---------------|-----------|
+| **Short** | Session / ephemeral observations | Optional TTL; swept when it expires |
+| **Project** | Work-product for an ongoing task | Medium |
+| **Long** | Durable facts and preferences | No expiry |
+| **Shared** | Cross-agent workspace knowledge | No expiry |
 
-## Via the API
+Short-term memory is captured continuously. An hourly **consolidation** job
+distills aging short-term rows into long-term facts (via an LLM), and a TTL
+sweeper retires short rows once they expire — but nothing is lost (see
+[bi-temporal](#bi-temporal-history) below). So an agent accrues observations,
+and the important ones graduate to durable memory on their own.
 
-### Create a memory
+> The **fact / preference / context / episode / instruction** labels you see in
+> the UI are friendly names mapped onto tiers (fact, preference, instruction →
+> long; context → short; episode → project). They are a convenience, not a
+> separate taxonomy — the system stores a tier.
+
+## Two modes
+
+- **Memory** — facts, preferences, and observations an agent accumulates.
+- **Document** — source documents you load for retrieval; they are chunked and
+  versioned so the agent can cite from a knowledge base.
+
+## How retrieval works
+
+Retrieval is **hybrid search**: vector similarity (pgvector, cosine) blended with
+Postgres full-text search, then filtered by scope, tier, tags, and validity.
+Embeddings are generated per scope (OpenAI `text-embedding-3-small` today, with a
+deterministic fallback) and computed asynchronously, so a new memory becomes
+searchable a moment after it is written.
+
+## Bi-temporal history
+
+Memory tracks two timelines, so you can ask not just *what is true* but *what the
+agent knew, and when*:
+
+- **Valid time** — when a memory is true in the agent's world.
+- **Transaction time** — when it was written.
+
+Updating a memory does not overwrite it: almyty writes a new current row and
+closes the old one. Expiry and consolidation also **close** rows rather than
+delete them. Because nothing is destroyed, an "as-of" query can reconstruct
+exactly what the agent knew at any past moment.
+
+## Multiple backends
+
+almyty-native (Postgres + pgvector) is the full-featured default — it is the
+backend with bi-temporal history, TTL, and hybrid search. But memory is
+pluggable: a per-scope router can point a scope at a different store, so you can
+bring your own.
+
+| Backend | Notes |
+|---------|-------|
+| **almyty-native** | Default; full feature set |
+| Anthropic memory tool | |
+| mem0 | |
+| Zep | |
+| Supermemory | |
+| Vertex Memory Bank | Google Vertex |
+
+Operations a backend does not support fall back to almyty-native or return a
+clean error, so a scope is never silently broken.
+
+## Sync
+
+A scope can mirror to a second backend. Every write is best-effort mirrored, and
+a scheduled reconciliation job keeps the two in lockstep (last-write-wins), so a
+dropped mirror write heals on its own. Use it to keep almyty-native and an
+external store (mem0, Zep, …) eventually consistent.
+
+## Scoping
+
+Every memory belongs to a scope — `user`, `workspace`, `project`, or `collab` —
+and every query filters on it. That scope is the isolation boundary: an agent
+only ever reads memory it is entitled to.
+
+## Add a memory
+
+In the UI: open an agent's **Memory** tab and click **Add Memory**, or let the
+agent save them automatically during a run. A minimal write over the API:
 
 ```bash
-curl -X POST /memories \
+curl -X POST https://api.almyty.com/memories \
   -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "content": "The user prefers concise responses under 200 words",
-    "type": "preference",
-    "scope": "agent",
-    "agentId": "agent-uuid"
-  }'
+  -d '{ "content": "The user prefers concise replies under 150 words",
+        "tier": "long", "scope": { "type": "user", "id": "<user-id>" } }'
 ```
 
-### List memories
+## Related
 
-```bash
-curl "/memories?agentId=agent-uuid" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Update a memory
-
-```bash
-curl -X PATCH /memories/{id} \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "content": "The user prefers concise responses under 150 words"
-  }'
-```
-
-### Delete a memory
-
-```bash
-curl -X DELETE /memories/{id} \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Search memories
-
-Memories are embedded as vectors for semantic search. Query by meaning, not just keywords:
-
-```bash
-curl -X POST /memories/search \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "response length preference",
-    "agentId": "agent-uuid",
-    "limit": 5
-  }'
-```
-
-## Memory types
-
-| Type | Description | Example |
-|------|-------------|---------|
-| `fact` | Objective information the agent has learned | "The company uses PostgreSQL 16" |
-| `preference` | User or behavioral preferences | "Prefers bullet points over paragraphs" |
-| `context` | Background context for ongoing work | "Currently migrating from v2 to v3 API" |
-| `episode` | Record of a past interaction or event | "On 2026-03-15, user asked to reset their API keys" |
-| `instruction` | Standing instructions that guide behavior | "Always include error handling in code examples" |
-
-## Scopes
-
-| Scope | Visibility | Use case |
-|-------|------------|----------|
-| `agent` | Single agent only | Agent-specific knowledge and preferences |
-| `shared` | All agents in the organization | Cross-agent knowledge (e.g., company coding standards) |
-| `global` | All agents across all organizations (admin) | Platform-wide instructions |
-
-## Configuration reference
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `content` | string | The memory text |
-| `type` | string | One of: `fact`, `preference`, `context`, `episode`, `instruction` |
-| `scope` | string | One of: `agent`, `shared`, `global` |
-| `agentId` | string | Required when scope is `agent` |
-| `metadata` | object | Optional key-value pairs for tagging |
-
-## How agents use memory
-
-During execution, the agent's memory module:
-
-1. Retrieves relevant memories via semantic search using the current conversation context
-2. Injects matching memories into the LLM prompt as additional context
-3. Optionally auto-saves new facts discovered during the conversation
-
-Configure memory behavior in the agent's settings under **Memory** -- toggle auto-save, set the maximum number of memories injected per turn, and choose which scopes to include.
+- [Autonomous agents](/agents/autonomous) — enable memory on an agent
+- [AI Models](/llm-providers) — the provider that generates embeddings
