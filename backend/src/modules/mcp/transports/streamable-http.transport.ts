@@ -71,6 +71,8 @@ const REPLAY_BUFFER_MAX = 256;
 const STALE_AFTER_MS = 5 * 60 * 1000;
 /** TTL for the cross-pod session registry; refreshed on activity. */
 const SESSION_REGISTRY_TTL_S = 600;
+/** SSE keep-alive comment cadence — well under typical proxy idle timeouts. */
+const KEEPALIVE_INTERVAL_MS = 15_000;
 /** Redis channels for cross-replica delivery (see the multi-replica note). */
 const CH_OUT = 'strm:out';   // server->client frames, fan to the stream-holding pod
 const CH_RESP = 'strm:resp'; // client->server responses, fan to the dispatching pod
@@ -108,6 +110,10 @@ export class StreamableHttpTransport extends EventEmitter {
   private gcInterval?: NodeJS.Timeout;
   /** Dedicated subscriber connection (ioredis requires one for sub mode). */
   private subscriber?: Redis.Redis;
+  /** This replica's id, for cross-pod diagnostic logs. */
+  private readonly podId = process.env.HOSTNAME ?? process.env.POD_NAME ?? `pid${process.pid}`;
+  /** Session ids this pod minted (vs adopted) — diagnostic only. */
+  private readonly sessionMintedHere = new Set<string>();
 
   constructor(
     private readonly mcpService: McpService,
@@ -258,19 +264,38 @@ export class StreamableHttpTransport extends EventEmitter {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Mcp-Session-Id', session.id);
+    // Tell nginx/proxies NOT to buffer this response — without it the
+    // ingress holds events and can close the connection as idle.
+    res.setHeader('X-Accel-Buffering', 'no');
     // SSE responses must flush headers before the first event, otherwise
     // some intermediaries hold the connection until first byte.
     res.flushHeaders?.();
 
+    const adopted = !this.sessionMintedHere.has(session.id);
+    const preempting = !!(session.stream && !session.stream.destroyed);
+    this.logger.log(`[strm] open session=${session.id} pod=${this.podId} adopted=${adopted} preempt=${preempting}`);
+
     // Preempt prior stream if any.
-    if (session.stream && !session.stream.destroyed) {
-      try { session.stream.end(); } catch { /* already gone */ }
+    if (preempting) {
+      try { session.stream!.end(); } catch { /* already gone */ }
     }
     session.stream = res;
     session.lastActivity = new Date();
 
+    // SSE keep-alive: send a comment frame periodically so idle streams (no
+    // events for a while) aren't closed by the client, nginx, or the LB.
+    // Without this an idle command stream gets reaped and the runner sees
+    // "stream ended" → reconnect churn → unreliable dispatch.
+    const keepAlive = setInterval(() => {
+      if (res.destroyed) return;
+      try { res.write(': keep-alive\n\n'); } catch { /* */ }
+    }, KEEPALIVE_INTERVAL_MS);
+    keepAlive.unref?.();
+
     res.on('close', () => {
+      clearInterval(keepAlive);
       if (session.stream === res) session.stream = null;
+      this.logger.log(`[strm] close session=${session.id} pod=${this.podId}`);
     });
 
     const lastEventId = (req.header('Last-Event-ID') || '').trim();
@@ -391,6 +416,7 @@ export class StreamableHttpTransport extends EventEmitter {
       lastActivity: new Date(),
     };
     this.sessions.set(id, session);
+    this.sessionMintedHere.add(id);
     this.registerSession(session); // cross-pod registry (no-op without redis)
     return session;
   }
