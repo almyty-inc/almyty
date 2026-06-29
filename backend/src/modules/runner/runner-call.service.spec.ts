@@ -27,8 +27,8 @@ class FakeTransport extends EventEmitter {
     return new Promise((resolve) => this.waiters.push(resolve));
   }
   /** Helper to simulate a runner-side response or error envelope. */
-  emitEnvelope(env: WorkerEnvelope): void {
-    this.emit('envelope', env);
+  emitEnvelope(env: WorkerEnvelope, session?: { id: string; organizationId: string }): void {
+    this.emit('envelope', env, session);
   }
 }
 
@@ -58,7 +58,26 @@ class FakeRunnerService {
   async getActiveSession(_id: string): Promise<RunnerSession | null> {
     return this.session;
   }
+  // Liveness wiring spies.
+  sessionConnects: Array<{ runnerId: string; sessionId: string }> = [];
+  heartbeats: string[] = [];
+  sessionToRunner: Record<string, string> = {};
+  async onSessionConnect(runnerId: string, streamableSessionId: string): Promise<any> {
+    this.sessionConnects.push({ runnerId, sessionId: streamableSessionId });
+    this.sessionToRunner[streamableSessionId] = runnerId;
+    return {};
+  }
+  async runnerIdForSession(streamableSessionId: string): Promise<string | null> {
+    return this.sessionToRunner[streamableSessionId] ?? null;
+  }
+  async heartbeat(runnerId: string): Promise<Runner> {
+    this.heartbeats.push(runnerId);
+    return this.runner;
+  }
 }
+
+/** Flush pending microtasks so fire-and-forget liveness handlers settle. */
+const flush = () => new Promise((r) => setTimeout(r, 0));
 
 function makeService() {
   const runners = new FakeRunnerService();
@@ -205,5 +224,63 @@ describe('RunnerCallService', () => {
     expect(svc.getPendingCount()).toBe(0);
     expect(transport.listenerCount('envelope')).toBe(0);
     await expect(p).rejects.toBeInstanceOf(RunnerCallError);
+  });
+
+  // ── liveness wiring (regression: heartbeats were dropped → never online) ──
+
+  it('runner.hello links the session to the runner', async () => {
+    const { runners, transport } = makeService();
+    transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e1', ts: Date.now(), payload: { kind: 'runner.hello', runnerId: 'runner-1' } },
+      { id: 'sh_session_1', organizationId: 'org-1' },
+    );
+    await flush();
+    expect(runners.sessionConnects).toEqual([{ runnerId: 'runner-1', sessionId: 'sh_session_1' }]);
+  });
+
+  it('heartbeat envelope updates the runner via the linked session', async () => {
+    const { runners, transport } = makeService();
+    // hello first to establish the session->runner link
+    transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e1', ts: Date.now(), payload: { kind: 'runner.hello', runnerId: 'runner-1' } },
+      { id: 'sh_session_1', organizationId: 'org-1' },
+    );
+    await flush();
+    transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: { ts: Date.now(), inUse: 0 } },
+      { id: 'sh_session_1', organizationId: 'org-1' },
+    );
+    await flush();
+    expect(runners.heartbeats).toEqual(['runner-1']);
+  });
+
+  it('heartbeat resolves the runner from the DB when not cached (cross-replica)', async () => {
+    const { runners, transport } = makeService();
+    // No hello on THIS instance; the link exists only in the shared store.
+    runners.sessionToRunner['sh_session_2'] = 'runner-1';
+    transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: { ts: Date.now(), inUse: 0 } },
+      { id: 'sh_session_2', organizationId: 'org-1' },
+    );
+    await flush();
+    expect(runners.heartbeats).toEqual(['runner-1']);
+  });
+
+  it('heartbeat for an unmapped session is dropped without throwing', async () => {
+    const { runners, transport } = makeService();
+    transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: { ts: Date.now(), inUse: 0 } },
+      { id: 'sh_unknown', organizationId: 'org-1' },
+    );
+    await flush();
+    expect(runners.heartbeats).toEqual([]);
+  });
+
+  it('liveness envelopes are ignored when no session is provided', async () => {
+    const { runners, transport } = makeService();
+    transport.emitEnvelope({ v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: {} });
+    await flush();
+    expect(runners.heartbeats).toEqual([]);
+    expect(runners.sessionConnects).toEqual([]);
   });
 });

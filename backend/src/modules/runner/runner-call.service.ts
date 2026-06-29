@@ -72,11 +72,19 @@ interface PendingCall {
  * mid-call, the call times out (the runner could reconnect inside
  * the timeout window and still deliver).
  */
+/** Minimal shape of the transport session passed alongside each envelope. */
+interface EnvelopeSession {
+  id: string;
+  organizationId: string;
+}
+
 @Injectable()
 export class RunnerCallService implements OnModuleDestroy {
   private readonly logger = new Logger(RunnerCallService.name);
   private readonly pending = new Map<string, PendingCall>();
-  private readonly envelopeListener: (env: WorkerEnvelope) => void;
+  private readonly envelopeListener: (env: WorkerEnvelope, session?: EnvelopeSession) => void;
+  /** Fast local cache: streamable session id -> runner id (from runner.hello). */
+  private readonly sessionRunners = new Map<string, string>();
 
   private static readonly DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -84,7 +92,7 @@ export class RunnerCallService implements OnModuleDestroy {
     private readonly runners: RunnerService,
     private readonly transport: StreamableHttpTransport,
   ) {
-    this.envelopeListener = (env) => this.onEnvelope(env);
+    this.envelopeListener = (env, session) => this.onEnvelope(env, session);
     this.transport.on('envelope', this.envelopeListener);
   }
 
@@ -197,7 +205,49 @@ export class RunnerCallService implements OnModuleDestroy {
     return this.pending.size;
   }
 
-  private onEnvelope(env: WorkerEnvelope): void {
+  /**
+   * Handle runner.hello (link session -> runner) and heartbeat (refresh
+   * lastHeartbeatAt + recompute state) envelopes.
+   */
+  private async onLivenessEnvelope(env: WorkerEnvelope, session?: EnvelopeSession): Promise<void> {
+    if (!session) return;
+
+    if (env.type === 'event') {
+      const payload = env.payload as { kind?: string; runnerId?: string } | undefined;
+      if (payload?.kind === 'runner.hello' && payload.runnerId) {
+        this.sessionRunners.set(session.id, payload.runnerId);
+        await this.runners.onSessionConnect(payload.runnerId, session.id);
+      }
+      // runner.draining and other events are observational here.
+      return;
+    }
+
+    if (env.type === 'heartbeat') {
+      const runnerId =
+        this.sessionRunners.get(session.id) ??
+        (await this.runners.runnerIdForSession(session.id));
+      if (!runnerId) {
+        this.logger.debug(`heartbeat for unmapped session ${session.id} dropped`);
+        return;
+      }
+      this.sessionRunners.set(session.id, runnerId);
+      await this.runners.heartbeat(runnerId);
+    }
+  }
+
+  private onEnvelope(env: WorkerEnvelope, session?: EnvelopeSession): void {
+    // Liveness/connection envelopes from the runner. These are keyed only by
+    // the streamable session, so we map session -> runner and update the
+    // runner row. Without this wiring, heartbeats were dropped and a runner
+    // could never leave 'registered' (never showed online). Fire-and-forget
+    // with logging: the transport listener is synchronous.
+    if (env.type === 'event' || env.type === 'heartbeat') {
+      void this.onLivenessEnvelope(env, session).catch((err) =>
+        this.logger.warn(`liveness envelope handling failed: ${err?.message ?? err}`),
+      );
+      return;
+    }
+
     if (env.type !== 'response' && env.type !== 'error') return;
     const call = this.pending.get(env.id);
     if (!call) {
