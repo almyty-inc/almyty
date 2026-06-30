@@ -94,8 +94,12 @@ export function AgentDetailPage() {
   const { data: entityVersionsData } = useQuery({
     queryKey: ['entity-versions', 'Agent', id],
     queryFn: async () => {
+      // apiGet already unwraps the {success, data} envelope via extractData,
+      // so `res` is the versions array itself — `res.data` would double-unwrap
+      // to undefined and silently empty the Change History. Match the other
+      // list callers in this file.
       const res = await versionsApi.getVersions('Agent', id!)
-      return res?.data || []
+      return Array.isArray(res) ? res : (res?.data || [])
     },
     enabled: !!id,
   })
