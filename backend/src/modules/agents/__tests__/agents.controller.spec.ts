@@ -19,6 +19,7 @@ describe('AgentsController', () => {
   let runsController: AgentRunsController;
   let agentsService: jest.Mocked<AgentsService>;
   let executionEngine: jest.Mocked<AgentExecutionEngine>;
+  let runtimeService: jest.Mocked<AgentRuntimeService>;
 
   const mockRequest = {
     user: {
@@ -111,6 +112,7 @@ describe('AgentsController', () => {
     runsController = module.get<AgentRunsController>(AgentRunsController);
     agentsService = module.get(AgentsService);
     executionEngine = module.get(AgentExecutionEngine);
+    runtimeService = module.get(AgentRuntimeService);
   });
 
   describe('createAgent', () => {
@@ -331,6 +333,34 @@ describe('AgentsController', () => {
 
       expect(result.success).toBe(false);
       expect(result.data).toBe(mockExecution);
+    });
+
+    it('routes autonomous agents to the runtime (startRun), not the pipeline engine', async () => {
+      const invokeDto = { input: { message: 'escalate this' } };
+      const mockAgent = {
+        id: 'agent-1',
+        status: AgentStatus.ACTIVE,
+        mode: 'autonomous',
+      } as any;
+      const mockRun = { id: 'run-1', status: 'running' } as any;
+
+      agentsService.getAgent.mockResolvedValue(mockAgent);
+      runtimeService.startRun.mockResolvedValue(mockRun);
+
+      const result = await executionController.invokeAgent('agent-1', invokeDto as any, mockRequest);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBe(mockRun);
+      expect(result.message).toBe('Autonomous agent run started');
+      expect(runtimeService.startRun).toHaveBeenCalledWith(
+        'agent-1',
+        'org-1',
+        'user-1',
+        invokeDto.input,
+      );
+      // The pipeline engine must NOT be used for autonomous agents — that path
+      // returns an empty "completed" run and the agent never actually runs.
+      expect(executionEngine.execute).not.toHaveBeenCalled();
     });
 
     it('should throw when agent is not active', async () => {

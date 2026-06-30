@@ -18,6 +18,7 @@ import { Response } from 'express';
 
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
+import { AgentRuntimeService } from './agent-runtime.service';
 import { AgentStatus } from '../../entities/agent.entity';
 import { InvokeAgentDto } from './dto/invoke-agent.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -38,6 +39,7 @@ export class AgentExecutionController {
   constructor(
     private readonly agentsService: AgentsService,
     private readonly executionEngine: AgentExecutionEngine,
+    private readonly runtimeService: AgentRuntimeService,
   ) {}
 
   @Post(':id/invoke')
@@ -72,6 +74,25 @@ export class AgentExecutionController {
           { success: false, message: 'Agent must be active to invoke', error: 'AGENT_NOT_ACTIVE' },
           HttpStatus.BAD_REQUEST,
         );
+      }
+
+      // Autonomous agents have no pipeline graph to execute; routing them
+      // through the pipeline engine silently returns an empty "completed"
+      // run (zero nodeResults, null output). Dispatch to the autonomous
+      // runtime (the ReAct loop) instead so the agent actually runs and can
+      // reach its built-in tools (wait, ask_user, request_approval, memory).
+      if (agent.mode === 'autonomous') {
+        const run = await this.runtimeService.startRun(
+          id,
+          organizationId,
+          userId,
+          invokeDto.input,
+        );
+        return {
+          success: true,
+          data: run,
+          message: 'Autonomous agent run started',
+        };
       }
 
       const execution = await this.executionEngine.execute(
