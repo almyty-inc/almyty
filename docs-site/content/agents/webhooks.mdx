@@ -1,122 +1,50 @@
 # Webhooks
 
-Agents can be triggered via webhooks, allowing external systems to invoke agent
-pipelines through HTTP POST requests without API key authentication.
+A webhook lets almyty notify your systems when an agent **finishes a run**. Give
+an agent a webhook URL and almyty sends it a POST with the execution result —
+status, output, cost, and tokens — so downstream systems can react without
+polling.
 
+![The Webhook config on an agent — a URL almyty calls when the run finishes](/screenshots/webhook-config.png)
 
-![Webhook settings on the agent](/screenshots/agent-builder.png)
-## In the UI
+## Set it up
 
-### Enabling Webhooks
+On the agent's detail page, turn on the webhook, paste the URL almyty should
+call, and save. From then on, every completed run POSTs to that URL.
 
-1. Open the agent's detail page
-2. Click the **Webhooks** tab
-3. Toggle **Enable Webhook**
-4. Copy the generated webhook URL
-5. Optionally configure authentication (Bearer token or HMAC signature)
+The request is hardened: the target URL is validated against SSRF (no internal
+or link-local hosts), redirects are not followed, and the call times out quickly.
+A failed webhook is logged but never fails the run.
 
-### Viewing Webhook Executions
+## What you receive
 
-1. Open the agent's detail page
-2. Click the **Executions** tab
-3. Filter by **Trigger: webhook** to see only webhook-initiated runs
-
-## Via the API
-
-### Enable Webhooks
-
-```bash
-curl -X PATCH /agents/{id} \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "webhookEnabled": true
-  }'
-```
-
-When enabled, the agent receives a unique webhook URL:
-
-```
-https://api.almyty.com/agents/{id}/webhook
-```
-
-### Trigger via Webhook
-
-Send a POST request to the webhook URL with the agent's expected input:
-
-```bash
-curl -X POST /agents/{id}/webhook \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Process this incoming data",
-    "payload": { "key": "value" }
-  }'
-```
-
-Webhook invocations return immediately with an execution ID:
+almyty POSTs this JSON when a run completes:
 
 ```json
 {
-  "success": true,
-  "data": {
-    "executionId": "exec-uuid",
-    "status": "running"
+  "event": "agent.execution.completed",
+  "timestamp": "2026-06-30T09:08:00.000Z",
+  "agent": { "id": "<agent-id>", "name": "Customer Support Orchestrator" },
+  "execution": {
+    "id": "<execution-id>",
+    "status": "completed",
+    "output": { "...": "the agent's result (truncated if very large)" },
+    "executionTime": 17700,
+    "totalCost": 0.0581,
+    "totalTokens": 2364,
+    "error": null
   }
 }
 ```
 
-Poll the execution endpoint for the result:
+## Triggering an agent
 
-```bash
-curl /agents/{id}/executions/{executionId} \
-  -H "Authorization: Bearer $TOKEN"
-```
+A webhook is for *outbound* notifications, not for starting a run. To **invoke**
+an agent from an external system, call the
+[OpenAI-compatible API](/api-reference/openai-compatible) or the agent's invoke
+endpoint, or run it on a [schedule](/agents/scheduling).
 
-## Authentication
+## Related
 
-Webhooks support two authentication methods:
-
-### Bearer Token
-
-Include the agent's webhook secret in the Authorization header:
-
-```bash
-curl -X POST /agents/{id}/webhook \
-  -H "Authorization: Bearer {webhook-secret}" \
-  -H "Content-Type: application/json" \
-  -d '{ "message": "Hello" }'
-```
-
-### HMAC Signature
-
-For integrations that support webhook signatures (GitHub, Stripe, etc.),
-configure HMAC verification:
-
-| Header | Description |
-|--------|-------------|
-| `X-Webhook-Signature` | HMAC-SHA256 hex digest of the request body |
-
-```bash
-SIGNATURE=$(echo -n '{"message":"Hello"}' | \
-  openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
-
-curl -X POST /agents/{id}/webhook \
-  -H "X-Webhook-Signature: sha256=$SIGNATURE" \
-  -H "Content-Type: application/json" \
-  -d '{"message":"Hello"}'
-```
-
-## Use Cases
-
-| Integration | Description |
-|-------------|-------------|
-| **GitHub** | Trigger agents on push, PR, or issue events |
-| **Stripe** | Process payment events with AI analysis |
-| **Slack** | Respond to messages or slash commands |
-| **Custom Apps** | Any system that can make HTTP POST requests |
-
-## Rate Limits
-
-Webhook endpoints are rate-limited to **100 requests per minute** with a maximum
-of **10 concurrent** executions. Requests exceeding the limit receive a
-`429 Too Many Requests` response with a `Retry-After` header.
+- [Scheduling](/agents/scheduling) — run an agent on a recurring interval
+- [OpenAI-compatible API](/api-reference/openai-compatible) — invoke an agent
