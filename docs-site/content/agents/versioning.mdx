@@ -1,112 +1,47 @@
 # Versioning and Rollback
 
-almyty tracks versions of your agent pipelines, letting you save snapshots,
-compare changes, and roll back to a previous configuration.
+almyty tracks how an agent changes over time in two layers: an **audit log**
+that records every change automatically, and **version snapshots** you save as
+named restore points and can roll back to.
 
+## Audit log
 
-![Agent versions in the builder](/screenshots/agent-builder.png)
-## In the UI
+Every change to an agent — created, configuration updated, tools changed,
+activated, a version saved, a rollback, an invocation — is recorded
+automatically, with the timestamp, the user, and what changed. It is the live
+history of the agent; nothing to turn on.
 
-### Saving a Version
-
-1. Open the agent in the builder
-2. Click the **Versions** tab in the agent detail header
-3. Click **Save Version**
-4. Enter a changelog describing what changed
-5. Click **Confirm** -- the snapshot is stored with an auto-incremented version number
-
-### Viewing Version History
-
-1. Open the agent detail page
-2. Click the **Versions** tab
-3. The version list shows each snapshot with its version number, changelog, author, and timestamp
-
-### Rolling Back
-
-1. Open the **Versions** tab
-2. Find the version you want to restore
-3. Click **Rollback** next to that version
-4. Confirm the rollback -- the agent's pipeline is replaced with the snapshot
-5. The rollback is recorded in the audit log as a separate event
-
-Rolling back does not delete newer versions. You can roll forward to any later
-version at any time.
-
-## Via the API
-
-### Save a Version
-
-```bash
-curl -X POST /agents/{id}/versions \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "changelog": "Added error handling branch and retry logic"
-  }'
-```
-
-Response:
-
-```json
-{
-  "success": true,
-  "data": {
-    "versionIndex": 3,
-    "changelog": "Added error handling branch and retry logic",
-    "createdAt": "2026-03-20T14:30:00Z",
-    "pipeline": { "..." }
-  }
-}
-```
-
-### List Versions
-
-```bash
-curl /agents/{id}/versions \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-Returns an array of version snapshots:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `versionIndex` | number | Sequential version number |
-| `changelog` | string | Description of changes |
-| `createdAt` | string | ISO 8601 timestamp |
-| `pipeline` | object | Full pipeline snapshot at that version |
-
-### Roll Back
-
-```bash
-curl -X POST /agents/{id}/versions/{versionIndex}/rollback \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-## Audit Log
-
-Every agent change is recorded in the audit log:
-
-```bash
-curl /agents/{id}/audit-log \
-  -H "Authorization: Bearer $TOKEN"
-```
+![The Audit Log on an agent — every change tracked with who, when, and what](/screenshots/versioning-audit.png)
 
 | Event | Description |
 |-------|-------------|
 | `created` | Agent was created |
-| `updated` | Pipeline or metadata was modified |
-| `activated` | Agent status changed to active |
-| `deactivated` | Agent status changed to inactive |
+| `updated` | Configuration, pipeline, or tools were modified |
+| `activated` / `deactivated` | Status changed |
 | `version_saved` | A version snapshot was created |
 | `rolled_back` | Pipeline was restored from a previous version |
 | `invoked` | Agent was executed |
 
-Each entry includes the timestamp, the user who performed the action, and
-relevant metadata.
+## Version snapshots and rollback
 
-## Best Practices
+When you are about to make a big change, save a snapshot first. On the agent's
+**Versions** tab, click **Save Version** and write a short changelog; almyty
+stores the full configuration with an auto-incremented version number. To
+restore one, find it in the list and click **Rollback** — the agent's
+configuration is replaced with that snapshot, and the rollback itself is recorded
+in the audit log. Rolling back never deletes newer versions, so you can roll
+forward again at any time.
 
-1. **Save versions before major changes** -- create a snapshot before restructuring the pipeline
-2. **Write meaningful changelogs** -- future you will thank present you
-3. **Test after rollback** -- verify the agent works correctly with the restored pipeline
-4. **Review the audit log** -- understand how an agent evolved over time
+Save a version over the API:
+
+```bash
+curl -X POST https://api.almyty.com/agents/{id}/versions \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{ "changelog": "Added a Gemini reviewer to the verify panel" }'
+```
+
+## Good practice
+
+- Save a version before restructuring an agent, so there is always a restore point.
+- Write a real changelog — it is what makes the history useful later.
+- Test the agent after a rollback to confirm the restored configuration behaves.
