@@ -247,6 +247,13 @@ import { databaseConfig } from './config/database.config';
     MailModule,
     CredentialsModule,
     AgentsModule,
+    // VersionsModule must be registered BEFORE UnifiedEndpointModule: the
+    // unified gateway endpoint mounts a greedy root catch-all
+    // (@All(':orgSlug/:resourceSlug/*')) that otherwise shadows
+    // GET /versions/:entityType/:entityId — which 404'd every entity Change
+    // History (e.g. the agent version panel) since this module was never even
+    // in the imports array.
+    VersionsModule,
     PromotedSkillsModule,
     PromotedSkillReplayModule,
     AgentConstraintsModule,

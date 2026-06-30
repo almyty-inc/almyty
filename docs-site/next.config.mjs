@@ -5,8 +5,9 @@ import nextra from 'nextra'
 // nextra() call needs is the MDX-compilation config, or can
 // even be called with no args.
 const withNextra = nextra({
-  // Use Nextra's default pagefind-free search for now. Enable
-  // codeHighlight for the code samples in the API reference pages.
+  // Nextra 4 search is powered by Pagefind: the `postbuild` script
+  // indexes the built HTML into public/_pagefind, which the search
+  // component loads at runtime. codeHighlight is for the API samples.
   codeHighlight: true,
 })
 

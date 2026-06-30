@@ -2,8 +2,6 @@
 
 almyty can be self-hosted using Docker Compose for single-server deployments or Kubernetes with Kustomize for production clusters.
 
-![docker-compose.yml at the project root](/screenshots/self-hosting-compose.png)
-
 ## Docker Hub
 
 Official images are published to Docker Hub:
@@ -22,7 +20,47 @@ Tags: `latest` (most recent master build), `vX.Y.Z` (releases), `sha-XXXXXXX` (p
 
 ## Docker Compose
 
-The repository includes a `docker-compose.yml` that runs all services.
+The repository includes a `docker-compose.yml` that runs Postgres, Redis, the
+backend API, and the frontend (with an optional nginx profile for production):
+
+```yaml
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: almyty
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports: ["5433:5432"]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6380:6379"]
+    command: redis-server --appendonly yes
+
+  backend:
+    build: { context: ./backend, target: development }
+    ports: ["4000:3000"]
+    environment:
+      - DATABASE_HOST=postgres
+      - REDIS_HOST=redis
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  frontend:
+    build: { context: ./frontend }
+    ports: ["4001:3000"]
+    depends_on: [backend]
+
+volumes:
+  postgres_data:
+  redis_data:
+```
 
 ### Quick start
 
