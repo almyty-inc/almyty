@@ -26,6 +26,7 @@ import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from './agent-runtime-misc.helper';
 import { AgentStepProcessor } from './agent-step-processor';
 import { ApprovalsService } from '../approvals/approvals.service';
+import { BudgetsService } from '../budgets/budgets.service';
 
 /**
  * Built-in tool definitions that the agent runtime injects for autonomous agents.
@@ -148,6 +149,7 @@ export class AgentRuntimeService implements OnModuleInit {
     readonly processor: AgentStepProcessor,
     @Inject(forwardRef(() => ApprovalsService))
     readonly approvals: ApprovalsService,
+    readonly budgets: BudgetsService,
   ) {}
 
   /**
@@ -172,6 +174,15 @@ export class AgentRuntimeService implements OnModuleInit {
     if (agent.mode !== 'autonomous') {
       throw new BadRequestException('Agent is not in autonomous mode. Use /invoke for workflow agents.');
     }
+
+    // Cross-run spend-budget enforcement (P2 cost governance). Runs
+    // BEFORE any conversation/run row is created so a rejected run
+    // leaves no residue. For a `reject` budget this throws
+    // BudgetExceededException (403); for `warn_log` it records an alert
+    // and returns; with no matching budget it is a no-op. This is the
+    // org/period ceiling — the per-run `maxCostCents` cap below is
+    // unchanged and still stops an individual run mid-flight.
+    await this.budgets.enforceForRun(organizationId, agentId);
 
     // Enforce maxChainDepth: count how many ancestors the new run will have
     // by walking the parentRunId chain. The new run's nesting level equals

@@ -4,6 +4,7 @@ import {
   Activity,
   ArrowDownToLine,
   Bot,
+  DollarSign,
   Globe,
   MessageSquare,
   ScrollText,
@@ -21,6 +22,7 @@ import {
 } from '@/components/analytics/constants'
 import { AgentsTab } from '@/components/analytics/agents-tab'
 import { AuditTab } from '@/components/analytics/audit-tab'
+import { CostTab } from '@/components/analytics/cost-tab'
 import { GatewaysTab } from '@/components/analytics/gateways-tab'
 import { LlmTab } from '@/components/analytics/llm-tab'
 import { OverviewTab } from '@/components/analytics/overview-tab'
@@ -38,6 +40,7 @@ const TAB_DEFINITIONS: Array<{
   { key: 'gateways', label: 'Gateways', icon: Zap },
   { key: 'llm', label: 'LLM', icon: MessageSquare },
   { key: 'agents', label: 'Agents', icon: Bot },
+  { key: 'cost', label: 'Cost', icon: DollarSign },
   { key: 'audit', label: 'Audit Trail', icon: ScrollText },
 ]
 
@@ -119,6 +122,7 @@ export function AnalyticsPage() {
       {tab === 'gateways' && <GatewaysTab />}
       {tab === 'llm' && <LlmTab />}
       {tab === 'agents' && <AgentsTab />}
+      {tab === 'cost' && <CostTab />}
       {tab === 'audit' && <AuditTab />}
     </div>
   )
