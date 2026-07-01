@@ -86,6 +86,7 @@ import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LicensingModule } from './modules/licensing/licensing.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
+import { ProviderUsageModule } from './modules/provider-usage/provider-usage.module';
 import { SsoModule } from './modules/sso/sso.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { AuditExportModule } from './modules/audit-export/audit-export.module';
@@ -286,6 +287,7 @@ import { databaseConfig } from './config/database.config';
     ApprovalPoliciesModule,
     EeStubsModule,
     BudgetsModule,
+    ProviderUsageModule,
     SsoModule,
     BillingModule,
     ToolHubModule,

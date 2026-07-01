@@ -622,6 +622,15 @@ export const budgetsApi = {
   delete: (id: string) => apiDel(`/budgets/${id}`),
 }
 
+// Provider usage / cost reconciliation API (P7 — provider-actual vs our estimate)
+export const providerUsageApi = {
+  getReconciliation: (period: 'day' | 'month' = 'month') =>
+    apiGet(`/provider-usage/reconciliation?period=${period}`),
+  getCapabilities: () => apiGet('/provider-usage/capabilities'),
+  sync: (data: { from?: string; to?: string; providerId?: string } = {}) =>
+    apiPost('/provider-usage/sync', data),
+}
+
 // SSO / SCIM API (EE — gated by the `sso` entitlement)
 export const ssoApi = {
   getConfig: () => apiGet('/sso/settings'),
