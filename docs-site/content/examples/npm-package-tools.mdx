@@ -1,0 +1,27 @@
+# Turn an npm package into tools
+
+**Goal:** make the functions of an npm package — `stripe`, `@aws-sdk/client-s3`,
+`lodash` — callable by an agent, without writing wrappers.
+
+## 1. Point almyty at the package
+
+In **Tools → Create Tool**, choose **SDK** as the execution method and enter the
+package name and version (for example `stripe` at `^17.0.0`). Click **Discover**:
+almyty installs the package in a sandbox, introspects its exports, and infers a
+parameter schema for each function from the package's TypeScript types.
+
+## 2. Pick the functions you want
+
+Select which exported functions to turn into tools, review the auto-generated
+name, description, and parameters, and create them. Each becomes a JavaScript
+tool that `require()`s the package and runs in the same hardened sandbox as any
+other JavaScript tool.
+
+## 3. Use them like any tool
+
+Attach them to an agent, or publish them on a gateway alongside your API tools.
+No schema, no wrapper code.
+
+## Related
+
+- [SDK tools](/tools/sdk-tools) · [JavaScript tools](/tools/javascript-tools) · [Tools](/tools)
