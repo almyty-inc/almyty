@@ -1,41 +1,53 @@
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { generateKeyPairSync } from 'crypto';
 import { signLicense, verifyLicense } from '../license-token';
-import { DEFAULT_LICENSE_PUBLIC_KEY } from '../license.constants';
 import { LicenseService } from '../license.service';
 
 /**
- * Guards against the embedded default public key drifting out of sync with the
- * committed dev private key. If these ever mismatch, locally-minted dev tokens
- * silently stop working (and `mint-license.js` becomes useless).
+ * Round-trips the Ed25519 sign/verify path and LicenseService activation
+ * using an EPHEMERAL keypair generated at test time.
+ *
+ * We deliberately do NOT commit a private key to the repo: secret scanning
+ * blocks it, and — more importantly — the embedded DEFAULT_LICENSE_PUBLIC_KEY
+ * is a verification key whose private counterpart must never live in git, or
+ * anyone with the source could forge valid entitlement tokens. For local dev,
+ * `mint-license.js` takes the signing key via `--key`/env instead.
  */
-describe('dev keypair <-> built-in default public key', () => {
-  const devPrivatePem = readFileSync(
-    resolve(__dirname, '../../../../scripts/license/dev-private-key.pem'),
-    'utf8',
-  );
-
-  it('a token signed by the dev private key verifies against DEFAULT_LICENSE_PUBLIC_KEY', () => {
-    const token = signLicense(
-      { entitlements: ['example_ee_feature'], limits: {}, expiresAt: null },
-      devPrivatePem,
-    );
-
-    const result = verifyLicense(token, DEFAULT_LICENSE_PUBLIC_KEY);
-    expect(result.valid).toBe(true);
+describe('license keypair sign/verify round-trip', () => {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519', {
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   });
 
-  it('LicenseService activates a dev-minted token using only the built-in default key', () => {
+  it('a token signed by a private key verifies against its public key', () => {
+    const token = signLicense(
+      { entitlements: ['example_ee_feature'], limits: {}, expiresAt: null },
+      privateKey,
+    );
+    expect(verifyLicense(token, publicKey).valid).toBe(true);
+  });
+
+  it('LicenseService activates a signed token via a public-key override', () => {
     const token = signLicense(
       { entitlements: ['example_ee_feature'], limits: { seats: 3 }, expiresAt: null },
-      devPrivatePem,
+      privateKey,
     );
 
     const svc = new LicenseService();
-    // No publicKeyPem override → uses DEFAULT_LICENSE_PUBLIC_KEY.
-    svc.load({ token });
+    svc.load({ token, publicKeyPem: publicKey });
 
     expect(svc.has('example_ee_feature')).toBe(true);
     expect(svc.limit('seats')).toBe(3);
+  });
+
+  it('rejects a token whose signature does not match the public key', () => {
+    const other = generateKeyPairSync('ed25519', {
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    const token = signLicense(
+      { entitlements: ['example_ee_feature'], limits: {}, expiresAt: null },
+      privateKey,
+    );
+    expect(verifyLicense(token, other.publicKey).valid).toBe(false);
   });
 });
