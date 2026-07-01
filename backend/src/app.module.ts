@@ -47,6 +47,7 @@ import { ToolTemplate } from './entities/tool-template.entity';
 import { ExternalAgent } from './entities/external-agent.entity';
 import { SpendBudget } from './entities/spend-budget.entity';
 import { SpendAlert } from './entities/spend-alert.entity';
+import { OrgSsoConfig } from './entities/org-sso-config.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -84,6 +85,7 @@ import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LicensingModule } from './modules/licensing/licensing.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
+import { SsoModule } from './modules/sso/sso.module';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -176,6 +178,7 @@ import { databaseConfig } from './config/database.config';
       ExternalAgent,
       SpendBudget,
       SpendAlert,
+      OrgSsoConfig,
     ]),
 
     // Rate limiting — backed by Redis so limits are shared across replicas
@@ -272,6 +275,7 @@ import { databaseConfig } from './config/database.config';
     WorkspaceModule,
     LicensingModule,
     BudgetsModule,
+    SsoModule,
     ToolHubModule,
     A2AModule,
     AcpModule,
