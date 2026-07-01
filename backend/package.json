@@ -97,6 +97,7 @@
     "rxjs": "^7.8.2",
     "soap": "^1.9.1",
     "stream-json": "^2.1.0",
+    "stripe": "^22.3.0",
     "supermemory": "^4.21.1",
     "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.28",

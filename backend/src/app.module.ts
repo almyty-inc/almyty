@@ -48,6 +48,7 @@ import { ExternalAgent } from './entities/external-agent.entity';
 import { SpendBudget } from './entities/spend-budget.entity';
 import { SpendAlert } from './entities/spend-alert.entity';
 import { OrgSsoConfig } from './entities/org-sso-config.entity';
+import { BillingEvent } from './entities/billing-event.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -90,6 +91,7 @@ import { RbacModule } from './modules/rbac/rbac.module';
 import { AuditExportModule } from './modules/audit-export/audit-export.module';
 import { ApprovalPoliciesModule } from './modules/approval-policies/approval-policies.module';
 import { EeStubsModule } from './modules/ee-stubs/ee-stubs.module';
+import { BillingModule } from './modules/billing/billing.module';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -183,6 +185,7 @@ import { databaseConfig } from './config/database.config';
       SpendBudget,
       SpendAlert,
       OrgSsoConfig,
+      BillingEvent,
     ]),
 
     // Rate limiting — backed by Redis so limits are shared across replicas
@@ -284,6 +287,7 @@ import { databaseConfig } from './config/database.config';
     EeStubsModule,
     BudgetsModule,
     SsoModule,
+    BillingModule,
     ToolHubModule,
     A2AModule,
     AcpModule,
