@@ -597,6 +597,17 @@ export const analyticsApi = {
   },
 }
 
+// Cost governance API (spend visibility + budgets)
+export const budgetsApi = {
+  getSpend: (period: 'day' | 'month' = 'month', granularity = 'day') =>
+    apiGet(`/budgets/spend?period=${period}&granularity=${granularity}`),
+  getAlerts: (limit = 100) => apiGet(`/budgets/alerts?limit=${limit}`),
+  list: () => apiGet('/budgets'),
+  create: (data: any) => apiPost('/budgets', data),
+  update: (id: string, data: any) => apiPatch(`/budgets/${id}`, data),
+  delete: (id: string) => apiDel(`/budgets/${id}`),
+}
+
 // Agents API
 export const agentsApi = {
   getAll: () => apiGet('/agents'),
