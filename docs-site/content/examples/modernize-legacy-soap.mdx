@@ -1,0 +1,43 @@
+# Modernize a legacy SOAP service
+
+**Goal:** a core system from 2006 still runs the business over SOAP. Nobody wants to touch it,
+and no LLM speaks WSDL. Wrap it — untouched — as modern MCP tools an agent can call.
+
+## 1. Import the WSDL
+
+In **APIs → Connect API**, point almyty at the service's WSDL URL. It parses the definitions,
+maps each operation to a tool, and builds a JSON parameter schema from the XML types — so the
+1,200-line envelope becomes a clean, typed tool per operation.
+
+![Importing a schema — OpenAPI, GraphQL, SOAP/WSDL, or Protobuf](/screenshots/apis-import-dialog.png)
+
+SOAP is one of several parsers: OpenAPI, GraphQL, and Protobuf import the same way, so a mixed
+estate of old and new services all lands in one place.
+
+## 2. Review the generated tools
+
+Each operation shows up as a tool with its inputs, outputs, and the endpoint it calls. almyty
+handles the SOAP envelope, headers, and namespaces at call time; the agent only ever sees the
+typed interface.
+
+![A generated tool from the imported service](/screenshots/api-detail.png)
+
+## 3. Store the credentials once
+
+Legacy services usually want a WS-Security header or basic auth. Put those in the
+[Credentials](/credentials) vault and reference them from the tools — no secrets in prompts,
+one place to rotate them.
+
+## 4. Publish it forward
+
+Group the operations you want to expose and publish them on an **MCP** gateway. Now a modern
+agent — or Claude Code, or a partner's system — calls your 2006 service through a 2026
+interface, with auth, rate limits, and audit in front of it.
+
+![The published gateway with its endpoint and key auth](/screenshots/quickstart-gateway-mcp.png)
+
+You didn't migrate the legacy system. You gave it a new front door.
+
+## Related
+
+- [Connect an API](/tools) · [MCP gateway](/gateways/mcp) · [Credentials](/credentials) · [Give Claude your API](/examples/give-claude-your-api)

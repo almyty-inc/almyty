@@ -1,11 +1,15 @@
 export default {
   index: 'Overview',
   'give-claude-your-api': 'Give Claude your API',
+  'npm-package-tools': 'npm package as tools',
+  'modernize-legacy-soap': 'Modernize a legacy SOAP service',
   'self-checking-support-agent': 'Self-checking support agent',
   'multi-model-debate': 'Multi-model debate',
+  'agent-that-remembers': 'An agent that remembers',
   'promote-run-to-skill': 'Promote a run to a skill',
+  'scheduled-monitoring-agent': 'Scheduled monitoring agent',
+  'expose-any-machine': 'Give an agent a machine',
   'multi-vendor-coding-fleet': 'Multi-vendor coding fleet',
-  'npm-package-tools': 'npm package as tools',
   'governed-production-agent': 'Governed production agent',
   'air-gapped-self-host': 'Air-gapped self-host',
 }
