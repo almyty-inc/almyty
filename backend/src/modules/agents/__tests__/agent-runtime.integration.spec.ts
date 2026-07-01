@@ -24,6 +24,7 @@ import { AuditLogService } from '../../audit-log/audit-log.service';
 import { AgentVerifierHelper } from '../agent-verifier.helper';
 import { AgentContextCompactor } from '../agent-context-compactor.helper';
 import { AgentConstraintsService } from '../../agent-constraints/agent-constraints.service';
+import { BudgetsService } from '../../budgets/budgets.service';
 
 /**
  * Integration tests for AgentRuntimeService.
@@ -184,6 +185,7 @@ describe('AgentRuntimeService (integration)', () => {
         AgentVerifierHelper,
         AgentContextCompactor,
         { provide: AgentConstraintsService, useValue: { listActiveRules: jest.fn().mockResolvedValue([]), recordFromRun: jest.fn().mockResolvedValue(null) } },
+        { provide: BudgetsService, useValue: { enforceForRun: jest.fn().mockResolvedValue(undefined) } },
         { provide: 'ApprovalsService', useValue: { create: jest.fn().mockResolvedValue({ id: 'a-stub' }) } },
         { provide: ApprovalsService, useValue: { create: jest.fn().mockResolvedValue({ id: 'a-stub' }) } },
         {

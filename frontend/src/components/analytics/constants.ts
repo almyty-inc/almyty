@@ -21,6 +21,7 @@ export type AnalyticsTab =
   | 'gateways'
   | 'llm'
   | 'agents'
+  | 'cost'
   | 'audit'
 
 export const ANALYTICS_TABS: AnalyticsTab[] = [
@@ -30,6 +31,7 @@ export const ANALYTICS_TABS: AnalyticsTab[] = [
   'gateways',
   'llm',
   'agents',
+  'cost',
   'audit',
 ]
 

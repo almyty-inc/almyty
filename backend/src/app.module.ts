@@ -45,6 +45,10 @@ import { AgentFile } from './entities/file.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { ToolTemplate } from './entities/tool-template.entity';
 import { ExternalAgent } from './entities/external-agent.entity';
+import { SpendBudget } from './entities/spend-budget.entity';
+import { SpendAlert } from './entities/spend-alert.entity';
+import { OrgSsoConfig } from './entities/org-sso-config.entity';
+import { BillingEvent } from './entities/billing-event.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -80,6 +84,14 @@ import { VersionsModule } from './modules/versions/versions.module';
 import { RunnerModule } from './modules/runner/runner.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
+import { LicensingModule } from './modules/licensing/licensing.module';
+import { BudgetsModule } from './modules/budgets/budgets.module';
+import { SsoModule } from './modules/sso/sso.module';
+import { RbacModule } from './modules/rbac/rbac.module';
+import { AuditExportModule } from './modules/audit-export/audit-export.module';
+import { ApprovalPoliciesModule } from './modules/approval-policies/approval-policies.module';
+import { EeStubsModule } from './modules/ee-stubs/ee-stubs.module';
+import { BillingModule } from './modules/billing/billing.module';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -170,6 +182,10 @@ import { databaseConfig } from './config/database.config';
       AuditLog,
       ToolTemplate,
       ExternalAgent,
+      SpendBudget,
+      SpendAlert,
+      OrgSsoConfig,
+      BillingEvent,
     ]),
 
     // Rate limiting — backed by Redis so limits are shared across replicas
@@ -264,6 +280,14 @@ import { databaseConfig } from './config/database.config';
     ApprovalsModule,
     RunnerModule,
     WorkspaceModule,
+    LicensingModule,
+    RbacModule,
+    AuditExportModule,
+    ApprovalPoliciesModule,
+    EeStubsModule,
+    BudgetsModule,
+    SsoModule,
+    BillingModule,
     ToolHubModule,
     A2AModule,
     AcpModule,

@@ -329,6 +329,20 @@ export const organizationsApi = {
     apiDel(`/organizations/${orgId}/teams/${teamId}/members/${userId}`),
 }
 
+// Hosted subscription billing (P6). Admin-only; drives the Stripe checkout /
+// portal handoff and reflects the org's plan/seat/dunning state.
+export const billingApi = {
+  getStatus: (orgId: string) => apiGet(`/billing/${orgId}`),
+
+  getInvoices: (orgId: string) => apiGet(`/billing/${orgId}/invoices`),
+
+  createCheckout: (orgId: string, data: { plan: string; seats?: number }) =>
+    apiPost<{ url: string }>(`/billing/${orgId}/checkout`, data),
+
+  createPortal: (orgId: string) =>
+    apiPost<{ url: string }>(`/billing/${orgId}/portal`, {}),
+}
+
 // Gateways API
 export const gatewaysApi = {
   getAll: (params?: { kind?: string; agentId?: string }) => {
@@ -595,6 +609,25 @@ export const analyticsApi = {
     if (to) params.set('to', to)
     return apiGet(`/analytics/export?${params.toString()}`, { responseType: 'blob' as any })
   },
+}
+
+// Cost governance API (spend visibility + budgets)
+export const budgetsApi = {
+  getSpend: (period: 'day' | 'month' = 'month', granularity = 'day') =>
+    apiGet(`/budgets/spend?period=${period}&granularity=${granularity}`),
+  getAlerts: (limit = 100) => apiGet(`/budgets/alerts?limit=${limit}`),
+  list: () => apiGet('/budgets'),
+  create: (data: any) => apiPost('/budgets', data),
+  update: (id: string, data: any) => apiPatch(`/budgets/${id}`, data),
+  delete: (id: string) => apiDel(`/budgets/${id}`),
+}
+
+// SSO / SCIM API (EE — gated by the `sso` entitlement)
+export const ssoApi = {
+  getConfig: () => apiGet('/sso/settings'),
+  saveConfig: (data: any) => apiPut('/sso/settings', data),
+  rotateScimToken: () => apiPost('/sso/settings/scim-token'),
+  revealScimToken: () => apiGet('/sso/settings/scim-token'),
 }
 
 // Agents API
