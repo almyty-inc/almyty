@@ -608,6 +608,14 @@ export const budgetsApi = {
   delete: (id: string) => apiDel(`/budgets/${id}`),
 }
 
+// SSO / SCIM API (EE — gated by the `sso` entitlement)
+export const ssoApi = {
+  getConfig: () => apiGet('/sso/settings'),
+  saveConfig: (data: any) => apiPut('/sso/settings', data),
+  rotateScimToken: () => apiPost('/sso/settings/scim-token'),
+  revealScimToken: () => apiGet('/sso/settings/scim-token'),
+}
+
 // Agents API
 export const agentsApi = {
   getAll: () => apiGet('/agents'),
