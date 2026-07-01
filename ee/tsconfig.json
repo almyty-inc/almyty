@@ -1,0 +1,10 @@
+{
+  "//": "EE overlay build. Extends the backend config and compiles the core PLUS the ee/ modules. The OSS backend build (backend/tsconfig.json) includes only backend/src and never sees this directory, so the community image is unaffected. This config is intentionally NOT wired into public CI (see /LICENSING.md).",
+  "extends": "../backend/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "../backend/dist-ee"
+  },
+  "include": ["../backend/src/**/*", "./**/*.ts"],
+  "exclude": ["node_modules", "**/*.spec.ts", "../backend/test", "../backend/dist"]
+}
