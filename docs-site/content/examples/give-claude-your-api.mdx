@@ -1,0 +1,49 @@
+# Give Claude Code your own API
+
+**Goal:** let Claude Code (or Cursor, or any MCP client) call an API you already
+run — without writing a single tool wrapper.
+
+## 1. Connect the API
+
+In **APIs → Connect API**, paste a schema URL. almyty parses it and generates a
+typed tool for every operation. OpenAPI, GraphQL, SOAP/WSDL, and Protobuf all
+work.
+
+![An imported API with its operations turned into tools](/screenshots/quickstart-api-imported.png)
+
+## 2. Publish an MCP gateway
+
+Group the tools you want to expose and publish them as an **MCP** gateway. Its
+endpoint is `https://api.almyty.com/{org}/{gateway}`, and its **Authentication**
+panel generates an `x-api-key`.
+
+![The gateway detail with its endpoint and API-key auth](/screenshots/quickstart-gateway-mcp.png)
+
+## 3. Add it to Claude Code
+
+The gateway's **Quick Setup** gives you a copy-paste command for Claude Code,
+Claude Desktop, and Cursor:
+
+![Quick Setup with copy-paste MCP configs](/screenshots/quickstart-claude-config.png)
+
+```bash
+claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
+# clients send: x-api-key: <your gateway key>
+```
+
+## 4. Use it
+
+Ask Claude to do something that needs your API. It calls the generated tools
+through the gateway, with auth, rate limits, and audit handled by almyty:
+
+```text
+> look up pet #2 and show its status
+  Claude calls get_pet_by_id via almyty → "Rosie", available
+```
+
+That is the whole loop. The same gateway also speaks A2A and UTCP, so other
+clients reach the identical tools.
+
+## Related
+
+- [Quickstart](/) · [MCP gateway](/gateways/mcp) · [MCP server CLI](/cli/mcp-server)

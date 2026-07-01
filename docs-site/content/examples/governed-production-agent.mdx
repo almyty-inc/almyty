@@ -1,0 +1,29 @@
+# Put a governed agent into production
+
+**Goal:** run an agent in front of real users, in a regulated workflow, with the
+controls that make that safe.
+
+almyty gives you the governance layer as composable building blocks:
+
+- **Verify gates** — reviewer models check the output before it ships; on a
+  failure the agent revises. See [verification](/agents/autonomous#verification).
+- **Human approvals** — the agent pauses for sign-off before irreversible actions
+  (payments, external sends). See [Approvals](/approvals).
+- **Constraints** — always-on rules the agent cannot violate, learned from past
+  failures. See [constraints](/agents/autonomous#constraints).
+- **PII filtering & security scanning** — plugins that sit in the execution path.
+- **RBAC & multi-tenant orgs** — role-based access over every resource. See
+  [Organizations](/organizations).
+- **Audit log** — every change and action recorded with who, when, and what. See
+  [Versioning & audit](/agents/versioning).
+
+## A typical shape
+
+A support or finance agent: constraints keep it inside policy, a cross-vendor
+verify panel checks each answer, a PII-filter plugin scrubs outputs, any refund
+or external action routes through an approval, and the audit log captures the
+trail — all self-hostable for data residency.
+
+## Related
+
+- [Approvals](/approvals) · [Autonomous agents](/agents/autonomous) · [Organizations](/organizations) · [Self-hosting](/self-hosting)

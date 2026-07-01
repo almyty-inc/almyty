@@ -1,0 +1,38 @@
+# Orchestrate a multi-vendor coding fleet
+
+**Goal:** have one agent drive several coding-agent CLIs — Claude Code, Codex,
+aider — on the same codebase, each on a different model, all on your machine.
+
+## 1. Start a runner on your machine
+
+```bash
+npx @almyty/auth login
+npx @almyty/runner start --name my-laptop
+```
+
+The runner registers your machine with almyty and reports the CLIs it detects on
+your PATH. Your code and credentials never leave the box; only the agent's
+instructions cross the wire.
+
+![A runner's detail page with the detected Coding agents card](/screenshots/runner-detail.png)
+
+## 2. Let an agent drive them
+
+The runner exposes a generic process surface and native support for the coding
+CLIs it finds. An agent can launch several as unattended members — each with its
+own model, isolated config, and headless auth — and watch their status
+(busy / idle / awaiting input) as they work.
+
+The orchestration lives in your agent's prompt: a planner breaks the task down
+and dispatches subtasks to the specialists, all editing the same workspace. The
+runner just runs the processes.
+
+## Notes
+
+- One runner per account in v1.0; multi-machine scheduling is on the way.
+- The coding CLIs authenticate to their own providers with keys you supply, so
+  those model calls leave from your machine.
+
+## Related
+
+- [Runners](/runner) · [CLI: the runner](/cli)

@@ -1,0 +1,30 @@
+# Multi-model debate for high-stakes calls
+
+**Goal:** for a decision where one model is not enough — research, due diligence,
+contract review — have several models argue it out and a judge settle the answer.
+
+## How it works
+
+An autonomous agent's **collaboration** can point at several member agents and
+choose how they work together. In **debate** mode:
+
+- Each member runs over several rounds, and in each round sees all prior
+  responses — so positions get challenged and refined.
+- After the final round, a **judge** model reads the whole debate and writes the
+  final answer.
+
+Because each member and the judge can be a different provider, this is a genuine
+cross-vendor debate: Claude and GPT-4o argue, Gemini fact-checks, and a judge you
+choose decides. (Other modes — `sequential`, `parallel`, `race` — cover chaining,
+fan-out, and first-to-finish.)
+
+## Set it up
+
+Configure `agent.collaboration` with `strategy: "debate"`, the member agents, and
+a `judgeAgentId`. Each member is just an agent, so you assign its model the usual
+way. See [Autonomous agents → Collaboration](/agents/autonomous#collaboration)
+for the full model.
+
+## Related
+
+- [Autonomous agents: collaboration](/agents/autonomous#collaboration) · [AI Models](/llm-providers)

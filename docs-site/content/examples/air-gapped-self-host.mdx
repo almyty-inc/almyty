@@ -1,0 +1,28 @@
+# Air-gapped, self-hosted agents
+
+**Goal:** run agents where nothing leaves your network — for data residency,
+compliance, or offline environments.
+
+almyty is open source and agnostic at every layer, which makes this a
+configuration rather than a special edition.
+
+## 1. Self-host almyty
+
+Run the platform on your own infrastructure with Docker Compose or Kubernetes.
+The hosted service runs the same code. See [Self-hosting](/self-hosting).
+
+## 2. Use local models
+
+Point an AI Model at a local, OpenAI-compatible endpoint — Ollama, or any model
+server you run — so inference stays inside your network. See
+[AI Models](/llm-providers).
+
+## 3. Keep secrets and data in place
+
+Credentials live in your own vault, memory persists in your own Postgres, and the
+runner executes on machines you control. No agent's model calls or tool
+executions need to reach the public internet.
+
+## Related
+
+- [Self-hosting](/self-hosting) · [AI Models](/llm-providers) · [Credentials](/credentials) · [Runners](/runner)
