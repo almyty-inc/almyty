@@ -460,6 +460,50 @@ export class LlmProvidersController {
     }
   }
 
+  @Post('test-connection')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Test a provider API key before saving (pre-creation)' })
+  @ApiResponse({ status: 200, description: 'Connection test result' })
+  async testConnection(
+    @Body() body: { type: string; apiKey: string },
+    @Request() req: any,
+  ) {
+    const organizationId = req.user.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException(
+        { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!body.type || !body.apiKey) {
+      throw new HttpException(
+        { success: false, message: 'type and apiKey are required', error: 'INVALID_INPUT' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    // Probe the provider by listing its models with the supplied key. A 200
+    // with ok:false (rather than a thrown error) lets the dialog render a red
+    // "invalid key" state without a network-error code path.
+    const start = Date.now();
+    try {
+      const models = await this.modelsHelper.fetchModelsByType(
+        body.type as any,
+        body.apiKey,
+      );
+      return {
+        success: true,
+        data: { ok: true, latencyMs: Date.now() - start, modelCount: models.length },
+        message: 'Connection successful',
+      };
+    } catch (error) {
+      return {
+        success: true,
+        data: { ok: false, latencyMs: Date.now() - start, error: error.message },
+        message: 'Connection failed',
+      };
+    }
+  }
+
   @Get(':providerId/models')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Fetch available models dynamically from the provider API' })

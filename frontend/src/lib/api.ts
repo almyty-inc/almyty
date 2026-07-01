@@ -564,6 +564,8 @@ export const llmProvidersApi = {
   getModels: (id: string) => apiGet(`/llm-providers/${id}/models`),
 
   getModelsByType: (type: string, apiKey: string) => apiPost('/llm-providers/models/by-type', { type, apiKey }),
+
+  testConnection: (type: string, apiKey: string) => apiPost('/llm-providers/test-connection', { type, apiKey }),
 }
 
 // Analytics / Monitoring API
