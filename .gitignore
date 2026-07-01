@@ -54,3 +54,6 @@ AGENTS.md
 _internal/
 .playwright-mcp/
 .playwright-cli/
+
+# Never commit license signing keys (forgeable entitlements)
+backend/scripts/license/*.pem
