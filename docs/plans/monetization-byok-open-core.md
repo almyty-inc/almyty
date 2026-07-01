@@ -1,6 +1,8 @@
 # Plan: BYOK UX, Cost Governance, and Open-Core Split
 
-Status: draft for review · Owner: TBD · Last updated: 2026-07-01
+Status: in progress (P1 started) · Owner: TBD · Last updated: 2026-07-01
+
+**License CONFIRMED (2026-07-01): Apache-2.0 for the OSS core + a commercial license for `ee/`.** (Not AGPL — frictionless enterprise self-host is the priority.)
 
 This plan turns three strategic gaps into sequenced, buildable workstreams:
 
@@ -118,7 +120,7 @@ Rationale: P1/P2 are pure adoption + user value and carry no strategic risk, so 
 ## Risks & open questions
 
 - **Entitlement bypass** — the whole EE model rests on P3 landing *before* the code goes public. Do not open-source with `plan`-string gating.
-- **License choice** — Apache-2.0 vs AGPL for core; commercial vs BSL for `ee/`. Needs a deliberate decision (recommend Apache-2.0 + commercial `ee/`).
+- ~~**License choice**~~ — **DECIDED (2026-07-01): Apache-2.0 core + commercial `ee/`.**
 - **"Payments" ambiguity** — confirm intent: WS2 (govern user's own spend, OSS) vs WS3.4 (charge for hosted subscription, EE). This plan does both, separately.
 - **Provider probe cost** — test-connection makes a real (tiny) API call; document it and keep it minimal/free where possible (prefer list-models over completions).
 - **Scope creep in EE** — resist gating anything in the core primitive set; every gate should pass the test "would an individual/OSS self-hoster reasonably expect this for free?"
@@ -238,9 +240,9 @@ Each task lists: **files/surfaces**, **acceptance/test**, **~effort**, **deps**.
 - Accept: OSS build compiles + runs without `ee/`; EE build includes it; CI builds both. Smoke test each build boots.
 - Effort: 2 · Deps: T3.2.
 
-**T3.5 License decision (non-code)**
-- Accept: documented decision — recommend Apache-2.0 core + commercial/BSL `ee/`; header/LICENSE files added.
-- Effort: 0.5 · Deps: none (do early).
+**T3.5 License decision (non-code)** — ✅ **DECIDED 2026-07-01: Apache-2.0 core + commercial `ee/`.**
+- Remaining: add `LICENSE` (Apache-2.0) at repo root + `ee/LICENSE` (commercial) + per-file headers when the `ee/` boundary lands (T3.4).
+- Effort: 0.5 · Deps: none.
 
 ## P4 — SSO/SAML (first EE feature)
 
