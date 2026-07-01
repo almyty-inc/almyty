@@ -22,7 +22,8 @@ import {
 } from '@/components/ui/select'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { useOrganizationStore } from '@/store/organization'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, TestTube, CheckCircle2, XCircle } from 'lucide-react'
+import { llmProvidersApi } from '@/lib/api'
 import { providerKeyUrls } from './provider-type-config'
 
 interface CreateProviderDialogProps {
@@ -40,6 +41,23 @@ export function CreateProviderDialog({
 }: CreateProviderDialogProps) {
   const { currentOrganization } = useOrganizationStore()
   const [visibility, setVisibility] = React.useState<VisibilityValue>({ visibility: 'org', teamId: null })
+  const [testing, setTesting] = React.useState(false)
+  const [testResult, setTestResult] = React.useState<any>(null)
+  const handleTestConnection = async () => {
+    const type = createForm.watch('type')
+    const apiKey = createForm.watch('apiKey')
+    if (!type || !apiKey) return
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res: any = await llmProvidersApi.testConnection(type, apiKey)
+      setTestResult(res?.data ?? res)
+    } catch (e: any) {
+      setTestResult({ ok: false, error: e?.response?.data?.message || e?.message || 'Test failed' })
+    } finally {
+      setTesting(false)
+    }
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
@@ -118,6 +136,29 @@ export function CreateProviderDialog({
               <ExternalLink className="h-3 w-3" />
               Get your API key
             </a>
+          )}
+          {createForm.watch('apiKey') && (
+            <div className="space-y-1">
+              <Button type="button" variant="outline" size="sm" onClick={handleTestConnection} disabled={testing} className="gap-2">
+                {testing ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current" />
+                ) : (
+                  <TestTube className="h-3.5 w-3.5" />
+                )}
+                Test connection
+              </Button>
+              {testResult && (testResult.ok ? (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Connected
+                  {typeof testResult.modelCount === 'number' ? ` — ${testResult.modelCount} models` : ''}
+                  {typeof testResult.latencyMs === 'number' ? ` (${testResult.latencyMs}ms)` : ''}
+                </p>
+              ) : (
+                <p className="text-xs text-red-600 flex items-center gap-1">
+                  <XCircle className="h-3 w-3" /> {testResult.error || 'Connection failed'}
+                </p>
+              ))}
+            </div>
           )}
           {createForm.formState.errors.apiKey && (
             <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.apiKey as any).message}</p>
