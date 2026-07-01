@@ -80,6 +80,7 @@ import { VersionsModule } from './modules/versions/versions.module';
 import { RunnerModule } from './modules/runner/runner.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
+import { LicensingModule } from './modules/licensing/licensing.module';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -264,6 +265,7 @@ import { databaseConfig } from './config/database.config';
     ApprovalsModule,
     RunnerModule,
     WorkspaceModule,
+    LicensingModule,
     ToolHubModule,
     A2AModule,
     AcpModule,
