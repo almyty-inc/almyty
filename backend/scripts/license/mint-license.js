@@ -59,8 +59,16 @@ const payload = {
   issuedAt: new Date().toISOString(),
 };
 
-const keyPath =
-  args.key ? String(args.key) : path.join(__dirname, 'dev-private-key.pem');
+const keyPath = args.key
+  ? String(args.key)
+  : process.env.ALMYTY_LICENSE_PRIVATE_KEY_FILE;
+if (!keyPath) {
+  console.error(
+    'No signing key. Pass --key <path> or set ALMYTY_LICENSE_PRIVATE_KEY_FILE.\n' +
+      'No private key is committed to the repo (it would let anyone forge licenses).',
+  );
+  process.exit(1);
+}
 const privateKey = crypto.createPrivateKey(fs.readFileSync(keyPath, 'utf8'));
 
 const payloadPart = base64url(Buffer.from(JSON.stringify(payload), 'utf8'));
