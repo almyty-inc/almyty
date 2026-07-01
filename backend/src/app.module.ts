@@ -86,6 +86,10 @@ import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LicensingModule } from './modules/licensing/licensing.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { SsoModule } from './modules/sso/sso.module';
+import { RbacModule } from './modules/rbac/rbac.module';
+import { AuditExportModule } from './modules/audit-export/audit-export.module';
+import { ApprovalPoliciesModule } from './modules/approval-policies/approval-policies.module';
+import { EeStubsModule } from './modules/ee-stubs/ee-stubs.module';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -274,6 +278,10 @@ import { databaseConfig } from './config/database.config';
     RunnerModule,
     WorkspaceModule,
     LicensingModule,
+    RbacModule,
+    AuditExportModule,
+    ApprovalPoliciesModule,
+    EeStubsModule,
     BudgetsModule,
     SsoModule,
     ToolHubModule,
