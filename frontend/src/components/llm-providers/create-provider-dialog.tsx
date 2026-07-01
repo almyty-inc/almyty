@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/select'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { useOrganizationStore } from '@/store/organization'
+import { ExternalLink } from 'lucide-react'
+import { providerKeyUrls } from './provider-type-config'
 
 interface CreateProviderDialogProps {
   open: boolean
@@ -106,6 +108,17 @@ export function CreateProviderDialog({
             newKeyValue={createForm.watch('apiKey') || ''}
             filterType="api_key"
           />
+          {providerKeyUrls[createForm.watch('type')] && (
+            <a
+              href={providerKeyUrls[createForm.watch('type')]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Get your API key
+            </a>
+          )}
           {createForm.formState.errors.apiKey && (
             <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.apiKey as any).message}</p>
           )}

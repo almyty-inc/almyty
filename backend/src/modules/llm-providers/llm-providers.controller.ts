@@ -21,7 +21,7 @@ import { Transform, Type } from 'class-transformer';
 
 import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, LlmProviderSearchFilters } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
-import { getProviderDisplayName, getProviderDescription, getProviderFeatures } from './llm-provider-catalog';
+import { getProviderDisplayName, getProviderDescription, getProviderFeatures, getProviderKeyUrl, getProviderDocsUrl } from './llm-provider-catalog';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -403,6 +403,8 @@ export class LlmProvidersController {
       name: getProviderDisplayName(type),
       description: getProviderDescription(type),
       features: getProviderFeatures(type),
+      keyUrl: getProviderKeyUrl(type),
+      docsUrl: getProviderDocsUrl(type),
     }));
 
     return {
