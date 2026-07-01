@@ -45,6 +45,8 @@ import { AgentFile } from './entities/file.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { ToolTemplate } from './entities/tool-template.entity';
 import { ExternalAgent } from './entities/external-agent.entity';
+import { SpendBudget } from './entities/spend-budget.entity';
+import { SpendAlert } from './entities/spend-alert.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -81,6 +83,7 @@ import { RunnerModule } from './modules/runner/runner.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LicensingModule } from './modules/licensing/licensing.module';
+import { BudgetsModule } from './modules/budgets/budgets.module';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -171,6 +174,8 @@ import { databaseConfig } from './config/database.config';
       AuditLog,
       ToolTemplate,
       ExternalAgent,
+      SpendBudget,
+      SpendAlert,
     ]),
 
     // Rate limiting — backed by Redis so limits are shared across replicas
@@ -266,6 +271,7 @@ import { databaseConfig } from './config/database.config';
     RunnerModule,
     WorkspaceModule,
     LicensingModule,
+    BudgetsModule,
     ToolHubModule,
     A2AModule,
     AcpModule,
