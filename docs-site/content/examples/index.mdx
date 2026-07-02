@@ -1,29 +1,40 @@
-# Examples
+# Use-case recipes
 
-Buildable, real-world recipes. Each takes a concrete goal and walks through the almyty pieces
-that get you there — the same core primitives (tools, agents, gateways, memory, the runner)
-composed different ways.
+Real jobs, built with almyty — each one names its **stack** (trigger · models · tools · mode)
+and walks the concrete steps. Pick the closest recipe, follow it, and swap the pieces for your
+own APIs and channels.
 
-## Developers & integration
+> Every recipe is built from the same primitives — [agents](/agents/autonomous),
+> [tools](/tools), [gateways](/gateways/mcp), [memory](/memory), and the [runner](/runner).
+> The "apps" are yours: any API becomes tools, any npm package becomes tools, and channels
+> (Slack, Discord, Telegram, webhooks) are the triggers and outputs.
 
-- [Give Claude Code your own API](/examples/give-claude-your-api) — import a schema, publish an MCP gateway, call it from Claude.
-- [Turn an npm package into tools](/examples/npm-package-tools) — point almyty at `stripe` and get typed tools, no wrappers.
-- [Modernize a legacy SOAP service](/examples/modernize-legacy-soap) — wrap a 2006 WSDL service as modern MCP tools without touching it.
+## Support & Sales
 
-## Autonomous agents
+- **[Triage support tickets and draft replies](/examples/support-ticket-triage)** — reads a ticket, pulls order history, drafts a verified reply, escalates refunds. `Zendesk · Slack · Verify · Approvals · Memory`
+- **[Deflect L1 questions from your docs](/examples/docs-deflection-bot)** — answers from your docs in-channel, cites the page, opens a ticket only when it can't. `Slack · Discord · Constraints`
+- **[Enrich and route inbound leads](/examples/lead-enrichment-routing)** — enriches, scores against ICP, writes back to the CRM, pings the right rep. `HubSpot/Salesforce · Slack`
+- **[Turn call notes into CRM updates](/examples/meeting-notes-to-crm)** — extracts next steps, updates the opportunity, drafts a follow-up for approval. `CRM · Approvals`
 
-- [A support agent that checks its own work](/examples/self-checking-support-agent) — cross-vendor verification + human approval for refunds.
-- [Multi-model debate for high-stakes calls](/examples/multi-model-debate) — several models argue, a judge decides.
-- [An agent that remembers across runs](/examples/agent-that-remembers) — memory tiers so knowledge accumulates instead of resetting.
-- [Promote a good run into a skill](/examples/promote-run-to-skill) — turn one solved task into a reusable Agent Skill.
-- [A scheduled agent that watches and reports](/examples/scheduled-monitoring-agent) — run on a cadence, push the result to Slack.
+## Engineering & DevOps
 
-## Runner
+- **[Triage and label GitHub issues](/examples/github-issue-triage)** — labels, links duplicates, routes, requests repros. `GitHub · Constraints · Memory`
+- **[Review pull requests for bugs and policy](/examples/pr-review-bot)** — flags bugs, missing tests, and policy violations inline; never approves. `GitHub · Verify · Constraints`
+- **[Summarize on-call alerts and suggest a runbook](/examples/oncall-alert-triage)** — gathers metrics and logs, correlates with past incidents, posts a summary. `Datadog/PagerDuty · Slack · Memory`
+- **[Orchestrate a multi-vendor coding fleet](/examples/multi-vendor-coding-fleet)** — one planner driving Claude Code, Codex, and aider on one repo. `Runner · Coding agents`
 
-- [Give an agent a machine to work on](/examples/expose-any-machine) — expose any machine — laptop, build server, VPC box — for an agent to execute on.
-- [Orchestrate a multi-vendor coding fleet](/examples/multi-vendor-coding-fleet) — one agent driving Claude Code, Codex, and aider on your repo.
+## Data, Finance & Ops
 
-## Enterprise & governance
+- **[Ask your database questions in plain English](/examples/nl-query-your-database)** — writes and runs read-only queries, answers with the SQL it used. `Postgres · Slack · Constraints`
+- **[Post a nightly data-quality digest](/examples/nightly-data-quality-digest)** — checks freshness and anomalies on a schedule, reports only what's wrong. `Scheduled · Slack · Memory`
+- **[Reconcile Stripe payouts and flag anomalies](/examples/stripe-payout-reconciliation)** — matches Stripe against the ledger daily, reports only exceptions. `Stripe · Scheduled · Constraints`
+- **[Run a governed refund agent](/examples/governed-refund-agent)** — policy constraints, cross-vendor verify, human approval, full audit. `Verify · Approvals · Audit`
+- **[Cross-vendor contract and risk review](/examples/cross-vendor-contract-review)** — several models argue the risks, a judge writes the memo. `Debate · Multi-model`
 
-- [Put a governed agent into production](/examples/governed-production-agent) — constraints, verify gates, approvals, and audit.
-- [Air-gapped, self-hosted agents](/examples/air-gapped-self-host) — open-source models, nothing leaves your network.
+## Platform & Integration
+
+- **[Give Claude Code your own API](/examples/give-claude-your-api)** — import a schema, publish an MCP gateway, call it from Claude. `MCP · Claude Code`
+- **[Modernize a legacy SOAP service](/examples/modernize-legacy-soap)** — wrap a WSDL as modern MCP tools, untouched. `Legacy · SOAP · MCP`
+- **[Turn an npm package into tools](/examples/npm-package-tools)** — point almyty at `stripe`, get typed tools. `SDK tools`
+- **[Give an agent a machine to work on](/examples/expose-any-machine)** — expose any machine — laptop, build server, VPC box. `Runner · On-prem`
+- **[Air-gapped, self-hosted agents](/examples/air-gapped-self-host)** — local models, nothing leaves your network. `Self-host · Compliance`

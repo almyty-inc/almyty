@@ -35,7 +35,7 @@ spec:
           volumeMounts:
           - name: tmp
             mountPath: /tmp
-          command: ["./node_modules/.bin/typeorm", "migration:run", "-d", "dist/config/database.config.js"]
+          command: ["./node_modules/.bin/typeorm", "migration:run", "-d", "dist-ee/src/config/database.config.js"]
           env:
             - name: NODE_ENV
               value: "production"
