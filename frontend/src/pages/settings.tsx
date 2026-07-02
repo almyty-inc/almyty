@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Settings, Building, Users, User, Shield, ShieldCheck, CreditCard } from 'lucide-react'
+import { Settings, Building, Users, User, Shield, ShieldCheck, CreditCard, Gift } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,10 +14,11 @@ import { useNotifications } from '@/store/app'
 import { MembersAndTeamsTab } from '@/components/MembersAndTeamsTab'
 import { SecurityTab } from '@/components/SecurityTab'
 import { SsoSettings } from '@/components/settings/sso-settings'
+import { ReferralsTab } from '@/components/settings/referrals-tab'
 import { BillingTab } from '@/components/BillingTab'
 import { authApi, organizationsApi } from '@/lib/api'
 
-const SETTINGS_TABS = ['organization', 'members', 'billing', 'profile', 'security', 'sso'] as const
+const SETTINGS_TABS = ['organization', 'members', 'billing', 'referrals', 'profile', 'security', 'sso'] as const
 type SettingsTab = typeof SETTINGS_TABS[number]
 
 function getSettingsTab(pathname: string): SettingsTab {
@@ -54,6 +55,7 @@ export function SettingsPage() {
           { key: 'organization' as SettingsTab, label: 'Organization', icon: Building },
           { key: 'members' as SettingsTab, label: 'Members & Teams', icon: Users },
           { key: 'billing' as SettingsTab, label: 'Billing', icon: CreditCard },
+          { key: 'referrals' as SettingsTab, label: 'Referrals', icon: Gift },
           { key: 'profile' as SettingsTab, label: 'Profile', icon: User },
           { key: 'security' as SettingsTab, label: 'Security', icon: Shield },
           { key: 'sso' as SettingsTab, label: 'SSO', icon: ShieldCheck },
@@ -78,6 +80,7 @@ export function SettingsPage() {
         {settingsTab === 'organization' && <OrganizationTab organization={currentOrganization} />}
         {settingsTab === 'members' && <MembersAndTeamsTab organizationId={currentOrganization?.id} />}
         {settingsTab === 'billing' && <BillingTab organizationId={currentOrganization?.id} />}
+        {settingsTab === 'referrals' && <ReferralsTab />}
         {settingsTab === 'profile' && <ProfileTab />}
         {settingsTab === 'security' && <SecurityTab />}
         {settingsTab === 'sso' && <SsoSettings />}
