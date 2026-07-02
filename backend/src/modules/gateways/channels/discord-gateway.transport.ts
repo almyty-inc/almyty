@@ -3,9 +3,12 @@ import {
   Logger,
   OnApplicationBootstrap,
   OnModuleDestroy,
+  Optional,
 } from '@nestjs/common';
+import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 import { WebSocket } from 'ws';
 
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
@@ -38,6 +41,30 @@ import { ChannelGatewayService } from './channel-gateway.service';
  * active discord gateway (skipped under NODE_ENV=test). GatewaysService
  * calls sync()/stop() when a discord gateway is created, updated,
  * (de)activated or deleted.
+ *
+ * Multi-replica safety: every api replica bootstraps the same set of
+ * active discord gateways, and Discord happily accepts N concurrent
+ * Gateway sessions for one bot — so without coordination each
+ * MESSAGE_CREATE would be processed once per replica (duplicate agent
+ * runs). A per-gateway distributed lease over the shared ioredis
+ * connection elects exactly one replica per gateway:
+ *
+ *   - acquire: SET <key> <instanceId> NX PX <leaseTtlMs> before
+ *     connecting; losers poll every leaseTtlMs/2 to take over.
+ *   - renew: every leaseTtlMs/3 while connected — GET to confirm we
+ *     still hold it, then PEXPIRE. If another instance took over
+ *     (holder mismatch), we tear the socket down and go back to
+ *     polling. Transient redis errors keep the socket and just retry
+ *     (flapping on every blip would be worse than a briefly unguarded
+ *     lease).
+ *   - release: compare-and-delete on stop, so a graceful shutdown or
+ *     gateway deactivation hands over immediately instead of waiting
+ *     for TTL expiry. A crashed holder is covered by the TTL: the
+ *     lease expires and a polling replica picks the gateway up.
+ *
+ * When no redis connection is available (local dev without the redis
+ * module), the transport behaves exactly as before: single-instance,
+ * connect immediately.
  */
 
 /** Minimal socket surface so tests can substitute a fake. */
@@ -46,6 +73,14 @@ export interface DiscordSocket {
   send(data: string): void;
   close(code?: number): void;
   terminate?(): void;
+}
+
+/** Minimal redis surface used by the lease (tests substitute a fake). */
+export interface DiscordLeaseRedis {
+  set(key: string, value: string, px: 'PX', ttl: number, nx: 'NX'): Promise<'OK' | null>;
+  get(key: string): Promise<string | null>;
+  del(key: string): Promise<number>;
+  pexpire(key: string, ttl: number): Promise<number>;
 }
 
 export const DISCORD_GATEWAY_URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
@@ -85,12 +120,26 @@ interface DiscordConnection {
   reconnectTimer: NodeJS.Timeout | null;
   reconnectAttempts: number;
   stopped: boolean;
+  /** Whether this instance currently holds the distributed lease. */
+  leaseHeld: boolean;
+  /** Single timer used for both lease renewal and acquisition polling. */
+  leaseTimer: NodeJS.Timeout | null;
 }
 
 @Injectable()
 export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(DiscordGatewayTransport.name);
   private readonly connections = new Map<string, DiscordConnection>();
+
+  /**
+   * In-flight lease releases keyed by gateway id. A config update
+   * restarts the connection (stop -> start); the release fired by
+   * stop() and the acquire fired by start() would otherwise race on
+   * the same key — the delayed compare-and-delete could remove the
+   * lease the new connection just (re)acquired. tryAcquireLease awaits
+   * any pending release for its gateway to serialize the two.
+   */
+  private readonly pendingReleases = new Map<string, Promise<void>>();
 
   /** Overridable in tests — production creates a real ws socket. */
   socketFactory: (url: string) => DiscordSocket = (url) =>
@@ -99,10 +148,19 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
   /** Overridable in tests to make backoff deterministic. */
   random: () => number = Math.random;
 
+  /** Distributed-lease TTL. Overridable in tests. */
+  leaseTtlMs = 30_000;
+
+  /** Identifies this process as a lease holder. */
+  readonly instanceId = randomUUID();
+
   constructor(
     @InjectRepository(Gateway)
     private readonly gatewayRepository: Repository<Gateway>,
     private readonly channelGatewayService: ChannelGatewayService,
+    // Optional: without redis (local dev, unit tests) the transport
+    // runs in single-instance mode and connects unconditionally.
+    @Optional() @InjectRedis() private readonly redis?: DiscordLeaseRedis,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -168,9 +226,18 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
       reconnectTimer: null,
       reconnectAttempts: 0,
       stopped: false,
+      leaseHeld: false,
+      leaseTimer: null,
     };
     this.connections.set(gateway.id, conn);
-    this.connect(conn);
+
+    if (!this.redis) {
+      // Single-instance mode: no coordination needed (or possible).
+      conn.leaseHeld = true;
+      this.connect(conn);
+      return;
+    }
+    void this.tryAcquireLease(conn);
   }
 
   /** Tear down the connection for a gateway (no reconnect). */
@@ -186,6 +253,13 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
     }
     conn.socket = null;
     this.connections.delete(gatewayId);
+    if (conn.leaseHeld) {
+      conn.leaseHeld = false;
+      this.pendingReleases.set(
+        gatewayId,
+        this.releaseLease(gatewayId).finally(() => this.pendingReleases.delete(gatewayId)),
+      );
+    }
   }
 
   /** Number of live managed connections (observability + tests). */
@@ -194,11 +268,153 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
   }
 
   // ---------------------------------------------------------------------------
+  // Distributed lease (multi-replica safety)
+  // ---------------------------------------------------------------------------
+
+  private leaseKey(gatewayId: string): string {
+    return `almyty:discord:gateway-lease:${gatewayId}`;
+  }
+
+  /** Try to become the connection holder for a gateway. */
+  private async tryAcquireLease(conn: DiscordConnection): Promise<void> {
+    if (conn.stopped || !this.redis) return;
+    // Serialize with a release from a just-stopped predecessor
+    // connection for the same gateway (restart on config update).
+    const pendingRelease = this.pendingReleases.get(conn.gateway.id);
+    if (pendingRelease) {
+      await pendingRelease.catch(() => undefined);
+      if (conn.stopped) return;
+    }
+    try {
+      let result = await this.redis.set(
+        this.leaseKey(conn.gateway.id),
+        this.instanceId,
+        'PX',
+        this.leaseTtlMs,
+        'NX',
+      );
+      if (conn.stopped) return;
+      if (result !== 'OK') {
+        // A stale lease of our own (e.g. release failed on a restart)
+        // is safe to take over — same process, no duplicate risk.
+        const holder = await this.redis.get(this.leaseKey(conn.gateway.id));
+        if (conn.stopped) return;
+        if (holder === this.instanceId) {
+          await this.redis.pexpire(this.leaseKey(conn.gateway.id), this.leaseTtlMs);
+          if (conn.stopped) return;
+          result = 'OK';
+        }
+      }
+      if (result === 'OK') {
+        conn.leaseHeld = true;
+        this.logger.log(
+          `acquired discord gateway lease (gateway ${conn.gateway.id}, instance ${this.instanceId})`,
+        );
+        this.connect(conn);
+        this.scheduleLeaseRenewal(conn);
+        return;
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `discord gateway lease acquire failed (gateway ${conn.gateway.id}): ${err?.message ?? err}`,
+      );
+    }
+    // Another replica holds the lease (or redis hiccuped) — poll so we
+    // take over when the holder dies and its lease expires.
+    this.scheduleLeaseAcquisition(conn);
+  }
+
+  private scheduleLeaseAcquisition(conn: DiscordConnection): void {
+    if (conn.stopped || conn.leaseTimer) return;
+    conn.leaseTimer = setTimeout(() => {
+      conn.leaseTimer = null;
+      void this.tryAcquireLease(conn);
+    }, Math.max(Math.floor(this.leaseTtlMs / 2), 500));
+    conn.leaseTimer.unref?.();
+  }
+
+  private scheduleLeaseRenewal(conn: DiscordConnection): void {
+    if (conn.stopped || conn.leaseTimer) return;
+    conn.leaseTimer = setTimeout(() => {
+      conn.leaseTimer = null;
+      void this.renewLease(conn);
+    }, Math.max(Math.floor(this.leaseTtlMs / 3), 500));
+    conn.leaseTimer.unref?.();
+  }
+
+  private async renewLease(conn: DiscordConnection): Promise<void> {
+    if (conn.stopped || !this.redis || !conn.leaseHeld) return;
+    const key = this.leaseKey(conn.gateway.id);
+    let holder: string | null;
+    try {
+      holder = await this.redis.get(key);
+      if (conn.stopped) return;
+      if (holder === this.instanceId) {
+        await this.redis.pexpire(key, this.leaseTtlMs);
+        this.scheduleLeaseRenewal(conn);
+        return;
+      }
+    } catch (err: any) {
+      // Transient redis failure: keep the socket and retry — tearing
+      // down on every blip would flap the bot connection. If redis
+      // stays down long enough for the lease to expire, another
+      // replica may briefly double-connect; duplicate suppression is
+      // restored as soon as renewal succeeds again.
+      this.logger.warn(
+        `discord gateway lease renew failed (gateway ${conn.gateway.id}): ${err?.message ?? err}`,
+      );
+      this.scheduleLeaseRenewal(conn);
+      return;
+    }
+    // Lease expired and someone else took it (or it vanished): we are
+    // no longer the holder — disconnect and go back to polling.
+    this.logger.warn(
+      `discord gateway lease lost (gateway ${conn.gateway.id}, holder ${holder ?? 'none'}) — disconnecting`,
+    );
+    conn.leaseHeld = false;
+    this.teardownSocket(conn);
+    this.scheduleLeaseAcquisition(conn);
+  }
+
+  /** Compare-and-delete so we never delete another instance's lease. */
+  private async releaseLease(gatewayId: string): Promise<void> {
+    if (!this.redis) return;
+    const key = this.leaseKey(gatewayId);
+    try {
+      const holder = await this.redis.get(key);
+      if (holder === this.instanceId) {
+        await this.redis.del(key);
+      }
+    } catch (err: any) {
+      // The TTL covers us: an unreleased lease expires on its own.
+      this.logger.warn(`discord gateway lease release failed: ${err?.message ?? err}`);
+    }
+  }
+
+  /** Close the socket without scheduling a reconnect (lease lost). */
+  private teardownSocket(conn: DiscordConnection): void {
+    this.clearHeartbeatTimers(conn);
+    if (conn.reconnectTimer) {
+      clearTimeout(conn.reconnectTimer);
+      conn.reconnectTimer = null;
+    }
+    const socket = conn.socket;
+    conn.socket = null;
+    if (socket) {
+      try {
+        socket.close(1000);
+      } catch {
+        /* already closed */
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Connection handling
   // ---------------------------------------------------------------------------
 
   private connect(conn: DiscordConnection): void {
-    if (conn.stopped) return;
+    if (conn.stopped || !conn.leaseHeld) return;
 
     const url =
       conn.canResume && conn.resumeUrl
@@ -405,6 +621,13 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
       );
       this.connections.delete(conn.gateway.id);
       conn.stopped = true;
+      this.clearTimers(conn);
+      // Free the lease — every replica would hit the same config error,
+      // but a lingering lease would just delay retry after a fix.
+      if (conn.leaseHeld) {
+        conn.leaseHeld = false;
+        void this.releaseLease(conn.gateway.id);
+      }
       return;
     }
 
@@ -447,6 +670,10 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
     if (conn.reconnectTimer) {
       clearTimeout(conn.reconnectTimer);
       conn.reconnectTimer = null;
+    }
+    if (conn.leaseTimer) {
+      clearTimeout(conn.leaseTimer);
+      conn.leaseTimer = null;
     }
   }
 }
