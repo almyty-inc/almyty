@@ -42,7 +42,7 @@ RUN npm ci --legacy-peer-deps
 # the image contains the EE modules, every EE route is entitlement-gated at
 # runtime and 402s without a license token; `npm run build` gives pure OSS).
 COPY . .
-RUN npm run build:ee && echo "Build timestamp: $(date)"
+RUN npm run build:ee && node scripts/ee-di-smoke.js && echo "Build timestamp: $(date)"
 
 # Production image
 FROM base AS production

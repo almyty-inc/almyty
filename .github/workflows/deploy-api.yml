@@ -171,7 +171,9 @@ jobs:
       - name: Restart API
         run: |
           kubectl rollout restart deployment/${{ steps.env.outputs.pfx }}-api -n ${{ steps.env.outputs.ns }}
-          kubectl rollout status deployment/${{ steps.env.outputs.pfx }}-api -n ${{ steps.env.outputs.ns }} --timeout=5m || true
+          # No '|| true': a CrashLooping rollout must fail this job loudly instead
+          # of leaving the old ReplicaSet serving while the workflow reports green.
+          kubectl rollout status deployment/${{ steps.env.outputs.pfx }}-api -n ${{ steps.env.outputs.ns }} --timeout=5m
 
       - name: Debug on failure
         if: failure()
