@@ -8,6 +8,7 @@ import { AgentExecutionEngine } from '../agent-execution.engine';
 import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentSchedulerService } from '../agent-scheduler.service';
 import { AgentAuditService } from '../agent-audit.service';
+import { AgentTechDocHelper } from '../agent-tech-doc.helper';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AgentStatus } from '../../../entities/agent.entity';
@@ -97,6 +98,10 @@ describe('AgentsController', () => {
         {
           provide: AgentAuditService,
           useValue: mockAuditService,
+        },
+        {
+          provide: AgentTechDocHelper,
+          useValue: { build: jest.fn(), renderMarkdown: jest.fn() },
         },
       ],
     })
