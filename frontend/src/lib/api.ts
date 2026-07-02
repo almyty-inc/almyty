@@ -700,6 +700,33 @@ export const promotedSkillsApi = {
   replay: (id: string, input?: any) => apiPost(`/promoted-skills/${id}/replay`, { input }),
 }
 
+// Referrals API — attribution endpoint is public; the rest is caller-scoped
+export const referralsApi = {
+  getCode: () => apiGet<{ code: string; link: string }>('/referrals/code'),
+  getStats: () =>
+    apiGet<{
+      invited: number
+      qualified: number
+      rewarded: number
+      pendingReview: number
+      totalRewardDays: number
+      accruedRewardDays: number
+    }>('/referrals/stats'),
+  list: () =>
+    apiGet<
+      Array<{
+        id: string
+        status: 'pending' | 'qualified' | 'rewarded' | 'pending_review'
+        rewardDays: number
+        qualifiedAt: string | null
+        rewardedAt: string | null
+        createdAt: string
+      }>
+    >('/referrals'),
+  attribute: (code: string) =>
+    apiGet(`/referrals/attribute/${encodeURIComponent(code)}?format=json`),
+}
+
 // Agent Constraints API (failure memory)
 export const agentConstraintsApi = {
   list: (agentId: string) => apiGet(`/agents/${agentId}/constraints`),

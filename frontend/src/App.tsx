@@ -51,6 +51,7 @@ const DocsPage = lazy(() => import('@/pages/docs').then(m => ({ default: m.DocsP
 const ToolHubPage = lazy(() => import('@/pages/tool-hub').then(m => ({ default: m.ToolHubPage })))
 const AcceptInvitePage = lazy(() => import('@/pages/accept-invite').then(m => ({ default: m.AcceptInvitePage })))
 const CliLoginPage = lazy(() => import('@/pages/cli-login').then(m => ({ default: m.CliLoginPage })))
+const ReferralRedirectPage = lazy(() => import('@/pages/referral-redirect').then(m => ({ default: m.ReferralRedirectPage })))
 
 // Layout wrapper that mounts once via parent Route + Outlet, so
 // useLocation() inside the layout always reflects the *current*
@@ -117,6 +118,9 @@ function App() {
 
         {/* CLI login (browser-based auth flow for @almyty/auth) */}
         <Route path="/cli-login" element={<CliLoginPage />} />
+
+        {/* Referral share links — public, sets the attribution cookie then lands on register */}
+        <Route path="/r/:code" element={<ReferralRedirectPage />} />
 
         {/* Auth routes */}
         <Route path="/auth/*" element={
