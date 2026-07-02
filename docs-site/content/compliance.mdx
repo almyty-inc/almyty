@@ -33,7 +33,8 @@ Agent conversations routinely contain personal data, so GDPR applies to almost e
 - **Minimization and filtering** — the pii-filter plugin can strip or mask personal data before it reaches a model or a log.
 - **Encryption** — credentials and provider secrets are AES-256-GCM encrypted at rest; self-hosters control the key (`ENCRYPTION_KEY`), and Enterprise adds customer-managed KMS keys.
 - **Erasure** — memory entries and conversations are deletable per record; deleting an agent removes its runs.
-- **Your side**: a records-of-processing entry for each agent, a lawful basis for the data it handles, data-processing agreements with your model providers (you are sending them conversation content under your own API keys), and retention schedules. Self-hosting in your own EU infrastructure keeps residency entirely in your hands.
+- **Retention** — configurable per organization: admins set independent retention periods (1–3650 days) for agent runs, conversations, request logs, usage metrics, and the audit log under Settings → Organization → Data Retention (or `GET/PUT /organizations/:id/retention`). An hourly sweep permanently deletes records older than each period — never touching runs that are still executing or awaiting approval — and records a `retention_sweep` audit entry with per-class counts. Fields left empty keep records indefinitely, so existing organizations are unchanged until a policy is set.
+- **Your side**: a records-of-processing entry for each agent, a lawful basis for the data it handles, and data-processing agreements with your model providers (you are sending them conversation content under your own API keys). Self-hosting in your own EU infrastructure keeps residency entirely in your hands.
 
 ## Other regimes worth knowing
 
