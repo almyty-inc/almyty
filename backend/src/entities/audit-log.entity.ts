@@ -67,6 +67,8 @@ export enum AuditAction {
   CREDENTIAL_UPDATE = 'credential_update',
   CREDENTIAL_DELETE = 'credential_delete',
   CREDENTIAL_USE = 'credential_use',
+  // Data retention
+  RETENTION_SWEEP = 'retention_sweep',
 }
 
 export enum AuditResource {
