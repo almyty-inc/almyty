@@ -64,6 +64,7 @@ import { ApiSchema } from '../entities/api-schema.entity';
 // Auth
 import { AuthController } from '../modules/auth/auth.controller';
 import { AuthService } from '../modules/auth/auth.service';
+import { ReferralsService } from '../modules/referrals/referrals.service';
 import { JwtStrategy } from '../modules/auth/strategies/jwt.strategy';
 import { ApiKeyStrategy } from '../modules/auth/strategies/api-key.strategy';
 import { LocalStrategy } from '../modules/auth/strategies/local.strategy';
@@ -201,6 +202,13 @@ const mockRedis = {
     JwtStrategy,
     ApiKeyStrategy,
     LocalStrategy,
+
+    // Referrals (mock — AuthService.register calls attributeSignup additively;
+    // integration specs here don't exercise referral flows)
+    {
+      provide: ReferralsService,
+      useValue: { attributeSignup: async () => null },
+    },
 
     // MCP
     McpOAuthService,
