@@ -3,6 +3,8 @@ import { BullModule } from '@nestjs/bull';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { SchemaImportProcessor } from './processors/schema-import.processor';
+import { ProviderHealthProcessor, PROVIDER_HEALTH_QUEUE } from './processors/provider-health.processor';
+import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
 import { ApisModule } from '../apis/apis.module';
 import { ToolsModule} from '../tools/tools.module';
 import { SchemaParserModule } from '../schema-parser/schema-parser.module';
@@ -13,6 +15,7 @@ import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
 import { Resource } from '../../entities/resource.entity';
 import { Organization } from '../../entities/organization.entity';
+import { LlmProvider } from '../../entities/llm-provider.entity';
 
 @Module({
   imports: [
@@ -39,12 +42,18 @@ import { Organization } from '../../entities/organization.entity';
       Operation,
       Resource,
       Organization,
+      LlmProvider,
     ]),
+    // Periodic provider key-health re-check (P1 T1.7). Registration is
+    // cheap; the repeatable job is only scheduled when
+    // PROVIDER_HEALTH_RECHECK_CRON is set (see the processor).
+    BullModule.registerQueue({ name: PROVIDER_HEALTH_QUEUE }),
     SchemaParserModule,
     ToolsModule,
     forwardRef(() => ApisModule),
+    LlmProvidersModule,
   ],
-  providers: [SchemaImportProcessor],
+  providers: [SchemaImportProcessor, ProviderHealthProcessor],
   exports: [BullModule, SchemaImportProcessor],
 })
 export class JobsModule {}

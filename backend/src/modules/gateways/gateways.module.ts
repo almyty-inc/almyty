@@ -51,6 +51,7 @@ import { SignalAdapter } from './channels/adapters/signal.adapter';
 import { MatrixAdapter } from './channels/adapters/matrix.adapter';
 import { IrcAdapter } from './channels/adapters/irc.adapter';
 import { ChannelGatewayService } from './channels/channel-gateway.service';
+import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelEventsController } from './channels/channel-events.controller';
 import { ChannelWidgetController } from './channels/channel-widget.controller';
 @Module({
@@ -82,6 +83,7 @@ import { ChannelWidgetController } from './channels/channel-widget.controller';
     GatewayToolService, GatewayToolTransferHelper, GatewayToolStatsHelper, GatewayToolQueriesHelper,
     // Channel adapters
     ChannelGatewayService,
+    DiscordGatewayTransport,
     ChatWidgetAdapter,
     SlackAdapter,
     DiscordAdapter,
@@ -116,6 +118,7 @@ import { ChannelWidgetController } from './channels/channel-widget.controller';
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,
     GatewayToolService,
     ChannelGatewayService,
+    DiscordGatewayTransport,
   ],
 })
 export class GatewaysModule {}
