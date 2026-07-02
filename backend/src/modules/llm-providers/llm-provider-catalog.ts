@@ -66,3 +66,64 @@ export function getProviderFeatures(type: LlmProviderType): string[] {
   };
   return features[type] || [];
 }
+
+/**
+ * Canonical page where a user creates/copies their API key for a
+ * provider, shown as a "Get your API key" deep-link in the add-provider
+ * dialog so onboarding doesn't require hunting through each vendor's
+ * console.
+ *
+ * Return contract — deliberately three-valued so a newly-added provider
+ * can't slip through unmapped:
+ *   string    → the key-creation page
+ *   null      → provider has no single canonical URL (e.g. CUSTOM, whose
+ *               key location depends on the user's own endpoint)
+ *   undefined → NOT mapped: a bug. The completeness test asserts every
+ *               LlmProviderType is explicitly handled (string | null),
+ *               so adding an enum value without a mapping fails CI.
+ */
+export function getProviderKeyUrl(type: LlmProviderType): string | null | undefined {
+  const urls: Record<string, string | null> = {
+    [LlmProviderType.OPENAI]: 'https://platform.openai.com/api-keys',
+    [LlmProviderType.ANTHROPIC]: 'https://console.anthropic.com/settings/keys',
+    [LlmProviderType.GOOGLE]: 'https://aistudio.google.com/apikey',
+    [LlmProviderType.MISTRAL]: 'https://console.mistral.ai/api-keys',
+    [LlmProviderType.XAI]: 'https://console.x.ai',
+    [LlmProviderType.DEEPSEEK]: 'https://platform.deepseek.com/api_keys',
+    [LlmProviderType.GROQ]: 'https://console.groq.com/keys',
+    [LlmProviderType.TOGETHER]: 'https://api.together.xyz/settings/api-keys',
+    [LlmProviderType.OPENROUTER]: 'https://openrouter.ai/keys',
+    // Azure OpenAI + AWS Bedrock use cloud IAM credentials, not a simple
+    // key — deep-link to where those live in each console.
+    [LlmProviderType.AZURE_OPENAI]: 'https://portal.azure.com',
+    [LlmProviderType.AWS_BEDROCK]: 'https://console.aws.amazon.com/bedrock',
+    [LlmProviderType.COHERE]: 'https://dashboard.cohere.com/api-keys',
+    [LlmProviderType.HUGGINGFACE]: 'https://huggingface.co/settings/tokens',
+    [LlmProviderType.CUSTOM]: null,
+  };
+  return urls[type];
+}
+
+/**
+ * Provider documentation home, shown as a secondary "Docs" link. Same
+ * three-valued contract as getProviderKeyUrl.
+ */
+export function getProviderDocsUrl(type: LlmProviderType): string | null | undefined {
+  const urls: Record<string, string | null> = {
+    [LlmProviderType.OPENAI]: 'https://platform.openai.com/docs',
+    [LlmProviderType.ANTHROPIC]: 'https://docs.anthropic.com',
+    [LlmProviderType.GOOGLE]: 'https://ai.google.dev/docs',
+    [LlmProviderType.MISTRAL]: 'https://docs.mistral.ai',
+    [LlmProviderType.XAI]: 'https://docs.x.ai',
+    [LlmProviderType.DEEPSEEK]: 'https://api-docs.deepseek.com',
+    [LlmProviderType.GROQ]: 'https://console.groq.com/docs',
+    [LlmProviderType.TOGETHER]: 'https://docs.together.ai',
+    [LlmProviderType.OPENROUTER]: 'https://openrouter.ai/docs',
+    [LlmProviderType.AZURE_OPENAI]: 'https://learn.microsoft.com/azure/ai-services/openai/',
+    [LlmProviderType.AWS_BEDROCK]: 'https://docs.aws.amazon.com/bedrock/',
+    [LlmProviderType.COHERE]: 'https://docs.cohere.com',
+    [LlmProviderType.HUGGINGFACE]: 'https://huggingface.co/docs',
+    [LlmProviderType.CUSTOM]: null,
+  };
+  return urls[type];
+}

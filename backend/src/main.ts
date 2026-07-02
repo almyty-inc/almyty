@@ -31,6 +31,10 @@ async function bootstrap() {
   
   const app = await NestFactory.create(AppModule, {
     logger: ['log', 'error', 'warn', 'debug', 'verbose'],
+    // Preserve the raw request body so the Stripe billing webhook can verify
+    // its signature over the exact bytes Stripe signed (JSON re-serialization
+    // would break the HMAC). Nest still parses JSON for every other route.
+    rawBody: true,
   });
 
   const configService = app.get(ConfigService);

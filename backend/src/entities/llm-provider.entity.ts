@@ -43,6 +43,13 @@ export enum LlmProviderStatus {
 
 export interface LlmProviderConfig {
   apiKey?: string;
+  /**
+   * Optional admin/org-scoped key for the provider's USAGE/COST API (P7).
+   * This is a DIFFERENT credential scope than `apiKey` (the inference
+   * key): OpenAI needs an Admin key, Anthropic an org Admin key. Stored
+   * encrypted alongside apiKey; read via getDecryptedUsageApiKey().
+   */
+  usageApiKey?: string;
   apiUrl?: string;
   apiVersion?: string;
   model?: string;
@@ -317,6 +324,20 @@ export class LlmProvider {
     if (typeof key === 'string' && key.length > 0 && !isEncrypted(key)) {
       this.configuration.apiKey = encryptField(key);
     }
+    const usageKey = this.configuration?.usageApiKey;
+    if (typeof usageKey === 'string' && usageKey.length > 0 && !isEncrypted(usageKey)) {
+      this.configuration.usageApiKey = encryptField(usageKey);
+    }
+  }
+
+  /**
+   * The plaintext admin/usage API key (P7), or undefined if none is set.
+   * Same transparent-decrypt contract as getDecryptedApiKey().
+   */
+  getDecryptedUsageApiKey(): string | undefined {
+    const key = this.configuration?.usageApiKey;
+    if (typeof key !== 'string' || key.length === 0) return undefined;
+    return decryptField(key);
   }
 
   /**
@@ -401,6 +422,7 @@ export class LlmProvider {
       masked.configuration = {
         ...masked.configuration,
         apiKey: masked.configuration.apiKey ? '***masked***' : undefined,
+        usageApiKey: masked.configuration.usageApiKey ? '***masked***' : undefined,
         azure: masked.configuration.azure ? {
           ...masked.configuration.azure,
         } : undefined,

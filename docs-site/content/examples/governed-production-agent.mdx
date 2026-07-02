@@ -1,0 +1,56 @@
+# Put a governed agent into production
+
+**Goal:** a billing agent that answers customer questions and issues small refunds on its
+own — but can't overspend, can't act outside policy, and leaves a record an auditor will
+accept. Here is how the pieces stack up.
+
+## 1. Constrain what it can do
+
+Constraints are always-on rules injected into every run — the agent cannot argue its way
+past them. Write them directly, or let the agent propose one after a failed run and approve
+it. For the billing agent: *never promise a refund over $500 without approval; Enterprise-plan
+customers get a four-hour SLA.*
+
+![The Constraints panel with always-on rules](/screenshots/agent-constraints.png)
+
+## 2. Check the answer before it ships
+
+On **Models & Verification**, add reviewer models from more than one vendor. The primary
+model drafts, the reviewers try to refute it, and on a failure the agent revises and retries
+before anything reaches the customer. A wrong number caught here never becomes a wrong number
+sent.
+
+![The verify loop on a run — draft, review, revise](/screenshots/agent-run-verify-loop.png)
+
+## 3. Stop at the irreversible step
+
+For anything that moves money or leaves the building, have the agent call `request_approval`.
+The run pauses at `waiting_approval`, a request lands on the **Approvals** page with the full
+context, and a human decides — the run resumes or stops on their call.
+
+![A pending refund approval with Approve / Reject](/screenshots/approvals-pending.png)
+
+## 4. Keep the receipts
+
+Every action the agent takes is recorded — who, when, and what — in an audit trail you can
+export to CSV or JSON. When someone asks why a refund went out in March, the answer is one
+query, not a reconstruction.
+
+![The audit trail with per-action detail](/screenshots/analytics-audit.png)
+
+## 5. Own the boundary
+
+Role-based access over every resource keeps operators, reviewers, and admins in their lanes
+([Organizations](/organizations)), and because the platform self-hosts, all of the above can
+run inside your own network for data-residency requirements. See
+[Air-gapped, self-hosted agents](/examples/air-gapped-self-host).
+
+## The shape of it
+
+Constraints hold the policy line, a cross-vendor panel checks each answer, refunds over the
+threshold route through a human, and the audit trail captures everything — a real agent doing
+real work, with the guardrails a regulated team needs before it ships.
+
+## Related
+
+- [Approvals](/approvals) · [Autonomous agents](/agents/autonomous) · [Organizations](/organizations) · [Versioning & audit](/agents/versioning) · [Self-hosting](/self-hosting)

@@ -2,6 +2,7 @@
 // alphabetically: get started, build the pipeline, operate it, then reference.
 export default {
   index: 'Getting Started',
+  examples: 'Examples',
   'build-separator': { type: 'separator', title: 'Build' },
   tools: 'Tools',
   gateways: 'Gateways',

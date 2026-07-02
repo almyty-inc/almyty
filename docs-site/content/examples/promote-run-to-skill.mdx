@@ -1,0 +1,28 @@
+# Promote a good run into a skill
+
+**Goal:** when an agent solves a task well, capture it as a reusable skill so the
+next agent — or your editor — does not re-derive the same steps.
+
+## 1. Promote a completed run
+
+From a completed run, open the **Promote to skill** dialog. almyty distills the
+run — its tool sequence and output — into an
+[Agent Skills](https://agentskills.io) `SKILL.md`, stored and versioned.
+
+![The Skills tab with promoted skills](/screenshots/agent-skills.png)
+
+## 2. Reuse it anywhere
+
+The skill is served over the [Skills gateway](/gateways/skills) path and REST, so
+another agent can call it directly, and your editor can install it with the CLI:
+
+```bash
+npx @almyty/skills install acme/support-gateway
+```
+
+A reasoning-only run produces the procedure in prose; a run that called tools
+lists them in order — so the skill captures the real steps.
+
+## Related
+
+- [Autonomous agents: promote a run to a skill](/agents/autonomous) · [Skills gateway](/gateways/skills) · [Skills CLI](/cli/skills)

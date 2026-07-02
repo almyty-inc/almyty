@@ -329,6 +329,20 @@ export const organizationsApi = {
     apiDel(`/organizations/${orgId}/teams/${teamId}/members/${userId}`),
 }
 
+// Hosted subscription billing (P6). Admin-only; drives the Stripe checkout /
+// portal handoff and reflects the org's plan/seat/dunning state.
+export const billingApi = {
+  getStatus: (orgId: string) => apiGet(`/billing/${orgId}`),
+
+  getInvoices: (orgId: string) => apiGet(`/billing/${orgId}/invoices`),
+
+  createCheckout: (orgId: string, data: { plan: string; seats?: number }) =>
+    apiPost<{ url: string }>(`/billing/${orgId}/checkout`, data),
+
+  createPortal: (orgId: string) =>
+    apiPost<{ url: string }>(`/billing/${orgId}/portal`, {}),
+}
+
 // Gateways API
 export const gatewaysApi = {
   getAll: (params?: { kind?: string; agentId?: string }) => {
@@ -564,6 +578,8 @@ export const llmProvidersApi = {
   getModels: (id: string) => apiGet(`/llm-providers/${id}/models`),
 
   getModelsByType: (type: string, apiKey: string) => apiPost('/llm-providers/models/by-type', { type, apiKey }),
+
+  testConnection: (type: string, apiKey: string) => apiPost('/llm-providers/test-connection', { type, apiKey }),
 }
 
 // Analytics / Monitoring API
@@ -595,6 +611,34 @@ export const analyticsApi = {
   },
 }
 
+// Cost governance API (spend visibility + budgets)
+export const budgetsApi = {
+  getSpend: (period: 'day' | 'month' = 'month', granularity = 'day') =>
+    apiGet(`/budgets/spend?period=${period}&granularity=${granularity}`),
+  getAlerts: (limit = 100) => apiGet(`/budgets/alerts?limit=${limit}`),
+  list: () => apiGet('/budgets'),
+  create: (data: any) => apiPost('/budgets', data),
+  update: (id: string, data: any) => apiPatch(`/budgets/${id}`, data),
+  delete: (id: string) => apiDel(`/budgets/${id}`),
+}
+
+// Provider usage / cost reconciliation API (P7 — provider-actual vs our estimate)
+export const providerUsageApi = {
+  getReconciliation: (period: 'day' | 'month' = 'month') =>
+    apiGet(`/provider-usage/reconciliation?period=${period}`),
+  getCapabilities: () => apiGet('/provider-usage/capabilities'),
+  sync: (data: { from?: string; to?: string; providerId?: string } = {}) =>
+    apiPost('/provider-usage/sync', data),
+}
+
+// SSO / SCIM API (EE — gated by the `sso` entitlement)
+export const ssoApi = {
+  getConfig: () => apiGet('/sso/settings'),
+  saveConfig: (data: any) => apiPut('/sso/settings', data),
+  rotateScimToken: () => apiPost('/sso/settings/scim-token'),
+  revealScimToken: () => apiGet('/sso/settings/scim-token'),
+}
+
 // Agents API
 export const agentsApi = {
   getAll: () => apiGet('/agents'),
@@ -617,6 +661,11 @@ export const agentsApi = {
   rollback: (id: string, versionIndex: number) => apiPost(`/agents/${id}/versions/${versionIndex}/rollback`),
   // Import / Export
   exportAgent: (id: string) => apiGet(`/agents/${id}/export`),
+  exportTechnicalDocumentation: (id: string) =>
+    apiGet<string>(`/agents/${id}/technical-documentation`, {
+      params: { format: 'markdown' },
+      responseType: 'text',
+    }),
   importAgent: (data: any) => apiPost('/agents/import', data),
   // Cost estimation
   getCostEstimate: (id: string) => apiGet(`/agents/${id}/cost-estimate`),

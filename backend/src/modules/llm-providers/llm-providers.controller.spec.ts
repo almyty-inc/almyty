@@ -207,6 +207,50 @@ describe('LlmProvidersController', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(expect.any(Array));
+      // Every catalog entry exposes onboarding links (string | null, never
+      // undefined) so the add-provider dialog can render "Get your API key".
+      for (const entry of result.data) {
+        expect(entry).toHaveProperty('keyUrl');
+        expect(entry).toHaveProperty('docsUrl');
+        expect(entry.keyUrl === null || typeof entry.keyUrl === 'string').toBe(true);
+        expect(entry.docsUrl === null || typeof entry.docsUrl === 'string').toBe(true);
+      }
+      const openai = result.data.find((e: any) => e.type === 'openai');
+      expect(openai.keyUrl).toBe('https://platform.openai.com/api-keys');
+    });
+  });
+
+  describe('testConnection', () => {
+    const mockRequest = { user: { currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
+
+    it('returns ok with latency + model count when the key works', async () => {
+      modelsHelper.fetchModelsByType.mockResolvedValue([
+        { id: 'gpt-4o' }, { id: 'gpt-4o-mini' },
+      ] as any);
+
+      const result = await controller.testConnection({ type: 'openai', apiKey: 'sk-good' }, mockRequest);
+
+      expect(result.success).toBe(true);
+      expect(result.data.ok).toBe(true);
+      expect(result.data.modelCount).toBe(2);
+      expect(typeof result.data.latencyMs).toBe('number');
+      expect(modelsHelper.fetchModelsByType).toHaveBeenCalledWith('openai', 'sk-good');
+    });
+
+    it('returns ok:false with the error (not a thrown 500) when the key is invalid', async () => {
+      modelsHelper.fetchModelsByType.mockRejectedValue(new Error('401 Unauthorized'));
+
+      const result = await controller.testConnection({ type: 'openai', apiKey: 'sk-bad' }, mockRequest);
+
+      expect(result.success).toBe(true);
+      expect(result.data.ok).toBe(false);
+      expect(result.data.error).toContain('401');
+    });
+
+    it('rejects when type or apiKey is missing', async () => {
+      await expect(
+        controller.testConnection({ type: '', apiKey: '' } as any, mockRequest),
+      ).rejects.toThrow();
     });
   });
 

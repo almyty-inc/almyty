@@ -1,0 +1,49 @@
+# Give an agent a machine to work on
+
+**Goal:** an agent needs to do something that only makes sense on a specific box — run a
+build, query a database that only listens on the internal network, touch files on an on-prem
+server. Install a runner there and the agent can execute on that machine, wherever it is.
+
+## What a runner is
+
+A runner is a small process you install on any machine — your laptop, a build server, a box
+inside a customer's VPC. It connects out to almyty (no inbound ports to open) and gives agents
+a place to execute: run commands, use the runtimes and tools already installed, and touch that
+machine's filesystem and network. The code, data, and credentials stay on the box; only the
+agent's instructions cross the wire.
+
+## 1. Install and start it
+
+```bash
+npx @almyty/auth login
+npx @almyty/runner start --name build-server
+```
+
+It registers and starts heartbeating. In **Runners** you see the machine come online — its OS,
+architecture, capacity, and labels.
+
+![The Runners list — a registered machine, online](/screenshots/runners-list.png)
+
+## 2. It reports what it can do
+
+Open the runner and it shows the runtimes and tools it detected on that machine — Node,
+Python, Docker, Git, and more — so an agent knows what's available before it runs anything.
+
+![A runner's detail — detected runtimes and tools on the machine](/screenshots/runner-detail.png)
+
+## 3. Point an agent at it
+
+Now an agent can execute on that machine as a step in its work: run a test suite on the build
+server, pull from a database only reachable from inside the network, or process files that
+can't leave the premises. The machine is the sandbox; almyty is the control plane.
+
+## Where this goes
+
+Because the runner runs on *any* machine you control, it's how you reach the things a hosted
+agent otherwise can't — internal services, on-prem data, private infrastructure. Driving
+coding-agent CLIs (next example) is one thing you can do with that; it isn't the point of the
+runner, just a capability built on it.
+
+## Related
+
+- [Runners](/runner) · [Orchestrate a multi-vendor coding fleet](/examples/multi-vendor-coding-fleet) · [CLI: the runner](/cli)
