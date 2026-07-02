@@ -1,17 +1,28 @@
-# Chat Interfaces
+# Deploy Your Agent to Your Channels
 
-Agents are most useful where your users already are. almyty ships twelve channel adapters that connect an agent to messaging platforms — configure a channel with the platform's credentials, and inbound messages become agent runs whose replies flow back to the same conversation.
+Agents are most useful where your users already are. Deploying an agent to a channel takes two halves: paste the platform's credentials into almyty, then point the platform at almyty's webhook URL — and for a growing set of platforms that second half is registered automatically. This page walks through both halves for every supported channel.
 
 ![Deploying a channel on an agent — pick the platform, name it, paste its credentials](/screenshots/interfaces-channel-config.png)
+
+## How a deployment works
+
+1. Open the agent's **Interfaces** tab, click **Deploy Channel**, and pick a platform.
+2. Paste the platform credentials from the table below. They are encrypted at rest like every other credential.
+3. After deploying, the **Setup** panel shows your channel's inbound webhook URL — `https://<api-host>/<org>/<channel>` — with a copy button and a platform-specific checklist. Paste the URL into the platform's console where a manual step is needed; for Telegram and Twilio-backed channels the webhook is registered automatically where the platform supports it.
+4. Click **Test connection** in the setup panel. It performs a real authentication probe against the platform, so a bad token surfaces immediately instead of on the first missed message.
+
+Messages then round-trip: platform → adapter (verify, normalize) → agent run → adapter (format for the platform) → reply.
 
 ## Supported channels
 
 | Channel | Inbound | Outbound | You need |
 |---|---|---|---|
 | **Slack** | Events API webhook, request-signature verified | `chat.postMessage` | Bot token, signing secret |
-| **Telegram** | Bot webhook | Bot API `sendMessage` | Bot token |
+| **Telegram** | Bot webhook (registered automatically) | Bot API `sendMessage` | Bot token |
 | **Discord** | Gateway events | Channel messages | Bot token |
-| **WhatsApp** (Twilio) | Twilio webhook, `X-Twilio-Signature` verified | Twilio Messages API | Account SID, auth token, WhatsApp sender |
+| **WhatsApp** (Twilio) | Twilio webhook (registered automatically), `X-Twilio-Signature` verified | Twilio Messages API | Account SID, auth token, WhatsApp sender |
+| **WhatsApp Cloud** (Meta) — rolling out | Meta callback webhook, app-secret verified | WhatsApp Cloud API | Access token, phone number ID, verify token, app secret |
+| **SMS** (Twilio) — rolling out | Twilio webhook (registered automatically), `X-Twilio-Signature` verified | Twilio Messages API | Account SID, auth token, phone number |
 | **Microsoft Teams** | Bot Framework activities, JWT verified | Bot Framework replies | Bot ID + password (Azure bot registration) |
 | **Google Chat** | Space webhook, verification token | Incoming webhook | Webhook URL, verification token |
 | **Signal** | signal-cli REST bridge webhook | Bridge send API | Self-hosted signal-cli bridge URL, phone number |
@@ -23,18 +34,91 @@ Agents are most useful where your users already are. almyty ships twelve channel
 
 Every inbound request is authenticated against the platform's mechanism before it reaches an agent: Slack and Webhook use HMAC signatures, WhatsApp validates the Twilio signature, Teams verifies the Bot Framework JWT, Google Chat checks its verification token. Requests that fail verification are rejected, never queued.
 
-## Connecting a channel
+## Per-platform quick guides
 
-1. Open the agent's **Interfaces** tab, click **Deploy Channel**, and pick a platform.
-2. Paste the platform credentials from the table above. They are encrypted at rest like every other credential.
-3. The channel's connection test performs a real authentication probe against the platform, so a bad token surfaces immediately instead of on the first missed message.
-4. Point the platform's webhook at the URL almyty displays (for webhook-driven channels).
+The setup panel in the app shows the same checklist for the channel you deployed; this section is the reference copy.
 
-Messages then round-trip: platform → adapter (verify, normalize) → agent run → adapter (format for the platform) → reply.
+### Slack
+
+1. Create an app at [api.slack.com/apps](https://api.slack.com/apps) (from scratch).
+2. Under **OAuth & Permissions**, add the bot scopes `chat:write`, `app_mentions:read`, and `im:history`, then install the app to your workspace.
+3. Paste the Bot Token (`xoxb-...`) and Signing Secret into the channel's configuration in almyty.
+4. Under **Event Subscriptions**, enable events and paste your almyty webhook URL as the Request URL.
+5. Subscribe to the bot events `message.im` and `app_mention`, then save.
+
+### Telegram
+
+1. Message [@BotFather](https://t.me/BotFather), run `/newbot`, and copy the bot token into the channel's configuration.
+2. Done — the webhook is registered automatically on deploy.
+
+### WhatsApp and SMS (Twilio)
+
+1. Copy the Account SID and Auth Token from the [Twilio Console](https://console.twilio.com).
+2. Enter the sender number (your WhatsApp sender or SMS phone number).
+3. The number's inbound webhook is registered automatically where the platform supports it. SMS is rolling out.
+
+### WhatsApp Cloud (Meta) — rolling out
+
+1. Create a Meta app with the WhatsApp product at [developers.facebook.com](https://developers.facebook.com).
+2. Paste the access token, phone number ID, verify token, and app secret into the channel's configuration.
+3. In the app's **WhatsApp → Configuration** page, paste your almyty webhook URL as the callback URL, using the same verify token.
+4. Subscribe the app to the `messages` webhook field.
+
+### Discord
+
+1. Create an application and bot at [discord.com/developers/applications](https://discord.com/developers/applications).
+2. Enable the **MESSAGE CONTENT** intent under Bot settings.
+3. Invite the bot to your server via an OAuth2 URL with the `bot` scope.
+4. No webhook needed — almyty connects out to the Discord gateway.
+
+### Google Chat
+
+1. Create a Chat app in the Google Cloud console and set your almyty webhook URL as its HTTP endpoint.
+2. Paste the space's incoming webhook URL and the verification token into the channel's configuration.
+
+### Microsoft Teams
+
+1. Register a bot in Azure (Bot Framework) and copy the bot ID, password, and tenant ID into the channel's configuration.
+2. Set the bot's messaging endpoint to your almyty webhook URL.
+
+### Signal
+
+1. Run a [signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api) bridge and enter its URL and your phone number.
+2. Point the bridge's receive webhook at your almyty webhook URL.
+
+### Matrix
+
+1. Enter the homeserver URL, an access token for the bot account, and the room ID.
+2. No webhook needed — almyty syncs from the homeserver.
+
+### IRC
+
+1. Run an IRC↔HTTP bridge and enter the server, port, channel, and nick.
+2. Point the bridge's outbound webhook at your almyty webhook URL.
+
+### Email
+
+1. Paste a Resend API key and set the reply-from and receive addresses.
+2. Configure your inbound email route to forward to your almyty webhook URL.
+
+### Webhook
+
+1. POST messages to your almyty webhook URL; optionally sign requests with the shared secret (HMAC).
+2. Replies are POSTed to the callback URL you configure on the channel.
+
+### Chat Widget
+
+Copy the embed snippet from the setup panel into your site's HTML, just before the closing `body` tag:
+
+```html
+<script src="https://<api-host>/gateways/<gateway-id>/widget.js" async></script>
+```
+
+No webhook needed — the widget talks to almyty directly.
 
 ## AI disclosure (EU AI Act Art. 50)
 
-Every channel has an **AI disclosure** setting. When enabled, the first outbound message of each conversation is preceded by a disclosure line — by default:
+Every channel has an **AI disclosure** setting — in the deploy dialog it is the "Disclose AI identity on first message" checkbox. When enabled, the first outbound message of each conversation is preceded by a disclosure line — by default:
 
 > You are chatting with an AI assistant.
 

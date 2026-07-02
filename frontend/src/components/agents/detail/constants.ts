@@ -62,6 +62,10 @@ export function getDefaultInterfaceConfig(type: string): Record<string, any> {
       return { botToken: '' }
     case 'whatsapp':
       return { accountSid: '', authToken: '', phoneNumber: '' }
+    case 'sms':
+      return { accountSid: '', authToken: '', phoneNumber: '' }
+    case 'whatsapp_cloud':
+      return { accessToken: '', phoneNumberId: '', verifyToken: '', appSecret: '' }
     case 'email':
       return { resendApiKey: '', replyFrom: '', receiveAddress: '' }
     case 'webhook':
@@ -116,6 +120,19 @@ export function getInterfaceConfigSummary(type: string, config: Record<string, a
         { label: 'Account SID', value: config.accountSid || '' },
         { label: 'Auth Token', value: config.authToken || '', secret: true },
         { label: 'Phone', value: config.phoneNumber || '' },
+      ]
+    case 'sms':
+      return [
+        { label: 'Account SID', value: config.accountSid || '' },
+        { label: 'Auth Token', value: config.authToken || '', secret: true },
+        { label: 'Phone', value: config.phoneNumber || '' },
+      ]
+    case 'whatsapp_cloud':
+      return [
+        { label: 'Access Token', value: config.accessToken || '', secret: true },
+        { label: 'Phone Number ID', value: config.phoneNumberId || '' },
+        { label: 'Verify Token', value: config.verifyToken || '', secret: true },
+        { label: 'App Secret', value: config.appSecret || '', secret: true },
       ]
     case 'email':
       return [
