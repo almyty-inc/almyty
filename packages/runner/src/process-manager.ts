@@ -235,6 +235,33 @@ export class ProcessManager {
     };
   }
 
+  /**
+   * Subscribe to a process's live output and exit. Push-based counterpart to
+   * read(): the coding-session layer streams chunks to the backend as they
+   * arrive instead of polling. Does NOT drain the pull buffer — a caller can
+   * observe and read() the same process without losing bytes in either place.
+   * Returns an unsubscribe function.
+   */
+  observe(
+    workspaceId: string,
+    processId: string,
+    handlers: { onData?: (chunk: string) => void; onExit?: (info: WaitResult) => void },
+  ): () => void {
+    const proc = this.getOrThrow(workspaceId, processId);
+    const onData = (chunk: string | Buffer) => {
+      handlers.onData?.(typeof chunk === 'string' ? chunk : chunk.toString('utf8'));
+    };
+    const onExit = (info: { exitCode: number | null; signal: string | null }) => {
+      handlers.onExit?.({ exitCode: info.exitCode, signal: info.signal });
+    };
+    if (handlers.onData) proc.adapter.on('data', onData);
+    if (handlers.onExit) proc.adapter.on('exit', onExit);
+    return () => {
+      proc.adapter.off('data', onData);
+      proc.adapter.off('exit', onExit);
+    };
+  }
+
   async waitForIdle(
     workspaceId: string,
     processId: string,

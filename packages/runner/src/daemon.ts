@@ -11,6 +11,7 @@ import { createDefaultAdapterFactory, ProcessManager } from './process-manager.j
 import { StreamableClient, envelope } from './streamable-client.js';
 import { WorkerEnvelope, RequestPayload, ResponsePayload, WORKER_ERROR_CODES } from './protocol.js';
 import { dispatchHandler, HandlerContext } from './handlers.js';
+import { CodingSessionManager } from './coding-sessions.js';
 
 const STATE_DIR = join(homedir(), '.almyty', 'runner');
 const PID_FILE = join(STATE_DIR, 'daemon.pid');
@@ -52,6 +53,7 @@ export class RunnerDaemon {
   private resolved: ResolvedConfig | null = null;
   private client: StreamableClient | null = null;
   private processes: ProcessManager | null = null;
+  private coding: CodingSessionManager | null = null;
   private runnerId: string | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private status: DaemonStatus | null = null;
@@ -113,6 +115,14 @@ export class RunnerDaemon {
     // may have constrained max_concurrent below what we requested).
     const effective = regBody.data.effectiveConfig;
     this.processes = new ProcessManager(createDefaultAdapterFactory(), effective.maxConcurrent);
+    // Coding-session registry for the chat bridge. Output events are sent
+    // through the same streamable client the heartbeats ride; the client is
+    // captured lazily so construction order doesn't matter.
+    this.coding = new CodingSessionManager(this.processes, (payload) => {
+      void this.client?.send(envelope('event', payload)).catch((err: any) => {
+        process.stderr.write(`coding event send failed: ${err?.message ?? err}\n`);
+      });
+    });
 
     // Open the Streamable HTTP stream.
     this.client = new StreamableClient({ baseUrl: backendUrl, token: credentials.token });
@@ -233,6 +243,7 @@ export class RunnerDaemon {
       labels: this.resolved.labels,
       maxConcurrent: this.resolved.config.maxConcurrent,
       config: this.resolved.config,
+      coding: this.coding ?? undefined,
     };
     const response: ResponsePayload = await dispatchHandler(ctx, req.payload);
     await this.client.send(envelope('response', response, req.id));

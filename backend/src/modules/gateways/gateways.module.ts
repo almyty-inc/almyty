@@ -43,6 +43,8 @@ import { SlackAdapter } from './channels/adapters/slack.adapter';
 import { DiscordAdapter } from './channels/adapters/discord.adapter';
 import { TelegramAdapter } from './channels/adapters/telegram.adapter';
 import { WhatsAppAdapter } from './channels/adapters/whatsapp.adapter';
+import { WhatsAppCloudAdapter } from './channels/adapters/whatsapp-cloud.adapter';
+import { SmsAdapter } from './channels/adapters/sms.adapter';
 import { EmailAdapter } from './channels/adapters/email.adapter';
 import { WebhookAdapter } from './channels/adapters/webhook.adapter';
 import { GoogleChatAdapter } from './channels/adapters/google-chat.adapter';
@@ -52,6 +54,7 @@ import { MatrixAdapter } from './channels/adapters/matrix.adapter';
 import { IrcAdapter } from './channels/adapters/irc.adapter';
 import { ChannelGatewayService } from './channels/channel-gateway.service';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
+import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
 import { ChannelEventsController } from './channels/channel-events.controller';
 import { ChannelWidgetController } from './channels/channel-widget.controller';
 @Module({
@@ -84,11 +87,14 @@ import { ChannelWidgetController } from './channels/channel-widget.controller';
     // Channel adapters
     ChannelGatewayService,
     DiscordGatewayTransport,
+    ChannelWebhookRegistrar,
     ChatWidgetAdapter,
     SlackAdapter,
     DiscordAdapter,
     TelegramAdapter,
     WhatsAppAdapter,
+    WhatsAppCloudAdapter,
+    SmsAdapter,
     EmailAdapter,
     WebhookAdapter,
     GoogleChatAdapter,
@@ -119,6 +125,7 @@ import { ChannelWidgetController } from './channels/channel-widget.controller';
     GatewayToolService,
     ChannelGatewayService,
     DiscordGatewayTransport,
+    ChannelWebhookRegistrar,
   ],
 })
 export class GatewaysModule {}

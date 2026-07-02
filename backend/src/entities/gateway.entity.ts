@@ -38,6 +38,8 @@ export enum GatewayType {
   DISCORD = 'discord',
   TELEGRAM = 'telegram',
   WHATSAPP = 'whatsapp',
+  WHATSAPP_CLOUD = 'whatsapp_cloud',
+  SMS = 'sms',
   EMAIL = 'email',
   WEBHOOK = 'webhook',
   GOOGLE_CHAT = 'google_chat',

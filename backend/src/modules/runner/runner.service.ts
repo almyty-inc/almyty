@@ -285,6 +285,21 @@ export class RunnerService {
     return runner;
   }
 
+  /**
+   * Org-scoped lookup for the coding bridge: any authenticated member of
+   * the runner's organization may drive coding sessions on it (the chat
+   * REPL dispatches on behalf of the user, not just the runner's owner).
+   * 404 when the runner doesn't exist, 403 when it belongs to another org.
+   */
+  async getOneForOrg(runnerId: string, organizationId: string): Promise<Runner> {
+    const runner = await this.runners.findOne({ where: { id: runnerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.organizationId !== organizationId) {
+      throw new ForbiddenException('runner belongs to a different organization');
+    }
+    return runner;
+  }
+
   async unregister(runnerId: string, userId: string, organizationId: string): Promise<void> {
     const runner = await this.runners.findOne({
       where: { id: runnerId, organizationId },

@@ -222,6 +222,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         new ToolStatsHelper(toolRepo, {} as any, {} as any),
         {} as any, // runnerCalls
         {} as any, // memoryService
+        {} as any, // mcpSources
       );
     });
 
