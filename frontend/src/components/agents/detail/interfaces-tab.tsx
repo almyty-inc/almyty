@@ -53,6 +53,7 @@ import {
 } from './constants'
 import { AI_DISCLOSURE_CHANNEL_TYPES } from './channel-setup'
 import { ChannelSetupPanel } from './channel-setup-panel'
+import { ChannelInstallationsPanel } from './channel-installations-panel'
 import type { Gateway } from '@/types'
 
 interface InterfacesTabProps {
@@ -310,6 +311,16 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
                   <Label htmlFor="cfg-slack-secret">Signing Secret</Label>
                   <Input id="cfg-slack-secret" type="password" placeholder="Signing secret" value={interfaceConfig.signingSecret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, signingSecret: e.target.value }))} className="mt-1" />
                 </div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-1">Multi-workspace installs (optional)</p>
+                <div>
+                  <Label htmlFor="cfg-slack-client-id">OAuth Client ID</Label>
+                  <Input id="cfg-slack-client-id" placeholder="Slack app client ID" value={interfaceConfig.client_id || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, client_id: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-slack-client-secret">OAuth Client Secret</Label>
+                  <Input id="cfg-slack-client-secret" type="password" placeholder="Slack app client secret" value={interfaceConfig.client_secret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, client_secret: e.target.value }))} className="mt-1" />
+                </div>
+                <p className="text-xs text-muted-foreground">With OAuth credentials set, this channel gets an "Add to Slack" install link so any workspace can install it.</p>
               </div>
             )}
 
@@ -424,7 +435,13 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
               Finish connecting {setupGateway?.name || 'this channel'} on the platform's side.
             </DialogDescription>
           </DialogHeader>
-          {setupGateway && <ChannelSetupPanel gateway={setupGateway} />}
+          {setupGateway && (
+            <>
+              <ChannelSetupPanel gateway={setupGateway} />
+              {/* Multi-workspace OAuth installs (Slack channels with a configured client_id) */}
+              <ChannelInstallationsPanel gateway={setupGateway} />
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </>

@@ -15,6 +15,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { encryptField, isEncrypted } from '../../common/security/field-crypto';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
 import { EmailProvisioningService } from './channels/email-provisioning.service';
@@ -217,6 +218,23 @@ export class GatewaysService {
       );
   }
 
+  /**
+   * Channel configs can carry the channel app's OAuth client secret
+   * (multi-workspace installs, e.g. a Slack app's client_secret).
+   * Encrypt it at rest; decryption happens at the point of use
+   * (SlackInstallService), and isEncrypted() makes this idempotent so
+   * an already-encrypted value round-trips through update unchanged.
+   */
+  private encryptConfigSecrets(configuration?: Record<string, any>): void {
+    if (!configuration) return;
+    for (const key of ['client_secret', 'clientSecret']) {
+      const value = configuration[key];
+      if (typeof value === 'string' && value && !isEncrypted(value)) {
+        configuration[key] = encryptField(value);
+      }
+    }
+  }
+
   async createGateway(
     createGatewayDto: CreateGatewayDto,
     organizationId: string,
@@ -283,6 +301,9 @@ export class GatewaysService {
         (createGatewayDto as any).visibility,
         (createGatewayDto as any).teamId,
       );
+
+      // Encrypt channel OAuth client secrets at rest before persisting.
+      this.encryptConfigSecrets(createGatewayDto.configuration);
 
       // Create the gateway
       const gateway = this.gatewayRepository.create({
@@ -366,6 +387,7 @@ export class GatewaysService {
       // Validate configuration if updated
       if (updateGatewayDto.configuration) {
         this.init.validateGatewayConfiguration(gateway.type, gateway.configuration);
+        this.encryptConfigSecrets(gateway.configuration);
       }
 
       const updatedGateway = await this.gatewayRepository.save(gateway);
