@@ -1,0 +1,33 @@
+# 🛡️ Run a governed refund agent in production
+
+**Stack** — `Trigger: your billing app calls the agent API` · `Models: primary + cross-vendor verify` · `Tools: billing/refund API` · `Mode: constraints + verify + approval + audit` · `Output: refund issued or escalated, full trail`
+
+**Who it's for** — teams that want an agent to issue refunds, but can't accept "the model decided to."
+**What it does** — handles refund requests end to end: it checks policy, verifies its own reasoning with a second-vendor model, issues small refunds automatically, escalates large ones to a human, and records every action for audit.
+
+## Build it
+
+1. **Connect the billing API** via *Connect API* so the agent can look up orders and issue refunds.
+2. **Set constraints** — always-on rules it can't argue past: *never refund over $500 without approval; Enterprise customers get a 4-hour SLA.*
+
+   ![The Constraints panel — always-on rules](/screenshots/agent-constraints.png)
+
+3. **Add a verify panel** — a second-vendor model re-checks the refund decision before it executes; on disagreement it revises.
+4. **Gate the irreversible step** — the agent calls `request_approval` for refunds over the threshold; the run pauses and a human approves or rejects.
+
+   ![A pending refund escalation](/screenshots/approvals-pending.png)
+
+5. **Wire the trigger** — your billing app calls the agent's API when a refund is requested.
+6. **Keep the receipts** — every action is in the [audit trail](/agents/versioning), exportable, with who/when/what.
+
+## Make it yours
+
+- Self-host the whole thing for data residency — see [Air-gapped, self-hosted agents](/examples/air-gapped-self-host).
+- Add [RBAC](/organizations) so only finance leads can approve.
+- Raise or lower the auto-refund threshold per customer tier with a lookup tool.
+
+**Uses** — `Finance` · `Constraints` · `Verification` · `Approvals` · `Audit`
+
+## Related
+
+- [Approvals](/approvals) · [Verification](/agents/autonomous#verification) · [Organizations](/organizations) · [Versioning & audit](/agents/versioning)
