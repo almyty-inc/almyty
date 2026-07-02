@@ -84,4 +84,60 @@ describe('SpendService', () => {
     expect(startOfPeriod('day', t).toISOString()).toBe('2026-06-23T00:00:00.000Z');
     expect(startOfPeriod('month', t).toISOString()).toBe('2026-06-01T00:00:00.000Z');
   });
+
+  it('attributes spend per team via the agent join (null = no team)', async () => {
+    const rows = [
+      { teamId: 'team-1', total: '6.00', count: '2' },
+      { teamId: null, total: '3.00', count: '1' },
+    ];
+    const qb: any = {};
+    for (const m of ['leftJoin', 'select', 'addSelect', 'where', 'andWhere', 'groupBy', 'orderBy']) {
+      qb[m] = jest.fn(() => qb);
+    }
+    qb.getRawMany = jest.fn().mockResolvedValue(rows);
+    const repo: any = { createQueryBuilder: jest.fn(() => qb) };
+    const service = new SpendService(repo);
+
+    const byTeam = await service.byTeam('org-1', new Date('2026-06-01T00:00:00Z'));
+    expect(qb.leftJoin).toHaveBeenCalledWith('agents', 'agent', 'agent.id = run.agentId');
+    expect(byTeam).toEqual([
+      { teamId: 'team-1', spentCents: 600, runCount: 2 },
+      { teamId: null, spentCents: 300, runCount: 1 },
+    ]);
+  });
+
+  describe('forecast', () => {
+    const service = new SpendService({} as any);
+    const bucket = (spentCents: number) => ({ periodStart: 'x', spentCents, runCount: 1 });
+
+    it('projects a rising linear series', () => {
+      const f = service.forecast([bucket(100), bucket(200), bucket(300)], 1);
+      expect(f.basis).toBe('linear');
+      expect(f.perPeriodCents).toBe(100);
+      // fit y = 100x + 100 → x=3 → 400.
+      expect(f.projectedCents).toBe(400);
+    });
+
+    it('sums multiple periods ahead', () => {
+      const f = service.forecast([bucket(100), bucket(200), bucket(300)], 2);
+      // x=3 (400) + x=4 (500) = 900.
+      expect(f.projectedCents).toBe(900);
+      expect(f.periodsAhead).toBe(2);
+    });
+
+    it('clamps a declining projection to zero', () => {
+      const f = service.forecast([bucket(300), bucket(200), bucket(100)], 1);
+      // fit slope -100, x=3 → 0 (clamped, not negative).
+      expect(f.projectedCents).toBe(0);
+      expect(f.perPeriodCents).toBe(-100);
+    });
+
+    it('flags insufficient data with fewer than two points', () => {
+      expect(service.forecast([], 1)).toMatchObject({ basis: 'insufficient-data', projectedCents: 0 });
+      expect(service.forecast([bucket(50)], 2)).toMatchObject({
+        basis: 'insufficient-data',
+        projectedCents: 100,
+      });
+    });
+  });
 });

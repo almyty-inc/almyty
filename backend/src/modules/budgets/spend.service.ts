@@ -27,10 +27,26 @@ export interface SpendByAgent {
   runCount: number;
 }
 
+export interface SpendByTeam {
+  /** Null for org-scoped agents that belong to no team. */
+  teamId: string | null;
+  spentCents: number;
+  runCount: number;
+}
+
 export interface SpendSummary {
   totalCents: number;
   timeseries: SpendBucket[];
   byAgent: SpendByAgent[];
+}
+
+export interface SpendForecast {
+  /** Projected spend for the next `periodsAhead` buckets, in cents. */
+  projectedCents: number;
+  /** Per-bucket slope (cents/period) from the least-squares fit. */
+  perPeriodCents: number;
+  periodsAhead: number;
+  basis: 'linear' | 'insufficient-data';
 }
 
 /**
@@ -134,5 +150,84 @@ export class SpendService {
       spentCents: this.toCents(r.total),
       runCount: parseInt(r.count, 10),
     }));
+  }
+
+  /**
+   * Cost attributed per team (T5.4 chargeback). Runs carry no team of
+   * their own, so we join through the owning agent's `teamId`. Org-scoped
+   * agents (no team) roll up under a `null` bucket.
+   */
+  async byTeam(
+    organizationId: string,
+    from: Date,
+    to?: Date,
+  ): Promise<SpendByTeam[]> {
+    const qb = this.runRepo
+      .createQueryBuilder('run')
+      .leftJoin('agents', 'agent', 'agent.id = run.agentId')
+      .select('agent.teamId', 'teamId')
+      .addSelect('COALESCE(SUM(run.totalCost), 0)', 'total')
+      .addSelect('COUNT(*)', 'count')
+      .where('run.organizationId = :orgId', { orgId: organizationId })
+      .andWhere('run.createdAt >= :from', { from })
+      .groupBy('agent.teamId')
+      .orderBy('COALESCE(SUM(run.totalCost), 0)', 'DESC');
+    if (to) qb.andWhere('run.createdAt < :to', { to });
+
+    const rows = await qb.getRawMany<{ teamId: string | null; total: string; count: string }>();
+    return rows.map((r) => ({
+      teamId: r.teamId ?? null,
+      spentCents: this.toCents(r.total),
+      runCount: parseInt(r.count, 10),
+    }));
+  }
+
+  /**
+   * Simple least-squares linear forecast (T5.4). Fits a line to the spend
+   * timeseries and projects the total spend over the next `periodsAhead`
+   * buckets, clamping any negative projection to zero. With fewer than two
+   * points there is nothing to fit — we carry the last observed value.
+   */
+  forecast(timeseries: SpendBucket[], periodsAhead = 1): SpendForecast {
+    const ys = timeseries.map((b) => b.spentCents);
+    const n = ys.length;
+    const ahead = Math.max(1, periodsAhead);
+
+    if (n < 2) {
+      const last = n === 1 ? Math.max(0, ys[0]) : 0;
+      return {
+        projectedCents: last * ahead,
+        perPeriodCents: 0,
+        periodsAhead: ahead,
+        basis: 'insufficient-data',
+      };
+    }
+
+    let sx = 0;
+    let sy = 0;
+    let sxx = 0;
+    let sxy = 0;
+    for (let i = 0; i < n; i++) {
+      sx += i;
+      sy += ys[i];
+      sxx += i * i;
+      sxy += i * ys[i];
+    }
+    const denom = n * sxx - sx * sx;
+    const slope = denom === 0 ? 0 : (n * sxy - sx * sy) / denom;
+    const intercept = (sy - slope * sx) / n;
+
+    let projected = 0;
+    for (let k = 0; k < ahead; k++) {
+      const x = n + k;
+      projected += Math.max(0, slope * x + intercept);
+    }
+
+    return {
+      projectedCents: Math.round(projected),
+      perPeriodCents: Math.round(slope),
+      periodsAhead: ahead,
+      basis: 'linear',
+    };
   }
 }
