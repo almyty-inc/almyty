@@ -12,6 +12,7 @@ import { MetricType, MetricStatus } from '../../entities/usage-metric.entity';
 import { setProtocolContext } from '../../common/interceptors/protocol-context';
 import { GatewayRateLimitService } from './gateway-rate-limit.service';
 import { ChannelGatewayService } from './channels/channel-gateway.service';
+import { WhatsAppCloudAdapter } from './channels/adapters/whatsapp-cloud.adapter';
 import { Organization } from '../../entities/organization.entity';
 import { McpService } from '../mcp/mcp.service';
 import { AlmytyMcpService } from '../mcp/almyty-mcp.service';
@@ -45,6 +46,8 @@ export class UnifiedGatewayDelegation {
     GatewayType.DISCORD,
     GatewayType.TELEGRAM,
     GatewayType.WHATSAPP,
+    GatewayType.WHATSAPP_CLOUD,
+    GatewayType.SMS,
     GatewayType.EMAIL,
     GatewayType.WEBHOOK,
     GatewayType.GOOGLE_CHAT,
@@ -168,6 +171,23 @@ export class UnifiedGatewayDelegation {
     res: Response,
     body: any,
   ) {
+    // Meta's webhook verification handshake for WhatsApp Cloud is a
+    // GET (hub.mode=subscribe&hub.verify_token=...&hub.challenge=...)
+    // that must be answered with the raw challenge string. This is the
+    // only channel GET we accept; it authenticates via the configured
+    // verify_token, not a signature.
+    if (req.method === 'GET' && gateway.type === GatewayType.WHATSAPP_CLOUD) {
+      const challenge = WhatsAppCloudAdapter.handleVerification(
+        (req.query as Record<string, any>) ?? {},
+        gateway.configuration || {},
+      );
+      if (challenge === null) {
+        throw new HttpException('Webhook verification failed', HttpStatus.FORBIDDEN);
+      }
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.status(HttpStatus.OK).send(challenge);
+    }
+
     if (req.method !== 'POST') {
       throw new HttpException(
         'Channel gateways only accept platform webhook POSTs',

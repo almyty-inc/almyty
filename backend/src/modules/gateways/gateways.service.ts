@@ -16,6 +16,7 @@ import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
+import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -152,6 +153,9 @@ export class GatewaysService {
     // Optional so unit tests (and contexts without the transport) can
     // construct the service without a live discord connection manager.
     @Optional() private readonly discordTransport?: DiscordGatewayTransport,
+    // Optional for the same reason: platform webhook auto-registration
+    // must never be required to construct the service.
+    @Optional() private readonly webhookRegistrar?: ChannelWebhookRegistrar,
   ) {}
 
   /**
@@ -175,6 +179,27 @@ export class GatewaysService {
     } catch (err: any) {
       this.logger.warn(`Failed to stop discord gateway transport: ${err.message}`);
     }
+  }
+
+  /**
+   * Keep the platform inbound-webhook registration (telegram
+   * setWebhook, twilio number webhook) in sync with the gateway row.
+   * Fire-and-forget: registration must never fail a CRUD request.
+   */
+  private syncWebhookRegistration(gateway: Gateway): void {
+    this.webhookRegistrar
+      ?.sync(gateway)
+      .catch((err: any) =>
+        this.logger.warn(`Failed to sync channel webhook registration: ${err.message}`),
+      );
+  }
+
+  private removeWebhookRegistration(gateway: Gateway): void {
+    this.webhookRegistrar
+      ?.remove(gateway)
+      .catch((err: any) =>
+        this.logger.warn(`Failed to remove channel webhook registration: ${err.message}`),
+      );
   }
 
   async createGateway(
@@ -265,6 +290,10 @@ export class GatewaysService {
       // Start the persistent connection for discord channel gateways.
       this.syncDiscordTransport(savedGateway);
 
+      // Register the platform inbound webhook (telegram/twilio) for
+      // channel gateways that support it.
+      this.syncWebhookRegistration(savedGateway);
+
       // Audit log (fire-and-forget)
       this.auditLogService.logCreate(organizationId, userId, AuditResource.GATEWAY, savedGateway.id, savedGateway.name);
 
@@ -331,6 +360,10 @@ export class GatewaysService {
       // Reconcile the persistent connection for discord channel gateways
       // (bot token may have changed).
       this.syncDiscordTransport(updatedGateway);
+
+      // Reconcile the platform webhook registration (token or public
+      // endpoint may have changed).
+      this.syncWebhookRegistration(updatedGateway);
 
       // Audit log (fire-and-forget)
       const changes = this.auditLogService.computeChanges(oldValues, updateGatewayDto, ['name', 'description', 'configuration', 'rateLimitConfig', 'metadata']);
@@ -520,6 +553,7 @@ export class GatewaysService {
     this.logger.log(`Gateway '${gateway.name}' activated`);
 
     this.syncDiscordTransport(updatedGateway);
+    this.syncWebhookRegistration(updatedGateway);
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId, action: AuditAction.GATEWAY_ACTIVATE, resourceType: AuditResource.GATEWAY, resourceId: gateway.id, resourceName: gateway.name });
@@ -550,6 +584,7 @@ export class GatewaysService {
     this.logger.log(`Gateway '${gateway.name}' deactivated`);
 
     this.syncDiscordTransport(updatedGateway);
+    this.syncWebhookRegistration(updatedGateway);
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId, action: AuditAction.GATEWAY_DEACTIVATE, resourceType: AuditResource.GATEWAY, resourceId: gateway.id, resourceName: gateway.name });
@@ -590,6 +625,7 @@ export class GatewaysService {
     await this.gatewayRepository.remove(gateway);
 
     this.stopDiscordTransport(gateway);
+    this.removeWebhookRegistration(gateway);
 
     this.logger.log(`Gateway '${gateway.name}' deleted`);
 

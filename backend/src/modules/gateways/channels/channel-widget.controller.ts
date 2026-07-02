@@ -16,12 +16,16 @@ import { Response } from 'express';
 
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { ChannelGatewayService } from './channel-gateway.service';
+import { buildWidgetScript } from './widget-script';
 
 /**
  * Public (unauthenticated) surface for the embedded chat widget — the
  * widget runs on third-party pages with no almyty session.
  *
  * Loop:
+ *   0. GET /gateways/:id/widget.js
+ *      -> self-contained embed script (bubble + panel) customers drop
+ *         into their site: <script src=".../gateways/<id>/widget.js" async>
  *   1. POST /gateways/:id/widget/messages  { message, threadId? }
  *      -> { runId, threadId }  (threadId is a server-minted run UUID on
  *         the first message; the widget echoes it back afterwards)
@@ -39,6 +43,22 @@ export class ChannelWidgetController {
     private readonly channelGatewayService: ChannelGatewayService,
     private readonly gatewayRateLimit: GatewayRateLimitService,
   ) {}
+
+  @Get(':id/widget.js')
+  @ApiOperation({ summary: 'Self-contained chat widget embed script' })
+  async widgetScript(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+  ) {
+    // 404s unless the gateway exists, is a chat_widget and is active —
+    // the script is only served for deployable widgets.
+    await this.channelGatewayService.findWidgetGateway(id);
+
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.send(buildWidgetScript(id));
+  }
 
   @Post(':id/widget/messages')
   @ApiOperation({ summary: 'Send a message from the chat widget' })

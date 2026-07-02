@@ -18,6 +18,8 @@ import { SlackAdapter } from './adapters/slack.adapter';
 import { DiscordAdapter } from './adapters/discord.adapter';
 import { TelegramAdapter } from './adapters/telegram.adapter';
 import { WhatsAppAdapter } from './adapters/whatsapp.adapter';
+import { WhatsAppCloudAdapter } from './adapters/whatsapp-cloud.adapter';
+import { SmsAdapter } from './adapters/sms.adapter';
 import { EmailAdapter } from './adapters/email.adapter';
 import { WebhookAdapter } from './adapters/webhook.adapter';
 import { GoogleChatAdapter } from './adapters/google-chat.adapter';
@@ -45,6 +47,8 @@ export class ChannelGatewayService {
     private readonly discordAdapter: DiscordAdapter,
     private readonly telegramAdapter: TelegramAdapter,
     private readonly whatsAppAdapter: WhatsAppAdapter,
+    private readonly whatsAppCloudAdapter: WhatsAppCloudAdapter,
+    private readonly smsAdapter: SmsAdapter,
     private readonly emailAdapter: EmailAdapter,
     private readonly webhookAdapter: WebhookAdapter,
     private readonly googleChatAdapter: GoogleChatAdapter,
@@ -59,6 +63,8 @@ export class ChannelGatewayService {
       [GatewayType.DISCORD, this.discordAdapter],
       [GatewayType.TELEGRAM, this.telegramAdapter],
       [GatewayType.WHATSAPP, this.whatsAppAdapter],
+      [GatewayType.WHATSAPP_CLOUD, this.whatsAppCloudAdapter],
+      [GatewayType.SMS, this.smsAdapter],
       [GatewayType.EMAIL, this.emailAdapter],
       [GatewayType.WEBHOOK, this.webhookAdapter],
       [GatewayType.GOOGLE_CHAT, this.googleChatAdapter],
@@ -537,7 +543,8 @@ export class ChannelGatewayService {
           const json: any = await res.json().catch(() => ({}));
           return { ok: true, detail: `bot ${json?.username || '?'}` };
         }
-        case GatewayType.WHATSAPP: {
+        case GatewayType.WHATSAPP:
+        case GatewayType.SMS: {
           if (!cfg.twilio_account_sid || !cfg.twilio_auth_token) {
             return { ok: false, detail: 'twilio_account_sid + twilio_auth_token required' };
           }
@@ -547,6 +554,17 @@ export class ChannelGatewayService {
           });
           return res.ok ? { ok: true, detail: 'twilio creds ok' }
                         : { ok: false, detail: `twilio ${res.status}` };
+        }
+        case GatewayType.WHATSAPP_CLOUD: {
+          if (!cfg.access_token || !cfg.phone_number_id) {
+            return { ok: false, detail: 'access_token + phone_number_id required' };
+          }
+          const res = await fetch(
+            `https://graph.facebook.com/v20.0/${cfg.phone_number_id}?fields=id`,
+            { headers: { Authorization: `Bearer ${cfg.access_token}` } },
+          );
+          return res.ok ? { ok: true, detail: 'whatsapp cloud phone number reachable' }
+                        : { ok: false, detail: `graph api ${res.status}` };
         }
         case GatewayType.MICROSOFT_TEAMS: {
           if (!cfg.bot_id || !cfg.bot_password) return { ok: false, detail: 'bot_id + bot_password required' };
