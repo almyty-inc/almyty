@@ -13,6 +13,9 @@ export const createProviderSchema = z.object({
   type: z.string().min(1, 'Provider type is required'),
   apiKey: z.string().min(1, 'API key is required'),
   organizationId: z.string().optional(),
+  // Optional admin-scoped key for the provider's usage/cost API (issue
+  // #241) — only rendered for types in providerUsageApiSupport.
+  usageApiKey: z.string().optional(),
 }).refine((data) => {
   // Just check it's not empty — actual validation happens when we test the connection
   return data.apiKey.length >= 8
@@ -50,6 +53,7 @@ export interface LlmProvider {
   organizationId: string
   configuration: {
     apiKey?: string
+    usageApiKey?: string
     baseUrl?: string
     region?: string
     model?: string
