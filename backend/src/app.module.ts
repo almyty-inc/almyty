@@ -55,6 +55,7 @@ import { Referral } from './entities/referral.entity';
 // OSS); only the feature logic moved to `ee/`.
 import { CompliancePolicy } from './entities/compliance-policy.entity';
 import { RetentionPolicy } from './entities/retention-policy.entity';
+import { McpSource } from './entities/mcp-source.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -62,6 +63,7 @@ import { UsersModule } from './modules/users/users.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { ApisModule } from './modules/apis/apis.module';
 import { ToolsModule } from './modules/tools/tools.module';
+import { McpSourcesModule } from './modules/mcp-sources/mcp-sources.module';
 import { GatewaysModule } from './modules/gateways/gateways.module';
 // import { MonitoringModule } from './modules/monitoring/monitoring.module'; // TODO: Create this module
 import { SchemaParserModule } from './modules/schema-parser/schema-parser.module';
@@ -198,6 +200,7 @@ import { databaseConfig } from './config/database.config';
       ReferralCode,
       Referral,
       RetentionPolicy,
+      McpSource,
     ]),
 
     // Rate limiting — backed by Redis so limits are shared across replicas
@@ -263,6 +266,7 @@ import { databaseConfig } from './config/database.config';
     SchemaParserModule,
     JsonSchemaTranslatorModule,
     ToolsModule,
+    McpSourcesModule,
     GatewaysModule,
     LlmProvidersModule,
     ApisModule,
