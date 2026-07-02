@@ -1,17 +1,19 @@
 # Versioning and Rollback
 
-almyty tracks how an agent changes over time in two layers: an **audit log**
-that records every change automatically, and **version snapshots** you save as
-named restore points and can roll back to.
+Every change to an agent — and to your tools, APIs, and gateways — is tracked
+automatically. The **Change History** shows each version (who changed it and
+when, expandable to the exact field diff), and you can roll back to any of them.
+Below it, an **Audit Log** records the full activity trail. Nothing to turn on.
 
-## Audit log
+![Change History and Audit Log on an agent — every change tracked, expandable to a diff, with version saves](/screenshots/versioning-history.png)
 
-Every change to an agent — created, configuration updated, tools changed,
-activated, a version saved, a rollback, an invocation — is recorded
-automatically, with the timestamp, the user, and what changed. It is the live
-history of the agent; nothing to turn on.
+## What's tracked
 
-![The Audit Log on an agent — every change tracked with who, when, and what](/screenshots/versioning-audit.png)
+Created, configuration updated, tools changed, activated/deactivated, a version
+saved, a rollback, an invocation — each with the timestamp, the user, and what
+changed.
+
+| Event | Description |
 
 | Event | Description |
 |-------|-------------|

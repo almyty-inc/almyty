@@ -1,0 +1,43 @@
+# Multi-model debate for high-stakes calls
+
+**Goal:** you're reviewing a vendor contract and one model's opinion isn't enough — a missed
+indemnity clause is expensive. Have three models argue the risks and a fourth settle the
+answer, so no single model's blind spot decides it.
+
+## How debate works
+
+An autonomous agent's **collaboration** points at several member agents and chooses how they
+work together. In **debate** mode:
+
+- Each member runs over several rounds. In every round it sees all the prior responses, so a
+  weak reading gets challenged and a strong one gets reinforced.
+- After the final round a **judge** model reads the whole exchange and writes the answer,
+  citing which arguments it found decisive.
+
+Because each member and the judge can be a different provider, this is a genuine cross-vendor
+debate: Claude argues the tenant's side, GPT-4o argues the landlord's, Gemini checks the
+clauses against the governing-law section, and a judge you pick reconciles them.
+
+## Set it up
+
+On the agent's **Collaboration** panel, choose **Debate** as the strategy, add the member
+agents (each is just an agent, so you assign its model the usual way), set the number of
+rounds, and pick the judge. Save, and every run of the agent now goes through the full
+debate before it returns.
+
+## When to reach for it
+
+Debate costs several model calls per run, so it earns its keep on judgment calls — contract
+and policy review, research synthesis, incident post-mortems — not on high-volume routing.
+For those, the other strategies fit better:
+
+| Strategy | Shape | Good for |
+| --- | --- | --- |
+| `sequential` | Each agent's output feeds the next | Multi-step pipelines |
+| `parallel` | All run at once, results merged | Fan-out, breadth |
+| `race` | First acceptable answer wins | Latency-sensitive calls |
+| `debate` | Rounds of argument, a judge decides | High-stakes judgment |
+
+## Related
+
+- [Autonomous agents: collaboration](/agents/autonomous#collaboration) · [AI Models](/llm-providers) · [Verification](/agents/autonomous#verification)

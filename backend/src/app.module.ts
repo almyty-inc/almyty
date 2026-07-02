@@ -45,6 +45,13 @@ import { AgentFile } from './entities/file.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { ToolTemplate } from './entities/tool-template.entity';
 import { ExternalAgent } from './entities/external-agent.entity';
+import { SpendBudget } from './entities/spend-budget.entity';
+import { SpendAlert } from './entities/spend-alert.entity';
+import { OrgSsoConfig } from './entities/org-sso-config.entity';
+import { BillingEvent } from './entities/billing-event.entity';
+// EE-feature entities stay in the CORE schema (migrations + entity glob are
+// OSS); only the feature logic moved to `ee/`.
+import { CompliancePolicy } from './entities/compliance-policy.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -80,6 +87,14 @@ import { VersionsModule } from './modules/versions/versions.module';
 import { RunnerModule } from './modules/runner/runner.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
+import { LicensingModule } from './modules/licensing/licensing.module';
+import { BudgetsModule } from './modules/budgets/budgets.module';
+import { ProviderUsageModule } from './modules/provider-usage/provider-usage.module';
+// EE feature modules (sso, rbac, audit-export, approval-policies, billing,
+// ee-stubs, compliance, chargeback) live under `ee/` and are loaded at
+// runtime via the ee-loader — NOT statically imported here, so this file
+// compiles in the OSS build without the commercial tree present.
+import { loadEeModules } from './ee-loader';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -170,6 +185,11 @@ import { databaseConfig } from './config/database.config';
       AuditLog,
       ToolTemplate,
       ExternalAgent,
+      SpendBudget,
+      SpendAlert,
+      OrgSsoConfig,
+      BillingEvent,
+      CompliancePolicy,
     ]),
 
     // Rate limiting — backed by Redis so limits are shared across replicas
@@ -264,6 +284,12 @@ import { databaseConfig } from './config/database.config';
     ApprovalsModule,
     RunnerModule,
     WorkspaceModule,
+    LicensingModule,
+    BudgetsModule,
+    ProviderUsageModule,
+    // EE feature modules are loaded dynamically so the OSS build compiles +
+    // boots without the commercial `ee/` tree present (loadEeModules() → []).
+    ...loadEeModules(),
     ToolHubModule,
     A2AModule,
     AcpModule,

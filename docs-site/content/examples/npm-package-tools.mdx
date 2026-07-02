@@ -1,0 +1,42 @@
+# Turn an npm package into tools
+
+**Goal:** you want an agent to move money with Stripe, but you don't want to hand-write a
+tool for `charges.create`, another for `refunds.create`, and keep them in sync with the
+SDK. Point almyty at the `stripe` package and get typed tools for its functions instead.
+
+## 1. Add the package as an SDK tool
+
+In **Tools → Create Tool**, choose **SDK** as the execution method and enter the package
+name and version — `stripe` at `^17.0.0`. Click **Discover**: almyty installs the package
+in a sandbox, reads its exported functions, and infers a parameter schema for each one from
+the package's own TypeScript types.
+
+## 2. Keep the functions you want
+
+Discovery returns everything the package exports. For a payments agent you don't need all
+of `stripe` — select `charges.create`, `refunds.create`, and `customers.retrieve`, review
+the generated name, description, and parameters, and create them. Each becomes a JavaScript
+tool that `require()`s the package and runs in the same hardened sandbox as any other
+JavaScript tool.
+
+## 3. Give the package its secret
+
+The Stripe client needs an API key. Store it once in the **Credentials** vault and reference
+it from the tool — the key is injected at execution time and never inlined into the tool
+body or an agent prompt.
+
+## 4. Attach and use
+
+Attach the tools to an agent, or publish them on a gateway next to your API tools. The agent
+calls `refunds.create` like any other tool; almyty runs the real SDK function and returns the
+result. No wrapper code, no schema drift when Stripe ships a new SDK version — re-run
+**Discover** and the parameters update.
+
+![The tools in your Tools list, ready to attach or publish](/screenshots/tools-list.png)
+
+The same flow works for `@aws-sdk/client-s3`, `@octokit/rest`, `lodash`, or any package on
+npm.
+
+## Related
+
+- [SDK tools](/tools/sdk-tools) · [JavaScript tools](/tools/javascript-tools) · [Credentials](/credentials) · [Tools](/tools)
