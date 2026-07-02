@@ -36,6 +36,25 @@ export const healthColors = {
 }
 
 /**
+ * Provider types whose first-party usage/cost API almyty can ingest for
+ * cost reconciliation. Mirrors the backend capability map
+ * (backend/src/modules/provider-usage/provider-usage.capability.ts) —
+ * keep the two in sync. These APIs need an ADMIN-scoped key (OpenAI
+ * sk-admin-..., Anthropic admin key), not the inference key, which is
+ * why the dialogs collect a separate usageApiKey.
+ */
+export const providerUsageApiSupport: Record<string, { docsUrl: string }> = {
+  openai: { docsUrl: 'https://platform.openai.com/docs/api-reference/usage' },
+  anthropic: {
+    docsUrl: 'https://docs.anthropic.com/en/api/admin-api/usage-cost/get-messages-usage-report',
+  },
+}
+
+export function usageApiSupported(type?: string): boolean {
+  return !!(type && providerUsageApiSupport[type])
+}
+
+/**
  * Where each provider's API key is created. Rendered as a "Get your API
  * key ↗" deep-link in the add/edit-provider dialog so onboarding doesn't
  * require hunting through each vendor's console. Mirrors the backend

@@ -161,6 +161,9 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
               model: provider.configuration.model || '',
               maxTokens: provider.configuration.maxTokens || 4096,
               temperature: provider.configuration.temperature || 0.7,
+              // Stored value is masked/encrypted — start blank; blank
+              // means "keep the existing key" on update.
+              usageApiKey: '',
             })
             setIsEditDialogOpen(true)
             setModelsLoading(true)

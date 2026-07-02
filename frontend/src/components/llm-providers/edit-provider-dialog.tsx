@@ -19,6 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { ExternalLink } from 'lucide-react'
+import { providerUsageApiSupport, usageApiSupported } from './provider-type-config'
 
 interface EditProviderDialogProps {
   open: boolean
@@ -117,6 +119,36 @@ export function EditProviderDialog({
               />
             </div>
           </div>
+
+          {/* Usage API key — only for types with a supported usage/cost API.
+              Never prefilled: the stored value is masked on read, and an
+              empty field means "keep the existing key" (the page only
+              sends it when non-empty). */}
+          {usageApiSupported(providerToEdit?.type) && (
+            <div>
+              <Label htmlFor="editUsageApiKey">Usage API key (admin-scoped, for cost reconciliation)</Label>
+              <Input
+                id="editUsageApiKey"
+                type="password"
+                autoComplete="off"
+                {...editForm.register('usageApiKey')}
+                placeholder="Leave blank to keep the existing key"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Requires an admin-scoped key (OpenAI sk-admin-..., Anthropic admin key) — the
+                regular inference key cannot read usage/cost reports.{' '}
+                <a
+                  href={providerUsageApiSupport[providerToEdit?.type]?.docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Admin key docs
+                </a>
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

@@ -15,6 +15,7 @@ import { MembersAndTeamsTab } from '@/components/MembersAndTeamsTab'
 import { SecurityTab } from '@/components/SecurityTab'
 import { SsoSettings } from '@/components/settings/sso-settings'
 import { ReferralsTab } from '@/components/settings/referrals-tab'
+import { DataRetentionCard } from '@/components/settings/data-retention-card'
 import { BillingTab } from '@/components/BillingTab'
 import { authApi, organizationsApi } from '@/lib/api'
 
@@ -325,6 +326,8 @@ function OrganizationTab({ organization }: { organization: any }) {
           </Button>
         </CardContent>
       </Card>
+
+      <DataRetentionCard organizationId={organization.id} />
     </div>
   )
 }

@@ -39,11 +39,11 @@ export class WebhookAdapter extends BaseAdapter {
     }
   }
 
-  async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>): Promise<boolean> {
+  async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>, rawBody?: string): Promise<boolean> {
     if (!config.secret) return true;
     const signature = headers['x-webhook-signature'];
     if (!signature) return false;
-    const expected = crypto.createHmac('sha256', config.secret).update(JSON.stringify(payload)).digest('hex');
+    const expected = crypto.createHmac('sha256', config.secret).update(rawBody ?? JSON.stringify(payload)).digest('hex');
     return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
   }
 }

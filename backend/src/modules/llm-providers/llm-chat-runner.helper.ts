@@ -239,6 +239,16 @@ export class LlmChatRunnerHelper {
   }
 
   validateProviderConfiguration(type: LlmProviderType, config: LlmProviderConfig): void {
+    // Optional admin-scoped usage/cost API key (issue #241). Accepted for
+    // any type (the capability map decides whether it is used), but it
+    // must be a non-empty string when present.
+    if (
+      config.usageApiKey !== undefined &&
+      (typeof config.usageApiKey !== 'string' || config.usageApiKey.length === 0)
+    ) {
+      throw new BadRequestException('usageApiKey must be a non-empty string when provided');
+    }
+
     switch (type) {
       case LlmProviderType.OPENAI:
       case LlmProviderType.ANTHROPIC:
