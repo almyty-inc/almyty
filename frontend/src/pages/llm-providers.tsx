@@ -171,6 +171,7 @@ export function LlmProvidersPage() {
       model: '',
       maxTokens: 4096,
       temperature: 0.7,
+      usageApiKey: '',
     }
   })
 
@@ -182,7 +183,10 @@ export function LlmProvidersPage() {
           type: data.type,
           configuration: {
             apiKey: data.apiKey,
-            ...(data.organizationId && { organizationId: data.organizationId })
+            ...(data.organizationId && { organizationId: data.organizationId }),
+            // Admin-scoped usage/cost API key (issue #241) — only sent
+            // when the user actually entered one.
+            ...(data.usageApiKey && { usageApiKey: data.usageApiKey }),
           }
         })
       } catch (error) {
@@ -210,6 +214,9 @@ export function LlmProvidersPage() {
           model: data.model,
           maxTokens: data.maxTokens,
           temperature: data.temperature,
+          // Only send the admin usage key when a new one was typed —
+          // an empty field means "keep the existing (encrypted) key".
+          ...(data.usageApiKey && { usageApiKey: data.usageApiKey }),
         }
       })
     },

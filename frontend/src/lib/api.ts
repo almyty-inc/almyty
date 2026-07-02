@@ -327,6 +327,21 @@ export const organizationsApi = {
     
   removeTeamMember: (orgId: string, teamId: string, userId: string) =>
     apiDel(`/organizations/${orgId}/teams/${teamId}/members/${userId}`),
+
+  // Data retention
+  getRetention: (id: string) => apiGet(`/organizations/${id}/retention`),
+
+  updateRetention: (
+    id: string,
+    data: Partial<{
+      enabled: boolean
+      agentRunsDays: number | null
+      conversationsDays: number | null
+      requestLogsDays: number | null
+      usageMetricsDays: number | null
+      auditLogDays: number | null
+    }>,
+  ) => apiPut(`/organizations/${id}/retention`, data),
 }
 
 // Hosted subscription billing (P6). Admin-only; drives the Stripe checkout /

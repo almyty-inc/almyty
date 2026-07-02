@@ -1,4 +1,4 @@
-import { Inject, forwardRef } from '@nestjs/common';
+import { Inject, Optional, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindManyOptions, Like, MoreThanOrEqual } from 'typeorm';
@@ -15,6 +15,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -148,7 +149,33 @@ export class GatewaysService {
     private readonly statsHelper: GatewaysStatsHelper,
     private readonly init: GatewayInitHelper,
     private readonly accessPolicy: AccessPolicyService,
+    // Optional so unit tests (and contexts without the transport) can
+    // construct the service without a live discord connection manager.
+    @Optional() private readonly discordTransport?: DiscordGatewayTransport,
   ) {}
+
+  /**
+   * Keep the persistent discord gateway connection in sync with the
+   * gateway row. Fire-and-forget: connection management must never
+   * fail a CRUD request.
+   */
+  private syncDiscordTransport(gateway: Gateway): void {
+    if (gateway.type !== GatewayType.DISCORD) return;
+    try {
+      this.discordTransport?.sync(gateway);
+    } catch (err: any) {
+      this.logger.warn(`Failed to sync discord gateway transport: ${err.message}`);
+    }
+  }
+
+  private stopDiscordTransport(gateway: Gateway): void {
+    if (gateway.type !== GatewayType.DISCORD) return;
+    try {
+      this.discordTransport?.stop(gateway.id);
+    } catch (err: any) {
+      this.logger.warn(`Failed to stop discord gateway transport: ${err.message}`);
+    }
+  }
 
   async createGateway(
     createGatewayDto: CreateGatewayDto,
@@ -235,6 +262,9 @@ export class GatewaysService {
 
       this.logger.log(`[CREATE_GATEWAY] Gateway '${savedGateway.name}' created successfully in organization ${organizationId}`);
 
+      // Start the persistent connection for discord channel gateways.
+      this.syncDiscordTransport(savedGateway);
+
       // Audit log (fire-and-forget)
       this.auditLogService.logCreate(organizationId, userId, AuditResource.GATEWAY, savedGateway.id, savedGateway.name);
 
@@ -297,6 +327,10 @@ export class GatewaysService {
       const updatedGateway = await this.gatewayRepository.save(gateway);
 
       this.logger.log(`Gateway '${updatedGateway.name}' updated`);
+
+      // Reconcile the persistent connection for discord channel gateways
+      // (bot token may have changed).
+      this.syncDiscordTransport(updatedGateway);
 
       // Audit log (fire-and-forget)
       const changes = this.auditLogService.computeChanges(oldValues, updateGatewayDto, ['name', 'description', 'configuration', 'rateLimitConfig', 'metadata']);
@@ -485,6 +519,8 @@ export class GatewaysService {
 
     this.logger.log(`Gateway '${gateway.name}' activated`);
 
+    this.syncDiscordTransport(updatedGateway);
+
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId, action: AuditAction.GATEWAY_ACTIVATE, resourceType: AuditResource.GATEWAY, resourceId: gateway.id, resourceName: gateway.name });
 
@@ -512,6 +548,8 @@ export class GatewaysService {
     const updatedGateway = await this.gatewayRepository.save(gateway);
 
     this.logger.log(`Gateway '${gateway.name}' deactivated`);
+
+    this.syncDiscordTransport(updatedGateway);
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId, action: AuditAction.GATEWAY_DEACTIVATE, resourceType: AuditResource.GATEWAY, resourceId: gateway.id, resourceName: gateway.name });
@@ -550,6 +588,8 @@ export class GatewaysService {
     }
 
     await this.gatewayRepository.remove(gateway);
+
+    this.stopDiscordTransport(gateway);
 
     this.logger.log(`Gateway '${gateway.name}' deleted`);
 

@@ -49,7 +49,7 @@ backend/src/
 │   ├── files/         # File uploads / attachments
 │   ├── gateways/      # Gateway CRUD, auth enforcement, protocol serving, unified endpoint
 │   ├── health/        # /health, /health/live, /health/ready
-│   ├── interfaces/    # Interface definitions (13 adapters: Slack, Discord, Telegram, etc.)
+│   ├── interfaces/    # Interface definition CRUD only — the 12 chat channel adapters live in gateways/channels/adapters/
 │   ├── jobs/          # BullMQ background jobs
 │   ├── json-schema-translator/ # JSON Schema conversion
 │   ├── llm-providers/ # OpenAI, Anthropic, + 12 more provider integrations
@@ -103,7 +103,7 @@ packages/
 - **Gateway types**: MCP, A2A, UTCP, Skills
 - **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed via worker_threads), GraphQL, LLM, SDK
 - **LLM Providers**: 14 (OpenAI, Anthropic, Gemini, Azure, Bedrock, Vertex, Mistral, Cohere, Groq, Together, Perplexity, DeepSeek, Ollama, Custom)
-- **Interface adapters**: 13 (Slack, Discord, Telegram, WhatsApp, Microsoft Teams, Google Chat, Signal, Matrix, IRC, Email, Webhook, Chat Widget)
+- **Chat channel adapters**: 12, in `gateways/channels/adapters/` NOT `interfaces/` (Slack, Discord, Telegram, WhatsApp, Microsoft Teams, Google Chat, Signal, Matrix, IRC, Email, Webhook, Chat Widget). Shared pipeline + AI disclosure in `channel-gateway.service.ts`; Discord inbound via `discord-gateway.transport.ts`. Audit: `docs/interface-adapters-audit.md`
 - **Built-in plugins**: 5 (performance-monitor, rate-limiter, pii-filter, request-logger, security-scanner)
 - **Backend tests**: ~130 spec files, 4,108 passing (NestJS 11, Node 24). Real-integration specs in `src/test/integration/` require `RUN_DB_INTEGRATION=1`.
 - **Frontend tests**: 127 vitest unit/integration tests + Playwright E2E suite (`frontend/tests/e2e/`)

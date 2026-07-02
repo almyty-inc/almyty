@@ -11,6 +11,7 @@ import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ToolExecutorService } from '../tools/tool-executor.service';
+import { isEncrypted } from '../../common/security/field-crypto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { LlmChatHelper } from './llm-chat.helper';
@@ -242,6 +243,94 @@ describe('LlmProvidersService', () => {
       await expect(service.createProvider(createDto, 'org-1', 'user-1'))
         .rejects
         .toThrow(ForbiddenException);
+    });
+  });
+
+  describe('usageApiKey (issue #241)', () => {
+    const baseCreateDto: CreateLlmProviderDto = {
+      name: 'OpenAI Provider',
+      type: LlmProviderType.OPENAI,
+      configuration: {
+        apiKey: 'test-api-key',
+        model: 'gpt-4',
+      },
+    };
+
+    it('accepts usageApiKey on create and persists it encrypted', async () => {
+      const dto: CreateLlmProviderDto = {
+        ...baseCreateDto,
+        configuration: { ...baseCreateDto.configuration, usageApiKey: 'sk-admin-plain-123' },
+      };
+      organizationRepository.findOne.mockResolvedValue({ id: 'org-1', name: 'Test Org' });
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      });
+      llmProviderRepository.create.mockImplementation((data: any) => {
+        const entity = { ...data };
+        Object.setPrototypeOf(entity, LlmProvider.prototype);
+        return entity;
+      });
+      llmProviderRepository.save.mockImplementation(async (p: any) => p);
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      const result = await service.createProvider(dto, 'org-1', 'user-1');
+
+      const saved = llmProviderRepository.save.mock.calls[0][0];
+      expect(saved.configuration.usageApiKey).not.toBe('sk-admin-plain-123');
+      expect(isEncrypted(saved.configuration.usageApiKey)).toBe(true);
+      // Transparent decrypt contract: read sites go through the getter.
+      expect((result as LlmProvider).getDecryptedUsageApiKey()).toBe('sk-admin-plain-123');
+      // The inference key is encrypted independently.
+      expect(isEncrypted(saved.configuration.apiKey)).toBe(true);
+    });
+
+    it('rejects a non-string usageApiKey on create', async () => {
+      organizationRepository.findOne.mockResolvedValue({ id: 'org-1', name: 'Test Org' });
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      });
+
+      const dto: CreateLlmProviderDto = {
+        ...baseCreateDto,
+        configuration: { ...baseCreateDto.configuration, usageApiKey: 42 as any },
+      };
+
+      await expect(service.createProvider(dto, 'org-1', 'user-1'))
+        .rejects
+        .toThrow(BadRequestException);
+    });
+
+    it('carries usageApiKey through a configuration update and encrypts it', async () => {
+      const mockProvider: any = {
+        id: 'provider-1',
+        name: 'Provider',
+        type: LlmProviderType.ANTHROPIC,
+        organizationId: 'org-1',
+        configuration: { apiKey: 'inference-key', temperature: 0.7 },
+        capabilities: {},
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      llmProviderRepository.save.mockImplementation(async (p: any) => p);
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      await service.updateProvider(
+        'provider-1',
+        { configuration: { usageApiKey: 'sk-ant-admin-plain' } },
+        'org-1',
+        'user-1',
+      );
+
+      // Merged into the existing configuration without clobbering it...
+      expect(mockProvider.configuration.temperature).toBe(0.7);
+      expect(mockProvider.configuration.apiKey).toBeDefined();
+      // ...and stored encrypted, decryptable via the getter.
+      expect(mockProvider.configuration.usageApiKey).not.toBe('sk-ant-admin-plain');
+      expect(isEncrypted(mockProvider.configuration.usageApiKey)).toBe(true);
+      expect(mockProvider.getDecryptedUsageApiKey()).toBe('sk-ant-admin-plain');
+      expect(llmProviderRepository.save).toHaveBeenCalledWith(mockProvider);
     });
   });
 

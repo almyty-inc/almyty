@@ -54,6 +54,7 @@ import { Referral } from './entities/referral.entity';
 // EE-feature entities stay in the CORE schema (migrations + entity glob are
 // OSS); only the feature logic moved to `ee/`.
 import { CompliancePolicy } from './entities/compliance-policy.entity';
+import { RetentionPolicy } from './entities/retention-policy.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -93,6 +94,7 @@ import { LicensingModule } from './modules/licensing/licensing.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { ProviderUsageModule } from './modules/provider-usage/provider-usage.module';
 import { ReferralsModule } from './modules/referrals/referrals.module';
+import { RetentionModule } from './modules/retention/retention.module';
 // EE feature modules (sso, rbac, audit-export, approval-policies, billing,
 // ee-stubs, compliance, chargeback) live under `ee/` and are loaded at
 // runtime via the ee-loader — NOT statically imported here, so this file
@@ -195,6 +197,7 @@ import { databaseConfig } from './config/database.config';
       CompliancePolicy,
       ReferralCode,
       Referral,
+      RetentionPolicy,
     ]),
 
     // Rate limiting — backed by Redis so limits are shared across replicas
@@ -293,6 +296,7 @@ import { databaseConfig } from './config/database.config';
     BudgetsModule,
     ProviderUsageModule,
     ReferralsModule,
+    RetentionModule,
     // EE feature modules are loaded dynamically so the OSS build compiles +
     // boots without the commercial `ee/` tree present (loadEeModules() → []).
     ...loadEeModules(),

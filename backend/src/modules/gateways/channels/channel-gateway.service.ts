@@ -93,6 +93,7 @@ export class ChannelGatewayService {
     gateway: Gateway,
     body: any,
     headers: Record<string, string>,
+    rawBody?: string,
   ): Promise<void> {
     if (!gateway.isActive()) {
       this.logger.warn(`Webhook received for inactive gateway: ${gateway.id}`);
@@ -102,7 +103,7 @@ export class ChannelGatewayService {
     const adapter = this.getAdapter(gateway.type);
 
     // Verify webhook signature
-    const isValid = await adapter.verifyWebhook(body, headers, gateway.configuration);
+    const isValid = await adapter.verifyWebhook(body, headers, gateway.configuration, rawBody);
     if (!isValid) {
       this.logger.warn(`Webhook signature verification failed for gateway: ${gateway.id}`);
       await this.logEvent(gateway, 'inbound', 'failed', body, 'signature verification failed');

@@ -1,0 +1,66 @@
+# Advanced RBAC
+
+Enterprise (`advanced_rbac` entitlement). The core role model — org `owner`/`admin`/`member` plus team leads — is free and covers most teams. Advanced RBAC adds two layers on top when fixed roles stop being enough: **custom roles** with wildcard permissions, and **ABAC policies** for attribute-based rules.
+
+## Custom roles
+
+A custom role is a named, org-scoped set of permission strings, assigned per-user in addition to their core role.
+
+```bash
+# Create a role
+curl -X POST /rbac/roles \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "agent-operator",
+    "description": "Run and inspect agents, read everything else",
+    "permissions": ["agents:*", "*:read"]
+  }'
+
+# Assign / unassign
+curl -X POST /rbac/roles/{id}/assignments -d '{"userId": "…"}'
+curl -X DELETE /rbac/roles/{id}/assignments/{userId}
+
+# What can this user do? (union across their active custom roles)
+curl /rbac/users/{userId}/permissions
+```
+
+Also available: `GET /rbac/roles`, `GET/PATCH/DELETE /rbac/roles/:id` (PATCH accepts `active: false` to disable a role without unassigning it). All RBAC endpoints require org admin/owner.
+
+### Permission format
+
+Permissions are `resource:action` pairs with wildcards on either side:
+
+| Grant | Means |
+|---|---|
+| `*` | everything |
+| `agents:*` | any action on agents |
+| `*:read` | read on any resource |
+| `agents:execute` | exactly that |
+
+Role names are unique per org; permission lists are normalized (trimmed, deduplicated) on save.
+
+## ABAC policies
+
+When a rule depends on *values* rather than resource types — "deny agent execution when `amount > 10000` unless the caller has the finance role" — use an ABAC policy:
+
+```bash
+curl -X POST /rbac/policies \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "block-large-amounts",
+    "effect": "deny",
+    "action": "agents:execute",
+    "conditions": [
+      { "attr": "resource.amount", "op": "gt", "value": 10000 }
+    ],
+    "priority": 100
+  }'
+```
+
+- **Conditions** are `{attr, op, value}` triples, ANDed together. `attr` is a dot-path into the evaluation context (`subject.*`, `resource.*`, `context.*`). Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`, `contains` (e.g. `subject.roles contains "finance"`).
+- **Evaluation is deny-overrides**: if any applicable `deny` policy matches, access is denied — regardless of allows. Otherwise the highest-`priority` matching `allow` wins.
+- `GET /rbac/policies` lists, `DELETE /rbac/policies/:id` removes. Policies are immutable — delete and recreate to change one.
+
+## How the layers combine
+
+Core roles answer "is this person an admin?"; custom roles answer "does this person hold `agents:execute`?"; ABAC answers "is *this particular request* allowed?". Custom roles are purely additive — they never reduce what a core role grants — while a matching ABAC `deny` beats everything.

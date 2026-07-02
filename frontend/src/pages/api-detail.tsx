@@ -45,6 +45,17 @@ export function ApiDetailPage() {
     enabled: !!id,
   })
 
+  // The API detail endpoint deliberately stopped eager-loading the schemas
+  // relation (multi-MB rawSchema rows OOMed list views), so api.schemas is
+  // always undefined there. Fetch schemas separately and merge below —
+  // otherwise the overview panel permanently shows "Schema: Not uploaded"
+  // even when a schema exists.
+  const { data: schemasData } = useQuery({
+    queryKey: ['api-schemas', id],
+    queryFn: () => apisApi.getSchemas(id!),
+    enabled: !!id,
+  })
+
 
   useEffect(() => {
     const name = (apiData as any)?.name
@@ -129,7 +140,8 @@ export function ApiDetailPage() {
     )
   }
 
-  const api = apiData
+  const schemas = Array.isArray(schemasData) ? schemasData : (schemasData as any)?.data || []
+  const api = { ...(apiData as any), schemas } as typeof apiData & { schemas: any[] }
   const operationsExtracted = apiOperations?.operations || apiOperations || []
   const operations: ApiOperation[] = Array.isArray(operationsExtracted) ? operationsExtracted : []
   const TypeIcon = getApiTypeIcon(api.type)
