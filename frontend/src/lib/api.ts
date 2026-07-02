@@ -84,6 +84,26 @@ export const api = axios.create({
   withCredentials: true, // Send cookies for httpOnly JWT auth
 })
 
+/**
+ * Base URL of the API host as configured on the axios instance.
+ *
+ * Used to build user-facing URLs that live on the API host (the unified
+ * channel endpoint `https://<api-host>/<orgSlug>/<gatewaySlug>`, the chat
+ * widget script `/gateways/:id/widget.js`). When the frontend is served
+ * behind the same origin as the API (local dev proxy, single-host
+ * deploys) the baseURL is empty and we fall back to the page origin.
+ */
+export function getApiBaseUrl(): string {
+  const base = api.defaults.baseURL || ''
+  if (/^https?:\/\//.test(base)) return base.replace(/\/+$/, '')
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    const origin = window.location.origin.replace(/\/+$/, '')
+    const path = base.replace(/^\/+|\/+$/g, '')
+    return path ? `${origin}/${path}` : origin
+  }
+  return base.replace(/\/+$/, '')
+}
+
 // Auth is carried entirely by the httpOnly cookie (withCredentials: true
 // above). We do NOT read a token out of localStorage anymore — that used
 // to be an XSS-vulnerable fallback, any script running in the page could
