@@ -55,8 +55,16 @@ import { IrcAdapter } from './channels/adapters/irc.adapter';
 import { ChannelGatewayService } from './channels/channel-gateway.service';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
+import { EmailProvisioningService } from './channels/email-provisioning.service';
 import { ChannelEventsController } from './channels/channel-events.controller';
+import { ChannelEmailInboundController } from './channels/channel-email-inbound.controller';
 import { ChannelWidgetController } from './channels/channel-widget.controller';
+// Multi-workspace channel installations (OAuth installs)
+import { ChannelInstallation } from '../../entities/channel-installation.entity';
+import { ChannelInstallationService } from './channels/channel-installation.service';
+import { SlackInstallService } from './channels/slack-install.service';
+import { ChannelInstallController } from './channels/channel-install.controller';
+import { ChannelInstallationsController } from './channels/channel-installations.controller';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -72,6 +80,7 @@ import { ChannelWidgetController } from './channels/channel-widget.controller';
       OAuthAccessToken,
       AgentRun,
       ChannelEvent,
+      ChannelInstallation,
     ]),
     JwtModule,
     ToolsModule,
@@ -88,6 +97,9 @@ import { ChannelWidgetController } from './channels/channel-widget.controller';
     ChannelGatewayService,
     DiscordGatewayTransport,
     ChannelWebhookRegistrar,
+    EmailProvisioningService,
+    ChannelInstallationService,
+    SlackInstallService,
     ChatWidgetAdapter,
     SlackAdapter,
     DiscordAdapter,
@@ -115,7 +127,10 @@ import { ChannelWidgetController } from './channels/channel-widget.controller';
     GatewayToolsController,
     GatewaySkillsController,
     ChannelEventsController,
+    ChannelEmailInboundController,
     ChannelWidgetController,
+    ChannelInstallController,
+    ChannelInstallationsController,
   ],
   exports: [
     GatewaysService,
@@ -126,6 +141,8 @@ import { ChannelWidgetController } from './channels/channel-widget.controller';
     ChannelGatewayService,
     DiscordGatewayTransport,
     ChannelWebhookRegistrar,
+    EmailProvisioningService,
+    ChannelInstallationService,
   ],
 })
 export class GatewaysModule {}

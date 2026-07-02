@@ -23,6 +23,8 @@ export interface ParsedMimeMessage {
   subject?: string;
   messageId?: string;
   inReplyTo?: string;
+  /** Raw References header: whitespace-separated message-ids, thread root first. */
+  references?: string;
   /** Plain-text body (derived from text/html when no text/plain part). */
   text: string;
   /** Raw HTML body, when the message carried one. */
@@ -48,6 +50,7 @@ export function parseMimeMessage(raw: string): ParsedMimeMessage {
     subject: headers['subject'] ? decodeEncodedWords(headers['subject']) : undefined,
     messageId: headers['message-id']?.trim() || undefined,
     inReplyTo: headers['in-reply-to']?.trim() || undefined,
+    references: headers['references']?.trim() || undefined,
     text: (text || (html ? htmlToText(html) : '')).trim(),
     html,
   };
