@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { IsNull } from 'typeorm';
 
 import { Runner, RunnerState, RunnerIsolationTier } from '../../entities/runner.entity';
@@ -358,5 +358,30 @@ describe('RunnerService', () => {
     await runners.save(runner);
     const drained = await service.drain(runner.id);
     expect(drained.state).toBe(RunnerState.DRAINING);
+  });
+
+  // ── getOneForOrg (coding-bridge authz scope) ────────────────────────
+
+  it('getOneForOrg returns a runner in the caller org regardless of owner', async () => {
+    const { runner } = await service.register(
+      { name: 'r1', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
+      ownerUserId, organizationId,
+    );
+    const found = await service.getOneForOrg(runner.id, organizationId);
+    expect(found.id).toBe(runner.id);
+  });
+
+  it('getOneForOrg throws Forbidden for a runner in another org', async () => {
+    const { runner } = await service.register(
+      { name: 'r1', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
+      ownerUserId, organizationId,
+    );
+    await expect(service.getOneForOrg(runner.id, 'other-org'))
+      .rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('getOneForOrg throws NotFound for an unknown runner', async () => {
+    await expect(service.getOneForOrg('nope', organizationId))
+      .rejects.toBeInstanceOf(NotFoundException);
   });
 });
