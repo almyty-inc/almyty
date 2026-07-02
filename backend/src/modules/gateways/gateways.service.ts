@@ -17,6 +17,7 @@ import { GatewayInitHelper } from './gateway-init.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
+import { EmailProvisioningService } from './channels/email-provisioning.service';
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -156,6 +157,9 @@ export class GatewaysService {
     // Optional for the same reason: platform webhook auto-registration
     // must never be required to construct the service.
     @Optional() private readonly webhookRegistrar?: ChannelWebhookRegistrar,
+    // Optional for the same reason: email inbound-address provisioning
+    // must never be required to construct the service.
+    @Optional() private readonly emailProvisioner?: EmailProvisioningService,
   ) {}
 
   /**
@@ -183,14 +187,20 @@ export class GatewaysService {
 
   /**
    * Keep the platform inbound-webhook registration (telegram
-   * setWebhook, twilio number webhook) in sync with the gateway row.
-   * Fire-and-forget: registration must never fail a CRUD request.
+   * setWebhook, twilio number webhook) and the email inbound-address
+   * provisioning in sync with the gateway row. Fire-and-forget:
+   * neither must ever fail a CRUD request.
    */
   private syncWebhookRegistration(gateway: Gateway): void {
     this.webhookRegistrar
       ?.sync(gateway)
       .catch((err: any) =>
         this.logger.warn(`Failed to sync channel webhook registration: ${err.message}`),
+      );
+    this.emailProvisioner
+      ?.sync(gateway)
+      .catch((err: any) =>
+        this.logger.warn(`Failed to sync email inbound provisioning: ${err.message}`),
       );
   }
 
@@ -199,6 +209,11 @@ export class GatewaysService {
       ?.remove(gateway)
       .catch((err: any) =>
         this.logger.warn(`Failed to remove channel webhook registration: ${err.message}`),
+      );
+    this.emailProvisioner
+      ?.remove(gateway)
+      .catch((err: any) =>
+        this.logger.warn(`Failed to remove email inbound provisioning: ${err.message}`),
       );
   }
 
