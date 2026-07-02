@@ -1,11 +1,27 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { AlmytyClient, GatewayClient, AgentInfo, StreamEvent } from '@almyty/client';
 
-import type { Message } from './components.js';
-import { Header, MessageView, LoadingIndicator, AgentSelector } from './components.js';
-import { SLASH_COMMANDS, COMMAND_DESCS, resolveSlash, getSuggestion, ALIASES } from './commands.js';
+import type { Message, Choice } from './components.js';
+import {
+  Header,
+  MessageView,
+  LoadingIndicator,
+  AgentSelector,
+  CodingModeIndicator,
+  ChoiceSelector,
+} from './components.js';
+import {
+  SLASH_COMMANDS,
+  COMMAND_DESCS,
+  resolveSlash,
+  getSuggestion,
+  ALIASES,
+  classifyInput,
+  buildCodeChoices,
+  type CodeChoice,
+} from './commands.js';
 
 // ── App state ──────────────────────────────────────────────────
 
@@ -16,6 +32,14 @@ export interface AppState {
   loadingLabel: string;
   conversationId: string | null;
   pendingRunId: string | null;
+}
+
+/** Active coding session driven from the REPL (chat-to-runner bridge). */
+export interface CodingSessionState {
+  runnerId: string;
+  runnerName: string;
+  agent: string;
+  sessionId: string;
 }
 
 // Mutable module-level variable; written by ChatApp, read by main() after exit
@@ -65,6 +89,11 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerAgents, setPickerAgents] = useState<AgentInfo[]>([]);
+  // Active coding session (input routes to the runner while set).
+  const [coding, setCoding] = useState<CodingSessionState | null>(null);
+  // Pending runner x CLI pick for /code when multiple targets exist.
+  const [codeChoices, setCodeChoices] = useState<{ choices: CodeChoice[]; task: string } | null>(null);
+  const codingAbortRef = useRef<AbortController | null>(null);
 
   // Command palette matches
   const slashMatches = input.startsWith('/') && !input.includes(' ')
@@ -123,6 +152,80 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
     setState(s => ({ ...s, messages: [...s.messages, msg] }));
   }, []);
 
+  // ── Coding session helpers (chat-to-runner bridge) ──────────────
+
+  /**
+   * Append streamed CLI output to the transcript, merging into the last
+   * coding message so a burst of chunks doesn't explode into hundreds of
+   * transcript entries. Caps a single coding message before rolling over.
+   */
+  const appendCodingOutput = useCallback((text: string) => {
+    if (!text) return;
+    setState(s => {
+      const msgs = [...s.messages];
+      const last = msgs[msgs.length - 1];
+      if (last && last.role === 'coding' && last.text.length < 4000) {
+        msgs[msgs.length - 1] = { ...last, text: last.text + text };
+      } else {
+        msgs.push({ role: 'coding', text });
+      }
+      return { ...s, messages: msgs };
+    });
+  }, []);
+
+  const startCoding = useCallback(async (choice: CodeChoice, task: string) => {
+    setState(s => ({ ...s, loading: true, loadingLabel: `Starting ${choice.agentName} on ${choice.runnerName}` }));
+    try {
+      const session = await client.startCodingSession(choice.runnerId, {
+        agent: choice.agentId,
+        task,
+      });
+      setState(s => ({ ...s, loading: false }));
+      setCoding({
+        runnerId: choice.runnerId,
+        runnerName: choice.runnerName,
+        agent: choice.agentId,
+        sessionId: session.sessionId,
+      });
+      addMessage({
+        role: 'info',
+        text: `coding session started — ${choice.agentId}@${choice.runnerName} (cwd ${session.cwd ?? '~'})`,
+      });
+
+      // Background stream: coding.output chunks land in the transcript,
+      // coding.exit closes the mode. /esc aborts the stream client-side.
+      const ac = new AbortController();
+      codingAbortRef.current = ac;
+      void client.streamCodingEvents(choice.runnerId, session.sessionId, (event: StreamEvent) => {
+        if (event.type === 'coding.output') {
+          const chunk = (event.data as any).data;
+          if (chunk) appendCodingOutput(String(chunk));
+        } else if (event.type === 'coding.exit') {
+          const code = (event.data as any).exitCode;
+          addMessage({ role: 'info', text: `coding session exited${code != null ? ` (exit ${code})` : ''}` });
+          codingAbortRef.current = null;
+          setCoding(null);
+        }
+      }, ac.signal).catch((err: any) => {
+        if (ac.signal.aborted) return;
+        addMessage({ role: 'error', text: `coding stream lost: ${err.message}` });
+        codingAbortRef.current = null;
+        setCoding(null);
+      });
+    } catch (err: any) {
+      setState(s => ({ ...s, loading: false }));
+      addMessage({ role: 'error', text: err.message });
+    }
+  }, [client, addMessage, appendCodingOutput]);
+
+  /** Detach from coding mode (abort the stream; the remote session is untouched). */
+  const leaveCodingMode = useCallback((note: string) => {
+    codingAbortRef.current?.abort();
+    codingAbortRef.current = null;
+    setCoding(null);
+    addMessage({ role: 'info', text: note });
+  }, [addMessage]);
+
   const handleSubmit = useCallback(async (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return;
@@ -136,7 +239,7 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
 
       if (!cmd) {
         addMessage({ role: 'error', text: `Unknown command: /${raw}` });
-        addMessage({ role: 'info', text: `Commands: /help /agents /clear /quit` });
+        addMessage({ role: 'info', text: `Commands: /help /agents /runners /code /clear /quit` });
         return;
       }
 
@@ -156,11 +259,15 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
           setState(s => ({ ...s, messages: [] }));
           return;
         case 'help':
-          addMessage({ role: 'info', text: '/agents  browse and switch agents' });
-          addMessage({ role: 'info', text: '/tools   show available tools' });
-          addMessage({ role: 'info', text: '/clear   clear conversation' });
-          addMessage({ role: 'info', text: '/help    show this help' });
-          addMessage({ role: 'info', text: '/quit    exit' });
+          addMessage({ role: 'info', text: '/agents     browse and switch agents' });
+          addMessage({ role: 'info', text: '/tools      show available tools' });
+          addMessage({ role: 'info', text: '/runners    list your runners + coding CLIs' });
+          addMessage({ role: 'info', text: '/code       run a coding task on a runner' });
+          addMessage({ role: 'info', text: '/code-stop  stop the active coding session' });
+          addMessage({ role: 'info', text: '/esc        leave coding mode (session keeps running)' });
+          addMessage({ role: 'info', text: '/clear      clear conversation' });
+          addMessage({ role: 'info', text: '/help       show this help' });
+          addMessage({ role: 'info', text: '/quit       exit' });
           addMessage({ role: 'info', text: 'Tab to autocomplete commands.' });
           return;
         case 'tools': {
@@ -202,6 +309,88 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
           setShowPicker(true);
           return;
         }
+        case 'runners': {
+          setState(s => ({ ...s, loading: true, loadingLabel: 'Loading runners' }));
+          try {
+            const runners = await client.listRunners();
+            setState(s => ({ ...s, loading: false }));
+            if (!runners.length) {
+              addMessage({ role: 'info', text: 'No runners registered. Start one: npx @almyty/runner start' });
+              return;
+            }
+            for (const r of runners) {
+              const clis = (r.codingAgents ?? []).map(a => a.id).join(', ') || 'no coding CLIs detected';
+              addMessage({ role: 'info', text: `${r.name} · ${r.state ?? 'unknown'} · ${clis}` });
+            }
+          } catch (err: any) {
+            setState(s => ({ ...s, loading: false }));
+            addMessage({ role: 'error', text: err.message });
+          }
+          return;
+        }
+        case 'code': {
+          const task = args.join(' ').trim();
+          if (!task) {
+            addMessage({ role: 'error', text: 'Usage: /code <task>' });
+            return;
+          }
+          if (coding) {
+            addMessage({ role: 'error', text: 'A coding session is already active — /code-stop or /esc first.' });
+            return;
+          }
+          setState(s => ({ ...s, loading: true, loadingLabel: 'Finding runners' }));
+          try {
+            const runners = await client.listRunners();
+            setState(s => ({ ...s, loading: false }));
+            const choices = buildCodeChoices(runners);
+            if (!choices.length) {
+              addMessage({ role: 'error', text: 'No online runner with a detected coding CLI. Start one: npx @almyty/runner start' });
+              return;
+            }
+            if (choices.length === 1) {
+              await startCoding(choices[0], task);
+              return;
+            }
+            setCodeChoices({ choices, task });
+          } catch (err: any) {
+            setState(s => ({ ...s, loading: false }));
+            addMessage({ role: 'error', text: err.message });
+          }
+          return;
+        }
+        case 'code-stop': {
+          if (!coding) {
+            addMessage({ role: 'info', text: 'No active coding session.' });
+            return;
+          }
+          try {
+            await client.stopCodingSession(coding.runnerId, coding.sessionId);
+          } catch (err: any) {
+            addMessage({ role: 'error', text: err.message });
+          }
+          leaveCodingMode('coding session stopped');
+          return;
+        }
+        case 'esc': {
+          if (!coding) {
+            addMessage({ role: 'info', text: 'Not in coding mode.' });
+            return;
+          }
+          leaveCodingMode(`left coding mode — session keeps running on ${coding.runnerName} (/code-stop to kill it)`);
+          return;
+        }
+      }
+      return;
+    }
+
+    // Coding mode: anything that isn't a slash command routes to the
+    // session's stdin, not to the chat agent.
+    if (classifyInput(trimmed, coding !== null) === 'coding' && coding) {
+      addMessage({ role: 'user', text: trimmed });
+      try {
+        await client.sendCodingInput(coding.runnerId, coding.sessionId, trimmed);
+      } catch (err: any) {
+        addMessage({ role: 'error', text: err.message });
       }
       return;
     }
@@ -311,7 +500,7 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
       setState(s => ({ ...s, loading: false }));
       addMessage({ role: 'error', text: err.message });
     }
-  }, [state.agent, state.conversationId, state.pendingRunId, client, addMessage, exit]);
+  }, [state.agent, state.conversationId, state.pendingRunId, client, addMessage, exit, coding, startCoding, leaveCodingMode]);
 
   const handlePickerSelect = useCallback((agent: AgentInfo) => {
     setShowPicker(false);
@@ -332,6 +521,29 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
       <Box flexDirection="column">
         <Header agent={state.agent} conversationId={state.conversationId} />
         <AgentSelector agents={pickerAgents} onSelect={handlePickerSelect} />
+      </Box>
+    );
+  }
+
+  if (codeChoices) {
+    const items: Choice[] = codeChoices.choices.map(c => ({
+      key: `${c.runnerId}:${c.agentId}`,
+      label: c.agentName,
+      hint: `on ${c.runnerName}`,
+    }));
+    return (
+      <Box flexDirection="column">
+        <Header agent={state.agent} conversationId={state.conversationId} />
+        <ChoiceSelector
+          title="Pick a coding CLI + runner:"
+          choices={items}
+          onSelect={(picked) => {
+            const choice = codeChoices.choices.find(c => `${c.runnerId}:${c.agentId}` === picked.key);
+            const task = codeChoices.task;
+            setCodeChoices(null);
+            if (choice) void startCoding(choice, task);
+          }}
+        />
       </Box>
     );
   }
@@ -362,6 +574,8 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
         </Box>
       )}
 
+      {/* Coding mode indicator */}
+      {coding && <CodingModeIndicator agent={coding.agent} runner={coding.runnerName} />}
       {/* Separator */}
       <Box>
         <Text dimColor>{'─'.repeat(Math.min(process.stdout.columns || 80, 120))}</Text>
@@ -369,7 +583,7 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
 
       {/* Input */}
       <Box paddingX={1} paddingY={1}>
-        <Text color="#8b5cf6">❯ </Text>
+        <Text color={coding ? '#22d3ee' : '#8b5cf6'}>❯ </Text>
         <Box flexGrow={1}>
           <TextInput
             value={input}
@@ -384,7 +598,7 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
               }
               handleSubmit(val);
             }}
-            placeholder="Type a message or / for commands"
+            placeholder={coding ? 'Type input for the coding session or / for commands' : 'Type a message or / for commands'}
           />
         </Box>
       </Box>
@@ -395,6 +609,7 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
           {state.agent.name}
           {state.agent.tools?.length ? ` · ${state.agent.tools.length} tools` : ''}
           {state.conversationId ? ` · ${state.conversationId.slice(0, 8)}` : ''}
+          {coding ? ` · coding:${coding.agent}@${coding.runnerName}` : ''}
         </Text>
       </Box>
     </Box>

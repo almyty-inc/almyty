@@ -21,7 +21,8 @@ describe('RunnerController agent.* endpoints', () => {
     const calls = {
       dispatch: over.dispatch ?? jest.fn().mockResolvedValue({ ok: true, result: { x: 1 } }),
     } as any;
-    return { ctrl: new RunnerController(service, calls), service, calls };
+    const relay = { subscribe: jest.fn().mockReturnValue(() => {}) } as any;
+    return { ctrl: new RunnerController(service, calls, relay), service, calls };
   }
 
   it('agent.list scopes ownership then dispatches agent.list', async () => {
