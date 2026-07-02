@@ -1,0 +1,71 @@
+# Referrals
+
+Invite other builders to almyty and both sides get free pro time. The program is built into the open-source platform — no external tracking, one httpOnly cookie, rewards applied as plan-expiry extensions.
+
+## How it works
+
+1. **Get your link.** Settings → Referrals, or `GET /referrals/code`. Every user gets one permanent 8-character code and a share link of the form:
+
+   ```
+   https://app.example.com/r/AB3D7XKQ
+   ```
+
+2. **Your invitee clicks it.** The link sets an attribution cookie (`almyty_ref`, httpOnly, 30 days) and redirects to the registration page. Attribution is last-touch: if they later click someone else's link, the newer code wins. Links of the form `/auth/register?ref=CODE` work too.
+
+3. **They sign up.** The cookie is consumed at registration (single-use). If the referral is clean, their new organization starts with **30 days of pro** immediately.
+
+4. **You get rewarded** as they become a real user:
+   - **+14 days** of pro when their org *activates* — created at least one gateway **and** completed at least one agent run.
+   - **+30 more days** if their org converts to a paid plan (an actual subscription — the free pro trial doesn't count).
+
+Qualification is checked by a background sweep every 10 minutes, so rewards land shortly after the milestone, not instantly.
+
+## Reward mechanics
+
+- Rewards extend your organization's plan expiry (`planExpiresAt`); there is no cash or credit ledger.
+- **Cap**: at most **365 reward days per rolling 365-day window** per referrer. Grants past the cap are trimmed (partial grants possible).
+- **Free-tier banking**: if your org is on the free plan when a reward lands, the days are banked (`accruedRewardDays`, visible in your stats) and applied automatically when your org is on pro.
+- **Enterprise orgs are excluded** on both sides: they can't create codes, can't be attributed as referrer or referee, and banked days are never applied to them.
+
+Referral lifecycle: `pending` → `qualified` (activation, +14d) → `rewarded` (paid conversion, +30d, terminal).
+
+## Abuse review
+
+Two signals flag a referral for review at signup:
+
+- **`disposable_email`** — the referee registered with a known throwaway-email domain.
+- **`same_ip`** — the referee registered from the same IP the code was created from, or the same IP as an earlier referral by the same referrer.
+
+A flagged referral is created but neutralized: the referee gets no signup bonus, and it never qualifies or rewards automatically. It shows as `pending_review` in your referral list and stats until an operator clears it.
+
+## Via the API
+
+All endpoints are under `/referrals`; the first three require authentication.
+
+```bash
+# Your code + share link (created on first call)
+curl /referrals/code
+
+# Your funnel: invited / qualified / rewarded / pendingReview,
+# totalRewardDays and banked accruedRewardDays
+curl /referrals/stats
+
+# Your referrals (statuses and reward days only — no referred-user PII)
+curl /referrals
+```
+
+`GET /referrals/attribute/:code` is the public endpoint behind `/r/<code>` links — it sets the cookie and redirects to registration (rate-limited to 20 requests/hour per IP). Append `?format=json` to get `{"attributed": true|false}` instead of a redirect.
+
+## Configuration (self-hosting)
+
+All knobs are environment variables on the backend:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `REFERRAL_REFEREE_DAYS` | `30` | referee's pro trial at signup |
+| `REFERRAL_TIER1_DAYS` | `14` | referrer reward on activation |
+| `REFERRAL_TIER2_DAYS` | `30` | referrer reward on paid conversion |
+| `REFERRAL_YEARLY_CAP_DAYS` | `365` | rolling-365-day cap on referrer rewards |
+| `REFERRAL_SWEEP_INTERVAL_MS` | `600000` | qualification sweep interval (10 min) |
+
+`FRONTEND_URL` is used to build share links and the post-attribution redirect.
