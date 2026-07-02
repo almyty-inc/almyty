@@ -85,6 +85,7 @@ export enum ToolType {
   QUERY = 'query',
   MUTATION = 'mutation',
   API = 'api',
+  MCP = 'mcp',
 }
 
 export enum ToolExecutionMethod {
@@ -200,6 +201,18 @@ export class Tool {
     cache?: {
       enabled: boolean;
       ttl?: number;
+    };
+    /**
+     * MCP-backed tool: set when this tool was materialized from an
+     * external MCP source. sourceId points at the McpSource row,
+     * remoteName is the tool's name on the remote server (used for
+     * tools/call), inputSchema is a snapshot of the remote-declared
+     * JSON Schema. Dispatch in ToolExecutorService keys off this.
+     */
+    mcp?: {
+      sourceId: string;
+      remoteName: string;
+      inputSchema?: Record<string, any>;
     };
   };
 
