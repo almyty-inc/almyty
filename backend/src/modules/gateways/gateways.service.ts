@@ -15,8 +15,10 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { encryptField, isEncrypted } from '../../common/security/field-crypto';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
+import { EmailProvisioningService } from './channels/email-provisioning.service';
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -156,6 +158,9 @@ export class GatewaysService {
     // Optional for the same reason: platform webhook auto-registration
     // must never be required to construct the service.
     @Optional() private readonly webhookRegistrar?: ChannelWebhookRegistrar,
+    // Optional for the same reason: email inbound-address provisioning
+    // must never be required to construct the service.
+    @Optional() private readonly emailProvisioner?: EmailProvisioningService,
   ) {}
 
   /**
@@ -183,14 +188,20 @@ export class GatewaysService {
 
   /**
    * Keep the platform inbound-webhook registration (telegram
-   * setWebhook, twilio number webhook) in sync with the gateway row.
-   * Fire-and-forget: registration must never fail a CRUD request.
+   * setWebhook, twilio number webhook) and the email inbound-address
+   * provisioning in sync with the gateway row. Fire-and-forget:
+   * neither must ever fail a CRUD request.
    */
   private syncWebhookRegistration(gateway: Gateway): void {
     this.webhookRegistrar
       ?.sync(gateway)
       .catch((err: any) =>
         this.logger.warn(`Failed to sync channel webhook registration: ${err.message}`),
+      );
+    this.emailProvisioner
+      ?.sync(gateway)
+      .catch((err: any) =>
+        this.logger.warn(`Failed to sync email inbound provisioning: ${err.message}`),
       );
   }
 
@@ -200,6 +211,28 @@ export class GatewaysService {
       .catch((err: any) =>
         this.logger.warn(`Failed to remove channel webhook registration: ${err.message}`),
       );
+    this.emailProvisioner
+      ?.remove(gateway)
+      .catch((err: any) =>
+        this.logger.warn(`Failed to remove email inbound provisioning: ${err.message}`),
+      );
+  }
+
+  /**
+   * Channel configs can carry the channel app's OAuth client secret
+   * (multi-workspace installs, e.g. a Slack app's client_secret).
+   * Encrypt it at rest; decryption happens at the point of use
+   * (SlackInstallService), and isEncrypted() makes this idempotent so
+   * an already-encrypted value round-trips through update unchanged.
+   */
+  private encryptConfigSecrets(configuration?: Record<string, any>): void {
+    if (!configuration) return;
+    for (const key of ['client_secret', 'clientSecret']) {
+      const value = configuration[key];
+      if (typeof value === 'string' && value && !isEncrypted(value)) {
+        configuration[key] = encryptField(value);
+      }
+    }
   }
 
   async createGateway(
@@ -268,6 +301,9 @@ export class GatewaysService {
         (createGatewayDto as any).visibility,
         (createGatewayDto as any).teamId,
       );
+
+      // Encrypt channel OAuth client secrets at rest before persisting.
+      this.encryptConfigSecrets(createGatewayDto.configuration);
 
       // Create the gateway
       const gateway = this.gatewayRepository.create({
@@ -351,6 +387,7 @@ export class GatewaysService {
       // Validate configuration if updated
       if (updateGatewayDto.configuration) {
         this.init.validateGatewayConfiguration(gateway.type, gateway.configuration);
+        this.encryptConfigSecrets(gateway.configuration);
       }
 
       const updatedGateway = await this.gatewayRepository.save(gateway);

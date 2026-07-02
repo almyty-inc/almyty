@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   Inject,
+  Optional,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -27,6 +28,7 @@ import { MicrosoftTeamsAdapter } from './adapters/microsoft-teams.adapter';
 import { SignalAdapter } from './adapters/signal.adapter';
 import { MatrixAdapter } from './adapters/matrix.adapter';
 import { IrcAdapter } from './adapters/irc.adapter';
+import { ChannelInstallationService } from './channel-installation.service';
 
 @Injectable()
 export class ChannelGatewayService {
@@ -56,6 +58,9 @@ export class ChannelGatewayService {
     private readonly signalAdapter: SignalAdapter,
     private readonly matrixAdapter: MatrixAdapter,
     private readonly ircAdapter: IrcAdapter,
+    // Optional so existing unit tests and minimal contexts can
+    // construct the service without the installation subsystem.
+    @Optional() private readonly installationService?: ChannelInstallationService,
   ) {
     this.adapters = new Map<string, BaseAdapter>([
       [GatewayType.CHAT_WIDGET, this.chatWidgetAdapter],
@@ -108,8 +113,29 @@ export class ChannelGatewayService {
 
     const adapter = this.getAdapter(gateway.type);
 
+    // Multi-workspace resolution: when the payload carries a platform
+    // tenant id (e.g. Slack team_id) and an active installation exists
+    // for it, that installation's credentials (its own bot token)
+    // override the gateway's single-workspace configuration for both
+    // verification context and the reply. Gateways without
+    // installations keep the existing single-credential behavior.
+    let effectiveConfig: Record<string, any> = gateway.configuration || {};
+    const tenantId = adapter.extractTenantId(body);
+    if (tenantId && this.installationService) {
+      try {
+        const creds = await this.installationService.resolveCredentials(gateway.id, String(tenantId));
+        if (creds) {
+          effectiveConfig = { ...effectiveConfig, ...creds };
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `installation resolution failed (gateway ${gateway.id}, tenant ${tenantId}): ${err?.message ?? err}`,
+        );
+      }
+    }
+
     // Verify webhook signature
-    const isValid = await adapter.verifyWebhook(body, headers, gateway.configuration, rawBody);
+    const isValid = await adapter.verifyWebhook(body, headers, effectiveConfig, rawBody);
     if (!isValid) {
       this.logger.warn(`Webhook signature verification failed for gateway: ${gateway.id}`);
       await this.logEvent(gateway, 'inbound', 'failed', body, 'signature verification failed');
@@ -139,7 +165,7 @@ export class ChannelGatewayService {
 
     if (run) {
       await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, normalized.text);
-      this.listenForCompletionAndRespond(run.id, gateway, adapter, normalized);
+      this.listenForCompletionAndRespond(run.id, gateway, adapter, normalized, effectiveConfig);
     } else {
       const newRun = await this.agentRuntimeService.startRun(
         gateway.agentId,
@@ -158,7 +184,7 @@ export class ChannelGatewayService {
       };
       await this.runRepository.save(newRun);
 
-      this.listenForCompletionAndRespond(newRun.id, gateway, adapter, normalized);
+      this.listenForCompletionAndRespond(newRun.id, gateway, adapter, normalized, effectiveConfig);
     }
 
     // Increment request count
@@ -168,12 +194,16 @@ export class ChannelGatewayService {
 
   /**
    * Listen for a run to complete and send the response back via the adapter.
+   * `sendConfig` (optional) carries installation-resolved credentials for
+   * multi-workspace gateways; omitted, the gateway's own configuration
+   * is used.
    */
   private listenForCompletionAndRespond(
     runId: string,
     gateway: Gateway,
     adapter: BaseAdapter,
     normalized: NormalizedMessage,
+    sendConfig?: Record<string, any>,
   ): void {
     const emitter = this.agentRuntimeService.getRunEmitter(runId);
     if (!emitter) {
@@ -199,7 +229,7 @@ export class ChannelGatewayService {
 
           const formatted = adapter.formatOutbound({ text: responseText });
           try {
-            await adapter.sendResponse(gateway.configuration, formatted, {
+            await adapter.sendResponse(sendConfig ?? gateway.configuration, formatted, {
               threadId: normalized.threadId,
               channel: normalized.metadata?.channel,
               userId: normalized.userId,
