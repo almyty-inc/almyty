@@ -49,6 +49,9 @@ import { SpendBudget } from './entities/spend-budget.entity';
 import { SpendAlert } from './entities/spend-alert.entity';
 import { OrgSsoConfig } from './entities/org-sso-config.entity';
 import { BillingEvent } from './entities/billing-event.entity';
+// EE-feature entities stay in the CORE schema (migrations + entity glob are
+// OSS); only the feature logic moved to `ee/`.
+import { CompliancePolicy } from './entities/compliance-policy.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -87,12 +90,11 @@ import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LicensingModule } from './modules/licensing/licensing.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { ProviderUsageModule } from './modules/provider-usage/provider-usage.module';
-import { SsoModule } from './modules/sso/sso.module';
-import { RbacModule } from './modules/rbac/rbac.module';
-import { AuditExportModule } from './modules/audit-export/audit-export.module';
-import { ApprovalPoliciesModule } from './modules/approval-policies/approval-policies.module';
-import { EeStubsModule } from './modules/ee-stubs/ee-stubs.module';
-import { BillingModule } from './modules/billing/billing.module';
+// EE feature modules (sso, rbac, audit-export, approval-policies, billing,
+// ee-stubs, compliance, chargeback) live under `ee/` and are loaded at
+// runtime via the ee-loader — NOT statically imported here, so this file
+// compiles in the OSS build without the commercial tree present.
+import { loadEeModules } from './ee-loader';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -187,6 +189,7 @@ import { databaseConfig } from './config/database.config';
       SpendAlert,
       OrgSsoConfig,
       BillingEvent,
+      CompliancePolicy,
     ]),
 
     // Rate limiting — backed by Redis so limits are shared across replicas
@@ -282,14 +285,11 @@ import { databaseConfig } from './config/database.config';
     RunnerModule,
     WorkspaceModule,
     LicensingModule,
-    RbacModule,
-    AuditExportModule,
-    ApprovalPoliciesModule,
-    EeStubsModule,
     BudgetsModule,
     ProviderUsageModule,
-    SsoModule,
-    BillingModule,
+    // EE feature modules are loaded dynamically so the OSS build compiles +
+    // boots without the commercial `ee/` tree present (loadEeModules() → []).
+    ...loadEeModules(),
     ToolHubModule,
     A2AModule,
     AcpModule,
