@@ -37,7 +37,7 @@ export abstract class BaseAdapter {
   /**
    * Verify webhook signature/authenticity (optional)
    */
-  async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>): Promise<boolean> {
+  async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>, rawBody?: string): Promise<boolean> {
     return true; // Override in specific adapters
   }
 }
