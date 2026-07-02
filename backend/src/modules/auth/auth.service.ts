@@ -16,6 +16,7 @@ import { LoginDto } from './dto/login.dto';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { ReferralsService } from '../referrals/referrals.service';
 import { MailService } from '../mail/mail.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
@@ -55,9 +56,13 @@ export class AuthService {
     private jwtService: JwtService,
     private readonly auditLogService: AuditLogService,
     private readonly mailService: MailService,
+    private readonly referralsService: ReferralsService,
   ) {}
 
-  async register(createUserDto: CreateUserDto): Promise<AuthTokens> {
+  async register(
+    createUserDto: CreateUserDto,
+    context?: { referralCode?: string; ipAddress?: string },
+  ): Promise<AuthTokens> {
     // Check if user already exists
     const existingUser = await this.userRepository.findOne({
       where: { email: createUserDto.email },
@@ -95,7 +100,7 @@ export class AuthService {
     //
     // A transaction makes the three writes atomic: either all three
     // commit, or the DB rolls them all back.
-    const savedUser = await this.userRepository.manager.transaction(async (tx) => {
+    const { savedUser, savedOrganizationId } = await this.userRepository.manager.transaction(async (tx) => {
       // Create user inside the transaction
       const user = tx.create(User, {
         email: createUserDto.email,
@@ -148,8 +153,24 @@ export class AuthService {
         isActive: true,
       }));
 
-      return saved;
+      return { savedUser: saved, savedOrganizationId: savedOrganization.id };
     });
+
+    // Referral attribution (outside the transaction, additive): a failure
+    // here must never fail or roll back a successful registration.
+    if (context?.referralCode) {
+      try {
+        await this.referralsService.attributeSignup({
+          userId: savedUser.id,
+          organizationId: savedOrganizationId,
+          email: savedUser.email,
+          referralCode: context.referralCode,
+          ipAddress: context.ipAddress,
+        });
+      } catch (err) {
+        // swallow — registration already succeeded
+      }
+    }
 
     // Generate tokens (outside the transaction — purely read-side)
     return this.generateTokens(savedUser);

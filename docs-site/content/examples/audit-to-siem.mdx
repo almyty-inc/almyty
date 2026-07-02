@@ -1,0 +1,26 @@
+# 🧾 Stream your audit trail to a SIEM
+
+**Stack** — `Source: every action (who/when/what)` · `Export: JSON / SIEM` · `Sinks: Splunk, Datadog, your log pipeline` · `Output: agent activity in your security stack`
+
+**Who it's for** — security and compliance teams who need agent activity in the same place as everything else they monitor.
+**What it does** — every action an agent takes and every change to its config is recorded with who, when, and what. You export that audit trail — as JSON or into your SIEM — so agent behavior is searchable, alertable, and retained alongside your other logs.
+
+## Build it
+
+1. **Confirm what's captured.** Every tool call, approval decision, config change, and run is already in the audit trail — no instrumentation to add.
+2. **Export it** — pull the audit log as CSV/JSON from Analytics, or stream events into your SIEM pipeline (Splunk, Datadog, or any log sink).
+3. **Alert on it** — build detections in your existing tooling: a spike in refunds, an agent touching a resource it shouldn't, an approval bypassed.
+4. **Retain it** — keep the exported trail for the window your compliance regime requires; it's the evidence for an audit.
+5. **Tie it to identity** — with [SSO/SCIM](/examples/sso-scim-onboarding), the "who" is a real directory user, not a shared key.
+
+## Make it yours
+
+- Feed anomalies back to an [on-call agent](/examples/oncall-alert-triage) that summarizes them.
+- Scope exports per team so each business unit sees only its own trail.
+- Combine with [approval policies](/examples/approval-policies) so the trail shows the full decision chain.
+
+**Uses** — `Enterprise` · `Audit` · `SIEM` · `Security`
+
+## Related
+
+- [Analytics](/analytics) · [Compliance](/compliance) · [Versioning & audit](/agents/versioning)

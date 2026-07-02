@@ -86,6 +86,7 @@ function buildService(opts: {
     jwt,
     { log: jest.fn(), logCreate: jest.fn(), logUpdate: jest.fn(), logDelete: jest.fn() } as any,
     { sendPasswordReset: jest.fn().mockResolvedValue(true) } as any, // mailService
+    { attributeSignup: jest.fn().mockResolvedValue(null) } as any, // referralsService
   );
 
   return { service, jwt };
