@@ -426,6 +426,12 @@ export const gatewaysApi = {
 
   testChannelConnection: (id: string) => apiPost(`/gateways/${id}/test-connection`),
 
+  // Multi-workspace channel installations (e.g. Slack OAuth installs)
+  getInstallations: (id: string) => apiGet(`/gateways/${id}/installations`),
+
+  revokeInstallation: (gatewayId: string, installationId: string) =>
+    apiPost(`/gateways/${gatewayId}/installations/${installationId}/revoke`),
+
   getMetrics: (id: string, params?: any) => apiGet(`/gateways/${id}/stats`, { params }),
 
   // Auth configuration
