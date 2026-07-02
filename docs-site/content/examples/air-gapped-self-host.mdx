@@ -1,43 +1,31 @@
-# Air-gapped, self-hosted agents
+# 🔒 Air-gapped, self-hosted agents
 
-**Goal:** you handle records that legally cannot leave your network — patient data, case
-files, trading positions. You still want agents. Run the whole stack on your own
-infrastructure with a local model, and nothing crosses the boundary.
+**Stack** — `Deploy: Docker Compose / Kubernetes (your infra)` · `Models: local (Ollama, vLLM)` · `Secrets: your vault` · `State: your Postgres` · `Output: agents, nothing leaves the network`
 
-Because almyty is open source (Apache-2.0 core) and agnostic at every layer, this is a
-matter of configuration, not a special edition. The hosted service runs the same code.
+**Who it's for** — teams handling records that legally cannot leave the network — patient data, case files, trading positions.
+**What it does** — runs the whole platform on your own infrastructure against a local model, so agents work end to end without a single call crossing the boundary. Because the core is open source (Apache-2.0), this is configuration, not a special edition — the hosted service runs the same code.
 
-## 1. Self-host the platform
+## Build it
 
-Bring it up with Docker Compose for a single box, or the Helm chart for Kubernetes. Postgres
-and the object store are yours; no telemetry leaves the cluster.
+1. **Self-host the platform** with Docker Compose (single box) or the Helm chart (Kubernetes). Postgres and object store are yours; no telemetry leaves the cluster.
 
-![The Docker Compose file for a self-hosted deployment](/screenshots/self-hosting-compose.png)
+   ![The Compose file for a self-hosted deployment](/screenshots/self-hosting-compose.png)
 
-See [Self-hosting](/self-hosting) for the full deployment guide.
+2. **Point at a local model** — add an AI Model whose base URL is a server you run (Ollama, vLLM, any OpenAI-compatible endpoint) inside the network. Inference stays on your hardware.
 
-## 2. Point at a local model
+   ![Adding a local, OpenAI-compatible model](/screenshots/llm-providers-create.png)
 
-Add an AI Model whose base URL is a model server you run — Ollama, vLLM, or any
-OpenAI-compatible endpoint — inside the same network. Inference happens on your hardware;
-prompts and completions never reach a public API.
+3. **Keep secrets and data in place** — keys in your own [Credentials](/credentials) vault, memory in your Postgres, tools executed by a [runner](/runner) on machines you control.
 
-![Adding a local, OpenAI-compatible model provider](/screenshots/llm-providers-create.png)
+   ![The credentials vault, local](/screenshots/credentials-vault.png)
 
-## 3. Keep secrets and data in place
+## Make it yours
 
-API keys live in your own [Credentials](/credentials) vault, encrypted at rest with your
-key. Memory persists in your Postgres. The [runner](/runner) executes tools and coding CLIs
-on machines you control.
+- The same governance — [verify gates, approvals, audit](/examples/governed-refund-agent) — applies unchanged, just inside your walls.
+- Use a runner to reach on-prem systems the cluster can't ([Give an agent a machine](/examples/expose-any-machine)).
+- Nothing has to cross the boundary: model calls, tool calls, secrets, and state all stay internal.
 
-![The credentials vault holding secrets locally](/screenshots/credentials-vault.png)
-
-## What crosses the boundary
-
-Nothing has to. Model calls go to your local server, tool calls run against your internal
-services, secrets stay in your vault, and state lives in your database. The same governance
-from [Put a governed agent into production](/examples/governed-production-agent) — verify
-gates, approvals, audit — applies unchanged; it just runs entirely inside your walls.
+**Uses** — `Enterprise` · `Self-host` · `Compliance`
 
 ## Related
 

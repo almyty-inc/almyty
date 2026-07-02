@@ -1,0 +1,30 @@
+# 🎧 Triage support tickets and draft replies
+
+**Stack** — `Trigger: Slack / your app calls the agent API` · `Models: Claude 4.8 draft + GPT-4o verify` · `Tools: Zendesk API, Orders API, KB search` · `Mode: verify panel + approval` · `Memory: on` · `Output: drafted reply + Slack escalation`
+
+**Who it's for** — support teams drowning in L1 tickets.
+**What it does** — reads a ticket, pulls the customer's order history, drafts a reply, has a second-vendor model check it for accuracy, and escalates refunds over a threshold to a human before anything sends.
+
+## Build it
+
+1. **Connect your tools.** In *APIs → Connect API*, paste the OpenAPI URLs for Zendesk and your Orders service — each operation becomes a typed tool. Add a knowledge-base search tool for your help center.
+2. **Create the agent.** *Agents → Create → Autonomous*, name it "Support Triage", attach those tools, and instruct it: *triage the ticket, pull order context, draft a reply in our voice, escalate refunds over $500.*
+3. **Turn on memory** so it recalls a customer's prior tickets across runs.
+4. **Add a verify panel** on *Models & Verification*: Claude drafts, GPT-4o and Gemini review; block on disagreement, give it one revise pass.
+5. **Gate refunds** — instruct the agent to call `request_approval` for refunds over $500. The run pauses at `waiting_approval` and a human decides.
+
+![A pending refund escalation, waiting for a human](/screenshots/approvals-pending.png)
+
+6. **Wire the trigger** — publish the agent on your `#support` Slack channel, or have your helpdesk call the agent's API when a ticket arrives. The drafted reply and any escalation post back to Slack.
+
+## Make it yours
+
+- Swap Zendesk for Intercom or Freshdesk — same *Connect API* step.
+- Run L1-only fully autonomous (no approval) and reserve approvals for money-movement.
+- Add a PII-scrub instruction so drafts never echo card or account numbers.
+
+**Uses** — `Support` · `Slack` · `Verification` · `Approvals` · `Memory`
+
+## Related
+
+- [Autonomous agents](/agents/autonomous) · [Approvals](/approvals) · [Connect an API](/tools)
