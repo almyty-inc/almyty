@@ -55,11 +55,44 @@ export interface StreamEvent {
   data: Record<string, unknown>;
 }
 
+// ── Runners & coding sessions ───────────────────────────────────
+
+/** A coding CLI detected on a runner machine. */
+export interface RunnerCodingAgent {
+  id: string;
+  displayName: string;
+  binary: string;
+  version?: string;
+  providerFamily?: string;
+}
+
+/** A registered runner (one of the user's machines). */
+export interface RunnerSummary {
+  id: string;
+  name: string;
+  state?: string;
+  labels?: Record<string, string>;
+  /** Coding CLIs the runner reported at registration. */
+  codingAgents: RunnerCodingAgent[];
+}
+
+/** A coding session running on a runner. */
+export interface CodingSession {
+  sessionId: string;
+  agent: string;
+  binary?: string;
+  processId?: string;
+  cwd?: string;
+  task?: string;
+  status?: string;
+  exitCode?: number | null;
+}
+
 /** Callback for stream events. */
 export type StreamEventHandler = (event: StreamEvent) => void;
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'timeout']);
-const TERMINAL_EVENT_TYPES = new Set(['run.completed', 'run.failed', 'run.cancelled']);
+const TERMINAL_EVENT_TYPES = new Set(['run.completed', 'run.failed', 'run.cancelled', 'coding.exit']);
 
 export class AlmytyClient {
   private readonly baseUrl: string;
@@ -315,6 +348,81 @@ export class AlmytyClient {
       await new Promise((r) => setTimeout(r, intervalMs));
     }
     throw new Error(`Run ${runId} did not finish within ${Math.round(timeoutMs / 1000)}s`);
+  }
+
+  // ── Runners & coding sessions ───────────────────────────────────
+
+  /** The caller's registered runners, with their detected coding CLIs. */
+  async listRunners(): Promise<RunnerSummary[]> {
+    const data: any = await this.request('/runners');
+    const list = data?.data ?? data ?? [];
+    return (list as any[]).map((r) => ({
+      id: r.id,
+      name: r.name,
+      state: r.state,
+      labels: r.labels,
+      codingAgents: r.runtimeInfo?.codingAgents ?? [],
+    }));
+  }
+
+  /** Fresh probe of coding CLIs installed on the runner machine. */
+  async listRunnerCodingAgents(runnerId: string): Promise<RunnerCodingAgent[]> {
+    const data: any = await this.request(
+      `/runners/${encodeURIComponent(runnerId)}/coding/agents`,
+    );
+    return this.unwrap(data)?.agents ?? [];
+  }
+
+  /** Start a coding session (spawns the CLI with the task prompt). */
+  async startCodingSession(
+    runnerId: string,
+    options: { agent: string; task: string; cwd?: string; model?: string },
+  ): Promise<CodingSession> {
+    const data: any = await this.request(
+      `/runners/${encodeURIComponent(runnerId)}/coding/sessions`,
+      { method: 'POST', body: JSON.stringify(options) },
+    );
+    return this.unwrap(data) as CodingSession;
+  }
+
+  async getCodingSession(runnerId: string, sessionId: string): Promise<CodingSession> {
+    const data: any = await this.request(
+      `/runners/${encodeURIComponent(runnerId)}/coding/sessions/${encodeURIComponent(sessionId)}`,
+    );
+    return this.unwrap(data) as CodingSession;
+  }
+
+  /** Route a line of user input to the session's stdin. */
+  async sendCodingInput(runnerId: string, sessionId: string, data: string): Promise<void> {
+    await this.request(
+      `/runners/${encodeURIComponent(runnerId)}/coding/sessions/${encodeURIComponent(sessionId)}/input`,
+      { method: 'POST', body: JSON.stringify({ data }) },
+    );
+  }
+
+  async stopCodingSession(runnerId: string, sessionId: string, force = false): Promise<void> {
+    await this.request(
+      `/runners/${encodeURIComponent(runnerId)}/coding/sessions/${encodeURIComponent(sessionId)}/stop`,
+      { method: 'POST', body: JSON.stringify(force ? { force } : {}) },
+    );
+  }
+
+  /**
+   * Stream a coding session's output via SSE. Calls handler for each
+   * coding.output / coding.exit event; returns when the session exits or
+   * the stream ends.
+   */
+  async streamCodingEvents(
+    runnerId: string,
+    sessionId: string,
+    handler: StreamEventHandler,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.streamSSE(
+      `/runners/${encodeURIComponent(runnerId)}/coding/sessions/${encodeURIComponent(sessionId)}/events`,
+      handler,
+      signal,
+    );
   }
 }
 

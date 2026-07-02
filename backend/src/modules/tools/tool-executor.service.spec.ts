@@ -24,6 +24,8 @@ import { GrpcCallerService } from './executors/grpc-caller.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { RunnerCallService } from '../runner/runner-call.service';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
+import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
+import { McpClientError } from '../mcp-sources/mcp-client.service';
 import axios from 'axios';
 
 jest.mock('axios', () => {
@@ -197,6 +199,12 @@ describe('ToolExecutorService', () => {
             put: jest.fn().mockResolvedValue({}),
             search: jest.fn().mockResolvedValue([]),
             list: jest.fn().mockResolvedValue({ items: [], cursor: null, total: 0 }),
+          },
+        },
+        {
+          provide: McpSourcesService,
+          useValue: {
+            executeToolCall: jest.fn().mockResolvedValue({ success: true, data: null }),
           },
         },
       ],
@@ -458,6 +466,89 @@ describe('ToolExecutorService', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('no executable configuration');
       expect(result.error).not.toContain('reading'); // not the null-deref message
+    });
+  });
+
+  describe('mcp dispatch', () => {
+    const mcpTool = () => ({
+      id: 'tool-mcp-1',
+      name: 'weather_get_forecast',
+      status: ToolStatus.ACTIVE,
+      type: ToolType.MCP,
+      organizationId: 'org-1',
+      operation: null,
+      configuration: {
+        timeout: 5000,
+        mcp: { sourceId: 'src-1', remoteName: 'get_forecast', inputSchema: { type: 'object' } },
+      },
+    } as any);
+
+    const allow = () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      } as any);
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+    };
+
+    it('dispatches tools with configuration.mcp to McpSourcesService and returns the mapped data', async () => {
+      const tool = mcpTool();
+      toolRepository.findOne.mockResolvedValue(tool);
+      allow();
+      const mcpSources = (service as any).mcpSources;
+      mcpSources.executeToolCall.mockResolvedValue({ success: true, data: { temp: 21 } });
+
+      const result = await service.executeTool('tool-mcp-1', { city: 'Berlin' }, {
+        userId: 'user-1',
+        organizationId: 'org-1',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ temp: 21 });
+      expect(result.metadata).toMatchObject({ mcpSourceId: 'src-1', remoteName: 'get_forecast' });
+      expect(mcpSources.executeToolCall).toHaveBeenCalledWith(
+        'org-1',
+        { sourceId: 'src-1', remoteName: 'get_forecast', inputSchema: { type: 'object' } },
+        { city: 'Berlin' },
+        expect.objectContaining({ timeoutMs: 5000 }),
+      );
+    });
+
+    it('maps a remote tool error onto a failed result without throwing', async () => {
+      const tool = mcpTool();
+      toolRepository.findOne.mockResolvedValue(tool);
+      allow();
+      (service as any).mcpSources.executeToolCall.mockResolvedValue({
+        success: false,
+        data: [{ type: 'text', text: 'city not found' }],
+        error: 'city not found',
+      });
+
+      const result = await service.executeTool('tool-mcp-1', { city: 'Nowhere' }, {
+        userId: 'user-1',
+        organizationId: 'org-1',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('city not found');
+    });
+
+    it('maps McpClientError codes onto a typed failed result (never a raw 500)', async () => {
+      const tool = mcpTool();
+      toolRepository.findOne.mockResolvedValue(tool);
+      allow();
+      (service as any).mcpSources.executeToolCall.mockRejectedValue(
+        new McpClientError('MCP_TIMEOUT', 'MCP request to https://mcp.example.com timed out after 5000ms or was cancelled'),
+      );
+
+      const result = await service.executeTool('tool-mcp-1', {}, {
+        userId: 'user-1',
+        organizationId: 'org-1',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('MCP_TIMEOUT');
+      expect(result.metadata).toMatchObject({ mcpErrorCode: 'MCP_TIMEOUT' });
     });
   });
 
