@@ -16,7 +16,7 @@ import { Response } from 'express';
 
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { ChannelGatewayService } from './channel-gateway.service';
-import { buildWidgetScript } from './widget-script';
+import { buildWidgetScript, sanitizeWidgetConfig } from './widget-script';
 
 /**
  * Public (unauthenticated) surface for the embedded chat widget — the
@@ -58,6 +58,23 @@ export class ChannelWidgetController {
     res.setHeader('Cache-Control', 'public, max-age=300');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     return res.send(buildWidgetScript(id));
+  }
+
+  @Get(':id/widget-config')
+  @ApiOperation({ summary: 'Public sanitized widget presentation config' })
+  async widgetConfig(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // Same gate as widget.js: 404 unless the gateway exists, is a
+    // chat_widget and is active. The response is a strict whitelist of
+    // presentation fields (see sanitizeWidgetConfig) — the raw
+    // configuration jsonb also holds channel credentials and must never
+    // leak through this public endpoint.
+    const gateway = await this.channelGatewayService.findWidgetGateway(id);
+
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    return { success: true, data: sanitizeWidgetConfig(gateway.configuration) };
   }
 
   @Post(':id/widget/messages')
