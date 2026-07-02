@@ -2,7 +2,7 @@
 
 Agents are most useful where your users already are. almyty ships twelve channel adapters that connect an agent to messaging platforms — configure a channel with the platform's credentials, and inbound messages become agent runs whose replies flow back to the same conversation.
 
-![Configuring a channel on an agent — pick the platform, paste its credentials, test the connection](/screenshots/interfaces-channel-config.png)
+![Deploying a channel on an agent — pick the platform, name it, paste its credentials](/screenshots/interfaces-channel-config.png)
 
 ## Supported channels
 
@@ -25,9 +25,9 @@ Every inbound request is authenticated against the platform's mechanism before i
 
 ## Connecting a channel
 
-1. Open the agent's **Interfaces** tab (or the gateway's channel settings) and pick a platform.
+1. Open the agent's **Interfaces** tab, click **Deploy Channel**, and pick a platform.
 2. Paste the platform credentials from the table above. They are encrypted at rest like every other credential.
-3. **Test connection** performs a real authentication probe against the platform before you save.
+3. The channel's connection test performs a real authentication probe against the platform, so a bad token surfaces immediately instead of on the first missed message.
 4. Point the platform's webhook at the URL almyty displays (for webhook-driven channels).
 
 Messages then round-trip: platform → adapter (verify, normalize) → agent run → adapter (format for the platform) → reply.
