@@ -64,11 +64,15 @@ export const COMMUNITY_ENTITLEMENTS: string[] = [
 export const COMMUNITY_LIMITS: Record<string, number> = {};
 
 /**
- * Built-in default Ed25519 public key (SPKI PEM). Matches the dev keypair in
- * `backend/scripts/license/`. A real EE deployment overrides it via
- * `ALMYTY_LICENSE_PUBLIC_KEY`; the matching private key is held offline by the
- * vendor and is NOT in this repo (the dev private key is for local testing only).
+ * Built-in default Ed25519 public key (SPKI PEM) — the license VERIFICATION
+ * key. A real EE deployment can override it via `ALMYTY_LICENSE_PUBLIC_KEY`.
+ * The matching private (signing) key is held offline by the vendor and is
+ * NEVER committed — committing it would let anyone forge entitlement tokens.
+ *
+ * Rotated 2026-07-02: the previous key's private counterpart had been briefly
+ * committed to git history, so it was replaced with a freshly generated pair
+ * whose private key exists only in the vendor's secret store.
  */
 export const DEFAULT_LICENSE_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAGMgHVuZL84VHwKDME7ynNIap1EfQH3RAqIEGFbJTFJ8=
+MCowBQYDK2VwAyEAvMDkQbs/XZoJOFjTaEU2Grljh6ecW6/d2TQmj5GShfk=
 -----END PUBLIC KEY-----`;
