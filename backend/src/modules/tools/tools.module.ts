@@ -39,6 +39,7 @@ import { JsonSchemaTranslatorModule } from '../json-schema-translator/json-schem
 import { NodeSandboxModule } from './node-sandbox/node-sandbox.module';
 import { MemoryModule } from '../memory/memory.module';
 import { RunnerModule } from '../runner/runner.module';
+import { McpSourcesModule } from '../mcp-sources/mcp-sources.module';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 @Module({
@@ -61,6 +62,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     JsonSchemaTranslatorModule,
     NodeSandboxModule,
     RunnerModule,
+    McpSourcesModule,
     forwardRef(() => MemoryModule),
     AuthorizationModule,
   ],

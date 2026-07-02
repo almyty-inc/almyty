@@ -5,6 +5,8 @@ import { SlackAdapter } from '../adapters/slack.adapter';
 import { DiscordAdapter } from '../adapters/discord.adapter';
 import { TelegramAdapter } from '../adapters/telegram.adapter';
 import { WhatsAppAdapter } from '../adapters/whatsapp.adapter';
+import { WhatsAppCloudAdapter } from '../adapters/whatsapp-cloud.adapter';
+import { SmsAdapter } from '../adapters/sms.adapter';
 import { EmailAdapter } from '../adapters/email.adapter';
 import { WebhookAdapter } from '../adapters/webhook.adapter';
 import { GoogleChatAdapter } from '../adapters/google-chat.adapter';
@@ -44,6 +46,8 @@ describe('ChannelGatewayService.testConnection', () => {
       new DiscordAdapter(),
       new TelegramAdapter(),
       new WhatsAppAdapter(),
+      new WhatsAppCloudAdapter(),
+      new SmsAdapter(),
       new EmailAdapter(),
       new WebhookAdapter(),
       new GoogleChatAdapter(),
@@ -63,6 +67,8 @@ describe('ChannelGatewayService.testConnection', () => {
         GatewayType.DISCORD,
         GatewayType.TELEGRAM,
         GatewayType.WHATSAPP,
+        GatewayType.WHATSAPP_CLOUD,
+        GatewayType.SMS,
         GatewayType.EMAIL,
         GatewayType.WEBHOOK,
         GatewayType.GOOGLE_CHAT,
@@ -260,6 +266,8 @@ describe('ChannelGatewayService.testConnection', () => {
         new DiscordAdapter(),
         new TelegramAdapter(),
         new WhatsAppAdapter(),
+        new WhatsAppCloudAdapter(),
+        new SmsAdapter(),
         new EmailAdapter(),
         new WebhookAdapter(),
         new GoogleChatAdapter(),
@@ -350,6 +358,8 @@ describe('ChannelGatewayService.testConnection', () => {
         new DiscordAdapter(),
         new TelegramAdapter(),
         new WhatsAppAdapter(),
+        new WhatsAppCloudAdapter(),
+        new SmsAdapter(),
         new EmailAdapter(),
         new WebhookAdapter(),
         new GoogleChatAdapter(),
