@@ -68,4 +68,62 @@ describe('WhatsAppAdapter', () => {
       )).resolves.toBeUndefined();
     });
   });
+
+  describe('sendResponse reply routing', () => {
+    it('falls back to threadId as the recipient (service dispatch shape)', async () => {
+      await adapter.sendResponse(
+        { twilio_account_sid: 'AC_TEST', twilio_auth_token: 't', phone_number: '+15559999999' },
+        { body: 'reply' },
+        { threadId: 'whatsapp:+15551234567', userId: 'whatsapp:+15551234567' },
+      );
+      const form = parseSentForm(fetchMock.calls[0]);
+      expect(form.To).toBe('whatsapp:+15551234567');
+    });
+  });
+
+  describe('verifyWebhook (X-Twilio-Signature)', () => {
+    const crypto = require('crypto');
+    const authToken = 'twilio-auth-token';
+    const webhookUrl = 'https://api.example.com/gateways/gw-1/webhook';
+    const config = { twilio_auth_token: authToken, webhook_url: webhookUrl };
+
+    const sign = (url: string, params: Record<string, string>) => {
+      const data = Object.keys(params).sort().reduce((acc, k) => acc + k + params[k], url);
+      return crypto.createHmac('sha1', authToken).update(data, 'utf-8').digest('base64');
+    };
+
+    it('accepts a correctly signed request', async () => {
+      const signature = sign(webhookUrl, twilioPayload as any);
+      const ok = await adapter.verifyWebhook(twilioPayload, { 'x-twilio-signature': signature }, config);
+      expect(ok).toBe(true);
+    });
+
+    it('rejects a tampered body', async () => {
+      const signature = sign(webhookUrl, twilioPayload as any);
+      const tampered = { ...twilioPayload, Body: 'attacker text' };
+      const ok = await adapter.verifyWebhook(tampered, { 'x-twilio-signature': signature }, config);
+      expect(ok).toBe(false);
+    });
+
+    it('rejects a signature computed for a different URL', async () => {
+      const signature = sign('https://evil.example.com/other', twilioPayload as any);
+      const ok = await adapter.verifyWebhook(twilioPayload, { 'x-twilio-signature': signature }, config);
+      expect(ok).toBe(false);
+    });
+
+    it('rejects when the signature header is missing', async () => {
+      const ok = await adapter.verifyWebhook(twilioPayload, {}, config);
+      expect(ok).toBe(false);
+    });
+
+    it('skips verification when webhook_url is not configured', async () => {
+      const ok = await adapter.verifyWebhook(twilioPayload, {}, { twilio_auth_token: authToken });
+      expect(ok).toBe(true);
+    });
+
+    it('skips verification when twilio_auth_token is not configured', async () => {
+      const ok = await adapter.verifyWebhook(twilioPayload, {}, { webhook_url: webhookUrl });
+      expect(ok).toBe(true);
+    });
+  });
 });

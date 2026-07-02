@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class WhatsAppAdapter extends BaseAdapter {
@@ -25,7 +26,10 @@ export class WhatsAppAdapter extends BaseAdapter {
       const accountSid = config.twilio_account_sid;
       const authToken = config.twilio_auth_token;
       const from = config.phone_number;
-      const to = threadContext?.from;
+      // threadId carries the sender's whatsapp:+E164 address (it is the
+      // conversation key), so it doubles as the reply-to when the caller
+      // didn't pass `from` explicitly.
+      const to = threadContext?.from || threadContext?.threadId;
 
       const fetch = globalThis.fetch || (await import('node-fetch')).default;
       const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
@@ -45,5 +49,37 @@ export class WhatsAppAdapter extends BaseAdapter {
     } catch (error) {
       this.logger.error(`WhatsApp send failed: ${error.message}`);
     }
+  }
+
+  /**
+   * Validate Twilio's X-Twilio-Signature header: base64(HMAC-SHA1(auth
+   * token, exact public webhook URL + POST params sorted alphabetically
+   * by key, each appended as key+value)). See
+   * https://www.twilio.com/docs/usage/security#validating-requests
+   *
+   * Verification is enforced when both `twilio_auth_token` and
+   * `webhook_url` (the exact URL configured in the Twilio console —
+   * needed because Twilio signs the full URL and we sit behind a proxy)
+   * are configured. Without `webhook_url` the signed URL cannot be
+   * reconstructed, so the check is skipped — mirroring the Slack
+   * adapter's optional `signing_secret`.
+   */
+  async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>): Promise<boolean> {
+    const authToken = config.twilio_auth_token;
+    const url = config.webhook_url;
+    if (!authToken || !url) return true;
+
+    const signature = headers['x-twilio-signature'];
+    if (!signature) return false;
+
+    const params = payload && typeof payload === 'object' ? payload : {};
+    const data = Object.keys(params)
+      .sort()
+      .reduce((acc, key) => acc + key + String(params[key] ?? ''), String(url));
+    const expected = crypto.createHmac('sha1', authToken).update(data, 'utf-8').digest('base64');
+
+    const a = Buffer.from(expected);
+    const b = Buffer.from(String(signature));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
   }
 }

@@ -52,7 +52,7 @@ import { MatrixAdapter } from './channels/adapters/matrix.adapter';
 import { IrcAdapter } from './channels/adapters/irc.adapter';
 import { ChannelGatewayService } from './channels/channel-gateway.service';
 import { ChannelEventsController } from './channels/channel-events.controller';
-
+import { ChannelWidgetController } from './channels/channel-widget.controller';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -107,6 +107,7 @@ import { ChannelEventsController } from './channels/channel-events.controller';
     GatewayToolsController,
     GatewaySkillsController,
     ChannelEventsController,
+    ChannelWidgetController,
   ],
   exports: [
     GatewaysService,
