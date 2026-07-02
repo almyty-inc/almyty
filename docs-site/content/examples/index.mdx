@@ -28,8 +28,19 @@ own APIs and channels.
 - **[Ask your database questions in plain English](/examples/nl-query-your-database)** — writes and runs read-only queries, answers with the SQL it used. `Postgres · Slack · Constraints`
 - **[Post a nightly data-quality digest](/examples/nightly-data-quality-digest)** — checks freshness and anomalies on a schedule, reports only what's wrong. `Scheduled · Slack · Memory`
 - **[Reconcile Stripe payouts and flag anomalies](/examples/stripe-payout-reconciliation)** — matches Stripe against the ledger daily, reports only exceptions. `Stripe · Scheduled · Constraints`
-- **[Run a governed refund agent](/examples/governed-refund-agent)** — policy constraints, cross-vendor verify, human approval, full audit. `Verify · Approvals · Audit`
 - **[Cross-vendor contract and risk review](/examples/cross-vendor-contract-review)** — several models argue the risks, a judge writes the memo. `Debate · Multi-model`
+
+## Enterprise & Governance
+
+- **[Run a governed refund agent in production](/examples/governed-refund-agent)** — constraints, cross-vendor verify, human approval, full audit. `Verify · Approvals · Audit`
+- **[Govern AI spend across teams](/examples/govern-ai-spend)** — per-team budgets with soft/hard caps and alerts, enforced at run start. `Budgets · Cost governance`
+- **[Enforce approval policies org-wide](/examples/approval-policies)** — action + threshold → required approver, applied across every agent. `Approvals · Policy`
+- **[Role-based access for a multi-team org](/examples/multi-team-rbac)** — teams, per-resource roles, least-privilege by default. `RBAC · Multi-tenant`
+- **[Onboard your workforce with SSO and SCIM](/examples/sso-scim-onboarding)** — SAML/OIDC sign-in, SCIM provisioning, groups → roles. `SSO · SCIM`
+- **[Stream your audit trail to a SIEM](/examples/audit-to-siem)** — every action to Splunk/Datadog, searchable and alertable. `Audit · SIEM`
+- **[Ship EU AI Act-compliant agents](/examples/eu-ai-act-compliance)** — AI-disclosure on every channel + Annex IV technical-doc export. `Compliance · EU AI Act`
+- **[Put your Google Drive or SharePoint to work](/examples/connect-google-sharepoint)** — connect Google/Microsoft 365, search and summarize docs, write back. `Google Workspace · SharePoint`
+- **[Air-gapped, self-hosted agents](/examples/air-gapped-self-host)** — local models, data residency, nothing leaves your network. `Self-host · Compliance`
 
 ## Platform & Integration
 
@@ -37,4 +48,3 @@ own APIs and channels.
 - **[Modernize a legacy SOAP service](/examples/modernize-legacy-soap)** — wrap a WSDL as modern MCP tools, untouched. `Legacy · SOAP · MCP`
 - **[Turn an npm package into tools](/examples/npm-package-tools)** — point almyty at `stripe`, get typed tools. `SDK tools`
 - **[Give an agent a machine to work on](/examples/expose-any-machine)** — expose any machine — laptop, build server, VPC box. `Runner · On-prem`
-- **[Air-gapped, self-hosted agents](/examples/air-gapped-self-host)** — local models, nothing leaves your network. `Self-host · Compliance`
