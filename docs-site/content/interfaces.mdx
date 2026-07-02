@@ -1,0 +1,47 @@
+# Chat Interfaces
+
+Agents are most useful where your users already are. almyty ships twelve channel adapters that connect an agent to messaging platforms — configure a channel with the platform's credentials, and inbound messages become agent runs whose replies flow back to the same conversation.
+
+![Deploying a channel on an agent — pick the platform, name it, paste its credentials](/screenshots/interfaces-channel-config.png)
+
+## Supported channels
+
+| Channel | Inbound | Outbound | You need |
+|---|---|---|---|
+| **Slack** | Events API webhook, request-signature verified | `chat.postMessage` | Bot token, signing secret |
+| **Telegram** | Bot webhook | Bot API `sendMessage` | Bot token |
+| **Discord** | Gateway events | Channel messages | Bot token |
+| **WhatsApp** (Twilio) | Twilio webhook, `X-Twilio-Signature` verified | Twilio Messages API | Account SID, auth token, WhatsApp sender |
+| **Microsoft Teams** | Bot Framework activities, JWT verified | Bot Framework replies | Bot ID + password (Azure bot registration) |
+| **Google Chat** | Space webhook, verification token | Incoming webhook | Webhook URL, verification token |
+| **Signal** | signal-cli REST bridge webhook | Bridge send API | Self-hosted signal-cli bridge URL, phone number |
+| **Matrix** | Homeserver sync | Room `send` | Homeserver URL, access token, room ID |
+| **IRC** | IRC↔HTTP bridge webhook | Bridge send | Bridge webhook URL |
+| **Email** | Inbound MIME parsing | Resend API | Resend API key |
+| **Webhook** | Any HTTP POST, optional HMAC verification | POST to your callback URL | Callback URL, optional shared secret |
+| **Chat Widget** | Widget POST | SSE / polling delivery | Nothing — embed the snippet |
+
+Every inbound request is authenticated against the platform's mechanism before it reaches an agent: Slack and Webhook use HMAC signatures, WhatsApp validates the Twilio signature, Teams verifies the Bot Framework JWT, Google Chat checks its verification token. Requests that fail verification are rejected, never queued.
+
+## Connecting a channel
+
+1. Open the agent's **Interfaces** tab, click **Deploy Channel**, and pick a platform.
+2. Paste the platform credentials from the table above. They are encrypted at rest like every other credential.
+3. The channel's connection test performs a real authentication probe against the platform, so a bad token surfaces immediately instead of on the first missed message.
+4. Point the platform's webhook at the URL almyty displays (for webhook-driven channels).
+
+Messages then round-trip: platform → adapter (verify, normalize) → agent run → adapter (format for the platform) → reply.
+
+## AI disclosure (EU AI Act Art. 50)
+
+Every channel has an **AI disclosure** setting. When enabled, the first outbound message of each conversation is preceded by a disclosure line — by default:
+
+> You are chatting with an AI assistant.
+
+The text is overridable per channel. If you deploy agents to the public in the EU, turn this on; Article 50 of the AI Act requires that people be informed they are interacting with an AI system. See [Compliance](/compliance) for the full mapping.
+
+## Operational notes
+
+- **Signal and IRC** need a small self-hosted bridge (signal-cli-rest-api, an IRC↔HTTP bridge); the adapter documents the exact contract it expects.
+- **Rate limits** are the platform's own; the adapter surfaces platform errors on the run rather than retrying blindly.
+- Adapter health and per-channel traffic appear in [Analytics](/analytics); failed deliveries are recorded on the run.
