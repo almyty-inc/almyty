@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/store/auth'
 import { useNotifications } from '@/store/app'
-import { apiPost } from '@/lib/api'
+import { apiPost, referralsApi } from '@/lib/api'
 
 const registerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -36,6 +36,16 @@ export function RegisterPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const inviteToken = searchParams.get('invite')
+  const referralCode = searchParams.get('ref')
+
+  // Referral attribution for ?ref= links: ask the backend to set the
+  // attribution cookie on the API origin so registration picks it up
+  // server-side. Best-effort — a failure must never affect signup.
+  React.useEffect(() => {
+    if (referralCode) {
+      referralsApi.attribute(referralCode).catch(() => {})
+    }
+  }, [referralCode])
   const { register: registerUser, isLoading } = useAuthStore()
   const { success, error } = useNotifications()
   const [showPassword, setShowPassword] = React.useState(false)

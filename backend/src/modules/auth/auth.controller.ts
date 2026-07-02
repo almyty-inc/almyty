@@ -13,6 +13,7 @@ import {
   Query,
   Patch,
   Res,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,7 +23,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { Response } from 'express';
+import { Request as ExpressRequest, Response } from 'express';
 
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -34,6 +35,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../../entities/user.entity';
+import { REFERRAL_COOKIE, clientIpOf } from '../referrals/referrals.constants';
 
 /** Shared cookie options for the access_token httpOnly cookie */
 const ACCESS_TOKEN_COOKIE_OPTIONS = {
@@ -121,8 +123,21 @@ export class AuthController {
   async register(
     @Body() createUserDto: CreateUserDto,
     @Res({ passthrough: true }) res: Response,
+    @Req() req: ExpressRequest,
   ) {
-    const tokens = await this.authService.register(createUserDto);
+    // Referral attribution: the /referrals/attribute/:code endpoint (reached
+    // via /r/<code> share links) drops a short-lived cookie on this origin;
+    // read it here so the signup is attributed server-side.
+    const referralCode = req.cookies?.[REFERRAL_COOKIE];
+    const tokens = await this.authService.register(createUserDto, {
+      referralCode,
+      ipAddress: clientIpOf(req),
+    });
+
+    // Attribution cookie is single-use — clear it once consumed.
+    if (referralCode) {
+      res.clearCookie(REFERRAL_COOKIE, { path: '/' });
+    }
 
     // Set httpOnly cookie for web UI security
     res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);

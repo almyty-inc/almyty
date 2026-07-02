@@ -49,6 +49,8 @@ import { SpendBudget } from './entities/spend-budget.entity';
 import { SpendAlert } from './entities/spend-alert.entity';
 import { OrgSsoConfig } from './entities/org-sso-config.entity';
 import { BillingEvent } from './entities/billing-event.entity';
+import { ReferralCode } from './entities/referral-code.entity';
+import { Referral } from './entities/referral.entity';
 // EE-feature entities stay in the CORE schema (migrations + entity glob are
 // OSS); only the feature logic moved to `ee/`.
 import { CompliancePolicy } from './entities/compliance-policy.entity';
@@ -90,6 +92,7 @@ import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LicensingModule } from './modules/licensing/licensing.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { ProviderUsageModule } from './modules/provider-usage/provider-usage.module';
+import { ReferralsModule } from './modules/referrals/referrals.module';
 // EE feature modules (sso, rbac, audit-export, approval-policies, billing,
 // ee-stubs, compliance, chargeback) live under `ee/` and are loaded at
 // runtime via the ee-loader — NOT statically imported here, so this file
@@ -190,6 +193,8 @@ import { databaseConfig } from './config/database.config';
       OrgSsoConfig,
       BillingEvent,
       CompliancePolicy,
+      ReferralCode,
+      Referral,
     ]),
 
     // Rate limiting — backed by Redis so limits are shared across replicas
@@ -287,6 +292,7 @@ import { databaseConfig } from './config/database.config';
     LicensingModule,
     BudgetsModule,
     ProviderUsageModule,
+    ReferralsModule,
     // EE feature modules are loaded dynamically so the OSS build compiles +
     // boots without the commercial `ee/` tree present (loadEeModules() → []).
     ...loadEeModules(),

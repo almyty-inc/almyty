@@ -14,6 +14,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { MailService } from '../mail/mail.service';
+import { ReferralsService } from '../referrals/referrals.service';
 
 // Unmock bcrypt from global setup to test actual hashing
 jest.unmock('bcryptjs');
@@ -26,6 +27,7 @@ describe('AuthService', () => {
   let organizationRepository: jest.Mocked<Repository<Organization>>;
   let userOrganizationRepository: jest.Mocked<Repository<UserOrganization>>;
   let jwtService: jest.Mocked<JwtService>;
+  let referralsService: any;
 
   beforeEach(async () => {
     // register() now wraps user + org + membership in a DB transaction,
@@ -126,6 +128,10 @@ describe('AuthService', () => {
           provide: MailService,
           useValue: { sendPasswordReset: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true), send: jest.fn().mockResolvedValue(true) },
         },
+        {
+          provide: ReferralsService,
+          useValue: { attributeSignup: jest.fn().mockResolvedValue(null) },
+        },
       ],
     }).compile();
 
@@ -136,6 +142,7 @@ describe('AuthService', () => {
     userOrganizationRepository = module.get(getRepositoryToken(UserOrganization));
     jwtService = module.get(JwtService);
     mailService = module.get(MailService);
+    referralsService = module.get(ReferralsService);
 
     // Reset repository mocks but not bcrypt mocks
     userRepository.findOne.mockReset();
@@ -240,6 +247,65 @@ describe('AuthService', () => {
       expect(organizationRepository.save).toHaveBeenCalled();
       expect(userOrganizationRepository.create).toHaveBeenCalled();
       expect(userOrganizationRepository.save).toHaveBeenCalled();
+    });
+
+    // ── Referral attribution hook (additive, post-transaction) ──────────
+
+    function mockSuccessfulRegistration() {
+      const mockOrganization = {
+        id: 'org-123',
+        name: createUserDto.organizationName,
+        plan: 'free',
+        isActive: true,
+      } as Organization;
+      userRepository.create.mockImplementation((userData) => userData as User);
+      userRepository.save.mockImplementation((user) =>
+        Promise.resolve({ ...user, id: 'user-123' } as User),
+      );
+      organizationRepository.create.mockReturnValue(mockOrganization);
+      organizationRepository.save.mockResolvedValue(mockOrganization);
+      userOrganizationRepository.create.mockReturnValue({} as UserOrganization);
+      userOrganizationRepository.save.mockResolvedValue({} as UserOrganization);
+      jwtService.sign.mockReturnValue('mock-token');
+      const userWithOrgs = {
+        id: 'user-123',
+        email: createUserDto.email,
+        organizationMemberships: [],
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      } as any;
+      userRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(userWithOrgs);
+      organizationRepository.findOne.mockResolvedValue(null); // org name available
+    }
+
+    it('attributes the signup when a referral code is present in the context', async () => {
+      mockSuccessfulRegistration();
+
+      await service.register(createUserDto, { referralCode: 'ABCD2345', ipAddress: '203.0.113.9' });
+
+      expect(referralsService.attributeSignup).toHaveBeenCalledWith({
+        userId: 'user-123',
+        organizationId: 'org-123',
+        email: createUserDto.email,
+        referralCode: 'ABCD2345',
+        ipAddress: '203.0.113.9',
+      });
+    });
+
+    it('does not attribute when no referral code is provided', async () => {
+      mockSuccessfulRegistration();
+
+      await service.register(createUserDto);
+
+      expect(referralsService.attributeSignup).not.toHaveBeenCalled();
+    });
+
+    it('still registers successfully when attribution throws', async () => {
+      mockSuccessfulRegistration();
+      referralsService.attributeSignup.mockRejectedValueOnce(new Error('referral system down'));
+
+      const result = await service.register(createUserDto, { referralCode: 'ABCD2345' });
+
+      expect(result.accessToken).toBe('mock-token');
     });
 
     it('auto-provisions the default "Everyone" team and joins the owner as LEAD on register', async () => {
