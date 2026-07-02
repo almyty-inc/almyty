@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, Logger, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -24,6 +24,11 @@ export class PromotedSkillsService {
     @InjectRepository(AgentRun)
     private readonly runRepository: Repository<AgentRun>,
     private readonly renderer: PromotedSkillRenderer,
+    // forwardRef: the EE assembly's require order puts this file inside a
+    // module cycle (llm-providers -> tool-executor -> runner -> mcp ->
+    // promoted-skills); without it the class metadata reads undefined at
+    // runtime and the whole app fails to boot (dev/staging CrashLoop).
+    @Inject(forwardRef(() => LlmProvidersService))
     private readonly llmProvidersService: LlmProvidersService,
   ) {}
 
