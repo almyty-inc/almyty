@@ -11,8 +11,6 @@ name and version — `stripe` at `^17.0.0`. Click **Discover**: almyty installs 
 in a sandbox, reads its exported functions, and infers a parameter schema for each one from
 the package's own TypeScript types.
 
-![Creating an SDK tool from an npm package](/screenshots/tools-create-dialog.png)
-
 ## 2. Keep the functions you want
 
 Discovery returns everything the package exports. For a payments agent you don't need all
@@ -20,8 +18,6 @@ of `stripe` — select `charges.create`, `refunds.create`, and `customers.retrie
 the generated name, description, and parameters, and create them. Each becomes a JavaScript
 tool that `require()`s the package and runs in the same hardened sandbox as any other
 JavaScript tool.
-
-![The generated tool with its inferred parameters](/screenshots/tool-detail.png)
 
 ## 3. Give the package its secret
 
@@ -35,6 +31,8 @@ Attach the tools to an agent, or publish them on a gateway next to your API tool
 calls `refunds.create` like any other tool; almyty runs the real SDK function and returns the
 result. No wrapper code, no schema drift when Stripe ships a new SDK version — re-run
 **Discover** and the parameters update.
+
+![The tools in your Tools list, ready to attach or publish](/screenshots/tools-list.png)
 
 The same flow works for `@aws-sdk/client-s3`, `@octokit/rest`, `lodash`, or any package on
 npm.
