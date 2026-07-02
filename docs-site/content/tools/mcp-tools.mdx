@@ -1,0 +1,22 @@
+# MCP Tools
+
+Agents can consume any remote MCP server that speaks the streamable HTTP transport — the same protocol almyty itself serves. Point almyty at the server once, and every tool it exposes becomes a regular almyty tool: usable in agent pipelines, servable through gateways, and testable in the tool tester.
+
+## Adding an MCP server
+
+On the **Tools** page, click **Add MCP Server** and enter a name, the server URL, and an optional bearer token (stored encrypted, never returned by the API). almyty performs the MCP handshake (`initialize` → `tools/list`), and registers each remote tool with an `MCP` badge.
+
+Re-sync a source at any time to pick up added, changed, or removed tools — removed remote tools are marked inactive so run history and gateway assignments survive. Deleting a source removes its tools.
+
+## Execution
+
+When an agent calls an MCP tool, almyty issues `tools/call` against the source with the agent's arguments and maps the result back as the tool output. Remote failures surface as typed tool errors on the run (`MCP_CONNECT_FAILED`, `MCP_TIMEOUT`, `MCP_REMOTE_ERROR`, …) — never an opaque crash.
+
+## Security
+
+- Server URLs are validated before every request: private ranges, loopback, link-local, and cloud-metadata addresses are blocked, and redirects are refused. Self-hosted deployments that need in-cluster MCP servers can set `MCP_ALLOW_PRIVATE_URLS=true` (http/https only).
+- Auth secrets (bearer tokens, custom headers) are AES-256-GCM encrypted at rest.
+
+## Supported protocol
+
+Streamable HTTP transport, protocol revision 2025-03-26 and later (both plain-JSON and SSE response framings; `Mcp-Session-Id` handled automatically). Not supported: stdio servers, the legacy HTTP+SSE transport, and server-initiated sampling — expose those through a bridge if you need them.
