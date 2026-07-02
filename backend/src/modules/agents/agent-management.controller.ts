@@ -22,6 +22,7 @@ import { Type } from 'class-transformer';
 import { Response } from 'express';
 
 import { AgentsService } from './agents.service';
+import { AgentTechDocHelper } from './agent-tech-doc.helper';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { AgentSchedulerService } from './agent-scheduler.service';
 import { AgentAuditService } from './agent-audit.service';
@@ -41,6 +42,7 @@ export class AgentManagementController {
     private readonly runtimeService: AgentRuntimeService,
     private readonly schedulerService: AgentSchedulerService,
     private readonly auditService: AgentAuditService,
+    private readonly techDocHelper: AgentTechDocHelper,
   ) {}
 
   @Get(':id/executions')
@@ -297,6 +299,50 @@ export class AgentManagementController {
           success: false,
           message: error.message,
           error: 'AGENT_EXPORT_FAILED',
+        },
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get(':id/technical-documentation')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Export EU AI Act Annex-IV-style technical documentation for an agent' })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  @ApiResponse({ status: 200, description: 'Technical documentation generated successfully' })
+  @ApiResponse({ status: 404, description: 'Agent not found' })
+  async getTechnicalDocumentation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('format') format: string,
+    @Request() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const doc = await this.techDocHelper.build(id, organizationId);
+
+      if (format === 'markdown') {
+        res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+        return this.techDocHelper.renderMarkdown(doc);
+      }
+
+      return {
+        success: true,
+        data: doc,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+          error: 'TECH_DOC_EXPORT_FAILED',
         },
         error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
