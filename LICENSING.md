@@ -4,8 +4,8 @@ almyty is **open core**. Two licenses coexist in this repository:
 
 | Scope | License | File |
 |-------|---------|------|
-| Everything **outside** `ee/` (the OSS core) | **Apache License 2.0** | [`LICENSE`](./LICENSE) |
-| Everything **inside** `ee/` (Enterprise Edition) | **Commercial / proprietary** | [`ee/LICENSE`](./ee/LICENSE) |
+| Everything **outside** `backend/ee/` (the OSS core) | **Apache License 2.0** | [`LICENSE`](./LICENSE) |
+| Everything **inside** `backend/ee/` (Enterprise Edition) | **Commercial / proprietary** | [`backend/ee/LICENSE`](./backend/ee/LICENSE) |
 
 The core is genuinely open: agents, tools (every type), gateways, all protocols
 (MCP / A2A / UTCP / Skills), BYOK, single-org RBAC, memory, the runner, basic
@@ -65,23 +65,27 @@ guard is the real boundary.
 
 ## Build model: OSS vs EE
 
-The two builds differ only by whether `ee/` is compiled in.
+The two builds differ only by whether `backend/ee/` is compiled in.
 
-- **OSS build (default, what public CI runs):** the backend `tsconfig.json`
-  includes only `backend/src/**`, so `ee/` is never compiled. The community image
-  is fully functional and self-contained. `LicenseService` returns the community
-  set; every EE-gated route (were it present) would 402.
-- **EE build:** overlays the core with `ee/` using
-  [`ee/tsconfig.json`](./ee/tsconfig.json) (which extends `backend/tsconfig.json`
-  and adds `ee/**`), and registers the EE modules (e.g. `ExampleEeModule`) in the
+- **OSS build (default, what public CI tests):** the backend `tsconfig.build.json`
+  includes only `backend/src/**`, so `backend/ee/` is never compiled. An OSS-only
+  source build is fully functional and self-contained: `loadEeModules()` returns
+  an empty list, `LicenseService` returns the community set.
+- **EE build:** overlays the core with `backend/ee/` using
+  [`backend/tsconfig.ee.json`](./backend/tsconfig.ee.json) (`npm run build:ee`,
+  output in `dist-ee/`), and registers the EE modules in the
   application module. The `LicensingModule` is `@Global`, so EE modules inject
   `LicenseService` / `EntitlementGuard` without extra wiring.
 
-To keep public CI simple and low-risk, this repository does **not** ship a second
-CI pipeline for the EE overlay; the EE assembly is documented here and left as a
-composable overlay. `ee/example-ee/` is a minimal reference stub showing the exact
+The **official `almyty/api` Docker image ships the EE build** (the GitLab-style
+one-image open-core model): the EE modules are present in the image but every
+EE route is entitlement-gated at runtime and returns 402 without a valid license
+token. Building from source with `npm run build` produces the pure-OSS artifact. The EE feature modules live in `backend/ee/modules/` and are
+loaded at runtime through `backend/src/ee-loader.ts`, which returns an empty list
+when the `ee/` tree is absent — the OSS build compiles and runs without it. A
+minimal reference stub shows the exact
 shape a real EE module takes (an entitlement-gated controller). Because it lives
-under `ee/`, it does not affect the OSS build or tests.
+under `backend/ee/`, it does not affect the OSS build or tests.
 
 ## Minting a license (vendor / dev)
 
