@@ -39,3 +39,24 @@ export function useCopySensitive() {
     [warning, error],
   )
 }
+
+/**
+ * Non-sensitive counterpart: same writeText + toast plumbing, but a plain
+ * success toast. For public values (share links, names, output JSON) where
+ * the warning-tier toast above would dilute its meaning.
+ */
+export function useCopy() {
+  const { success, error } = useNotifications()
+
+  return useCallback(
+    async (value: string, label: string): Promise<void> => {
+      try {
+        await navigator.clipboard.writeText(value)
+        success(`${label} copied`)
+      } catch {
+        error(`Failed to copy ${label}`, 'Clipboard access was denied by the browser.')
+      }
+    },
+    [success, error],
+  )
+}

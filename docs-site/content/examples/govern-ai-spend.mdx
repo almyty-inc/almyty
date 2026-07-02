@@ -1,0 +1,26 @@
+# 💰 Govern AI spend across teams
+
+**Stack** — `Scope: org / team / agent budgets` · `Caps: soft (alert) + hard (block)` · `Enforced: at run start` · `Visibility: Cost tab` · `Output: no runaway bills`
+
+**Who it's for** — the person who has to explain the model bill, and wants a ceiling before it's a surprise.
+**What it does** — sets spend budgets per team or agent with a soft cap that alerts and a hard cap that blocks. The limit is checked when a run starts, so a looping agent or a bad prompt can't quietly burn the quarter's budget.
+
+## Build it
+
+1. **Decide the scope.** Budgets attach at the org, team, or agent level — give each team a monthly ceiling, or cap an experimental agent tightly.
+2. **Set a soft cap** — an alert threshold. Crossing it notifies you but lets work continue.
+3. **Set a hard cap** — the enforced ceiling. When spend would exceed it, the next run is blocked rather than billed.
+4. **Watch the Cost tab** — spend per agent and team, so you see which agents actually drive the bill (a cross-vendor verify panel earns its cost on a contract reviewer, not a formatter).
+5. **Combine with BYOK** — bring your own provider keys for the volume you'd rather meter directly, and let budgets bound the rest.
+
+## Make it yours
+
+- Cap a customer-facing agent per tenant so one account can't exhaust shared budget.
+- Alert to Slack on the soft cap; page on the hard cap.
+- Pair with [analytics](/analytics) to attribute spend before you set the numbers.
+
+**Uses** — `Enterprise` · `Cost governance` · `Budgets`
+
+## Related
+
+- [Analytics](/analytics) · [AI Models](/llm-providers) · [Organizations](/organizations)

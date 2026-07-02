@@ -1,0 +1,26 @@
+# 📄 Put your Google Drive or SharePoint to work
+
+**Stack** — `Data: Google Drive/Docs or Microsoft 365/SharePoint` · `Tools: their API (OAuth)` · `Trigger: schedule / chat / channel` · `Output: answers, summaries, generated docs`
+
+**Who it's for** — teams whose knowledge lives in Google Drive or SharePoint and who want agents to actually use it — read it, answer from it, keep it updated.
+**What it does** — connects your document store as tools and lets an agent search folders, read and summarize documents, answer questions from them, and write results back — so "what's in the Q3 folder?" or "draft the weekly summary from these docs" happens without anyone opening Drive.
+
+## Build it
+
+1. **Connect the store.** Both expose REST APIs — connect the **Google Drive/Docs API** or **Microsoft Graph** (SharePoint/OneDrive) in *APIs → Connect API*, or add their SDK (`googleapis`, `@microsoft/microsoft-graph-client`) as an [SDK tool](/tools/sdk-tools). Each gives typed tools for list, read, and update.
+2. **Authorize once.** These use OAuth — store the app credentials in the [Credentials](/credentials) vault (the gateway/tool reads them at run time); scope them to the folders or sites the agent should see, nothing more.
+3. **Create the agent** with the job: *search the shared drive, read the relevant docs, and answer / summarize / draft* — and attach the Drive or Graph tools.
+4. **Automate the loop** — run it [on a schedule](/examples/nightly-data-quality-digest) (a Monday digest of new docs), publish it on [Slack](/interfaces) so people ask in-channel, or have your app invoke it.
+5. **Write back** — the agent can create or update a Google Doc / SharePoint file with its output, so the summary lands where the team already looks.
+
+## Make it yours
+
+- Restrict scope to a single shared drive or site collection; least-privilege via [RBAC](/examples/multi-team-rbac).
+- Add memory so a research agent compounds what it learns across the document set.
+- Combine with your [own API](/examples/give-claude-your-api) so a doc-summary can trigger a real action.
+
+**Uses** — `Enterprise` · `Google Workspace` · `SharePoint` · `Knowledge`
+
+## Related
+
+- [Connect an API](/tools) · [SDK tools](/tools/sdk-tools) · [Credentials](/credentials) · [Interfaces](/interfaces)

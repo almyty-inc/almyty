@@ -108,7 +108,8 @@ describe('AuthController', () => {
 
       authService.register.mockResolvedValue(mockTokens);
 
-      const result = await controller.register(createUserDto, mockResponse);
+      const mockRequest: any = { cookies: {}, ip: '203.0.113.10' };
+      const result = await controller.register(createUserDto, mockResponse, mockRequest);
 
       expect(result).toEqual({
         success: true,
