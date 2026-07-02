@@ -51,4 +51,19 @@ export class SlackAdapter extends BaseAdapter {
     const mySignature = 'v0=' + crypto.createHmac('sha256', config.signing_secret).update(sigBasestring).digest('hex');
     return crypto.timingSafeEqual(Buffer.from(mySignature), Buffer.from(signature));
   }
+
+  /**
+   * Slack event payloads carry the workspace (team) id at the top level
+   * (`team_id`), and events forwarded from other workspaces carry it on
+   * the event itself (`event.team`). Used to resolve multi-workspace
+   * installations to the installing workspace's own bot token.
+   */
+  extractTenantId(rawPayload: any): string | undefined {
+    return (
+      rawPayload?.team_id ||
+      rawPayload?.event?.team ||
+      rawPayload?.team?.id ||
+      undefined
+    );
+  }
 }
