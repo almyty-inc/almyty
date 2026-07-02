@@ -1,0 +1,27 @@
+# 🚨 Summarize on-call alerts and suggest a runbook
+
+**Stack** — `Trigger: alert webhook → agent API / schedule` · `Models: your choice` · `Tools: monitoring API (Datadog/PagerDuty), logs API, runbook search` · `Mode: single agent + memory` · `Output: Slack incident summary`
+
+**Who it's for** — on-call engineers woken by a wall of alerts with no context.
+**What it does** — takes a firing alert, pulls the related metrics and recent logs, correlates it with past incidents, and posts a plain-language summary plus the most likely runbook to the incident channel — so the human starts triaging, not gathering.
+
+## Build it
+
+1. **Connect your signals.** *Connect API* against your monitoring and logging endpoints (Datadog, PagerDuty, Loki) for query tools, and expose your runbooks as a search tool.
+2. **Create the agent** with: *given an alert, gather the relevant metrics and last-15-min logs, correlate with prior incidents, and summarize likely cause + suggested runbook.*
+3. **Turn on memory** so recurring incidents ("the nightly ETL OOMs again") come with last time's resolution attached.
+4. **Post to the incident channel** — publish the agent on Slack so summaries land in `#incidents`.
+5. **Keep it advisory** — it summarizes and suggests; it does not run remediation. (Add [approvals](/approvals) later if you want it to.)
+6. **Trigger it** — your alerting tool's webhook calls the agent API when an alert fires.
+
+## Make it yours
+
+- Add a runner so it can actually run a read-only diagnostic on the affected host — see [Give an agent a machine](/examples/expose-any-machine).
+- Gate any remediation action behind `request_approval`.
+- Feed post-incident reviews back into memory so the summaries get sharper.
+
+**Uses** — `DevOps` · `Slack` · `Memory` · `Runner`
+
+## Related
+
+- [Autonomous agents](/agents/autonomous) · [Memory](/memory) · [Runners](/runner)

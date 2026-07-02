@@ -1,0 +1,27 @@
+# 📝 Turn call notes into CRM updates and follow-ups
+
+**Stack** — `Trigger: paste notes / your app calls the agent API` · `Models: your choice` · `Tools: CRM API, calendar API` · `Mode: single agent + approval` · `Output: CRM update + drafted follow-up email`
+
+**Who it's for** — reps who take good calls and then never update the CRM.
+**What it does** — takes raw call notes (or a transcript), extracts the next steps, updates the opportunity in the CRM, and drafts a follow-up email for the rep to approve before it sends.
+
+## Build it
+
+1. **Connect the CRM** (and your calendar API if you want it to propose times) via *Connect API*.
+2. **Create the agent** with: *from these notes, extract action items, update the opportunity stage and next-step date, and draft a follow-up email in the rep's voice.*
+3. **Constrain it** — *never advance a deal stage the notes don't support; never invent a commitment* — so the CRM stays honest.
+4. **Draft, don't send** — the agent produces the email and calls `request_approval` so the rep edits and approves before anything leaves.
+5. **Write back** — on approval, it updates the CRM record and logs the activity.
+6. **Trigger it** — paste notes into the agent's chat, or have your note-taking tool call the agent API when a call ends.
+
+## Make it yours
+
+- Feed it the transcript directly if you capture calls; it handles the summarization.
+- Skip approval for the CRM write and keep approval only on the outbound email.
+- Add memory so it remembers each account's tone and past commitments.
+
+**Uses** — `Sales` · `CRM` · `Approvals`
+
+## Related
+
+- [Autonomous agents](/agents/autonomous) · [Approvals](/approvals) · [Connect an API](/tools)
