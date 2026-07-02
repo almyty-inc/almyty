@@ -1,0 +1,48 @@
+# Compliance Pack
+
+Enterprise (`compliance_pack` entitlement). The open-source platform ships the guardrail plugins — **pii-filter** and **security-scanner** — but each agent opts in individually. The compliance pack turns them into **org policy**: a central declaration of which guardrails are mandatory and how strict they are, plus a posture report you can hand to an auditor.
+
+This is the operational half of the story told on the [Compliance](/compliance) page: Art. 9 risk management wants demonstrable, organization-wide controls, not per-agent good intentions.
+
+## The org policy
+
+```bash
+curl -X PUT /compliance/policy \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enforcedPlugins": ["pii-filter", "security-scanner"],
+    "securityThreshold": "medium",
+    "blockOnViolation": true,
+    "piiCategories": []
+  }'
+```
+
+| Field | Values | Meaning |
+|---|---|---|
+| `enforcedPlugins` | `pii-filter`, `security-scanner` | which built-in guardrails are mandatory org-wide |
+| `securityThreshold` | `low` \| `medium` \| `high` \| `critical` | severity at which the security-scanner acts |
+| `blockOnViolation` | boolean | block the offending call vs. log-and-continue |
+| `piiCategories` | string[] | PII categories to filter; empty = all |
+
+**Secure by default**: until an admin configures a policy, the effective policy enforces both plugins with `securityThreshold: medium` and `blockOnViolation: true`. Configuring can only relax from there, deliberately.
+
+`GET /compliance/policy` returns the effective policy (including whether it's the default or configured). Admin/owner only.
+
+## The posture report
+
+```bash
+curl "/compliance/report?from=2026-06-01&to=2026-07-01"   # defaults: last 30 days
+```
+
+The report is designed to be attached to a conformity file as-is:
+
+- **Effective policy** for the window.
+- **Enforced controls** — per plugin: enforced or not, and the effective settings (threshold, blocking, categories).
+- **Activity** — audit-log-derived counts: total events, breakdown by action, how many were scannable executions (tool/agent runs), and credential-access events.
+- **Posture score** (0–100) — a blunt summary: 40 points per enforced guardrail plugin, 20 for blocking mode. Full marks means both guardrails enforced and violations blocked, not merely logged.
+
+## Related
+
+- [Compliance](/compliance) — the regulatory mapping this pack supports
+- [Approval policies](/enterprise/approval-policies) — human oversight for consequential actions
+- [Audit export](/enterprise/audit-export) — get the evidence trail into your SIEM
