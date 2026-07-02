@@ -21,7 +21,7 @@ import { Transform, Type } from 'class-transformer';
 
 import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, LlmProviderSearchFilters } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
-import { getProviderDisplayName, getProviderDescription, getProviderFeatures } from './llm-provider-catalog';
+import { getProviderDisplayName, getProviderDescription, getProviderFeatures, getProviderKeyUrl, getProviderDocsUrl } from './llm-provider-catalog';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -403,6 +403,8 @@ export class LlmProvidersController {
       name: getProviderDisplayName(type),
       description: getProviderDescription(type),
       features: getProviderFeatures(type),
+      keyUrl: getProviderKeyUrl(type),
+      docsUrl: getProviderDocsUrl(type),
     }));
 
     return {
@@ -455,6 +457,50 @@ export class LlmProvidersController {
         },
         error.status || HttpStatus.BAD_REQUEST,
       );
+    }
+  }
+
+  @Post('test-connection')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Test a provider API key before saving (pre-creation)' })
+  @ApiResponse({ status: 200, description: 'Connection test result' })
+  async testConnection(
+    @Body() body: { type: string; apiKey: string },
+    @Request() req: any,
+  ) {
+    const organizationId = req.user.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException(
+        { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!body.type || !body.apiKey) {
+      throw new HttpException(
+        { success: false, message: 'type and apiKey are required', error: 'INVALID_INPUT' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    // Probe the provider by listing its models with the supplied key. A 200
+    // with ok:false (rather than a thrown error) lets the dialog render a red
+    // "invalid key" state without a network-error code path.
+    const start = Date.now();
+    try {
+      const models = await this.modelsHelper.fetchModelsByType(
+        body.type as any,
+        body.apiKey,
+      );
+      return {
+        success: true,
+        data: { ok: true, latencyMs: Date.now() - start, modelCount: models.length },
+        message: 'Connection successful',
+      };
+    } catch (error) {
+      return {
+        success: true,
+        data: { ok: false, latencyMs: Date.now() - start, error: error.message },
+        message: 'Connection failed',
+      };
     }
   }
 

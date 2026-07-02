@@ -1,0 +1,44 @@
+# A support agent that checks its own work
+
+**Goal:** an autonomous agent that triages support tickets and drafts replies —
+but has other models verify every answer, and pauses for a human before doing
+anything irreversible.
+
+## 1. Create an autonomous agent
+
+In **Agents → Create Agent → Autonomous**, give it instructions ("triage tickets,
+draft replies, escalate refunds over $500") and attach the tools it needs (your
+orders API, a knowledge-base search). Turn on **memory** so it carries context
+between runs.
+
+![The autonomous agent detail with its Models & Verification panel](/screenshots/agent-detail-overview.png)
+
+## 2. Add a cross-vendor verifier panel
+
+On the **Models & Verification** panel, click **Configure** and add reviewer
+models — ideally from different vendors, so a blind spot in one is caught by
+another. Pick a merge policy (a single failure blocks, or a majority vote) and a
+revise budget.
+
+![Configuring the verifier panel with GPT-4o and Gemini reviewers](/screenshots/agent-verify-config-dialog.png)
+
+Now the primary model drafts, the reviewers try to refute it, and on a failure
+the agent revises and tries again before anything returns.
+
+## 3. Gate irreversible actions with approvals
+
+Have the agent call the built-in `request_approval` tool before issuing a refund
+over a threshold. The run pauses at `waiting_approval`, a request appears in the
+**Approvals** page, and a human approves or rejects — the run resumes or stops.
+
+![A pending approval — an $820 refund escalation with Approve/Reject](/screenshots/approvals-pending.png)
+
+## 4. Keep it from repeating mistakes
+
+Add **constraints** (or let it learn them from failed runs): "never promise a
+refund over $500 without approval," "Scale-plan customers get a four-hour SLA."
+They are injected on every run.
+
+## Related
+
+- [Autonomous agents](/agents/autonomous) · [Approvals](/approvals) · [Memory](/memory)

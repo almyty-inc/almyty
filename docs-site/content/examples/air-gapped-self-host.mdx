@@ -1,0 +1,44 @@
+# Air-gapped, self-hosted agents
+
+**Goal:** you handle records that legally cannot leave your network — patient data, case
+files, trading positions. You still want agents. Run the whole stack on your own
+infrastructure with a local model, and nothing crosses the boundary.
+
+Because almyty is open source (Apache-2.0 core) and agnostic at every layer, this is a
+matter of configuration, not a special edition. The hosted service runs the same code.
+
+## 1. Self-host the platform
+
+Bring it up with Docker Compose for a single box, or the Helm chart for Kubernetes. Postgres
+and the object store are yours; no telemetry leaves the cluster.
+
+![The Docker Compose file for a self-hosted deployment](/screenshots/self-hosting-compose.png)
+
+See [Self-hosting](/self-hosting) for the full deployment guide.
+
+## 2. Point at a local model
+
+Add an AI Model whose base URL is a model server you run — Ollama, vLLM, or any
+OpenAI-compatible endpoint — inside the same network. Inference happens on your hardware;
+prompts and completions never reach a public API.
+
+![Adding a local, OpenAI-compatible model provider](/screenshots/llm-providers-create.png)
+
+## 3. Keep secrets and data in place
+
+API keys live in your own [Credentials](/credentials) vault, encrypted at rest with your
+key. Memory persists in your Postgres. The [runner](/runner) executes tools and coding CLIs
+on machines you control.
+
+![The credentials vault holding secrets locally](/screenshots/credentials-vault.png)
+
+## What crosses the boundary
+
+Nothing has to. Model calls go to your local server, tool calls run against your internal
+services, secrets stay in your vault, and state lives in your database. The same governance
+from [Put a governed agent into production](/examples/governed-production-agent) — verify
+gates, approvals, audit — applies unchanged; it just runs entirely inside your walls.
+
+## Related
+
+- [Self-hosting](/self-hosting) · [AI Models](/llm-providers) · [Credentials](/credentials) · [Runners](/runner)
