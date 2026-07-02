@@ -590,6 +590,18 @@ export const toolsApi = {
   getSdk: (id: string, organizationId: string) => apiGet(`/organizations/${organizationId}/tools/${id}/sdk`),
 }
 
+// MCP Sources API (external MCP servers as tool sources)
+export const mcpSourcesApi = {
+  getAll: (organizationId: string) => apiGet(`/organizations//mcp-sources`),
+
+  create: (organizationId: string, data: { name: string; url: string; description?: string; bearerToken?: string }) =>
+    apiPost(`/organizations//mcp-sources`, data),
+
+  sync: (organizationId: string, id: string) => apiPost(`/organizations//mcp-sources//sync`),
+
+  delete: (organizationId: string, id: string) => apiDel(`/organizations//mcp-sources/`),
+}
+
 // LLM Providers API
 export const llmProvidersApi = {
   getAll: () => apiGet('/llm-providers'),

@@ -50,6 +50,8 @@ import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
 import { ToolStatsHelper } from './tool-stats.helper';
 import { RunnerCallService, RUNNER_CALL_ERRORS, RunnerCallError } from '../runner/runner-call.service';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
+import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
+import { McpClientError } from '../mcp-sources/mcp-client.service';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -79,6 +81,7 @@ export class ToolExecutorService {
     private readonly stats: ToolStatsHelper,
     private readonly runnerCalls: RunnerCallService,
     private readonly memoryService: CanonicalMemoryService,
+    private readonly mcpSources: McpSourcesService,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -232,6 +235,8 @@ export class ToolExecutorService {
         result = await this.executeRunnerCall(tool, parameters, options);
       } else if (tool.memoryConfig) {
         result = await this.executeMemoryCall(tool, parameters, options);
+      } else if (tool.configuration?.mcp) {
+        result = await this.executeMcpCall(tool, parameters, options);
       } else if (tool.llmConfig?.providerId && tool.llmConfig?.promptTemplate) {
         result = await this.scriptExecutor.executeLlm(tool, parameters, options);
       } else if (tool.sdkConfig) {
@@ -581,6 +586,54 @@ export class ToolExecutorService {
         rateLimited: false,
         retryCount: 0,
       };
+    }
+  }
+
+  /**
+   * Dispatch an MCP-backed tool (materialized from an external MCP
+   * source). Bridges to McpSourcesService which runs tools/call over
+   * streamable HTTP. Remote/transport failures come back as typed
+   * McpClientError codes and are mapped onto a failed
+   * ToolExecutionResult — a flaky remote server must never surface as
+   * a raw 500 to the caller.
+   */
+  private async executeMcpCall(
+    tool: Tool,
+    parameters: Record<string, any>,
+    options: ToolExecutionOptions,
+  ): Promise<ToolExecutionResult> {
+    const startTime = Date.now();
+    const cfg = tool.configuration!.mcp!;
+    try {
+      const mapped = await this.mcpSources.executeToolCall(
+        tool.organizationId,
+        cfg,
+        parameters,
+        { timeoutMs: tool.configuration?.timeout, signal: options.signal },
+      );
+      return {
+        success: mapped.success,
+        data: mapped.data,
+        error: mapped.error,
+        executionTime: Date.now() - startTime,
+        cached: false,
+        rateLimited: false,
+        retryCount: 0,
+        metadata: { mcpSourceId: cfg.sourceId, remoteName: cfg.remoteName },
+      };
+    } catch (err: any) {
+      if (err instanceof McpClientError) {
+        return {
+          success: false,
+          error: `${err.code}: ${err.message}`,
+          executionTime: Date.now() - startTime,
+          cached: false,
+          rateLimited: false,
+          retryCount: 0,
+          metadata: { mcpErrorCode: err.code, mcpSourceId: cfg.sourceId, remoteName: cfg.remoteName },
+        };
+      }
+      throw err;
     }
   }
 
