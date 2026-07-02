@@ -18,10 +18,12 @@ import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UserOrganization } from '../../entities/user-organization.entity';
+import { ReferralsModule } from '../referrals/referrals.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, ApiKey, Organization, UserOrganization]),
+    ReferralsModule,
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
