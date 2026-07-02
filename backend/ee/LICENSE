@@ -1,0 +1,14 @@
+almyty Enterprise Edition License (Commercial)
+
+Copyright (c) almyty. All rights reserved.
+
+The contents of this `ee/` directory are the Enterprise Edition of almyty
+and are NOT covered by the Apache-2.0 license that governs the rest of the
+repository. They are made available under a separate commercial license.
+
+You may not use, copy, modify, or distribute the software in this directory
+except in compliance with a valid almyty commercial (Enterprise) license
+agreement. In the absence of such an agreement, no rights are granted.
+
+The community (OSS) build excludes this directory entirely and is fully
+functional without it. See docs/plans/monetization-byok-open-core.md (T3.4/T3.5).
