@@ -39,7 +39,7 @@ describe('ChannelGatewayService.testConnection', () => {
       null as any,
       null as any,
       null as any,
-      new ChatWidgetAdapter(),
+      new ChatWidgetAdapter(null as any),
       new SlackAdapter(),
       new DiscordAdapter(),
       new TelegramAdapter(),
@@ -239,6 +239,167 @@ describe('ChannelGatewayService.testConnection', () => {
       const res = await service.testConnection(gw(GatewayType.SLACK, { bot_token: 'x' }));
       expect(res.ok).toBe(false);
       expect(res.detail).toContain('dns fail');
+    });
+  });
+
+  describe('applyAiDisclosure (EU AI Act Art. 50)', () => {
+    let runRepository: { save: jest.Mock };
+    let svc: ChannelGatewayService;
+    const makeGateway = (configuration: Record<string, any>): Gateway =>
+      ({ configuration } as unknown as Gateway);
+
+    beforeEach(() => {
+      runRepository = { save: jest.fn(async (r) => r) };
+      svc = new ChannelGatewayService(
+        null as any,
+        runRepository as any,
+        null as any,
+        null as any,
+        new ChatWidgetAdapter(null as any),
+        new SlackAdapter(),
+        new DiscordAdapter(),
+        new TelegramAdapter(),
+        new WhatsAppAdapter(),
+        new EmailAdapter(),
+        new WebhookAdapter(),
+        new GoogleChatAdapter(),
+        new MicrosoftTeamsAdapter(),
+        new SignalAdapter(),
+        new MatrixAdapter(),
+        new IrcAdapter(),
+      );
+    });
+
+    it('prefixes the default disclosure on the first message of a conversation', async () => {
+      const run: any = { metadata: {} };
+      const out = await svc.applyAiDisclosure(makeGateway({ aiDisclosure: true }), run, 'Hi!');
+      expect(out).toBe('You are chatting with an AI assistant.\n\nHi!');
+      expect(run.metadata.aiDisclosureSent).toBe(true);
+      expect(runRepository.save).toHaveBeenCalledWith(run);
+    });
+
+    it('does not prefix subsequent messages of the same conversation', async () => {
+      const run: any = { metadata: {} };
+      const gw = makeGateway({ aiDisclosure: true });
+      const first = await svc.applyAiDisclosure(gw, run, 'first');
+      const second = await svc.applyAiDisclosure(gw, run, 'second');
+      expect(first).toContain('AI assistant');
+      expect(second).toBe('second');
+      expect(runRepository.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses a custom disclosure string when configured', async () => {
+      const run: any = { metadata: {} };
+      const out = await svc.applyAiDisclosure(
+        makeGateway({ aiDisclosure: 'Du chattest mit einem KI-Assistenten.' }),
+        run,
+        'Hallo!',
+      );
+      expect(out).toBe('Du chattest mit einem KI-Assistenten.\n\nHallo!');
+    });
+
+    it('never prefixes when disabled or unset', async () => {
+      const run: any = { metadata: {} };
+      expect(await svc.applyAiDisclosure(makeGateway({}), run, 'x')).toBe('x');
+      expect(await svc.applyAiDisclosure(makeGateway({ aiDisclosure: false }), run, 'x')).toBe('x');
+      expect(runRepository.save).not.toHaveBeenCalled();
+      expect(run.metadata.aiDisclosureSent).toBeUndefined();
+    });
+
+    it('starts a new conversation (new run) with the disclosure again', async () => {
+      const gw = makeGateway({ aiDisclosure: true });
+      const run1: any = { metadata: {} };
+      const run2: any = { metadata: {} };
+      await svc.applyAiDisclosure(gw, run1, 'a');
+      const out = await svc.applyAiDisclosure(gw, run2, 'b');
+      expect(out).toBe('You are chatting with an AI assistant.\n\nb');
+    });
+  });
+
+  describe('widget surface', () => {
+    let gatewayRepository: { findOne: jest.Mock };
+    let eventRepository: { createQueryBuilder: jest.Mock };
+    let qb: any;
+    let svc: ChannelGatewayService;
+
+    const widgetGateway = () =>
+      ({
+        id: 'gw-1',
+        type: GatewayType.CHAT_WIDGET,
+        organizationId: 'org-1',
+        isActive: () => true,
+      } as unknown as Gateway);
+
+    beforeEach(() => {
+      qb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getMany: jest.fn(async () => []),
+      };
+      gatewayRepository = { findOne: jest.fn(async () => widgetGateway()) };
+      eventRepository = { createQueryBuilder: jest.fn(() => qb) };
+      svc = new ChannelGatewayService(
+        gatewayRepository as any,
+        null as any,
+        eventRepository as any,
+        null as any,
+        new ChatWidgetAdapter(null as any),
+        new SlackAdapter(),
+        new DiscordAdapter(),
+        new TelegramAdapter(),
+        new WhatsAppAdapter(),
+        new EmailAdapter(),
+        new WebhookAdapter(),
+        new GoogleChatAdapter(),
+        new MicrosoftTeamsAdapter(),
+        new SignalAdapter(),
+        new MatrixAdapter(),
+        new IrcAdapter(),
+      );
+    });
+
+    it('findWidgetGateway returns an active chat_widget gateway', async () => {
+      const gw = await svc.findWidgetGateway('gw-1');
+      expect(gw.id).toBe('gw-1');
+      expect(gatewayRepository.findOne).toHaveBeenCalledWith({ where: { id: 'gw-1' } });
+    });
+
+    it('findWidgetGateway 404s for missing, non-widget, or inactive gateways', async () => {
+      gatewayRepository.findOne.mockResolvedValueOnce(null);
+      await expect(svc.findWidgetGateway('nope')).rejects.toThrow(/not found/i);
+
+      gatewayRepository.findOne.mockResolvedValueOnce({
+        id: 'gw-2', type: GatewayType.SLACK, isActive: () => true,
+      });
+      await expect(svc.findWidgetGateway('gw-2')).rejects.toThrow(/not found/i);
+
+      gatewayRepository.findOne.mockResolvedValueOnce({
+        id: 'gw-3', type: GatewayType.CHAT_WIDGET, isActive: () => false,
+      });
+      await expect(svc.findWidgetGateway('gw-3')).rejects.toThrow(/not found/i);
+    });
+
+    it('listWidgetMessages filters by gateway + thread and maps payload rows', async () => {
+      const createdAt = new Date('2026-07-01T10:00:00Z');
+      qb.getMany.mockResolvedValueOnce([
+        { id: 'e1', runId: 'r1', payload: { kind: 'widget_message', threadId: 't1', message: 'hello', attachments: null }, createdAt },
+      ]);
+      const rows = await svc.listWidgetMessages('gw-1', 't1');
+      expect(rows).toEqual([
+        { id: 'e1', runId: 'r1', message: 'hello', attachments: null, createdAt },
+      ]);
+      expect(qb.where).toHaveBeenCalledWith('event.gatewayId = :gatewayId', { gatewayId: 'gw-1' });
+      expect(qb.andWhere).toHaveBeenCalledWith("event.payload->>'threadId' = :threadId", { threadId: 't1' });
+      // no `after` — the time filter must not be applied
+      expect(qb.andWhere).not.toHaveBeenCalledWith('event.createdAt > :after', expect.anything());
+    });
+
+    it('listWidgetMessages applies the incremental `after` filter', async () => {
+      const after = new Date('2026-07-01T10:00:00Z');
+      await svc.listWidgetMessages('gw-1', 't1', after);
+      expect(qb.andWhere).toHaveBeenCalledWith('event.createdAt > :after', { after });
     });
   });
 });

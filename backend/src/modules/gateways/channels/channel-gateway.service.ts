@@ -182,10 +182,13 @@ export class ChannelGatewayService {
           const finalRun = await this.runRepository.findOne({ where: { id: runId } });
           if (!finalRun) return;
 
-          const responseText =
+          const rawText =
             (typeof finalRun.output === 'string'
               ? finalRun.output
               : finalRun.output?.text) || 'No response';
+          // EU AI Act Art. 50: prepend the disclosure line on the first
+          // outbound message of a conversation when the gateway opts in.
+          const responseText = await this.applyAiDisclosure(gateway, finalRun, rawText);
 
           const formatted = adapter.formatOutbound({ text: responseText });
           try {
@@ -193,6 +196,16 @@ export class ChannelGatewayService {
               threadId: normalized.threadId,
               channel: normalized.metadata?.channel,
               userId: normalized.userId,
+              // Reply-routing hints some platforms need (Teams serviceUrl,
+              // email from/subject, Signal groupId, ...).
+              from: normalized.metadata?.from,
+              subject: normalized.metadata?.subject,
+              metadata: normalized.metadata,
+              // Identity for adapters that persist rather than push
+              // (chat widget files the reply as a channel event).
+              gatewayId: gateway.id,
+              organizationId: gateway.organizationId,
+              runId,
             });
             await this.logEvent(gateway, 'outbound', 'processed', this.truncatePayload(formatted), null, runId);
           } catch (sendErr: any) {
@@ -218,6 +231,36 @@ export class ChannelGatewayService {
     // Safety timeout — .unref() so pending handle doesn't keep Node alive
     const safety = setTimeout(() => cleanup(), 5 * 60 * 1000);
     safety.unref?.();
+  }
+
+  /** Default EU AI Act Art. 50 disclosure line. */
+  static readonly DEFAULT_AI_DISCLOSURE = 'You are chatting with an AI assistant.';
+
+  /**
+   * EU AI Act Art. 50 transparency: when a channel gateway opts in via
+   * `configuration.aiDisclosure` (true = default line, non-empty string
+   * = custom override), the FIRST outbound message of each conversation
+   * is prefixed with the disclosure. First-ness is tracked on the run
+   * (`run.metadata.aiDisclosureSent`) — a conversation maps 1:1 to a
+   * run (thread lookups reattach to the active run), so follow-up
+   * replies in the same conversation are not re-prefixed. Implemented
+   * centrally in the dispatch path so all 12 adapters inherit it
+   * without per-adapter changes.
+   */
+  async applyAiDisclosure(gateway: Gateway, run: AgentRun, text: string): Promise<string> {
+    const setting = gateway.configuration?.aiDisclosure;
+    if (!setting) return text;
+    if ((run.metadata as any)?.aiDisclosureSent) return text;
+
+    const line =
+      typeof setting === 'string' && setting.trim()
+        ? setting.trim()
+        : ChannelGatewayService.DEFAULT_AI_DISCLOSURE;
+
+    run.metadata = { ...(run.metadata || {}), aiDisclosureSent: true };
+    await this.runRepository.save(run);
+
+    return `${line}\n\n${text}`;
   }
 
   // ---------------------------------------------------------------------------
@@ -283,6 +326,13 @@ export class ChannelGatewayService {
       await this.runRepository.save(run);
     }
 
+    // Persist the agent's reply for the widget poll endpoint once the
+    // run completes (the widget can also stream live via the run SSE).
+    this.listenForCompletionAndRespond(run.id, gateway, adapter, {
+      ...normalized,
+      threadId: (run.metadata as any)?.threadId || normalized.threadId || run.id,
+    });
+
     // Increment request count
     gateway.incrementRequest(true);
     await this.gatewayRepository.save(gateway);
@@ -291,6 +341,52 @@ export class ChannelGatewayService {
       runId: run.id,
       threadId: (run.metadata as any)?.threadId || run.id,
     };
+  }
+
+  /**
+   * Resolve a gateway for the public widget surface: must exist, be an
+   * active chat_widget gateway. 404s otherwise (no auth on this path —
+   * don't leak whether an id exists as a different type).
+   */
+  async findWidgetGateway(gatewayId: string): Promise<Gateway> {
+    const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId } });
+    if (!gateway || gateway.type !== GatewayType.CHAT_WIDGET || !gateway.isActive()) {
+      throw new NotFoundException('Widget gateway not found or inactive');
+    }
+    return gateway;
+  }
+
+  /**
+   * Poll surface for the widget: outbound widget messages persisted by
+   * ChatWidgetAdapter.sendResponse for a given thread, oldest first.
+   * `after` restricts to messages newer than the given timestamp so the
+   * widget can poll incrementally.
+   */
+  async listWidgetMessages(
+    gatewayId: string,
+    threadId: string,
+    after?: Date,
+  ): Promise<Array<{ id: string; runId: string | null; message: string; attachments: any; createdAt: Date }>> {
+    const qb = this.eventRepository
+      .createQueryBuilder('event')
+      .where('event.gatewayId = :gatewayId', { gatewayId })
+      .andWhere('event.channelType = :channelType', { channelType: GatewayType.CHAT_WIDGET })
+      .andWhere("event.direction = 'outbound'")
+      .andWhere("event.payload->>'kind' = 'widget_message'")
+      .andWhere("event.payload->>'threadId' = :threadId", { threadId })
+      .orderBy('event.createdAt', 'ASC')
+      .limit(100);
+    if (after) {
+      qb.andWhere('event.createdAt > :after', { after });
+    }
+    const events = await qb.getMany();
+    return events.map((e) => ({
+      id: e.id,
+      runId: e.runId,
+      message: e.payload?.message ?? '',
+      attachments: e.payload?.attachments ?? null,
+      createdAt: e.createdAt,
+    }));
   }
 
   // ---------------------------------------------------------------------------
