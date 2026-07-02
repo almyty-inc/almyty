@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { User } from '../../entities/user.entity';
+import { AUDIT_STREAM_HOOK, AuditStreamHook } from '../../common/ee-hooks/ee-hooks';
 
 export interface AuditLogOptions {
   organizationId: string;
@@ -43,6 +44,12 @@ export class AuditLogService {
     private readonly auditLogRepository: Repository<AuditLog>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    // EE hook (audit_export): SIEM streaming after each write. Absent in
+    // the community build — @Optional() resolves to undefined and the
+    // write path is byte-for-byte the OSS behavior.
+    @Optional()
+    @Inject(AUDIT_STREAM_HOOK)
+    private readonly auditStreamHook?: AuditStreamHook,
   ) {}
 
   /**
@@ -80,11 +87,30 @@ export class AuditLogService {
         cost: options.cost,
         metadata: options.metadata,
       });
-      return await this.auditLogRepository.save(entry);
+      const saved = await this.auditLogRepository.save(entry);
+      this.forwardToStreamHook(saved);
+      return saved;
     } catch (error) {
       // Audit logging should never break the main flow
       this.logger.error(`Audit log failed: ${error.message}`, error.stack);
       return null;
+    }
+  }
+
+  /**
+   * EE (audit_export): forward a persisted audit row to the optional SIEM
+   * streaming hook. Strictly fire-and-forget — the hook is never awaited
+   * and any failure (sync or async) is swallowed so an unreachable SIEM
+   * can't slow down or break the request that produced the event.
+   */
+  private forwardToStreamHook(entry: AuditLog): void {
+    if (!this.auditStreamHook) return;
+    try {
+      Promise.resolve(this.auditStreamHook.afterAuditWrite(entry)).catch(
+        (err) => this.logger.warn(`Audit stream hook failed: ${err?.message ?? err}`),
+      );
+    } catch (err: any) {
+      this.logger.warn(`Audit stream hook failed: ${err?.message ?? err}`);
     }
   }
 
