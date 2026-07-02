@@ -661,6 +661,11 @@ export const agentsApi = {
   rollback: (id: string, versionIndex: number) => apiPost(`/agents/${id}/versions/${versionIndex}/rollback`),
   // Import / Export
   exportAgent: (id: string) => apiGet(`/agents/${id}/export`),
+  exportTechnicalDocumentation: (id: string) =>
+    apiGet<string>(`/agents/${id}/technical-documentation`, {
+      params: { format: 'markdown' },
+      responseType: 'text',
+    }),
   importAgent: (data: any) => apiPost('/agents/import', data),
   // Cost estimation
   getCostEstimate: (id: string) => apiGet(`/agents/${id}/cost-estimate`),

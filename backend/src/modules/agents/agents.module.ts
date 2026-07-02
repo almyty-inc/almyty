@@ -14,6 +14,8 @@ import { Organization } from '../../entities/organization.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
+import { ApprovalRequest } from '../../entities/approval-request.entity';
+import { AgentFile } from '../../entities/file.entity';
 
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
@@ -38,6 +40,7 @@ import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentRunReaperService } from './agent-run-reaper.service';
 import { AgentValidationHelper } from './agent-validation.helper';
+import { AgentTechDocHelper } from './agent-tech-doc.helper';
 import { AgentsController } from './agents.controller';
 import { AgentExecutionController } from './agent-execution.controller';
 import { AgentManagementController } from './agent-management.controller';
@@ -69,6 +72,8 @@ import { BudgetsModule } from '../budgets/budgets.module';
       ApiKey,
       Conversation,
       Message,
+      ApprovalRequest,
+      AgentFile,
     ]),
     BullModule.registerQueue({ name: 'agent-scheduler' }),
     BullModule.registerQueue({ name: 'agent-runtime' }),
@@ -81,7 +86,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
     AgentConstraintsModule,
     BudgetsModule,
   ],
-  providers: [AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor],
+  providers: [AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper],
   controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController],
   exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })

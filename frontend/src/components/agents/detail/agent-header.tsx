@@ -11,6 +11,7 @@ import {
   Download,
   Copy,
   ChevronRight,
+  FileText,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -21,11 +22,12 @@ import type { Agent } from '@/types'
 interface AgentHeaderProps {
   agent: Agent
   onExport: () => void
+  onExportTechDoc: () => void
   onDuplicate: () => void
   onInvoke: () => void
 }
 
-export function AgentHeader({ agent, onExport, onDuplicate, onInvoke }: AgentHeaderProps) {
+export function AgentHeader({ agent, onExport, onExportTechDoc, onDuplicate, onInvoke }: AgentHeaderProps) {
   const navigate = useNavigate()
 
   return (
@@ -57,6 +59,15 @@ export function AgentHeader({ agent, onExport, onDuplicate, onInvoke }: AgentHea
           <Button variant="outline" size="sm" onClick={onExport}>
             <Download className="h-4 w-4 mr-2" />
             Export
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onExportTechDoc}
+            title="Export EU AI Act style technical documentation (Markdown)"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Tech Doc
           </Button>
           <Button variant="outline" size="sm" onClick={onDuplicate}>
             <Copy className="h-4 w-4 mr-2" />
