@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, Optional, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { EventEmitter } from 'events';
@@ -6,6 +6,13 @@ import { EventEmitter } from 'events';
 import { ApprovalRequest, ApprovalStatus } from '../../entities/approval-request.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import {
+  APPROVAL_POLICY_HOOK,
+  ApprovalPolicyApproval,
+  ApprovalPolicyHook,
+  ApprovalPolicyProgress,
+  ApprovalPolicyRef,
+} from '../../common/ee-hooks/ee-hooks';
 
 export interface CreateApprovalInput {
   organizationId: string;
@@ -52,6 +59,12 @@ export class ApprovalsService extends EventEmitter {
     @InjectRepository(AgentRun)
     private readonly runs: Repository<AgentRun>,
     private readonly accessPolicy: AccessPolicyService,
+    // EE hook (approval_policy): multi-step / quorum policies. Absent in
+    // the community build — @Optional() resolves to undefined and the
+    // single-gate flow below is untouched.
+    @Optional()
+    @Inject(APPROVAL_POLICY_HOOK)
+    private readonly approvalPolicyHook?: ApprovalPolicyHook,
   ) {
     super();
   }
@@ -60,6 +73,11 @@ export class ApprovalsService extends EventEmitter {
    * Create an approval gate. Idempotent on (runId, toolCallId): a
    * second call with the same pair returns the existing row rather
    * than creating a duplicate.
+   *
+   * EE (approval_policy): when the optional policy hook resolves a
+   * governing policy for this request, its reference is recorded under
+   * the reserved `payload._policy` key so the decide path can enforce
+   * the policy's steps/quorum. No policy (or no hook) → OSS single gate.
    */
   async create(input: CreateApprovalInput): Promise<ApprovalRequest> {
     if (input.toolCallId) {
@@ -68,6 +86,8 @@ export class ApprovalsService extends EventEmitter {
       });
       if (existing) return existing;
     }
+
+    const policy = await this.resolveGoverningPolicy(input);
 
     const ttl = Math.min(input.ttlSeconds ?? DEFAULT_TTL_SECONDS, MAX_TTL_SECONDS);
     const expiresAt = new Date(Date.now() + ttl * 1000);
@@ -79,7 +99,12 @@ export class ApprovalsService extends EventEmitter {
       agentId: input.agentId,
       toolCallId: input.toolCallId ?? null,
       reason: input.reason,
-      payload: input.payload ?? null,
+      payload: policy
+        ? {
+            ...(input.payload ?? {}),
+            _policy: { policyId: policy.id, policyName: policy.name, approvals: [] },
+          }
+        : input.payload ?? null,
       status: 'pending' as ApprovalStatus,
       expiresAt,
     } as Partial<ApprovalRequest>);
@@ -115,6 +140,14 @@ export class ApprovalsService extends EventEmitter {
     const can = await this.accessPolicy.canAccess(caller, row, 'manage');
     if (!can.allowed) throw new ForbiddenException(can.reason);
 
+    // EE (approval_policy): a policy-governed request only flips to
+    // approved once its steps/quorum are satisfied. A rejection is always
+    // immediate (a single rejection kills the request, as in OSS).
+    if (next === 'approved') {
+      const stillPending = await this.applyPolicyProgress(row, caller);
+      if (stillPending) return stillPending;
+    }
+
     row.status = next;
     row.decidedBy = decision.decidedBy;
     row.decidedAt = new Date();
@@ -123,6 +156,106 @@ export class ApprovalsService extends EventEmitter {
 
     this.emit('approval.decided', saved);
     return saved;
+  }
+
+  /**
+   * EE (approval_policy): resolve the policy governing a new request via
+   * the optional hook. Best-effort — any hook failure degrades to the OSS
+   * single-gate flow rather than blocking the run.
+   */
+  private async resolveGoverningPolicy(
+    input: CreateApprovalInput,
+  ): Promise<ApprovalPolicyRef | null> {
+    if (!this.approvalPolicyHook) return null;
+    try {
+      return await this.approvalPolicyHook.resolveForContext(input.organizationId, {
+        reason: input.reason,
+        agentId: input.agentId,
+        runId: input.runId,
+        toolCallId: input.toolCallId ?? null,
+        teamId: input.teamId,
+        payload: input.payload ?? {},
+      });
+    } catch (err: any) {
+      this.logger.warn(`approval policy resolution failed: ${err?.message ?? err}`);
+      return null;
+    }
+  }
+
+  /**
+   * EE (approval_policy): record the caller's approval against the
+   * governing policy and score progress. Returns the saved (still
+   * pending) row when the policy's steps/quorum are not yet satisfied —
+   * the caller then skips the status flip. Returns null when the OSS
+   * single-gate flip should proceed: no hook, no recorded policy, policy
+   * gone / unlicensed (hook scores null), or the policy is satisfied.
+   */
+  private async applyPolicyProgress(
+    row: ApprovalRequest,
+    caller: { id: string },
+  ): Promise<ApprovalRequest | null> {
+    const state = (row.payload as Record<string, any> | null)?._policy;
+    if (!this.approvalPolicyHook || !state?.policyId) return null;
+
+    const prior: ApprovalPolicyApproval[] = Array.isArray(state.approvals)
+      ? state.approvals
+      : [];
+    if (prior.some((a) => a.approverId === caller.id)) {
+      throw new BadRequestException('caller has already approved this request');
+    }
+    const roles = await this.resolveApproverRoles(caller.id, row);
+    const collected = [...prior, { approverId: caller.id, roles }];
+
+    let progress: ApprovalPolicyProgress | null = null;
+    try {
+      progress = await this.approvalPolicyHook.scoreProgress(
+        row.organizationId,
+        state.policyId,
+        collected,
+      );
+    } catch (err: any) {
+      this.logger.warn(`approval policy scoring failed: ${err?.message ?? err}`);
+    }
+    // No progress (unlicensed / policy deleted / hook failure) → fall back
+    // to the OSS single gate: this approval decides the request.
+    if (!progress) return null;
+
+    row.payload = {
+      ...(row.payload ?? {}),
+      _policy: { ...state, approvals: collected, progress },
+    };
+    if (progress.satisfied) return null;
+
+    const saved = await this.approvals.save(row);
+    this.emit('approval.progress', saved);
+    return saved;
+  }
+
+  /**
+   * Role names used to match a policy step's `approverRole`: the caller's
+   * org role ('owner' | 'admin' | 'member' | 'viewer') plus, when the
+   * request is team-scoped, 'team_lead' / 'team_member'.
+   */
+  private async resolveApproverRoles(
+    userId: string,
+    row: ApprovalRequest,
+  ): Promise<string[]> {
+    const roles: string[] = [];
+    try {
+      const orgRole = await this.accessPolicy.getOrgRole(userId, row.organizationId);
+      if (orgRole) roles.push(orgRole);
+      if (row.teamId) {
+        const memberships = await this.accessPolicy.getTeamMemberships(
+          userId,
+          row.organizationId,
+        );
+        const teamRole = memberships.get(row.teamId);
+        if (teamRole) roles.push(`team_${teamRole}`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`approver role resolution failed: ${err?.message ?? err}`);
+    }
+    return roles;
   }
 
   async findOne(id: string, caller: { id: string }, organizationId: string): Promise<ApprovalRequest> {
