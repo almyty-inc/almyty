@@ -24,7 +24,7 @@ import { VisibilityField, type VisibilityValue } from '@/components/ui/visibilit
 import { useOrganizationStore } from '@/store/organization'
 import { ExternalLink, TestTube, CheckCircle2, XCircle } from 'lucide-react'
 import { llmProvidersApi } from '@/lib/api'
-import { providerKeyUrls } from './provider-type-config'
+import { providerKeyUrls, providerUsageApiSupport, usageApiSupported } from './provider-type-config'
 
 interface CreateProviderDialogProps {
   open: boolean
@@ -162,6 +162,33 @@ export function CreateProviderDialog({
           )}
           {createForm.formState.errors.apiKey && (
             <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.apiKey as any).message}</p>
+          )}
+
+          {/* Usage API key — only for types with a supported usage/cost API */}
+          {usageApiSupported(createForm.watch('type')) && (
+            <div>
+              <Label htmlFor="usageApiKey">Usage API key (admin-scoped, for cost reconciliation)</Label>
+              <Input
+                id="usageApiKey"
+                type="password"
+                autoComplete="off"
+                {...createForm.register('usageApiKey')}
+                placeholder="Optional — admin key for usage/cost reports"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Requires an admin-scoped key (OpenAI sk-admin-..., Anthropic admin key) — the
+                regular inference key cannot read usage/cost reports.{' '}
+                <a
+                  href={providerUsageApiSupport[createForm.watch('type')]?.docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Admin key docs
+                </a>
+              </p>
+            </div>
           )}
 
           {/* Organization ID - Only for OpenAI */}
