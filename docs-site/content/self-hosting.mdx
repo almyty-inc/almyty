@@ -197,6 +197,12 @@ Either way, back up the database before upgrading.
 
 Rate limits are backed by Redis, so the configured limit (`RATE_LIMIT_MAX` per `RATE_LIMIT_TTL` seconds) is shared across every API replica rather than counted per process. Point all replicas at the same Redis and the limit holds for the cluster as a whole.
 
+## Compliance and data residency
+
+Self-hosting keeps every byte — conversations, memory, credentials, logs — in infrastructure you control, which is the simplest answer to GDPR data-residency questions. Secrets are AES-256-GCM encrypted with your `ENCRYPTION_KEY`; rotate it like any other production secret and never commit it. Remember that BYOK means conversation content flows to your model providers under **your** API keys, so your data-processing agreements with those providers are part of your deployment's compliance story.
+
+The [Compliance](/compliance) page maps platform features to the EU AI Act (transparency disclosure, human oversight, record-keeping, technical documentation export) and the other regimes that typically apply. The repository's `SECURITY.md` documents the vulnerability-disclosure process and how to generate an SBOM for your release.
+
 ## Upgrades
 
 ```bash
