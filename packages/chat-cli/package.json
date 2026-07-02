@@ -27,7 +27,7 @@
   "author": "almyty",
   "license": "BSL-1.1",
   "dependencies": {
-    "@almyty/client": "^0.1.0",
+    "@almyty/client": "^0.2.0",
     "@types/react": "^19.2.14",
     "ink": "^7.0.1",
     "ink-spinner": "^5.0.0",

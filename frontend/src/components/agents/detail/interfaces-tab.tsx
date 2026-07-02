@@ -16,12 +16,14 @@ import {
   Clock,
   Plug,
   Loader2,
+  Wrench,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import {
@@ -49,6 +51,8 @@ import {
   maskSecret,
   getInterfaceConfigSummary,
 } from './constants'
+import { AI_DISCLOSURE_CHANNEL_TYPES } from './channel-setup'
+import { ChannelSetupPanel } from './channel-setup-panel'
 import type { Gateway } from '@/types'
 
 interface InterfacesTabProps {
@@ -62,7 +66,9 @@ const CHANNEL_TYPES = [
   { value: 'slack', label: 'Slack' },
   { value: 'discord', label: 'Discord' },
   { value: 'telegram', label: 'Telegram' },
-  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'whatsapp', label: 'WhatsApp (Twilio)' },
+  { value: 'whatsapp_cloud', label: 'WhatsApp Cloud (Meta)' },
+  { value: 'sms', label: 'SMS (Twilio)' },
   { value: 'email', label: 'Email' },
   { value: 'webhook', label: 'Webhook' },
   { value: 'google_chat', label: 'Google Chat' },
@@ -81,6 +87,9 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
   const [newInterfaceType, setNewInterfaceType] = useState<string>('a2a')
   const [newInterfaceName, setNewInterfaceName] = useState('')
   const [interfaceConfig, setInterfaceConfig] = useState<Record<string, any>>({})
+  // Deployed channel whose setup instructions are open. Set right after a
+  // successful deploy and from the "Setup" button on every channel card.
+  const [setupGateway, setSetupGateway] = useState<Gateway | null>(null)
 
   // Fetch agent-kind gateways for this agent
   const { data: gatewaysData, isLoading } = useQuery({
@@ -106,13 +115,16 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
         configuration: interfaceConfig,
       })
     },
-    onSuccess: () => {
+    onSuccess: (created: any) => {
       success('Channel Deployed', 'Gateway has been created for this agent.')
       queryClient.invalidateQueries({ queryKey: ['agent-gateways', agentId] })
       setDeployInterfaceOpen(false)
       setNewInterfaceName('')
       setNewInterfaceType('a2a')
       setInterfaceConfig({})
+      // Walk the user straight into platform-side setup for the new channel.
+      const gateway = created?.gateway || created
+      if (gateway?.id) setSetupGateway(gateway as Gateway)
     },
     onError: (err: any) => {
       errorNotif('Deploy Failed', err?.response?.data?.message || err?.message || 'Failed to deploy channel')
@@ -209,6 +221,16 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
                       <span>Last request: {gw.lastRequestAt ? formatDateTime(gw.lastRequestAt) : 'Never'}</span>
                     </div>
                   </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 w-full"
+                    onClick={() => setSetupGateway(gw)}
+                  >
+                    <Wrench className="h-3.5 w-3.5 mr-1.5" />
+                    Setup
+                  </Button>
                 </CardContent>
               </Card>
             )
@@ -308,6 +330,67 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
                   <Label htmlFor="cfg-telegram-token">Bot Token</Label>
                   <Input id="cfg-telegram-token" type="password" placeholder="123456:ABC-DEF..." value={interfaceConfig.botToken || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, botToken: e.target.value }))} className="mt-1" />
                 </div>
+                <p className="text-xs text-muted-foreground">The Telegram webhook is registered automatically on deploy.</p>
+              </div>
+            )}
+
+            {(newInterfaceType === 'whatsapp' || newInterfaceType === 'sms') && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Twilio Settings</p>
+                <div>
+                  <Label htmlFor="cfg-twilio-sid">Account SID</Label>
+                  <Input id="cfg-twilio-sid" placeholder="AC..." value={interfaceConfig.accountSid || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, accountSid: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-twilio-token">Auth Token</Label>
+                  <Input id="cfg-twilio-token" type="password" placeholder="Auth token" value={interfaceConfig.authToken || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, authToken: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-twilio-phone">{newInterfaceType === 'whatsapp' ? 'WhatsApp Sender Number' : 'Phone Number'}</Label>
+                  <Input id="cfg-twilio-phone" placeholder="+15551234567" value={interfaceConfig.phoneNumber || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, phoneNumber: e.target.value }))} className="mt-1" />
+                </div>
+                <p className="text-xs text-muted-foreground">The number's inbound webhook is registered automatically where the platform supports it.</p>
+              </div>
+            )}
+
+            {newInterfaceType === 'whatsapp_cloud' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">WhatsApp Cloud Settings</p>
+                <div>
+                  <Label htmlFor="cfg-wac-token">Access Token</Label>
+                  <Input id="cfg-wac-token" type="password" placeholder="Meta access token" value={interfaceConfig.accessToken || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, accessToken: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-wac-phone-id">Phone Number ID</Label>
+                  <Input id="cfg-wac-phone-id" placeholder="Phone number ID" value={interfaceConfig.phoneNumberId || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, phoneNumberId: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-wac-verify">Verify Token</Label>
+                  <Input id="cfg-wac-verify" type="password" placeholder="Webhook verify token" value={interfaceConfig.verifyToken || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, verifyToken: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="cfg-wac-secret">App Secret</Label>
+                  <Input id="cfg-wac-secret" type="password" placeholder="Meta app secret" value={interfaceConfig.appSecret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, appSecret: e.target.value }))} className="mt-1" />
+                </div>
+              </div>
+            )}
+
+            {AI_DISCLOSURE_CHANNEL_TYPES.has(newInterfaceType) && (
+              <div className="flex items-start gap-2 rounded-md border p-3">
+                <Checkbox
+                  id="cfg-ai-disclosure"
+                  checked={!!interfaceConfig.aiDisclosure}
+                  onCheckedChange={(checked) => setInterfaceConfig(prev => ({ ...prev, aiDisclosure: checked === true }))}
+                  className="mt-0.5"
+                />
+                <div>
+                  <Label htmlFor="cfg-ai-disclosure" className="text-sm font-normal cursor-pointer">
+                    Disclose AI identity on first message (EU AI Act Art. 50)
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Prepends a disclosure line to the first reply of each conversation.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -329,6 +412,19 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
               )}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Channel Setup Dialog — opened after a deploy and from each card's Setup button */}
+      <Dialog open={!!setupGateway} onOpenChange={(open) => { if (!open) setSetupGateway(null) }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Channel Setup</DialogTitle>
+            <DialogDescription>
+              Finish connecting {setupGateway?.name || 'this channel'} on the platform's side.
+            </DialogDescription>
+          </DialogHeader>
+          {setupGateway && <ChannelSetupPanel gateway={setupGateway} />}
         </DialogContent>
       </Dialog>
     </>

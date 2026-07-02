@@ -6,7 +6,7 @@ import type { AgentInfo } from '@almyty/client';
 // ── Types ───────────────────────────────────────────────────────
 
 export interface Message {
-  role: 'user' | 'agent' | 'error' | 'info' | 'tool';
+  role: 'user' | 'agent' | 'error' | 'info' | 'tool' | 'coding';
   text: string;
 }
 
@@ -220,6 +220,19 @@ export function MessageView({ msg }: { msg: Message }) {
           <Text dimColor>│ {msg.text}</Text>
         </Box>
       );
+    case 'coding':
+      // Coding-session output: distinct cyan gutter so streamed CLI output
+      // reads apart from agent/chat messages.
+      return (
+        <Box paddingLeft={2} flexDirection="column">
+          {msg.text.replace(/\n+$/, '').split('\n').map((line, i) => (
+            <Text key={i} wrap="truncate-end">
+              <Text color="#22d3ee">▍ </Text>
+              <Text dimColor>{line || ' '}</Text>
+            </Text>
+          ))}
+        </Box>
+      );
     default:
       return null;
   }
@@ -263,6 +276,60 @@ export function AgentSelector({ agents, onSelect }: { agents: AgentInfo[]; onSel
           <Text dimColor>{agents[cursor].description}</Text>
         </Box>
       )}
+    </Box>
+  );
+}
+
+// ── Coding mode ─────────────────────────────────────────────────
+
+/**
+ * Visible mode banner while a coding session is active: input routes to the
+ * session, /esc detaches, /code-stop kills it.
+ */
+export function CodingModeIndicator({ agent, runner }: { agent: string; runner: string }) {
+  return (
+    <Box paddingX={1}>
+      <Text backgroundColor="#0891B2" color="black"> coding </Text>
+      <Text color="#22d3ee"> {agent}@{runner}</Text>
+      <Text dimColor>  input goes to the session · /esc detach · /code-stop stop</Text>
+    </Box>
+  );
+}
+
+// ── Generic choice selector (runner x CLI picks for /code) ──────
+
+export interface Choice {
+  key: string;
+  label: string;
+  hint?: string;
+}
+
+export function ChoiceSelector({ title, choices, onSelect }: {
+  title: string;
+  choices: Choice[];
+  onSelect: (c: Choice) => void;
+}) {
+  const [cursor, setCursor] = useState(0);
+
+  useInput((input, key) => {
+    if (key.upArrow) setCursor(c => (c - 1 + choices.length) % choices.length);
+    if (key.downArrow) setCursor(c => (c + 1) % choices.length);
+    if (key.return) onSelect(choices[cursor]);
+  });
+
+  return (
+    <Box flexDirection="column" paddingTop={1}>
+      <Text dimColor>  {title}</Text>
+      <Text> </Text>
+      {choices.map((choice, i) => (
+        <Box key={choice.key} paddingLeft={2}>
+          <Text color={i === cursor ? '#8b5cf6' : undefined}>
+            {i === cursor ? '❯' : ' '}{' '}
+          </Text>
+          <Text bold={i === cursor}>{choice.label}</Text>
+          {choice.hint && <Text dimColor> {choice.hint}</Text>}
+        </Box>
+      ))}
     </Box>
   );
 }
