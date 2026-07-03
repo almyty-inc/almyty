@@ -9,7 +9,9 @@
 
 1. **Write the policies** — e.g. *refunds over $500 → finance lead*, *any external send → manager*, *production config change → admin*. Rules live at the org level, above any single agent.
 2. **Reference the gate in agents** — the agent calls `request_approval` for the action; the policy decides who must approve and when.
-3. **Route to the queue** — the run pauses at `waiting_approval` and the request lands on the [Approvals](/approvals) page with full context for the designated approver.
+3. **Route to the queue** — the run pauses at `waiting_approval` and the request lands on the [Approvals](/approvals) page with full context. Here the demo's support agent hit its refund rule on a real **$820 Brightway Logistics** claim and stopped for a human:
+
+   ![A real refund escalation waiting for approval](/screenshots/approval-refund-820.png)
 4. **Approve or reject** — the run resumes or stops on their decision; both outcomes are recorded.
 5. **Prove it** — every approval and its decider is in the audit trail (see [Stream your audit trail to a SIEM](/examples/audit-to-siem)).
 
