@@ -3,33 +3,43 @@
 **Stack** — `Trigger: Claude Code / any MCP client` · `Tools: your API (any schema)` · `Gateway: MCP (+ A2A, UTCP)` · `Auth: x-api-key` · `Output: Claude calls your API`
 
 **Who it's for** — anyone who wants Claude Code, Cursor, or Claude Desktop to call an API they already run.
-**What it does** — turns your API into typed tools and publishes them as an MCP gateway, so an MCP client can call your service directly — with auth, rate limits, and audit handled by almyty, and no tool wrappers to write.
+
+This recipe is **real** — the *Petstore MCP* gateway below is live in the demo org, serving 19
+Swagger Petstore tools over MCP with 14 real requests logged.
 
 ## Build it
 
-1. **Connect the API.** In *APIs → Connect API*, paste a schema URL — OpenAPI, GraphQL, SOAP/WSDL, or Protobuf. almyty generates a typed tool for every operation.
+1. **Connect the API.** In *APIs → Connect API*, paste a schema URL — OpenAPI, GraphQL, SOAP/WSDL,
+   or Protobuf. almyty generates a typed tool for every operation. (The demo imported Swagger
+   Petstore: 19 operations → 19 tools.)
 
-   ![An imported API — operations turned into tools](/screenshots/quickstart-api-imported.png)
+   ![The imported Swagger Petstore — 19 operations turned into tools](/screenshots/quickstart-api-imported.png)
 
-2. **Publish an MCP gateway.** Group the tools you want to expose and publish them as an **MCP** gateway. Its endpoint is `https://api.almyty.com/{org}/{gateway}`, and the *Authentication* panel generates an `x-api-key`.
+2. **Publish an MCP gateway.** Group the tools to expose and publish them as an **MCP** gateway,
+   then generate an `x-api-key` on its Authentication panel. Scope exactly which tools it serves —
+   here, 19 of 55 available tools.
 
-   ![The gateway with its endpoint and key auth](/screenshots/quickstart-gateway-mcp.png)
+   ![The Petstore MCP gateway — endpoint, API keys, and tool scoping](/screenshots/gateway-petstore-config.png)
 
-3. **Add it to your client.** *Quick Setup* gives you a copy-paste command:
+3. **Grab the endpoint.** The gateway's **Integrations** tab gives you the live MCP endpoint
+   (`https://api.almyty.com/{org}/{gateway}`), plus SSE and discovery URLs:
+
+   ![The gateway's MCP endpoint, SSE, and discovery URLs](/screenshots/gateway-petstore-integration.png)
+
+4. **Add it to your client** and use it:
    ```bash
-   claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
+   claude mcp add petstore --transport http https://api.almyty.com/northwind-ai/petstore
    # clients send: x-api-key: <your gateway key>
    ```
-4. **Use it.** Ask Claude something that needs your API — it calls the generated tools through the gateway:
    ```text
    > look up pet #2 and show its status
-     Claude calls get_pet_by_id via almyty → "Rosie", available
+     Claude calls getPetById via almyty → "Rosie", available
    ```
 
 ## Make it yours
 
 - The same gateway also speaks **A2A** and **UTCP**, so other agents and clients reach identical tools.
-- Scope which operations each key can call; rotate keys from the Authentication panel.
+- Rotate or revoke keys per client from the Authentication panel (the demo has three: a default key, a quickstart key, and a docs key).
 - Front a [legacy SOAP service](/examples/modernize-legacy-soap) the same way.
 
 **Uses** — `Platform` · `MCP` · `Claude Code`
