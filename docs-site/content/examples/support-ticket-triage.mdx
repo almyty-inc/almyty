@@ -1,30 +1,59 @@
 # 🎧 Triage support tickets and draft replies
 
-**Stack** — `Trigger: Slack / your app calls the agent API` · `Models: Claude 4.8 draft + GPT-4o verify` · `Tools: Zendesk API, Orders API, KB search` · `Mode: verify panel + approval` · `Memory: on` · `Output: drafted reply + Slack escalation`
+**Stack** — `Trigger: agent API / Slack` · `Models: GPT-4o primary + GPT-4o & Gemini 1.5 Pro verifier panel` · `Tools: order-lookup` · `Mode: verify + approval` · `Memory: on`
 
-**Who it's for** — support teams drowning in L1 tickets.
-**What it does** — reads a ticket, pulls the customer's order history, drafts a reply, has a second-vendor model check it for accuracy, and escalates refunds over a threshold to a human before anything sends.
+**Who it's for** — support teams drowning in L1 tickets who can't let an agent send a wrong answer.
+
+This recipe is a **real, running agent** — the *Customer Support Orchestrator* below has handled 8
+runs at 87.5% success for ~$0.07 total. Everything shown is its actual configuration and history.
+
+![The Customer Support Orchestrator: primary GPT-4o plus a cross-vendor verifier panel](/screenshots/support-agent-overview.png)
+
+## What it actually does
+
+It reads a ticket, looks up the order, drafts a reply, and a **cross-vendor verifier panel**
+checks the draft before it ships. Two real runs from its history:
+
+- *"Where is my order NW-10428?"* → it called the **Lookup Order Status** tool, and the
+  verifier caught a delivery-date inconsistency (the ETA didn't match the carrier's speed) and
+  forced **1 revision** before the reply passed. 3 steps, 6,463 tokens, $0.0121.
+- *"URGENT ticket TKT-6190 from Brightway Logistics (enterprise customer)…"* → it hit the
+  refund-escalation rule and stopped at **`waiting approval`** for a human, instead of
+  promising something it shouldn't.
+
+![Real runs — a completed order-status reply, an enterprise ticket paused at waiting-approval, a failed run](/screenshots/support-agent-runs.png)
 
 ## Build it
 
-1. **Connect your tools.** In *APIs → Connect API*, paste the OpenAPI URLs for Zendesk and your Orders service — each operation becomes a typed tool. Add a knowledge-base search tool for your help center.
-2. **Create the agent.** *Agents → Create → Autonomous*, name it "Support Triage", attach those tools, and instruct it: *triage the ticket, pull order context, draft a reply in our voice, escalate refunds over $500.*
-3. **Turn on memory** so it recalls a customer's prior tickets across runs.
-4. **Add a verify panel** on *Models & Verification*: Claude drafts, GPT-4o and Gemini review; block on disagreement, give it one revise pass.
-5. **Gate refunds** — instruct the agent to call `request_approval` for refunds over $500. The run pauses at `waiting_approval` and a human decides.
+1. **Create the agent** (*Agents → Create → Autonomous*) with a primary model — this one uses
+   **GPT-4o at temp 0.3** — and instructions to triage the ticket, look up the order, and draft
+   a reply in your voice.
+2. **Attach the tools** it needs — here an **order-lookup** tool generated from a connected
+   orders API. (Connect yours in *APIs → Connect API*.)
+3. **Add a verifier panel** (*Models & Verification → Configure*): add reviewers from more than
+   one vendor — this agent runs **GPT-4o + Gemini 1.5 Pro** with `any_fail_blocks` and up to
+   **2 revisions**, triggered `on_final_output`. The primary drafts, the reviewers try to
+   refute, and it revises before anything ships.
+4. **Set constraints** — always-on rules it can't argue past. This agent's include *"Never
+   promise a refund over $500 without escalating to a human first"* and *"Do not invent order
+   numbers or account details that are not in the ticket"* — plus one it **learned** from a
+   failed run ("Avoid the failure encountered previously: LLM provider is not healthy").
 
-![A pending refund escalation, waiting for a human](/screenshots/approvals-pending.png)
+   ![The agent's four constraints, including a learned one](/screenshots/support-agent-constraints.png)
 
-6. **Wire the trigger** — publish the agent on your `#support` Slack channel, or have your helpdesk call the agent's API when a ticket arrives. The drafted reply and any escalation post back to Slack.
+5. **Turn on memory** so it carries context between runs, and gate refunds with
+   `request_approval` — that's what paused the Brightway Logistics ticket above.
+6. **Wire the trigger** — call the agent's API when a ticket arrives (its endpoint is on the
+   Overview → Integration panel), or publish it on Slack.
 
 ## Make it yours
 
-- Swap Zendesk for Intercom or Freshdesk — same *Connect API* step.
-- Run L1-only fully autonomous (no approval) and reserve approvals for money-movement.
-- Add a PII-scrub instruction so drafts never echo card or account numbers.
+- Swap the orders API for Zendesk/Intercom — same *Connect API* step.
+- Tighten or loosen the refund threshold in the constraint.
+- Promote a good run to a **skill** (button on any completed run) so other agents reuse the flow.
 
-**Uses** — `Support` · `Slack` · `Verification` · `Approvals` · `Memory`
+**Uses** — `Support` · `Verification` · `Approvals` · `Memory`
 
 ## Related
 
-- [Autonomous agents](/agents/autonomous) · [Approvals](/approvals) · [Connect an API](/tools)
+- [Autonomous agents](/agents/autonomous) · [Approvals](/approvals) · [Verification](/agents/autonomous#verification) · [Connect an API](/tools)
