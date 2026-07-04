@@ -15,7 +15,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
-import { encryptField, isEncrypted } from '../../common/security/field-crypto';
+import { encryptChannelConfigSecrets, restoreMaskedChannelSecrets } from './channels/channel-config.helper';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
 import { EmailProvisioningService } from './channels/email-provisioning.service';
@@ -219,20 +219,18 @@ export class GatewaysService {
   }
 
   /**
-   * Channel configs can carry the channel app's OAuth client secret
-   * (multi-workspace installs, e.g. a Slack app's client_secret).
-   * Encrypt it at rest; decryption happens at the point of use
-   * (SlackInstallService), and isEncrypted() makes this idempotent so
-   * an already-encrypted value round-trips through update unchanged.
+   * Channel configs carry channel secrets: the app's OAuth client
+   * secret (multi-workspace installs, e.g. a Slack app's
+   * client_secret) plus per-channel credentials such as bot_token,
+   * twilio_auth_token, access_token, signing secrets, verify/bridge
+   * tokens etc. Encrypt them at rest; decryption happens at the point
+   * of use (getChannelConfig in the channel pipeline,
+   * SlackInstallService for OAuth), and isEncrypted() makes this
+   * idempotent so an already-encrypted value round-trips through
+   * update unchanged.
    */
   private encryptConfigSecrets(configuration?: Record<string, any>): void {
-    if (!configuration) return;
-    for (const key of ['client_secret', 'clientSecret']) {
-      const value = configuration[key];
-      if (typeof value === 'string' && value && !isEncrypted(value)) {
-        configuration[key] = encryptField(value);
-      }
-    }
+    encryptChannelConfigSecrets(configuration);
   }
 
   async createGateway(
@@ -372,6 +370,12 @@ export class GatewaysService {
 
       // Capture old values for change tracking (before mutation)
       const oldValues = { name: gateway.name, description: gateway.description, configuration: gateway.configuration, rateLimitConfig: gateway.rateLimitConfig, metadata: gateway.metadata };
+
+      // API responses mask channel secrets; an edit dialog that
+      // round-trips the whole configuration sends the mask back for
+      // untouched fields. Swap masked placeholders for the stored
+      // values so they survive the update.
+      restoreMaskedChannelSecrets(updateGatewayDto.configuration, gateway.configuration);
 
       // Update fields
       Object.assign(gateway, updateGatewayDto);

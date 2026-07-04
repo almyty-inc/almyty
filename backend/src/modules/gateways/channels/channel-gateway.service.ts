@@ -29,6 +29,7 @@ import { SignalAdapter } from './adapters/signal.adapter';
 import { MatrixAdapter } from './adapters/matrix.adapter';
 import { IrcAdapter } from './adapters/irc.adapter';
 import { ChannelInstallationService } from './channel-installation.service';
+import { getChannelConfig } from './channel-config.helper';
 
 @Injectable()
 export class ChannelGatewayService {
@@ -119,7 +120,11 @@ export class ChannelGatewayService {
     // override the gateway's single-workspace configuration for both
     // verification context and the reply. Gateways without
     // installations keep the existing single-credential behavior.
-    let effectiveConfig: Record<string, any> = gateway.configuration || {};
+    //
+    // getChannelConfig decrypts secrets stored encrypted at rest and
+    // normalizes legacy camelCase keys onto the snake_case names the
+    // adapters read.
+    let effectiveConfig: Record<string, any> = getChannelConfig(gateway.configuration);
     const tenantId = adapter.extractTenantId(body);
     if (tenantId && this.installationService) {
       try {
@@ -229,7 +234,7 @@ export class ChannelGatewayService {
 
           const formatted = adapter.formatOutbound({ text: responseText });
           try {
-            await adapter.sendResponse(sendConfig ?? gateway.configuration, formatted, {
+            await adapter.sendResponse(sendConfig ?? getChannelConfig(gateway.configuration), formatted, {
               threadId: normalized.threadId,
               channel: normalized.metadata?.channel,
               userId: normalized.userId,
@@ -545,7 +550,9 @@ export class ChannelGatewayService {
    */
   async testConnection(gateway: Gateway): Promise<{ ok: boolean; detail: string }> {
     const adapter = this.getAdapter(gateway.type);
-    const cfg = gateway.configuration || {};
+    // Decrypted + key-normalized view — testConnection exercises the
+    // same credentials the adapters would use.
+    const cfg = getChannelConfig(gateway.configuration);
     try {
       switch (gateway.type) {
         case GatewayType.SLACK: {
