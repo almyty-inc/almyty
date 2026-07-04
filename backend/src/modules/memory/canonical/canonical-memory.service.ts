@@ -39,7 +39,7 @@ import {
   itemToEntity,
   entityToItem,
 } from './canonical-memory.helpers';
-import { EmbeddingService } from '../embedding.service';
+import { EmbeddingService, EmbeddingResult } from '../embedding.service';
 import { CanonicalSearchHelper } from './canonical-search.helper';
 import { CanonicalMemoryOpsHelper } from './canonical-ops.helper';
 import { CanonicalPutValidators } from './canonical-put-validators.helper';
@@ -363,14 +363,32 @@ export class CanonicalMemoryService {
     const orgId = scopeToOrganizationId(query.scope.scope_type, query.scope.scope_id);
     const startedAt = Date.now();
 
-    let queryEmbedding: number[] | null = null;
+    let queryEmbedding: EmbeddingResult | null = null;
     if (!query.fts_only) {
       queryEmbedding = await this.embedding.generateEmbedding(query.query, orgId);
     }
 
-    const results = queryEmbedding
-      ? await this.searchHelper.hybridSearch(query, queryEmbedding, topK)
-      : await this.searchHelper.ftsSearch(query, topK);
+    let signal: 'hybrid' | 'fts' = queryEmbedding ? 'hybrid' : 'fts';
+    let results: RankedItem[];
+    if (queryEmbedding) {
+      // Pad/truncate the query vector to the pgvector column width
+      // (mistral-embed emits 1024-dim; the column is vector(1536) —
+      // without this the `<=>` operator errors on dimension mismatch).
+      const vector = EmbeddingService.padToDim(queryEmbedding.vector, LIMITS.EMBEDDING_DEFAULT_DIM);
+      results = await this.searchHelper.hybridSearch(query, vector, topK, queryEmbedding.model);
+      if (results.length === 0) {
+        // Cross-model fallback: rows embedded under a different model
+        // than the query (e.g. hash-embedded rows after the org added
+        // a real provider, or openai rows after switching to mistral)
+        // are excluded from the vector half by the like-with-like
+        // guard. Keep them discoverable via lexical FTS instead of
+        // silently comparing incompatible vectors.
+        results = await this.searchHelper.ftsSearch(query, topK);
+        signal = 'fts';
+      }
+    } else {
+      results = await this.searchHelper.ftsSearch(query, topK);
+    }
 
     // Bump access counters on the matched rows.
     if (results.length > 0) {
@@ -397,7 +415,7 @@ export class CanonicalMemoryService {
       resourceId: results[0]?.item.id ?? '',
       details: {
         query: query.query,
-        signal: queryEmbedding ? 'hybrid' : 'fts',
+        signal,
         result_count: results.length,
         latency_ms: Date.now() - startedAt,
       },
