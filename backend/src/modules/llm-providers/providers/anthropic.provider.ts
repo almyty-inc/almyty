@@ -7,6 +7,34 @@ import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service
 import { callLlmProviderHttp, callLlmProviderHttpStream } from './safe-request';
 
 /**
+ * Anthropic deprecates sampling params per model generation (e.g.
+ * `temperature` is rejected with a 400 invalid_request_error on
+ * claude-opus-4-8+). Callers like the provider health check set such
+ * params unconditionally, so instead of hardcoding a model->param
+ * matrix that rots, strip the named param and retry once when the API
+ * tells us exactly which one it no longer accepts.
+ */
+const DEPRECATED_PARAM_RE = /`(\w+)` is deprecated/;
+
+export async function callWithDeprecatedParamRetry<T>(
+  call: () => Promise<T>,
+  body: Record<string, unknown>,
+): Promise<T> {
+  try {
+    return await call();
+  } catch (error: any) {
+    const message = error?.response?.data?.error?.message;
+    const match = typeof message === 'string' ? message.match(DEPRECATED_PARAM_RE) : null;
+    if (match && match[1] in body) {
+      delete body[match[1]];
+      return call();
+    }
+    throw error;
+  }
+}
+
+
+/**
  * Handles Anthropic Claude API calls.
  */
 export async function callAnthropic(
@@ -60,7 +88,10 @@ export async function callAnthropic(
     signal: request.signal,
   };
 
-  const response: AxiosResponse = await callLlmProviderHttp(config);
+  const response: AxiosResponse = await callWithDeprecatedParamRetry(
+    () => callLlmProviderHttp(config),
+    anthropicRequest,
+  );
   const responseTime = Date.now() - startTime;
 
   const usage = response.data.usage;
@@ -183,7 +214,10 @@ export async function callAnthropicStream(
     signal: request.signal,
   };
 
-  const response: AxiosResponse = await callLlmProviderHttpStream(config);
+  const response: AxiosResponse = await callWithDeprecatedParamRetry(
+    () => callLlmProviderHttpStream(config),
+    anthropicRequest,
+  );
 
   let contentAccumulator = '';
   let modelName = '';
