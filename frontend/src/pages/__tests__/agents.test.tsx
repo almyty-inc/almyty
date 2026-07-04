@@ -227,6 +227,55 @@ describe('AgentsPage', () => {
       })
     })
 
+    it('shows an Autonomous badge instead of a node count for autonomous agents', async () => {
+      vi.mocked(agentsApi.getAll).mockResolvedValue([
+        {
+          id: 'agent-auto',
+          name: 'Autonomous Agent',
+          description: 'Runs on its own',
+          status: 'active',
+          mode: 'autonomous',
+          totalExecutions: 7,
+          // Autonomous agents have no meaningful pipeline — the list
+          // used to render a misleading "0" here.
+          pipeline: { nodes: [], edges: [] },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'agent-flow',
+          name: 'Workflow Agent',
+          description: 'Pipeline based',
+          status: 'active',
+          mode: 'workflow',
+          totalExecutions: 2,
+          pipeline: {
+            nodes: [
+              { id: 'input_1', type: 'input' },
+              { id: 'llm_1', type: 'llm_call' },
+              { id: 'output_1', type: 'output' },
+            ],
+            edges: [],
+          },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ])
+
+      renderAgentsPage()
+
+      await waitFor(() => {
+        expect(screen.getByText('Autonomous Agent')).toBeInTheDocument()
+      })
+
+      // Autonomous row renders the badge, not a zero.
+      expect(screen.getByText('Autonomous')).toBeInTheDocument()
+      expect(screen.queryByText('0')).not.toBeInTheDocument()
+
+      // Workflow row keeps the plain node count.
+      expect(screen.getByText('3')).toBeInTheDocument()
+    })
+
     it('should show execution count for each agent', async () => {
       renderAgentsPage()
 
