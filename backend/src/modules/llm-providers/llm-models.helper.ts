@@ -51,7 +51,13 @@ export class LlmModelsHelper {
     created?: number;
     owned_by?: string;
   }>> {
-    const apiUrl = provider.configuration.apiUrl || 'https://api.openai.com/v1';
+    // Use the provider's type-aware base URL. This previously defaulted to
+    // api.openai.com for ANY provider without a custom apiUrl, which both
+    // broke the models list for every OpenAI-compatible vendor (mistral,
+    // xai, deepseek, groq, together, openrouter -> 401) and sent their API
+    // keys to the wrong vendor. Found live: a healthy Mistral provider's
+    // models call 401'd because its key was going to OpenAI.
+    const apiUrl = provider.getApiUrl();
     // callLlmProviderHttp runs the SSRF gate and applies the shared
     // content / redirect hygiene defaults before delegating to axios.
     const response = await callLlmProviderHttp({
