@@ -32,6 +32,9 @@ export const CHANNEL_SECRET_CONFIG_KEYS: readonly string[] = [
   // Slack / Discord / Telegram
   'bot_token',
   'botToken',
+  // Microsoft Teams (Bot Framework app password)
+  'bot_password',
+  'botPassword',
   'signing_secret',
   'signingSecret',
   // Twilio (WhatsApp / SMS)
