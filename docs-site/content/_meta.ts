@@ -7,6 +7,7 @@ export default {
   tools: 'Tools',
   gateways: 'Gateways',
   agents: 'Agents',
+  'agentic-loops': 'Agentic Loops',
   'llm-providers': 'AI Models',
   interfaces: 'Chat Interfaces',
   'operate-separator': { type: 'separator', title: 'Operate' },
