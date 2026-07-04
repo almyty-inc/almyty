@@ -33,6 +33,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GatewayKind, GatewayType, GatewayStatus } from '../../entities/gateway.entity';
 import { GatewayAuthType } from '../../entities/gateway-auth.entity';
+import { maskChannelConfigSecrets } from './channels/channel-config.helper';
 
 import {
   CreateGatewayBodyDto,
@@ -57,6 +58,18 @@ export class GatewaysController {
     private readonly cliGeneratorService: CliGeneratorService,
     private readonly codegenService: CodegenService,
   ) {}
+
+  /**
+   * Channel secrets (bot tokens, signing secrets, ...) never leave the
+   * API in the clear — replace them with a fixed placeholder on every
+   * endpoint that returns a gateway. The update path swaps the
+   * placeholder back for the stored value, so round-tripping a masked
+   * configuration is safe.
+   */
+  private maskGatewaySecrets<T extends { configuration?: Record<string, any> | null }>(gateway: T): T {
+    if (!gateway || !gateway.configuration) return gateway;
+    return { ...gateway, configuration: maskChannelConfigSecrets(gateway.configuration) } as T;
+  }
 
   @Post()
   @Roles('admin', 'owner')
@@ -105,7 +118,7 @@ export class GatewaysController {
       return {
         success: true,
         data: {
-          ...gateway,
+          ...this.maskGatewaySecrets(gateway),
           initialApiKey, // Only returned once at creation time
         },
         message: initialApiKey
@@ -151,7 +164,10 @@ export class GatewaysController {
 
       return {
         success: true,
-        data: result,
+        data: {
+          ...result,
+          gateways: result.gateways.map((g) => this.maskGatewaySecrets(g)),
+        },
         message: 'Gateways retrieved successfully',
       };
     } catch (error) {
@@ -188,7 +204,7 @@ export class GatewaysController {
 
       return {
         success: true,
-        data: gateway,
+        data: this.maskGatewaySecrets(gateway),
         message: 'Gateway retrieved successfully',
       };
     } catch (error) {
@@ -232,7 +248,7 @@ export class GatewaysController {
 
       return {
         success: true,
-        data: gateway,
+        data: this.maskGatewaySecrets(gateway),
         message: 'Gateway updated successfully',
       };
     } catch (error) {
@@ -305,7 +321,7 @@ export class GatewaysController {
 
       return {
         success: true,
-        data: gateway,
+        data: this.maskGatewaySecrets(gateway),
         message: 'Gateway activated successfully',
       };
     } catch (error) {
@@ -341,7 +357,7 @@ export class GatewaysController {
 
       return {
         success: true,
-        data: gateway,
+        data: this.maskGatewaySecrets(gateway),
         message: 'Gateway deactivated successfully',
       };
     } catch (error) {

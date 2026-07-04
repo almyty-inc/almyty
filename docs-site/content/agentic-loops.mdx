@@ -1,0 +1,53 @@
+# Agentic loops
+
+An **agentic loop** is the pattern behind autonomous AI: *reason → act → observe → repeat*
+until a stopping condition. The agent takes an action, sees the result, decides the next move,
+and keeps going without a human between steps. The current wisdom — "loop engineering" — is that
+the loop, not the model, is what separates a reliable agent from a demo.
+
+almyty's [autonomous agents](/agents/autonomous) **are** governed agentic loops. You bring the
+model; almyty gives you the loop — and the controls that make it safe to leave running.
+
+## The loop, in almyty
+
+Each autonomous run is a loop of steps, and you can see every one:
+
+1. **Reason** — the primary model decides what to do next.
+2. **Act** — it calls a tool (an operation on a connected API, an npm/SDK function, a runner
+   command).
+3. **Observe** — the tool's result feeds back into context.
+4. **Evaluate & repeat** — it continues until the task is done or a stop condition fires.
+
+A real run from the demo's support agent: `tool_call` → *Lookup Order Status (NW-10428)* →
+observe → draft → **verify** → the reviewer caught an inconsistency → **1 revision** → pass.
+Three-to-six steps, visible end to end.
+
+## Loop engineering — the knobs almyty gives you
+
+The differentiator isn't that agents loop; it's that you can *engineer* the loop:
+
+- **Self-correction** — a cross-vendor **verifier panel** re-checks each result; on failure the
+  agent revises and retries. See [verification](/agents/autonomous#verification).
+- **Termination** — a **revise budget** (e.g. 2 revisions, `any_fail_blocks`) is the stop
+  condition, so a loop can't spin forever.
+- **Guardrails inside the loop** — always-on [constraints](/agents/autonomous#constraints), some
+  *learned from past failures*, bound what each iteration may do.
+- **Multi-agent loops** — [collaboration](/agents/autonomous#collaboration) runs several agents:
+  `sequential` chains, `parallel` fan-out, `race` first-to-finish, or `debate` (rounds of
+  argument settled by a judge).
+- **Human-in-the-loop** — [`request_approval`](/approvals) pauses the loop for a person before an
+  irreversible step, then resumes.
+- **Loops that compound** — [memory](/memory) carries context across runs, and a good run can be
+  promoted to a reusable [skill](/gateways/skills).
+
+## Why it matters
+
+A bare model call answers once. An agentic loop keeps working — checking itself, correcting, and
+stopping when it should. almyty makes that loop **observable** (every step in the run view),
+**bounded** (revise budgets, constraints), and **governed** (verification, approvals, audit) —
+so you can put a loop in production, not just a notebook.
+
+## Related
+
+- [Autonomous agents](/agents/autonomous) · [Verification](/agents/autonomous#verification) · [Collaboration](/agents/autonomous#collaboration) · [Approvals](/approvals) · [Memory](/memory)
+- Recipes: [self-checking support agent](/examples/support-ticket-triage) · [multi-model debate](/examples/cross-vendor-contract-review) · [governed refund agent](/examples/governed-refund-agent)

@@ -476,7 +476,18 @@ export function AgentsPage() {
                       {agent.status === 'active' ? 'Active' : agent.status === 'draft' ? 'Draft' : agent.status}
                     </Badge>
                   </td>
-                  <td className="py-3 px-4 text-sm text-muted-foreground">{nodeCount}</td>
+                  <td className="py-3 px-4 text-sm text-muted-foreground">
+                    {agent.mode === 'autonomous' ? (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0 border-violet-600 text-violet-600 dark:border-violet-500 dark:text-violet-400"
+                      >
+                        Autonomous
+                      </Badge>
+                    ) : (
+                      nodeCount
+                    )}
+                  </td>
                   <td className="py-3 px-4 text-sm text-muted-foreground">{agent.totalExecutions || 0}</td>
                   <td className="py-3 px-4 text-right">
                         <DropdownMenu>
