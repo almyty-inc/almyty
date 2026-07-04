@@ -13,6 +13,7 @@ import { setProtocolContext } from '../../common/interceptors/protocol-context';
 import { GatewayRateLimitService } from './gateway-rate-limit.service';
 import { ChannelGatewayService } from './channels/channel-gateway.service';
 import { WhatsAppCloudAdapter } from './channels/adapters/whatsapp-cloud.adapter';
+import { getChannelConfig } from './channels/channel-config.helper';
 import { Organization } from '../../entities/organization.entity';
 import { McpService } from '../mcp/mcp.service';
 import { AlmytyMcpService } from '../mcp/almyty-mcp.service';
@@ -179,7 +180,7 @@ export class UnifiedGatewayDelegation {
     if (req.method === 'GET' && gateway.type === GatewayType.WHATSAPP_CLOUD) {
       const challenge = WhatsAppCloudAdapter.handleVerification(
         (req.query as Record<string, any>) ?? {},
-        gateway.configuration || {},
+        getChannelConfig(gateway.configuration),
       );
       if (challenge === null) {
         throw new HttpException('Webhook verification failed', HttpStatus.FORBIDDEN);
@@ -209,7 +210,7 @@ export class UnifiedGatewayDelegation {
       : undefined;
 
     const adapter = this.channelGatewayService.getAdapter(gateway.type);
-    const verified = await adapter.verifyWebhook(body, headers, gateway.configuration || {}, rawBody);
+    const verified = await adapter.verifyWebhook(body, headers, getChannelConfig(gateway.configuration), rawBody);
     if (!verified) {
       this.bumpGatewayCounters(gateway.id, false);
       throw new HttpException('Webhook signature verification failed', HttpStatus.UNAUTHORIZED);
