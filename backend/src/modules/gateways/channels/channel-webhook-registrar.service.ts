@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { ChannelEvent } from '../../../entities/channel-event.entity';
+import { getChannelConfig } from './channel-config.helper';
 
 /**
  * Automatic inbound-webhook registration for channel gateways whose
@@ -154,7 +155,7 @@ export class ChannelWebhookRegistrar {
   // ---------------------------------------------------------------------------
 
   private async telegramSetWebhook(gateway: Gateway, publicUrl: string): Promise<void> {
-    const token = gateway.configuration?.bot_token;
+    const token = getChannelConfig(gateway.configuration).bot_token;
     if (!token) throw new Error('bot_token not configured');
     const res = await this.fetch(
       `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(publicUrl)}`,
@@ -167,7 +168,7 @@ export class ChannelWebhookRegistrar {
   }
 
   private async telegramDeleteWebhook(gateway: Gateway): Promise<void> {
-    const token = gateway.configuration?.bot_token;
+    const token = getChannelConfig(gateway.configuration).bot_token;
     if (!token) throw new Error('bot_token not configured');
     const res = await this.fetch(`https://api.telegram.org/bot${token}/deleteWebhook`, {
       method: 'POST',
@@ -184,7 +185,7 @@ export class ChannelWebhookRegistrar {
    * SID for the configured phone_number, then update its SmsUrl.
    */
   private async twilioSetWebhook(gateway: Gateway, url: string): Promise<void> {
-    const cfg = gateway.configuration || {};
+    const cfg = getChannelConfig(gateway.configuration);
     const accountSid = cfg.twilio_account_sid;
     const authToken = cfg.twilio_auth_token;
     const phoneNumber = cfg.phone_number;
