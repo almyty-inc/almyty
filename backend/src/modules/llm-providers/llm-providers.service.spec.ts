@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest } from './llm-providers.service';
+import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
 import { callOpenAI, callAnthropic, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
@@ -893,6 +893,28 @@ describe('LlmProvidersService', () => {
         expect.objectContaining({ lastError: expect.any(String) }),
       );
     });
+
+    it('does not overwrite lastError with the health gate wording when gated', async () => {
+      // Provider already marked unhealthy: the pre-flight gate in
+      // chat() throws its own wording. That message must NOT be
+      // persisted as lastError — it would erase the real upstream
+      // error the operator needs to see.
+      const mockProvider = {
+        id: 'provider-1',
+        isHealthy: false,
+        maskSensitiveData: jest.fn().mockReturnThis(),
+      };
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+
+      await expect(service.chat('provider-1', chatRequest, 'org-1', 'user-1'))
+        .rejects
+        .toThrow(LLM_HEALTH_GATE_MESSAGE);
+
+      expect(llmProviderRepository.update).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ lastError: LLM_HEALTH_GATE_MESSAGE }),
+      );
+    });
   });
 
   describe('performHealthCheck', () => {
@@ -990,6 +1012,96 @@ describe('LlmProvidersService', () => {
 
       expect(result.isHealthy).toBe(false);
       expect(result.error).toContain('API Error');
+    });
+
+    it('surfaces the upstream provider error body instead of the bare axios message', async () => {
+      const mockProvider = {
+        id: 'provider-1',
+        type: LlmProviderType.ANTHROPIC,
+        configuration: { apiKey: 'test-key' },
+        organizationId: 'org-1',
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+
+      // Anthropic-style 400: the actionable message lives in the
+      // response body; error.message is the useless transport line.
+      const upstream =
+        'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.';
+      const axiosError = Object.assign(new Error('Request failed with status code 400'), {
+        isAxiosError: true,
+        response: {
+          status: 400,
+          data: { type: 'error', error: { type: 'invalid_request_error', message: upstream } },
+        },
+      });
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(axiosError);
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.isHealthy).toBe(false);
+      expect(result.error).toContain('credit balance is too low');
+      expect(result.error).not.toContain('Request failed with status code 400');
+      expect(llmProviderRepository.update).toHaveBeenCalledWith(
+        { id: 'provider-1', organizationId: 'org-1' },
+        expect.objectContaining({
+          isHealthy: false,
+          lastError: expect.stringContaining('credit balance is too low'),
+        }),
+      );
+    });
+
+    it('falls back to the OpenAI-style body message shape', async () => {
+      const mockProvider = {
+        id: 'provider-1',
+        type: LlmProviderType.OPENAI,
+        configuration: { apiKey: 'test-key' },
+        organizationId: 'org-1',
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+
+      const axiosError = Object.assign(new Error('Request failed with status code 401'), {
+        isAxiosError: true,
+        response: { status: 401, data: { message: 'Incorrect API key provided' } },
+      });
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(axiosError);
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.error).toContain('Incorrect API key provided');
+      expect(llmProviderRepository.update).toHaveBeenCalledWith(
+        { id: 'provider-1', organizationId: 'org-1' },
+        expect.objectContaining({ lastError: expect.stringContaining('Incorrect API key provided') }),
+      );
+    });
+
+    it('never persists the health gate wording as lastError', async () => {
+      const mockProvider = {
+        id: 'provider-1',
+        type: LlmProviderType.ANTHROPIC,
+        configuration: { apiKey: 'test-key' },
+        organizationId: 'org-1',
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+
+      jest
+        .spyOn(runnerInstance as any, 'callLlmProvider')
+        .mockRejectedValue(new BadRequestException(LLM_HEALTH_GATE_MESSAGE));
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.isHealthy).toBe(false);
+      // The circular wording is returned to the caller but never
+      // written over the provider's stored lastError.
+      expect(llmProviderRepository.update).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ lastError: LLM_HEALTH_GATE_MESSAGE }),
+      );
     });
   });
 
