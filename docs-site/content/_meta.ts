@@ -21,6 +21,7 @@ export default {
   referrals: 'Referrals',
   enterprise: 'Enterprise',
   'reference-separator': { type: 'separator', title: 'Reference' },
+  'control-via-mcp': 'Control via MCP',
   cli: 'CLI',
   'api-reference': 'API Reference',
   'self-hosting': 'Self-Hosting',
