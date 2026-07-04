@@ -32,6 +32,16 @@ import { installFetchMock } from '../adapters/__tests__/test-helpers';
  * testConnection read path that must receive decrypted, key-normalized
  * credentials.
  */
+
+describe('teams bot_password coverage', () => {
+  const { CHANNEL_SECRET_CONFIG_KEYS, LEGACY_CHANNEL_CONFIG_KEY_MAP } = require('../channel-config.helper');
+  it('bot_password is treated as a secret (encrypted + masked) incl. legacy camelCase', () => {
+    expect(CHANNEL_SECRET_CONFIG_KEYS).toContain('bot_password');
+    expect(CHANNEL_SECRET_CONFIG_KEYS).toContain('botPassword');
+    expect(LEGACY_CHANNEL_CONFIG_KEY_MAP.botPassword).toBe('bot_password');
+  });
+});
+
 describe('channel-config.helper', () => {
   describe('encryptChannelConfigSecrets', () => {
     it('encrypts every secret key and leaves non-secrets alone', () => {
