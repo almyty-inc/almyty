@@ -71,6 +71,38 @@ export function safeErrorBody(errorBody: any): string | null {
   }
 }
 
+/**
+ * Wording of the pre-flight health gate in LlmChatHelper.chat(). This
+ * message describes our OWN gate, not an upstream provider failure, so
+ * it must never be persisted as a provider's `lastError` — doing so
+ * overwrites the real upstream error with a circular "not healthy
+ * because it is not healthy".
+ */
+export const LLM_HEALTH_GATE_MESSAGE = 'LLM provider is not healthy';
+
+/**
+ * Extract the human-useful upstream provider error from an axios-style
+ * error. Provider APIs put the actionable message in the response body
+ * (e.g. Anthropic: `{ type: 'error', error: { message: '...' } }`,
+ * OpenAI: `{ error: { message: '...' } }`) while `error.message` is the
+ * bare transport line ("Request failed with status code 400"). Same
+ * extraction order as the agent-node executor's LLM error handler.
+ * The result is secret-redacted and length-capped like safeErrorMessage.
+ */
+export function extractUpstreamErrorMessage(error: any): string {
+  const data = error?.response?.data;
+  const candidates = [
+    data?.error?.message,
+    data?.message,
+    typeof data === 'string' ? data : undefined,
+    typeof error?.message === 'string' ? error.message : undefined,
+  ];
+  const first = candidates.find(
+    (c) => typeof c === 'string' && c.trim().length > 0,
+  ) || 'Unknown error';
+  return String(first).replace(SECRET_VALUE_PATTERN, '[REDACTED]').slice(0, 500);
+}
+
 @Injectable()
 export class LlmProvidersService {
   private readonly logger = new Logger(LlmProvidersService.name);
@@ -422,20 +454,28 @@ export class LlmProvidersService {
         },
       };
     } catch (error: any) {
+      // Surface the upstream provider's own error message (e.g.
+      // Anthropic's "Your credit balance is too low...") instead of
+      // the bare axios transport line. Never persist the health
+      // gate's own wording — that would be circular.
+      const upstreamMessage = extractUpstreamErrorMessage(error);
+
       // Record a failed health check on the provider row (still
       // org-scoped so we don't touch a foreign provider on errors
       // either). Partial UPDATE for the same race reason.
-      try {
-        await this.llmProviderRepository.update(
-          { id: providerId, organizationId },
-          {
-            isHealthy: false,
-            lastHealthCheckAt: new Date(),
-            lastError: error.message,
-          },
-        );
-      } catch (updateError: any) {
-        this.logger.warn(`Failed to update provider health status: ${updateError.message}`);
+      if (upstreamMessage !== LLM_HEALTH_GATE_MESSAGE) {
+        try {
+          await this.llmProviderRepository.update(
+            { id: providerId, organizationId },
+            {
+              isHealthy: false,
+              lastHealthCheckAt: new Date(),
+              lastError: upstreamMessage,
+            },
+          );
+        } catch (updateError: any) {
+          this.logger.warn(`Failed to update provider health status: ${updateError.message}`);
+        }
       }
 
       return {
@@ -445,7 +485,7 @@ export class LlmProvidersService {
         // The caller only gets a response time when the request
         // actually started, so leave it undefined on the error path.
         responseTime: undefined,
-        error: error.message,
+        error: upstreamMessage,
       };
     }
   }
