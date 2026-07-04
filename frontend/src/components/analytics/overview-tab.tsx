@@ -25,7 +25,7 @@ import { analyticsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import type { TimelineEntry } from '@/types'
 
-import { formatMs, formatNumber } from './format'
+import { computeYAxisMax, formatMs, formatNumber } from './format'
 import { StatCard } from './stat-card'
 
 export function OverviewTab() {
@@ -65,6 +65,14 @@ export function OverviewTab() {
     }
     return days
   }, [timeline])
+
+  // Nice, data-driven ceiling for the requests chart y-axis — scales
+  // with actual volume instead of pinning low-traffic weeks to a tall
+  // fixed axis.
+  const requestsYMax = useMemo(
+    () => computeYAxisMax(timelineData.map((d) => d.requests)),
+    [timelineData],
+  )
 
   return (
     <div>
@@ -129,7 +137,7 @@ export function OverviewTab() {
               <LineChart data={timelineData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="date" className="text-xs" />
-                <YAxis className="text-xs" />
+                <YAxis className="text-xs" domain={[0, requestsYMax]} allowDecimals={false} />
                 <Tooltip />
                 <Line
                   type="monotone"
