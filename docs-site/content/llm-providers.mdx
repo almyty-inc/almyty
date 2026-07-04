@@ -93,7 +93,7 @@ curl -X DELETE /llm-providers/{id} \
 | Azure OpenAI | `openai` | Set `baseUrl` to your Azure deployment |
 | AWS Bedrock | `openai` | Via OpenAI-compatible proxy |
 | Google Vertex | `openai` | Via OpenAI-compatible proxy |
-| Mistral | `openai` | Set `baseUrl` to `https://api.mistral.ai/v1` |
+| Mistral | `mistral` | Native type; `baseUrl` defaults to `https://api.mistral.ai/v1`. Chat models include Codestral (`codestral-latest`); also serves memory embeddings via `mistral-embed` |
 | Cohere | `openai` | Via OpenAI-compatible endpoint |
 | Groq | `openai` | Set `baseUrl` to `https://api.groq.com/openai/v1` |
 | Together | `openai` | Set `baseUrl` to `https://api.together.xyz/v1` |
@@ -120,6 +120,12 @@ For providers listed as type `openai`, set the `baseUrl` field to point at the p
 ## Cost tracking
 
 almyty tracks token usage and estimated cost for every LLM call. View aggregate costs per provider in the **Analytics** dashboard or on the provider detail page.
+
+Estimates use built-in list-price tables per provider type (OpenAI, Anthropic, Gemini, Mistral — including Codestral and `mistral-embed` — xAI, DeepSeek, Groq, Together, Cohere, and OpenRouter passthrough), refreshed against published prices as of January 2026. Configure per-model pricing on a provider to override the defaults. See [Cost governance](/cost-governance) for reconciliation against provider actuals.
+
+## Memory embeddings
+
+The [Memory](/memory) module embeds content with the organization's own providers. When both are configured, OpenAI (`text-embedding-3-small`) is preferred over Mistral (`mistral-embed`); with neither, a deterministic local fallback keeps memory searchable. Each stored memory records the model that embedded it, and vector search only compares like with like.
 
 ## Usage in agents
 
