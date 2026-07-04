@@ -13,6 +13,8 @@ Agents are most useful where your users already are. Deploying an agent to a cha
 
 Messages then round-trip: platform → adapter (verify, normalize) → agent run → adapter (format for the platform) → reply.
 
+![The Channel Setup panel — your exact webhook URL or embed snippet, the platform-side checklist, and a live connection test](/screenshots/interfaces-channel-setup.png)
+
 ## Supported channels
 
 | Channel | Inbound | Outbound | You need |
@@ -115,6 +117,12 @@ Copy the embed snippet from the setup panel into your site's HTML, just before t
 ```
 
 No webhook needed — the widget talks to almyty directly.
+
+## Customizing the chat widget
+
+Chat-widget gateways get a **widget builder** on their gateway page: title, color, position, launcher icon, theme, and greeting — with a live preview that runs the exact `widget.js` the gateway serves, and the one-line embed snippet.
+
+![The widget builder — customize and preview the embeddable widget, then copy the snippet](/screenshots/widget-builder.png)
 
 ## AI disclosure (EU AI Act Art. 50)
 
