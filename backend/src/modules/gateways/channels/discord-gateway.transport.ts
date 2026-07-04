@@ -13,6 +13,7 @@ import { WebSocket } from 'ws';
 
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { ChannelGatewayService } from './channel-gateway.service';
+import { getChannelConfig } from './channel-config.helper';
 
 /**
  * Discord delivers inbound messages over a persistent Gateway
@@ -201,7 +202,7 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
   sync(gateway: Gateway): void {
     if (gateway.type !== GatewayType.DISCORD) return;
     const shouldRun =
-      gateway.status === GatewayStatus.ACTIVE && !!gateway.configuration?.bot_token;
+      gateway.status === GatewayStatus.ACTIVE && !!getChannelConfig(gateway.configuration).bot_token;
     if (shouldRun) {
       this.start(gateway);
     } else {
@@ -535,7 +536,7 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
     this.sendJson(socket, {
       op: Op.IDENTIFY,
       d: {
-        token: conn.gateway.configuration?.bot_token,
+        token: getChannelConfig(conn.gateway.configuration).bot_token,
         intents: DISCORD_INTENTS,
         properties: { os: process.platform, browser: 'almyty', device: 'almyty' },
       },
@@ -546,7 +547,7 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
     this.sendJson(socket, {
       op: Op.RESUME,
       d: {
-        token: conn.gateway.configuration?.bot_token,
+        token: getChannelConfig(conn.gateway.configuration).bot_token,
         session_id: conn.sessionId,
         seq: conn.seq,
       },
