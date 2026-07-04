@@ -305,11 +305,11 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Slack Settings</p>
                 <div>
                   <Label htmlFor="cfg-slack-token">Bot Token</Label>
-                  <Input id="cfg-slack-token" type="password" placeholder="xoxb-..." value={interfaceConfig.botToken || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, botToken: e.target.value }))} className="mt-1" />
+                  <Input id="cfg-slack-token" type="password" placeholder="xoxb-..." value={interfaceConfig.bot_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, bot_token: e.target.value }))} className="mt-1" />
                 </div>
                 <div>
                   <Label htmlFor="cfg-slack-secret">Signing Secret</Label>
-                  <Input id="cfg-slack-secret" type="password" placeholder="Signing secret" value={interfaceConfig.signingSecret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, signingSecret: e.target.value }))} className="mt-1" />
+                  <Input id="cfg-slack-secret" type="password" placeholder="Signing secret" value={interfaceConfig.signing_secret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, signing_secret: e.target.value }))} className="mt-1" />
                 </div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-1">Multi-workspace installs (optional)</p>
                 <div>
@@ -329,7 +329,7 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Discord Settings</p>
                 <div>
                   <Label htmlFor="cfg-discord-token">Bot Token</Label>
-                  <Input id="cfg-discord-token" type="password" placeholder="Bot token" value={interfaceConfig.botToken || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, botToken: e.target.value }))} className="mt-1" />
+                  <Input id="cfg-discord-token" type="password" placeholder="Bot token" value={interfaceConfig.bot_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, bot_token: e.target.value }))} className="mt-1" />
                 </div>
               </div>
             )}
@@ -339,7 +339,7 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Telegram Settings</p>
                 <div>
                   <Label htmlFor="cfg-telegram-token">Bot Token</Label>
-                  <Input id="cfg-telegram-token" type="password" placeholder="123456:ABC-DEF..." value={interfaceConfig.botToken || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, botToken: e.target.value }))} className="mt-1" />
+                  <Input id="cfg-telegram-token" type="password" placeholder="123456:ABC-DEF..." value={interfaceConfig.bot_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, bot_token: e.target.value }))} className="mt-1" />
                 </div>
                 <p className="text-xs text-muted-foreground">The Telegram webhook is registered automatically on deploy.</p>
               </div>
@@ -350,15 +350,15 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Twilio Settings</p>
                 <div>
                   <Label htmlFor="cfg-twilio-sid">Account SID</Label>
-                  <Input id="cfg-twilio-sid" placeholder="AC..." value={interfaceConfig.accountSid || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, accountSid: e.target.value }))} className="mt-1" />
+                  <Input id="cfg-twilio-sid" placeholder="AC..." value={interfaceConfig.twilio_account_sid || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, twilio_account_sid: e.target.value }))} className="mt-1" />
                 </div>
                 <div>
                   <Label htmlFor="cfg-twilio-token">Auth Token</Label>
-                  <Input id="cfg-twilio-token" type="password" placeholder="Auth token" value={interfaceConfig.authToken || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, authToken: e.target.value }))} className="mt-1" />
+                  <Input id="cfg-twilio-token" type="password" placeholder="Auth token" value={interfaceConfig.twilio_auth_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, twilio_auth_token: e.target.value }))} className="mt-1" />
                 </div>
                 <div>
                   <Label htmlFor="cfg-twilio-phone">{newInterfaceType === 'whatsapp' ? 'WhatsApp Sender Number' : 'Phone Number'}</Label>
-                  <Input id="cfg-twilio-phone" placeholder="+15551234567" value={interfaceConfig.phoneNumber || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, phoneNumber: e.target.value }))} className="mt-1" />
+                  <Input id="cfg-twilio-phone" placeholder="+15551234567" value={interfaceConfig.phone_number || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, phone_number: e.target.value }))} className="mt-1" />
                 </div>
                 <p className="text-xs text-muted-foreground">The number's inbound webhook is registered automatically where the platform supports it.</p>
               </div>
@@ -369,19 +369,19 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">WhatsApp Cloud Settings</p>
                 <div>
                   <Label htmlFor="cfg-wac-token">Access Token</Label>
-                  <Input id="cfg-wac-token" type="password" placeholder="Meta access token" value={interfaceConfig.accessToken || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, accessToken: e.target.value }))} className="mt-1" />
+                  <Input id="cfg-wac-token" type="password" placeholder="Meta access token" value={interfaceConfig.access_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, access_token: e.target.value }))} className="mt-1" />
                 </div>
                 <div>
                   <Label htmlFor="cfg-wac-phone-id">Phone Number ID</Label>
-                  <Input id="cfg-wac-phone-id" placeholder="Phone number ID" value={interfaceConfig.phoneNumberId || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, phoneNumberId: e.target.value }))} className="mt-1" />
+                  <Input id="cfg-wac-phone-id" placeholder="Phone number ID" value={interfaceConfig.phone_number_id || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, phone_number_id: e.target.value }))} className="mt-1" />
                 </div>
                 <div>
                   <Label htmlFor="cfg-wac-verify">Verify Token</Label>
-                  <Input id="cfg-wac-verify" type="password" placeholder="Webhook verify token" value={interfaceConfig.verifyToken || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, verifyToken: e.target.value }))} className="mt-1" />
+                  <Input id="cfg-wac-verify" type="password" placeholder="Webhook verify token" value={interfaceConfig.verify_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, verify_token: e.target.value }))} className="mt-1" />
                 </div>
                 <div>
                   <Label htmlFor="cfg-wac-secret">App Secret</Label>
-                  <Input id="cfg-wac-secret" type="password" placeholder="Meta app secret" value={interfaceConfig.appSecret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, appSecret: e.target.value }))} className="mt-1" />
+                  <Input id="cfg-wac-secret" type="password" placeholder="Meta app secret" value={interfaceConfig.app_secret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, app_secret: e.target.value }))} className="mt-1" />
                 </div>
               </div>
             )}
