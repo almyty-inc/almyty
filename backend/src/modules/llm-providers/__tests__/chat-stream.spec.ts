@@ -6,8 +6,10 @@ import { Conversation } from '../../../entities/conversation.entity';
 import { MessageRole } from '../../../entities/message.entity';
 import { ChatRequest, StreamChunk } from '../llm-providers.service';
 
-// Mock safe-request to avoid real HTTP calls
+// Mock safe-request to avoid real HTTP calls (keep the real
+// llmCallOptionsFor — it is pure env/provider-type logic).
 jest.mock('../providers/safe-request', () => ({
+  ...jest.requireActual('../providers/safe-request'),
   callLlmProviderHttp: jest.fn(),
   callLlmProviderHttpStream: jest.fn(),
 }));

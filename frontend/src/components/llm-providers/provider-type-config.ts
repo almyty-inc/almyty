@@ -18,6 +18,7 @@ export const providerLogos: Record<string, string> = {
   aws_bedrock: '🪨',
   cohere: '🌀',
   huggingface: '🤗',
+  ollama: '🦙',
   custom: '⚙️',
 }
 
@@ -58,8 +59,11 @@ export function usageApiSupported(type?: string): boolean {
  * Where each provider's API key is created. Rendered as a "Get your API
  * key ↗" deep-link in the add/edit-provider dialog so onboarding doesn't
  * require hunting through each vendor's console. Mirrors the backend
- * catalog (llm-provider-catalog.ts getProviderKeyUrl); `custom` is
- * intentionally absent (the key lives at the user's own endpoint).
+ * catalog (llm-provider-catalog.ts getProviderKeyUrl); `custom` and
+ * `custom` is intentionally absent (keys live at the user's own
+ * endpoint). ollama links the CLOUD key page (ollama.com also runs a
+ * hosted service); local mode is keyless — the dialog shows a setup
+ * note instead of a key link).
  */
 export const providerKeyUrls: Record<string, string> = {
   openai: 'https://platform.openai.com/api-keys',
@@ -75,4 +79,5 @@ export const providerKeyUrls: Record<string, string> = {
   aws_bedrock: 'https://console.aws.amazon.com/bedrock',
   cohere: 'https://dashboard.cohere.com/api-keys',
   huggingface: 'https://huggingface.co/settings/tokens',
+  ollama: 'https://ollama.com/settings/keys',
 }

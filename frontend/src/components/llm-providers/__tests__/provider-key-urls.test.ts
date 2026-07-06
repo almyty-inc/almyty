@@ -32,6 +32,10 @@ describe('providerKeyUrls', () => {
     expect(providerKeyUrls['custom']).toBeUndefined()
   })
 
+  it('ollama links the cloud key page (local mode is keyless)', () => {
+    expect(providerKeyUrls['ollama']).toBe('https://ollama.com/settings/keys')
+  })
+
   it('every URL is a valid https URL', () => {
     for (const [provider, url] of Object.entries(providerKeyUrls)) {
       expect(url, `${provider} must be https`).toMatch(/^https:\/\/\S+$/)

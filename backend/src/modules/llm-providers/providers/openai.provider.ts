@@ -4,7 +4,7 @@ import { Conversation } from '../../../entities/conversation.entity';
 import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service';
-import { callLlmProviderHttp, callLlmProviderHttpStream } from './safe-request';
+import { callLlmProviderHttp, callLlmProviderHttpStream, llmCallOptionsFor } from './safe-request';
 
 /**
  * Handles OpenAI-compatible provider calls (OpenAI, Azure OpenAI, Mistral, xAI,
@@ -80,7 +80,10 @@ export async function callOpenAI(
     signal: request.signal,
   };
 
-  const response: AxiosResponse = await callLlmProviderHttp(config);
+  // llmCallOptionsFor: Ollama providers may target private URLs when
+  // OLLAMA_ALLOW_PRIVATE_URLS=true (self-hosted); every other type
+  // always gets the full SSRF gate.
+  const response: AxiosResponse = await callLlmProviderHttp(config, llmCallOptionsFor(provider));
   const responseTime = Date.now() - startTime;
 
   const choice = response.data.choices[0];
@@ -225,7 +228,7 @@ export async function callOpenAIStream(
     signal: request.signal,
   };
 
-  const response: AxiosResponse = await callLlmProviderHttpStream(config);
+  const response: AxiosResponse = await callLlmProviderHttpStream(config, llmCallOptionsFor(provider));
 
   // Parse SSE stream
   let contentAccumulator = '';
