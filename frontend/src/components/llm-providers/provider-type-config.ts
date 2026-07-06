@@ -60,8 +60,9 @@ export function usageApiSupported(type?: string): boolean {
  * key ↗" deep-link in the add/edit-provider dialog so onboarding doesn't
  * require hunting through each vendor's console. Mirrors the backend
  * catalog (llm-provider-catalog.ts getProviderKeyUrl); `custom` and
- * `ollama` are intentionally absent (custom keys live at the user's own
- * endpoint; ollama is keyless — the create dialog shows a local-setup
+ * `custom` is intentionally absent (keys live at the user's own
+ * endpoint). ollama links the CLOUD key page (ollama.com also runs a
+ * hosted service); local mode is keyless — the dialog shows a setup
  * note instead of a key link).
  */
 export const providerKeyUrls: Record<string, string> = {
@@ -78,4 +79,5 @@ export const providerKeyUrls: Record<string, string> = {
   aws_bedrock: 'https://console.aws.amazon.com/bedrock',
   cohere: 'https://dashboard.cohere.com/api-keys',
   huggingface: 'https://huggingface.co/settings/tokens',
+  ollama: 'https://ollama.com/settings/keys',
 }

@@ -105,7 +105,8 @@ export function getProviderKeyUrl(type: LlmProviderType): string | null | undefi
     // Ollama needs no API key — it runs on the user's own machine (an
     // optional key exists only for auth proxies), so like CUSTOM there
     // is no canonical key page.
-    [LlmProviderType.OLLAMA]: null,
+    // Local Ollama needs no key; this is the CLOUD key page (ollama.com).
+    [LlmProviderType.OLLAMA]: 'https://ollama.com/settings/keys',
     [LlmProviderType.CUSTOM]: null,
   };
   return urls[type];
