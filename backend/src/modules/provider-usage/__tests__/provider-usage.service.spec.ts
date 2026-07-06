@@ -76,6 +76,15 @@ describe('ProviderUsageService', () => {
     expect(unsupported.every((c) => !!c.note)).toBe(true);
   });
 
+  it('explains precisely why Mistral usage is not ingested (console-only, no public API)', () => {
+    const mistral = providerUsageCapability(LlmProviderType.MISTRAL);
+    expect(mistral.supported).toBe(false);
+    expect(mistral.requiresAdminKey).toBe(false);
+    expect(mistral.note).toBe(
+      'Mistral exposes usage only in the La Plateforme console; there is no public usage/billing API. Not ingested.',
+    );
+  });
+
   // ── OpenAI parsing ─────────────────────────────────────────────────
 
   it('parses + merges OpenAI usage (tokens) and costs (dollars) by bucket', () => {

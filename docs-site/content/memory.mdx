@@ -44,9 +44,13 @@ and the important ones graduate to durable memory on their own.
 
 Retrieval is **hybrid search**: vector similarity (pgvector, cosine) blended with
 Postgres full-text search, then filtered by scope, tier, tags, and validity.
-Embeddings are generated per scope (OpenAI `text-embedding-3-small` today, with a
-deterministic fallback) and computed asynchronously, so a new memory becomes
-searchable a moment after it is written.
+Embeddings are generated per scope with the organization's own providers —
+OpenAI `text-embedding-3-small` preferred, Mistral `mistral-embed` next, and a
+deterministic fallback when neither is configured — and computed asynchronously,
+so a new memory becomes searchable a moment after it is written. Each memory
+records the model that embedded it; the vector half of search only compares
+vectors from the same model (embeddings from different models are not
+comparable), falling back to full-text search across models.
 
 ## Bi-temporal history
 
