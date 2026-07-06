@@ -111,6 +111,10 @@ The `ollama` type talks to an [Ollama](https://ollama.com) server. Chat, streami
 
 Because Ollama usually listens on localhost or a private network, almyty's SSRF protection blocks such URLs by default. Self-hosted deployments opt in with `OLLAMA_ALLOW_PRIVATE_URLS=true` on the backend — see [Self-hosting](/self-hosting#local-models-with-ollama). On hosted almyty the Ollama server must be reachable at a public URL.
 
+### Ollama cloud
+
+The same provider type also works with [Ollama's hosted service](https://ollama.com): set the base URL to `https://ollama.com` and paste an API key from [ollama.com/settings/keys](https://ollama.com/settings/keys). You get the hosted model catalog (large open models like `gpt-oss:120b` or `qwen3.5:397b` without local hardware), the key is sent as a Bearer token, and no SSRF opt-in is needed — it is a public endpoint like any other provider. Hosted-model usage is billed by Ollama; almyty's cost accounting treats the type as zero-cost, so track spend in your Ollama account.
+
 ## Configuration reference
 
 | Parameter | Type | Default | Description |
