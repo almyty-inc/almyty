@@ -102,7 +102,7 @@ packages/
 - **Agent node types** (10): `input`, `output`, `llm_call`, `tool_call`, `condition`, `transform`, `loop`, `parallel`, `merge`, `sub_agent`
 - **Gateway types**: MCP, A2A, UTCP, Skills
 - **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed via worker_threads), GraphQL, LLM, SDK
-- **LLM Providers**: 14 (OpenAI, Anthropic, Gemini, Azure, Bedrock, Vertex, Mistral, Cohere, Groq, Together, Perplexity, DeepSeek, Ollama, Custom)
+- **LLM Providers**: 15 (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, Together, OpenRouter, Azure OpenAI, AWS Bedrock, Cohere, Hugging Face, Ollama, Custom). Ollama is keyless local inference; private URLs are gated by `OLLAMA_ALLOW_PRIVATE_URLS` (default off).
 - **Chat channel adapters**: 12, in `gateways/channels/adapters/` NOT `interfaces/` (Slack, Discord, Telegram, WhatsApp, Microsoft Teams, Google Chat, Signal, Matrix, IRC, Email, Webhook, Chat Widget). Shared pipeline + AI disclosure in `channel-gateway.service.ts`; Discord inbound via `discord-gateway.transport.ts`. Audit: `docs/interface-adapters-audit.md`
 - **Built-in plugins**: 5 (performance-monitor, rate-limiter, pii-filter, request-logger, security-scanner)
 - **Backend tests**: ~130 spec files, 4,108 passing (NestJS 11, Node 24). Real-integration specs in `src/test/integration/` require `RUN_DB_INTEGRATION=1`.
