@@ -35,7 +35,7 @@ import {
 import { CanonicalSearchHelper } from '../../modules/memory/canonical/canonical-search.helper';
 import { CanonicalMemoryOpsHelper } from '../../modules/memory/canonical/canonical-ops.helper';
 import { CanonicalPutValidators } from '../../modules/memory/canonical/canonical-put-validators.helper';
-import { EmbeddingService } from '../../modules/memory/embedding.service';
+import { EmbeddingService, HASH_EMBEDDING_MODEL } from '../../modules/memory/embedding.service';
 import { DocumentChunkerService } from '../../modules/memory/canonical/document-chunker.service';
 import { ConsolidationService } from '../../modules/memory/canonical/consolidation.service';
 import { LlmProvidersService } from '../../modules/llm-providers/llm-providers.service';
@@ -145,8 +145,9 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
     // (matches the column's vector(1536) constraint and the canonical
     // default dim). The projection is text-content-derived so similar
     // inputs produce similar vectors and cosine distance is meaningful.
-    // The real OpenAI path is covered separately in EmbeddingService
-    // unit tests.
+    // Model/dim metadata mirrors what the hash fallback reports so the
+    // like-with-like vector search guard matches across write and read.
+    // The real provider paths are covered in EmbeddingService unit tests.
     const embeddingStub: Pick<EmbeddingService, 'generateEmbedding' | 'cosineSimilarity'> = {
       generateEmbedding: jest.fn(async (text: string) => {
         const dim = 1536;
@@ -155,7 +156,8 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
           v[i % dim] += (text.charCodeAt(i) % 13) / 13;
         }
         const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0));
-        return norm > 0 ? v.map((x) => x / norm) : v;
+        const vector = norm > 0 ? v.map((x) => x / norm) : v;
+        return { vector, model: HASH_EMBEDDING_MODEL, dim, provider: 'hash' as const };
       }),
       cosineSimilarity: jest.fn(),
     };
