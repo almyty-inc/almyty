@@ -3,7 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import axios from 'axios';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
-import { validateUrl } from '../../common/security/url-validator';
+import {
+  validateUrl,
+  validateUrlAllowingPrivate,
+  ollamaPrivateUrlsAllowed,
+} from '../../common/security/url-validator';
 import { LIMITS } from './canonical/canonical.constants';
 
 /**
@@ -25,19 +29,26 @@ export const HASH_EMBEDDING_MODEL = 'hash-ngram-v1';
  */
 export interface EmbeddingResult {
   vector: number[];
-  /** Model that produced the vector, e.g. 'text-embedding-3-small', 'mistral-embed', or HASH_EMBEDDING_MODEL. */
+  /** Model that produced the vector, e.g. 'text-embedding-3-small', 'mistral-embed', 'nomic-embed-text', or HASH_EMBEDDING_MODEL. */
   model: string;
   /** Raw model output dimensionality, BEFORE any padding to the pgvector column width. */
   dim: number;
-  provider: 'openai' | 'mistral' | 'hash';
+  provider: 'openai' | 'mistral' | 'ollama' | 'hash';
 }
 
 interface EmbeddingBackend {
-  provider: 'openai' | 'mistral';
-  model: string;
+  provider: 'openai' | 'mistral' | 'ollama';
+  /** Default embedding model; overridable per provider via configuration.embeddingModel. */
+  defaultModel: string;
   defaultBaseUrl: string;
+  /** Endpoint path appended to the base URL. */
+  path: string;
+  /** false → the backend works without an API key (Ollama). */
+  requiresApiKey: boolean;
   /** Provider-specific request body. Mistral requires `input` to be an array. */
-  buildBody: (text: string) => Record<string, unknown>;
+  buildBody: (text: string, model: string) => Record<string, unknown>;
+  /** Pull the vector out of the provider-specific response shape. */
+  extractVector: (data: any) => unknown;
 }
 
 /**
@@ -48,15 +59,36 @@ interface EmbeddingBackend {
 const EMBEDDING_BACKENDS: Partial<Record<LlmProviderType, EmbeddingBackend>> = {
   [LlmProviderType.OPENAI]: {
     provider: 'openai',
-    model: 'text-embedding-3-small',
+    defaultModel: 'text-embedding-3-small',
     defaultBaseUrl: 'https://api.openai.com/v1',
-    buildBody: (text) => ({ model: 'text-embedding-3-small', input: text }),
+    path: '/embeddings',
+    requiresApiKey: true,
+    buildBody: (text, model) => ({ model, input: text }),
+    extractVector: (data) => data?.data?.[0]?.embedding,
   },
   [LlmProviderType.MISTRAL]: {
     provider: 'mistral',
-    model: 'mistral-embed',
+    defaultModel: 'mistral-embed',
     defaultBaseUrl: 'https://api.mistral.ai/v1',
-    buildBody: (text) => ({ model: 'mistral-embed', input: [text] }),
+    path: '/embeddings',
+    requiresApiKey: true,
+    buildBody: (text, model) => ({ model, input: [text] }),
+    extractVector: (data) => data?.data?.[0]?.embedding,
+  },
+  [LlmProviderType.OLLAMA]: {
+    provider: 'ollama',
+    // nomic-embed-text is 768-dim; other local models differ. Dims vary
+    // per model and each stored vector records its model + dim, so the
+    // read side never cosine-compares across models (see EmbeddingResult).
+    defaultModel: 'nomic-embed-text',
+    defaultBaseUrl: 'http://localhost:11434',
+    // Native embed endpoint (POST /api/embed { model, input }) — the
+    // OpenAI-compat /v1/embeddings surface exists but /api/embed is the
+    // canonical one and supports every embedding-capable local model.
+    path: '/api/embed',
+    requiresApiKey: false,
+    buildBody: (text, model) => ({ model, input: text }),
+    extractVector: (data) => data?.embeddings?.[0],
   },
 };
 
@@ -64,11 +96,14 @@ const EMBEDDING_BACKENDS: Partial<Record<LlmProviderType, EmbeddingBackend>> = {
  * Preference order when an org has several embedding-capable providers.
  * OpenAI first (1536-dim matches the pgvector column width exactly),
  * then Mistral (1024-dim, zero-padded to the column width — padding
- * with zeros preserves cosine similarity between same-model vectors).
+ * with zeros preserves cosine similarity between same-model vectors),
+ * then Ollama (local inference; typically 768-dim nomic-embed-text,
+ * also zero-padded).
  */
 const EMBEDDING_PROVIDER_PREFERENCE: LlmProviderType[] = [
   LlmProviderType.OPENAI,
   LlmProviderType.MISTRAL,
+  LlmProviderType.OLLAMA,
 ];
 
 @Injectable()
@@ -100,8 +135,9 @@ export class EmbeddingService {
    * Generate an embedding for text content.
    *
    * Resolves the org's active embedding-capable providers and calls the
-   * preferred one (OpenAI, then Mistral). Falls back to the deterministic
-   * hash vector when no capable provider exists or the call fails.
+   * preferred one (OpenAI, then Mistral, then Ollama). Falls back to the
+   * deterministic hash vector when no capable provider exists or the
+   * call fails.
    */
   async generateEmbedding(text: string, organizationId?: string): Promise<EmbeddingResult | null> {
     if (organizationId) {
@@ -109,12 +145,20 @@ export class EmbeddingService {
         const provider = await this.getEmbeddingProvider(organizationId);
         const backend = provider ? EMBEDDING_BACKENDS[provider.type] : undefined;
         const apiKey = provider?.getDecryptedApiKey();
-        if (provider && backend && apiKey) {
-          const vector = await this.callEmbeddingApi(backend, text, apiKey, provider.configuration.apiUrl);
+        // Keyless backends (Ollama) may proceed without an API key.
+        if (provider && backend && (apiKey || !backend.requiresApiKey)) {
+          const model = provider.configuration?.embeddingModel || backend.defaultModel;
+          const vector = await this.callEmbeddingApi(
+            backend,
+            text,
+            model,
+            apiKey,
+            this.resolveEmbeddingBaseUrl(provider, backend),
+          );
           if (vector) {
             return {
               vector,
-              model: backend.model,
+              model,
               dim: vector.length,
               provider: backend.provider,
             };
@@ -154,35 +198,62 @@ export class EmbeddingService {
   }
 
   /**
-   * Call an OpenAI-shaped embeddings API (OpenAI, Mistral). Both return
-   * `{ data: [{ embedding: number[] }] }`.
+   * Resolve the base URL for an embedding call. Ollama's configured
+   * `apiUrl` is the server root and may carry a /v1 suffix (the
+   * OpenAI-compat surface used for chat) — strip it, because the native
+   * embed endpoint lives at the root (/api/embed).
+   */
+  private resolveEmbeddingBaseUrl(provider: LlmProvider, backend: EmbeddingBackend): string {
+    const configured = provider.configuration?.apiUrl;
+    if (backend.provider === 'ollama') {
+      const base = (configured || backend.defaultBaseUrl).replace(/\/+$/, '');
+      return base.toLowerCase().endsWith('/v1')
+        ? base.slice(0, -3).replace(/\/+$/, '')
+        : base;
+    }
+    return configured || backend.defaultBaseUrl;
+  }
+
+  /**
+   * Call an embeddings API. OpenAI and Mistral share the OpenAI shape
+   * (`{ data: [{ embedding: [...] }] }`); Ollama's native /api/embed
+   * returns `{ embeddings: [[...]] }` — each backend supplies its own
+   * body builder and vector extractor.
    */
   private async callEmbeddingApi(
     backend: EmbeddingBackend,
     text: string,
-    apiKey: string,
-    apiUrl?: string,
+    model: string,
+    apiKey: string | undefined,
+    baseUrl: string,
   ): Promise<number[] | null> {
-    const baseUrl = apiUrl || backend.defaultBaseUrl;
-    const target = `${baseUrl}/embeddings`;
+    const target = `${baseUrl}${backend.path}`;
     // SSRF guard. `apiUrl` comes from the LLM provider configuration
     // saved by the user — a hostile "OpenAI-compat" provider pointed
     // at http://169.254.169.254/... would otherwise have the server
     // POST embedding requests (which include user input text) to an
-    // internal service.
-    const validation = validateUrl(target);
+    // internal service. Ollama providers honor the self-hosting escape
+    // hatch OLLAMA_ALLOW_PRIVATE_URLS=true (still http(s)-only, no
+    // embedded credentials) so a machine-local Ollama can serve
+    // embeddings; every other backend always gets the full gate.
+    const allowPrivate = backend.provider === 'ollama' && ollamaPrivateUrlsAllowed();
+    const validation = allowPrivate ? validateUrlAllowingPrivate(target) : validateUrl(target);
     if (!validation.valid) {
       this.logger.warn(`Refused to reach embedding URL: ${validation.error}`);
       return null;
     }
+    // Keyless backends (Ollama) send no Authorization header; when a
+    // key is configured anyway (auth proxy in front of Ollama) it is
+    // forwarded as a Bearer token.
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
     const response = await axios.post(
       target,
-      backend.buildBody(text.substring(0, 8000)), // Cap input length
+      backend.buildBody(text.substring(0, 8000), model), // Cap input length
       {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         timeout: 10000,
         maxContentLength: 2 * 1024 * 1024,
         maxBodyLength: 2 * 1024 * 1024,
@@ -190,16 +261,16 @@ export class EmbeddingService {
       },
     );
 
-    const embedding = response.data?.data?.[0]?.embedding;
+    const embedding = backend.extractVector(response.data);
     if (Array.isArray(embedding) && embedding.length > 0) {
-      return embedding;
+      return embedding as number[];
     }
     return null;
   }
 
   /**
    * Find the org's preferred active embedding-capable provider
-   * (cached, size-bounded). Preference order: OpenAI, then Mistral;
+   * (cached, size-bounded). Preference order: OpenAI, Mistral, Ollama;
    * ties within a type break on oldest createdAt.
    */
   private async getEmbeddingProvider(organizationId: string): Promise<LlmProvider | null> {
