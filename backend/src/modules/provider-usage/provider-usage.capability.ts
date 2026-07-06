@@ -57,7 +57,10 @@ const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
     supported: false,
     requiresAdminKey: false,
     label: 'Mistral',
-    note: 'No documented programmatic usage/cost API. Not ingested.',
+    // Verified against La Plateforme docs (as of 2026-01): usage and
+    // billing are exposed only in the console (console.mistral.ai →
+    // Usage); there is no public usage/cost API endpoint to ingest.
+    note: 'Mistral exposes usage only in the La Plateforme console; there is no public usage/billing API. Not ingested.',
   },
   [LlmProviderType.XAI]: {
     supported: false,

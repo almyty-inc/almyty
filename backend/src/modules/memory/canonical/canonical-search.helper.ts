@@ -16,20 +16,32 @@ export class CanonicalSearchHelper {
     query: SearchQuery,
     queryEmbedding: number[],
     topK: number,
+    queryEmbeddingModel: string,
   ): Promise<RankedItem[]> {
     // Hybrid scoring: vector cosine distance ascending + FTS rank
     // descending, normalized into a single weighted score. The
     // candidate pool is bounded by the index — pgvector's HNSW gives
     // us O(log n) nearest-neighbour lookup, and FTS rides the GIN
     // index on `content_tsv`.
+    //
+    // Like-with-like guard: the vector half only considers rows whose
+    // `embedding_model` matches the model that embedded the query.
+    // Vectors from different models live in different embedding spaces
+    // (and different raw dimensionalities — 1536 for
+    // text-embedding-3-small vs 1024 for mistral-embed, zero-padded to
+    // the column width), so cross-model cosine distances are
+    // meaningless. Rows embedded under another model are still
+    // reachable lexically: the caller falls back to ftsSearch when the
+    // vector half yields nothing.
     const params: any[] = [
       query.scope.scope_type,
       query.scope.scope_id,
       pgvector.toSql(queryEmbedding),
       query.query,
       topK,
+      queryEmbeddingModel,
     ];
-    let where = `m.scope_type = $1 AND m.scope_id = $2 AND m.deleted_at IS NULL AND m.valid_until IS NULL AND m.embedding IS NOT NULL`;
+    let where = `m.scope_type = $1 AND m.scope_id = $2 AND m.deleted_at IS NULL AND m.valid_until IS NULL AND m.embedding IS NOT NULL AND m.embedding_model = $6`;
     if (query.mode) {
       params.push(query.mode);
       where += ` AND m.mode = $${params.length}`;
