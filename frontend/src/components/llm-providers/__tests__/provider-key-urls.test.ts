@@ -32,6 +32,10 @@ describe('providerKeyUrls', () => {
     expect(providerKeyUrls['custom']).toBeUndefined()
   })
 
+  it('does not offer a link for ollama (keyless local server)', () => {
+    expect(providerKeyUrls['ollama']).toBeUndefined()
+  })
+
   it('every URL is a valid https URL', () => {
     for (const [provider, url] of Object.entries(providerKeyUrls)) {
       expect(url, `${provider} must be https`).toMatch(/^https:\/\/\S+$/)

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 
-import { callLlmProviderHttp } from './providers/safe-request';
+import { callLlmProviderHttp, llmCallOptionsFor } from './providers/safe-request';
 import { LlmProvider, LlmProviderType } from '../../entities/llm-provider.entity';
 
 @Injectable()
@@ -24,6 +24,11 @@ export class LlmModelsHelper {
         case LlmProviderType.TOGETHER:
         case LlmProviderType.OPENROUTER:
           return this.fetchOpenAIModels(provider);
+        case LlmProviderType.OLLAMA:
+          // Native /api/tags — lists locally pulled models. Works
+          // without an API key (fetchModelsByType may pass an empty
+          // one for the pre-creation probe).
+          return this.fetchOllamaModels(provider);
         case LlmProviderType.ANTHROPIC:
           return this.fetchAnthropicModels(provider);
         case LlmProviderType.GOOGLE:
@@ -171,6 +176,53 @@ export class LlmModelsHelper {
   }
 
   /**
+   * Ollama's native model list — GET <server>/api/tags. The OpenAI-compat
+   * /v1/models endpoint exists on recent Ollama versions but /api/tags is
+   * the canonical surface and includes locally pulled models only.
+   *
+   * Keyless by default: the Authorization header is attached only when a
+   * key is configured (auth proxy in front of Ollama). The tags call runs
+   * through callLlmProviderHttp with llmCallOptionsFor so the
+   * OLLAMA_ALLOW_PRIVATE_URLS escape hatch applies here exactly like it
+   * does for chat.
+   */
+  private async fetchOllamaModels(provider: LlmProvider): Promise<Array<{
+    id: string;
+    name: string;
+    created?: number;
+    owned_by?: string;
+  }>> {
+    const baseUrl = provider.getOllamaBaseUrl();
+    const headers: Record<string, string> = {};
+    const apiKey = provider.getDecryptedApiKey();
+    if (apiKey) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
+    const response = await callLlmProviderHttp(
+      {
+        method: 'GET',
+        url: `${baseUrl}/api/tags`,
+        headers,
+        timeout: 10000,
+      },
+      llmCallOptionsFor(provider),
+    );
+
+    const models = response.data?.models || [];
+
+    return models
+      .map((m: any) => ({
+        id: m.name || m.model,
+        name: m.name || m.model,
+        created: m.modified_at ? Math.floor(new Date(m.modified_at).getTime() / 1000) : undefined,
+        owned_by: 'ollama',
+      }))
+      .filter((m: any) => !!m.id)
+      .sort((a: any, b: any) => (b.created || 0) - (a.created || 0));
+  }
+
+  /**
    * Fetch models by provider type and API key without needing a saved provider.
    * Used during provider creation to show available models before the provider is saved.
    */
@@ -268,6 +320,12 @@ export class LlmModelsHelper {
 
       case LlmProviderType.HUGGINGFACE:
         return { ...baseCapabilities, supportedModels: [], supportsStreaming: true };
+
+      case LlmProviderType.OLLAMA:
+        // OpenAI-compatible /v1 surface with tool calling and streaming.
+        // Context window varies per local model; 32k is a conservative
+        // default users can raise per provider.
+        return { ...openaiCompatible, maxTokens: 32768 };
 
       default:
         return baseCapabilities;
@@ -444,6 +502,10 @@ const COHERE_PRICING: DefaultModelPricing[] = [
  *  - HUGGINGFACE and CUSTOM serve arbitrary models; their dispatch does
  *    not take the cost function and pricing must come from
  *    `metadata.modelInfo` on the provider.
+ *  - OLLAMA is local inference and always costs $0. The zero table is
+ *    load-bearing: getDefaultModelPricing() short-circuits for OLLAMA
+ *    before the cross-provider fallback so a locally served
+ *    'mistral-large' is never billed at Mistral's hosted list price.
  */
 export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[]> = {
   [LlmProviderType.OPENAI]: OPENAI_PRICING,
@@ -472,6 +534,8 @@ export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[
   ],
   [LlmProviderType.AWS_BEDROCK]: [],
   [LlmProviderType.HUGGINGFACE]: [],
+  // Zero-cost by design (local inference) — see doc comment above.
+  [LlmProviderType.OLLAMA]: [],
   [LlmProviderType.CUSTOM]: [],
 };
 
@@ -501,6 +565,12 @@ export function getDefaultModelPricing(
   providerType: LlmProviderType,
 ): { input: number; output: number } | null {
   if (!model) return null;
+  // Local inference is free: never price an Ollama-served model, and
+  // never fall through to the global vendor fallback — a local
+  // 'mistral-large' or 'gpt-oss' would otherwise be billed at the
+  // hosted vendor's list price. Explicit per-provider overrides via
+  // metadata.modelInfo still apply (handled in calculateProviderCost).
+  if (providerType === LlmProviderType.OLLAMA) return null;
   const rules = DEFAULT_MODEL_PRICING[providerType] ?? [];
   for (const rule of rules) {
     if (model.includes(rule.match)) return { input: rule.input, output: rule.output };
