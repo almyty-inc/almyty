@@ -160,6 +160,7 @@ export function LlmProvidersPage() {
       name: '',
       type: '',
       apiKey: '',
+      apiUrl: '',
       organizationId: '',
     }
   })
@@ -182,7 +183,11 @@ export function LlmProvidersPage() {
           name: data.name,
           type: data.type,
           configuration: {
-            apiKey: data.apiKey,
+            // Ollama is keyless — only send the key when one was typed
+            // (the zod schema enforces presence for all other types).
+            ...(data.apiKey && { apiKey: data.apiKey }),
+            // Optional server URL (Ollama base URL field).
+            ...(data.apiUrl && { apiUrl: data.apiUrl }),
             ...(data.organizationId && { organizationId: data.organizationId }),
             // Admin-scoped usage/cost API key (issue #241) — only sent
             // when the user actually entered one.
