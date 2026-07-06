@@ -54,7 +54,7 @@ describe('ProviderUsageService', () => {
     expect(providerUsageCapability(LlmProviderType.ANTHROPIC).supported).toBe(true);
   });
 
-  it('flags the other 12 provider types as unsupported', () => {
+  it('flags the other 13 provider types as unsupported', () => {
     const unsupported = listProviderUsageCapabilities().filter((c) => !c.supported);
     expect(unsupported.map((c) => c.type).sort()).toEqual(
       [
@@ -67,6 +67,9 @@ describe('ProviderUsageService', () => {
         LlmProviderType.GROQ,
         LlmProviderType.HUGGINGFACE,
         LlmProviderType.MISTRAL,
+        // Ollama is local inference — nothing is billed, so there is no
+        // usage/cost API to ingest.
+        LlmProviderType.OLLAMA,
         LlmProviderType.OPENROUTER,
         LlmProviderType.TOGETHER,
         LlmProviderType.XAI,
