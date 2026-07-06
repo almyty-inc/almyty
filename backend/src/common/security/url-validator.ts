@@ -210,3 +210,45 @@ export function validateResponseSize(contentLength: number | undefined, maxBytes
   if (contentLength === undefined) return true; // Can't check, allow but enforce at stream level
   return contentLength <= maxBytes;
 }
+
+/**
+ * Escape hatch for self-hosted deployments that run Ollama on
+ * localhost / a private network. Mirrors MCP_ALLOW_PRIVATE_URLS for
+ * the MCP client.
+ *
+ * Default OFF: on hosted almyty a tenant-supplied private Ollama URL
+ * is exactly the SSRF vector validateUrl() exists to block (cloud
+ * metadata, in-cluster services, loopback admin ports). Self-hosters
+ * who want a machine-local Ollama set OLLAMA_ALLOW_PRIVATE_URLS=true
+ * on the API process.
+ *
+ * Even when the gate is open, URLs still go through
+ * validateUrlAllowingPrivate() — http(s)-only, no embedded
+ * credentials — so the override only relaxes the private/loopback
+ * range bans, never the protocol or credential rules.
+ */
+export function ollamaPrivateUrlsAllowed(): boolean {
+  return process.env.OLLAMA_ALLOW_PRIVATE_URLS === 'true';
+}
+
+/**
+ * Reduced validation used when a private-URL escape hatch
+ * (OLLAMA_ALLOW_PRIVATE_URLS / MCP_ALLOW_PRIVATE_URLS) is active:
+ * the URL must still be parseable, http(s)-only, and free of embedded
+ * credentials, but private/loopback/link-local ranges are permitted.
+ */
+export function validateUrlAllowingPrivate(urlString: string): UrlValidationResult {
+  let parsed: URL;
+  try {
+    parsed = new URL(urlString);
+  } catch {
+    return { valid: false, error: `Invalid URL: ${urlString}` };
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { valid: false, error: `Blocked protocol: ${parsed.protocol}. Only http: and https: are allowed.` };
+  }
+  if (parsed.username || parsed.password) {
+    return { valid: false, error: 'URLs with embedded credentials are not allowed.' };
+  }
+  return { valid: true, sanitizedUrl: parsed.toString() };
+}

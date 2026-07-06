@@ -1,7 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { validateUrl } from '../../../common/security/url-validator';
+import {
+  validateUrl,
+  validateUrlAllowingPrivate,
+  ollamaPrivateUrlsAllowed,
+} from '../../../common/security/url-validator';
 import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
+import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 
 /**
  * Single entry point for every outbound HTTP call to an LLM
@@ -50,16 +55,38 @@ const LLM_HTTP_DEFAULTS: AxiosRequestConfig = {
   httpsAgent: ssrfSafeHttpsAgent,
 };
 
-export async function callLlmProviderHttp<T = any>(
-  config: AxiosRequestConfig,
-): Promise<AxiosResponse<T>> {
+export interface LlmCallOptions {
+  /**
+   * Relax the private/loopback/link-local range bans for this single
+   * call. ONLY ever set through llmCallOptionsFor() — i.e. for OLLAMA
+   * providers when the self-hosting escape hatch
+   * OLLAMA_ALLOW_PRIVATE_URLS=true is active. Even then the URL must
+   * still be a credential-free http(s) URL, redirects stay disabled,
+   * and the response-size caps still apply.
+   */
+  allowPrivateUrls?: boolean;
+}
+
+/**
+ * Per-provider SSRF posture for an outbound LLM call. Every provider
+ * type gets the full validateUrl() gate; Ollama providers additionally
+ * honor OLLAMA_ALLOW_PRIVATE_URLS=true (self-hosted deployments running
+ * Ollama on localhost / a private network). Hosted deployments leave
+ * the env unset, so tenant-supplied private URLs stay blocked.
+ */
+export function llmCallOptionsFor(provider: LlmProvider): LlmCallOptions {
+  return {
+    allowPrivateUrls:
+      provider.type === LlmProviderType.OLLAMA && ollamaPrivateUrlsAllowed(),
+  };
+}
+
+/** Resolve baseURL+url the way axios does and run the SSRF gate. */
+function assertLlmUrlAllowed(config: AxiosRequestConfig, opts?: LlmCallOptions): void {
   if (!config.url) {
     throw new BadRequestException('LLM provider URL is missing');
   }
 
-  // Resolve the full URL the way axios does: baseURL + url. We
-  // don't use baseURL anywhere so this is almost always just
-  // `config.url`, but handling both forms avoids a future footgun.
   let target: string;
   try {
     target = new URL(config.url, config.baseURL || undefined).toString();
@@ -67,14 +94,36 @@ export async function callLlmProviderHttp<T = any>(
     throw new BadRequestException(`Invalid LLM provider URL: ${config.url}`);
   }
 
-  const validation = validateUrl(target);
+  const validation = opts?.allowPrivateUrls
+    ? validateUrlAllowingPrivate(target)
+    : validateUrl(target);
   if (!validation.valid) {
     throw new BadRequestException(
       `Refused to reach LLM provider URL: ${validation.error}`,
     );
   }
+}
 
-  return axios({ ...LLM_HTTP_DEFAULTS, ...config });
+/**
+ * The DNS-pinning agents refuse connections that resolve to private
+ * addresses, so when private URLs are explicitly allowed (Ollama escape
+ * hatch) the request must fall back to the default agents — otherwise
+ * localhost:11434 would pass the string check and then be refused at
+ * connect time.
+ */
+function defaultsFor(opts?: LlmCallOptions): AxiosRequestConfig {
+  if (opts?.allowPrivateUrls) {
+    return { ...LLM_HTTP_DEFAULTS, httpAgent: undefined, httpsAgent: undefined };
+  }
+  return LLM_HTTP_DEFAULTS;
+}
+
+export async function callLlmProviderHttp<T = any>(
+  config: AxiosRequestConfig,
+  opts?: LlmCallOptions,
+): Promise<AxiosResponse<T>> {
+  assertLlmUrlAllowed(config, opts);
+  return axios({ ...defaultsFor(opts), ...config });
 }
 
 /**
@@ -86,27 +135,11 @@ export async function callLlmProviderHttp<T = any>(
  */
 export async function callLlmProviderHttpStream<T = any>(
   config: AxiosRequestConfig,
+  opts?: LlmCallOptions,
 ): Promise<AxiosResponse<T>> {
-  if (!config.url) {
-    throw new BadRequestException('LLM provider URL is missing');
-  }
-
-  let target: string;
-  try {
-    target = new URL(config.url, config.baseURL || undefined).toString();
-  } catch {
-    throw new BadRequestException(`Invalid LLM provider URL: ${config.url}`);
-  }
-
-  const validation = validateUrl(target);
-  if (!validation.valid) {
-    throw new BadRequestException(
-      `Refused to reach LLM provider URL: ${validation.error}`,
-    );
-  }
-
+  assertLlmUrlAllowed(config, opts);
   return axios({
-    ...LLM_HTTP_DEFAULTS,
+    ...defaultsFor(opts),
     ...config,
     responseType: 'stream',
   });

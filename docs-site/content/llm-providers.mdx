@@ -1,6 +1,6 @@
 # AI Models
 
-AI Models connect language model providers to your agent pipelines and LLM-powered tools. almyty supports 14 providers out of the box and any OpenAI-compatible endpoint.
+AI Models connect language model providers to your agent pipelines and LLM-powered tools. almyty supports 15 providers out of the box — including local models via Ollama — and any OpenAI-compatible endpoint.
 
 ![Models page](/screenshots/models.png)
 
@@ -87,22 +87,33 @@ curl -X DELETE /llm-providers/{id} \
 
 | Provider | Type | Notes |
 |----------|------|-------|
-| OpenAI | `openai` | GPT-4o, GPT-4o-mini, o1, o3, etc. |
+| OpenAI | `openai` | GPT-4o, GPT-4.1, o3, o4-mini, etc. |
 | Anthropic | `anthropic` | Claude Opus, Sonnet, Haiku |
-| Google Gemini | `openai` | Via OpenAI-compatible endpoint |
-| Azure OpenAI | `openai` | Set `baseUrl` to your Azure deployment |
-| AWS Bedrock | `openai` | Via OpenAI-compatible proxy |
-| Google Vertex | `openai` | Via OpenAI-compatible proxy |
-| Mistral | `mistral` | Native type; `baseUrl` defaults to `https://api.mistral.ai/v1`. Chat models include Codestral (`codestral-latest`); also serves memory embeddings via `mistral-embed` |
-| Cohere | `openai` | Via OpenAI-compatible endpoint |
-| Groq | `openai` | Set `baseUrl` to `https://api.groq.com/openai/v1` |
-| Together | `openai` | Set `baseUrl` to `https://api.together.xyz/v1` |
-| Perplexity | `openai` | Set `baseUrl` to `https://api.perplexity.ai` |
-| DeepSeek | `openai` | Set `baseUrl` to `https://api.deepseek.com/v1` |
-| Ollama | `openai` | Set `baseUrl` to `http://localhost:11434/v1` |
-| Custom | `openai` | Any OpenAI-compatible HTTP endpoint |
+| Google Gemini | `google` | Gemini 2.5 Pro, Flash, and more |
+| Mistral | `mistral` | `baseUrl` defaults to `https://api.mistral.ai/v1`. Chat models include Codestral (`codestral-latest`); also serves memory embeddings via `mistral-embed` |
+| xAI | `xai` | Grok models |
+| DeepSeek | `deepseek` | DeepSeek Chat and Reasoner |
+| Groq | `groq` | Ultra-fast inference for open models |
+| Together | `together` | Open-source models at scale |
+| OpenRouter | `openrouter` | Unified access to 200+ models |
+| Azure OpenAI | `azure_openai` | Configure resource name + deployment name |
+| AWS Bedrock | `aws_bedrock` | Foundation models through AWS |
+| Cohere | `cohere` | Command models |
+| Hugging Face | `huggingface` | Open-source model inference |
+| Ollama | `ollama` | Local models — llama, qwen, mistral, and more. Keyless; `baseUrl` defaults to `http://localhost:11434` |
+| Custom | `custom` | Any OpenAI-compatible HTTP endpoint (Perplexity, a Vertex proxy, vLLM, ...) |
 
-For providers listed as type `openai`, set the `baseUrl` field to point at the provider's OpenAI-compatible endpoint. The `apiKey` field accepts whatever token the provider expects.
+Each native type ships with the right default `baseUrl`; override it to point at a compatible proxy. For `custom`, set `baseUrl` to the provider's OpenAI-compatible endpoint — the `apiKey` field accepts whatever token the provider expects.
+
+### Local models with Ollama
+
+The `ollama` type talks to an [Ollama](https://ollama.com) server. Chat, streaming, and tool calling ride Ollama's OpenAI-compatible `/v1` endpoint; the model dropdown is populated from the native `GET /api/tags` (your locally pulled models); memory embeddings use the native `POST /api/embed`. No API key is required — if you front Ollama with an authenticating reverse proxy, configure a key and it is sent as a Bearer token.
+
+Because Ollama usually listens on localhost or a private network, almyty's SSRF protection blocks such URLs by default. Self-hosted deployments opt in with `OLLAMA_ALLOW_PRIVATE_URLS=true` on the backend — see [Self-hosting](/self-hosting#local-models-with-ollama). On hosted almyty the Ollama server must be reachable at a public URL.
+
+### Ollama cloud
+
+The same provider type also works with [Ollama's hosted service](https://ollama.com): set the base URL to `https://ollama.com` and paste an API key from [ollama.com/settings/keys](https://ollama.com/settings/keys). You get the hosted model catalog (large open models like `gpt-oss:120b` or `qwen3.5:397b` without local hardware), the key is sent as a Bearer token, and no SSRF opt-in is needed — it is a public endpoint like any other provider. Hosted-model usage is billed by Ollama; almyty's cost accounting treats the type as zero-cost, so track spend in your Ollama account.
 
 ## Configuration reference
 
@@ -121,11 +132,11 @@ For providers listed as type `openai`, set the `baseUrl` field to point at the p
 
 almyty tracks token usage and estimated cost for every LLM call. View aggregate costs per provider in the **Analytics** dashboard or on the provider detail page.
 
-Estimates use built-in list-price tables per provider type (OpenAI, Anthropic, Gemini, Mistral — including Codestral and `mistral-embed` — xAI, DeepSeek, Groq, Together, Cohere, and OpenRouter passthrough), refreshed against published prices as of January 2026. Configure per-model pricing on a provider to override the defaults. See [Cost governance](/cost-governance) for reconciliation against provider actuals.
+Estimates use built-in list-price tables per provider type (OpenAI, Anthropic, Gemini, Mistral — including Codestral and `mistral-embed` — xAI, DeepSeek, Groq, Together, Cohere, and OpenRouter passthrough), refreshed against published prices as of January 2026. Ollama usage is always recorded at $0 — local inference has no per-token price. Configure per-model pricing on a provider to override the defaults. See [Cost governance](/cost-governance) for reconciliation against provider actuals.
 
 ## Memory embeddings
 
-The [Memory](/memory) module embeds content with the organization's own providers. When both are configured, OpenAI (`text-embedding-3-small`) is preferred over Mistral (`mistral-embed`); with neither, a deterministic local fallback keeps memory searchable. Each stored memory records the model that embedded it, and vector search only compares like with like.
+The [Memory](/memory) module embeds content with the organization's own providers. When several are configured, OpenAI (`text-embedding-3-small`) is preferred over Mistral (`mistral-embed`), then Ollama (`nomic-embed-text` by default via the native `/api/embed` endpoint — override with `configuration.embeddingModel`); with none, a deterministic local fallback keeps memory searchable. Each stored memory records the model that embedded it (dimensions vary per model), and vector search only compares like with like.
 
 ## Usage in agents
 

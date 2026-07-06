@@ -368,6 +368,7 @@ export class LlmChatHelper {
         case LlmProviderType.GROQ:
         case LlmProviderType.TOGETHER:
         case LlmProviderType.OPENROUTER:
+        case LlmProviderType.OLLAMA:
           response = await callOpenAIStream(provider, request, session, tools, startTime, costFn, onChunk);
           break;
         case LlmProviderType.ANTHROPIC:
