@@ -31,6 +31,7 @@ export enum LlmProviderType {
   AWS_BEDROCK = 'aws_bedrock',
   COHERE = 'cohere',
   HUGGINGFACE = 'huggingface',
+  OLLAMA = 'ollama',
   CUSTOM = 'custom',
 }
 
@@ -53,6 +54,13 @@ export interface LlmProviderConfig {
   apiUrl?: string;
   apiVersion?: string;
   model?: string;
+  /**
+   * Embedding model override for embedding-capable providers. Currently
+   * honored by the memory EmbeddingService for Ollama providers
+   * (default: nomic-embed-text). Embedding dimensionality varies per
+   * model; the memory store records model + dim per vector.
+   */
+  embeddingModel?: string;
   maxTokens?: number;
   temperature?: number;
   topP?: number;
@@ -307,11 +315,31 @@ export class LlmProvider {
         return `https://bedrock-runtime.${region}.amazonaws.com`;
       case LlmProviderType.HUGGINGFACE:
         return this.configuration.huggingface?.endpoint || 'https://api-inference.huggingface.co/models';
+      case LlmProviderType.OLLAMA: {
+        // OpenAI-compatible surface lives under /v1 on the Ollama server
+        // root; `apiUrl` is the root (default: a local install). On
+        // hosted almyty the URL must be publicly reachable — private and
+        // loopback ranges are refused by the SSRF gate unless the
+        // self-hosting escape hatch OLLAMA_ALLOW_PRIVATE_URLS=true is set.
+        const ollamaBase = (this.configuration.apiUrl || 'http://localhost:11434').replace(/\/+$/, '');
+        return ollamaBase.toLowerCase().endsWith('/v1') ? ollamaBase : `${ollamaBase}/v1`;
+      }
       case LlmProviderType.CUSTOM:
         return this.configuration.apiUrl || '';
       default:
         return this.configuration.apiUrl || '';
     }
+  }
+
+  /**
+   * The Ollama server root (no /v1 suffix) for the native endpoints —
+   * GET /api/tags (models) and POST /api/embed (embeddings).
+   */
+  getOllamaBaseUrl(): string {
+    const base = (this.configuration?.apiUrl || 'http://localhost:11434').replace(/\/+$/, '');
+    return base.toLowerCase().endsWith('/v1')
+      ? base.slice(0, -3).replace(/\/+$/, '')
+      : base;
   }
 
   /**
@@ -376,6 +404,16 @@ export class LlmProvider {
           headers['Authorization'] = `Bearer ${apiKey}`;
           headers['HTTP-Referer'] = 'https://almyty.com';
           headers['X-Title'] = 'almyty';
+        }
+        break;
+
+      case LlmProviderType.OLLAMA:
+        // Ollama itself is unauthenticated — no API key is required.
+        // A key is optional and only sent (as a Bearer token) when
+        // configured, for deployments that front Ollama with an
+        // authenticating reverse proxy.
+        if (apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`;
         }
         break;
 

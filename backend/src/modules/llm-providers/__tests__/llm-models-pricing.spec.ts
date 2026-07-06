@@ -27,6 +27,10 @@ describe('DEFAULT_MODEL_PRICING completeness', () => {
    *  - AWS_BEDROCK: no chat dispatch implementation yet.
    *  - HUGGINGFACE / CUSTOM: chat dispatch does not take the cost
    *    function; arbitrary models are priced via metadata.modelInfo.
+   *  - OLLAMA: chat dispatch takes the cost function but local
+   *    inference is zero-cost by design — the table stays empty and
+   *    getDefaultModelPricing short-circuits before the global
+   *    fallback (see 'ollama zero-cost' tests below).
    */
   const CHAT_TYPES_REQUIRING_PRICING: LlmProviderType[] = [
     LlmProviderType.OPENAI,
@@ -160,6 +164,35 @@ describe('calculateProviderCost', () => {
     } as unknown as LlmProvider;
     const cost = helper.calculateProviderCost(provider, 1000, 1000);
     expect(cost).toBeCloseTo(0.001 + 0.002, 9);
+  });
+
+  it('ollama zero-cost: a vendor-named local model is NOT priced via the global fallback', () => {
+    // 'mistral-large' pulled locally must cost $0, not Mistral's hosted
+    // list price — the OLLAMA short-circuit runs before the fallback scan.
+    expect(getDefaultModelPricing('mistral-large', LlmProviderType.OLLAMA)).toBeNull();
+    const cost = helper.calculateProviderCost(
+      providerWith(LlmProviderType.OLLAMA, 'mistral-large'),
+      MILLION,
+      MILLION,
+    );
+    expect(cost).toBe(0);
+  });
+
+  it('ollama zero-cost: common local models cost 0', () => {
+    for (const model of ['llama3.2', 'qwen3:8b', 'gpt-oss-20b', 'nomic-embed-text']) {
+      expect(
+        helper.calculateProviderCost(providerWith(LlmProviderType.OLLAMA, model), MILLION, MILLION),
+      ).toBe(0);
+    }
+  });
+
+  it('ollama still honors explicit metadata.modelInfo pricing overrides', () => {
+    const provider = {
+      type: LlmProviderType.OLLAMA,
+      configuration: { model: 'llama3.2' },
+      metadata: { modelInfo: { inputTokenCost: 0.0001, outputTokenCost: 0.0002 } },
+    } as unknown as LlmProvider;
+    expect(helper.calculateProviderCost(provider, 1000, 1000)).toBeCloseTo(0.0003, 9);
   });
 
   it('returns 0 for unknown models', () => {

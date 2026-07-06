@@ -431,7 +431,8 @@ export class LlmProvidersController {
         );
       }
 
-      if (!body.type || !body.apiKey) {
+      // Ollama is keyless — /api/tags needs no credentials.
+      if (!body.type || (!body.apiKey && body.type !== LlmProviderType.OLLAMA)) {
         throw new HttpException(
           { success: false, message: 'type and apiKey are required', error: 'INVALID_INPUT' },
           HttpStatus.BAD_REQUEST,
@@ -475,7 +476,9 @@ export class LlmProvidersController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    if (!body.type || !body.apiKey) {
+    // Ollama is keyless — the probe hits the (public or explicitly
+    // env-allowed) server's /api/tags without credentials.
+    if (!body.type || (!body.apiKey && body.type !== LlmProviderType.OLLAMA)) {
       throw new HttpException(
         { success: false, message: 'type and apiKey are required', error: 'INVALID_INPUT' },
         HttpStatus.BAD_REQUEST,

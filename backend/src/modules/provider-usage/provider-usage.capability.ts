@@ -116,6 +116,12 @@ const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
     label: 'Hugging Face',
     note: 'No documented programmatic usage/cost API. Not ingested.',
   },
+  [LlmProviderType.OLLAMA]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Ollama',
+    note: 'Local inference is free — there is no usage/cost API to ingest.',
+  },
   [LlmProviderType.CUSTOM]: {
     supported: false,
     requiresAdminKey: false,

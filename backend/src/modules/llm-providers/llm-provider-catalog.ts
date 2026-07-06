@@ -22,6 +22,7 @@ export function getProviderDisplayName(type: LlmProviderType): string {
     [LlmProviderType.AWS_BEDROCK]: 'AWS Bedrock',
     [LlmProviderType.COHERE]: 'Cohere',
     [LlmProviderType.HUGGINGFACE]: 'Hugging Face',
+    [LlmProviderType.OLLAMA]: 'Ollama',
     [LlmProviderType.CUSTOM]: 'Custom',
   };
   return names[type] || type;
@@ -42,6 +43,7 @@ export function getProviderDescription(type: LlmProviderType): string {
     [LlmProviderType.AWS_BEDROCK]: 'Foundation models through AWS',
     [LlmProviderType.COHERE]: 'Enterprise language models',
     [LlmProviderType.HUGGINGFACE]: 'Open-source model inference',
+    [LlmProviderType.OLLAMA]: 'Run open models locally — llama, qwen, mistral, and more',
     [LlmProviderType.CUSTOM]: 'Any OpenAI-compatible API endpoint',
   };
   return descriptions[type] || 'Custom AI model provider';
@@ -62,6 +64,7 @@ export function getProviderFeatures(type: LlmProviderType): string[] {
     [LlmProviderType.AWS_BEDROCK]: ['Multiple Providers', 'Enterprise Security'],
     [LlmProviderType.COHERE]: ['Tool Use', 'Streaming', 'Enterprise'],
     [LlmProviderType.HUGGINGFACE]: ['Open Source', 'Multiple Models'],
+    [LlmProviderType.OLLAMA]: ['Tool Use', 'Streaming', 'Local Inference', 'Zero Cost'],
     [LlmProviderType.CUSTOM]: ['Flexible', 'Any OpenAI-Compatible API'],
   };
   return features[type] || [];
@@ -99,6 +102,10 @@ export function getProviderKeyUrl(type: LlmProviderType): string | null | undefi
     [LlmProviderType.AWS_BEDROCK]: 'https://console.aws.amazon.com/bedrock',
     [LlmProviderType.COHERE]: 'https://dashboard.cohere.com/api-keys',
     [LlmProviderType.HUGGINGFACE]: 'https://huggingface.co/settings/tokens',
+    // Ollama needs no API key — it runs on the user's own machine (an
+    // optional key exists only for auth proxies), so like CUSTOM there
+    // is no canonical key page.
+    [LlmProviderType.OLLAMA]: null,
     [LlmProviderType.CUSTOM]: null,
   };
   return urls[type];
@@ -123,6 +130,7 @@ export function getProviderDocsUrl(type: LlmProviderType): string | null | undef
     [LlmProviderType.AWS_BEDROCK]: 'https://docs.aws.amazon.com/bedrock/',
     [LlmProviderType.COHERE]: 'https://docs.cohere.com',
     [LlmProviderType.HUGGINGFACE]: 'https://huggingface.co/docs',
+    [LlmProviderType.OLLAMA]: 'https://ollama.com',
     [LlmProviderType.CUSTOM]: null,
   };
   return urls[type];

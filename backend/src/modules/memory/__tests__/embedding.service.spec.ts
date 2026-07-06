@@ -169,6 +169,127 @@ describe('EmbeddingService', () => {
     });
   });
 
+  // ── ollama backend ────────────────────────────────────────────────────
+
+  describe('ollama dispatch', () => {
+    const ENV_KEY = 'OLLAMA_ALLOW_PRIVATE_URLS';
+    const originalEnv = process.env[ENV_KEY];
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        delete process.env[ENV_KEY];
+      } else {
+        process.env[ENV_KEY] = originalEnv;
+      }
+    });
+
+    function ollamaProvider(opts: { apiKey?: string; apiUrl?: string; embeddingModel?: string } = {}): LlmProvider {
+      return {
+        id: 'prov-ollama',
+        type: LlmProviderType.OLLAMA,
+        status: LlmProviderStatus.ACTIVE,
+        configuration: {
+          ...(opts.apiUrl ? { apiUrl: opts.apiUrl } : {}),
+          ...(opts.embeddingModel ? { embeddingModel: opts.embeddingModel } : {}),
+        },
+        getDecryptedApiKey: () => opts.apiKey,
+      } as unknown as LlmProvider;
+    }
+
+    function ollamaEmbedResponse(dim: number) {
+      // Native /api/embed shape: { embeddings: [[...]] }
+      return { data: { embeddings: [new Array(dim).fill(0).map((_, i) => (i % 5) / 5)] } };
+    }
+
+    it('embeds via native /api/embed for a keyless ollama provider with a public URL', async () => {
+      repoFind.mockResolvedValue([ollamaProvider({ apiUrl: 'https://ollama.example.com' })]);
+      mockedAxios.post.mockResolvedValue(ollamaEmbedResponse(768));
+
+      const result = await service.generateEmbedding('local embeddings', 'org-ollama');
+
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+      const [url, body, options] = mockedAxios.post.mock.calls[0];
+      expect(url).toBe('https://ollama.example.com/api/embed');
+      expect(body).toEqual({ model: 'nomic-embed-text', input: 'local embeddings' });
+      // Keyless: no Authorization header at all.
+      expect((options as any).headers['Authorization']).toBeUndefined();
+
+      // Dims vary per model — recorded per vector for the read-side guard.
+      expect(result!.provider).toBe('ollama');
+      expect(result!.model).toBe('nomic-embed-text');
+      expect(result!.dim).toBe(768);
+      expect(result!.vector).toHaveLength(768);
+    });
+
+    it('strips a /v1 suffix from the configured URL for the native embed endpoint', async () => {
+      repoFind.mockResolvedValue([ollamaProvider({ apiUrl: 'https://ollama.example.com/v1' })]);
+      mockedAxios.post.mockResolvedValue(ollamaEmbedResponse(768));
+
+      await service.generateEmbedding('text', 'org-ollama-v1');
+
+      expect(mockedAxios.post.mock.calls[0][0]).toBe('https://ollama.example.com/api/embed');
+    });
+
+    it('honors a configuration.embeddingModel override and records it on the result', async () => {
+      repoFind.mockResolvedValue([
+        ollamaProvider({ apiUrl: 'https://ollama.example.com', embeddingModel: 'mxbai-embed-large' }),
+      ]);
+      mockedAxios.post.mockResolvedValue(ollamaEmbedResponse(1024));
+
+      const result = await service.generateEmbedding('text', 'org-ollama-model');
+
+      expect(mockedAxios.post.mock.calls[0][1]).toEqual({ model: 'mxbai-embed-large', input: 'text' });
+      expect(result!.model).toBe('mxbai-embed-large');
+      expect(result!.dim).toBe(1024);
+    });
+
+    it('sends a Bearer token when a key is configured (auth proxy)', async () => {
+      repoFind.mockResolvedValue([
+        ollamaProvider({ apiUrl: 'https://ollama.example.com', apiKey: 'proxy-token' }),
+      ]);
+      mockedAxios.post.mockResolvedValue(ollamaEmbedResponse(768));
+
+      await service.generateEmbedding('text', 'org-ollama-key');
+
+      const options = mockedAxios.post.mock.calls[0][2];
+      expect((options as any).headers['Authorization']).toBe('Bearer proxy-token');
+    });
+
+    it('refuses the default localhost URL without the escape hatch and falls back to hash', async () => {
+      delete process.env[ENV_KEY];
+      repoFind.mockResolvedValue([ollamaProvider()]);
+
+      const result = await service.generateEmbedding('private probe', 'org-ollama-private');
+
+      expect(mockedAxios.post).not.toHaveBeenCalled();
+      expect(result!.model).toBe(HASH_EMBEDDING_MODEL);
+    });
+
+    it('reaches a localhost ollama when OLLAMA_ALLOW_PRIVATE_URLS=true', async () => {
+      process.env[ENV_KEY] = 'true';
+      repoFind.mockResolvedValue([ollamaProvider()]);
+      mockedAxios.post.mockResolvedValue(ollamaEmbedResponse(768));
+
+      const result = await service.generateEmbedding('local text', 'org-ollama-env');
+
+      expect(mockedAxios.post.mock.calls[0][0]).toBe('http://localhost:11434/api/embed');
+      expect(result!.provider).toBe('ollama');
+    });
+
+    it('prefers OpenAI (then Mistral) over ollama when both are active', async () => {
+      repoFind.mockResolvedValue([
+        ollamaProvider({ apiUrl: 'https://ollama.example.com' }),
+        fakeProvider(LlmProviderType.OPENAI, 'openai-key'),
+      ]);
+      mockedAxios.post.mockResolvedValue(embeddingResponse(1536));
+
+      const result = await service.generateEmbedding('hello', 'org-ollama-pref');
+
+      expect(mockedAxios.post.mock.calls[0][0]).toBe('https://api.openai.com/v1/embeddings');
+      expect(result!.provider).toBe('openai');
+    });
+  });
+
   // ── mixed-dimension safety ────────────────────────────────────────────
 
   describe('padToDim', () => {

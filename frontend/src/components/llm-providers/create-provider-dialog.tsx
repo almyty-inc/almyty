@@ -107,6 +107,7 @@ export function CreateProviderDialog({
                     <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
                     <SelectItem value="cohere">Cohere</SelectItem>
                     <SelectItem value="huggingface">HuggingFace</SelectItem>
+                    <SelectItem value="ollama">Ollama</SelectItem>
                     <SelectItem value="custom">Custom</SelectItem>
                   </SelectContent>
                 </Select>
@@ -119,7 +120,7 @@ export function CreateProviderDialog({
 
           {/* API Key — select from vault or enter new */}
           <CredentialPicker
-            label="API Key"
+            label={createForm.watch('type') === 'ollama' ? 'API Key (optional)' : 'API Key'}
             value={createForm.watch('credentialId') || ''}
             onSelect={(id) => { createForm.setValue('credentialId', id); createForm.setValue('apiKey', '') }}
             onNewKey={(key) => { createForm.setValue('apiKey', key); createForm.setValue('credentialId', '') }}
@@ -136,6 +137,33 @@ export function CreateProviderDialog({
               <ExternalLink className="h-3 w-3" />
               Get your API key
             </a>
+          )}
+          {createForm.watch('type') === 'ollama' && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Runs on your machine - install from{' '}
+                <a
+                  href="https://ollama.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  ollama.com
+                </a>
+                ; default URL http://localhost:11434. No API key needed - only add one if your
+                Ollama server sits behind an authenticating proxy. Self-hosted almyty needs
+                OLLAMA_ALLOW_PRIVATE_URLS=true to reach a localhost/private-network server.
+              </p>
+              <div>
+                <Label htmlFor="apiUrl">Base URL (optional)</Label>
+                <Input
+                  id="apiUrl"
+                  {...createForm.register('apiUrl')}
+                  placeholder="http://localhost:11434"
+                />
+              </div>
+            </div>
           )}
           {createForm.watch('apiKey') && (
             <div className="space-y-1">
