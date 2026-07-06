@@ -151,9 +151,11 @@ export function CreateProviderDialog({
                   <ExternalLink className="h-3 w-3" />
                   ollama.com
                 </a>
-                ; default URL http://localhost:11434. No API key needed - only add one if your
-                Ollama server sits behind an authenticating proxy. Self-hosted almyty needs
-                OLLAMA_ALLOW_PRIVATE_URLS=true to reach a localhost/private-network server.
+                ; default URL http://localhost:11434. Local mode needs no API key - only add
+                one if your server sits behind an authenticating proxy. Self-hosted almyty
+                needs OLLAMA_ALLOW_PRIVATE_URLS=true to reach a localhost/private server.
+                Or use Ollama cloud: set the base URL to https://ollama.com and paste an API
+                key from ollama.com/settings/keys - hosted models, no local install.
               </p>
               <div>
                 <Label htmlFor="apiUrl">Base URL (optional)</Label>

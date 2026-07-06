@@ -32,8 +32,8 @@ describe('providerKeyUrls', () => {
     expect(providerKeyUrls['custom']).toBeUndefined()
   })
 
-  it('does not offer a link for ollama (keyless local server)', () => {
-    expect(providerKeyUrls['ollama']).toBeUndefined()
+  it('ollama links the cloud key page (local mode is keyless)', () => {
+    expect(providerKeyUrls['ollama']).toBe('https://ollama.com/settings/keys')
   })
 
   it('every URL is a valid https URL', () => {
