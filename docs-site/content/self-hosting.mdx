@@ -154,6 +154,19 @@ The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt
 | `MAIL_PORT` | SMTP port | `587` |
 | `MAIL_USER` | SMTP username | -- |
 | `MAIL_PASS` | SMTP password | -- |
+| `OLLAMA_ALLOW_PRIVATE_URLS` | Allow Ollama providers to target localhost/private-network URLs (see [Local models with Ollama](#local-models-with-ollama)) | `false` |
+
+## Local models with Ollama
+
+almyty's SSRF protection refuses private and loopback URLs on outbound LLM calls — the right default for a multi-tenant host, but it also blocks a machine-local [Ollama](https://ollama.com) server. Self-hosted deployments can opt out for the `ollama` provider type only:
+
+```bash
+OLLAMA_ALLOW_PRIVATE_URLS=true
+```
+
+Set it on the backend API process, then add an Ollama provider (Models → Add Provider → Ollama). The URL defaults to `http://localhost:11434`; chat and tool calling use Ollama's OpenAI-compatible `/v1` endpoint, the model list comes from `/api/tags`, and memory embeddings use `/api/embed`. No API key is needed.
+
+Networking note for Docker Compose: inside the backend container, `localhost` is the container itself, not your machine. Point the provider at the host instead — `http://host.docker.internal:11434` (on Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the backend service). The escape hatch only relaxes the private-range ban: URLs must still be http(s) with no embedded credentials, and every other provider type keeps the full SSRF gate.
 
 ## Health check endpoints
 

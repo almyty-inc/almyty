@@ -46,6 +46,12 @@ describe('llm-provider-catalog key/docs URLs', () => {
     expect(getProviderDocsUrl(LlmProviderType.CUSTOM)).toBeNull();
   });
 
+  it('ollama links the CLOUD key page (local mode is keyless) and docs at ollama.com', () => {
+    expect(getProviderKeyUrl(LlmProviderType.OLLAMA)).toBe('https://ollama.com/settings/keys');
+    expect(getProviderDocsUrl(LlmProviderType.OLLAMA)).toBe('https://ollama.com');
+    expect(getProviderDisplayName(LlmProviderType.OLLAMA)).toBe('Ollama');
+  });
+
   it('still resolves a display name for every type (sanity)', () => {
     for (const type of ALL_TYPES) {
       expect(getProviderDisplayName(type)).toBeTruthy();
