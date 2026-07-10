@@ -206,6 +206,42 @@ spec:
             secretKeyRef:
               name: almyty-secrets
               key: ENCRYPTION_KEY
+        # Stripe billing (hosted tier). All optional: environments without
+        # billing configured (e.g. dev) boot fine - the billing module goes
+        # dormant when STRIPE_SECRET_KEY is absent.
+        - name: STRIPE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: STRIPE_SECRET_KEY
+              optional: true
+        - name: STRIPE_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: STRIPE_WEBHOOK_SECRET
+              optional: true
+        - name: STRIPE_PRICE_PRO
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: STRIPE_PRICE_PRO
+              optional: true
+        - name: STRIPE_PRICE_ENTERPRISE
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: STRIPE_PRICE_ENTERPRISE
+              optional: true
+        # Vendor license signing key - lets the billing webhook mint
+        # entitlement tokens on subscription changes. Optional: without it
+        # subscriptions still update plan fields, token minting is skipped.
+        - name: ALMYTY_LICENSE_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: ALMYTY_LICENSE_PRIVATE_KEY
+              optional: true
         # Platform operator bearer token for the /monitoring/metrics
         # + /monitoring/metrics/history + /monitoring/metrics/prometheus
         # endpoints. Without this env var set, those endpoints
