@@ -48,6 +48,8 @@ import { getInitials } from '@/lib/utils'
 import { CommandPalette } from '@/components/command-palette'
 import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { NotificationBell } from '@/components/notifications/notification-bell'
+import { EmailVerificationBanner } from '@/components/layout/email-verification-banner'
 
 // Suspense fallback for lazy page chunks. Rendered INSIDE the main
 // landmark so the sidebar + header + <main> stay mounted during
@@ -402,6 +404,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
+        {/* Email verification nudge — renders only when the backend
+         * explicitly reports emailVerified === false. */}
+        <EmailVerificationBanner />
         {/* Top Bar */}
         <header className="bg-background shadow-sm border-b lg:hidden">
           <div className="flex items-center justify-between h-16 px-4">
@@ -417,8 +422,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8" />
               <span className="text-xl font-heading font-medium tracking-tight text-foreground">almyty</span>
             </div>
+            <NotificationBell />
           </div>
         </header>
+
+        {/* Desktop utility bar — persistent home for the notification
+         * bell. There is no desktop header (command palette + user
+         * menu live in the sidebar), and floating the bell over the
+         * page content would collide with per-page action buttons. */}
+        <div className="hidden lg:flex items-center justify-end h-11 px-4 sm:px-6 lg:px-8 border-b bg-background">
+          <NotificationBell />
+        </div>
 
         {/* Page Content */}
         <main

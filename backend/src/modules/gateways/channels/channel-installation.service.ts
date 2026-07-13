@@ -1,10 +1,12 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { ChannelInstallation } from '../../../entities/channel-installation.entity';
 import { Gateway } from '../../../entities/gateway.entity';
+import { OrganizationRole } from '../../../entities/user-organization.entity';
 import { encryptField, decryptField } from '../../../common/security/field-crypto';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 /** Credential keys whose values are encrypted at rest. */
 const SECRET_CREDENTIAL_KEYS = new Set(['bot_token', 'access_token', 'refresh_token']);
@@ -33,6 +35,10 @@ export class ChannelInstallationService {
   constructor(
     @InjectRepository(ChannelInstallation)
     private readonly installationRepository: Repository<ChannelInstallation>,
+    // @Global notifications pipeline; @Optional() keeps existing unit
+    // tests (constructed without it) working.
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   /**
@@ -46,6 +52,7 @@ export class ChannelInstallationService {
     let installation = await this.installationRepository.findOne({
       where: { gatewayId: gateway.id, externalTenantId: input.externalTenantId },
     });
+    const isNew = !installation;
 
     if (installation) {
       installation.credentials = encrypted;
@@ -64,7 +71,33 @@ export class ChannelInstallationService {
       });
     }
 
-    return this.installationRepository.save(installation);
+    const saved = await this.installationRepository.save(installation);
+
+    // security.sso_install — new external-workspace installs grant an
+    // outside tenant access through this gateway; org admins should
+    // know. First install only (reinstall/refresh is routine churn).
+    if (isNew && this.notifications) {
+      const detail =
+        (input.metadata as any)?.teamName ||
+        (input.metadata as any)?.workspaceName ||
+        input.externalTenantId;
+      this.notifications
+        .emit({
+          type: 'security.sso_install',
+          organizationId: gateway.organizationId,
+          roleTarget: { orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN] },
+          title: 'New channel installation',
+          body: `A channel integration was installed into an external workspace (${detail}).`,
+          link: `/gateways/${gateway.id}`,
+          email: {
+            template: 'security.sso_install',
+            params: { kind: 'channel', detail },
+          },
+        })
+        .catch(() => {});
+    }
+
+    return saved;
   }
 
   /**
