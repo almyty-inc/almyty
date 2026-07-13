@@ -10,6 +10,7 @@ describe('ReferralsService', () => {
   let codeRepo: ReturnType<typeof makeRepo>;
   let referralRepo: ReturnType<typeof makeRepo>;
   let orgRepo: ReturnType<typeof makeRepo>;
+  let userRepo: ReturnType<typeof makeRepo>;
   let audit: ReturnType<typeof makeAudit>;
   let service: ReferralsService;
 
@@ -23,8 +24,24 @@ describe('ReferralsService', () => {
       { id: 'org-referrer', plan: 'free', planExpiresAt: null, billingInfo: null },
       { id: 'org-referred', plan: 'free', planExpiresAt: null, billingInfo: null },
     ]);
+    // Referees are verified by default so the pre-existing reward
+    // scenarios exercise their original paths; the verified-gating
+    // tests below override per case.
+    userRepo = makeRepo('user', [
+      ...['user-new', 'user-old', 'user-ancient', 'u1', 'u2', 'u3', 'u4'].map((id) => ({
+        id,
+        verifiedAt: new Date(),
+        isVerified: true,
+      })),
+    ]);
     audit = makeAudit();
-    service = new ReferralsService(codeRepo as any, referralRepo as any, orgRepo as any, audit as any);
+    service = new ReferralsService(
+      codeRepo as any,
+      referralRepo as any,
+      orgRepo as any,
+      audit as any,
+      userRepo as any,
+    );
   });
 
   // ── Code generation ────────────────────────────────────────────────────
@@ -365,5 +382,98 @@ describe('ReferralsService', () => {
         expect.not.arrayContaining(['referredUserId', 'ipAddress']),
       );
     });
+  });
+});
+
+/**
+ * Verified-referee reward gating + referrer notifications. Uses the
+ * same in-memory repos with an explicit notifications fake (the
+ * production wiring injects it @Optional()).
+ */
+describe('ReferralsService verified gating + notifications', () => {
+  let codeRepo: ReturnType<typeof makeRepo>;
+  let referralRepo: ReturnType<typeof makeRepo>;
+  let orgRepo: ReturnType<typeof makeRepo>;
+  let userRepo: ReturnType<typeof makeRepo>;
+  let notifications: { emit: jest.Mock };
+  let service: ReferralsService;
+
+  beforeEach(() => {
+    codeRepo = makeRepo('code');
+    referralRepo = makeRepo('ref');
+    orgRepo = makeRepo('org', [
+      { id: 'org-referrer', plan: 'pro', planExpiresAt: new Date(Date.now() + DAY_MS), billingInfo: null },
+      { id: 'org-referred', plan: 'free', planExpiresAt: null, billingInfo: null },
+    ]);
+    userRepo = makeRepo('user', [
+      { id: 'user-verified', verifiedAt: new Date(), isVerified: true },
+      { id: 'user-unverified', verifiedAt: null, isVerified: false },
+    ]);
+    notifications = { emit: jest.fn().mockResolvedValue(undefined) };
+    service = new ReferralsService(
+      codeRepo as any,
+      referralRepo as any,
+      orgRepo as any,
+      makeAudit() as any,
+      userRepo as any,
+      notifications as any,
+    );
+  });
+
+  async function seed(referredUserId: string) {
+    const code = await service.getOrCreateCode('user-referrer', 'org-referrer');
+    return referralRepo.save({
+      referrerUserId: 'user-referrer',
+      referredUserId,
+      referredOrganizationId: 'org-referred',
+      referralCodeId: code.id,
+      status: ReferralStatus.QUALIFIED,
+      qualifiedAt: new Date(),
+      rewardDays: 0,
+      abuseFlag: null,
+    });
+  }
+
+  it('holds the reward for an unverified referee (returns 0, no rewardDays)', async () => {
+    const referral = await seed('user-unverified');
+
+    const granted = await service.awardReferrerDays(referral, 14, 'tier1');
+
+    expect(granted).toBe(0);
+    expect(referral.rewardDays).toBe(0);
+    expect(notifications.emit).not.toHaveBeenCalled();
+  });
+
+  it('awards once the referee is verified and notifies the referrer (referral.qualified)', async () => {
+    const referral = await seed('user-verified');
+
+    const granted = await service.awardReferrerDays(referral, 14, 'tier1');
+    await new Promise((r) => setImmediate(r));
+
+    expect(granted).toBe(14);
+    expect(notifications.emit).toHaveBeenCalledTimes(1);
+    const input = notifications.emit.mock.calls[0][0];
+    expect(input).toMatchObject({
+      type: 'referral.qualified',
+      organizationId: 'org-referrer',
+      userIds: ['user-referrer'],
+    });
+    expect(input.email.template).toBe('referral.qualified');
+    expect(input.email.params.days).toBe(14);
+  });
+
+  it('tier 2 emits referral.rewarded', async () => {
+    const referral = await seed('user-verified');
+
+    await service.awardReferrerDays(referral, 30, 'tier2');
+    await new Promise((r) => setImmediate(r));
+
+    expect(notifications.emit.mock.calls[0][0].type).toBe('referral.rewarded');
+  });
+
+  it('isRefereeVerified accepts the legacy isVerified boolean too', async () => {
+    userRepo.store.push({ id: 'user-legacy', verifiedAt: null, isVerified: true });
+    const referral = await seed('user-legacy');
+    expect(await service.isRefereeVerified(referral)).toBe(true);
   });
 });
