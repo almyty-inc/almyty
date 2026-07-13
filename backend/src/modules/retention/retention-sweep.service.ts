@@ -3,6 +3,7 @@ import {
   Logger,
   OnModuleInit,
   OnModuleDestroy,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, LessThan, Repository, FindOptionsWhere } from 'typeorm';
@@ -15,6 +16,8 @@ import { UsageMetric } from '../../entities/usage-metric.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { OrganizationRole } from '../../entities/user-organization.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const SWEEP_INTERVAL_MS =
   Number(process.env.RETENTION_SWEEP_INTERVAL_MS) || 60 * 60_000; // hourly
@@ -87,6 +90,10 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(Gateway)
     private readonly gatewayRepository: Repository<Gateway>,
     private readonly auditLogService: AuditLogService,
+    // @Global notifications pipeline; @Optional() keeps existing unit
+    // tests (constructed without it) working.
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   onModuleInit(): void {
@@ -200,6 +207,9 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
         resourceName: 'retention_sweep',
         details: { ...counts },
       });
+
+      // Best-effort admin notification, max one per org per day.
+      await this.notifySweep(organizationId, counts, total);
     }
 
     return counts;
@@ -285,5 +295,42 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       gatewayId: In(gateways.map((g) => g.id)),
       timestamp: LessThan(cutoff),
     } as FindOptionsWhere<RequestLog>);
+  }
+
+  /**
+   * retention.sweep — tell the org's admins their retention policy
+   * deleted data. Only when something was actually deleted, and at
+   * most once per org per day (checked against the latest stored
+   * notification, so it survives restarts and multiple replicas).
+   */
+  private async notifySweep(organizationId: string, counts: SweepCounts, total: number): Promise<void> {
+    if (!this.notifications || total <= 0) return;
+    try {
+      const recent = await this.notifications.hasRecentOrgNotification(
+        organizationId,
+        'retention.sweep',
+        24 * 60 * 60 * 1000,
+      );
+      if (recent) return;
+
+      const summary =
+        `${counts.agentRuns} runs, ${counts.conversations} conversations, ` +
+        `${counts.messages} messages, ${counts.requestLogs} request logs, ` +
+        `${counts.usageMetrics} usage metrics, ${counts.auditLogs} audit logs`;
+      await this.notifications.emit({
+        type: 'retention.sweep',
+        organizationId,
+        roleTarget: { orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN] },
+        title: 'Retention sweep completed',
+        body: `Your retention policy deleted ${total} expired records (${summary}).`,
+        link: '/settings',
+        email: {
+          template: 'retention.sweep',
+          params: { totalDeleted: total, summary },
+        },
+      });
+    } catch (err: any) {
+      this.logger.warn(`retention sweep notification failed: ${err?.message ?? err}`);
+    }
   }
 }

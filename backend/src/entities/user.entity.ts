@@ -37,6 +37,15 @@ export class User {
   isVerified: boolean;
 
   /**
+   * When the user verified their email address (non-blocking flow —
+   * login works unverified; some features like referral rewards are
+   * gated on this). NULL = unverified. Set together with the legacy
+   * `isVerified` boolean.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  verifiedAt: Date | null;
+
+  /**
    * Bumped to invalidate all previously issued access/refresh tokens for
    * this user (password change, password reset). JWTs carry the value
    * they were minted with; the JWT strategy and refresh path reject any

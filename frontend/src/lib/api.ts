@@ -290,6 +290,23 @@ export const authApi = {
 
   createApiKey: (data: { name: string; scopes?: string[]; expiresAt?: string }) =>
     apiPost('/auth/api-keys', data),
+
+  resendVerification: () => apiPost('/auth/resend-verification'),
+}
+
+// Notifications API
+export const notificationsApi = {
+  list: (params?: { unreadOnly?: boolean; page?: number; limit?: number }) =>
+    apiGet('/notifications', { params }),
+
+  markRead: (id: string) => apiPost(`/notifications/${id}/read`),
+
+  markAllRead: () => apiPost('/notifications/read-all'),
+
+  getPreferences: () => apiGet('/notifications/preferences'),
+
+  updatePreferences: (matrix: Record<string, { inApp: boolean; email: boolean }>) =>
+    apiPut('/notifications/preferences', { matrix }),
 }
 
 // Organizations API

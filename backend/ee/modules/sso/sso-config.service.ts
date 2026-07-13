@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
 
 import { OrgSsoConfig } from '../../../src/entities/org-sso-config.entity';
+import { OrganizationRole } from '../../../src/entities/user-organization.entity';
+import { NotificationsService } from '../../../src/modules/notifications/notifications.service';
 import {
   encryptField,
   decryptField,
@@ -38,6 +40,11 @@ export class SsoConfigService {
   constructor(
     @InjectRepository(OrgSsoConfig)
     private readonly repo: Repository<OrgSsoConfig>,
+    // Core notification pipeline (@Global). EE -> core is the allowed
+    // dependency direction; @Optional() so tests constructing the
+    // service without it keep working.
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   /** Raw entity (secrets still encrypted). */
@@ -108,6 +115,7 @@ export class SsoConfigService {
     dto: UpsertSsoConfigDto,
   ): Promise<OrgSsoConfig> {
     let config = await this.get(organizationId);
+    const isNew = !config;
     if (!config) {
       config = this.repo.create({ organizationId });
     }
@@ -143,7 +151,31 @@ export class SsoConfigService {
       }
     }
 
-    return this.repo.save(config);
+    const saved = await this.repo.save(config);
+
+    // security.sso_install — notify org admins the first time SSO is
+    // configured for the org. Best-effort: EE feature code never breaks
+    // the admin's save. (EE -> core injection is the allowed dependency
+    // direction; @Optional() keeps unit tests without the pipeline
+    // working.)
+    if (isNew && this.notifications) {
+      this.notifications
+        .emit({
+          type: 'security.sso_install',
+          organizationId,
+          roleTarget: { orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN] },
+          title: 'SSO configuration created',
+          body: `Single sign-on (${saved.protocol || 'saml'}) was configured for your organization.`,
+          link: '/settings',
+          email: {
+            template: 'security.sso_install',
+            params: { kind: 'sso', detail: saved.protocol || 'saml' },
+          },
+        })
+        .catch(() => {});
+    }
+
+    return saved;
   }
 
   /**

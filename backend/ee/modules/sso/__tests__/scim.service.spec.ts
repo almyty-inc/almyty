@@ -159,3 +159,79 @@ describe('ScimService — Groups', () => {
     );
   });
 });
+
+/**
+ * security.scim_deprovision notification wiring — org admins are told
+ * when the IdP deactivates a member. Fake pipeline passed positionally
+ * (production injects it @Optional()).
+ */
+describe('ScimService — deprovision notifications', () => {
+  function makeNotifyingService() {
+    const userRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 'u-1', email: 'carol@corp.com', firstName: 'C', lastName: 'D' }),
+      save: jest.fn(async (x: any) => x),
+    };
+    const membershipRepo = {
+      findOne: jest.fn(),
+      save: jest.fn(async (x: any) => x),
+    };
+    const notifications = { emit: jest.fn().mockResolvedValue(undefined) };
+    const service = new ScimService(
+      userRepo as any,
+      membershipRepo as any,
+      {} as any,
+      {} as any,
+      { get: jest.fn().mockResolvedValue({ defaultRole: 'member' }) } as any,
+      notifications as any,
+    );
+    return { service, userRepo, membershipRepo, notifications };
+  }
+
+  it('DELETE deprovision emits security.scim_deprovision to org admins', async () => {
+    const { service, membershipRepo, notifications } = makeNotifyingService();
+    membershipRepo.findOne.mockResolvedValue({ id: 'm-1', userId: 'u-1', organizationId: 'org-1', isActive: true });
+
+    await service.deleteUser('org-1', 'u-1');
+    await new Promise((r) => setImmediate(r));
+
+    expect(notifications.emit).toHaveBeenCalledTimes(1);
+    const input = notifications.emit.mock.calls[0][0];
+    expect(input).toMatchObject({
+      type: 'security.scim_deprovision',
+      organizationId: 'org-1',
+    });
+    expect(input.roleTarget.orgRoles).toEqual([OrganizationRole.OWNER, OrganizationRole.ADMIN]);
+    expect(input.body).toContain('carol@corp.com');
+    expect(input.email.params.memberEmail).toBe('carol@corp.com');
+  });
+
+  it('PATCH active:false emits; PATCH on an already-inactive membership does not', async () => {
+    const { service, membershipRepo, notifications } = makeNotifyingService();
+    membershipRepo.findOne.mockResolvedValue({ id: 'm-1', userId: 'u-1', organizationId: 'org-1', isActive: true });
+
+    await service.patchUser('org-1', 'u-1', {
+      Operations: [{ op: 'replace', path: 'active', value: false }],
+    } as any);
+    await new Promise((r) => setImmediate(r));
+    expect(notifications.emit).toHaveBeenCalledTimes(1);
+
+    notifications.emit.mockClear();
+    membershipRepo.findOne.mockResolvedValue({ id: 'm-1', userId: 'u-1', organizationId: 'org-1', isActive: false });
+    await service.patchUser('org-1', 'u-1', {
+      Operations: [{ op: 'replace', path: 'active', value: false }],
+    } as any);
+    await new Promise((r) => setImmediate(r));
+    expect(notifications.emit).not.toHaveBeenCalled();
+  });
+
+  it('reactivation (active:true) does not emit', async () => {
+    const { service, membershipRepo, notifications } = makeNotifyingService();
+    membershipRepo.findOne.mockResolvedValue({ id: 'm-1', userId: 'u-1', organizationId: 'org-1', isActive: false });
+
+    await service.patchUser('org-1', 'u-1', {
+      Operations: [{ op: 'replace', path: 'active', value: true }],
+    } as any);
+    await new Promise((r) => setImmediate(r));
+    expect(notifications.emit).not.toHaveBeenCalled();
+  });
+});
