@@ -126,7 +126,7 @@ describe('AuthService', () => {
         },
         {
           provide: MailService,
-          useValue: { sendPasswordReset: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true), send: jest.fn().mockResolvedValue(true) },
+          useValue: { sendPasswordReset: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true), sendEmailVerification: jest.fn().mockResolvedValue(true), send: jest.fn().mockResolvedValue(true) },
         },
         {
           provide: ReferralsService,
@@ -223,7 +223,13 @@ describe('AuthService', () => {
         fullName: `${createUserDto.firstName} ${createUserDto.lastName}`,
         hasPermissionInOrganization: jest.fn().mockReturnValue(true),
       } as any;
-      userRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(userWithOrgs);
+      // Sequence: 1) duplicate-email check, 2) fire-and-forget
+      // verification-email lookup (register kicks it off before token
+      // generation), 3) generateTokens re-reads the user with orgs.
+      userRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(userWithOrgs);
 
       const result = await service.register(createUserDto);
 
@@ -273,7 +279,13 @@ describe('AuthService', () => {
         organizationMemberships: [],
         hasPermissionInOrganization: jest.fn().mockReturnValue(true),
       } as any;
-      userRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(userWithOrgs);
+      // Sequence: 1) duplicate-email check, 2) fire-and-forget
+      // verification-email lookup (register kicks it off before token
+      // generation), 3) generateTokens re-reads the user with orgs.
+      userRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(userWithOrgs);
       organizationRepository.findOne.mockResolvedValue(null); // org name available
     }
 
@@ -346,6 +358,7 @@ describe('AuthService', () => {
       }));
 
       userRepo.findOne.mockResolvedValueOnce(null); // user not found
+      userRepo.findOne.mockResolvedValueOnce(null); // fire-and-forget verification lookup
       orgRepo.findOne.mockResolvedValue(null); // org name available
       jwtService.sign.mockReturnValue('mock-token');
       // The token generation reads the user back with memberships.
@@ -978,4 +991,201 @@ describe('AuthService', () => {
       await expect(service.verifyEmail('invalid-token')).rejects.toThrow(BadRequestException);
     });
   });
+
+/**
+ * Email verification flow (verifiedAt + signed token link). Uses direct
+ * construction with per-test mocks — the flow touches only the user
+ * repository, JwtService, and MailService.
+ */
+describe('AuthService email verification', () => {
+  function makeDirect(overrides: { notifications?: any } = {}) {
+    const userRepo: any = {
+      findOne: jest.fn(),
+      create: jest.fn((d: any) => d),
+      save: jest.fn(async (u: any) => u),
+      manager: { transaction: jest.fn() },
+    };
+    const orgRepo: any = { findOne: jest.fn().mockResolvedValue(null), create: jest.fn(), save: jest.fn() };
+    const jwt: any = { sign: jest.fn().mockReturnValue('signed-token'), verify: jest.fn() };
+    const mail: any = { sendEmailVerification: jest.fn().mockResolvedValue(true) };
+    const audit: any = { log: jest.fn().mockResolvedValue(null) };
+    const referrals: any = { attributeSignup: jest.fn().mockResolvedValue(null) };
+    const svc = new AuthService(
+      userRepo,
+      {} as any,
+      orgRepo,
+      {} as any,
+      jwt,
+      audit,
+      mail,
+      referrals,
+      overrides.notifications,
+    );
+    return { svc, userRepo, orgRepo, jwt, mail };
+  }
+
+  describe('verifyEmail', () => {
+    it('verifies via a signed token, stamping verifiedAt and clearing the legacy token', async () => {
+      const { svc, userRepo, jwt } = makeDirect();
+      const user: any = {
+        id: 'u1',
+        email: 'a@example.com',
+        isVerified: false,
+        verifiedAt: null,
+        verificationToken: 'legacy',
+      };
+      jwt.verify.mockReturnValue({ sub: 'u1', email: 'a@example.com', purpose: 'email_verify' });
+      userRepo.findOne.mockResolvedValue(user);
+
+      await svc.verifyEmail('signed-token');
+
+      expect(user.isVerified).toBe(true);
+      expect(user.verifiedAt).toBeInstanceOf(Date);
+      expect(user.verificationToken).toBeNull();
+      expect(userRepo.save).toHaveBeenCalledWith(user);
+    });
+
+    it('rejects a signed token bound to a different email address', async () => {
+      const { svc, userRepo, jwt } = makeDirect();
+      jwt.verify.mockReturnValue({ sub: 'u1', email: 'old@example.com', purpose: 'email_verify' });
+      userRepo.findOne.mockResolvedValue({ id: 'u1', email: 'new@example.com' });
+
+      await expect(svc.verifyEmail('signed-token')).rejects.toThrow(BadRequestException);
+    });
+
+    it('falls back to the legacy DB-token path when the value is not a JWT', async () => {
+      const { svc, userRepo, jwt } = makeDirect();
+      jwt.verify.mockImplementation(() => {
+        throw new Error('jwt malformed');
+      });
+      const user: any = { id: 'u1', isVerified: false, verifiedAt: null, verificationToken: 'db-token' };
+      userRepo.findOne.mockResolvedValue(user);
+
+      await svc.verifyEmail('db-token');
+
+      expect(userRepo.findOne).toHaveBeenCalledWith({ where: { verificationToken: 'db-token' } });
+      expect(user.verifiedAt).toBeInstanceOf(Date);
+      expect(user.isVerified).toBe(true);
+    });
+
+    it('rejects empty and unknown tokens', async () => {
+      const { svc, userRepo, jwt } = makeDirect();
+      await expect(svc.verifyEmail('')).rejects.toThrow(BadRequestException);
+
+      jwt.verify.mockImplementation(() => {
+        throw new Error('bad');
+      });
+      userRepo.findOne.mockResolvedValue(null);
+      await expect(svc.verifyEmail('nope')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('requestEmailVerification', () => {
+    it('mints a purpose-scoped 7d token and emails it to unverified users', async () => {
+      const { svc, userRepo, jwt, mail } = makeDirect();
+      userRepo.findOne.mockResolvedValue({
+        id: 'u1',
+        email: 'a@example.com',
+        firstName: 'Ada',
+        isVerified: false,
+        verifiedAt: null,
+      });
+
+      const result = await svc.requestEmailVerification('u1');
+
+      expect(result.alreadyVerified).toBe(false);
+      expect(jwt.sign).toHaveBeenCalledWith(
+        { sub: 'u1', email: 'a@example.com', purpose: 'email_verify' },
+        { expiresIn: '7d' },
+      );
+      expect(mail.sendEmailVerification).toHaveBeenCalledWith('a@example.com', 'signed-token', 'Ada');
+    });
+
+    it('is a no-op for already-verified users', async () => {
+      const { svc, userRepo, mail } = makeDirect();
+      userRepo.findOne.mockResolvedValue({ id: 'u1', email: 'a@example.com', verifiedAt: new Date() });
+
+      const result = await svc.requestEmailVerification('u1');
+
+      expect(result.alreadyVerified).toBe(true);
+      expect(mail.sendEmailVerification).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('non-blocking login', () => {
+    it('validateUser succeeds for an unverified user (verification never blocks login)', async () => {
+      const { svc, userRepo } = makeDirect();
+      const passwordHash = await bcrypt.hash('Password123!', 4);
+      userRepo.findOne.mockResolvedValue({
+        id: 'u1',
+        email: 'a@example.com',
+        passwordHash,
+        isActive: true,
+        isVerified: false,
+        verifiedAt: null,
+        organizationMemberships: [],
+      });
+
+      const user = await svc.validateUser('a@example.com', 'Password123!');
+      expect(user).not.toBeNull();
+      expect(user!.verifiedAt).toBeNull();
+    });
+  });
+
+  describe('register side-effects', () => {
+    it('sends the verification email and emits account.welcome', async () => {
+      const notifications = { emit: jest.fn().mockResolvedValue(undefined) };
+      const { svc, userRepo, jwt, mail } = makeDirect({ notifications });
+
+      const savedUser: any = {
+        id: 'user-123',
+        email: 'new@example.com',
+        firstName: 'New',
+        lastName: 'User',
+        isVerified: false,
+        verifiedAt: null,
+        tokenVersion: 0,
+      };
+      userRepo.manager.transaction.mockImplementation(async (cb: any) =>
+        cb({
+          create: (_c: any, d: any) => d,
+          save: async (c: any, e: any) => {
+            const name = c?.name ?? '';
+            if (name === 'User') return savedUser;
+            if (name === 'Organization') return { id: 'org-123', ...e };
+            return e;
+          },
+        }),
+      );
+      userRepo.findOne
+        .mockResolvedValueOnce(null) // duplicate-email check
+        .mockResolvedValueOnce(savedUser) // verification lookup
+        .mockResolvedValueOnce({
+          ...savedUser,
+          organizationMemberships: [],
+          hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+        }); // generateTokens
+
+      await svc.register({
+        email: 'new@example.com',
+        password: 'Password123!',
+        firstName: 'New',
+        lastName: 'User',
+        organizationName: 'NewOrg',
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      expect(mail.sendEmailVerification).toHaveBeenCalledWith('new@example.com', 'signed-token', 'New');
+      expect(notifications.emit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'account.welcome',
+          organizationId: 'org-123',
+          userIds: ['user-123'],
+          email: expect.objectContaining({ template: 'account.welcome' }),
+        }),
+      );
+      expect(jwt.sign).toHaveBeenCalled();
+    });
+  });
+});
 });
