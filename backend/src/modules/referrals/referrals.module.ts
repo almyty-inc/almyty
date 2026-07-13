@@ -6,6 +6,7 @@ import { Referral } from '../../entities/referral.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
+import { User } from '../../entities/user.entity';
 import { ReferralsService } from './referrals.service';
 import { ReferralQualificationService } from './referral-qualification.service';
 import { ReferralsController } from './referrals.controller';
@@ -17,7 +18,7 @@ import { ReferralsController } from './referrals.controller';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ReferralCode, Referral, Organization, Gateway, AgentRun]),
+    TypeOrmModule.forFeature([ReferralCode, Referral, Organization, Gateway, AgentRun, User]),
   ],
   providers: [ReferralsService, ReferralQualificationService],
   controllers: [ReferralsController],

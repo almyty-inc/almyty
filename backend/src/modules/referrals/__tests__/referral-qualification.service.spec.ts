@@ -11,6 +11,7 @@ describe('ReferralQualificationService', () => {
   let orgRepo: ReturnType<typeof makeRepo>;
   let gatewayRepo: ReturnType<typeof makeRepo>;
   let agentRunRepo: ReturnType<typeof makeRepo>;
+  let userRepo: ReturnType<typeof makeRepo>;
   let referralsService: ReferralsService;
   let sweeper: ReferralQualificationService;
 
@@ -26,11 +27,16 @@ describe('ReferralQualificationService', () => {
     ]);
     gatewayRepo = makeRepo('gw');
     agentRunRepo = makeRepo('run');
+    // Referee verified by default — verified-gating cases override.
+    userRepo = makeRepo('user', [
+      { id: 'user-new', verifiedAt: new Date(), isVerified: true },
+    ]);
     referralsService = new ReferralsService(
       codeRepo as any,
       referralRepo as any,
       orgRepo as any,
       makeAudit() as any,
+      userRepo as any,
     );
     sweeper = new ReferralQualificationService(
       referralRepo as any,
@@ -42,7 +48,6 @@ describe('ReferralQualificationService', () => {
       makeAudit() as any,
     );
   });
-
   async function seedReferral(overrides: any = {}) {
     const code = await codeRepo.save({
       userId: 'user-referrer',
@@ -220,4 +225,117 @@ describe('ReferralQualificationService', () => {
       expect(codeRepo.store[0].accruedRewardDays).toBe(28);
     });
   });
+});
+
+/**
+ * Verified-referee gating in the sweep: an activated referral whose
+ * referee has not verified their email is held as PENDING (like the
+ * abuse path) and retried — it qualifies on a later tick once the
+ * referee verifies.
+ */
+describe('ReferralQualificationService verified-referee gating', () => {
+  let referralRepo: ReturnType<typeof makeRepo>;
+  let codeRepo: ReturnType<typeof makeRepo>;
+  let orgRepo: ReturnType<typeof makeRepo>;
+  let gatewayRepo: ReturnType<typeof makeRepo>;
+  let agentRunRepo: ReturnType<typeof makeRepo>;
+  let userRepo: ReturnType<typeof makeRepo>;
+  let sweeper: ReferralQualificationService;
+
+  beforeEach(() => {
+    referralRepo = makeRepo('ref');
+    codeRepo = makeRepo('code');
+    orgRepo = makeRepo('org', [
+      { id: 'org-referrer', plan: 'pro', planExpiresAt: new Date(Date.now() + DAY_MS), billingInfo: null },
+      { id: 'org-referred', plan: 'free', planExpiresAt: null, billingInfo: null },
+    ]);
+    gatewayRepo = makeRepo('gw');
+    agentRunRepo = makeRepo('run');
+    userRepo = makeRepo('user', [
+      { id: 'user-new', verifiedAt: null, isVerified: false }, // unverified referee
+    ]);
+    const referralsService = new ReferralsService(
+      codeRepo as any,
+      referralRepo as any,
+      orgRepo as any,
+      makeAudit() as any,
+      userRepo as any,
+    );
+    sweeper = new ReferralQualificationService(
+      referralRepo as any,
+      codeRepo as any,
+      orgRepo as any,
+      gatewayRepo as any,
+      agentRunRepo as any,
+      referralsService,
+      makeAudit() as any,
+    );
+  });
+
+  async function seedActivatedReferral() {
+    const code = await codeRepo.save({
+      userId: 'user-referrer',
+      organizationId: 'org-referrer',
+      code: 'CODE2345',
+      active: true,
+      accruedRewardDays: 0,
+    });
+    const referral = await referralRepo.save({
+      referrerUserId: 'user-referrer',
+      referredUserId: 'user-new',
+      referredOrganizationId: 'org-referred',
+      referralCodeId: code.id,
+      status: ReferralStatus.PENDING,
+      qualifiedAt: null,
+      rewardedAt: null,
+      rewardDays: 0,
+      abuseFlag: null,
+    });
+    gatewayRepo.store.push({ id: 'gw-1', organizationId: 'org-referred' });
+    agentRunRepo.store.push({ id: 'run-1', organizationId: 'org-referred' });
+    return referral;
+  }
+
+  it('holds an activated referral as PENDING while the referee is unverified', async () => {
+    const referral = await seedActivatedReferral();
+
+    const result = await sweeper.sweep();
+
+    expect(result.qualified).toBe(0);
+    expect(referral.status).toBe(ReferralStatus.PENDING);
+    expect(referral.rewardDays).toBe(0);
+  });
+
+  it('qualifies (and rewards tier 1) on a later sweep after the referee verifies', async () => {
+    const referral = await seedActivatedReferral();
+
+    await sweeper.sweep(); // held
+    userRepo.store[0].verifiedAt = new Date(); // referee verifies
+    const result = await sweeper.sweep();
+
+    expect(result.qualified).toBe(1);
+    expect(referral.status).toBe(ReferralStatus.QUALIFIED);
+    expect(referral.rewardDays).toBeGreaterThan(0);
+  });
+
+  it('holds the qualified -> rewarded (tier 2) transition for unverified referees too', async () => {
+    const referral = await seedActivatedReferral();
+    referral.status = ReferralStatus.QUALIFIED;
+    referral.qualifiedAt = new Date();
+    referredOrgRow().plan = 'pro';
+    referredOrgRow().billingInfo = { stripeSubscriptionId: 'sub_1' };
+
+    const held = await sweeper.sweep();
+    expect(held.rewarded).toBe(0);
+    expect(referral.status).toBe(ReferralStatus.QUALIFIED);
+
+    userRepo.store[0].verifiedAt = new Date();
+    const after = await sweeper.sweep();
+    expect(after.rewarded).toBe(1);
+    expect(referral.status).toBe(ReferralStatus.REWARDED);
+  });
+
+  function referredOrgRow() {
+    return orgRepo.store.find((o) => o.id === 'org-referred');
+  }
 });
