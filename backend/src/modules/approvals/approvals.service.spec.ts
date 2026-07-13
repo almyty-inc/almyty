@@ -154,3 +154,136 @@ describe('ApprovalsService', () => {
     });
   });
 });
+
+/**
+ * Notification wiring: approval.pending fans out to the users who can
+ * decide; approval.decided goes to the run's initiator. The pipeline is
+ * injected @Optional() — everything above runs without it, these tests
+ * pass a fake.
+ */
+describe('ApprovalsService notifications', () => {
+  function makeNotifyingService(runUserId: string | null = 'initiator-1') {
+    const approvals = new FakeApprovalsRepo();
+    const runs: any = {
+      updates: [] as any[],
+      async update(criteria: any, patch: any) {
+        this.updates.push({ criteria, patch });
+        return { affected: 1 };
+      },
+      async findOne() {
+        return runUserId ? { id: 'r1', userId: runUserId } : null;
+      },
+    };
+    const policy = new FakePolicy();
+    const notifications = { emit: jest.fn().mockResolvedValue(undefined) };
+    const svc = new ApprovalsService(
+      approvals as any,
+      runs as any,
+      policy as any,
+      undefined,
+      notifications as any,
+    );
+    return { svc, approvals, runs, notifications };
+  }
+
+  const createInput = (overrides: any = {}) => ({
+    organizationId: 'org-1',
+    teamId: null,
+    runId: 'r1',
+    agentId: 'a1',
+    toolCallId: 'tc-1',
+    reason: 'destructive action ahead',
+    ...overrides,
+  });
+
+  async function flush() {
+    await new Promise((r) => setImmediate(r));
+  }
+
+  it('emits approval.pending to org owners/admins on create', async () => {
+    const { svc, notifications } = makeNotifyingService();
+    const row = await svc.create(createInput());
+    await flush();
+
+    expect(notifications.emit).toHaveBeenCalledTimes(1);
+    const input = notifications.emit.mock.calls[0][0];
+    expect(input).toMatchObject({
+      type: 'approval.pending',
+      organizationId: 'org-1',
+      body: 'destructive action ahead',
+      link: `/approvals/${row.id}`,
+    });
+    expect(input.roleTarget.orgRoles).toEqual(['owner', 'admin']);
+    expect(input.roleTarget.teamLeadOfTeamId).toBeNull();
+    expect(input.email.template).toBe('approval.pending');
+  });
+
+  it('includes the team LEAD target for team-scoped requests', async () => {
+    const { svc, notifications } = makeNotifyingService();
+    await svc.create(createInput({ teamId: 'team-9' }));
+    await flush();
+
+    expect(notifications.emit.mock.calls[0][0].roleTarget.teamLeadOfTeamId).toBe('team-9');
+  });
+
+  it('emits approval.decided to the run initiator on approve', async () => {
+    const { svc, notifications } = makeNotifyingService('initiator-1');
+    const row = await svc.create(createInput());
+    notifications.emit.mockClear();
+
+    await svc.approve(row.id, { decidedBy: 'admin-1', decisionReason: 'ok' }, { id: 'admin-1' });
+    await flush();
+
+    expect(notifications.emit).toHaveBeenCalledTimes(1);
+    const input = notifications.emit.mock.calls[0][0];
+    expect(input).toMatchObject({
+      type: 'approval.decided',
+      userIds: ['initiator-1'],
+      title: 'Approval approved',
+    });
+    expect(input.email.params.status).toBe('approved');
+  });
+
+  it('emits approval.decided on reject too', async () => {
+    const { svc, notifications } = makeNotifyingService('initiator-1');
+    const row = await svc.create(createInput());
+    notifications.emit.mockClear();
+
+    await svc.reject(row.id, { decidedBy: 'admin-1', decisionReason: 'no' }, { id: 'admin-1' });
+    await flush();
+
+    expect(notifications.emit.mock.calls[0][0].title).toBe('Approval rejected');
+  });
+
+  it('skips the decided notification when the initiator decided their own request', async () => {
+    const { svc, notifications } = makeNotifyingService('admin-1');
+    const row = await svc.create(createInput());
+    notifications.emit.mockClear();
+
+    await svc.approve(row.id, { decidedBy: 'admin-1' }, { id: 'admin-1' });
+    await flush();
+
+    expect(notifications.emit).not.toHaveBeenCalled();
+  });
+
+  it('notifies the initiator with status expired from the sweep', async () => {
+    const { svc, notifications } = makeNotifyingService('initiator-1');
+    await svc.create(createInput({ ttlSeconds: 1 }));
+    notifications.emit.mockClear();
+
+    await svc.sweepExpired(new Date(Date.now() + 60_000));
+    await flush();
+
+    expect(notifications.emit).toHaveBeenCalledTimes(1);
+    expect(notifications.emit.mock.calls[0][0].title).toBe('Approval expired');
+  });
+
+  it('create still succeeds when the notification pipeline throws', async () => {
+    const { svc, notifications } = makeNotifyingService();
+    notifications.emit.mockRejectedValue(new Error('down'));
+
+    const row = await svc.create(createInput());
+    await flush();
+    expect(row.status).toBe('pending');
+  });
+});

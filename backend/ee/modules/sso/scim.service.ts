@@ -3,8 +3,10 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { NotificationsService } from '../../../src/modules/notifications/notifications.service';
 import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
@@ -68,6 +70,10 @@ export class ScimService {
     @InjectRepository(UserTeam)
     private readonly userTeamRepo: Repository<UserTeam>,
     private readonly configService: SsoConfigService,
+    // Core notification pipeline (@Global). EE -> core is the allowed
+    // dependency direction; @Optional() keeps existing tests working.
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   // ── Users ─────────────────────────────────────────────────────────
@@ -162,6 +168,7 @@ export class ScimService {
   /** PUT — full replace. */
   async replaceUser(orgId: string, userId: string, input: ScimUserInput) {
     const { user, membership } = await this.loadMember(orgId, userId);
+    const wasActive = membership.isActive;
     if (input.name?.givenName !== undefined) user.firstName = input.name.givenName;
     if (input.name?.familyName !== undefined) user.lastName = input.name.familyName;
     await this.userRepo.save(user);
@@ -169,12 +176,14 @@ export class ScimService {
       membership.isActive = input.active;
       await this.membershipRepo.save(membership);
     }
+    if (wasActive && !membership.isActive) this.notifyDeprovision(orgId, user);
     return this.toScimUser(user, membership);
   }
 
   /** PATCH — the common Okta/Entra deactivation is `replace active:false`. */
   async patchUser(orgId: string, userId: string, patch: ScimPatchOp) {
     const { user, membership } = await this.loadMember(orgId, userId);
+    const wasActive = membership.isActive;
     for (const op of patch.Operations ?? []) {
       const operation = op.op?.toLowerCase();
       if (operation !== 'replace' && operation !== 'add') continue;
@@ -192,14 +201,40 @@ export class ScimService {
     }
     await this.userRepo.save(user);
     await this.membershipRepo.save(membership);
+    if (wasActive && !membership.isActive) this.notifyDeprovision(orgId, user);
     return this.toScimUser(user, membership);
   }
 
   /** DELETE — deprovision from the org (deactivate membership). */
   async deleteUser(orgId: string, userId: string) {
-    const { membership } = await this.loadMember(orgId, userId);
+    const { user, membership } = await this.loadMember(orgId, userId);
+    const wasActive = membership.isActive;
     membership.isActive = false;
     await this.membershipRepo.save(membership);
+    if (wasActive) this.notifyDeprovision(orgId, user);
+  }
+
+  /**
+   * security.scim_deprovision — tell org admins their IdP deactivated a
+   * member. Best-effort and fire-and-forget: a notification failure
+   * must never fail the SCIM call the IdP is waiting on.
+   */
+  private notifyDeprovision(orgId: string, user: User): void {
+    if (!this.notifications) return;
+    this.notifications
+      .emit({
+        type: 'security.scim_deprovision',
+        organizationId: orgId,
+        roleTarget: { orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN] },
+        title: 'Member deprovisioned via SCIM',
+        body: `Your identity provider deactivated ${user.email} in your organization.`,
+        link: '/settings',
+        email: {
+          template: 'security.scim_deprovision',
+          params: { memberEmail: user.email },
+        },
+      })
+      .catch(() => {});
   }
 
   private async loadMember(orgId: string, userId: string) {

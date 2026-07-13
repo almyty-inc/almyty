@@ -93,6 +93,12 @@ export class ReferralQualificationService implements OnModuleInit, OnModuleDestr
     for (const referral of pending) {
       const activated = await this.isActivated(referral.referredOrganizationId);
       if (!activated) continue;
+      // Verified-referee gate: attribution + activation criteria are
+      // unchanged, but the pending->qualified transition (and its
+      // tier-1 reward) is held until the referee verifies their email —
+      // exactly like the abuse path, the row is skipped and retried on
+      // a later sweep tick.
+      if (!(await this.referralsService.isRefereeVerified(referral))) continue;
 
       referral.status = ReferralStatus.QUALIFIED;
       referral.qualifiedAt = new Date();
@@ -130,6 +136,10 @@ export class ReferralQualificationService implements OnModuleInit, OnModuleDestr
         ['pro', 'enterprise'].includes(org.plan) &&
         !!(org.billingInfo as any)?.stripeSubscriptionId;
       if (!paid) continue;
+      // Verified-referee gate (same as the pending sweep): hold the row
+      // so the tier-2 reward isn't burned while the referee is
+      // unverified; retried on a later tick.
+      if (!(await this.referralsService.isRefereeVerified(referral))) continue;
 
       referral.status = ReferralStatus.REWARDED;
       referral.rewardedAt = new Date();

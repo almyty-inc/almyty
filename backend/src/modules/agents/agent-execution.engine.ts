@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -9,6 +9,7 @@ import { AgentWebhookService } from './agent-webhook.service';
 import { AgentExecutionStateHelper } from './agent-execution-state.helper';
 import { ExecutionContext } from './agent-template-resolver';
 import { StreamEvent } from './stream-event.types';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // Re-export so existing `import { StreamEvent } from './agent-execution.engine'`
 // continues to work without changing every consumer in one shot.
@@ -76,6 +77,11 @@ export class AgentExecutionEngine {
     private readonly nodeExecutor: AgentNodeExecutor,
     private readonly webhookService: AgentWebhookService,
     private readonly state: AgentExecutionStateHelper,
+    // Notification pipeline (@Global module) — @Optional() and appended
+    // last so existing test harnesses that construct/compile the engine
+    // without it resolve to undefined and skip run.failed emission.
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   /**
@@ -212,6 +218,7 @@ export class AgentExecutionEngine {
             timestamp: Date.now(),
           });
 
+          this.notifyRunFailed(agent, execution).catch(() => {});
           return execution;
         }
 
@@ -232,6 +239,7 @@ export class AgentExecutionEngine {
             timestamp: Date.now(),
           });
 
+          this.notifyRunFailed(agent, execution).catch(() => {});
           return execution;
         }
 
@@ -357,6 +365,7 @@ export class AgentExecutionEngine {
             timestamp: Date.now(),
           });
 
+          this.notifyRunFailed(agent, execution).catch(() => {});
           return execution;
         }
 
@@ -492,6 +501,7 @@ export class AgentExecutionEngine {
           data: { error: execution.error, errorType: ExecutionErrorType.BUDGET_EXCEEDED, executionId: execution.id },
           timestamp: Date.now(),
         });
+        this.notifyRunFailed(agent, execution).catch(() => {});
         return execution;
       }
 
@@ -524,6 +534,8 @@ export class AgentExecutionEngine {
           data: { error: execution.error, executionId: execution.id },
           timestamp: Date.now(),
         });
+
+        this.notifyRunFailed(agent, execution).catch(() => {});
 
         return execution;
       }
@@ -584,8 +596,47 @@ export class AgentExecutionEngine {
 
       // Send webhook notification for failures too (fire-and-forget)
       this.webhookService.sendExecutionWebhook(agent, execution).catch(() => {});
+      this.notifyRunFailed(agent, execution).catch(() => {});
 
       return execution;
+    }
+  }
+
+  /**
+   * run.failed notification for UNATTENDED runs only. An interactive
+   * Try-It invocation surfaces its failure directly in the UI the user
+   * is looking at; a scheduled (or webhook-triggered) run failing at
+   * 3am would otherwise go unnoticed. Detection is by the triggerType
+   * the scheduler/webhook path stamps into execution.metadata.
+   * In-app row by default; email only for users who explicitly enabled
+   * it (the defaults matrix has run.failed email OFF).
+   */
+  private async notifyRunFailed(agent: Agent, execution: AgentExecution): Promise<void> {
+    try {
+      if (!this.notifications) return;
+      const triggerType = (execution.metadata as any)?.triggerType;
+      if (triggerType !== 'scheduled' && triggerType !== 'webhook') return;
+      if (!execution.userId) return;
+      const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
+      await this.notifications.emit({
+        type: 'run.failed',
+        organizationId: execution.organizationId,
+        userIds: [execution.userId],
+        title: `Run failed: ${agent.name}`,
+        body: execution.error || 'Run failed',
+        link: `/agents/${agent.id}`,
+        email: {
+          template: 'run.failed',
+          params: {
+            agentName: agent.name,
+            error: execution.error,
+            triggerType,
+            agentUrl: `${baseUrl}/agents/${agent.id}`,
+          },
+        },
+      });
+    } catch {
+      // Notification delivery must never affect the execution result.
     }
   }
 
