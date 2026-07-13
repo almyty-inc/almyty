@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 
@@ -9,6 +9,8 @@ import { SpendAlert, SpendAlertLevel } from '../../entities/spend-alert.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
 import { User } from '../../entities/user.entity';
 import { MailService } from '../mail/mail.service';
+import { renderEmailTemplate } from '../mail/email-templates';
+import { NotificationsService } from '../notifications/notifications.service';
 import { SpendService } from './spend.service';
 import { startOfPeriod } from './spend-period.util';
 import { BudgetExceededException } from './budget-exceeded.exception';
@@ -48,6 +50,10 @@ export class BudgetsService {
     private readonly userRepo: Repository<User>,
     private readonly spend: SpendService,
     private readonly mail: MailService,
+    // @Global notifications pipeline; @Optional() and appended last so
+    // the existing spec (positional construction) keeps working.
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   // ── CRUD (T2.4) ──────────────────────────────────────────────────
@@ -223,6 +229,15 @@ export class BudgetsService {
   }
 
   /** Email the org's owners/admins about a threshold breach. */
+  /**
+   * Notify the org's owners/admins about a threshold breach: branded
+   * email (rendered from the shared budget.alert template) plus an
+   * in-app notification row. Triggering logic is unchanged — this
+   * fires exactly once per budget/period/level via recordAlert's
+   * dedup. When the notification pipeline is available, the email
+   * list additionally honors each user's `budget.alert` email
+   * preference (the per-period dedup already storms-proofs delivery).
+   */
   private async sendAlertEmail(
     budget: SpendBudget,
     level: SpendAlertLevel,
@@ -234,36 +249,69 @@ export class BudgetsService {
     const spent = `$${(spentCents / 100).toFixed(2)}`;
     const limit = `$${(budget.limitCents / 100).toFixed(2)}`;
     const pct = Math.round((spentCents / budget.limitCents) * 100);
-    const subject =
-      level === 'hard'
-        ? `almyty spend budget reached (${spent} of ${limit})`
-        : `almyty spend at ${pct}% of budget (${spent} of ${limit})`;
     const scope = budget.agentId ? 'this agent' : 'your organization';
-    const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-        <h2 style="color: #8b5cf6; margin-bottom: 8px;">almyty</h2>
-        <p style="font-size: 16px; color: #18181b;">
-          ${level === 'hard' ? 'The spend budget for' : `Spend has reached ${pct}% of the budget for`}
-          <strong>${scope}</strong> this ${budget.periodType}.
-        </p>
-        <p style="font-size: 16px; color: #18181b;">
-          <strong>${spent}</strong> of <strong>${limit}</strong> used.
-          ${level === 'hard' && budget.behavior === 'reject' ? 'New runs are blocked until the budget resets.' : ''}
-        </p>
-        <p style="font-size: 12px; color: #a1a1aa; margin-top: 32px;">
-          almyty — cost governance
-        </p>
-      </div>`;
-    const text =
-      `${subject}. ${spent} of ${limit} used this ${budget.periodType} for ${scope}.`;
+    const params = {
+      level,
+      spent,
+      limit,
+      pct,
+      scope,
+      periodType: budget.periodType,
+      behavior: budget.behavior,
+    };
+    const rendered = renderEmailTemplate('budget.alert', params);
+
+    // Honor per-user email preferences when the pipeline is available.
+    let emailTargets = recipients;
+    if (this.notifications) {
+      try {
+        const allowedIds = new Set(
+          await this.notifications.filterUsersWithEmailEnabled(
+            'budget.alert',
+            recipients.map((r) => r.userId),
+          ),
+        );
+        emailTargets = recipients.filter((r) => allowedIds.has(r.userId));
+      } catch {
+        // Preference lookup failure degrades to "email everyone".
+      }
+    }
 
     await Promise.all(
-      recipients.map((to) => this.mail.send({ to, subject, html, text })),
+      emailTargets.map(({ email }) =>
+        this.mail.send({
+          to: email,
+          subject: rendered.subject,
+          html: rendered.html,
+          text: rendered.text,
+        }),
+      ),
     );
+
+    // In-app rows for all owner/admin recipients (email deliberately
+    // omitted from the emit — it was handled above so the existing
+    // per-period dedup, not the 10-minute digest guard, governs it).
+    if (this.notifications) {
+      this.notifications
+        .emit({
+          type: 'budget.alert',
+          organizationId: budget.organizationId,
+          userIds: recipients.map((r) => r.userId),
+          title:
+            level === 'hard'
+              ? `Spend budget reached (${spent} of ${limit})`
+              : `Spend at ${pct}% of budget (${spent} of ${limit})`,
+          body: `${spent} of ${limit} used this ${budget.periodType} for ${scope}.${level === 'hard' && budget.behavior === 'reject' ? ' New runs are blocked until the budget resets.' : ''}`,
+          link: '/analytics',
+        })
+        .catch(() => {});
+    }
   }
 
-  /** Owner/admin emails for the org (budget-breach notification targets). */
-  private async resolveRecipients(organizationId: string): Promise<string[]> {
+  /** Owner/admin recipients for the org (budget-breach notification targets). */
+  private async resolveRecipients(
+    organizationId: string,
+  ): Promise<Array<{ userId: string; email: string }>> {
     const memberships = await this.userOrgRepo.find({
       where: [
         { organizationId, role: OrganizationRole.OWNER, isActive: true },
@@ -274,8 +322,10 @@ export class BudgetsService {
     if (memberships.length === 0) return [];
     const users = await this.userRepo.find({
       where: { id: In(memberships.map((m) => m.userId)) },
-      select: ['email'],
+      select: ['id', 'email'],
     });
-    return users.map((u) => u.email).filter((e): e is string => !!e);
+    return users
+      .filter((u): u is User => !!u.email)
+      .map((u) => ({ userId: u.id, email: u.email }));
   }
 }

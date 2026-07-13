@@ -6,6 +6,8 @@ import { EventEmitter } from 'events';
 import { ApprovalRequest, ApprovalStatus } from '../../entities/approval-request.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { OrganizationRole } from '../../entities/user-organization.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   APPROVAL_POLICY_HOOK,
   ApprovalPolicyApproval,
@@ -65,6 +67,12 @@ export class ApprovalsService extends EventEmitter {
     @Optional()
     @Inject(APPROVAL_POLICY_HOOK)
     private readonly approvalPolicyHook?: ApprovalPolicyHook,
+    // Notification pipeline (NotificationsModule is @Global). @Optional()
+    // so community/unit-test instantiations without the module keep
+    // working — emission is skipped when absent. This deliberately adds
+    // no module import edge (the cycle-safe pattern used for EE hooks).
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {
     super();
   }
@@ -114,6 +122,7 @@ export class ApprovalsService extends EventEmitter {
     await this.runs.update({ id: input.runId }, { status: AgentRunStatus.WAITING_APPROVAL });
 
     this.emit('approval.requested', saved);
+    this.notifyPending(saved).catch(() => {});
     return saved;
   }
 
@@ -155,6 +164,7 @@ export class ApprovalsService extends EventEmitter {
     const saved = await this.approvals.save(row);
 
     this.emit('approval.decided', saved);
+    this.notifyDecided(saved).catch(() => {});
     return saved;
   }
 
@@ -296,7 +306,67 @@ export class ApprovalsService extends EventEmitter {
       row.decisionReason = 'approval expired';
       await this.approvals.save(row);
       this.emit('approval.decided', row);
+      this.notifyDecided(row).catch(() => {});
     }
     return expired.length;
+  }
+
+  // ── Notifications (best-effort, fire-and-forget) ─────────────────
+
+  /**
+   * approval.pending — notify the users who can decide: org
+   * owners/admins plus, for team-scoped requests, the team's LEAD(s)
+   * (mirrors the RBAC rule documented on ApprovalRequest).
+   */
+  private async notifyPending(row: ApprovalRequest): Promise<void> {
+    if (!this.notifications) return;
+    const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
+    await this.notifications.emit({
+      type: 'approval.pending',
+      organizationId: row.organizationId,
+      roleTarget: {
+        orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN],
+        teamLeadOfTeamId: row.teamId,
+      },
+      title: 'Approval requested',
+      body: row.reason,
+      link: `/approvals/${row.id}`,
+      email: {
+        template: 'approval.pending',
+        params: {
+          reason: row.reason,
+          approvalUrl: `${baseUrl}/approvals/${row.id}`,
+        },
+      },
+    });
+  }
+
+  /**
+   * approval.decided — notify the run's initiator (skipping them when
+   * they decided their own request). Also fires for sweep expiry.
+   */
+  private async notifyDecided(row: ApprovalRequest): Promise<void> {
+    if (!this.notifications) return;
+    const run = await this.runs.findOne({ where: { id: row.runId } });
+    const initiatorId = run?.userId;
+    if (!initiatorId || initiatorId === row.decidedBy) return;
+    const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
+    const outcome = row.status === 'approved' ? 'approved' : row.status === 'expired' ? 'expired' : 'rejected';
+    await this.notifications.emit({
+      type: 'approval.decided',
+      organizationId: row.organizationId,
+      userIds: [initiatorId],
+      title: `Approval ${outcome}`,
+      body: row.decisionReason || row.reason,
+      link: `/approvals/${row.id}`,
+      email: {
+        template: 'approval.decided',
+        params: {
+          status: row.status,
+          decisionReason: row.decisionReason,
+          runUrl: `${baseUrl}/approvals/${row.id}`,
+        },
+      },
+    });
   }
 }
