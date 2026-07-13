@@ -6,6 +6,10 @@ export interface User {
   name: string
   role: UserRole
   isEmailVerified: boolean
+  // Notifications contract field — backend ships this alongside
+  // isEmailVerified. Absent/undefined means "treat as verified"
+  // (do not nag sessions created before the field existed).
+  emailVerified?: boolean
   avatar?: string
   createdAt: string
   updatedAt: string
@@ -470,3 +474,4 @@ export interface LlmCostConfig {
 
 export * from './usage';
 export * from './runtime';
+export * from './notification';
