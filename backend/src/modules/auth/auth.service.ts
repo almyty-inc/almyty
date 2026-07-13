@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -18,6 +18,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ReferralsService } from '../referrals/referrals.service';
 import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 export interface JwtPayload {
@@ -57,6 +58,11 @@ export class AuthService {
     private readonly auditLogService: AuditLogService,
     private readonly mailService: MailService,
     private readonly referralsService: ReferralsService,
+    // Notification pipeline (@Global module) — @Optional() so unit tests
+    // and community builds without it keep working (welcome notification
+    // is simply skipped).
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   async register(
@@ -170,6 +176,31 @@ export class AuthService {
       } catch (err) {
         // swallow — registration already succeeded
       }
+    }
+
+    // Post-registration notifications (fire-and-forget, outside the
+    // transaction): the verification link email and the welcome
+    // notification must never fail a successful registration.
+    this.requestEmailVerification(savedUser.id).catch(() => {});
+    if (this.notifications) {
+      const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
+      this.notifications
+        .emit({
+          type: 'account.welcome',
+          organizationId: savedOrganizationId,
+          userIds: [savedUser.id],
+          title: 'Welcome to almyty',
+          body: `Your organization ${createUserDto.organizationName} is ready. Connect an API and build your first agent.`,
+          link: '/dashboard',
+          email: {
+            template: 'account.welcome',
+            params: {
+              organizationName: createUserDto.organizationName,
+              dashboardUrl: `${baseUrl}/dashboard`,
+            },
+          },
+        })
+        .catch(() => {});
     }
 
     // Generate tokens (outside the transaction — purely read-side)
@@ -446,32 +477,87 @@ export class AuthService {
     await this.userRepository.save(user);
   }
 
+  /**
+   * Verify an email address from a token link. Primary path: a
+   * purpose-scoped signed JWT minted by requestEmailVerification()
+   * (carries its own expiry, no DB token storage needed). Legacy
+   * fallback: match the stored `verificationToken` column so any
+   * previously issued DB tokens keep working.
+   *
+   * Verification is NON-BLOCKING: login and every other flow work for
+   * unverified users; only verification-gated features (e.g. referral
+   * rewards) check `verifiedAt`.
+   */
   async verifyEmail(token: string): Promise<void> {
     // Same defense-in-depth as confirmPasswordReset: an empty/null
     // token would `WHERE verificationToken IS NULL` under TypeORM
     // and match any user who has already verified (i.e. had their
-    // token cleared to null). That would let an unauthenticated
-    // caller with no token silently "verify" an arbitrary already-
-    // verified account's verification state — harmless today but
-    // exactly the kind of brittle invariant that bites later when a
-    // verification flow is added that depends on re-entering the
-    // unverified state. Reject empty tokens up front.
+    // token cleared to null). Reject empty tokens up front.
     if (!token || typeof token !== 'string') {
       throw new BadRequestException('Invalid verification token');
     }
 
-    const user = await this.userRepository.findOne({
-      where: { verificationToken: token },
-    });
+    let user: User | null = null;
+
+    // Signed-JWT path.
+    try {
+      const payload: any = this.jwtService.verify(token);
+      if (payload?.purpose === 'email_verify' && payload?.sub) {
+        user = await this.userRepository.findOne({ where: { id: payload.sub } });
+        // The link is bound to the address it was sent to — if the user
+        // changed their email since, the old link must not verify the
+        // new address.
+        if (user && payload.email && user.email !== payload.email) {
+          throw new BadRequestException('Verification link is for a different email address');
+        }
+      }
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      // Not a (valid) JWT — fall through to the legacy DB-token path.
+    }
+
+    if (!user) {
+      user = await this.userRepository.findOne({
+        where: { verificationToken: token },
+      });
+    }
 
     if (!user) {
       throw new BadRequestException('Invalid verification token');
     }
 
     user.isVerified = true;
+    user.verifiedAt = user.verifiedAt ?? new Date();
     user.verificationToken = null;
 
     await this.userRepository.save(user);
+  }
+
+  /**
+   * (Re-)send the email verification link for a user. Idempotent and
+   * safe to call repeatedly: a fresh token is minted each time (JWTs
+   * are stateless, previous links stay valid until their expiry).
+   * No-op when the user is already verified.
+   */
+  async requestEmailVerification(userId: string): Promise<{ alreadyVerified: boolean }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+    if (user.verifiedAt || user.isVerified) {
+      return { alreadyVerified: true };
+    }
+    const token = this.mintEmailVerificationToken(user);
+    await this.mailService.sendEmailVerification(user.email, token, user.firstName);
+    return { alreadyVerified: false };
+  }
+
+  /** Purpose-scoped signed verification token (7 day expiry). */
+  private mintEmailVerificationToken(user: User): string {
+    return this.jwtService.sign(
+      { sub: user.id, email: user.email, purpose: 'email_verify' },
+      { expiresIn: '7d' },
+    );
   }
 
   async updateProfile(userId: string, updateProfileDto: UpdateProfileDto): Promise<User> {

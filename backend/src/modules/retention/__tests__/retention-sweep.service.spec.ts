@@ -277,3 +277,104 @@ describe('RetentionSweepService', () => {
     }
   });
 });
+
+/**
+ * retention.sweep notification: org admins hear about a sweep only when
+ * it deleted something, and at most once per org per day.
+ */
+describe('RetentionSweepService notifications', () => {
+  function makeService(recentNotification = false) {
+    const repos = {
+      policyRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn() },
+      runRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
+      conversationRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
+      messageRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
+      requestLogRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
+      usageMetricRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
+      auditLogRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
+      gatewayRepo: { find: jest.fn().mockResolvedValue([]) },
+    };
+    const notifications = {
+      emit: jest.fn().mockResolvedValue(undefined),
+      hasRecentOrgNotification: jest.fn().mockResolvedValue(recentNotification),
+    };
+    const service = new RetentionSweepService(
+      repos.policyRepo as any,
+      repos.runRepo as any,
+      repos.conversationRepo as any,
+      repos.messageRepo as any,
+      repos.requestLogRepo as any,
+      repos.usageMetricRepo as any,
+      repos.auditLogRepo as any,
+      repos.gatewayRepo as any,
+      { log: jest.fn().mockResolvedValue(null) } as any,
+      notifications as any,
+    );
+    return { service, repos, notifications };
+  }
+
+  const policyWithRuns = () =>
+    ({
+      id: 'p1',
+      organizationId: 'org-1',
+      enabled: true,
+      agentRunsDays: 30,
+      conversationsDays: null,
+      requestLogsDays: null,
+      usageMetricsDays: null,
+      auditLogDays: null,
+    } as any);
+
+  it('notifies org admins when the sweep deleted rows', async () => {
+    const { service, repos, notifications } = makeService();
+    repos.runRepo.find.mockResolvedValueOnce([{ id: 'r1' }, { id: 'r2' }]);
+    repos.runRepo.delete.mockResolvedValueOnce({ affected: 2 });
+
+    await service.sweepOrganization(policyWithRuns());
+
+    expect(notifications.hasRecentOrgNotification).toHaveBeenCalledWith(
+      'org-1',
+      'retention.sweep',
+      24 * 60 * 60 * 1000,
+    );
+    expect(notifications.emit).toHaveBeenCalledTimes(1);
+    const input = notifications.emit.mock.calls[0][0];
+    expect(input).toMatchObject({
+      type: 'retention.sweep',
+      organizationId: 'org-1',
+    });
+    expect(input.roleTarget.orgRoles).toEqual(['owner', 'admin']);
+    expect(input.body).toContain('2 expired records');
+    expect(input.email.template).toBe('retention.sweep');
+    expect(input.email.params.totalDeleted).toBe(2);
+  });
+
+  it('stays silent when nothing was deleted', async () => {
+    const { service, notifications } = makeService();
+
+    await service.sweepOrganization(policyWithRuns());
+
+    expect(notifications.emit).not.toHaveBeenCalled();
+  });
+
+  it('caps at one notification per org per day', async () => {
+    const { service, repos, notifications } = makeService(true);
+    repos.runRepo.find.mockResolvedValueOnce([{ id: 'r1' }]);
+    repos.runRepo.delete.mockResolvedValueOnce({ affected: 1 });
+
+    await service.sweepOrganization(policyWithRuns());
+
+    expect(notifications.hasRecentOrgNotification).toHaveBeenCalled();
+    expect(notifications.emit).not.toHaveBeenCalled();
+  });
+
+  it('a notification failure never fails the sweep', async () => {
+    const { service, repos, notifications } = makeService();
+    repos.runRepo.find.mockResolvedValueOnce([{ id: 'r1' }]);
+    repos.runRepo.delete.mockResolvedValueOnce({ affected: 1 });
+    notifications.emit.mockRejectedValue(new Error('down'));
+
+    const counts = await service.sweepOrganization(policyWithRuns());
+    expect(counts.agentRuns).toBe(1);
+  });
+});

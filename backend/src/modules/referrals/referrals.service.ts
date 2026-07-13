@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, Repository } from 'typeorm';
 import * as crypto from 'crypto';
@@ -6,6 +6,8 @@ import * as crypto from 'crypto';
 import { ReferralCode } from '../../entities/referral-code.entity';
 import { Referral, ReferralAbuseFlag, ReferralStatus } from '../../entities/referral.entity';
 import { Organization } from '../../entities/organization.entity';
+import { User } from '../../entities/user.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import {
@@ -52,6 +54,12 @@ export class ReferralsService {
     @InjectRepository(Organization)
     private readonly organizationRepository: Repository<Organization>,
     private readonly auditLogService: AuditLogService,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    // @Global notifications pipeline; @Optional() keeps existing unit
+    // tests (constructed without it) working.
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   // ── Code lifecycle ─────────────────────────────────────────────────────
@@ -229,6 +237,15 @@ export class ReferralsService {
   async awardReferrerDays(referral: Referral, days: number, trigger: 'tier1' | 'tier2'): Promise<number> {
     if (referral.abuseFlag) return 0;
 
+    // Verified-referee gate: rewards only auto-apply once the referee
+    // verified their email. Held like the abuse path — the sweep skips
+    // the row (status untouched) so it retries after verification; this
+    // check is defense-in-depth for any other caller.
+    if (!(await this.isRefereeVerified(referral))) {
+      this.logger.log(`referral ${referral.id} reward held: referee email unverified`);
+      return 0;
+    }
+
     const code = referral.referralCodeId
       ? await this.referralCodeRepository.findOne({ where: { id: referral.referralCodeId } })
       : await this.referralCodeRepository.findOne({ where: { userId: referral.referrerUserId } });
@@ -277,7 +294,59 @@ export class ReferralsService {
       },
     });
 
+    this.notifyReward(referral, referrerOrg.id, trigger, granted, referrerOrg.plan !== 'pro');
+
     return granted;
+  }
+
+  /**
+   * Reward gate: the referee must have verified their email address.
+   * Mirrors the abuse-flag path — an unverified referral is held (it
+   * never auto-rewards) and the qualification sweep retries it on a
+   * later tick once the referee verifies. Attribution and the
+   * qualification criteria themselves are unchanged.
+   */
+  async isRefereeVerified(referral: Referral): Promise<boolean> {
+    if (!referral.referredUserId) return false;
+    const referee = await this.userRepository.findOne({
+      where: { id: referral.referredUserId },
+      select: ['id', 'verifiedAt', 'isVerified'],
+    });
+    return !!(referee && (referee.verifiedAt || referee.isVerified));
+  }
+
+  /** referral.qualified / referral.rewarded — notify the referrer. */
+  private notifyReward(
+    referral: Referral,
+    referrerOrgId: string,
+    trigger: 'tier1' | 'tier2',
+    days: number,
+    banked: boolean,
+  ): void {
+    if (!this.notifications) return;
+    const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
+    const type = trigger === 'tier1' ? ('referral.qualified' as const) : ('referral.rewarded' as const);
+    this.notifications
+      .emit({
+        type,
+        organizationId: referrerOrgId,
+        userIds: [referral.referrerUserId],
+        title:
+          trigger === 'tier1'
+            ? 'Your referral qualified'
+            : 'Referral reward unlocked',
+        body: `${days} pro day${days === 1 ? '' : 's'} ${banked ? 'banked to your account' : 'added to your plan'}.`,
+        link: '/settings',
+        email: {
+          template: type,
+          params: {
+            days,
+            banked,
+            referralsUrl: `${baseUrl}/settings`,
+          },
+        },
+      })
+      .catch(() => {});
   }
 
   tier1Days(): number {
