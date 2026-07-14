@@ -15,14 +15,15 @@ function ctxFor(controller: any, method: string): ExecutionContext {
 }
 
 describe('ChargebackController entitlement gate', () => {
+  const orgResolverStub = { entitlementsForOrg: jest.fn(), hasForOrg: jest.fn() } as any;
   const reflector = new Reflector();
 
-  it('blocks with 402 in the community edition', () => {
+  it('blocks with 402 in the community edition', async () => {
     const svc = new LicenseService();
     svc.load({ token: '' });
-    const guard = new EntitlementGuard(reflector, svc);
+    const guard = new EntitlementGuard(reflector, svc, orgResolverStub);
     try {
-      guard.canActivate(ctxFor(ChargebackController, 'getReport'));
+      await guard.canActivate(ctxFor(ChargebackController, 'getReport'));
       fail('expected 402');
     } catch (e) {
       expect((e as HttpException).getStatus()).toBe(HttpStatus.PAYMENT_REQUIRED);
@@ -31,10 +32,10 @@ describe('ChargebackController entitlement gate', () => {
     }
   });
 
-  it('allows when chargeback is licensed', () => {
+  it('allows when chargeback is licensed', async () => {
     const svc = new LicenseService();
     jest.spyOn(svc, 'has').mockImplementation((f) => f === EE_ENTITLEMENTS.CHARGEBACK);
-    const guard = new EntitlementGuard(reflector, svc);
-    expect(guard.canActivate(ctxFor(ChargebackController, 'getReport'))).toBe(true);
+    const guard = new EntitlementGuard(reflector, svc, orgResolverStub);
+    expect(await guard.canActivate(ctxFor(ChargebackController, 'getReport'))).toBe(true);
   });
 });
