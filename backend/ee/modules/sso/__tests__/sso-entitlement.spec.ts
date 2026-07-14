@@ -16,9 +16,10 @@ import { ScimController } from '../scim.controller';
  * refuses (402) under a community license while allowing an EE-licensed one.
  */
 describe('SSO/SCIM entitlement gating', () => {
+  const orgResolverStub = { entitlementsForOrg: jest.fn(), hasForOrg: jest.fn() } as any;
   const controllers = [SsoController, SsoConfigController, ScimController];
 
-  it('gates every SSO/SCIM controller behind the sso entitlement', () => {
+  it('gates every SSO/SCIM controller behind the sso entitlement', async () => {
     for (const controller of controllers) {
       const meta = Reflect.getMetadata(ENTITLEMENT_KEY, controller);
       expect(meta).toEqual([EE_ENTITLEMENTS.SSO]);
@@ -33,15 +34,15 @@ describe('SSO/SCIM entitlement gating', () => {
     } as unknown as ExecutionContext;
   }
 
-  it('returns 402 for every SSO/SCIM route under a community license', () => {
+  it('returns 402 for every SSO/SCIM route under a community license', async () => {
     const svc = new LicenseService();
     svc.load({ token: '' }); // community — no sso entitlement
-    const guard = new EntitlementGuard(new Reflector(), svc);
+    const guard = new EntitlementGuard(new Reflector(), svc, orgResolverStub);
 
     for (const controller of controllers) {
       let status: number | undefined;
       try {
-        guard.canActivate(contextFor(controller));
+        await guard.canActivate(contextFor(controller));
         fail(`expected 402 for ${controller.name}`);
       } catch (e) {
         status = (e as HttpException).getStatus();
@@ -50,13 +51,13 @@ describe('SSO/SCIM entitlement gating', () => {
     }
   });
 
-  it('allows every SSO/SCIM route when the license grants sso', () => {
+  it('allows every SSO/SCIM route when the license grants sso', async () => {
     const svc = new LicenseService();
     jest.spyOn(svc, 'has').mockImplementation((f: string) => f === EE_ENTITLEMENTS.SSO);
-    const guard = new EntitlementGuard(new Reflector(), svc);
+    const guard = new EntitlementGuard(new Reflector(), svc, orgResolverStub);
 
     for (const controller of controllers) {
-      expect(guard.canActivate(contextFor(controller))).toBe(true);
+      expect(await guard.canActivate(contextFor(controller))).toBe(true);
     }
   });
 });
