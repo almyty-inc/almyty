@@ -21,15 +21,16 @@ const cases: [any, string, string][] = [
 ];
 
 describe('EE stub controllers', () => {
+  const orgResolverStub = { entitlementsForOrg: jest.fn(), hasForOrg: jest.fn() } as any;
   const reflector = new Reflector();
 
   describe.each(cases)('%p', (Controller, method, entitlement) => {
-    it(`gate: blocks with 402 without ${entitlement}`, () => {
+    it(`gate: blocks with 402 without ${entitlement}`, async () => {
       const svc = new LicenseService();
       svc.load({ token: '' });
-      const guard = new EntitlementGuard(reflector, svc);
+      const guard = new EntitlementGuard(reflector, svc, orgResolverStub);
       try {
-        guard.canActivate(ctxFor(Controller, method));
+        await guard.canActivate(ctxFor(Controller, method));
         fail('expected 402');
       } catch (e) {
         expect((e as HttpException).getStatus()).toBe(HttpStatus.PAYMENT_REQUIRED);
@@ -39,14 +40,14 @@ describe('EE stub controllers', () => {
       }
     });
 
-    it(`gate: allows with ${entitlement} licensed`, () => {
+    it(`gate: allows with ${entitlement} licensed`, async () => {
       const svc = new LicenseService();
       jest.spyOn(svc, 'has').mockImplementation((f) => f === entitlement);
-      const guard = new EntitlementGuard(reflector, svc);
-      expect(guard.canActivate(ctxFor(Controller, method))).toBe(true);
+      const guard = new EntitlementGuard(reflector, svc, orgResolverStub);
+      expect(await guard.canActivate(ctxFor(Controller, method))).toBe(true);
     });
 
-    it('handler reports 501 not implemented once past the gate', () => {
+    it('handler reports 501 not implemented once past the gate', async () => {
       const instance = new Controller();
       try {
         instance[method]();
