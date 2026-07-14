@@ -133,4 +133,128 @@ describe('LicenseService', () => {
     expect(snap.entitlements).toContain('agents');
     expect(snap.entitlements).not.toContain(EE_ENTITLEMENTS.SSO);
   });
+
+  // ── Per-org resolveToken (the billing seam fix) ─────────────────────────
+
+  describe('resolveToken (per-org resolution)', () => {
+    const PUBLIC_KEY_ENV = 'ALMYTY_LICENSE_PUBLIC_KEY';
+    const TOKEN_ENV = 'ALMYTY_LICENSE_KEY';
+
+    afterEach(() => {
+      delete process.env[PUBLIC_KEY_ENV];
+      delete process.env[TOKEN_ENV];
+    });
+
+    it('resolves a valid pro token to its EE entitlements unioned with community', () => {
+      const { publicPem, privatePem } = keypair();
+      process.env[PUBLIC_KEY_ENV] = publicPem;
+      const token = signLicense(
+        {
+          entitlements: [EE_ENTITLEMENTS.ADVANCED_RBAC, EE_ENTITLEMENTS.AUDIT_EXPORT],
+          limits: { seats: 10 },
+          expiresAt: null,
+          issuedTo: 'paid-org',
+        },
+        privatePem,
+      );
+
+      const svc = new LicenseService();
+      const snap = svc.resolveToken(token);
+
+      expect(snap.edition).toBe(EDITION_ENTERPRISE);
+      expect(snap.entitlements).toContain(EE_ENTITLEMENTS.ADVANCED_RBAC);
+      expect(snap.entitlements).toContain(EE_ENTITLEMENTS.AUDIT_EXPORT);
+      // Community baseline preserved.
+      expect(snap.entitlements).toContain('agents');
+      // EE feature NOT in the token stays absent.
+      expect(snap.entitlements).not.toContain(EE_ENTITLEMENTS.BYO_KMS);
+      expect(snap.limits.seats).toBe(10);
+      expect(snap.issuedTo).toBe('paid-org');
+    });
+
+    it('does not mutate the singleton global state', () => {
+      const { publicPem, privatePem } = keypair();
+      process.env[PUBLIC_KEY_ENV] = publicPem;
+      const token = signLicense(
+        { entitlements: [EE_ENTITLEMENTS.SSO], limits: {}, expiresAt: null },
+        privatePem,
+      );
+
+      const svc = new LicenseService();
+      svc.load({ token: '' }); // community global
+      svc.resolveToken(token); // per-org enterprise resolution
+
+      // Global state untouched by the per-org resolution.
+      expect(svc.getEdition()).toBe(EDITION_COMMUNITY);
+      expect(svc.has(EE_ENTITLEMENTS.SSO)).toBe(false);
+    });
+
+    it('falls back to the global env token when the passed token is expired', () => {
+      const { publicPem, privatePem } = keypair();
+      process.env[PUBLIC_KEY_ENV] = publicPem;
+      const envToken = signLicense(
+        { entitlements: [EE_ENTITLEMENTS.SSO], limits: {}, expiresAt: null },
+        privatePem,
+      );
+      process.env[TOKEN_ENV] = envToken;
+
+      const expired = signLicense(
+        {
+          entitlements: [EE_ENTITLEMENTS.ADVANCED_RBAC],
+          limits: {},
+          expiresAt: new Date(Date.now() - 1000).toISOString(),
+        },
+        privatePem,
+      );
+
+      const svc = new LicenseService();
+      const snap = svc.resolveToken(expired);
+
+      // Expired org token ignored → env token wins.
+      expect(snap.edition).toBe(EDITION_ENTERPRISE);
+      expect(snap.entitlements).toContain(EE_ENTITLEMENTS.SSO);
+      expect(snap.entitlements).not.toContain(EE_ENTITLEMENTS.ADVANCED_RBAC);
+    });
+
+    it('falls back to community when the passed token is tampered and no env token is set', () => {
+      const { publicPem, privatePem } = keypair();
+      process.env[PUBLIC_KEY_ENV] = publicPem;
+      const token = signLicense(
+        { entitlements: [EE_ENTITLEMENTS.SSO], limits: {}, expiresAt: null },
+        privatePem,
+      );
+      const tampered = token.slice(0, -4) + 'AAAA';
+
+      const svc = new LicenseService();
+      const snap = svc.resolveToken(tampered);
+
+      expect(snap.edition).toBe(EDITION_COMMUNITY);
+      expect(snap.entitlements).not.toContain(EE_ENTITLEMENTS.SSO);
+      expect(snap.entitlements).toContain('agents');
+    });
+
+    it('returns community when token is null and no env token is set', () => {
+      const svc = new LicenseService();
+      const snap = svc.resolveToken(null);
+
+      expect(snap.edition).toBe(EDITION_COMMUNITY);
+      expect(snap.entitlements).toContain('agents');
+      expect(snap.entitlements).not.toContain(EE_ENTITLEMENTS.SSO);
+    });
+
+    it('returns the env token snapshot when the passed token is null (self-host path)', () => {
+      const { publicPem, privatePem } = keypair();
+      process.env[PUBLIC_KEY_ENV] = publicPem;
+      process.env[TOKEN_ENV] = signLicense(
+        { entitlements: [EE_ENTITLEMENTS.SSO], limits: {}, expiresAt: null },
+        privatePem,
+      );
+
+      const svc = new LicenseService();
+      const snap = svc.resolveToken(null);
+
+      expect(snap.edition).toBe(EDITION_ENTERPRISE);
+      expect(snap.entitlements).toContain(EE_ENTITLEMENTS.SSO);
+    });
+  });
 });
