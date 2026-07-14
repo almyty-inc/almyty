@@ -20,13 +20,15 @@ import {
   LICENSE_PRIVATE_KEY_ENV,
   PAID_PLANS,
   PLAN_ENTERPRISE,
+  PLAN_BUSINESS,
+  SELF_SERVE_PLANS,
   PLAN_ENTITLEMENTS,
   PLAN_FREE,
   PLAN_PRO,
   STRIPE_CHECKOUT_CANCEL_URL_ENV,
   STRIPE_CHECKOUT_SUCCESS_URL_ENV,
   STRIPE_PORTAL_RETURN_URL_ENV,
-  STRIPE_PRICE_ENTERPRISE_ENV,
+  STRIPE_PRICE_BUSINESS_ENV,
   STRIPE_PRICE_PRO_ENV,
 } from './billing.constants';
 import { StripeService } from './stripe.service';
@@ -122,8 +124,13 @@ export class BillingService {
     input: CreateCheckoutInput,
   ): Promise<{ url: string }> {
     const plan = input.plan;
-    if (!PAID_PLANS.includes(plan)) {
-      throw new BadRequestException(`Unknown or non-purchasable plan: ${plan}`);
+    if (!SELF_SERVE_PLANS.includes(plan)) {
+      // Enterprise (and anything not pro/business) is contact-sales — there is
+      // no self-serve checkout for it. Matches almyty.com/pricing.
+      throw new BadRequestException(
+        `Plan "${plan}" is not self-serve. Pro and Business can be purchased ` +
+          `here; Enterprise is contact-sales.`,
+      );
     }
     const priceId = this.priceIdForPlan(plan);
     if (!priceId) {
@@ -352,8 +359,8 @@ export class BillingService {
   private planFromSubscription(subscription: Stripe.Subscription): string {
     const priceId = this.priceIdFromSubscription(subscription);
     const proPrice = this.config.get<string>(STRIPE_PRICE_PRO_ENV);
-    const enterprisePrice = this.config.get<string>(STRIPE_PRICE_ENTERPRISE_ENV);
-    if (enterprisePrice && priceId === enterprisePrice) return PLAN_ENTERPRISE;
+    const businessPrice = this.config.get<string>(STRIPE_PRICE_BUSINESS_ENV);
+    if (businessPrice && priceId === businessPrice) return PLAN_BUSINESS;
     if (proPrice && priceId === proPrice) return PLAN_PRO;
     // Fall back to the plan stamped on subscription metadata at checkout.
     const metaPlan = subscription.metadata?.plan;
@@ -383,12 +390,13 @@ export class BillingService {
   }
 
   private priceIdForPlan(plan: string): string | undefined {
-    if (plan === PLAN_ENTERPRISE) {
-      return this.config.get<string>(STRIPE_PRICE_ENTERPRISE_ENV);
+    if (plan === PLAN_BUSINESS) {
+      return this.config.get<string>(STRIPE_PRICE_BUSINESS_ENV);
     }
     if (plan === PLAN_PRO) {
       return this.config.get<string>(STRIPE_PRICE_PRO_ENV);
     }
+    // Enterprise is contact-sales — no self-serve price.
     return undefined;
   }
 
