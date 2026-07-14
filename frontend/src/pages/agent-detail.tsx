@@ -94,8 +94,12 @@ export function AgentDetailPage() {
   const { data: entityVersionsData } = useQuery({
     queryKey: ['entity-versions', 'Agent', id],
     queryFn: async () => {
+      // apiGet already unwraps the {success, data} envelope via extractData,
+      // so `res` is the versions array itself — `res.data` would double-unwrap
+      // to undefined and silently empty the Change History. Match the other
+      // list callers in this file.
       const res = await versionsApi.getVersions('Agent', id!)
-      return res?.data || []
+      return Array.isArray(res) ? res : (res?.data || [])
     },
     enabled: !!id,
   })
@@ -247,6 +251,23 @@ export function AgentDetailPage() {
     }
   }
 
+  // Technical documentation export handler (EU AI Act Annex-IV-style Markdown)
+  const handleExportTechDoc = async () => {
+    try {
+      const markdown = await agentsApi.exportTechnicalDocumentation(id!)
+      const blob = new Blob([markdown], { type: 'text/markdown' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${agent?.name?.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'agent'}-technical-documentation.md`
+      a.click()
+      URL.revokeObjectURL(url)
+      success('Exported', 'Technical documentation downloaded.')
+    } catch (err: any) {
+      errorNotif('Export Failed', err?.message || 'Failed to export technical documentation')
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -272,6 +293,7 @@ export function AgentDetailPage() {
       <AgentHeader
         agent={agent}
         onExport={handleExport}
+        onExportTechDoc={handleExportTechDoc}
         onDuplicate={() => duplicateMutation.mutate()}
         onInvoke={() => setInvokeDialogOpen(true)}
       />

@@ -93,6 +93,7 @@ const providerLogos: Record<string, string> = {
   aws_bedrock: '🪨',
   cohere: '🌀',
   huggingface: '🤗',
+  ollama: '🦙',
   custom: '⚙️'
 }
 

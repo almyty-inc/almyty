@@ -1,0 +1,26 @@
+# 🇪🇺 Ship EU AI Act-compliant agents
+
+**Stack** — `Disclosure: Art. 50 aiDisclosure on every channel` · `Docs: Annex IV export per agent` · `Trail: audit + approvals` · `Output: audit-ready deployment`
+
+**Who it's for** — teams deploying agents to EU users who need to meet the AI Act, not just hope they do.
+**What it does** — turns on the machine-readable AI-disclosure that rides every channel an agent speaks on, and exports the Annex IV technical documentation for each agent — so when a regulator or customer asks "is this AI, and how is it governed?", the answer is a button, not a scramble.
+
+## Build it
+
+1. **Enable AI disclosure.** The Art. 50 `aiDisclosure` flag is inherited by every [channel](/interfaces) an agent publishes to — Slack, web chat, email — so users are told they're talking to an AI, consistently.
+2. **Export Annex IV documentation.** On the agent detail page, use **Tech Doc** to export the Annex IV technical documentation (JSON or Markdown): purpose, model(s), data, and governance for that agent.
+3. **Show the governance.** Attach the [verify](/agents/autonomous#verification), [approval](/examples/approval-policies), and [audit](/examples/audit-to-siem) controls the Act expects for higher-risk use — human oversight and record-keeping, demonstrable.
+4. **Map the rest.** The [Compliance](/compliance) page walks the Act article by article, plus GDPR and the other regimes, and what remains your responsibility.
+5. **Keep it current** — re-export the Tech Doc when an agent's model or scope changes, so the documentation matches what's deployed.
+
+## Make it yours
+
+- Self-host for data residency alongside disclosure — see [Keep data in-region](/examples/air-gapped-self-host).
+- Stream the audit trail to your [SIEM](/examples/audit-to-siem) for the record-keeping obligation.
+- Gate high-risk actions behind [approval policies](/examples/approval-policies) for the human-oversight obligation.
+
+**Uses** — `Enterprise` · `Compliance` · `EU AI Act`
+
+## Related
+
+- [Compliance pack](/enterprise/compliance-pack) · [Compliance](/compliance) · [Interfaces](/interfaces) · [Approvals](/approvals)

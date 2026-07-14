@@ -7,18 +7,35 @@
  */
 import * as z from 'zod'
 
-// Zod schema for create provider form with API key validation
+// Zod schema for create provider form with API key validation.
+// Ollama is keyless (local inference; an optional key covers auth
+// proxies) — every other type requires a key of at least 8 chars.
 export const createProviderSchema = z.object({
   name: z.string().min(1, 'Provider name is required'),
   type: z.string().min(1, 'Provider type is required'),
-  apiKey: z.string().min(1, 'API key is required'),
+  apiKey: z.string().optional(),
+  // Optional server URL — currently surfaced for Ollama (default
+  // http://localhost:11434).
+  apiUrl: z.string().optional(),
   organizationId: z.string().optional(),
-}).refine((data) => {
-  // Just check it's not empty — actual validation happens when we test the connection
-  return data.apiKey.length >= 8
-}, {
-  message: 'API key is too short',
-  path: ['apiKey'],
+  // Optional admin-scoped key for the provider's usage/cost API (issue
+  // #241) — only rendered for types in providerUsageApiSupport.
+  usageApiKey: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.type === 'ollama') {
+    // Key optional; when provided it still has to look like a token.
+    if (data.apiKey && data.apiKey.length < 8) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'API key is too short', path: ['apiKey'] })
+    }
+    return
+  }
+  if (!data.apiKey) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'API key is required', path: ['apiKey'] })
+  } else if (data.apiKey.length < 8) {
+    // Just check it's not comically short — actual validation happens
+    // when we test the connection.
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'API key is too short', path: ['apiKey'] })
+  }
 })
 
 export type CreateProviderFormData = z.infer<typeof createProviderSchema>
@@ -37,6 +54,7 @@ export type LlmProviderType =
   | 'aws_bedrock'
   | 'cohere'
   | 'huggingface'
+  | 'ollama'
   | 'custom'
 
 export type LlmProviderStatus = 'active' | 'inactive' | 'error' | 'configuring'
@@ -50,6 +68,7 @@ export interface LlmProvider {
   organizationId: string
   configuration: {
     apiKey?: string
+    usageApiKey?: string
     baseUrl?: string
     region?: string
     model?: string

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, forwardRef } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
@@ -7,6 +7,7 @@ import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { UserOrganization } from '../../entities/user-organization.entity';
 import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { TeamMembershipHelper } from './team-membership.helper';
@@ -31,6 +32,10 @@ export class OrganizationsInvitesHelper {
     @Inject(forwardRef(() => GatewaysService))
     private readonly gatewaysService: GatewaysService,
     private readonly teamMembershipHelper: TeamMembershipHelper,
+    // @Global notifications pipeline; @Optional() keeps existing unit
+    // tests (constructed without it) working.
+    @Optional()
+    private readonly notifications?: NotificationsService,
   ) {}
 
   async inviteUser(organizationId: string, inviteUserDto: InviteUserDto, invitedBy: string): Promise<{ inviteSent: boolean }> {
@@ -90,6 +95,23 @@ export class OrganizationsInvitesHelper {
         inviteToken,
         isNewUser: false,
       });
+
+      // In-app notification alongside the invitation email (existing
+      // users only — a not-yet-registered invitee has no inbox to put
+      // a row in). Email channel intentionally omitted: sendInvitation
+      // above already delivered it.
+      if (this.notifications) {
+        this.notifications
+          .emit({
+            type: 'invite.received',
+            organizationId,
+            userIds: [user.id],
+            title: `You're invited to ${org.name}`,
+            body: `${inviterName} invited you to join ${org.name} as ${inviteUserDto.role}.`,
+            link: `/invite/accept?token=${encodeURIComponent(inviteToken)}`,
+          })
+          .catch(() => {});
+      }
 
       return { inviteSent: emailSent };
     }

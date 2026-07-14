@@ -58,11 +58,17 @@ export enum AuditAction {
   LOGIN = 'login',
   API_KEY_CREATE = 'api_key_create',
   API_KEY_REVOKE = 'api_key_revoke',
+  // Referral program
+  REFERRAL_ATTRIBUTED = 'referral_attributed',
+  REFERRAL_QUALIFIED = 'referral_qualified',
+  REFERRAL_REWARDED = 'referral_rewarded',
   // Credential
   CREDENTIAL_CREATE = 'credential_create',
   CREDENTIAL_UPDATE = 'credential_update',
   CREDENTIAL_DELETE = 'credential_delete',
   CREDENTIAL_USE = 'credential_use',
+  // Data retention
+  RETENTION_SWEEP = 'retention_sweep',
 }
 
 export enum AuditResource {
@@ -80,6 +86,7 @@ export enum AuditResource {
   ORGANIZATION = 'organization',
   LLM_PROVIDER = 'llm_provider',
   LLM_SESSION = 'llm_session',
+  REFERRAL = 'referral',
 }
 
 @Entity('audit_logs')

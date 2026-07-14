@@ -37,6 +37,13 @@ export default defineConfig({
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
+      // NOTE: no bypassHtmlGetRequests here — the referral attribution
+      // flow navigates the BROWSER to /referrals/attribute/:code (an HTML
+      // GET) and that must reach the backend so it can set the cookie.
+      '/referrals': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
       '/gateways': {
         target: 'http://localhost:4000',
         changeOrigin: true,

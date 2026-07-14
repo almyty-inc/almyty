@@ -64,6 +64,7 @@ import { ApiSchema } from '../entities/api-schema.entity';
 // Auth
 import { AuthController } from '../modules/auth/auth.controller';
 import { AuthService } from '../modules/auth/auth.service';
+import { ReferralsService } from '../modules/referrals/referrals.service';
 import { JwtStrategy } from '../modules/auth/strategies/jwt.strategy';
 import { ApiKeyStrategy } from '../modules/auth/strategies/api-key.strategy';
 import { LocalStrategy } from '../modules/auth/strategies/local.strategy';
@@ -102,6 +103,7 @@ import { MailService } from '../modules/mail/mail.service';
 import { UnifiedEndpointController } from '../modules/gateways/unified-endpoint.controller';
 import { UnifiedAgentHelper } from '../modules/gateways/unified-agent.helper';
 import { UnifiedGatewayDelegation } from '../modules/gateways/unified-gateway-delegation.helper';
+import { ChannelGatewayService } from '../modules/gateways/channels/channel-gateway.service';
 import { GatewayRateLimitService } from '../modules/gateways/gateway-rate-limit.service';
 import { AgentExecutionEngine } from '../modules/agents/agent-execution.engine';
 import { A2AServerService } from '../modules/a2a/a2a-server.service';
@@ -202,6 +204,13 @@ const mockRedis = {
     ApiKeyStrategy,
     LocalStrategy,
 
+    // Referrals (mock — AuthService.register calls attributeSignup additively;
+    // integration specs here don't exercise referral flows)
+    {
+      provide: ReferralsService,
+      useValue: { attributeSignup: async () => null },
+    },
+
     // MCP
     McpOAuthService,
     McpOAuthTokensHelper,
@@ -265,6 +274,11 @@ const mockRedis = {
     { provide: AgentRuntimeService, useValue: { startRun: () => ({}), getRun: () => ({}), listRuns: () => ([]), getRunEmitter: () => null, subscribeRunEvents: () => ({}), sendInput: () => ({}), cancelRun: () => ({}) } },
     UnifiedAgentHelper,
     UnifiedGatewayDelegation,
+    // Channel layer (mock — channel webhook delegation isn't exercised here)
+    {
+      provide: ChannelGatewayService,
+      useValue: { handleInboundMessage: async () => ({ ok: true }), testConnection: async () => ({ ok: true }) },
+    },
     { provide: GatewayRateLimitService, useValue: { check: async () => ({ limited: false }) } },
 
     // Redis mock

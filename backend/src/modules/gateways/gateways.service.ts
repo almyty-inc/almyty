@@ -1,4 +1,4 @@
-import { Inject, forwardRef } from '@nestjs/common';
+import { Inject, Optional, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindManyOptions, Like, MoreThanOrEqual } from 'typeorm';
@@ -15,6 +15,10 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { encryptChannelConfigSecrets, restoreMaskedChannelSecrets } from './channels/channel-config.helper';
+import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
+import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
+import { EmailProvisioningService } from './channels/email-provisioning.service';
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -148,7 +152,86 @@ export class GatewaysService {
     private readonly statsHelper: GatewaysStatsHelper,
     private readonly init: GatewayInitHelper,
     private readonly accessPolicy: AccessPolicyService,
+    // Optional so unit tests (and contexts without the transport) can
+    // construct the service without a live discord connection manager.
+    @Optional() private readonly discordTransport?: DiscordGatewayTransport,
+    // Optional for the same reason: platform webhook auto-registration
+    // must never be required to construct the service.
+    @Optional() private readonly webhookRegistrar?: ChannelWebhookRegistrar,
+    // Optional for the same reason: email inbound-address provisioning
+    // must never be required to construct the service.
+    @Optional() private readonly emailProvisioner?: EmailProvisioningService,
   ) {}
+
+  /**
+   * Keep the persistent discord gateway connection in sync with the
+   * gateway row. Fire-and-forget: connection management must never
+   * fail a CRUD request.
+   */
+  private syncDiscordTransport(gateway: Gateway): void {
+    if (gateway.type !== GatewayType.DISCORD) return;
+    try {
+      this.discordTransport?.sync(gateway);
+    } catch (err: any) {
+      this.logger.warn(`Failed to sync discord gateway transport: ${err.message}`);
+    }
+  }
+
+  private stopDiscordTransport(gateway: Gateway): void {
+    if (gateway.type !== GatewayType.DISCORD) return;
+    try {
+      this.discordTransport?.stop(gateway.id);
+    } catch (err: any) {
+      this.logger.warn(`Failed to stop discord gateway transport: ${err.message}`);
+    }
+  }
+
+  /**
+   * Keep the platform inbound-webhook registration (telegram
+   * setWebhook, twilio number webhook) and the email inbound-address
+   * provisioning in sync with the gateway row. Fire-and-forget:
+   * neither must ever fail a CRUD request.
+   */
+  private syncWebhookRegistration(gateway: Gateway): void {
+    this.webhookRegistrar
+      ?.sync(gateway)
+      .catch((err: any) =>
+        this.logger.warn(`Failed to sync channel webhook registration: ${err.message}`),
+      );
+    this.emailProvisioner
+      ?.sync(gateway)
+      .catch((err: any) =>
+        this.logger.warn(`Failed to sync email inbound provisioning: ${err.message}`),
+      );
+  }
+
+  private removeWebhookRegistration(gateway: Gateway): void {
+    this.webhookRegistrar
+      ?.remove(gateway)
+      .catch((err: any) =>
+        this.logger.warn(`Failed to remove channel webhook registration: ${err.message}`),
+      );
+    this.emailProvisioner
+      ?.remove(gateway)
+      .catch((err: any) =>
+        this.logger.warn(`Failed to remove email inbound provisioning: ${err.message}`),
+      );
+  }
+
+  /**
+   * Channel configs carry channel secrets: the app's OAuth client
+   * secret (multi-workspace installs, e.g. a Slack app's
+   * client_secret) plus per-channel credentials such as bot_token,
+   * twilio_auth_token, access_token, signing secrets, verify/bridge
+   * tokens etc. Encrypt them at rest; decryption happens at the point
+   * of use (getChannelConfig in the channel pipeline,
+   * SlackInstallService for OAuth), and isEncrypted() makes this
+   * idempotent so an already-encrypted value round-trips through
+   * update unchanged.
+   */
+  private encryptConfigSecrets(configuration?: Record<string, any>): void {
+    encryptChannelConfigSecrets(configuration);
+  }
 
   async createGateway(
     createGatewayDto: CreateGatewayDto,
@@ -217,6 +300,9 @@ export class GatewaysService {
         (createGatewayDto as any).teamId,
       );
 
+      // Encrypt channel OAuth client secrets at rest before persisting.
+      this.encryptConfigSecrets(createGatewayDto.configuration);
+
       // Create the gateway
       const gateway = this.gatewayRepository.create({
         ...createGatewayDto,
@@ -234,6 +320,13 @@ export class GatewaysService {
       await this.init.createDefaultAuth(savedGateway);
 
       this.logger.log(`[CREATE_GATEWAY] Gateway '${savedGateway.name}' created successfully in organization ${organizationId}`);
+
+      // Start the persistent connection for discord channel gateways.
+      this.syncDiscordTransport(savedGateway);
+
+      // Register the platform inbound webhook (telegram/twilio) for
+      // channel gateways that support it.
+      this.syncWebhookRegistration(savedGateway);
 
       // Audit log (fire-and-forget)
       this.auditLogService.logCreate(organizationId, userId, AuditResource.GATEWAY, savedGateway.id, savedGateway.name);
@@ -278,6 +371,12 @@ export class GatewaysService {
       // Capture old values for change tracking (before mutation)
       const oldValues = { name: gateway.name, description: gateway.description, configuration: gateway.configuration, rateLimitConfig: gateway.rateLimitConfig, metadata: gateway.metadata };
 
+      // API responses mask channel secrets; an edit dialog that
+      // round-trips the whole configuration sends the mask back for
+      // untouched fields. Swap masked placeholders for the stored
+      // values so they survive the update.
+      restoreMaskedChannelSecrets(updateGatewayDto.configuration, gateway.configuration);
+
       // Update fields
       Object.assign(gateway, updateGatewayDto);
       // Sanitize team-scoping after the spread so flipping back to
@@ -292,11 +391,20 @@ export class GatewaysService {
       // Validate configuration if updated
       if (updateGatewayDto.configuration) {
         this.init.validateGatewayConfiguration(gateway.type, gateway.configuration);
+        this.encryptConfigSecrets(gateway.configuration);
       }
 
       const updatedGateway = await this.gatewayRepository.save(gateway);
 
       this.logger.log(`Gateway '${updatedGateway.name}' updated`);
+
+      // Reconcile the persistent connection for discord channel gateways
+      // (bot token may have changed).
+      this.syncDiscordTransport(updatedGateway);
+
+      // Reconcile the platform webhook registration (token or public
+      // endpoint may have changed).
+      this.syncWebhookRegistration(updatedGateway);
 
       // Audit log (fire-and-forget)
       const changes = this.auditLogService.computeChanges(oldValues, updateGatewayDto, ['name', 'description', 'configuration', 'rateLimitConfig', 'metadata']);
@@ -485,6 +593,9 @@ export class GatewaysService {
 
     this.logger.log(`Gateway '${gateway.name}' activated`);
 
+    this.syncDiscordTransport(updatedGateway);
+    this.syncWebhookRegistration(updatedGateway);
+
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId, action: AuditAction.GATEWAY_ACTIVATE, resourceType: AuditResource.GATEWAY, resourceId: gateway.id, resourceName: gateway.name });
 
@@ -512,6 +623,9 @@ export class GatewaysService {
     const updatedGateway = await this.gatewayRepository.save(gateway);
 
     this.logger.log(`Gateway '${gateway.name}' deactivated`);
+
+    this.syncDiscordTransport(updatedGateway);
+    this.syncWebhookRegistration(updatedGateway);
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId, action: AuditAction.GATEWAY_DEACTIVATE, resourceType: AuditResource.GATEWAY, resourceId: gateway.id, resourceName: gateway.name });
@@ -550,6 +664,9 @@ export class GatewaysService {
     }
 
     await this.gatewayRepository.remove(gateway);
+
+    this.stopDiscordTransport(gateway);
+    this.removeWebhookRegistration(gateway);
 
     this.logger.log(`Gateway '${gateway.name}' deleted`);
 

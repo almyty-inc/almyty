@@ -1,0 +1,27 @@
+# 🗄️ Ask your database questions in plain English
+
+**Stack** — `Trigger: Slack / chat` · `Models: your choice` · `Tools: read-only query API over Postgres` · `Mode: single agent + constraints` · `Output: answer + the query it ran`
+
+**Who it's for** — teams where every "how many X last week?" turns into a ticket for the data team.
+**What it does** — takes a plain-English question, writes and runs a read-only query against your database, and answers in the channel — showing the SQL it ran so anyone can check it.
+
+## Build it
+
+1. **Expose a read-only query tool.** Put a read-replica behind a small query endpoint (or a stored-proc API) and *Connect API* to it — never point it at a writable primary.
+2. **Give the agent the schema.** Attach a schema-description tool or include table/column docs in its instructions so it writes correct queries.
+3. **Create the agent** with: *translate the question to SQL, run it read-only, and answer with the number and the query used.*
+4. **Constrain it hard** — *SELECT only; never UPDATE/DELETE/DROP; cap rows and time range* — the guardrail that makes this safe to open up.
+5. **Show the work** — instruct it to always return the query alongside the answer, so results are auditable.
+6. **Publish on Slack** so anyone can ask in `#data`.
+
+## Make it yours
+
+- Add a chart tool so it returns a plot for time-series questions.
+- Restrict tables per team with separate tools and [RBAC](/organizations).
+- Log every query to the [audit trail](/agents/versioning) for review.
+
+**Uses** — `Data` · `Slack` · `Constraints`
+
+## Related
+
+- [Connect an API](/tools) · [Autonomous agents](/agents/autonomous) · [Organizations](/organizations)

@@ -1,0 +1,51 @@
+# Use-case recipes
+
+Real jobs, built with almyty — each one names its **stack** (trigger · models · tools · mode)
+and walks the concrete steps. Pick the closest recipe, follow it, and swap the pieces for your
+own APIs and channels.
+
+> Every recipe is built from the same primitives — [agents](/agents/autonomous),
+> [tools](/tools), [gateways](/gateways/mcp), [memory](/memory), and the [runner](/runner).
+> The "apps" are yours: any API you connect becomes tools, any npm package becomes tools, and
+> channels (Slack, Discord, Telegram, webhooks) are the triggers and outputs. Tags below are
+> almyty capabilities; a name like "CRM API" means an API you connect, not a built-in connector.
+
+## Support & Sales
+
+- **[Triage support tickets and draft replies](/examples/support-ticket-triage)** — a real running agent: looks up the order, drafts a reply, a cross-vendor panel checks it, refunds escalate to a human. `verification · approvals · memory`
+- **[Deflect L1 questions from your docs](/examples/docs-deflection-bot)** — answers from your docs in-channel, cites the page, opens a ticket only when it can't. `Slack · Discord · constraints`
+- **[Enrich and route inbound leads](/examples/lead-enrichment-routing)** — enriches, scores against your ICP, writes back to the CRM, pings the right rep. `CRM API · Slack · constraints`
+- **[Turn call notes into CRM updates](/examples/meeting-notes-to-crm)** — extracts next steps, updates the opportunity, drafts a follow-up for approval. `CRM API · approvals`
+
+## Engineering & DevOps
+
+- **[Triage and label GitHub issues](/examples/github-issue-triage)** — labels, links duplicates, routes, requests repros. `GitHub API · constraints · memory`
+- **[Review pull requests for bugs and policy](/examples/pr-review-bot)** — flags bugs, missing tests, and policy violations inline; never approves. `GitHub API · verification · constraints`
+- **[Summarize on-call alerts and suggest a runbook](/examples/oncall-alert-triage)** — gathers metrics and logs, correlates with past incidents, posts a summary. `monitoring API · Slack · memory`
+- **[Orchestrate a multi-vendor coding fleet](/examples/multi-vendor-coding-fleet)** — one planner driving Claude Code, Codex, and aider on one repo. `runner · coding agents`
+
+## Data, Finance & Ops
+
+- **[Ask your database questions in plain English](/examples/nl-query-your-database)** — writes and runs read-only queries, answers with the SQL it used. `database · Slack · constraints`
+- **[Post a nightly data-quality digest](/examples/nightly-data-quality-digest)** — checks freshness and anomalies on a schedule, reports only what's wrong. `scheduled · Slack · memory`
+- **[Reconcile Stripe payouts and flag anomalies](/examples/stripe-payout-reconciliation)** — matches Stripe against the ledger daily, reports only exceptions. `Stripe API · scheduled · constraints`
+- **[Cross-vendor contract and risk review](/examples/cross-vendor-contract-review)** — several models argue the risks, a judge writes the memo. `debate · multi-model`
+
+## Enterprise & Governance
+
+- **[Run a governed refund agent in production](/examples/governed-refund-agent)** — constraints, cross-vendor verify, human approval, full audit. `verification · approvals · audit`
+- **[Govern AI spend across teams](/examples/govern-ai-spend)** — per-team budgets with soft/hard caps and alerts, enforced at run start. `budgets · cost governance`
+- **[Enforce approval policies org-wide](/examples/approval-policies)** — action + threshold → required approver, applied across every agent. `approvals · policy`
+- **[Role-based access for a multi-team org](/examples/multi-team-rbac)** — teams, per-resource roles, least-privilege by default. `RBAC · multi-tenant`
+- **[Onboard your workforce with SSO and SCIM](/examples/sso-scim-onboarding)** — SAML/OIDC sign-in, SCIM provisioning, groups → roles. `SSO · SCIM`
+- **[Stream your audit trail to a SIEM](/examples/audit-to-siem)** — every action to Splunk/Datadog, searchable and alertable. `audit · SIEM`
+- **[Ship EU AI Act-compliant agents](/examples/eu-ai-act-compliance)** — AI-disclosure on every channel + Annex IV technical-doc export. `compliance · EU AI Act`
+- **[Put your Google Drive or SharePoint to work](/examples/connect-google-sharepoint)** — connect Google/Microsoft 365, search and summarize docs, write back. `Google Drive API · SharePoint`
+- **[Air-gapped, self-hosted agents](/examples/air-gapped-self-host)** — local models, data residency, nothing leaves your network. `self-host · compliance`
+
+## Platform & Integration
+
+- **[Give Claude Code your own API](/examples/give-claude-your-api)** — import a schema, publish an MCP gateway, call it from Claude. `MCP · Claude Code`
+- **[Modernize a legacy SOAP service](/examples/modernize-legacy-soap)** — wrap a WSDL as modern MCP tools, untouched. `SOAP · MCP`
+- **[Turn an npm package into tools](/examples/npm-package-tools)** — point almyty at `stripe`, get typed tools. `SDK tools`
+- **[Give an agent a machine to work on](/examples/expose-any-machine)** — expose any machine — laptop, build server, VPC box. `runner · on-prem`

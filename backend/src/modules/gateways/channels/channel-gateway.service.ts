@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   Inject,
+  Optional,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -18,6 +19,8 @@ import { SlackAdapter } from './adapters/slack.adapter';
 import { DiscordAdapter } from './adapters/discord.adapter';
 import { TelegramAdapter } from './adapters/telegram.adapter';
 import { WhatsAppAdapter } from './adapters/whatsapp.adapter';
+import { WhatsAppCloudAdapter } from './adapters/whatsapp-cloud.adapter';
+import { SmsAdapter } from './adapters/sms.adapter';
 import { EmailAdapter } from './adapters/email.adapter';
 import { WebhookAdapter } from './adapters/webhook.adapter';
 import { GoogleChatAdapter } from './adapters/google-chat.adapter';
@@ -25,6 +28,8 @@ import { MicrosoftTeamsAdapter } from './adapters/microsoft-teams.adapter';
 import { SignalAdapter } from './adapters/signal.adapter';
 import { MatrixAdapter } from './adapters/matrix.adapter';
 import { IrcAdapter } from './adapters/irc.adapter';
+import { ChannelInstallationService } from './channel-installation.service';
+import { getChannelConfig } from './channel-config.helper';
 
 @Injectable()
 export class ChannelGatewayService {
@@ -45,6 +50,8 @@ export class ChannelGatewayService {
     private readonly discordAdapter: DiscordAdapter,
     private readonly telegramAdapter: TelegramAdapter,
     private readonly whatsAppAdapter: WhatsAppAdapter,
+    private readonly whatsAppCloudAdapter: WhatsAppCloudAdapter,
+    private readonly smsAdapter: SmsAdapter,
     private readonly emailAdapter: EmailAdapter,
     private readonly webhookAdapter: WebhookAdapter,
     private readonly googleChatAdapter: GoogleChatAdapter,
@@ -52,6 +59,9 @@ export class ChannelGatewayService {
     private readonly signalAdapter: SignalAdapter,
     private readonly matrixAdapter: MatrixAdapter,
     private readonly ircAdapter: IrcAdapter,
+    // Optional so existing unit tests and minimal contexts can
+    // construct the service without the installation subsystem.
+    @Optional() private readonly installationService?: ChannelInstallationService,
   ) {
     this.adapters = new Map<string, BaseAdapter>([
       [GatewayType.CHAT_WIDGET, this.chatWidgetAdapter],
@@ -59,6 +69,8 @@ export class ChannelGatewayService {
       [GatewayType.DISCORD, this.discordAdapter],
       [GatewayType.TELEGRAM, this.telegramAdapter],
       [GatewayType.WHATSAPP, this.whatsAppAdapter],
+      [GatewayType.WHATSAPP_CLOUD, this.whatsAppCloudAdapter],
+      [GatewayType.SMS, this.smsAdapter],
       [GatewayType.EMAIL, this.emailAdapter],
       [GatewayType.WEBHOOK, this.webhookAdapter],
       [GatewayType.GOOGLE_CHAT, this.googleChatAdapter],
@@ -93,6 +105,7 @@ export class ChannelGatewayService {
     gateway: Gateway,
     body: any,
     headers: Record<string, string>,
+    rawBody?: string,
   ): Promise<void> {
     if (!gateway.isActive()) {
       this.logger.warn(`Webhook received for inactive gateway: ${gateway.id}`);
@@ -101,8 +114,33 @@ export class ChannelGatewayService {
 
     const adapter = this.getAdapter(gateway.type);
 
+    // Multi-workspace resolution: when the payload carries a platform
+    // tenant id (e.g. Slack team_id) and an active installation exists
+    // for it, that installation's credentials (its own bot token)
+    // override the gateway's single-workspace configuration for both
+    // verification context and the reply. Gateways without
+    // installations keep the existing single-credential behavior.
+    //
+    // getChannelConfig decrypts secrets stored encrypted at rest and
+    // normalizes legacy camelCase keys onto the snake_case names the
+    // adapters read.
+    let effectiveConfig: Record<string, any> = getChannelConfig(gateway.configuration);
+    const tenantId = adapter.extractTenantId(body);
+    if (tenantId && this.installationService) {
+      try {
+        const creds = await this.installationService.resolveCredentials(gateway.id, String(tenantId));
+        if (creds) {
+          effectiveConfig = { ...effectiveConfig, ...creds };
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `installation resolution failed (gateway ${gateway.id}, tenant ${tenantId}): ${err?.message ?? err}`,
+        );
+      }
+    }
+
     // Verify webhook signature
-    const isValid = await adapter.verifyWebhook(body, headers, gateway.configuration);
+    const isValid = await adapter.verifyWebhook(body, headers, effectiveConfig, rawBody);
     if (!isValid) {
       this.logger.warn(`Webhook signature verification failed for gateway: ${gateway.id}`);
       await this.logEvent(gateway, 'inbound', 'failed', body, 'signature verification failed');
@@ -132,7 +170,7 @@ export class ChannelGatewayService {
 
     if (run) {
       await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, normalized.text);
-      this.listenForCompletionAndRespond(run.id, gateway, adapter, normalized);
+      this.listenForCompletionAndRespond(run.id, gateway, adapter, normalized, effectiveConfig);
     } else {
       const newRun = await this.agentRuntimeService.startRun(
         gateway.agentId,
@@ -151,7 +189,7 @@ export class ChannelGatewayService {
       };
       await this.runRepository.save(newRun);
 
-      this.listenForCompletionAndRespond(newRun.id, gateway, adapter, normalized);
+      this.listenForCompletionAndRespond(newRun.id, gateway, adapter, normalized, effectiveConfig);
     }
 
     // Increment request count
@@ -161,12 +199,16 @@ export class ChannelGatewayService {
 
   /**
    * Listen for a run to complete and send the response back via the adapter.
+   * `sendConfig` (optional) carries installation-resolved credentials for
+   * multi-workspace gateways; omitted, the gateway's own configuration
+   * is used.
    */
   private listenForCompletionAndRespond(
     runId: string,
     gateway: Gateway,
     adapter: BaseAdapter,
     normalized: NormalizedMessage,
+    sendConfig?: Record<string, any>,
   ): void {
     const emitter = this.agentRuntimeService.getRunEmitter(runId);
     if (!emitter) {
@@ -182,17 +224,30 @@ export class ChannelGatewayService {
           const finalRun = await this.runRepository.findOne({ where: { id: runId } });
           if (!finalRun) return;
 
-          const responseText =
+          const rawText =
             (typeof finalRun.output === 'string'
               ? finalRun.output
               : finalRun.output?.text) || 'No response';
+          // EU AI Act Art. 50: prepend the disclosure line on the first
+          // outbound message of a conversation when the gateway opts in.
+          const responseText = await this.applyAiDisclosure(gateway, finalRun, rawText);
 
           const formatted = adapter.formatOutbound({ text: responseText });
           try {
-            await adapter.sendResponse(gateway.configuration, formatted, {
+            await adapter.sendResponse(sendConfig ?? getChannelConfig(gateway.configuration), formatted, {
               threadId: normalized.threadId,
               channel: normalized.metadata?.channel,
               userId: normalized.userId,
+              // Reply-routing hints some platforms need (Teams serviceUrl,
+              // email from/subject, Signal groupId, ...).
+              from: normalized.metadata?.from,
+              subject: normalized.metadata?.subject,
+              metadata: normalized.metadata,
+              // Identity for adapters that persist rather than push
+              // (chat widget files the reply as a channel event).
+              gatewayId: gateway.id,
+              organizationId: gateway.organizationId,
+              runId,
             });
             await this.logEvent(gateway, 'outbound', 'processed', this.truncatePayload(formatted), null, runId);
           } catch (sendErr: any) {
@@ -218,6 +273,36 @@ export class ChannelGatewayService {
     // Safety timeout — .unref() so pending handle doesn't keep Node alive
     const safety = setTimeout(() => cleanup(), 5 * 60 * 1000);
     safety.unref?.();
+  }
+
+  /** Default EU AI Act Art. 50 disclosure line. */
+  static readonly DEFAULT_AI_DISCLOSURE = 'You are chatting with an AI assistant.';
+
+  /**
+   * EU AI Act Art. 50 transparency: when a channel gateway opts in via
+   * `configuration.aiDisclosure` (true = default line, non-empty string
+   * = custom override), the FIRST outbound message of each conversation
+   * is prefixed with the disclosure. First-ness is tracked on the run
+   * (`run.metadata.aiDisclosureSent`) — a conversation maps 1:1 to a
+   * run (thread lookups reattach to the active run), so follow-up
+   * replies in the same conversation are not re-prefixed. Implemented
+   * centrally in the dispatch path so all 12 adapters inherit it
+   * without per-adapter changes.
+   */
+  async applyAiDisclosure(gateway: Gateway, run: AgentRun, text: string): Promise<string> {
+    const setting = gateway.configuration?.aiDisclosure;
+    if (!setting) return text;
+    if ((run.metadata as any)?.aiDisclosureSent) return text;
+
+    const line =
+      typeof setting === 'string' && setting.trim()
+        ? setting.trim()
+        : ChannelGatewayService.DEFAULT_AI_DISCLOSURE;
+
+    run.metadata = { ...(run.metadata || {}), aiDisclosureSent: true };
+    await this.runRepository.save(run);
+
+    return `${line}\n\n${text}`;
   }
 
   // ---------------------------------------------------------------------------
@@ -283,6 +368,13 @@ export class ChannelGatewayService {
       await this.runRepository.save(run);
     }
 
+    // Persist the agent's reply for the widget poll endpoint once the
+    // run completes (the widget can also stream live via the run SSE).
+    this.listenForCompletionAndRespond(run.id, gateway, adapter, {
+      ...normalized,
+      threadId: (run.metadata as any)?.threadId || normalized.threadId || run.id,
+    });
+
     // Increment request count
     gateway.incrementRequest(true);
     await this.gatewayRepository.save(gateway);
@@ -291,6 +383,52 @@ export class ChannelGatewayService {
       runId: run.id,
       threadId: (run.metadata as any)?.threadId || run.id,
     };
+  }
+
+  /**
+   * Resolve a gateway for the public widget surface: must exist, be an
+   * active chat_widget gateway. 404s otherwise (no auth on this path —
+   * don't leak whether an id exists as a different type).
+   */
+  async findWidgetGateway(gatewayId: string): Promise<Gateway> {
+    const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId } });
+    if (!gateway || gateway.type !== GatewayType.CHAT_WIDGET || !gateway.isActive()) {
+      throw new NotFoundException('Widget gateway not found or inactive');
+    }
+    return gateway;
+  }
+
+  /**
+   * Poll surface for the widget: outbound widget messages persisted by
+   * ChatWidgetAdapter.sendResponse for a given thread, oldest first.
+   * `after` restricts to messages newer than the given timestamp so the
+   * widget can poll incrementally.
+   */
+  async listWidgetMessages(
+    gatewayId: string,
+    threadId: string,
+    after?: Date,
+  ): Promise<Array<{ id: string; runId: string | null; message: string; attachments: any; createdAt: Date }>> {
+    const qb = this.eventRepository
+      .createQueryBuilder('event')
+      .where('event.gatewayId = :gatewayId', { gatewayId })
+      .andWhere('event.channelType = :channelType', { channelType: GatewayType.CHAT_WIDGET })
+      .andWhere("event.direction = 'outbound'")
+      .andWhere("event.payload->>'kind' = 'widget_message'")
+      .andWhere("event.payload->>'threadId' = :threadId", { threadId })
+      .orderBy('event.createdAt', 'ASC')
+      .limit(100);
+    if (after) {
+      qb.andWhere('event.createdAt > :after', { after });
+    }
+    const events = await qb.getMany();
+    return events.map((e) => ({
+      id: e.id,
+      runId: e.runId,
+      message: e.payload?.message ?? '',
+      attachments: e.payload?.attachments ?? null,
+      createdAt: e.createdAt,
+    }));
   }
 
   // ---------------------------------------------------------------------------
@@ -412,7 +550,9 @@ export class ChannelGatewayService {
    */
   async testConnection(gateway: Gateway): Promise<{ ok: boolean; detail: string }> {
     const adapter = this.getAdapter(gateway.type);
-    const cfg = gateway.configuration || {};
+    // Decrypted + key-normalized view — testConnection exercises the
+    // same credentials the adapters would use.
+    const cfg = getChannelConfig(gateway.configuration);
     try {
       switch (gateway.type) {
         case GatewayType.SLACK: {
@@ -440,7 +580,8 @@ export class ChannelGatewayService {
           const json: any = await res.json().catch(() => ({}));
           return { ok: true, detail: `bot ${json?.username || '?'}` };
         }
-        case GatewayType.WHATSAPP: {
+        case GatewayType.WHATSAPP:
+        case GatewayType.SMS: {
           if (!cfg.twilio_account_sid || !cfg.twilio_auth_token) {
             return { ok: false, detail: 'twilio_account_sid + twilio_auth_token required' };
           }
@@ -450,6 +591,17 @@ export class ChannelGatewayService {
           });
           return res.ok ? { ok: true, detail: 'twilio creds ok' }
                         : { ok: false, detail: `twilio ${res.status}` };
+        }
+        case GatewayType.WHATSAPP_CLOUD: {
+          if (!cfg.access_token || !cfg.phone_number_id) {
+            return { ok: false, detail: 'access_token + phone_number_id required' };
+          }
+          const res = await fetch(
+            `https://graph.facebook.com/v20.0/${cfg.phone_number_id}?fields=id`,
+            { headers: { Authorization: `Bearer ${cfg.access_token}` } },
+          );
+          return res.ok ? { ok: true, detail: 'whatsapp cloud phone number reachable' }
+                        : { ok: false, detail: `graph api ${res.status}` };
         }
         case GatewayType.MICROSOFT_TEAMS: {
           if (!cfg.bot_id || !cfg.bot_password) return { ok: false, detail: 'bot_id + bot_password required' };

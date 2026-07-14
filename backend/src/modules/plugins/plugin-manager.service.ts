@@ -1,4 +1,8 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Optional, Inject } from '@nestjs/common';
+import {
+  COMPLIANCE_ENFORCEMENT_HOOK,
+  ComplianceEnforcementHook,
+} from '../../common/ee-hooks/ee-hooks';
 import { EventEmitter } from 'events';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -56,6 +60,12 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     @Optional()
     @InjectRepository(UsageMetric)
     private readonly usageMetricRepository?: Repository<UsageMetric>,
+    // EE hook (compliance_pack): org-wide plugin enforcement. Absent in
+    // the community build — @Optional() resolves to undefined and
+    // executeHook keeps its exact OSS behavior.
+    @Optional()
+    @Inject(COMPLIANCE_ENFORCEMENT_HOOK)
+    private readonly complianceHook?: ComplianceEnforcementHook,
   ) {
     super();
     // Construct the loader with our Redis client so built-in plugins (the
@@ -106,6 +116,11 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
 
     this.logger.debug(`Executing ${pluginIds.length} plugins for hook: ${hookType}`);
 
+    // EE (compliance_pack): org-wide enforcement — plugins the org policy
+    // mandates run even when not individually enabled, with policy-derived
+    // settings overrides. null in the community build / unlicensed.
+    const enforcedByPolicy = await this.resolveComplianceEnforcement(context);
+
     let currentContext = { ...context };
     const results: Array<{ pluginId: string; result: PluginResult }> = [];
 
@@ -116,7 +131,14 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
       .sort((a, b) => (b!.configuration.priority || 50) - (a!.configuration.priority || 50));
 
     for (const plugin of sortedPlugins) {
-      if (!plugin || !plugin.isActive) {
+      if (!plugin) {
+        continue;
+      }
+
+      // A disabled plugin still runs when the org's compliance policy
+      // enforces it; otherwise it is skipped exactly as before.
+      const enforcedSettings = enforcedByPolicy?.[this.enforcementKey(plugin.name)];
+      if (!plugin.isActive && enforcedSettings === undefined) {
         continue;
       }
 
@@ -125,8 +147,21 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
         continue;
       }
 
+      // Apply the policy's settings overrides for this execution only —
+      // the registered plugin configuration is never mutated.
+      const effectivePlugin =
+        enforcedSettings && Object.keys(enforcedSettings).length > 0
+          ? {
+              ...plugin,
+              configuration: {
+                ...plugin.configuration,
+                settings: { ...plugin.configuration.settings, ...enforcedSettings },
+              },
+            }
+          : plugin;
+
       try {
-        const pluginResult = await this.executePlugin(plugin, hookType, currentContext);
+        const pluginResult = await this.executePlugin(effectivePlugin, hookType, currentContext);
         results.push({ pluginId: plugin.id, result: pluginResult });
 
         this.recordSecurityCounters(plugin, pluginResult, currentContext);
@@ -172,6 +207,34 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     }
 
     return currentContext;
+  }
+
+  /**
+   * EE (compliance_pack): resolve the org's plugin-enforcement map via the
+   * optional hook. Best-effort — a hook failure (or absence, or missing
+   * org context) means no enforcement, i.e. exact community behavior.
+   */
+  private async resolveComplianceEnforcement(
+    context: PluginContext,
+  ): Promise<Record<string, Record<string, any>> | null> {
+    if (!this.complianceHook || !context.organizationId) return null;
+    try {
+      const enforcement = await this.complianceHook.getEnforcement(context.organizationId);
+      return enforcement?.enforcedPlugins ?? null;
+    } catch (error) {
+      this.logger.warn(`Compliance enforcement lookup failed: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Key a registered plugin into the enforcement map: slug of its display
+   * name ('PII Filter' → 'pii-filter', 'Security Scanner' →
+   * 'security-scanner'), matching the compliance policy's
+   * `enforcedPlugins` vocabulary.
+   */
+  private enforcementKey(name: string): string {
+    return (name || '').trim().toLowerCase().replace(/\s+/g, '-');
   }
 
   /**

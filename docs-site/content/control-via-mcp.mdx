@@ -1,0 +1,71 @@
+# Control almyty via MCP
+
+almyty is itself an **MCP server**. Point any MCP client — Claude Code, Cursor, Claude
+Desktop — at the platform endpoint and your AI assistant can *operate almyty for you*: import
+APIs, generate tools, build agents, set up gateways, and manage memory — the same actions you'd
+take in the dashboard, driven from your editor.
+
+This is different from [publishing your own tools on an MCP gateway](/gateways/mcp): there, an
+LLM calls *your* API tools. Here, the LLM calls *almyty's own management tools* to configure the
+platform.
+
+## Connect
+
+Add the universal `/mcp` endpoint (the built-in `almyty` system gateway):
+
+```bash
+claude mcp add almyty --transport http https://api.almyty.com/mcp
+```
+
+Or in a client config file:
+
+```json
+{
+  "mcpServers": {
+    "almyty": { "url": "https://api.almyty.com/mcp" }
+  }
+}
+```
+
+Authenticate once with `npx @almyty/auth login`; the server announces itself as `almyty`.
+
+## What your assistant can do
+
+The control endpoint exposes 30 management tools:
+
+| Area | Tools |
+| --- | --- |
+| **APIs** | `create_api`, `list_apis`, `update_api`, `delete_api`, `import_schema`, `check_import_status` |
+| **Tools** | `list_tools`, `delete_tool` |
+| **Gateways** | `create_gateway`, `list_gateways`, `delete_gateway`, `assign_tools_to_gateway`, `add_auth_to_gateway`, `remove_auth_from_gateway` |
+| **Agents** | `create_agent`, `list_agents` |
+| **AI Models** | `add_provider`, `list_providers` |
+| **Memory** | `memory_put`, `memory_get`, `memory_list`, `memory_search`, `memory_delete`, `memory_supersede`, `memory_consolidate`, `memory_sync`, `memory_transfer`, `memory_list_backends`, `memory_backends_health` |
+
+## Example
+
+Ask your assistant, in plain language:
+
+```text
+> Import the Stripe OpenAPI spec, then publish an MCP gateway with just the refund tools.
+```
+
+It chains the management tools: `import_schema` → `check_import_status` → `list_tools` →
+`create_gateway` → `assign_tools_to_gateway` → `add_auth_to_gateway` — and hands you back a
+ready endpoint, without you touching the UI.
+
+## What's not exposed
+
+The control set is deliberately build-and-configure, not run-and-mutate:
+
+- **No `run_agent`** — invoke an agent through its own endpoint
+  (`https://api.almyty.com/{org}/{agent}`), not the control plane.
+- **No `update_agent` / `update_gateway`** — edit an existing agent or gateway in the dashboard
+  or via the [REST API](/api-reference). The MCP tools create and wire; deeper edits stay in the
+  UI so a stray model call can't silently rewrite a production agent.
+
+## Related
+
+- [MCP gateway](/gateways/mcp) — publish your own tools over MCP
+- [MCP server CLI](/cli/mcp-server) — connect a client to a gateway
+- [API Reference](/api-reference) — the full REST surface

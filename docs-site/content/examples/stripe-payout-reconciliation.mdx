@@ -1,0 +1,27 @@
+# 💳 Reconcile Stripe payouts and flag anomalies
+
+**Stack** — `Trigger: schedule (interval)` · `Models: your choice` · `Tools: stripe (npm SDK), ledger/query API` · `Mode: single agent + constraints` · `Output: Slack exceptions report`
+
+**Who it's for** — finance ops who reconcile Stripe against the ledger by hand every morning.
+**What it does** — each day it pulls Stripe payouts and charges, matches them against your internal ledger, and posts only the exceptions — mismatched amounts, missing entries, unexpected refunds — so a human looks at the 3 that matter, not the 3,000 that reconcile fine.
+
+## Build it
+
+1. **Add Stripe as tools.** Add the `stripe` npm package as an [SDK tool](/tools/sdk-tools) (Tools → Create → SDK → `stripe` → *Discover*) — you get typed tools for payouts, charges, and refunds without writing wrappers.
+2. **Connect your ledger** via *Connect API* (a read-only query endpoint over your accounting DB).
+3. **Store the Stripe key** in the [Credentials](/credentials) vault; the SDK tool reads it at run time — never in a prompt.
+4. **Create the agent** with: *pull yesterday's payouts and charges, match to the ledger by amount and reference, and report only unmatched or anomalous items.*
+5. **Constrain it** — *read-only; never issue or modify a charge or refund* — reconciliation observes, it doesn't act.
+6. **Schedule it** daily and publish the exceptions report to `#finance` on Slack.
+
+## Make it yours
+
+- Let it *propose* a correcting ledger entry and route it through [`request_approval`](/approvals) — proposal, not execution.
+- Add a second-vendor [verify](/agents/autonomous#verification) pass on flagged anomalies to cut false positives.
+- Swap Stripe for Adyen or Braintree — connect their API the same way.
+
+**Uses** — `Finance` · `Stripe` · `Scheduled` · `Constraints`
+
+## Related
+
+- [SDK tools](/tools/sdk-tools) · [Credentials](/credentials) · [Approvals](/approvals)

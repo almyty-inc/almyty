@@ -31,6 +31,7 @@ export enum LlmProviderType {
   AWS_BEDROCK = 'aws_bedrock',
   COHERE = 'cohere',
   HUGGINGFACE = 'huggingface',
+  OLLAMA = 'ollama',
   CUSTOM = 'custom',
 }
 
@@ -43,9 +44,23 @@ export enum LlmProviderStatus {
 
 export interface LlmProviderConfig {
   apiKey?: string;
+  /**
+   * Optional admin/org-scoped key for the provider's USAGE/COST API (P7).
+   * This is a DIFFERENT credential scope than `apiKey` (the inference
+   * key): OpenAI needs an Admin key, Anthropic an org Admin key. Stored
+   * encrypted alongside apiKey; read via getDecryptedUsageApiKey().
+   */
+  usageApiKey?: string;
   apiUrl?: string;
   apiVersion?: string;
   model?: string;
+  /**
+   * Embedding model override for embedding-capable providers. Currently
+   * honored by the memory EmbeddingService for Ollama providers
+   * (default: nomic-embed-text). Embedding dimensionality varies per
+   * model; the memory store records model + dim per vector.
+   */
+  embeddingModel?: string;
   maxTokens?: number;
   temperature?: number;
   topP?: number;
@@ -300,11 +315,31 @@ export class LlmProvider {
         return `https://bedrock-runtime.${region}.amazonaws.com`;
       case LlmProviderType.HUGGINGFACE:
         return this.configuration.huggingface?.endpoint || 'https://api-inference.huggingface.co/models';
+      case LlmProviderType.OLLAMA: {
+        // OpenAI-compatible surface lives under /v1 on the Ollama server
+        // root; `apiUrl` is the root (default: a local install). On
+        // hosted almyty the URL must be publicly reachable — private and
+        // loopback ranges are refused by the SSRF gate unless the
+        // self-hosting escape hatch OLLAMA_ALLOW_PRIVATE_URLS=true is set.
+        const ollamaBase = (this.configuration.apiUrl || 'http://localhost:11434').replace(/\/+$/, '');
+        return ollamaBase.toLowerCase().endsWith('/v1') ? ollamaBase : `${ollamaBase}/v1`;
+      }
       case LlmProviderType.CUSTOM:
         return this.configuration.apiUrl || '';
       default:
         return this.configuration.apiUrl || '';
     }
+  }
+
+  /**
+   * The Ollama server root (no /v1 suffix) for the native endpoints —
+   * GET /api/tags (models) and POST /api/embed (embeddings).
+   */
+  getOllamaBaseUrl(): string {
+    const base = (this.configuration?.apiUrl || 'http://localhost:11434').replace(/\/+$/, '');
+    return base.toLowerCase().endsWith('/v1')
+      ? base.slice(0, -3).replace(/\/+$/, '')
+      : base;
   }
 
   /**
@@ -317,6 +352,20 @@ export class LlmProvider {
     if (typeof key === 'string' && key.length > 0 && !isEncrypted(key)) {
       this.configuration.apiKey = encryptField(key);
     }
+    const usageKey = this.configuration?.usageApiKey;
+    if (typeof usageKey === 'string' && usageKey.length > 0 && !isEncrypted(usageKey)) {
+      this.configuration.usageApiKey = encryptField(usageKey);
+    }
+  }
+
+  /**
+   * The plaintext admin/usage API key (P7), or undefined if none is set.
+   * Same transparent-decrypt contract as getDecryptedApiKey().
+   */
+  getDecryptedUsageApiKey(): string | undefined {
+    const key = this.configuration?.usageApiKey;
+    if (typeof key !== 'string' || key.length === 0) return undefined;
+    return decryptField(key);
   }
 
   /**
@@ -355,6 +404,16 @@ export class LlmProvider {
           headers['Authorization'] = `Bearer ${apiKey}`;
           headers['HTTP-Referer'] = 'https://almyty.com';
           headers['X-Title'] = 'almyty';
+        }
+        break;
+
+      case LlmProviderType.OLLAMA:
+        // Ollama itself is unauthenticated — no API key is required.
+        // A key is optional and only sent (as a Bearer token) when
+        // configured, for deployments that front Ollama with an
+        // authenticating reverse proxy.
+        if (apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`;
         }
         break;
 
@@ -401,6 +460,7 @@ export class LlmProvider {
       masked.configuration = {
         ...masked.configuration,
         apiKey: masked.configuration.apiKey ? '***masked***' : undefined,
+        usageApiKey: masked.configuration.usageApiKey ? '***masked***' : undefined,
         azure: masked.configuration.azure ? {
           ...masked.configuration.azure,
         } : undefined,

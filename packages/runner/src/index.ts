@@ -13,6 +13,13 @@ export {
   type ProcessAdapter,
   type AdapterFactory,
 } from './process-manager.js';
+export {
+  CodingSessionManager,
+  type CodingEmitter,
+  type CodingEventPayload,
+  type CodingSessionRecord,
+  type CodingStartInput,
+} from './coding-sessions.js';
 export { loadConfig, DEFAULTS, DEFAULT_BINARY_PROBE_LIST, GLOBAL_CONFIG_PATH, PROJECT_CONFIG_PATH } from './config.js';
 export { detectRuntimeInfo, RUNNER_VERSION } from './runtime-info.js';
 export { probe, probeAll, realExec, type ProbeExec } from './binaries.js';
