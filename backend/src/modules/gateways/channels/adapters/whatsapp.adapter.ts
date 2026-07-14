@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import { verifyTwilioSignature } from './twilio-signature.helper';
 
 @Injectable()
 export class WhatsAppAdapter extends BaseAdapter {
@@ -25,7 +26,10 @@ export class WhatsAppAdapter extends BaseAdapter {
       const accountSid = config.twilio_account_sid;
       const authToken = config.twilio_auth_token;
       const from = config.phone_number;
-      const to = threadContext?.from;
+      // threadId carries the sender's whatsapp:+E164 address (it is the
+      // conversation key), so it doubles as the reply-to when the caller
+      // didn't pass `from` explicitly.
+      const to = threadContext?.from || threadContext?.threadId;
 
       const fetch = globalThis.fetch || (await import('node-fetch')).default;
       const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
@@ -45,5 +49,14 @@ export class WhatsAppAdapter extends BaseAdapter {
     } catch (error) {
       this.logger.error(`WhatsApp send failed: ${error.message}`);
     }
+  }
+
+  /**
+   * Twilio X-Twilio-Signature validation — shared with the sms adapter
+   * (both are Twilio form-encoded webhooks). See
+   * twilio-signature.helper.ts for the algorithm and skip semantics.
+   */
+  async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>): Promise<boolean> {
+    return verifyTwilioSignature(payload, headers, config);
   }
 }

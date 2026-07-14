@@ -50,32 +50,45 @@ export const interfaceTypeIcons: Record<string, string> = {
   irc: '⌨️',
 }
 
+/**
+ * Default (empty) configuration per channel type. Keys MUST be exactly
+ * the snake_case keys the backend channel adapters read
+ * (backend/src/modules/gateways/channels/adapters/*) — the deploy
+ * dialog used to write camelCase (botToken) that no adapter looked at.
+ * The chat widget is the one exception: the widget script reads
+ * camelCase presentation keys.
+ * A completeness test pins these against the adapter-read key list.
+ */
 export function getDefaultInterfaceConfig(type: string): Record<string, any> {
   switch (type) {
     case 'chat_widget':
       return { welcomeMessage: '', primaryColor: '#8b5cf6', position: 'bottom-right', theme: 'auto' }
     case 'slack':
-      return { botToken: '', signingSecret: '', channelIds: '' }
+      return { bot_token: '', signing_secret: '' }
     case 'discord':
-      return { botToken: '', guildIds: '' }
+      return { bot_token: '' }
     case 'telegram':
-      return { botToken: '' }
+      return { bot_token: '' }
     case 'whatsapp':
-      return { accountSid: '', authToken: '', phoneNumber: '' }
+      return { twilio_account_sid: '', twilio_auth_token: '', phone_number: '' }
+    case 'sms':
+      return { twilio_account_sid: '', twilio_auth_token: '', phone_number: '' }
+    case 'whatsapp_cloud':
+      return { access_token: '', phone_number_id: '', verify_token: '', app_secret: '' }
     case 'email':
-      return { resendApiKey: '', replyFrom: '', receiveAddress: '' }
+      return { resend_api_key: '', reply_from: '' }
     case 'webhook':
-      return { callbackUrl: '', secret: '' }
+      return { callback_url: '', secret: '' }
     case 'google_chat':
-      return { webhookUrl: '', spaceId: '' }
+      return { webhook_url: '', verification_token: '' }
     case 'microsoft_teams':
-      return { botId: '', botPassword: '', tenantId: '' }
+      return { bot_id: '', bot_password: '' }
     case 'signal':
-      return { phoneNumber: '', apiUrl: '' }
+      return { phone_number: '', api_url: '' }
     case 'matrix':
-      return { homeserverUrl: '', accessToken: '', roomId: '' }
+      return { homeserver_url: '', access_token: '', room_id: '' }
     case 'irc':
-      return { server: '', port: '6667', channel: '', nick: '' }
+      return { webhook_url: '', channel: '', nick: '' }
     default:
       return {}
   }
@@ -86,6 +99,11 @@ export function maskSecret(value: string): string {
   return value.slice(0, 4) + '****'
 }
 
+/**
+ * Card summary per channel type. Reads the canonical snake_case keys
+ * (what adapters read); the camelCase fallbacks keep summaries working
+ * for channels deployed before the key-casing fix.
+ */
 export function getInterfaceConfigSummary(type: string, config: Record<string, any>): { label: string; value: string; secret?: boolean }[] {
   if (!config) return []
   switch (type) {
@@ -98,62 +116,65 @@ export function getInterfaceConfigSummary(type: string, config: Record<string, a
       ]
     case 'slack':
       return [
-        { label: 'Bot Token', value: config.botToken || '', secret: true },
-        { label: 'Signing Secret', value: config.signingSecret || '', secret: true },
-        { label: 'Channels', value: config.channelIds || '' },
+        { label: 'Bot Token', value: config.bot_token || config.botToken || '', secret: true },
+        { label: 'Signing Secret', value: config.signing_secret || config.signingSecret || '', secret: true },
       ]
     case 'discord':
       return [
-        { label: 'Bot Token', value: config.botToken || '', secret: true },
-        { label: 'Guild IDs', value: config.guildIds || '' },
+        { label: 'Bot Token', value: config.bot_token || config.botToken || '', secret: true },
       ]
     case 'telegram':
       return [
-        { label: 'Bot Token', value: config.botToken || '', secret: true },
+        { label: 'Bot Token', value: config.bot_token || config.botToken || '', secret: true },
       ]
     case 'whatsapp':
+    case 'sms':
       return [
-        { label: 'Account SID', value: config.accountSid || '' },
-        { label: 'Auth Token', value: config.authToken || '', secret: true },
-        { label: 'Phone', value: config.phoneNumber || '' },
+        { label: 'Account SID', value: config.twilio_account_sid || config.accountSid || '' },
+        { label: 'Auth Token', value: config.twilio_auth_token || config.authToken || '', secret: true },
+        { label: 'Phone', value: config.phone_number || config.phoneNumber || '' },
+      ]
+    case 'whatsapp_cloud':
+      return [
+        { label: 'Access Token', value: config.access_token || config.accessToken || '', secret: true },
+        { label: 'Phone Number ID', value: config.phone_number_id || config.phoneNumberId || '' },
+        { label: 'Verify Token', value: config.verify_token || config.verifyToken || '', secret: true },
+        { label: 'App Secret', value: config.app_secret || config.appSecret || '', secret: true },
       ]
     case 'email':
       return [
-        { label: 'API Key', value: config.resendApiKey || '', secret: true },
-        { label: 'Reply From', value: config.replyFrom || '' },
-        { label: 'Receive At', value: config.receiveAddress || '' },
+        { label: 'API Key', value: config.resend_api_key || config.resendApiKey || '', secret: true },
+        { label: 'Reply From', value: config.reply_from || config.replyFrom || '' },
+        { label: 'Receive At', value: config.inbound_address || config.receiveAddress || '' },
       ]
     case 'webhook':
       return [
-        { label: 'URL', value: config.callbackUrl || '' },
+        { label: 'URL', value: config.callback_url || config.callbackUrl || '' },
         { label: 'Secret', value: config.secret || '', secret: true },
       ]
     case 'google_chat':
       return [
-        { label: 'Webhook URL', value: config.webhookUrl || '', secret: true },
-        { label: 'Space ID', value: config.spaceId || '' },
+        { label: 'Webhook URL', value: config.webhook_url || config.webhookUrl || '', secret: true },
       ]
     case 'microsoft_teams':
       return [
-        { label: 'Bot ID', value: config.botId || '' },
-        { label: 'Bot Password', value: config.botPassword || '', secret: true },
-        { label: 'Tenant ID', value: config.tenantId || '' },
+        { label: 'Bot ID', value: config.bot_id || config.botId || '' },
+        { label: 'Bot Password', value: config.bot_password || config.botPassword || '', secret: true },
       ]
     case 'signal':
       return [
-        { label: 'Phone Number', value: config.phoneNumber || '' },
-        { label: 'API URL', value: config.apiUrl || '' },
+        { label: 'Phone Number', value: config.phone_number || config.phoneNumber || '' },
+        { label: 'API URL', value: config.api_url || config.apiUrl || '' },
       ]
     case 'matrix':
       return [
-        { label: 'Homeserver', value: config.homeserverUrl || '' },
-        { label: 'Access Token', value: config.accessToken || '', secret: true },
-        { label: 'Room ID', value: config.roomId || '' },
+        { label: 'Homeserver', value: config.homeserver_url || config.homeserverUrl || '' },
+        { label: 'Access Token', value: config.access_token || config.accessToken || '', secret: true },
+        { label: 'Room ID', value: config.room_id || config.roomId || '' },
       ]
     case 'irc':
       return [
-        { label: 'Server', value: config.server || '' },
-        { label: 'Port', value: config.port || '6667' },
+        { label: 'Bridge URL', value: config.webhook_url || config.webhookUrl || '' },
         { label: 'Channel', value: config.channel || '' },
         { label: 'Nick', value: config.nick || '' },
       ]

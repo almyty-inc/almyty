@@ -1,0 +1,59 @@
+# 🎧 Triage support tickets and draft replies
+
+**Stack** — `Trigger: agent API / Slack` · `Models: GPT-4o primary + GPT-4o & Gemini 1.5 Pro verifier panel` · `Tools: order-lookup` · `Mode: verify + approval` · `Memory: on`
+
+**Who it's for** — support teams drowning in L1 tickets who can't let an agent send a wrong answer.
+
+This recipe is a **real, running agent** — the *Customer Support Orchestrator* below has handled 8
+runs at 87.5% success for ~$0.07 total. Everything shown is its actual configuration and history.
+
+![The Customer Support Orchestrator: primary GPT-4o plus a cross-vendor verifier panel](/screenshots/support-agent-overview.png)
+
+## What it actually does
+
+It reads a ticket, looks up the order, drafts a reply, and a **cross-vendor verifier panel**
+checks the draft before it ships. Two real runs from its history:
+
+- *"Where is my order NW-10428?"* → it called the **Lookup Order Status** tool, and the
+  verifier caught a delivery-date inconsistency (the ETA didn't match the carrier's speed) and
+  forced **1 revision** before the reply passed. 3 steps, 6,463 tokens, $0.0121.
+- *"URGENT ticket TKT-6190 from Brightway Logistics (enterprise customer)…"* → it hit the
+  refund-escalation rule and stopped at **`waiting approval`** for a human, instead of
+  promising something it shouldn't.
+
+![Real runs — a completed order-status reply, an enterprise ticket paused at waiting-approval, a failed run](/screenshots/support-agent-runs.png)
+
+## Build it
+
+1. **Create the agent** (*Agents → Create → Autonomous*) with a primary model — this one uses
+   **GPT-4o at temp 0.3** — and instructions to triage the ticket, look up the order, and draft
+   a reply in your voice.
+2. **Attach the tools** it needs — here an **order-lookup** tool generated from a connected
+   orders API. (Connect yours in *APIs → Connect API*.)
+3. **Add a verifier panel** (*Models & Verification → Configure*): add reviewers from more than
+   one vendor — this agent runs **GPT-4o + Gemini 1.5 Pro** with `any_fail_blocks` and up to
+   **2 revisions**, triggered `on_final_output`. The primary drafts, the reviewers try to
+   refute, and it revises before anything ships.
+4. **Set constraints** — always-on rules it can't argue past. This agent's include *"Never
+   promise a refund over $500 without escalating to a human first"* and *"Do not invent order
+   numbers or account details that are not in the ticket"* — plus one it **learned** from a
+   failed run ("Avoid the failure encountered previously: LLM provider is not healthy").
+
+   ![The agent's four constraints, including a learned one](/screenshots/support-agent-constraints.png)
+
+5. **Turn on memory** so it carries context between runs, and gate refunds with
+   `request_approval` — that's what paused the Brightway Logistics ticket above.
+6. **Wire the trigger** — call the agent's API when a ticket arrives (its endpoint is on the
+   Overview → Integration panel), or publish it on Slack.
+
+## Make it yours
+
+- Swap the orders API for Zendesk/Intercom — same *Connect API* step.
+- Tighten or loosen the refund threshold in the constraint.
+- Promote a good run to a **skill** (button on any completed run) so other agents reuse the flow.
+
+**Uses** — `Support` · `Verification` · `Approvals` · `Memory`
+
+## Related
+
+- [Autonomous agents](/agents/autonomous) · [Approvals](/approvals) · [Verification](/agents/autonomous#verification) · [Connect an API](/tools)

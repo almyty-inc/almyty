@@ -13,6 +13,7 @@ import {
   Query,
   Patch,
   Res,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,7 +23,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { Response } from 'express';
+import { Request as ExpressRequest, Response } from 'express';
 
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -34,6 +35,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../../entities/user.entity';
+import { REFERRAL_COOKIE, clientIpOf } from '../referrals/referrals.constants';
 
 /** Shared cookie options for the access_token httpOnly cookie */
 const ACCESS_TOKEN_COOKIE_OPTIONS = {
@@ -121,8 +123,21 @@ export class AuthController {
   async register(
     @Body() createUserDto: CreateUserDto,
     @Res({ passthrough: true }) res: Response,
+    @Req() req: ExpressRequest,
   ) {
-    const tokens = await this.authService.register(createUserDto);
+    // Referral attribution: the /referrals/attribute/:code endpoint (reached
+    // via /r/<code> share links) drops a short-lived cookie on this origin;
+    // read it here so the signup is attributed server-side.
+    const referralCode = req.cookies?.[REFERRAL_COOKIE];
+    const tokens = await this.authService.register(createUserDto, {
+      referralCode,
+      ipAddress: clientIpOf(req),
+    });
+
+    // Attribution cookie is single-use — clear it once consumed.
+    if (referralCode) {
+      res.clearCookie(REFERRAL_COOKIE, { path: '/' });
+    }
 
     // Set httpOnly cookie for web UI security
     res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
@@ -249,6 +264,9 @@ export class AuthController {
       success: true,
       data: {
         ...profile,
+        // Non-blocking email verification state — the UI shows a
+        // "verify your email" banner while false.
+        emailVerified: !!(user.verifiedAt || user.isVerified),
         organizationMemberships: user.organizationMemberships?.map(membership => ({
           id: membership.id,
           role: membership.role,
@@ -282,7 +300,10 @@ export class AuthController {
 
     return {
       success: true,
-      data: profile,
+      data: {
+        ...profile,
+        emailVerified: !!(updatedUser.verifiedAt || updatedUser.isVerified),
+      },
       message: 'Profile updated successfully',
     };
   }
@@ -489,6 +510,58 @@ export class AuthController {
       success: true,
       data: null,
       message: 'Email verified successfully',
+    };
+  }
+
+  /**
+   * Link-click verification target (the email button lands on the
+   * frontend page, which calls this). Same semantics as the POST
+   * variant, exposed as GET so the token can travel in the query
+   * string of a plain link.
+   */
+  @Public()
+  @Get('verify-email')
+  @ApiOperation({ summary: 'Verify email using a token link (?token=)' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid verification token' })
+  async verifyEmailLink(@Query('token') token: string) {
+    if (!token) {
+      throw new BadRequestException('Verification token is required');
+    }
+
+    await this.authService.verifyEmail(token);
+
+    return {
+      success: true,
+      data: null,
+      message: 'Email verified successfully',
+    };
+  }
+
+  /**
+   * Re-send the verification email for the logged-in user.
+   * Verification is non-blocking, so this is reachable while
+   * unverified (normal JWT auth). Throttled tighter than the global
+   * limit — it sends outbound email.
+   */
+  @UseGuards(JwtAuthGuard)
+  // Two paths for the same action: the frozen frontend contract calls
+  // POST /auth/resend-verification; the REST-nested form is kept too.
+  @Post('resend-verification')
+  @Post('verify-email/resend')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 3, ttl: 300_000 } })
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Re-send the email verification link' })
+  @ApiResponse({ status: 200, description: 'Verification email sent (or already verified)' })
+  async resendVerification(@CurrentUser() user: User) {
+    const result = await this.authService.requestEmailVerification(user.id);
+    return {
+      success: true,
+      data: { alreadyVerified: result.alreadyVerified },
+      message: result.alreadyVerified
+        ? 'Email is already verified'
+        : 'Verification email sent',
     };
   }
 }

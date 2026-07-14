@@ -58,11 +58,15 @@ export class CanonicalMemoryOpsHelper {
     if (row.embeddingStatus === 'ready' || row.embeddingStatus === 'skipped') return;
 
     const orgId = scopeToOrganizationId(row.scopeType, row.scopeId);
-    const config = await this.getOrCreateConfig(row.scopeType, row.scopeId);
+    // Ensure the workspace config row exists (first write into a fresh
+    // scope creates it). The recorded model below comes from the actual
+    // embedding result, not the config's wish — the two can differ when
+    // the org's provider set changes.
+    await this.getOrCreateConfig(row.scopeType, row.scopeId);
 
     try {
-      const raw = await this.embedding.generateEmbedding(row.content, orgId);
-      if (!raw) {
+      const result = await this.embedding.generateEmbedding(row.content, orgId);
+      if (!result) {
         await this.repo.update(
           { id: memoryId },
           {
@@ -74,23 +78,21 @@ export class CanonicalMemoryOpsHelper {
       }
       // The DB column is `vector(EMBEDDING_DEFAULT_DIM)`. Normalise
       // truncate or zero-pad incoming vectors to that length so a
-      // workspace using a different-dim embedder still produces
-      // insertable rows. The recorded `embedding_dim` reflects the
-      // raw model output so consumers know what shape to expect on
-      // the read side.
-      const target = LIMITS.EMBEDDING_DEFAULT_DIM;
-      const normalised =
-        raw.length === target
-          ? raw
-          : raw.length > target
-            ? raw.slice(0, target)
-            : raw.concat(new Array(target - raw.length).fill(0));
+      // workspace using a different-dim embedder (e.g. mistral-embed's
+      // 1024) still produces insertable rows. The recorded
+      // `embedding_dim` reflects the raw model output so consumers know
+      // what shape to expect on the read side, and `embedding_model`
+      // records which model actually produced the vector — the vector
+      // search only compares rows whose model matches the query
+      // embedding's model, so mixed-model vectors are never silently
+      // cosine-compared.
+      const normalised = EmbeddingService.padToDim(result.vector, LIMITS.EMBEDDING_DEFAULT_DIM);
       await this.repo.update(
         { id: memoryId },
         {
           embedding: normalised,
-          embeddingDim: raw.length,
-          embeddingModel: config.embeddingModel,
+          embeddingDim: result.dim,
+          embeddingModel: result.model,
           embeddingStatus: 'ready' as EmbeddingStatus,
           embeddingError: null,
         },

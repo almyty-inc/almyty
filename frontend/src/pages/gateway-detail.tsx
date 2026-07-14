@@ -33,6 +33,7 @@ import {
   ChannelConfigForm,
   isChannelType,
 } from '@/components/gateways/detail/channel-config-form'
+import { WidgetBuilder } from '@/components/gateways/widget-builder'
 
 export function GatewayDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -320,6 +321,9 @@ export function GatewayDetailPage() {
           }}
         />
       )}
+
+      {/* Chat widget builder — customize + live-preview the embeddable widget */}
+      {gateway.type === 'chat_widget' && <WidgetBuilder gateway={gateway} />}
 
       {/* Authentication */}
       {gateway.type !== 'skills' && (

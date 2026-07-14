@@ -125,7 +125,9 @@ describe('GatewaysController', () => {
       const result = await controller.getGateways({ page: 1, limit: 10 }, mockRequest);
 
       expect(result.success).toBe(true);
-      expect(result.data).toBe(mockResult);
+      // The controller maps rows through secret masking, so the data
+      // is a deep-equal copy rather than the same object reference.
+      expect(result.data).toEqual(mockResult);
     });
   });
 

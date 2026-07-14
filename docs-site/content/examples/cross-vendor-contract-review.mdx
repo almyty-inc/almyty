@@ -1,0 +1,29 @@
+# ⚖️ Cross-vendor contract and risk review
+
+**Stack** — `Trigger: upload / agent API` · `Models: Claude + GPT-4o + Gemini members, judge` · `Tools: clause/precedent search (optional)` · `Mode: debate collaboration` · `Output: risk memo citing the debate`
+
+**Who it's for** — legal, procurement, and diligence teams where one model's read isn't enough.
+**What it does** — several models argue a document's risks from different angles and a judge writes the final memo — so a missed indemnity or auto-renewal clause is caught by the model that was looking for it, not left to one opinion.
+
+## Build it
+
+1. **Create member agents**, each a different provider and each given a lens: *tenant's risk*, *counterparty's leverage*, *compliance with governing law*.
+2. **Set collaboration to `debate`** on the primary agent — members run over several rounds, each seeing the others' arguments, so weak readings get challenged.
+
+   ![The collaboration panel — debate strategy with member agents](/screenshots/agent-collab-debate.png)
+3. **Pick a judge** model that reads the full exchange and writes the final answer, citing which arguments decided it.
+4. **(Optional) add a search tool** for your clause library or past contracts so arguments cite precedent, not just the text.
+5. **Feed it the document** — upload the contract or have your DMS call the agent API.
+6. **Get the memo** — a structured risk summary with the reasoning, not a single-model guess.
+
+## Make it yours
+
+- Reuse the pattern for research synthesis, due diligence, or incident post-mortems — anywhere one model isn't enough.
+- Reserve debate for high-stakes calls; use `race` or `parallel` for high-volume, low-stakes work.
+- Route anything above a risk score to a human via [`request_approval`](/approvals).
+
+**Uses** — `Legal` · `Debate` · `Multi-model`
+
+## Related
+
+- [Collaboration](/agents/autonomous#collaboration) · [AI Models](/llm-providers) · [Autonomous agents](/agents/autonomous)

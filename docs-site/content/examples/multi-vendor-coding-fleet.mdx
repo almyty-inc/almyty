@@ -1,0 +1,36 @@
+# 🤖 Orchestrate a multi-vendor coding fleet
+
+**Stack** — `Trigger: chat / agent API` · `Models: per-CLI (Claude Code, Codex, aider)` · `Tools: runner process surface + coding CLIs` · `Mode: planner + parallel members` · `Output: edits in one workspace`
+
+**Who it's for** — engineers who want more than one coding agent on a task, each on its strongest model.
+**What it does** — one planner agent breaks a task down and dispatches subtasks to several coding-agent CLIs running on your machine — each with its own model and isolated config — all editing the same repo, while you watch their status.
+
+Builds on [Give an agent a machine](/examples/expose-any-machine): driving coding CLIs is one capability the runner offers once a machine is exposed.
+
+## Build it
+
+1. **Start a runner** on the machine with your repo:
+   ```bash
+   npx @almyty/auth login
+   npx @almyty/runner start --name my-laptop
+   ```
+   It registers and reports the coding CLIs it finds on your PATH. Code and credentials stay on the box; only instructions cross the wire.
+
+   ![A runner's detail — detected coding agents on the machine](/screenshots/runner-detail.png)
+
+2. **Create a planner agent** whose instruction is to decompose the task and dispatch subtasks to the specialists.
+3. **Launch the CLIs as members** — each unattended, each with its own model, isolated config, and headless auth.
+4. **Let them work the same workspace** — the planner assigns files/subtasks; you watch each member's status (busy / idle / awaiting input).
+5. **Review the result** — the members edit one shared workspace; you review the diff as usual.
+
+## Make it yours
+
+- Put a different model behind each CLI so the fleet is genuinely multi-vendor.
+- Pair with the [PR review bot](/examples/pr-review-bot) to check what the fleet produced.
+- The coding CLIs authenticate to their own providers with keys you supply, so those model calls leave from your machine.
+
+**Uses** — `DevOps` · `Runner` · `Coding agents`
+
+## Related
+
+- [Runners](/runner) · [Give an agent a machine](/examples/expose-any-machine) · [CLI: the runner](/cli)

@@ -22,6 +22,9 @@ import {
 } from '@/components/ui/select'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { useOrganizationStore } from '@/store/organization'
+import { ExternalLink, TestTube, CheckCircle2, XCircle } from 'lucide-react'
+import { llmProvidersApi } from '@/lib/api'
+import { providerKeyUrls, providerUsageApiSupport, usageApiSupported } from './provider-type-config'
 
 interface CreateProviderDialogProps {
   open: boolean
@@ -38,6 +41,23 @@ export function CreateProviderDialog({
 }: CreateProviderDialogProps) {
   const { currentOrganization } = useOrganizationStore()
   const [visibility, setVisibility] = React.useState<VisibilityValue>({ visibility: 'org', teamId: null })
+  const [testing, setTesting] = React.useState(false)
+  const [testResult, setTestResult] = React.useState<any>(null)
+  const handleTestConnection = async () => {
+    const type = createForm.watch('type')
+    const apiKey = createForm.watch('apiKey')
+    if (!type || !apiKey) return
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res: any = await llmProvidersApi.testConnection(type, apiKey)
+      setTestResult(res?.data ?? res)
+    } catch (e: any) {
+      setTestResult({ ok: false, error: e?.response?.data?.message || e?.message || 'Test failed' })
+    } finally {
+      setTesting(false)
+    }
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
@@ -87,6 +107,7 @@ export function CreateProviderDialog({
                     <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
                     <SelectItem value="cohere">Cohere</SelectItem>
                     <SelectItem value="huggingface">HuggingFace</SelectItem>
+                    <SelectItem value="ollama">Ollama</SelectItem>
                     <SelectItem value="custom">Custom</SelectItem>
                   </SelectContent>
                 </Select>
@@ -99,15 +120,105 @@ export function CreateProviderDialog({
 
           {/* API Key — select from vault or enter new */}
           <CredentialPicker
-            label="API Key"
+            label={createForm.watch('type') === 'ollama' ? 'API Key (optional)' : 'API Key'}
             value={createForm.watch('credentialId') || ''}
             onSelect={(id) => { createForm.setValue('credentialId', id); createForm.setValue('apiKey', '') }}
             onNewKey={(key) => { createForm.setValue('apiKey', key); createForm.setValue('credentialId', '') }}
             newKeyValue={createForm.watch('apiKey') || ''}
             filterType="api_key"
           />
+          {providerKeyUrls[createForm.watch('type')] && (
+            <a
+              href={providerKeyUrls[createForm.watch('type')]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Get your API key
+            </a>
+          )}
+          {createForm.watch('type') === 'ollama' && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Runs on your machine - install from{' '}
+                <a
+                  href="https://ollama.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  ollama.com
+                </a>
+                ; default URL http://localhost:11434. Local mode needs no API key - only add
+                one if your server sits behind an authenticating proxy. Self-hosted almyty
+                needs OLLAMA_ALLOW_PRIVATE_URLS=true to reach a localhost/private server.
+                Or use Ollama cloud: set the base URL to https://ollama.com and paste an API
+                key from ollama.com/settings/keys - hosted models, no local install.
+              </p>
+              <div>
+                <Label htmlFor="apiUrl">Base URL (optional)</Label>
+                <Input
+                  id="apiUrl"
+                  {...createForm.register('apiUrl')}
+                  placeholder="http://localhost:11434"
+                />
+              </div>
+            </div>
+          )}
+          {createForm.watch('apiKey') && (
+            <div className="space-y-1">
+              <Button type="button" variant="outline" size="sm" onClick={handleTestConnection} disabled={testing} className="gap-2">
+                {testing ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current" />
+                ) : (
+                  <TestTube className="h-3.5 w-3.5" />
+                )}
+                Test connection
+              </Button>
+              {testResult && (testResult.ok ? (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Connected
+                  {typeof testResult.modelCount === 'number' ? ` — ${testResult.modelCount} models` : ''}
+                  {typeof testResult.latencyMs === 'number' ? ` (${testResult.latencyMs}ms)` : ''}
+                </p>
+              ) : (
+                <p className="text-xs text-red-600 flex items-center gap-1">
+                  <XCircle className="h-3 w-3" /> {testResult.error || 'Connection failed'}
+                </p>
+              ))}
+            </div>
+          )}
           {createForm.formState.errors.apiKey && (
             <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.apiKey as any).message}</p>
+          )}
+
+          {/* Usage API key — only for types with a supported usage/cost API */}
+          {usageApiSupported(createForm.watch('type')) && (
+            <div>
+              <Label htmlFor="usageApiKey">Usage API key (admin-scoped, for cost reconciliation)</Label>
+              <Input
+                id="usageApiKey"
+                type="password"
+                autoComplete="off"
+                {...createForm.register('usageApiKey')}
+                placeholder="Optional — admin key for usage/cost reports"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Requires an admin-scoped key (OpenAI sk-admin-..., Anthropic admin key) — the
+                regular inference key cannot read usage/cost reports.{' '}
+                <a
+                  href={providerUsageApiSupport[createForm.watch('type')]?.docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Admin key docs
+                </a>
+              </p>
+            </div>
           )}
 
           {/* Organization ID - Only for OpenAI */}

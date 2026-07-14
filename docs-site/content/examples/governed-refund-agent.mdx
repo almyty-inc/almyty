@@ -1,0 +1,45 @@
+# 🛡️ Run a governed refund agent in production
+
+**Stack** — `Trigger: your billing app calls the agent API` · `Models: GPT-4o primary + cross-vendor verify` · `Tools: order-lookup, refund` · `Mode: constraints + verify + approval + audit` · `Output: refund issued or escalated, full trail`
+
+**Who it's for** — teams that want an agent to handle refunds, but can't accept "the model decided to."
+
+This is **real governance in action**. The demo's *Customer Support Orchestrator* handles refunds
+end to end, and one is paused for a human right now: *Brightway Logistics, order NW-44120 arrived
+defective, $820 refund requested* — over the $500 policy, so the run stopped and is waiting on an
+approver.
+
+![A real $820 refund escalation, paused for human approval](/screenshots/approval-refund-820.png)
+
+## Build it
+
+1. **Set constraints** — always-on rules the agent can't argue past. This agent's include
+   *"Never promise a refund over $500 without escalating to a human first"* and *"Do not invent
+   order numbers or account details that are not in the ticket."*
+
+   ![The agent's always-on constraints](/screenshots/support-agent-constraints.png)
+
+2. **Verify before it ships** — a cross-vendor panel (GPT-4o + Gemini 1.5 Pro, `any_fail_blocks`)
+   re-checks the refund decision; on disagreement it revises. A wrong number caught here never
+   becomes a wrong refund.
+
+   ![Primary model plus the cross-vendor verifier panel](/screenshots/support-agent-overview.png)
+
+3. **Gate the irreversible step** — the agent calls `request_approval` for refunds over the
+   threshold. The run pauses at `waiting approval` and a human Approves or Rejects (the $820
+   Brightway escalation above). Below the threshold, it proceeds on its own.
+
+4. **Keep the receipts** — every action and config change is in the [audit trail](/enterprise/audit-export)
+   with who/when/what, exportable for compliance.
+
+## Make it yours
+
+- Turn who-approves-what into org policy with the [approval-policy engine](/enterprise/approval-policies).
+- Restrict approvers by team with [RBAC](/enterprise/advanced-rbac).
+- Self-host the whole thing for data residency — see [Air-gapped agents](/examples/air-gapped-self-host).
+
+**Uses** — `Enterprise` · `Constraints` · `Verification` · `Approvals` · `Audit`
+
+## Related
+
+- [Approvals](/approvals) · [Approval policies](/enterprise/approval-policies) · [Audit export](/enterprise/audit-export) · [Compliance](/compliance)
