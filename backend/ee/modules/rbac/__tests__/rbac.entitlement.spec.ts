@@ -20,15 +20,16 @@ function ctxFor(controller: any, method: string): ExecutionContext {
 }
 
 describe('RbacController entitlement gate', () => {
+  const orgResolverStub = { entitlementsForOrg: jest.fn(), hasForOrg: jest.fn() } as any;
   const reflector = new Reflector();
 
-  it('blocks with 402 in the community edition', () => {
+  it('blocks with 402 in the community edition', async () => {
     const svc = new LicenseService();
     svc.load({ token: '' }); // community
-    const guard = new EntitlementGuard(reflector, svc);
+    const guard = new EntitlementGuard(reflector, svc, orgResolverStub);
 
     try {
-      guard.canActivate(ctxFor(RbacController, 'listRoles'));
+      await guard.canActivate(ctxFor(RbacController, 'listRoles'));
       fail('expected 402');
     } catch (e) {
       expect((e as HttpException).getStatus()).toBe(HttpStatus.PAYMENT_REQUIRED);
@@ -37,10 +38,10 @@ describe('RbacController entitlement gate', () => {
     }
   });
 
-  it('allows when advanced_rbac is licensed', () => {
+  it('allows when advanced_rbac is licensed', async () => {
     const svc = new LicenseService();
     jest.spyOn(svc, 'has').mockImplementation((f) => f === EE_ENTITLEMENTS.ADVANCED_RBAC);
-    const guard = new EntitlementGuard(reflector, svc);
-    expect(guard.canActivate(ctxFor(RbacController, 'createRole'))).toBe(true);
+    const guard = new EntitlementGuard(reflector, svc, orgResolverStub);
+    expect(await guard.canActivate(ctxFor(RbacController, 'createRole'))).toBe(true);
   });
 });
