@@ -227,11 +227,11 @@ spec:
               name: almyty-secrets
               key: STRIPE_PRICE_PRO
               optional: true
-        - name: STRIPE_PRICE_ENTERPRISE
+        - name: STRIPE_PRICE_BUSINESS
           valueFrom:
             secretKeyRef:
               name: almyty-secrets
-              key: STRIPE_PRICE_ENTERPRISE
+              key: STRIPE_PRICE_BUSINESS
               optional: true
         # Vendor license signing key - lets the billing webhook mint
         # entitlement tokens on subscription changes. Optional: without it
