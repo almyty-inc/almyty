@@ -164,6 +164,20 @@ jobs:
         working-directory: backend
         run: npx tsc --noEmit
 
+      # The EE overlay (backend/ee + tsconfig.ee.json) is not covered by
+      # the plain tsc run above, so a broken overlay used to surface
+      # only at deploy time. Compile it here so it fails CI instead.
+      - name: Build EE overlay
+        working-directory: backend
+        run: npm run build:ee
+
+      # Require-cycle DI smoke over the compiled EE assembly: a class left
+      # undefined at decoration time boots into CrashLoopBackOff (it did —
+      # PromotedSkillsService after the EE relocation) while compiling fine.
+      - name: EE DI smoke
+        working-directory: backend
+        run: node scripts/ee-di-smoke.js
+
   # ─── Dependency vulnerability scan (npm audit) ───────────────
   # Fails the PR if npm audit finds a high- or critical-severity
   # advisory in backend/ or frontend/ dependencies. `--audit-level=high`

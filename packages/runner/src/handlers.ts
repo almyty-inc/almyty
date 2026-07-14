@@ -5,12 +5,15 @@ import { RequestPayload, ResponsePayload, WORKER_ERROR_CODES } from './protocol.
 import {
   buildAgentSpawn,
   classifyStatus,
+  detectCodingAgents,
   findByBinary,
   getCodingAgent,
   listCodingAgents,
   stripVtEscapes,
   type AgentSpawnInput,
 } from './coding-agents/index.js';
+import { realExec, type ProbeExec } from './binaries.js';
+import { CodingSessionManager } from './coding-sessions.js';
 import {
   ProcessSignal,
   RUNNER_ERROR_CODES,
@@ -46,6 +49,10 @@ export interface HandlerContext {
   config: RunnerConfig;
   /** Test injection point for runner.info; returns the cached probe map. */
   cachedRuntimeInfo?: Awaited<ReturnType<typeof detectRuntimeInfo>>;
+  /** Coding-session registry (chat-to-runner bridge); wired by the daemon. */
+  coding?: CodingSessionManager;
+  /** Test injection for coding.list's binary probing. */
+  probeExec?: ProbeExec;
 }
 
 export async function dispatchHandler(ctx: HandlerContext, req: RequestPayload): Promise<ResponsePayload> {
@@ -64,6 +71,11 @@ export async function dispatchHandler(ctx: HandlerContext, req: RequestPayload):
       case 'agent.list': return ok(agentList());
       case 'agent.spawn': return ok(await agentSpawn(ctx, req));
       case 'agent.status': return ok(agentStatus(ctx, req));
+      case 'coding.list': return ok(await codingList(ctx));
+      case 'coding.start': return ok(await codingStart(ctx, req));
+      case 'coding.input': return ok(codingInput(ctx, req));
+      case 'coding.status': return ok(codingStatus(ctx, req));
+      case 'coding.stop': return ok(codingStop(ctx, req));
       default:
         return err(WORKER_ERROR_CODES.MALFORMED_ENVELOPE, `unknown method ${req.method}`);
     }
@@ -260,6 +272,85 @@ function agentStatus(ctx: HandlerContext, req: RequestPayload): unknown {
     status: agentStatusValue,
     idleMs: snap.idleMs,
   };
+}
+
+// ── coding-session surface (chat-to-runner bridge) ─────────────────
+//
+// Unlike agent.* (workspace-scoped unattended members), coding.* sessions
+// are daemon-global interactive sessions driven from the chat REPL. The
+// CodingSessionManager namespaces each one under a synthetic workspace and
+// streams output upstream as coding.output/coding.exit event envelopes.
+
+function requireCoding(ctx: HandlerContext): CodingSessionManager {
+  if (!ctx.coding) {
+    throw new RunnerError(
+      'coding sessions are not available on this runner',
+      RUNNER_ERROR_CODES.PATH_DENIED,
+    );
+  }
+  return ctx.coding;
+}
+
+/** Coding CLIs actually installed on this machine (fresh probe). */
+async function codingList(ctx: HandlerContext): Promise<unknown> {
+  const agents = await detectCodingAgents(ctx.probeExec ?? realExec);
+  return { agents };
+}
+
+/**
+ * Start a coding session: resolve the platform spec, build the spawn spec
+ * (auto-approve, task as final positional arg, pipe stdio), run it through
+ * the SAME execution policy as process.spawn, then hand it to the session
+ * registry which streams output back as events.
+ */
+async function codingStart(ctx: HandlerContext, req: RequestPayload): Promise<unknown> {
+  const coding = requireCoding(ctx);
+  const p = req.params as {
+    agent?: string;
+    task?: string;
+    cwd?: string;
+    model?: string;
+    extraArgs?: string[];
+  };
+  const spec = getCodingAgent(requireString(p.agent, 'agent'));
+  if (!spec) {
+    throw new RunnerError(`unknown coding agent ${p.agent}`, RUNNER_ERROR_CODES.PATH_DENIED);
+  }
+  const input = {
+    task: requireString(p.task, 'task'),
+    cwd: typeof p.cwd === 'string' && p.cwd.length > 0 ? p.cwd : undefined,
+    model: typeof p.model === 'string' ? p.model : undefined,
+    extraArgs: Array.isArray(p.extraArgs) ? p.extraArgs.map(String) : undefined,
+  };
+  const opts = coding.buildStartOptions(spec, input);
+  // Same policy gate as process.spawn — isolation/deny/cwd/install all apply.
+  opts.env = enforceSpawnPolicy(ctx.config, opts).env;
+  return coding.start(spec, input, opts);
+}
+
+/** Route a line of user input to the session's stdin. */
+function codingInput(ctx: HandlerContext, req: RequestPayload): unknown {
+  const coding = requireCoding(ctx);
+  const p = req.params as { sessionId?: string; data?: string };
+  coding.input(requireString(p.sessionId, 'sessionId'), requireString(p.data, 'data'));
+  return {};
+}
+
+/** One session's status, or the full session list when sessionId is omitted. */
+function codingStatus(ctx: HandlerContext, req: RequestPayload): unknown {
+  const coding = requireCoding(ctx);
+  const p = req.params as { sessionId?: string };
+  if (typeof p.sessionId === 'string' && p.sessionId.length > 0) {
+    return coding.status(p.sessionId);
+  }
+  return { sessions: coding.list() };
+}
+
+/** Stop a session (TERM; KILL with force). */
+function codingStop(ctx: HandlerContext, req: RequestPayload): unknown {
+  const coding = requireCoding(ctx);
+  const p = req.params as { sessionId?: string; force?: boolean };
+  return coding.stop(requireString(p.sessionId, 'sessionId'), p.force === true);
 }
 
 // ── helpers ─────────────────────────────────────────────────────────

@@ -1,0 +1,35 @@
+# 💻 Give an agent a machine to work on
+
+**Stack** — `Runner: any machine (laptop, build server, VPC box)` · `Connection: outbound only` · `Surface: commands + installed runtimes + filesystem` · `Output: work done on that box`
+
+**Who it's for** — anyone whose agent needs to reach something a hosted agent can't: internal services, on-prem data, private infrastructure.
+**What it does** — a small runner process you install on any machine gives agents a place to execute — run commands, use the runtimes already installed, touch that box's files and network. Code, data, and credentials stay put; only instructions cross the wire.
+
+## Build it
+
+1. **Install and start it** on the machine:
+   ```bash
+   npx @almyty/auth login
+   npx @almyty/runner start --name build-server
+   ```
+   It connects out (no inbound ports) and starts heartbeating.
+
+   ![The Runners list — a machine online](/screenshots/runners-list.png)
+
+2. **It reports what it can do.** Open the runner and it shows the runtimes and tools it detected — Node, Python, Docker, Git — so an agent knows what's available.
+
+   ![A runner's detail — detected runtimes on the machine](/screenshots/runner-detail.png)
+
+3. **Point an agent at it.** The agent executes on that machine as a step: run a test suite, query a DB only reachable inside the network, or process files that can't leave.
+
+## Make it yours
+
+- Driving [coding-agent CLIs](/examples/multi-vendor-coding-fleet) is one capability built on this — not the point of the runner.
+- Reach a database that only listens on `localhost` inside a private subnet.
+- Keep regulated data on-prem while the control plane stays hosted — or [self-host all of it](/examples/air-gapped-self-host).
+
+**Uses** — `Platform` · `Runner` · `On-prem`
+
+## Related
+
+- [Runners](/runner) · [Multi-vendor coding fleet](/examples/multi-vendor-coding-fleet) · [CLI: the runner](/cli)

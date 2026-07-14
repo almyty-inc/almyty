@@ -2,7 +2,7 @@
 
 Approvals are the human-in-the-loop gate for autonomous agents. When an agent needs human sign-off before taking a non-reversible action — a payment, an external send, a destructive operation — it calls the built-in `request_approval` tool. The run pauses, an approval request appears in the **Approvals** page, and an authorized reviewer approves or rejects. The run then resumes (on approve) or terminates (on reject).
 
-![Approvals empty state](/screenshots/approvals-empty.png)
+![A pending approval — a paused run with its escalation reason and Approve/Reject](/screenshots/approvals-pending.png)
 
 ## How it works
 
@@ -76,3 +76,7 @@ what you intend to do and the relevant amounts/parties.
 
 The tool returns when the human decides. Treat the returned value as the
 authorization to proceed.
+
+## Multi-step policies (Enterprise)
+
+A single authorized reviewer is the free, default gate. If you need finance-then-admin chains, amount-conditional rules, or a two-reviewer quorum, [approval policies](/enterprise/approval-policies) (Enterprise) layer that on top of this flow.

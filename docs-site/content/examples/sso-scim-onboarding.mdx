@@ -1,0 +1,28 @@
+# 🔑 Onboard your workforce with SSO and SCIM
+
+**Stack** — `Auth: SAML / OIDC single sign-on` · `Provisioning: SCIM` · `Mapping: directory groups → roles` · `Output: managed identity, automatic deprovisioning`
+
+**Who it's for** — IT admins who want almyty behind the same identity provider as everything else, and users off it the day they leave.
+**What it does** — connects almyty to your IdP so people sign in with your directory (Okta, Entra ID, Google Workspace), and SCIM provisions and deprovisions accounts automatically — no manual invites, no orphaned access.
+
+> **Note** — SSO/SCIM is code-complete and covered by tests, but end-to-end verification needs a live IdP. Treat the steps below as the configuration path; confirm against your own IdP before relying on it in production.
+
+## Build it
+
+1. **Connect your IdP** — configure SAML or OIDC with your provider's metadata; users then sign in through your directory.
+2. **Enable SCIM provisioning** — point your IdP's SCIM connector at almyty so new hires get accounts and departures are removed automatically.
+3. **Map groups to roles** — a directory group becomes a [team role](/examples/multi-team-rbac), so access follows the org chart instead of manual assignment.
+4. **Enforce it** — require SSO for the org so shared logins and local passwords aren't an option.
+5. **Verify the trail** — sign-ins and provisioning events land in the [audit trail](/examples/audit-to-siem), tied to real directory identities.
+
+## Make it yours
+
+- Scope contractors to a group that maps to a time-boxed role.
+- Combine with [approval policies](/examples/approval-policies) so the approver is a real, current employee.
+- Deprovision instantly on offboarding — SCIM removes access without a ticket.
+
+**Uses** — `Enterprise` · `SSO` · `SCIM` · `Identity`
+
+## Related
+
+- [SSO](/enterprise/sso) · [Organizations](/organizations) · [Multi-team RBAC](/examples/multi-team-rbac) · [Compliance](/compliance)

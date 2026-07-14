@@ -16,7 +16,7 @@ import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmProvidersService } from './llm-providers.service';
 import { ChatRequest, ChatResponse, StreamChunk } from './dto/llm-providers.dto';
 import { callLlmProviderHttp } from './providers/safe-request';
-import { safeErrorBody, safeErrorMessage } from './llm-providers.service';
+import { safeErrorBody, safeErrorMessage, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
 import { ToolExecutionOptions } from '../tools/tool-executor.service';
 
 @Injectable()
@@ -55,7 +55,7 @@ export class LlmChatHelper {
       const provider = await this.providers.getProvider(providerId, organizationId, true);
 
       if (!provider.isHealthy) {
-        throw new BadRequestException('LLM provider is not healthy');
+        throw new BadRequestException(LLM_HEALTH_GATE_MESSAGE);
       }
 
       // Get or create session
@@ -221,16 +221,24 @@ export class LlmChatHelper {
       // old path loaded the provider, mutated it, and called
       // save(provider) — racing with any concurrent writer on the
       // same row. Use a scoped partial UPDATE instead.
+      //
+      // lastError gets the UPSTREAM provider message (redacted) —
+      // not the bare axios transport line, and never our own
+      // health-gate wording, which would overwrite the real upstream
+      // error with a circular "not healthy" note.
+      const upstreamMsg = extractUpstreamErrorMessage(error);
       try {
         await this.stats.bumpProviderStats(providerId, {
           tokens: 0,
           cost: 0,
           success: false,
         });
-        await this.llmProviderRepository.update(
-          { id: providerId, organizationId },
-          { lastError: safeMsg },
-        );
+        if (upstreamMsg !== LLM_HEALTH_GATE_MESSAGE) {
+          await this.llmProviderRepository.update(
+            { id: providerId, organizationId },
+            { lastError: upstreamMsg },
+          );
+        }
       } catch (updateError: any) {
         this.logger.warn(`Failed to update provider error stats: ${updateError.message}`);
       }
@@ -272,7 +280,7 @@ export class LlmChatHelper {
       const provider = await this.providers.getProvider(providerId, organizationId, true);
 
       if (!provider.isHealthy) {
-        throw new BadRequestException('LLM provider is not healthy');
+        throw new BadRequestException(LLM_HEALTH_GATE_MESSAGE);
       }
 
       // Determine if the provider supports streaming
@@ -360,6 +368,7 @@ export class LlmChatHelper {
         case LlmProviderType.GROQ:
         case LlmProviderType.TOGETHER:
         case LlmProviderType.OPENROUTER:
+        case LlmProviderType.OLLAMA:
           response = await callOpenAIStream(provider, request, session, tools, startTime, costFn, onChunk);
           break;
         case LlmProviderType.ANTHROPIC:
@@ -419,16 +428,22 @@ export class LlmChatHelper {
         error.stack,
       );
 
+      // Persist the UPSTREAM provider message (redacted) — and never
+      // our own health-gate wording, which would overwrite the real
+      // upstream error with a circular "not healthy" note.
+      const upstreamMsg = extractUpstreamErrorMessage(error);
       try {
         await this.stats.bumpProviderStats(providerId, {
           tokens: 0,
           cost: 0,
           success: false,
         });
-        await this.llmProviderRepository.update(
-          { id: providerId, organizationId },
-          { lastError: safeMsg },
-        );
+        if (upstreamMsg !== LLM_HEALTH_GATE_MESSAGE) {
+          await this.llmProviderRepository.update(
+            { id: providerId, organizationId },
+            { lastError: upstreamMsg },
+          );
+        }
       } catch (updateError: any) {
         this.logger.warn(`Failed to update provider error stats: ${updateError.message}`);
       }

@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
 
+import { renderEmailTemplate } from './email-templates';
+
 export interface SendEmailOptions {
   to: string;
   subject: string;
@@ -16,7 +18,13 @@ export class MailService {
 
   constructor() {
     const apiKey = process.env.RESEND_API_KEY;
-    this.fromEmail = process.env.EMAIL_FROM || 'almyty <noreply@almyty.com>';
+    // MAIL_FROM is the canonical sender env (the almyty.com domain is
+    // verified in Resend). EMAIL_FROM is kept as a fallback for deploys
+    // that already set it.
+    this.fromEmail =
+      process.env.MAIL_FROM ||
+      process.env.EMAIL_FROM ||
+      'almyty <notifications@almyty.com>';
 
     if (apiKey) {
       this.resend = new Resend(apiKey);
@@ -65,26 +73,32 @@ export class MailService {
   }
 
   /**
-   * HTML-escape a string so it can be safely interpolated into an
-   * email template. Previously invitation emails interpolated the
-   * inviter's name and the organization's name (both user-supplied)
-   * directly into the HTML body — an inviter named
-   *   `<a href="http://phishing.com">Click to verify</a>`
-   * could rewrite the legitimate accept button into a phishing link
-   * in every recipient's inbox. Stored XSS in email bodies is also
-   * real in clients that render HTML + JS (some webmail previews).
+   * Render a branded template (see email-templates.ts) and send it.
+   * All notification/system emails go through here so every sender
+   * gets the shared base layout + plain-text alternative for free.
    */
-  private escapeHtml(value: string): string {
-    if (value === null || value === undefined) return '';
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#x27;')
-      .replace(/\//g, '&#x2F;');
+  async sendTemplate(
+    to: string,
+    template: string,
+    params: Record<string, any> = {},
+    subjectOverride?: string,
+  ): Promise<boolean> {
+    const rendered = renderEmailTemplate(template, params);
+    return this.send({
+      to,
+      subject: subjectOverride ? subjectOverride.replace(/[\r\n]+/g, ' ') : rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+    });
   }
 
+  /**
+   * Invitation email — branded template. User-supplied values
+   * (inviter/org names) are HTML-escaped inside the template layer;
+   * see the stored-XSS note in email-templates.ts (an inviter named
+   * `<a href="http://phishing.com">Click to verify</a>` must not be
+   * able to rewrite the accept button into a phishing link).
+   */
   async sendInvitation(params: {
     to: string;
     organizationName: string;
@@ -103,45 +117,12 @@ export class MailService {
       ? `${baseUrl}/auth/register?invite=${encodedToken}`
       : `${baseUrl}/invite/accept?token=${encodedToken}`;
 
-    // Escape every user-supplied value before HTML interpolation.
-    const safeInviterName = this.escapeHtml(params.inviterName);
-    const safeOrgName = this.escapeHtml(params.organizationName);
-    const safeRole = this.escapeHtml(params.role);
-    // The URL is built from the invite token (random base64url) and
-    // our own baseUrl, so it's already safe, but escape it too for
-    // belt-and-braces rendering inside the href attribute.
-    const safeUrl = this.escapeHtml(acceptUrl);
-
-    return this.send({
-      to: params.to,
-      // Email subjects aren't HTML, but the raw orgName could still
-      // contain newlines that would break header formatting. Strip
-      // CR/LF before interpolating.
-      subject: `You're invited to ${params.organizationName.replace(/[\r\n]/g, ' ')} on almyty`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-          <h2 style="color: #8b5cf6; margin-bottom: 8px;">almyty</h2>
-          <p style="font-size: 16px; color: #18181b;">
-            <strong>${safeInviterName}</strong> invited you to join
-            <strong>${safeOrgName}</strong> as <strong>${safeRole}</strong>.
-          </p>
-          <a href="${safeUrl}"
-             style="display: inline-block; background: #8b5cf6; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 24px 0;">
-            ${params.isNewUser ? 'Create Account &amp; Join' : 'Accept Invitation'}
-          </a>
-          <p style="font-size: 13px; color: #71717a;">
-            This invitation expires in 7 days. If you didn't expect this, you can ignore it.
-          </p>
-          <p style="font-size: 12px; color: #a1a1aa; margin-top: 32px;">
-            almyty — The open platform for AI agents
-          </p>
-        </div>
-      `,
-      // The plain-text alternative doesn't go through HTML rendering
-      // but we still want to prevent newline injection that could
-      // break MIME boundaries in some mail clients.
-      text: `${params.inviterName} invited you to join ${params.organizationName} as ${params.role}. Accept: ${acceptUrl}`
-        .replace(/[\r\n]+/g, ' '),
+    return this.sendTemplate(params.to, 'invite.received', {
+      organizationName: params.organizationName,
+      inviterName: params.inviterName,
+      role: params.role,
+      isNewUser: params.isNewUser,
+      acceptUrl,
     });
   }
 
@@ -149,31 +130,20 @@ export class MailService {
     const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
     const encodedToken = encodeURIComponent(resetToken);
     const resetUrl = `${baseUrl}/auth/reset-password?token=${encodedToken}`;
-    const safeUrl = this.escapeHtml(resetUrl);
 
-    return this.send({
-      to,
-      subject: 'Reset your almyty password',
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-          <h2 style="color: #8b5cf6; margin-bottom: 8px;">almyty</h2>
-          <p style="font-size: 16px; color: #18181b;">
-            We received a request to reset your password. Click below to choose a new one.
-          </p>
-          <a href="${safeUrl}"
-             style="display: inline-block; background: #8b5cf6; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 24px 0;">
-            Reset Password
-          </a>
-          <p style="font-size: 13px; color: #71717a;">
-            This link expires in 1 hour. If you didn't request a reset, you can safely ignore this email.
-          </p>
-          <p style="font-size: 12px; color: #a1a1aa; margin-top: 32px;">
-            almyty — The open platform for AI agents
-          </p>
-        </div>
-      `,
-      text: `Reset your almyty password: ${resetUrl} (expires in 1 hour). If you didn't request this, ignore this email.`
-        .replace(/[\r\n]+/g, ' '),
-    });
+    return this.sendTemplate(to, 'account.password_reset', { resetUrl });
+  }
+
+  /**
+   * Email-address verification link. The token is a purpose-scoped
+   * signed JWT minted by AuthService; the link lands on the frontend
+   * page which calls GET /auth/verify-email?token=.
+   */
+  async sendEmailVerification(to: string, verifyToken: string, firstName?: string): Promise<boolean> {
+    const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
+    const encodedToken = encodeURIComponent(verifyToken);
+    const verifyUrl = `${baseUrl}/auth/verify-email?token=${encodedToken}`;
+
+    return this.sendTemplate(to, 'account.verify_email', { verifyUrl, firstName });
   }
 }

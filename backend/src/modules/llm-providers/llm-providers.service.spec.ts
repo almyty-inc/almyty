@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest } from './llm-providers.service';
+import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
 import { callOpenAI, callAnthropic, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
@@ -11,6 +11,7 @@ import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ToolExecutorService } from '../tools/tool-executor.service';
+import { isEncrypted } from '../../common/security/field-crypto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { LlmChatHelper } from './llm-chat.helper';
@@ -242,6 +243,94 @@ describe('LlmProvidersService', () => {
       await expect(service.createProvider(createDto, 'org-1', 'user-1'))
         .rejects
         .toThrow(ForbiddenException);
+    });
+  });
+
+  describe('usageApiKey (issue #241)', () => {
+    const baseCreateDto: CreateLlmProviderDto = {
+      name: 'OpenAI Provider',
+      type: LlmProviderType.OPENAI,
+      configuration: {
+        apiKey: 'test-api-key',
+        model: 'gpt-4',
+      },
+    };
+
+    it('accepts usageApiKey on create and persists it encrypted', async () => {
+      const dto: CreateLlmProviderDto = {
+        ...baseCreateDto,
+        configuration: { ...baseCreateDto.configuration, usageApiKey: 'sk-admin-plain-123' },
+      };
+      organizationRepository.findOne.mockResolvedValue({ id: 'org-1', name: 'Test Org' });
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      });
+      llmProviderRepository.create.mockImplementation((data: any) => {
+        const entity = { ...data };
+        Object.setPrototypeOf(entity, LlmProvider.prototype);
+        return entity;
+      });
+      llmProviderRepository.save.mockImplementation(async (p: any) => p);
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      const result = await service.createProvider(dto, 'org-1', 'user-1');
+
+      const saved = llmProviderRepository.save.mock.calls[0][0];
+      expect(saved.configuration.usageApiKey).not.toBe('sk-admin-plain-123');
+      expect(isEncrypted(saved.configuration.usageApiKey)).toBe(true);
+      // Transparent decrypt contract: read sites go through the getter.
+      expect((result as LlmProvider).getDecryptedUsageApiKey()).toBe('sk-admin-plain-123');
+      // The inference key is encrypted independently.
+      expect(isEncrypted(saved.configuration.apiKey)).toBe(true);
+    });
+
+    it('rejects a non-string usageApiKey on create', async () => {
+      organizationRepository.findOne.mockResolvedValue({ id: 'org-1', name: 'Test Org' });
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      });
+
+      const dto: CreateLlmProviderDto = {
+        ...baseCreateDto,
+        configuration: { ...baseCreateDto.configuration, usageApiKey: 42 as any },
+      };
+
+      await expect(service.createProvider(dto, 'org-1', 'user-1'))
+        .rejects
+        .toThrow(BadRequestException);
+    });
+
+    it('carries usageApiKey through a configuration update and encrypts it', async () => {
+      const mockProvider: any = {
+        id: 'provider-1',
+        name: 'Provider',
+        type: LlmProviderType.ANTHROPIC,
+        organizationId: 'org-1',
+        configuration: { apiKey: 'inference-key', temperature: 0.7 },
+        capabilities: {},
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      llmProviderRepository.save.mockImplementation(async (p: any) => p);
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      await service.updateProvider(
+        'provider-1',
+        { configuration: { usageApiKey: 'sk-ant-admin-plain' } },
+        'org-1',
+        'user-1',
+      );
+
+      // Merged into the existing configuration without clobbering it...
+      expect(mockProvider.configuration.temperature).toBe(0.7);
+      expect(mockProvider.configuration.apiKey).toBeDefined();
+      // ...and stored encrypted, decryptable via the getter.
+      expect(mockProvider.configuration.usageApiKey).not.toBe('sk-ant-admin-plain');
+      expect(isEncrypted(mockProvider.configuration.usageApiKey)).toBe(true);
+      expect(mockProvider.getDecryptedUsageApiKey()).toBe('sk-ant-admin-plain');
+      expect(llmProviderRepository.save).toHaveBeenCalledWith(mockProvider);
     });
   });
 
@@ -804,6 +893,28 @@ describe('LlmProvidersService', () => {
         expect.objectContaining({ lastError: expect.any(String) }),
       );
     });
+
+    it('does not overwrite lastError with the health gate wording when gated', async () => {
+      // Provider already marked unhealthy: the pre-flight gate in
+      // chat() throws its own wording. That message must NOT be
+      // persisted as lastError — it would erase the real upstream
+      // error the operator needs to see.
+      const mockProvider = {
+        id: 'provider-1',
+        isHealthy: false,
+        maskSensitiveData: jest.fn().mockReturnThis(),
+      };
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+
+      await expect(service.chat('provider-1', chatRequest, 'org-1', 'user-1'))
+        .rejects
+        .toThrow(LLM_HEALTH_GATE_MESSAGE);
+
+      expect(llmProviderRepository.update).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ lastError: LLM_HEALTH_GATE_MESSAGE }),
+      );
+    });
   });
 
   describe('performHealthCheck', () => {
@@ -901,6 +1012,96 @@ describe('LlmProvidersService', () => {
 
       expect(result.isHealthy).toBe(false);
       expect(result.error).toContain('API Error');
+    });
+
+    it('surfaces the upstream provider error body instead of the bare axios message', async () => {
+      const mockProvider = {
+        id: 'provider-1',
+        type: LlmProviderType.ANTHROPIC,
+        configuration: { apiKey: 'test-key' },
+        organizationId: 'org-1',
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+
+      // Anthropic-style 400: the actionable message lives in the
+      // response body; error.message is the useless transport line.
+      const upstream =
+        'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.';
+      const axiosError = Object.assign(new Error('Request failed with status code 400'), {
+        isAxiosError: true,
+        response: {
+          status: 400,
+          data: { type: 'error', error: { type: 'invalid_request_error', message: upstream } },
+        },
+      });
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(axiosError);
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.isHealthy).toBe(false);
+      expect(result.error).toContain('credit balance is too low');
+      expect(result.error).not.toContain('Request failed with status code 400');
+      expect(llmProviderRepository.update).toHaveBeenCalledWith(
+        { id: 'provider-1', organizationId: 'org-1' },
+        expect.objectContaining({
+          isHealthy: false,
+          lastError: expect.stringContaining('credit balance is too low'),
+        }),
+      );
+    });
+
+    it('falls back to the OpenAI-style body message shape', async () => {
+      const mockProvider = {
+        id: 'provider-1',
+        type: LlmProviderType.OPENAI,
+        configuration: { apiKey: 'test-key' },
+        organizationId: 'org-1',
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+
+      const axiosError = Object.assign(new Error('Request failed with status code 401'), {
+        isAxiosError: true,
+        response: { status: 401, data: { message: 'Incorrect API key provided' } },
+      });
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(axiosError);
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.error).toContain('Incorrect API key provided');
+      expect(llmProviderRepository.update).toHaveBeenCalledWith(
+        { id: 'provider-1', organizationId: 'org-1' },
+        expect.objectContaining({ lastError: expect.stringContaining('Incorrect API key provided') }),
+      );
+    });
+
+    it('never persists the health gate wording as lastError', async () => {
+      const mockProvider = {
+        id: 'provider-1',
+        type: LlmProviderType.ANTHROPIC,
+        configuration: { apiKey: 'test-key' },
+        organizationId: 'org-1',
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+
+      jest
+        .spyOn(runnerInstance as any, 'callLlmProvider')
+        .mockRejectedValue(new BadRequestException(LLM_HEALTH_GATE_MESSAGE));
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.isHealthy).toBe(false);
+      // The circular wording is returned to the caller but never
+      // written over the provider's stored lastError.
+      expect(llmProviderRepository.update).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ lastError: LLM_HEALTH_GATE_MESSAGE }),
+      );
     });
   });
 

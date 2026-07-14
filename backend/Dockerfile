@@ -38,9 +38,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 
-# Copy source code and build
+# Copy source code and build the EE assembly (one-image open-core model:
+# the image contains the EE modules, every EE route is entitlement-gated at
+# runtime and 402s without a license token; `npm run build` gives pure OSS).
 COPY . .
-RUN npm run build && echo "Build timestamp: $(date)"
+RUN npm run build:ee && node scripts/ee-di-smoke.js && echo "Build timestamp: $(date)"
 
 # Production image
 FROM base AS production
@@ -54,8 +56,8 @@ RUN adduser --system --uid 1001 nestjs
 COPY package*.json ./
 RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
 
-# Copy built application
-COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
+# Copy built application (EE layout: dist-ee/src + dist-ee/ee)
+COPY --from=builder --chown=nestjs:nodejs /app/dist-ee ./dist-ee
 
 USER nestjs
 
@@ -66,4 +68,4 @@ ENV NODE_ENV=production
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "const http = require('http'); http.get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
-CMD ["node", "dist/main"]
+CMD ["node", "dist-ee/src/main"]

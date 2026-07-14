@@ -43,6 +43,8 @@ import { SlackAdapter } from './channels/adapters/slack.adapter';
 import { DiscordAdapter } from './channels/adapters/discord.adapter';
 import { TelegramAdapter } from './channels/adapters/telegram.adapter';
 import { WhatsAppAdapter } from './channels/adapters/whatsapp.adapter';
+import { WhatsAppCloudAdapter } from './channels/adapters/whatsapp-cloud.adapter';
+import { SmsAdapter } from './channels/adapters/sms.adapter';
 import { EmailAdapter } from './channels/adapters/email.adapter';
 import { WebhookAdapter } from './channels/adapters/webhook.adapter';
 import { GoogleChatAdapter } from './channels/adapters/google-chat.adapter';
@@ -51,8 +53,18 @@ import { SignalAdapter } from './channels/adapters/signal.adapter';
 import { MatrixAdapter } from './channels/adapters/matrix.adapter';
 import { IrcAdapter } from './channels/adapters/irc.adapter';
 import { ChannelGatewayService } from './channels/channel-gateway.service';
+import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
+import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
+import { EmailProvisioningService } from './channels/email-provisioning.service';
 import { ChannelEventsController } from './channels/channel-events.controller';
-
+import { ChannelEmailInboundController } from './channels/channel-email-inbound.controller';
+import { ChannelWidgetController } from './channels/channel-widget.controller';
+// Multi-workspace channel installations (OAuth installs)
+import { ChannelInstallation } from '../../entities/channel-installation.entity';
+import { ChannelInstallationService } from './channels/channel-installation.service';
+import { SlackInstallService } from './channels/slack-install.service';
+import { ChannelInstallController } from './channels/channel-install.controller';
+import { ChannelInstallationsController } from './channels/channel-installations.controller';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -68,6 +80,7 @@ import { ChannelEventsController } from './channels/channel-events.controller';
       OAuthAccessToken,
       AgentRun,
       ChannelEvent,
+      ChannelInstallation,
     ]),
     JwtModule,
     ToolsModule,
@@ -82,11 +95,18 @@ import { ChannelEventsController } from './channels/channel-events.controller';
     GatewayToolService, GatewayToolTransferHelper, GatewayToolStatsHelper, GatewayToolQueriesHelper,
     // Channel adapters
     ChannelGatewayService,
+    DiscordGatewayTransport,
+    ChannelWebhookRegistrar,
+    EmailProvisioningService,
+    ChannelInstallationService,
+    SlackInstallService,
     ChatWidgetAdapter,
     SlackAdapter,
     DiscordAdapter,
     TelegramAdapter,
     WhatsAppAdapter,
+    WhatsAppCloudAdapter,
+    SmsAdapter,
     EmailAdapter,
     WebhookAdapter,
     GoogleChatAdapter,
@@ -107,6 +127,10 @@ import { ChannelEventsController } from './channels/channel-events.controller';
     GatewayToolsController,
     GatewaySkillsController,
     ChannelEventsController,
+    ChannelEmailInboundController,
+    ChannelWidgetController,
+    ChannelInstallController,
+    ChannelInstallationsController,
   ],
   exports: [
     GatewaysService,
@@ -115,6 +139,10 @@ import { ChannelEventsController } from './channels/channel-events.controller';
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,
     GatewayToolService,
     ChannelGatewayService,
+    DiscordGatewayTransport,
+    ChannelWebhookRegistrar,
+    EmailProvisioningService,
+    ChannelInstallationService,
   ],
 })
 export class GatewaysModule {}

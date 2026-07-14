@@ -1,0 +1,56 @@
+# Compliance
+
+almyty is orchestration tooling: you bring your own models, build agents, and deploy them to your users. That split matters legally. Under the EU AI Act, the obligations of a *model provider* (OpenAI, Anthropic, Google, …) stay with the model provider, and the obligations of a *deployer* sit with you — the organization putting an agent in front of people. almyty's job is to make meeting those obligations straightforward. This page maps what the platform gives you to what the regulations ask for, and is explicit about what remains your responsibility.
+
+> **This page is not legal advice.** Compliance is assessed per deployment, not per tool. Use this mapping as the starting point for your own conformity assessment.
+
+## EU AI Act
+
+The AI Act classifies systems by risk. Most agents built on almyty — support assistants, internal automation, data pipelines — fall under **limited or minimal risk**, where the main obligation is transparency. If you deploy agents in an Annex III domain (employment screening, credit scoring, essential services, and similar), you are operating a **high-risk** system and the full deployer obligations apply.
+
+### What the platform provides, article by article
+
+| AI Act requirement | almyty feature | Where |
+|---|---|---|
+| **Art. 50 — transparency**: people must be told they are interacting with an AI | Per-channel **AI disclosure** setting: when enabled, the first message of every conversation on a chat interface carries a disclosure line ("You are chatting with an AI assistant", overridable) | [Chat Interfaces](/interfaces) |
+| **Art. 14 — human oversight**: humans must be able to intervene | Built-in `request_approval` tool pauses any run for human sign-off; [approval policies](/enterprise/approval-policies) (multi-step, conditional, quorum) let you require multiple reviewers for sensitive actions | [Approvals](/approvals) |
+| **Art. 12 — record-keeping**: automatic logging over the system lifetime | Every run stores its steps, tool calls, cost, and outcome; the audit log records sensitive actions; entity versioning keeps a change history of every agent, tool, and gateway | [Analytics](/analytics), agent run history |
+| **Annex IV — technical documentation** | One-click **technical documentation export** per agent: general description, models and parameters, tools and capabilities, oversight configuration, data governance, logging, and change history — as JSON or Markdown | Agent detail → Export Technical Documentation |
+| **Art. 9 — risk management** | Guardrail constraints on agents, the pii-filter and security-scanner plugins, and (Enterprise) the [compliance pack](/enterprise/compliance-pack) that enforces them org-wide with a posture report | Agent constraints, [Plugins](/self-hosting) |
+| **Art. 26 — deployer duties** (use per instructions, monitor, retain logs) | Usage monitoring, [spend governance](/cost-governance), per-run traces, and audit retention/[export](/enterprise/audit-export) (Enterprise) give you the operational evidence | [Analytics](/analytics) |
+
+### What remains yours
+
+- **Risk classification.** Decide which tier each deployment falls into. almyty cannot know whether your agent screens job applicants.
+- **Conformity assessment and registration** for high-risk systems.
+- **Instructions for use** to your own users, and incident reporting to authorities where required.
+- **Model choice.** GPAI obligations rest with the model providers you bring keys for; check their AI Act documentation (transparency reports, training-data summaries) as inputs to your own file.
+
+## GDPR
+
+Agent conversations routinely contain personal data, so GDPR applies to almost every real deployment.
+
+- **Minimization and filtering** — the pii-filter plugin can strip or mask personal data before it reaches a model or a log.
+- **Encryption** — credentials and provider secrets are AES-256-GCM encrypted at rest; self-hosters control the key (`ENCRYPTION_KEY`), and Enterprise adds customer-managed KMS keys.
+- **Erasure** — memory entries and conversations are deletable per record; deleting an agent removes its runs.
+- **Retention** — configurable per organization: admins set independent retention periods (1–3650 days) for agent runs, conversations, request logs, usage metrics, and the audit log under Settings → Organization → Data Retention (or `GET/PUT /organizations/:id/retention`). An hourly sweep permanently deletes records older than each period — never touching runs that are still executing or awaiting approval — and records a `retention_sweep` audit entry with per-class counts. Fields left empty keep records indefinitely, so existing organizations are unchanged until a policy is set.
+- **Your side**: a records-of-processing entry for each agent, a lawful basis for the data it handles, and data-processing agreements with your model providers (you are sending them conversation content under your own API keys). Self-hosting in your own EU infrastructure keeps residency entirely in your hands.
+
+## Other regimes worth knowing
+
+| Regime | Applies when | Relevant almyty capabilities |
+|---|---|---|
+| **Cyber Resilience Act** (EU, phasing in to 2027) | You distribute or sell software with digital elements in the EU — including a commercial almyty-based product | Dependency-audit and secret-scanning gates in CI, security-scanner plugin; publish your own vulnerability-disclosure policy and SBOM |
+| **NIS2** | Your customers are in essential/important sectors and flow supply-chain security requirements down to you | [SSO/SAML + SCIM](/enterprise/sso), [RBAC](/enterprise/advanced-rbac), [audit export to SIEM](/enterprise/audit-export) (all Enterprise) are the standard answers to those questionnaires |
+| **DORA** | Financial-sector customers in the EU | Audit trails, exit-friendly data export, incident evidence from run logs |
+| **SOC 2 / ISO 27001** | Enterprise sales, not law | The technical prerequisites — SSO, RBAC, audit logging, encryption at rest, change history — ship with the platform; the certification process is organizational |
+| **ePrivacy** | You embed the chat widget on a public site | The widget sets no tracking cookies by default; consent is only needed for what you add around it |
+
+## Practical checklist for a new deployment
+
+1. Classify the use case (minimal / limited / high-risk).
+2. Turn on **AI disclosure** for every public-facing chat interface.
+3. Configure `request_approval` (and [approval policies](/enterprise/approval-policies)) for consequential actions.
+4. Export the agent's **technical documentation** and file it with your assessment.
+5. Enable the pii-filter where conversations may contain personal data.
+6. Set retention and review the audit/run logs as part of your monitoring duty.

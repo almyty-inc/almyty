@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsEnum, IsNumber, IsObject, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsNumber, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 import { GatewayKind, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
@@ -204,6 +204,18 @@ export class GatewaySearchQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  // kind/agentId power the agent-detail Interfaces tab ("Deployed
+  // Channels"). They were missing here, so the global ValidationPipe's
+  // forbidNonWhitelisted turned every tab load into a 400 and the list
+  // rendered permanently empty even with deployed channels.
+  @IsOptional()
+  @IsEnum(GatewayKind)
+  kind?: GatewayKind;
+
+  @IsOptional()
+  @IsUUID()
+  agentId?: string;
 
   @IsOptional()
   @IsEnum(GatewayType)

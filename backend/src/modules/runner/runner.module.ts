@@ -10,6 +10,7 @@ import { RunnerService } from './runner.service';
 import { RunnerController } from './runner.controller';
 import { RunnerCallService } from './runner-call.service';
 import { RunnerCapabilityPublisher } from './runner-capability.publisher';
+import { CodingRelayService } from './coding-relay.service';
 import { McpModule } from '../mcp/mcp.module';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
@@ -36,8 +37,8 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     forwardRef(() => McpModule),
     AuthorizationModule,
   ],
-  providers: [RunnerService, RunnerCallService, RunnerCapabilityPublisher],
+  providers: [RunnerService, RunnerCallService, RunnerCapabilityPublisher, CodingRelayService],
   controllers: [RunnerController],
-  exports: [RunnerService, RunnerCallService, RunnerCapabilityPublisher],
+  exports: [RunnerService, RunnerCallService, RunnerCapabilityPublisher, CodingRelayService],
 })
 export class RunnerModule {}

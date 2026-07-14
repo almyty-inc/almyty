@@ -160,6 +160,7 @@ export function LlmProvidersPage() {
       name: '',
       type: '',
       apiKey: '',
+      apiUrl: '',
       organizationId: '',
     }
   })
@@ -171,6 +172,7 @@ export function LlmProvidersPage() {
       model: '',
       maxTokens: 4096,
       temperature: 0.7,
+      usageApiKey: '',
     }
   })
 
@@ -181,8 +183,15 @@ export function LlmProvidersPage() {
           name: data.name,
           type: data.type,
           configuration: {
-            apiKey: data.apiKey,
-            ...(data.organizationId && { organizationId: data.organizationId })
+            // Ollama is keyless — only send the key when one was typed
+            // (the zod schema enforces presence for all other types).
+            ...(data.apiKey && { apiKey: data.apiKey }),
+            // Optional server URL (Ollama base URL field).
+            ...(data.apiUrl && { apiUrl: data.apiUrl }),
+            ...(data.organizationId && { organizationId: data.organizationId }),
+            // Admin-scoped usage/cost API key (issue #241) — only sent
+            // when the user actually entered one.
+            ...(data.usageApiKey && { usageApiKey: data.usageApiKey }),
           }
         })
       } catch (error) {
@@ -210,6 +219,9 @@ export function LlmProvidersPage() {
           model: data.model,
           maxTokens: data.maxTokens,
           temperature: data.temperature,
+          // Only send the admin usage key when a new one was typed —
+          // an empty field means "keep the existing (encrypted) key".
+          ...(data.usageApiKey && { usageApiKey: data.usageApiKey }),
         }
       })
     },
@@ -288,7 +300,7 @@ export function LlmProvidersPage() {
             <EmptyState
               icon={Brain}
               title="No models configured"
-              description="Connect OpenAI, Anthropic, Google, Mistral, xAI, Groq, OpenRouter, Azure, AWS Bedrock, or any of 14 supported providers. Agents and LLM tools need at least one model to call."
+              description="Connect OpenAI, Anthropic, Google, Mistral, xAI, Groq, OpenRouter, Azure, AWS Bedrock, or any of 14 supported providers. Add Provider links you straight to where each vendor issues API keys, and you can test the key before saving. Agents and LLM tools need at least one model to call."
               action={
                 <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
                   <Plus className="h-4 w-4" />

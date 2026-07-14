@@ -45,6 +45,19 @@ import { AgentFile } from './entities/file.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { ToolTemplate } from './entities/tool-template.entity';
 import { ExternalAgent } from './entities/external-agent.entity';
+import { SpendBudget } from './entities/spend-budget.entity';
+import { SpendAlert } from './entities/spend-alert.entity';
+import { OrgSsoConfig } from './entities/org-sso-config.entity';
+import { BillingEvent } from './entities/billing-event.entity';
+import { ReferralCode } from './entities/referral-code.entity';
+import { Referral } from './entities/referral.entity';
+// EE-feature entities stay in the CORE schema (migrations + entity glob are
+// OSS); only the feature logic moved to `ee/`.
+import { CompliancePolicy } from './entities/compliance-policy.entity';
+import { RetentionPolicy } from './entities/retention-policy.entity';
+import { McpSource } from './entities/mcp-source.entity';
+import { Notification } from './entities/notification.entity';
+import { NotificationPreference } from './entities/notification-preference.entity';
 
 // Import modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -52,6 +65,7 @@ import { UsersModule } from './modules/users/users.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { ApisModule } from './modules/apis/apis.module';
 import { ToolsModule } from './modules/tools/tools.module';
+import { McpSourcesModule } from './modules/mcp-sources/mcp-sources.module';
 import { GatewaysModule } from './modules/gateways/gateways.module';
 // import { MonitoringModule } from './modules/monitoring/monitoring.module'; // TODO: Create this module
 import { SchemaParserModule } from './modules/schema-parser/schema-parser.module';
@@ -80,6 +94,17 @@ import { VersionsModule } from './modules/versions/versions.module';
 import { RunnerModule } from './modules/runner/runner.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
+import { LicensingModule } from './modules/licensing/licensing.module';
+import { BudgetsModule } from './modules/budgets/budgets.module';
+import { ProviderUsageModule } from './modules/provider-usage/provider-usage.module';
+import { ReferralsModule } from './modules/referrals/referrals.module';
+import { RetentionModule } from './modules/retention/retention.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+// EE feature modules (sso, rbac, audit-export, approval-policies, billing,
+// ee-stubs, compliance, chargeback) live under `ee/` and are loaded at
+// runtime via the ee-loader — NOT statically imported here, so this file
+// compiles in the OSS build without the commercial tree present.
+import { loadEeModules } from './ee-loader';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
@@ -170,6 +195,17 @@ import { databaseConfig } from './config/database.config';
       AuditLog,
       ToolTemplate,
       ExternalAgent,
+      SpendBudget,
+      SpendAlert,
+      OrgSsoConfig,
+      BillingEvent,
+      CompliancePolicy,
+      ReferralCode,
+      Referral,
+      RetentionPolicy,
+      McpSource,
+      Notification,
+      NotificationPreference,
     ]),
 
     // Rate limiting — backed by Redis so limits are shared across replicas
@@ -235,6 +271,7 @@ import { databaseConfig } from './config/database.config';
     SchemaParserModule,
     JsonSchemaTranslatorModule,
     ToolsModule,
+    McpSourcesModule,
     GatewaysModule,
     LlmProvidersModule,
     ApisModule,
@@ -247,6 +284,13 @@ import { databaseConfig } from './config/database.config';
     MailModule,
     CredentialsModule,
     AgentsModule,
+    // VersionsModule must be registered BEFORE UnifiedEndpointModule: the
+    // unified gateway endpoint mounts a greedy root catch-all
+    // (@All(':orgSlug/:resourceSlug/*')) that otherwise shadows
+    // GET /versions/:entityType/:entityId — which 404'd every entity Change
+    // History (e.g. the agent version panel) since this module was never even
+    // in the imports array.
+    VersionsModule,
     PromotedSkillsModule,
     PromotedSkillReplayModule,
     AgentConstraintsModule,
@@ -257,6 +301,15 @@ import { databaseConfig } from './config/database.config';
     ApprovalsModule,
     RunnerModule,
     WorkspaceModule,
+    LicensingModule,
+    BudgetsModule,
+    ProviderUsageModule,
+    ReferralsModule,
+    RetentionModule,
+    NotificationsModule,
+    // EE feature modules are loaded dynamically so the OSS build compiles +
+    // boots without the commercial `ee/` tree present (loadEeModules() → []).
+    ...loadEeModules(),
     ToolHubModule,
     A2AModule,
     AcpModule,

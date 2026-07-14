@@ -21,6 +21,13 @@ export class CreateLlmProviderBodyDto {
   @IsObject()
   configuration: {
     apiKey?: string;
+    /**
+     * Optional admin/org-scoped key for the provider usage/cost API
+     * (issue #241). Stored encrypted in configuration.usageApiKey —
+     * see LlmProviderConfig on the entity. Only meaningful for types
+     * where providerUsageCapability(type).supported is true.
+     */
+    usageApiKey?: string;
     apiUrl?: string;
     apiVersion?: string;
     model?: string;

@@ -21,6 +21,11 @@ import { ChatRequest, ChatResponse, StreamChunk } from './dto/llm-providers.dto'
 import { callLlmProviderHttp } from './providers/safe-request';
 import { safeErrorBody, safeErrorMessage } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
+import {
+  validateUrl,
+  validateUrlAllowingPrivate,
+  ollamaPrivateUrlsAllowed,
+} from '../../common/security/url-validator';
 
 /**
  * Provider-call mechanics extracted from LlmChatHelper:
@@ -128,6 +133,11 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.GROQ:
       case LlmProviderType.TOGETHER:
       case LlmProviderType.OPENROUTER:
+      // Ollama serves an OpenAI-compatible API under <server>/v1 —
+      // chat, streaming, and tool calling all ride the OpenAI path.
+      // getAuthHeaders() adds no Authorization header when no key is
+      // configured (Ollama needs none).
+      case LlmProviderType.OLLAMA:
         return callOpenAI(provider, request, session, tools, startTime, costFn);
       case LlmProviderType.ANTHROPIC:
         return callAnthropic(provider, request, session, tools, startTime, costFn);
@@ -239,6 +249,16 @@ export class LlmChatRunnerHelper {
   }
 
   validateProviderConfiguration(type: LlmProviderType, config: LlmProviderConfig): void {
+    // Optional admin-scoped usage/cost API key (issue #241). Accepted for
+    // any type (the capability map decides whether it is used), but it
+    // must be a non-empty string when present.
+    if (
+      config.usageApiKey !== undefined &&
+      (typeof config.usageApiKey !== 'string' || config.usageApiKey.length === 0)
+    ) {
+      throw new BadRequestException('usageApiKey must be a non-empty string when provided');
+    }
+
     switch (type) {
       case LlmProviderType.OPENAI:
       case LlmProviderType.ANTHROPIC:
@@ -255,6 +275,29 @@ export class LlmChatRunnerHelper {
           throw new BadRequestException(`${type} provider requires an API key`);
         }
         break;
+
+      case LlmProviderType.OLLAMA: {
+        // Ollama is keyless by design — the API-key requirement above
+        // deliberately does not apply (an optional key is sent as a
+        // Bearer token for deployments fronting Ollama with an auth
+        // proxy). Validate the effective server URL instead, at save
+        // time, so a blocked URL fails fast here rather than on the
+        // first chat call. callLlmProviderHttp re-runs the same gate on
+        // every outbound request (defense in depth).
+        const effectiveUrl = config.apiUrl || 'http://localhost:11434';
+        const validation = ollamaPrivateUrlsAllowed()
+          ? validateUrlAllowingPrivate(effectiveUrl)
+          : validateUrl(effectiveUrl);
+        if (!validation.valid) {
+          throw new BadRequestException(
+            `Ollama URL rejected: ${validation.error}. ` +
+            'On hosted almyty the Ollama server must be reachable at a public URL; ' +
+            'self-hosted deployments can set OLLAMA_ALLOW_PRIVATE_URLS=true to allow ' +
+            'localhost/private-network Ollama servers.',
+          );
+        }
+        break;
+      }
 
       case LlmProviderType.AZURE_OPENAI:
         if (!config.apiKey || !config.azure?.resourceName || !config.azure?.deploymentName) {

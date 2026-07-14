@@ -84,6 +84,26 @@ export const api = axios.create({
   withCredentials: true, // Send cookies for httpOnly JWT auth
 })
 
+/**
+ * Base URL of the API host as configured on the axios instance.
+ *
+ * Used to build user-facing URLs that live on the API host (the unified
+ * channel endpoint `https://<api-host>/<orgSlug>/<gatewaySlug>`, the chat
+ * widget script `/gateways/:id/widget.js`). When the frontend is served
+ * behind the same origin as the API (local dev proxy, single-host
+ * deploys) the baseURL is empty and we fall back to the page origin.
+ */
+export function getApiBaseUrl(): string {
+  const base = api.defaults.baseURL || ''
+  if (/^https?:\/\//.test(base)) return base.replace(/\/+$/, '')
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    const origin = window.location.origin.replace(/\/+$/, '')
+    const path = base.replace(/^\/+|\/+$/g, '')
+    return path ? `${origin}/${path}` : origin
+  }
+  return base.replace(/\/+$/, '')
+}
+
 // Auth is carried entirely by the httpOnly cookie (withCredentials: true
 // above). We do NOT read a token out of localStorage anymore — that used
 // to be an XSS-vulnerable fallback, any script running in the page could
@@ -270,6 +290,23 @@ export const authApi = {
 
   createApiKey: (data: { name: string; scopes?: string[]; expiresAt?: string }) =>
     apiPost('/auth/api-keys', data),
+
+  resendVerification: () => apiPost('/auth/resend-verification'),
+}
+
+// Notifications API
+export const notificationsApi = {
+  list: (params?: { unreadOnly?: boolean; page?: number; limit?: number }) =>
+    apiGet('/notifications', { params }),
+
+  markRead: (id: string) => apiPost(`/notifications/${id}/read`),
+
+  markAllRead: () => apiPost('/notifications/read-all'),
+
+  getPreferences: () => apiGet('/notifications/preferences'),
+
+  updatePreferences: (matrix: Record<string, { inApp: boolean; email: boolean }>) =>
+    apiPut('/notifications/preferences', { matrix }),
 }
 
 // Organizations API
@@ -327,6 +364,35 @@ export const organizationsApi = {
     
   removeTeamMember: (orgId: string, teamId: string, userId: string) =>
     apiDel(`/organizations/${orgId}/teams/${teamId}/members/${userId}`),
+
+  // Data retention
+  getRetention: (id: string) => apiGet(`/organizations/${id}/retention`),
+
+  updateRetention: (
+    id: string,
+    data: Partial<{
+      enabled: boolean
+      agentRunsDays: number | null
+      conversationsDays: number | null
+      requestLogsDays: number | null
+      usageMetricsDays: number | null
+      auditLogDays: number | null
+    }>,
+  ) => apiPut(`/organizations/${id}/retention`, data),
+}
+
+// Hosted subscription billing (P6). Admin-only; drives the Stripe checkout /
+// portal handoff and reflects the org's plan/seat/dunning state.
+export const billingApi = {
+  getStatus: (orgId: string) => apiGet(`/billing/${orgId}`),
+
+  getInvoices: (orgId: string) => apiGet(`/billing/${orgId}/invoices`),
+
+  createCheckout: (orgId: string, data: { plan: string; seats?: number }) =>
+    apiPost<{ url: string }>(`/billing/${orgId}/checkout`, data),
+
+  createPortal: (orgId: string) =>
+    apiPost<{ url: string }>(`/billing/${orgId}/portal`, {}),
 }
 
 // Gateways API
@@ -376,6 +442,12 @@ export const gatewaysApi = {
   testConnection: (id: string) => apiPost(`/gateways/${id}/health-check`),
 
   testChannelConnection: (id: string) => apiPost(`/gateways/${id}/test-connection`),
+
+  // Multi-workspace channel installations (e.g. Slack OAuth installs)
+  getInstallations: (id: string) => apiGet(`/gateways/${id}/installations`),
+
+  revokeInstallation: (gatewayId: string, installationId: string) =>
+    apiPost(`/gateways/${gatewayId}/installations/${installationId}/revoke`),
 
   getMetrics: (id: string, params?: any) => apiGet(`/gateways/${id}/stats`, { params }),
 
@@ -541,6 +613,18 @@ export const toolsApi = {
   getSdk: (id: string, organizationId: string) => apiGet(`/organizations/${organizationId}/tools/${id}/sdk`),
 }
 
+// MCP Sources API (external MCP servers as tool sources)
+export const mcpSourcesApi = {
+  getAll: (organizationId: string) => apiGet(`/organizations//mcp-sources`),
+
+  create: (organizationId: string, data: { name: string; url: string; description?: string; bearerToken?: string }) =>
+    apiPost(`/organizations//mcp-sources`, data),
+
+  sync: (organizationId: string, id: string) => apiPost(`/organizations//mcp-sources//sync`),
+
+  delete: (organizationId: string, id: string) => apiDel(`/organizations//mcp-sources/`),
+}
+
 // LLM Providers API
 export const llmProvidersApi = {
   getAll: () => apiGet('/llm-providers'),
@@ -564,6 +648,8 @@ export const llmProvidersApi = {
   getModels: (id: string) => apiGet(`/llm-providers/${id}/models`),
 
   getModelsByType: (type: string, apiKey: string) => apiPost('/llm-providers/models/by-type', { type, apiKey }),
+
+  testConnection: (type: string, apiKey: string) => apiPost('/llm-providers/test-connection', { type, apiKey }),
 }
 
 // Analytics / Monitoring API
@@ -595,6 +681,34 @@ export const analyticsApi = {
   },
 }
 
+// Cost governance API (spend visibility + budgets)
+export const budgetsApi = {
+  getSpend: (period: 'day' | 'month' = 'month', granularity = 'day') =>
+    apiGet(`/budgets/spend?period=${period}&granularity=${granularity}`),
+  getAlerts: (limit = 100) => apiGet(`/budgets/alerts?limit=${limit}`),
+  list: () => apiGet('/budgets'),
+  create: (data: any) => apiPost('/budgets', data),
+  update: (id: string, data: any) => apiPatch(`/budgets/${id}`, data),
+  delete: (id: string) => apiDel(`/budgets/${id}`),
+}
+
+// Provider usage / cost reconciliation API (P7 — provider-actual vs our estimate)
+export const providerUsageApi = {
+  getReconciliation: (period: 'day' | 'month' = 'month') =>
+    apiGet(`/provider-usage/reconciliation?period=${period}`),
+  getCapabilities: () => apiGet('/provider-usage/capabilities'),
+  sync: (data: { from?: string; to?: string; providerId?: string } = {}) =>
+    apiPost('/provider-usage/sync', data),
+}
+
+// SSO / SCIM API (EE — gated by the `sso` entitlement)
+export const ssoApi = {
+  getConfig: () => apiGet('/sso/settings'),
+  saveConfig: (data: any) => apiPut('/sso/settings', data),
+  rotateScimToken: () => apiPost('/sso/settings/scim-token'),
+  revealScimToken: () => apiGet('/sso/settings/scim-token'),
+}
+
 // Agents API
 export const agentsApi = {
   getAll: () => apiGet('/agents'),
@@ -617,6 +731,11 @@ export const agentsApi = {
   rollback: (id: string, versionIndex: number) => apiPost(`/agents/${id}/versions/${versionIndex}/rollback`),
   // Import / Export
   exportAgent: (id: string) => apiGet(`/agents/${id}/export`),
+  exportTechnicalDocumentation: (id: string) =>
+    apiGet<string>(`/agents/${id}/technical-documentation`, {
+      params: { format: 'markdown' },
+      responseType: 'text',
+    }),
   importAgent: (data: any) => apiPost('/agents/import', data),
   // Cost estimation
   getCostEstimate: (id: string) => apiGet(`/agents/${id}/cost-estimate`),
@@ -649,6 +768,33 @@ export const promotedSkillsApi = {
   get: (id: string) => apiGet(`/promoted-skills/${id}`),
   remove: (id: string) => apiDel(`/promoted-skills/${id}`),
   replay: (id: string, input?: any) => apiPost(`/promoted-skills/${id}/replay`, { input }),
+}
+
+// Referrals API — attribution endpoint is public; the rest is caller-scoped
+export const referralsApi = {
+  getCode: () => apiGet<{ code: string; link: string }>('/referrals/code'),
+  getStats: () =>
+    apiGet<{
+      invited: number
+      qualified: number
+      rewarded: number
+      pendingReview: number
+      totalRewardDays: number
+      accruedRewardDays: number
+    }>('/referrals/stats'),
+  list: () =>
+    apiGet<
+      Array<{
+        id: string
+        status: 'pending' | 'qualified' | 'rewarded' | 'pending_review'
+        rewardDays: number
+        qualifiedAt: string | null
+        rewardedAt: string | null
+        createdAt: string
+      }>
+    >('/referrals'),
+  attribute: (code: string) =>
+    apiGet(`/referrals/attribute/${encodeURIComponent(code)}?format=json`),
 }
 
 // Agent Constraints API (failure memory)

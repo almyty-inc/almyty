@@ -42,13 +42,28 @@ export class SlackAdapter extends BaseAdapter {
     }
   }
 
-  async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>): Promise<boolean> {
+  async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>, rawBody?: string): Promise<boolean> {
     if (!config.signing_secret) return true;
     const timestamp = headers['x-slack-request-timestamp'];
     const signature = headers['x-slack-signature'];
     if (!timestamp || !signature) return false;
-    const sigBasestring = `v0:${timestamp}:${JSON.stringify(payload)}`;
+    const sigBasestring = `v0:${timestamp}:${rawBody ?? JSON.stringify(payload)}`;
     const mySignature = 'v0=' + crypto.createHmac('sha256', config.signing_secret).update(sigBasestring).digest('hex');
     return crypto.timingSafeEqual(Buffer.from(mySignature), Buffer.from(signature));
+  }
+
+  /**
+   * Slack event payloads carry the workspace (team) id at the top level
+   * (`team_id`), and events forwarded from other workspaces carry it on
+   * the event itself (`event.team`). Used to resolve multi-workspace
+   * installations to the installing workspace's own bot token.
+   */
+  extractTenantId(rawPayload: any): string | undefined {
+    return (
+      rawPayload?.team_id ||
+      rawPayload?.event?.team ||
+      rawPayload?.team?.id ||
+      undefined
+    );
   }
 }
