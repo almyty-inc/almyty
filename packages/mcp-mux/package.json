@@ -23,5 +23,5 @@
   },
   "keywords": ["almyty", "mcp", "multiplexer", "stdio", "proxy"],
   "author": "almyty",
-  "license": "BSL-1.1"
+  "license": "Apache-2.0"
 }
