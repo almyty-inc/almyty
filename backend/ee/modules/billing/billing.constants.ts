@@ -21,9 +21,14 @@ export const STRIPE_WEBHOOK_SECRET_ENV = 'STRIPE_WEBHOOK_SECRET';
  */
 export const LICENSE_PRIVATE_KEY_ENV = 'ALMYTY_LICENSE_PRIVATE_KEY';
 
-/** Stripe price ids per paid plan (from the Stripe dashboard). */
+/**
+ * Stripe price ids for the SELF-SERVE plans (per-seat). Enterprise is
+ * deliberately NOT a self-serve price — it is a contact-sales/custom deal
+ * (SCIM, SLAs, security review, volume commitments are negotiated), matching
+ * almyty.com/pricing. There is no STRIPE_PRICE_ENTERPRISE.
+ */
 export const STRIPE_PRICE_PRO_ENV = 'STRIPE_PRICE_PRO';
-export const STRIPE_PRICE_ENTERPRISE_ENV = 'STRIPE_PRICE_ENTERPRISE';
+export const STRIPE_PRICE_BUSINESS_ENV = 'STRIPE_PRICE_BUSINESS';
 
 /** Post-checkout / portal redirect targets. */
 export const STRIPE_CHECKOUT_SUCCESS_URL_ENV = 'STRIPE_CHECKOUT_SUCCESS_URL';
@@ -36,9 +41,13 @@ export const DEFAULT_DUNNING_GRACE_DAYS = 7;
 
 export const PLAN_FREE = 'free';
 export const PLAN_PRO = 'pro';
+export const PLAN_BUSINESS = 'business';
 export const PLAN_ENTERPRISE = 'enterprise';
 
-export const PAID_PLANS = [PLAN_PRO, PLAN_ENTERPRISE];
+/** Plans customers can self-serve via Stripe checkout. Enterprise is
+ *  contact-sales only. */
+export const SELF_SERVE_PLANS = [PLAN_PRO, PLAN_BUSINESS];
+export const PAID_PLANS = [PLAN_PRO, PLAN_BUSINESS, PLAN_ENTERPRISE];
 
 /**
  * Plan → EE entitlement set minted into the signed license token. `free` grants
@@ -46,20 +55,34 @@ export const PAID_PLANS = [PLAN_PRO, PLAN_ENTERPRISE];
  * community entitlements are always unioned in by `LicenseService` itself.
  */
 export const PLAN_ENTITLEMENTS: Record<string, string[]> = {
+  // Free = community baseline (agents/tools/gateways/MCP/memory/runner/basic
+  // audit/basic RBAC/spend governance) — unioned in by LicenseService.
   [PLAN_FREE]: [],
-  [PLAN_PRO]: [
+  // Pro ($20/seat) is a HOSTED tier, not a feature tier: unlimited resources,
+  // managed credits, email support. Its website bullets (scheduling, webhooks,
+  // analytics, audit log) are all already community features, so Pro grants no
+  // additional gated EE entitlements. (Hosted usage caps live outside the
+  // entitlement token.)
+  [PLAN_PRO]: [],
+  // Business ($60/seat) is the governance tier from almyty.com/pricing:
+  // SSO + role-based access control, approvals, PII filtering.
+  [PLAN_BUSINESS]: [
+    EE_ENTITLEMENTS.SSO,
     EE_ENTITLEMENTS.ADVANCED_RBAC,
+    EE_ENTITLEMENTS.APPROVAL_POLICY,
+    EE_ENTITLEMENTS.COMPLIANCE_PACK,
     EE_ENTITLEMENTS.AUDIT_EXPORT,
-    EE_ENTITLEMENTS.CHARGEBACK,
   ],
+  // Enterprise (custom / contact sales) = Business + SCIM (part of SSO),
+  // customer-managed keys/private cloud, and cost attribution.
   [PLAN_ENTERPRISE]: [
     EE_ENTITLEMENTS.SSO,
     EE_ENTITLEMENTS.ADVANCED_RBAC,
-    EE_ENTITLEMENTS.AUDIT_EXPORT,
-    EE_ENTITLEMENTS.COMPLIANCE_PACK,
-    EE_ENTITLEMENTS.CHARGEBACK,
-    EE_ENTITLEMENTS.BYO_KMS,
     EE_ENTITLEMENTS.APPROVAL_POLICY,
+    EE_ENTITLEMENTS.COMPLIANCE_PACK,
+    EE_ENTITLEMENTS.AUDIT_EXPORT,
+    EE_ENTITLEMENTS.BYO_KMS,
+    EE_ENTITLEMENTS.CHARGEBACK,
   ],
 };
 
