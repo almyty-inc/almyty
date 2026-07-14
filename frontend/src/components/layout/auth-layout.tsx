@@ -31,6 +31,9 @@ export function AuthLayout({ children }: AuthLayoutProps) {
             {children}
           </Suspense>
         </div>
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+          &copy; {new Date().getFullYear()} Almyty Inc.
+        </p>
       </div>
 
     </div>

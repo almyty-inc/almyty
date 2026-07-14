@@ -47,8 +47,8 @@
     "nestjs",
     "react"
   ],
-  "author": "frane <frane.bandov@gmail.com>",
-  "license": "BSL-1.1",
+  "author": "Almyty Inc. <hello@almyty.com>",
+  "license": "Apache-2.0",
   "devDependencies": {
     "concurrently": "^8.2.2",
     "rimraf": "^5.0.5"
