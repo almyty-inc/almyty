@@ -15,14 +15,15 @@ function ctxFor(controller: any, method: string): ExecutionContext {
 }
 
 describe('AuditExportController entitlement gate', () => {
+  const orgResolverStub = { entitlementsForOrg: jest.fn(), hasForOrg: jest.fn() } as any;
   const reflector = new Reflector();
 
-  it('blocks with 402 in the community edition', () => {
+  it('blocks with 402 in the community edition', async () => {
     const svc = new LicenseService();
     svc.load({ token: '' });
-    const guard = new EntitlementGuard(reflector, svc);
+    const guard = new EntitlementGuard(reflector, svc, orgResolverStub);
     try {
-      guard.canActivate(ctxFor(AuditExportController, 'download'));
+      await guard.canActivate(ctxFor(AuditExportController, 'download'));
       fail('expected 402');
     } catch (e) {
       expect((e as HttpException).getStatus()).toBe(HttpStatus.PAYMENT_REQUIRED);
@@ -31,10 +32,10 @@ describe('AuditExportController entitlement gate', () => {
     }
   });
 
-  it('allows when audit_export is licensed', () => {
+  it('allows when audit_export is licensed', async () => {
     const svc = new LicenseService();
     jest.spyOn(svc, 'has').mockImplementation((f) => f === EE_ENTITLEMENTS.AUDIT_EXPORT);
-    const guard = new EntitlementGuard(reflector, svc);
-    expect(guard.canActivate(ctxFor(AuditExportController, 'listStreams'))).toBe(true);
+    const guard = new EntitlementGuard(reflector, svc, orgResolverStub);
+    expect(await guard.canActivate(ctxFor(AuditExportController, 'listStreams'))).toBe(true);
   });
 });

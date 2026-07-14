@@ -50,6 +50,11 @@ export class LicenseService implements OnModuleInit {
    * (Re)resolve entitlements from the given options or process env. Always
    * fails safe to the community set on any missing/invalid/expired token.
    */
+  /** Set only when load() was given an explicit publicKeyPem. resolveToken()
+   *  prefers it so a programmatically-configured key resolves per-org tokens,
+   *  but leaves env-based config (the deployment norm) read fresh each call. */
+  private explicitPublicKey: string | undefined;
+
   load(opts: LoadOptions = {}): void {
     // Start from the community baseline every time.
     this.edition = EDITION_COMMUNITY;
@@ -62,6 +67,7 @@ export class LicenseService implements OnModuleInit {
       opts.publicKeyPem ??
       process.env[LICENSE_PUBLIC_KEY_ENV] ??
       DEFAULT_LICENSE_PUBLIC_KEY;
+    this.explicitPublicKey = opts.publicKeyPem;
 
     const token =
       opts.token ??
@@ -109,8 +115,14 @@ export class LicenseService implements OnModuleInit {
    * (b) the community set. Does NOT mutate the singleton's global state.
    */
   resolveToken(token: string | null | undefined): EntitlementSnapshot {
+    // Honor the key the service was loaded with (load() persists it), so a
+    // programmatically-configured verification key resolves per-org tokens
+    // too — not only the env/default key. Falls back to env/default when the
+    // service was never explicitly loaded.
     const publicKey =
-      process.env[LICENSE_PUBLIC_KEY_ENV] ?? DEFAULT_LICENSE_PUBLIC_KEY;
+      this.explicitPublicKey ??
+      process.env[LICENSE_PUBLIC_KEY_ENV] ??
+      DEFAULT_LICENSE_PUBLIC_KEY;
 
     const fromToken = token ? this.snapshotFromToken(token, publicKey) : null;
     if (fromToken) return fromToken;
