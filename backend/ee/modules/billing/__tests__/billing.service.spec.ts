@@ -7,9 +7,10 @@ import { EE_ENTITLEMENTS } from '../../../../src/modules/licensing/license.const
 import {
   LICENSE_PRIVATE_KEY_ENV,
   PLAN_ENTERPRISE,
+  PLAN_BUSINESS,
   PLAN_FREE,
   PLAN_PRO,
-  STRIPE_PRICE_ENTERPRISE_ENV,
+  STRIPE_PRICE_BUSINESS_ENV,
   STRIPE_PRICE_PRO_ENV,
 } from '../billing.constants';
 
@@ -107,7 +108,7 @@ describe('BillingService', () => {
     configMap = {
       [LICENSE_PRIVATE_KEY_ENV]: privatePem,
       [STRIPE_PRICE_PRO_ENV]: 'price_pro',
-      [STRIPE_PRICE_ENTERPRISE_ENV]: 'price_ent',
+      [STRIPE_PRICE_BUSINESS_ENV]: 'price_biz',
     };
     config = { get: (k: string) => configMap[k] };
     service = new BillingService(orgRepo, eventRepo, stripe, config);
@@ -132,10 +133,10 @@ describe('BillingService', () => {
 
     it('reuses an existing customer', async () => {
       org.billingInfo = { stripeCustomerId: 'cus_existing' };
-      await service.createCheckoutSession(ORG_ID, { plan: PLAN_ENTERPRISE });
+      await service.createCheckoutSession(ORG_ID, { plan: PLAN_BUSINESS });
       expect(stripe.createCustomer).not.toHaveBeenCalled();
       expect(stripe.createCheckoutSession).toHaveBeenCalledWith(
-        expect.objectContaining({ customer: 'cus_existing', line_items: [{ price: 'price_ent', quantity: 1 }] }),
+        expect.objectContaining({ customer: 'cus_existing', line_items: [{ price: 'price_biz', quantity: 1 }] }),
       );
     });
 
@@ -144,16 +145,26 @@ describe('BillingService', () => {
         service.createCheckoutSession(ORG_ID, { plan: 'gold' }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    it('rejects Enterprise checkout — it is contact-sales, not self-serve', async () => {
+      await expect(
+        service.createCheckoutSession(ORG_ID, { plan: PLAN_ENTERPRISE }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(stripe.createCheckoutSession).not.toHaveBeenCalled();
+    });
   });
 
   describe('webhook → entitlement issuance', () => {
     it('subscription.created sets plan + mints a token verifiable by the licensing verifier', async () => {
       const res = await service.handleWebhookEvent(
-        event('customer.subscription.created', fakeSubscription()),
+        event('customer.subscription.created', fakeSubscription({
+          metadata: { organizationId: ORG_ID, plan: PLAN_BUSINESS },
+          items: { data: [{ price: { id: 'price_biz' }, quantity: 3, current_period_end: 1900000000 }] },
+        })),
       );
 
       expect(res).toEqual({ handled: true, deduped: false, ignored: false });
-      expect(org.plan).toBe(PLAN_PRO);
+      expect(org.plan).toBe(PLAN_BUSINESS);
       expect(org.billingInfo.seats).toBe(3);
       expect(org.billingInfo.licenseToken).toBeTruthy();
 
@@ -169,23 +180,29 @@ describe('BillingService', () => {
       const license = new LicenseService();
       license.load({ publicKeyPem: publicPem }); // global stays community, as in prod
       const snap = license.resolveToken(org.billingInfo.licenseToken);
+      // Business unlocks the governance set (per almyty.com/pricing).
+      expect(snap.entitlements).toContain(EE_ENTITLEMENTS.SSO);
       expect(snap.entitlements).toContain(EE_ENTITLEMENTS.ADVANCED_RBAC);
-      expect(snap.entitlements).toContain(EE_ENTITLEMENTS.AUDIT_EXPORT);
-      expect(snap.entitlements).not.toContain(EE_ENTITLEMENTS.SSO);
+      expect(snap.entitlements).toContain(EE_ENTITLEMENTS.COMPLIANCE_PACK);
+      // ...but not enterprise-only extras.
+      expect(snap.entitlements).not.toContain(EE_ENTITLEMENTS.BYO_KMS);
     });
 
-    it('maps the enterprise price to the enterprise entitlement set', async () => {
+    it('maps an enterprise subscription (via metadata — enterprise is not a self-serve price) to the full set', async () => {
+      // Enterprise has no Stripe price (contact-sales); a sales-created
+      // subscription stamps plan=enterprise in metadata.
       const sub = fakeSubscription({
-        metadata: { organizationId: ORG_ID },
-        items: { data: [{ price: { id: 'price_ent' }, quantity: 10, current_period_end: 1900000000 }] },
+        metadata: { organizationId: ORG_ID, plan: PLAN_ENTERPRISE },
+        items: { data: [{ price: { id: 'price_custom_ent' }, quantity: 10, current_period_end: 1900000000 }] },
       });
       await service.handleWebhookEvent(event('customer.subscription.updated', sub));
 
       expect(org.plan).toBe(PLAN_ENTERPRISE);
       const license = new LicenseService();
-      license.load({ publicKeyPem: publicPem, token: org.billingInfo.licenseToken });
-      expect(license.has(EE_ENTITLEMENTS.SSO)).toBe(true);
-      expect(license.has(EE_ENTITLEMENTS.BYO_KMS)).toBe(true);
+      license.load({ publicKeyPem: publicPem });
+      const snap = license.resolveToken(org.billingInfo.licenseToken);
+      expect(snap.entitlements).toContain(EE_ENTITLEMENTS.SSO);
+      expect(snap.entitlements).toContain(EE_ENTITLEMENTS.BYO_KMS);
     });
 
     it('is idempotent — a repeated event id is a no-op', async () => {
