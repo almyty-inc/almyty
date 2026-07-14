@@ -162,12 +162,16 @@ describe('BillingService', () => {
       expect(verified.valid).toBe(true);
       expect(verified.payload.limits.seats).toBe(3);
 
-      // ...and unlocks exactly the pro entitlement set through LicenseService.
+      // ...and unlocks the pro set through the PER-ORG resolution path the app
+      // actually uses (resolveToken), not the process-global load(). The old
+      // assertion used license.load({token}) — a path production never takes —
+      // which is why a live payment unlocked nothing while this test was green.
       const license = new LicenseService();
-      license.load({ publicKeyPem: publicPem, token: org.billingInfo.licenseToken });
-      expect(license.has(EE_ENTITLEMENTS.ADVANCED_RBAC)).toBe(true);
-      expect(license.has(EE_ENTITLEMENTS.AUDIT_EXPORT)).toBe(true);
-      expect(license.has(EE_ENTITLEMENTS.SSO)).toBe(false);
+      license.load({ publicKeyPem: publicPem }); // global stays community, as in prod
+      const snap = license.resolveToken(org.billingInfo.licenseToken);
+      expect(snap.entitlements).toContain(EE_ENTITLEMENTS.ADVANCED_RBAC);
+      expect(snap.entitlements).toContain(EE_ENTITLEMENTS.AUDIT_EXPORT);
+      expect(snap.entitlements).not.toContain(EE_ENTITLEMENTS.SSO);
     });
 
     it('maps the enterprise price to the enterprise entitlement set', async () => {
