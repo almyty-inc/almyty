@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { captureEvent } from '@/lib/analytics'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { CreditCard, ExternalLink, Check, AlertTriangle } from 'lucide-react'
 
@@ -83,8 +84,10 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
   })
 
   const checkoutMutation = useMutation({
-    mutationFn: (plan: string) =>
-      billingApi.createCheckout(organizationId!, { plan, interval }),
+    mutationFn: (plan: string) => {
+      captureEvent('checkout_started', { plan, interval })
+      return billingApi.createCheckout(organizationId!, { plan, interval })
+    },
     onSuccess: (res: { url: string }) => {
       if (res?.url) window.location.assign(res.url)
     },
