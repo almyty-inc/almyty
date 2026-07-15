@@ -38,7 +38,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: frontend
-        image: ghcr.io/frane/almyty/frontend:latest
+        image: ghcr.io/almyty-inc/almyty/frontend:latest
         imagePullPolicy: Always
         # readOnlyRootFilesystem is safe here because nginx only
         # needs writable paths we control via emptyDir mounts

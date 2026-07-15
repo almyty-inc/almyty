@@ -8,7 +8,7 @@ on:
       - 'docs-site/**'
 
 env:
-  REGISTRY: ghcr.io/frane/almyty
+  REGISTRY: ghcr.io/almyty-inc/almyty
 
 jobs:
   build-and-deploy:

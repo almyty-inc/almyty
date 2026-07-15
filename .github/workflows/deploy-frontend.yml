@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: ghcr.io/frane/almyty
+  REGISTRY: ghcr.io/almyty-inc/almyty
 
 jobs:
   build:

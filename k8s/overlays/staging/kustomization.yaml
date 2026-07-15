@@ -108,7 +108,7 @@ patches:
         value: app.staging.almyty.com
 
 images:
-  - name: ghcr.io/frane/almyty/api
+  - name: ghcr.io/almyty-inc/almyty/api
     newTag: staging-latest
-  - name: ghcr.io/frane/almyty/frontend
+  - name: ghcr.io/almyty-inc/almyty/frontend
     newTag: staging-latest

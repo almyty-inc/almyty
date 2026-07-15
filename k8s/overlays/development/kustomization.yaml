@@ -116,7 +116,7 @@ patches:
         value: app.dev.almyty.com
 
 images:
-  - name: ghcr.io/frane/almyty/api
+  - name: ghcr.io/almyty-inc/almyty/api
     newTag: dev-latest
-  - name: ghcr.io/frane/almyty/frontend
+  - name: ghcr.io/almyty-inc/almyty/frontend
     newTag: dev-latest

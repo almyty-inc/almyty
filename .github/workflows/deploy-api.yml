@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: ghcr.io/frane/almyty
+  REGISTRY: ghcr.io/almyty-inc/almyty
 
 jobs:
   build:
@@ -121,7 +121,7 @@ jobs:
           kubectl delete job ${PFX}-db-migration -n $NS --ignore-not-found
 
           cat k8s/base/migration-job.yaml | \
-            sed "s|image: ghcr.io/frane/almyty/api:latest|image: ghcr.io/frane/almyty/api:${IMAGE_TAG}|g" | \
+            sed "s|image: ghcr.io/almyty-inc/almyty/api:latest|image: ghcr.io/almyty-inc/almyty/api:${IMAGE_TAG}|g" | \
             sed "s|name: db-migration|name: ${PFX}-db-migration|g" | \
             sed "s|name: almyty-config|name: ${PFX}-almyty-config|g" | \
             kubectl apply -n $NS -f -

@@ -1,6 +1,6 @@
 # Docs site deployment — docs.almyty.com
-# Build: docker build -t ghcr.io/frane/almyty/docs:latest ./docs-site
-# Push: docker push ghcr.io/frane/almyty/docs:latest
+# Build: docker build -t ghcr.io/almyty-inc/almyty/docs:latest ./docs-site
+# Push: docker push ghcr.io/almyty-inc/almyty/docs:latest
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -29,7 +29,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: docs
-        image: ghcr.io/frane/almyty/docs:latest
+        image: ghcr.io/almyty-inc/almyty/docs:latest
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
