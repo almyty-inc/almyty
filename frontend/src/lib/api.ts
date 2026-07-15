@@ -388,8 +388,10 @@ export const billingApi = {
 
   getInvoices: (orgId: string) => apiGet(`/billing/${orgId}/invoices`),
 
-  createCheckout: (orgId: string, data: { plan: string; seats?: number }) =>
-    apiPost<{ url: string }>(`/billing/${orgId}/checkout`, data),
+  createCheckout: (
+    orgId: string,
+    data: { plan: string; seats?: number; interval?: 'month' | 'year' },
+  ) => apiPost<{ url: string }>(`/billing/${orgId}/checkout`, data),
 
   createPortal: (orgId: string) =>
     apiPost<{ url: string }>(`/billing/${orgId}/portal`, {}),

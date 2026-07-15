@@ -21,6 +21,7 @@ import { CanvasArea } from '@/components/agents/builder/canvas-area'
 import { AutonomousConfig } from '@/components/agents/builder/autonomous-config'
 
 import { agentsApi, llmProvidersApi, toolsApi } from '@/lib/api'
+import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import type { Agent, PipelineNode, PipelineEdge } from '@/types'
@@ -318,6 +319,7 @@ export function AgentBuilderPage() {
       success('Saved', `Agent "${agentName}" saved successfully.`)
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
       if (!isEditing) {
+        captureEvent('agent_created')
         const newAgent = res
         if (newAgent?.id) {
           navigate(`/agents/${newAgent.id}/edit`, { replace: true })
