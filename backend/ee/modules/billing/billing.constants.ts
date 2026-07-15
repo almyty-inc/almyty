@@ -30,6 +30,14 @@ export const LICENSE_PRIVATE_KEY_ENV = 'ALMYTY_LICENSE_PRIVATE_KEY';
 export const STRIPE_PRICE_PRO_ENV = 'STRIPE_PRICE_PRO';
 export const STRIPE_PRICE_BUSINESS_ENV = 'STRIPE_PRICE_BUSINESS';
 
+/**
+ * Annual (yearly) price ids for the self-serve plans. Annual billing gives two
+ * months free vs paying monthly. Optional — if an annual price env is unset the
+ * checkout falls back to the plan's monthly price rather than failing.
+ */
+export const STRIPE_PRICE_PRO_ANNUAL_ENV = 'STRIPE_PRICE_PRO_ANNUAL';
+export const STRIPE_PRICE_BUSINESS_ANNUAL_ENV = 'STRIPE_PRICE_BUSINESS_ANNUAL';
+
 /** Post-checkout / portal redirect targets. */
 export const STRIPE_CHECKOUT_SUCCESS_URL_ENV = 'STRIPE_CHECKOUT_SUCCESS_URL';
 export const STRIPE_CHECKOUT_CANCEL_URL_ENV = 'STRIPE_CHECKOUT_CANCEL_URL';
@@ -48,6 +56,11 @@ export const PLAN_ENTERPRISE = 'enterprise';
  *  contact-sales only. */
 export const SELF_SERVE_PLANS = [PLAN_PRO, PLAN_BUSINESS];
 export const PAID_PLANS = [PLAN_PRO, PLAN_BUSINESS, PLAN_ENTERPRISE];
+
+/** Billing cadence a customer can pick at checkout. */
+export type BillingInterval = 'month' | 'year';
+export const BILLING_INTERVALS: BillingInterval[] = ['month', 'year'];
+export const DEFAULT_BILLING_INTERVAL: BillingInterval = 'month';
 
 /**
  * Plan → EE entitlement set minted into the signed license token. `free` grants

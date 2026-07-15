@@ -44,6 +44,7 @@ import {
 import { gatewaysApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
+import { captureEvent } from '@/lib/analytics'
 import {
   interfaceStatusVariant,
   interfaceTypeIcons,
@@ -117,6 +118,7 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
       })
     },
     onSuccess: (created: any) => {
+      captureEvent('channel_deployed', { channelType: newInterfaceType })
       success('Channel Deployed', 'Gateway has been created for this agent.')
       queryClient.invalidateQueries({ queryKey: ['agent-gateways', agentId] })
       setDeployInterfaceOpen(false)
