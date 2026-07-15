@@ -233,6 +233,20 @@ spec:
               name: almyty-secrets
               key: STRIPE_PRICE_BUSINESS
               optional: true
+        # Annual (yearly) price ids - two months free vs monthly. Optional:
+        # if unset the checkout falls back to the plan's monthly price.
+        - name: STRIPE_PRICE_PRO_ANNUAL
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: STRIPE_PRICE_PRO_ANNUAL
+              optional: true
+        - name: STRIPE_PRICE_BUSINESS_ANNUAL
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: STRIPE_PRICE_BUSINESS_ANNUAL
+              optional: true
         # Vendor license signing key - lets the billing webhook mint
         # entitlement tokens on subscription changes. Optional: without it
         # subscriptions still update plan fields, token minting is skipped.
