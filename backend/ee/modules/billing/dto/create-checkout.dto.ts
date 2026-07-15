@@ -1,5 +1,5 @@
 import { IsIn, IsInt, IsOptional, IsString, IsUrl, Max, Min } from 'class-validator';
-import { PAID_PLANS } from '../billing.constants';
+import { BILLING_INTERVALS, BillingInterval, PAID_PLANS } from '../billing.constants';
 
 export class CreateCheckoutDto {
   @IsString()
@@ -11,6 +11,10 @@ export class CreateCheckoutDto {
   @Min(1)
   @Max(10000)
   seats?: number;
+
+  @IsOptional()
+  @IsIn(BILLING_INTERVALS)
+  interval?: BillingInterval;
 
   @IsOptional()
   @IsUrl({ require_tld: false })
