@@ -90,4 +90,7 @@ regexes = [
   '''stale-jwt-value''',
   '''attacker-controlled-secret''',
   '''rbac-integration-test-secret''',
+  # PostHog PUBLISHABLE client key (phc_...) — a public browser-side key,
+  # baked into the frontend bundle by design; not a secret.
+  '''phc_[A-Za-z0-9]+''',
 ]
