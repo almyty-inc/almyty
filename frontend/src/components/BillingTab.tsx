@@ -1,9 +1,12 @@
+import { useState } from 'react'
+import { captureEvent } from '@/lib/analytics'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { CreditCard, ExternalLink, Check, AlertTriangle } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import { billingApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 
@@ -30,10 +33,29 @@ interface Invoice {
   pdfUrl: string | null
 }
 
-const PLANS = [
-  { key: 'pro', label: 'Pro', blurb: 'Advanced RBAC, audit export, chargeback.' },
-  { key: 'enterprise', label: 'Enterprise', blurb: 'SSO/SAML, compliance pack, BYO-KMS, approval policy.' },
+type BillingInterval = 'month' | 'year'
+
+// Per-seat list prices (USD). Annual gives two months free: annual is billed as
+// 10x the monthly rate. Kept in sync with almyty.com/pricing and the Stripe
+// prices behind STRIPE_PRICE_* / STRIPE_PRICE_*_ANNUAL.
+const SELF_SERVE_PLANS = [
+  {
+    key: 'pro',
+    label: 'Pro',
+    blurb: 'Unlimited resources, managed credits, email support.',
+    monthly: 20,
+  },
+  {
+    key: 'business',
+    label: 'Business',
+    blurb: 'SSO, advanced RBAC, approvals, PII filtering, audit export.',
+    monthly: 60,
+  },
 ] as const
+
+function formatUsd(amount: number) {
+  return `$${amount.toLocaleString('en-US')}`
+}
 
 function formatMoney(cents: number, currency: string) {
   try {
@@ -47,6 +69,7 @@ function formatMoney(cents: number, currency: string) {
 
 export function BillingTab({ organizationId }: { organizationId?: string }) {
   const { error } = useNotifications()
+  const [interval, setInterval] = useState<BillingInterval>('month')
 
   const { data: status, isLoading } = useQuery<BillingStatus>({
     queryKey: ['billing-status', organizationId],
@@ -61,7 +84,10 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
   })
 
   const checkoutMutation = useMutation({
-    mutationFn: (plan: string) => billingApi.createCheckout(organizationId!, { plan }),
+    mutationFn: (plan: string) => {
+      captureEvent('checkout_started', { plan, interval })
+      return billingApi.createCheckout(organizationId!, { plan, interval })
+    },
     onSuccess: (res: { url: string }) => {
       if (res?.url) window.location.assign(res.url)
     },
@@ -90,6 +116,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
 
   const plan = status?.plan || 'free'
   const isPaid = plan !== 'free'
+  const annual = interval === 'year'
 
   return (
     <div className="space-y-6">
@@ -167,35 +194,112 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
       </Card>
 
       {status?.stripeConfigured && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {PLANS.map((p) => {
-            const current = plan === p.key
-            return (
-              <Card key={p.key} className={current ? 'border-primary' : ''}>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>{p.label}</span>
-                    {current && (
-                      <Badge variant="default" className="gap-1">
-                        <Check className="h-3 w-3" /> Current
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  <CardDescription>{p.blurb}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    className="w-full"
-                    variant={current ? 'outline' : 'default'}
-                    disabled={current || checkoutMutation.isPending}
-                    onClick={() => checkoutMutation.mutate(p.key)}
-                  >
-                    {current ? 'Active plan' : `Upgrade to ${p.label}`}
-                  </Button>
-                </CardContent>
-              </Card>
-            )
-          })}
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              {annual ? 'Billed annually · 2 months free' : 'Billed monthly'}
+            </p>
+            <div
+              role="group"
+              aria-label="Billing interval"
+              className="inline-flex items-center rounded-lg border bg-muted p-0.5 text-sm"
+            >
+              <button
+                type="button"
+                aria-pressed={!annual}
+                onClick={() => setInterval('month')}
+                className={cn(
+                  'rounded-md px-3 py-1.5 font-medium transition-colors',
+                  !annual ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
+                )}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                aria-pressed={annual}
+                onClick={() => setInterval('year')}
+                className={cn(
+                  'rounded-md px-3 py-1.5 font-medium transition-colors',
+                  annual ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
+                )}
+              >
+                Annual
+                <span className="ml-1.5 text-xs text-cyan-600 dark:text-cyan-400">Save 17%</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {SELF_SERVE_PLANS.map((p) => {
+              const current = plan === p.key
+              const annualPrice = p.monthly * 10
+              const fullYear = p.monthly * 12
+              const perSeat = annual ? annualPrice : p.monthly
+              return (
+                <Card key={p.key} className={current ? 'border-primary' : ''}>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>{p.label}</span>
+                      {current && (
+                        <Badge variant="default" className="gap-1">
+                          <Check className="h-3 w-3" /> Current
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <CardDescription>{p.blurb}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-3xl font-semibold">{formatUsd(perSeat)}</span>
+                        <span className="text-sm text-muted-foreground">
+                          / seat / {annual ? 'year' : 'month'}
+                        </span>
+                      </div>
+                      {annual ? (
+                        <p className="text-sm text-cyan-600 dark:text-cyan-400">
+                          {formatUsd(annualPrice)}/yr vs {formatUsd(fullYear)} — 2 months free
+                        </p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {formatUsd(annualPrice)}/yr on annual billing (2 months free)
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      className="w-full"
+                      variant={current ? 'outline' : 'default'}
+                      disabled={current || checkoutMutation.isPending}
+                      onClick={() => checkoutMutation.mutate(p.key)}
+                    >
+                      {current ? 'Active plan' : `Upgrade to ${p.label}`}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )
+            })}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Enterprise</CardTitle>
+                <CardDescription>
+                  SSO/SAML, SCIM, compliance pack, BYO-KMS, cost attribution, custom SLAs.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-semibold">Custom</span>
+                </div>
+                <Button asChild className="w-full" variant="outline">
+                  <a href="mailto:sales@almyty.com?subject=almyty%20Enterprise">
+                    Contact sales
+                    <ExternalLink className="ml-1.5 h-4 w-4" />
+                  </a>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
