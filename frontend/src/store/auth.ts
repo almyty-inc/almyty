@@ -3,6 +3,16 @@ import { persist } from 'zustand/middleware'
 import { User, AuthResponse } from '@/types'
 import { authApi } from '@/lib/api'
 import { useOrganizationStore } from './organization'
+import { identifyUser, resetAnalytics } from '@/lib/analytics'
+
+// Identify the logged-in user in PostHog. Called only after auth succeeds
+// (contract basis). Carries the minimum: user id + current org id + plan.
+// No-op when analytics is disabled (no VITE_POSTHOG_KEY).
+function identifyForAnalytics(user: User) {
+  if (!user?.id) return
+  const org = useOrganizationStore.getState().currentOrganization
+  identifyUser({ id: user.id, orgId: org?.id, plan: org?.plan })
+}
 
 interface AuthState {
   user: User | null
@@ -60,6 +70,9 @@ export const useAuthStore = create<AuthState>()(
           const { initializeFromUser } = useOrganizationStore.getState()
           initializeFromUser(user)
 
+          // Identify only after a successful login (contract basis).
+          identifyForAnalytics(user)
+
           set({
             user,
             token: accessToken,
@@ -95,6 +108,9 @@ export const useAuthStore = create<AuthState>()(
           const { initializeFromUser } = useOrganizationStore.getState()
           initializeFromUser(user)
 
+          // Identify only after a successful registration (contract basis).
+          identifyForAnalytics(user)
+
           set({
             user,
             token: accessToken,
@@ -126,6 +142,10 @@ export const useAuthStore = create<AuthState>()(
         // "Not a member of the requested organization" — looks to the
         // user as an "Invalid credentials" failure.
         localStorage.removeItem('almyty-org-store')
+
+        // Drop the PostHog identity so the next user on this browser is
+        // not stitched to the previous session.
+        resetAnalytics()
 
         set({
           user: null,
@@ -174,6 +194,10 @@ export const useAuthStore = create<AuthState>()(
           // Initialize organization store from user data
           const { initializeFromUser } = useOrganizationStore.getState()
           initializeFromUser(user)
+
+          // Re-identify on cookie-based session restore. The user is
+          // authenticated (valid cookie), so this is on contract basis.
+          identifyForAnalytics(user)
 
           set({
             user,
