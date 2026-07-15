@@ -9,6 +9,12 @@ COPY . .
 
 ARG VITE_API_BASE_URL=http://localhost:3000
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+# PostHog product analytics (publishable client key; baked at build time).
+# Cross-domain funnels stitch to the marketing site's same PostHog EU project.
+ARG VITE_POSTHOG_KEY=phc_wLKPNJ2JTUp7vbdjPKXcieuA6vJrjjDSib4HrSNzfV4e
+ENV VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY
+ARG VITE_POSTHOG_HOST=https://eu.i.posthog.com
+ENV VITE_POSTHOG_HOST=$VITE_POSTHOG_HOST
 
 RUN npx vite build
 
