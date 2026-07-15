@@ -57,6 +57,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { agentsApi, externalAgentsApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
+import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { ImportExternalA2ADialog } from '@/components/agents/import-external-a2a-dialog'
@@ -191,6 +192,7 @@ export function AgentsPage() {
       return agentsApi.create(payload, currentOrganization?.id)
     },
     onSuccess: async (result) => {
+      captureEvent('agent_created')
       success('Agent Created', `${createForm.getValues('name')} is ready to configure.`)
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
       createForm.reset()
