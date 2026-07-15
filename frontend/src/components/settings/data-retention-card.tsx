@@ -141,6 +141,12 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
             <Button onClick={handleSave} disabled={updateMutation.isPending}>
               {updateMutation.isPending ? 'Saving...' : 'Save Retention Policy'}
             </Button>
+
+            <p className="text-xs text-muted-foreground border-t pt-4">
+              We use cookieless product analytics (PostHog, hosted in the EU)
+              to understand how the app is used and improve it. No advertising
+              cookies are set.
+            </p>
           </>
         )}
       </CardContent>
