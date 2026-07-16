@@ -13,7 +13,10 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 # Cross-domain funnels stitch to the marketing site's same PostHog EU project.
 ARG VITE_POSTHOG_KEY=phc_wLKPNJ2JTUp7vbdjPKXcieuA6vJrjjDSib4HrSNzfV4e
 ENV VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY
-ARG VITE_POSTHOG_HOST=https://eu.i.posthog.com
+# Same-origin reverse-proxy path (nginx forwards /ingest → PostHog EU),
+# so ad blockers can't drop the third-party host. Override with an
+# absolute URL (e.g. https://app.almyty.com/ingest) to align origins.
+ARG VITE_POSTHOG_HOST=/ingest
 ENV VITE_POSTHOG_HOST=$VITE_POSTHOG_HOST
 
 RUN npx vite build
