@@ -66,24 +66,56 @@ describe('analytics wrapper — keyed (enabled)', () => {
     vi.unstubAllEnvs()
   })
 
-  it('inits with EU host + memory persistence + identified_only', async () => {
+  it('inits pointing at the same-origin /ingest proxy by default', async () => {
     const a = await loadAnalytics()
     await a.initAnalytics()
     expect(posthogMock.init).toHaveBeenCalledTimes(1)
     const [key, opts] = posthogMock.init.mock.calls[0]
     expect(key).toBe('phc_test_key')
-    expect(opts.api_host).toBe('https://eu.i.posthog.com')
+    // Events go through the same-origin proxy (ad-blocker safe)...
+    expect(opts.api_host).toBe('/ingest')
+    // ...while the toolbar/session links still resolve to real PostHog.
+    expect(opts.ui_host).toBe('https://eu.posthog.com')
+  })
+
+  it('keeps cookieless + identified_only + autocapture posture', async () => {
+    const a = await loadAnalytics()
+    await a.initAnalytics()
+    const opts = posthogMock.init.mock.calls[0][1]
     expect(opts.persistence).toBe('memory')
     expect(opts.person_profiles).toBe('identified_only')
     expect(opts.autocapture).toBe(true)
-    expect(opts.capture_pageview).toBe(true)
   })
 
-  it('honors VITE_POSTHOG_HOST override', async () => {
-    vi.stubEnv('VITE_POSTHOG_HOST', 'https://ph.example.com')
+  it('disables automatic pageview (SPA captures are manual)', async () => {
     const a = await loadAnalytics()
     await a.initAnalytics()
-    expect(posthogMock.init.mock.calls[0][1].api_host).toBe('https://ph.example.com')
+    expect(posthogMock.init.mock.calls[0][1].capture_pageview).toBe(false)
+  })
+
+  it('honors VITE_POSTHOG_HOST override (aligned proxy origin)', async () => {
+    vi.stubEnv('VITE_POSTHOG_HOST', 'https://app.almyty.com/ingest')
+    const a = await loadAnalytics()
+    await a.initAnalytics()
+    expect(posthogMock.init.mock.calls[0][1].api_host).toBe('https://app.almyty.com/ingest')
+  })
+
+  it('capturePageview forwards a $pageview with $current_url', async () => {
+    const a = await loadAnalytics()
+    await a.initAnalytics()
+    a.capturePageview('/agents/42?tab=runs')
+    expect(posthogMock.capture).toHaveBeenCalledTimes(1)
+    const [event, props] = posthogMock.capture.mock.calls[0]
+    expect(event).toBe('$pageview')
+    expect(props.$current_url).toContain('/agents/42?tab=runs')
+  })
+
+  it('capturePageview is a no-op when analytics is disabled', async () => {
+    vi.stubEnv('VITE_POSTHOG_KEY', '')
+    const a = await loadAnalytics()
+    await a.initAnalytics()
+    a.capturePageview('/anything')
+    expect(posthogMock.capture).not.toHaveBeenCalled()
   })
 
   it('init is idempotent (second call is a no-op)', async () => {
