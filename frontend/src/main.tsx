@@ -6,10 +6,15 @@ import { BrowserRouter } from 'react-router-dom'
 
 import App from './App.tsx'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
+import { initAnalytics } from '@/lib/analytics'
 import './index.css'
 
 // Sentry error tracking — install @sentry/react and set VITE_SENTRY_DSN to enable
 // import('@sentry/react').then(Sentry => Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN }))
+
+// PostHog product analytics — no-op unless VITE_POSTHOG_KEY is set.
+// Cookieless, EU host; see src/lib/analytics.ts.
+initAnalytics()
 
 // Create a client
 const queryClient = new QueryClient({

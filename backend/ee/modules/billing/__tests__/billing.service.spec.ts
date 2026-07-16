@@ -10,7 +10,9 @@ import {
   PLAN_BUSINESS,
   PLAN_FREE,
   PLAN_PRO,
+  STRIPE_PRICE_BUSINESS_ANNUAL_ENV,
   STRIPE_PRICE_BUSINESS_ENV,
+  STRIPE_PRICE_PRO_ANNUAL_ENV,
   STRIPE_PRICE_PRO_ENV,
 } from '../billing.constants';
 
@@ -109,6 +111,8 @@ describe('BillingService', () => {
       [LICENSE_PRIVATE_KEY_ENV]: privatePem,
       [STRIPE_PRICE_PRO_ENV]: 'price_pro',
       [STRIPE_PRICE_BUSINESS_ENV]: 'price_biz',
+      [STRIPE_PRICE_PRO_ANNUAL_ENV]: 'price_pro_annual',
+      [STRIPE_PRICE_BUSINESS_ANNUAL_ENV]: 'price_biz_annual',
     };
     config = { get: (k: string) => configMap[k] };
     service = new BillingService(orgRepo, eventRepo, stripe, config);
@@ -151,6 +155,45 @@ describe('BillingService', () => {
         service.createCheckoutSession(ORG_ID, { plan: PLAN_ENTERPRISE }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(stripe.createCheckoutSession).not.toHaveBeenCalled();
+    });
+
+    it('defaults to the monthly price when no interval is given', async () => {
+      await service.createCheckoutSession(ORG_ID, { plan: PLAN_PRO });
+      expect(stripe.createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          line_items: [{ price: 'price_pro', quantity: 1 }],
+          metadata: expect.objectContaining({ interval: 'month' }),
+        }),
+      );
+    });
+
+    it('passes the annual price when interval=year', async () => {
+      await service.createCheckoutSession(ORG_ID, { plan: PLAN_PRO, interval: 'year' });
+      expect(stripe.createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          line_items: [{ price: 'price_pro_annual', quantity: 1 }],
+          metadata: expect.objectContaining({ interval: 'year' }),
+        }),
+      );
+    });
+
+    it('uses the annual business price for business/year', async () => {
+      await service.createCheckoutSession(ORG_ID, { plan: PLAN_BUSINESS, interval: 'year' });
+      expect(stripe.createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          line_items: [{ price: 'price_biz_annual', quantity: 1 }],
+        }),
+      );
+    });
+
+    it('falls back to the monthly price when the annual env is unset (never 500)', async () => {
+      delete configMap[STRIPE_PRICE_PRO_ANNUAL_ENV];
+      await service.createCheckoutSession(ORG_ID, { plan: PLAN_PRO, interval: 'year' });
+      expect(stripe.createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          line_items: [{ price: 'price_pro', quantity: 1 }],
+        }),
+      );
     });
   });
 
@@ -203,6 +246,19 @@ describe('BillingService', () => {
       const snap = license.resolveToken(org.billingInfo.licenseToken);
       expect(snap.entitlements).toContain(EE_ENTITLEMENTS.SSO);
       expect(snap.entitlements).toContain(EE_ENTITLEMENTS.BYO_KMS);
+    });
+
+    it('maps an annual price id back to its plan (no metadata plan)', async () => {
+      // Annual sub carries the annual price id; metadata.plan is intentionally
+      // absent so resolution must come from the annual reverse lookup.
+      const sub = fakeSubscription({
+        metadata: { organizationId: ORG_ID },
+        items: { data: [{ price: { id: 'price_biz_annual' }, quantity: 4, current_period_end: 1900000000 }] },
+      });
+      await service.handleWebhookEvent(event('customer.subscription.created', sub, 'evt_annual'));
+
+      expect(org.plan).toBe(PLAN_BUSINESS);
+      expect(org.billingInfo.seats).toBe(4);
     });
 
     it('is idempotent — a repeated event id is a no-op', async () => {
