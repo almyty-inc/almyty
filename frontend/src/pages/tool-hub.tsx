@@ -104,7 +104,7 @@ export function ToolHubPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Tool Hub</h1>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Tool Hub</h1>
           <p className="text-muted-foreground">
             Browse and install pre-built tool templates from popular providers.
           </p>
