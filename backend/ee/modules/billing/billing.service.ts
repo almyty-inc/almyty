@@ -14,6 +14,8 @@ import { BillingEvent } from '../../../src/entities/billing-event.entity';
 import { signLicense, LicensePayload } from '../../../src/modules/licensing/license-token';
 import {
   ACTIVE_SUBSCRIPTION_STATUSES,
+  BillingInterval,
+  DEFAULT_BILLING_INTERVAL,
   DEFAULT_DUNNING_GRACE_DAYS,
   DUNNING_GRACE_DAYS_ENV,
   DUNNING_SUBSCRIPTION_STATUSES,
@@ -28,7 +30,9 @@ import {
   STRIPE_CHECKOUT_CANCEL_URL_ENV,
   STRIPE_CHECKOUT_SUCCESS_URL_ENV,
   STRIPE_PORTAL_RETURN_URL_ENV,
+  STRIPE_PRICE_BUSINESS_ANNUAL_ENV,
   STRIPE_PRICE_BUSINESS_ENV,
+  STRIPE_PRICE_PRO_ANNUAL_ENV,
   STRIPE_PRICE_PRO_ENV,
 } from './billing.constants';
 import { StripeService } from './stripe.service';
@@ -48,6 +52,7 @@ export interface BillingStatus {
 export interface CreateCheckoutInput {
   plan: string;
   seats?: number;
+  interval?: BillingInterval;
   successUrl?: string;
   cancelUrl?: string;
 }
@@ -132,7 +137,9 @@ export class BillingService {
           `here; Enterprise is contact-sales.`,
       );
     }
-    const priceId = this.priceIdForPlan(plan);
+    const interval: BillingInterval =
+      input.interval === 'year' ? 'year' : DEFAULT_BILLING_INTERVAL;
+    const priceId = this.priceIdForPlan(plan, interval);
     if (!priceId) {
       throw new BadRequestException(
         `No Stripe price configured for plan "${plan}"`,
@@ -159,8 +166,8 @@ export class BillingService {
       success_url: successUrl,
       cancel_url: cancelUrl,
       client_reference_id: org.id,
-      subscription_data: { metadata: { organizationId: org.id, plan } },
-      metadata: { organizationId: org.id, plan },
+      subscription_data: { metadata: { organizationId: org.id, plan, interval } },
+      metadata: { organizationId: org.id, plan, interval },
     });
 
     return { url: session.url };
@@ -358,10 +365,18 @@ export class BillingService {
 
   private planFromSubscription(subscription: Stripe.Subscription): string {
     const priceId = this.priceIdFromSubscription(subscription);
-    const proPrice = this.config.get<string>(STRIPE_PRICE_PRO_ENV);
-    const businessPrice = this.config.get<string>(STRIPE_PRICE_BUSINESS_ENV);
-    if (businessPrice && priceId === businessPrice) return PLAN_BUSINESS;
-    if (proPrice && priceId === proPrice) return PLAN_PRO;
+    // Both the monthly and the annual price id of a plan must resolve back to
+    // that plan, otherwise webhook plan resolution breaks for annual subs.
+    const businessPrices = [
+      this.config.get<string>(STRIPE_PRICE_BUSINESS_ENV),
+      this.config.get<string>(STRIPE_PRICE_BUSINESS_ANNUAL_ENV),
+    ].filter(Boolean);
+    const proPrices = [
+      this.config.get<string>(STRIPE_PRICE_PRO_ENV),
+      this.config.get<string>(STRIPE_PRICE_PRO_ANNUAL_ENV),
+    ].filter(Boolean);
+    if (priceId && businessPrices.includes(priceId)) return PLAN_BUSINESS;
+    if (priceId && proPrices.includes(priceId)) return PLAN_PRO;
     // Fall back to the plan stamped on subscription metadata at checkout.
     const metaPlan = subscription.metadata?.plan;
     if (metaPlan && PAID_PLANS.includes(metaPlan)) return metaPlan;
@@ -389,15 +404,27 @@ export class BillingService {
     return typeof customer === 'string' ? customer : customer?.id;
   }
 
-  private priceIdForPlan(plan: string): string | undefined {
-    if (plan === PLAN_BUSINESS) {
-      return this.config.get<string>(STRIPE_PRICE_BUSINESS_ENV);
-    }
-    if (plan === PLAN_PRO) {
-      return this.config.get<string>(STRIPE_PRICE_PRO_ENV);
-    }
+  private priceIdForPlan(
+    plan: string,
+    interval: BillingInterval = DEFAULT_BILLING_INTERVAL,
+  ): string | undefined {
+    const monthlyEnv =
+      plan === PLAN_BUSINESS
+        ? STRIPE_PRICE_BUSINESS_ENV
+        : plan === PLAN_PRO
+          ? STRIPE_PRICE_PRO_ENV
+          : undefined;
     // Enterprise is contact-sales — no self-serve price.
-    return undefined;
+    if (!monthlyEnv) return undefined;
+    const monthly = this.config.get<string>(monthlyEnv);
+    if (interval !== 'year') return monthly;
+    const annualEnv =
+      plan === PLAN_BUSINESS
+        ? STRIPE_PRICE_BUSINESS_ANNUAL_ENV
+        : STRIPE_PRICE_PRO_ANNUAL_ENV;
+    // Fall back to the monthly price when no annual price is configured — an
+    // unset annual env must never 500 the checkout.
+    return this.config.get<string>(annualEnv) || monthly;
   }
 
   private graceDeadline(): Date {
