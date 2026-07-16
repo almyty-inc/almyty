@@ -712,6 +712,147 @@ export const ssoApi = {
   revealScimToken: () => apiGet('/sso/settings/scim-token'),
 }
 
+// Advanced RBAC API (EE — gated by the `advanced_rbac` entitlement).
+// Custom org roles, their user assignments, effective-permission resolution,
+// and ABAC policies. Mirrors backend/ee/modules/rbac/rbac.controller.ts.
+export interface CustomRole {
+  id: string
+  organizationId: string
+  name: string
+  description: string | null
+  permissions: string[]
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CustomRoleAssignment {
+  id: string
+  organizationId: string
+  userId: string
+  customRoleId: string
+  assignedBy: string | null
+  createdAt: string
+}
+
+export type AbacEffect = 'allow' | 'deny'
+
+export interface AbacCondition {
+  attr: string
+  op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'contains'
+  value: unknown
+}
+
+export interface AbacPolicy {
+  id: string
+  organizationId: string
+  name: string
+  description: string | null
+  effect: AbacEffect
+  action: string
+  conditions: AbacCondition[]
+  priority: number
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateRolePayload {
+  name: string
+  description?: string
+  permissions?: string[]
+}
+
+export interface UpdateRolePayload {
+  name?: string
+  description?: string
+  permissions?: string[]
+  active?: boolean
+}
+
+export interface CreatePolicyPayload {
+  name: string
+  description?: string
+  effect?: AbacEffect
+  action?: string
+  conditions?: AbacCondition[]
+  priority?: number
+}
+
+export const rbacApi = {
+  // Custom roles
+  listRoles: () => apiGet<CustomRole[]>('/rbac/roles'),
+  getRole: (id: string) => apiGet<CustomRole>(`/rbac/roles/${id}`),
+  createRole: (data: CreateRolePayload) => apiPost<CustomRole>('/rbac/roles', data),
+  updateRole: (id: string, data: UpdateRolePayload) =>
+    apiPatch<CustomRole>(`/rbac/roles/${id}`, data),
+  deleteRole: (id: string) => apiDel(`/rbac/roles/${id}`),
+  // Assignments
+  assignUser: (roleId: string, userId: string) =>
+    apiPost<CustomRoleAssignment>(`/rbac/roles/${roleId}/assignments`, { userId }),
+  unassignUser: (roleId: string, userId: string) =>
+    apiDel(`/rbac/roles/${roleId}/assignments/${userId}`),
+  // Effective permissions for a user
+  getUserPermissions: (userId: string) =>
+    apiGet<string[]>(`/rbac/users/${userId}/permissions`),
+  // ABAC policies
+  listPolicies: () => apiGet<AbacPolicy[]>('/rbac/policies'),
+  createPolicy: (data: CreatePolicyPayload) => apiPost<AbacPolicy>('/rbac/policies', data),
+  deletePolicy: (id: string) => apiDel(`/rbac/policies/${id}`),
+}
+
+/** A built-in plugin the compliance pack can enforce org-wide. */
+export type EnforceablePlugin = 'pii-filter' | 'security-scanner'
+
+/** Security-scanner severity floor at/above which a request is blocked. */
+export type ComplianceSeverity = 'low' | 'medium' | 'high' | 'critical'
+
+/** The effective enforced org policy returned by GET /compliance/policy. */
+export interface EffectiveCompliancePolicy {
+  organizationId: string
+  configured: boolean
+  enforcedPlugins: EnforceablePlugin[]
+  securityThreshold: ComplianceSeverity
+  blockOnViolation: boolean
+  piiCategories: string[]
+}
+
+/** Payload for PUT /compliance/policy — every field optional (partial upsert). */
+export interface UpdateCompliancePolicyInput {
+  enforcedPlugins?: EnforceablePlugin[]
+  securityThreshold?: ComplianceSeverity
+  blockOnViolation?: boolean
+  piiCategories?: string[]
+}
+
+/** The compliance report returned by GET /compliance/report. */
+export interface ComplianceReport {
+  organizationId: string
+  window: { from: string; to: string }
+  policy: EffectiveCompliancePolicy
+  enforcedControls: Array<{
+    plugin: EnforceablePlugin
+    enforced: boolean
+    settings: Record<string, any>
+  }>
+  activity: {
+    totalEvents: number
+    byAction: Record<string, number>
+    scannableEvents: number
+    credentialAccessEvents: number
+  }
+  postureScore: number
+}
+
+// Compliance Pack API (EE — gated by the `compliance_pack` entitlement)
+export const complianceApi = {
+  getPolicy: () => apiGet<EffectiveCompliancePolicy>('/compliance/policy'),
+  updatePolicy: (data: UpdateCompliancePolicyInput) =>
+    apiPut<EffectiveCompliancePolicy>('/compliance/policy', data),
+  getReport: (params?: { from?: string; to?: string }) =>
+    apiGet<ComplianceReport>('/compliance/report', { params }),
+}
+
 // Agents API
 export const agentsApi = {
   getAll: () => apiGet('/agents'),
@@ -1043,6 +1184,58 @@ export const approvalsApi = {
     apiPost(`/approvals/${id}/approve`, { decisionReason }),
   reject: (id: string, decisionReason?: string) =>
     apiPost(`/approvals/${id}/reject`, { decisionReason }),
+}
+
+// Approval Policies API (EE — gated by the `approval_policy` entitlement).
+// Decides WHEN an approval is required (match conditions) and WHO must sign
+// off (sequential quorum steps). Distinct from approvalsApi, which decides
+// individual pending requests.
+export type ApprovalMatchOp = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin'
+
+export interface ApprovalMatchCondition {
+  attr: string
+  op: ApprovalMatchOp
+  value: unknown
+}
+
+export interface ApprovalStep {
+  name: string
+  approverRole: string
+  minApprovals: number
+}
+
+export interface ApprovalPolicy {
+  id: string
+  organizationId: string
+  name: string
+  description: string | null
+  teamId: string | null
+  match: ApprovalMatchCondition[]
+  steps: ApprovalStep[]
+  priority: number
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UpsertApprovalPolicy {
+  name: string
+  description?: string | null
+  teamId?: string | null
+  match?: ApprovalMatchCondition[]
+  steps?: ApprovalStep[]
+  priority?: number
+  enabled?: boolean
+}
+
+export const approvalPoliciesApi = {
+  list: () => apiGet<ApprovalPolicy[]>('/approval-policies'),
+  getById: (id: string) => apiGet<ApprovalPolicy>(`/approval-policies/${id}`),
+  create: (data: UpsertApprovalPolicy) =>
+    apiPost<ApprovalPolicy>('/approval-policies', data),
+  update: (id: string, data: Partial<UpsertApprovalPolicy>) =>
+    apiPatch<ApprovalPolicy>(`/approval-policies/${id}`, data),
+  delete: (id: string) => apiDel(`/approval-policies/${id}`),
 }
 
 export const teamsApi = {
