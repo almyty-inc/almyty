@@ -323,11 +323,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   end={item.href === '/dashboard'}
                   title={sidebarCollapsed ? item.name : undefined}
                   className={({ isActive }) => cn(
-                    "group flex items-center rounded-md transition-colors",
+                    "group relative flex items-center rounded-md transition-colors",
                     sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-1.5 text-[13px]",
                     isActive
                       ? "bg-primary/10 text-primary font-medium"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    // DS sidebar-active signature: violet->cyan gradient accent bar
+                    isActive && !sidebarCollapsed &&
+                      "before:absolute before:left-0 before:top-1/2 before:h-4 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-gradient-to-b before:from-violet-500 before:to-cyan-400"
                   )}
                 >
                   {({ isActive }) => (
