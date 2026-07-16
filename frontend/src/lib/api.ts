@@ -712,6 +712,95 @@ export const ssoApi = {
   revealScimToken: () => apiGet('/sso/settings/scim-token'),
 }
 
+// Advanced RBAC API (EE — gated by the `advanced_rbac` entitlement).
+// Custom org roles, their user assignments, effective-permission resolution,
+// and ABAC policies. Mirrors backend/ee/modules/rbac/rbac.controller.ts.
+export interface CustomRole {
+  id: string
+  organizationId: string
+  name: string
+  description: string | null
+  permissions: string[]
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CustomRoleAssignment {
+  id: string
+  organizationId: string
+  userId: string
+  customRoleId: string
+  assignedBy: string | null
+  createdAt: string
+}
+
+export type AbacEffect = 'allow' | 'deny'
+
+export interface AbacCondition {
+  attr: string
+  op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'contains'
+  value: unknown
+}
+
+export interface AbacPolicy {
+  id: string
+  organizationId: string
+  name: string
+  description: string | null
+  effect: AbacEffect
+  action: string
+  conditions: AbacCondition[]
+  priority: number
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateRolePayload {
+  name: string
+  description?: string
+  permissions?: string[]
+}
+
+export interface UpdateRolePayload {
+  name?: string
+  description?: string
+  permissions?: string[]
+  active?: boolean
+}
+
+export interface CreatePolicyPayload {
+  name: string
+  description?: string
+  effect?: AbacEffect
+  action?: string
+  conditions?: AbacCondition[]
+  priority?: number
+}
+
+export const rbacApi = {
+  // Custom roles
+  listRoles: () => apiGet<CustomRole[]>('/rbac/roles'),
+  getRole: (id: string) => apiGet<CustomRole>(`/rbac/roles/${id}`),
+  createRole: (data: CreateRolePayload) => apiPost<CustomRole>('/rbac/roles', data),
+  updateRole: (id: string, data: UpdateRolePayload) =>
+    apiPatch<CustomRole>(`/rbac/roles/${id}`, data),
+  deleteRole: (id: string) => apiDel(`/rbac/roles/${id}`),
+  // Assignments
+  assignUser: (roleId: string, userId: string) =>
+    apiPost<CustomRoleAssignment>(`/rbac/roles/${roleId}/assignments`, { userId }),
+  unassignUser: (roleId: string, userId: string) =>
+    apiDel(`/rbac/roles/${roleId}/assignments/${userId}`),
+  // Effective permissions for a user
+  getUserPermissions: (userId: string) =>
+    apiGet<string[]>(`/rbac/users/${userId}/permissions`),
+  // ABAC policies
+  listPolicies: () => apiGet<AbacPolicy[]>('/rbac/policies'),
+  createPolicy: (data: CreatePolicyPayload) => apiPost<AbacPolicy>('/rbac/policies', data),
+  deletePolicy: (id: string) => apiDel(`/rbac/policies/${id}`),
+}
+
 // Agents API
 export const agentsApi = {
   getAll: () => apiGet('/agents'),
