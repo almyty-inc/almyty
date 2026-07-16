@@ -964,6 +964,28 @@ export const auditLogsApi = {
     apiGet(`/audit-logs/resource?resourceType=${resourceType}&resourceId=${resourceId}${limit ? `&limit=${limit}` : ''}`),
 }
 
+// EE audit-export (gated on the `audit_export` entitlement — Business+). The
+// download endpoint streams a file with a Content-Disposition attachment
+// header, so we fetch it as a blob and trigger a browser download. Cookie auth
+// flows automatically via withCredentials.
+export const auditExportApi = {
+  download: async (format: 'json' | 'csv', params?: Record<string, string>) => {
+    const query = new URLSearchParams({ format, ...(params || {}) }).toString()
+    const res = await api.get(`/audit-export?${query}`, { responseType: 'blob' })
+    const disposition = res.headers?.['content-disposition'] || ''
+    const match = /filename="?([^"]+)"?/.exec(disposition)
+    const filename = match?.[1] || `audit-log.${format}`
+    const url = window.URL.createObjectURL(res.data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  },
+}
+
 // Credentials Vault API
 export const credentialsApi = {
   getAll: () => apiGet('/credentials'),
