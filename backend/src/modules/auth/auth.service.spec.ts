@@ -990,6 +990,52 @@ describe('AuthService', () => {
 
       await expect(service.verifyEmail('invalid-token')).rejects.toThrow(BadRequestException);
     });
+
+    // Real signed-JWT roundtrip — the path the emailed link actually uses.
+    // Mints a genuine token and verifies it end to end (no verify() mock),
+    // guarding the sign -> verify -> verifiedAt chain and its security checks.
+    describe('signed-token roundtrip (integration)', () => {
+      const { JwtService: RealJwt } = require('@nestjs/jwt');
+      const realJwt = new RealJwt({ secret: 'roundtrip-test-secret' });
+      const mint = (claims: Record<string, any>) =>
+        realJwt.sign(claims, { expiresIn: '7d' });
+
+      beforeEach(() => {
+        jwtService.verify.mockImplementation(((t: string) => realJwt.verify(t)) as any);
+      });
+
+      it('a real email_verify token flips verifiedAt and persists', async () => {
+        const user = { id: 'user-9', email: 'ava@northwind.ai', verifiedAt: null, isVerified: false } as any;
+        userRepository.findOne.mockResolvedValue(user);
+        userRepository.save.mockImplementation(async (u: any) => u);
+
+        const token = mint({ sub: 'user-9', email: 'ava@northwind.ai', purpose: 'email_verify' });
+        await service.verifyEmail(token);
+
+        expect(user.verifiedAt).toBeInstanceOf(Date);
+        expect(userRepository.save).toHaveBeenCalled();
+      });
+
+      it('rejects a token whose purpose is not email_verify', async () => {
+        const user = { id: 'user-9', email: 'ava@northwind.ai', verifiedAt: null } as any;
+        // Faithful: the DB-token fallback (findOne by verificationToken) never
+        // matches a JWT — only the id lookup returns the user.
+        userRepository.findOne.mockImplementation(async ({ where }: any) =>
+          where?.id === 'user-9' ? user : null);
+        const token = mint({ sub: 'user-9', email: 'ava@northwind.ai', purpose: 'password_reset' });
+        await expect(service.verifyEmail(token)).rejects.toThrow(BadRequestException);
+        expect(user.verifiedAt).toBeNull();
+      });
+
+      it('rejects a token minted for a different email than the user now has', async () => {
+        const user = { id: 'user-9', email: 'new@northwind.ai', verifiedAt: null } as any;
+        userRepository.findOne.mockImplementation(async ({ where }: any) =>
+          where?.id === 'user-9' ? user : null);
+        const token = mint({ sub: 'user-9', email: 'old@northwind.ai', purpose: 'email_verify' });
+        await expect(service.verifyEmail(token)).rejects.toThrow(BadRequestException);
+        expect(user.verifiedAt).toBeNull();
+      });
+    });
   });
 
 /**
