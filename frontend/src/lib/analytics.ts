@@ -6,14 +6,28 @@
  * app so a site visit → signup → activation funnel can be stitched by
  * identifying the logged-in user.
  *
+ * Delivery: events are NOT sent to eu.i.posthog.com directly — ad
+ * blockers (uBlock, Brave, Safari ITP) drop that hostname on sight. We
+ * point `api_host` at a SAME-ORIGIN reverse proxy path ('/ingest' by
+ * default) which nginx forwards to PostHog EU. The browser only ever
+ * talks to the app's own domain, so there is nothing for a blocker to
+ * match. `ui_host` stays on the real PostHog origin so toolbar/session
+ * links still resolve.
+ *
  * Privacy posture (matches almyty.com/privacy):
  *   - Cookieless: persistence is 'memory' — no cookies, no localStorage.
- *   - EU host by default (https://eu.i.posthog.com).
+ *   - EU host (via the proxy) by default.
  *   - person_profiles: 'identified_only' — anonymous visitors never get a
  *     profile; a profile only exists once we identify() after login, which
  *     is a deliberate authenticated action (contract basis).
  *   - identify() carries the minimum: user id, org id, and plan. Nothing
  *     more.
+ *
+ * SPA pageviews: capture_pageview is DISABLED here. PostHog's automatic
+ * pageview only fires on the initial hard load; client-side react-router
+ * navigations send nothing. We capture $pageview manually on every route
+ * change via capturePageview() (see usePageviews hook), and PostHog emits
+ * the matching $pageleave automatically.
  *
  * Turnkey / no-op contract:
  *   - Reads VITE_POSTHOG_KEY at init. If it is unset, PostHog is NEVER
@@ -23,7 +37,15 @@
  */
 import type { PostHog } from 'posthog-js'
 
-const DEFAULT_HOST = 'https://eu.i.posthog.com'
+// Same-origin reverse-proxy path. nginx (frontend/nginx.conf) forwards
+// /ingest/* to PostHog EU. Overridable per-environment via
+// VITE_POSTHOG_HOST — e.g. an absolute 'https://app.almyty.com/ingest'
+// once the marketing + app origins are aligned. THIS is the one default
+// to change if the external proxy path ever moves.
+const DEFAULT_HOST = '/ingest'
+// Where the PostHog toolbar/app links should point (real PH origin), so
+// they keep working even though events flow through the proxy.
+const UI_HOST = 'https://eu.posthog.com'
 
 // Live PostHog client, or null while uninitialized / disabled.
 let client: PostHog | null = null
@@ -63,11 +85,17 @@ export async function initAnalytics(): Promise<void> {
 
   const { default: posthog } = await import('posthog-js')
   posthog.init(key, {
+    // Events flow through the same-origin proxy so ad blockers can't
+    // drop them; ui_host keeps toolbar/session links on the real PH app.
     api_host: readHost(),
+    ui_host: UI_HOST,
     // Cookieless: keep everything in memory, cleared on reload.
     persistence: 'memory',
     autocapture: true,
-    capture_pageview: true,
+    // Disabled: PostHog's auto pageview only fires on the initial hard
+    // load. SPA route changes are captured manually via capturePageview()
+    // (usePageviews hook). PostHog still emits $pageleave automatically.
+    capture_pageview: false,
     // Anonymous visitors never get a person profile; only identified
     // (post-login) users do. This is the cookieless funnel contract.
     person_profiles: 'identified_only',
@@ -103,4 +131,20 @@ export function resetAnalytics(): void {
 export function captureEvent(name: string, props?: Record<string, unknown>): void {
   if (!client || !name) return
   client.capture(name, props)
+}
+
+/**
+ * Capture a manual $pageview for the current SPA route. Called by the
+ * usePageviews hook on every client-side navigation, since
+ * capture_pageview is disabled at init. No-op when analytics is
+ * disabled. Passing the current path as $current_url keeps PostHog's
+ * pageview URL accurate for history-based SPA routing.
+ */
+export function capturePageview(path?: string): void {
+  if (!client) return
+  const props =
+    path && typeof window !== 'undefined'
+      ? { $current_url: window.location.origin + path }
+      : undefined
+  client.capture('$pageview', props)
 }
