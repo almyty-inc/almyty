@@ -305,7 +305,7 @@ export function AgentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Agents</h1>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Agents</h1>
           <p className="text-muted-foreground">
             {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(agents.length, 'agent')} (${activeCount} active)${externalAgents.length > 0 ? ` + ${externalAgents.length} external` : ''}`}
           </p>
