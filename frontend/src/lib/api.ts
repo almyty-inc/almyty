@@ -801,6 +801,58 @@ export const rbacApi = {
   deletePolicy: (id: string) => apiDel(`/rbac/policies/${id}`),
 }
 
+/** A built-in plugin the compliance pack can enforce org-wide. */
+export type EnforceablePlugin = 'pii-filter' | 'security-scanner'
+
+/** Security-scanner severity floor at/above which a request is blocked. */
+export type ComplianceSeverity = 'low' | 'medium' | 'high' | 'critical'
+
+/** The effective enforced org policy returned by GET /compliance/policy. */
+export interface EffectiveCompliancePolicy {
+  organizationId: string
+  configured: boolean
+  enforcedPlugins: EnforceablePlugin[]
+  securityThreshold: ComplianceSeverity
+  blockOnViolation: boolean
+  piiCategories: string[]
+}
+
+/** Payload for PUT /compliance/policy — every field optional (partial upsert). */
+export interface UpdateCompliancePolicyInput {
+  enforcedPlugins?: EnforceablePlugin[]
+  securityThreshold?: ComplianceSeverity
+  blockOnViolation?: boolean
+  piiCategories?: string[]
+}
+
+/** The compliance report returned by GET /compliance/report. */
+export interface ComplianceReport {
+  organizationId: string
+  window: { from: string; to: string }
+  policy: EffectiveCompliancePolicy
+  enforcedControls: Array<{
+    plugin: EnforceablePlugin
+    enforced: boolean
+    settings: Record<string, any>
+  }>
+  activity: {
+    totalEvents: number
+    byAction: Record<string, number>
+    scannableEvents: number
+    credentialAccessEvents: number
+  }
+  postureScore: number
+}
+
+// Compliance Pack API (EE — gated by the `compliance_pack` entitlement)
+export const complianceApi = {
+  getPolicy: () => apiGet<EffectiveCompliancePolicy>('/compliance/policy'),
+  updatePolicy: (data: UpdateCompliancePolicyInput) =>
+    apiPut<EffectiveCompliancePolicy>('/compliance/policy', data),
+  getReport: (params?: { from?: string; to?: string }) =>
+    apiGet<ComplianceReport>('/compliance/report', { params }),
+}
+
 // Agents API
 export const agentsApi = {
   getAll: () => apiGet('/agents'),
