@@ -292,6 +292,7 @@ export const authApi = {
     apiPost('/auth/api-keys', data),
 
   resendVerification: () => apiPost('/auth/resend-verification'),
+  verifyEmail: (token: string) => apiPost('/auth/verify-email', { token }),
 }
 
 // Notifications API
