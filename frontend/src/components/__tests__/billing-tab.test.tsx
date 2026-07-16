@@ -111,6 +111,49 @@ describe('BillingTab', () => {
     )
   })
 
+  it('renders a fresh free org (no Stripe customer) with the plan and comparison, no error', async () => {
+    // A brand-new free org: getStatus resolves plan=free, no subscription.
+    // With Stripe unconfigured the checkout cards are hidden, but the plan
+    // callout and the comparison matrix must still render.
+    mocked.getStatus.mockResolvedValue({ ...freeStatus, stripeConfigured: false })
+
+    render(<BillingTab organizationId={ORG} />)
+
+    await waitFor(() =>
+      expect(screen.getByText(/You're on the Free plan/)).toBeInTheDocument(),
+    )
+    // Comparison matrix is always shown so the user sees every tier.
+    expect(screen.getByText('Compare plans')).toBeInTheDocument()
+    expect(screen.getByText('SSO / SAML + SCIM')).toBeInTheDocument()
+    // No self-serve checkout cards when Stripe is not configured.
+    expect(screen.queryByText('Upgrade to Pro')).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/Hosted billing is not configured for this deployment/),
+    ).toBeInTheDocument()
+  })
+
+  it('marks Business-only features locked for a free org and unlocked for business in the matrix', async () => {
+    mocked.getStatus.mockResolvedValue(freeStatus)
+    const { unmount } = render(<BillingTab organizationId={ORG} />)
+
+    // Free org: the SSO row's Business column shows a lock, not a check.
+    await waitFor(() => expect(screen.getByText('SSO / SAML + SCIM')).toBeInTheDocument())
+    const freeRow = screen.getByText('SSO / SAML + SCIM').closest('tr')!
+    expect(freeRow.querySelector('[data-testid="lock-free"]')).toBeTruthy()
+    expect(freeRow.querySelector('[data-testid="lock-business"]')).toBeNull()
+    expect(freeRow.querySelector('[data-testid="incl-business"]')).toBeTruthy()
+
+    unmount()
+
+    // A business org highlights the Business column as current.
+    mocked.getStatus.mockResolvedValue({ ...freeStatus, plan: 'business' })
+    render(<BillingTab organizationId={ORG} />)
+    await waitFor(() => expect(screen.getAllByText('Business').length).toBeGreaterThan(0))
+    // Business column includes SSO.
+    const bizRow = screen.getByText('SSO / SAML + SCIM').closest('tr')!
+    expect(bizRow.querySelector('[data-testid="incl-business"]')).toBeTruthy()
+  })
+
   it('surfaces a dunning warning on a paid plan with a failed payment', async () => {
     mocked.getStatus.mockResolvedValue({
       plan: 'pro',
