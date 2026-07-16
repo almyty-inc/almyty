@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { billingApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { PlanComparison } from '@/components/plan-comparison'
+import { PLANS, toPlanKey } from '@/lib/plan-catalog'
 
 interface BillingStatus {
   plan: string
@@ -147,7 +149,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm text-muted-foreground">Current plan</span>
                 <Badge variant={isPaid ? 'default' : 'secondary'} className="capitalize">
-                  {plan}
+                  {PLANS[toPlanKey(plan)].label}
                 </Badge>
                 {isPaid && (
                   <span className="text-sm text-muted-foreground">
@@ -160,6 +162,12 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
                   </Badge>
                 )}
               </div>
+
+              <p className="text-sm text-muted-foreground">
+                {isPaid
+                  ? PLANS[toPlanKey(plan)].blurb
+                  : "You're on the Free plan. Compare plans below to see what each tier unlocks."}
+              </p>
 
               {status?.dunning && (
                 <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
@@ -192,6 +200,8 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
           )}
         </CardContent>
       </Card>
+
+      <PlanComparison currentPlan={plan} />
 
       {status?.stripeConfigured && (
         <div className="space-y-4">

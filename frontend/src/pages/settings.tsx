@@ -18,6 +18,7 @@ import { ReferralsTab } from '@/components/settings/referrals-tab'
 import { DataRetentionCard } from '@/components/settings/data-retention-card'
 import { NotificationPreferences } from '@/components/settings/notification-preferences'
 import { BillingTab } from '@/components/BillingTab'
+import { PlanBadge } from '@/components/plan-indicator'
 import { authApi, organizationsApi } from '@/lib/api'
 
 const SETTINGS_TABS = ['organization', 'members', 'billing', 'referrals', 'profile', 'notifications', 'security', 'sso'] as const
@@ -45,11 +46,17 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Settings</h1>
-        <p className="text-muted-foreground">
-          Manage your organization and account settings
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Settings</h1>
+          <p className="text-muted-foreground">
+            Manage your organization and account settings
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 pt-1">
+          <span className="text-sm text-muted-foreground">Plan</span>
+          <PlanBadge />
+        </div>
       </div>
 
       <div className="flex items-center gap-1 border-b">
