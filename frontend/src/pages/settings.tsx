@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Settings, Building, Users, User, Shield, ShieldCheck, CreditCard, Gift, Bell } from 'lucide-react'
+import { Settings, Building, Users, User, Shield, ShieldCheck, KeyRound, CreditCard, Gift, Bell } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import { useNotifications } from '@/store/app'
 import { MembersAndTeamsTab } from '@/components/MembersAndTeamsTab'
 import { SecurityTab } from '@/components/SecurityTab'
 import { SsoSettings } from '@/components/settings/sso-settings'
+import { RbacSettings } from '@/components/settings/rbac-settings'
 import { ReferralsTab } from '@/components/settings/referrals-tab'
 import { DataRetentionCard } from '@/components/settings/data-retention-card'
 import { NotificationPreferences } from '@/components/settings/notification-preferences'
@@ -21,7 +22,7 @@ import { BillingTab } from '@/components/BillingTab'
 import { PlanBadge } from '@/components/plan-indicator'
 import { authApi, organizationsApi } from '@/lib/api'
 
-const SETTINGS_TABS = ['organization', 'members', 'billing', 'referrals', 'profile', 'notifications', 'security', 'sso'] as const
+const SETTINGS_TABS = ['organization', 'members', 'billing', 'referrals', 'profile', 'notifications', 'security', 'sso', 'rbac'] as const
 type SettingsTab = typeof SETTINGS_TABS[number]
 
 function getSettingsTab(pathname: string): SettingsTab {
@@ -69,6 +70,7 @@ export function SettingsPage() {
           { key: 'notifications' as SettingsTab, label: 'Notifications', icon: Bell },
           { key: 'security' as SettingsTab, label: 'Security', icon: Shield },
           { key: 'sso' as SettingsTab, label: 'SSO', icon: ShieldCheck },
+          { key: 'rbac' as SettingsTab, label: 'Roles', icon: KeyRound },
         ]).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -95,6 +97,7 @@ export function SettingsPage() {
         {settingsTab === 'notifications' && <NotificationPreferences />}
         {settingsTab === 'security' && <SecurityTab />}
         {settingsTab === 'sso' && <SsoSettings />}
+        {settingsTab === 'rbac' && <RbacSettings />}
       </div>
     </div>
   )
