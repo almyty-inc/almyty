@@ -533,7 +533,7 @@ return new Promise((resolve, reject) => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Tools</h1>
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Tools</h1>
           <p className="text-muted-foreground">
             {toolsTotal} tool{toolsTotal !== 1 ? 's' : ''} total
           </p>
