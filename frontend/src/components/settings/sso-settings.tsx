@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { EntitlementGate } from '@/components/entitlement-gate'
+import { UpgradePrompt } from '@/components/plan-indicator'
 import { useNotifications } from '@/store/app'
 import { useCopySensitive } from '@/lib/clipboard'
 import { ssoApi } from '@/lib/api'
@@ -40,26 +41,19 @@ interface SsoConfigView {
   scimTokenSet: boolean
 }
 
-/** Upsell shown when the deployment's license does not include SSO. */
-function SsoLocked() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-primary" /> Single Sign-On (Enterprise)
-        </CardTitle>
-        <CardDescription>
-          SAML / OIDC login and SCIM provisioning are part of the almyty
-          Enterprise edition. Add an enterprise license to enable them.
-        </CardDescription>
-      </CardHeader>
-    </Card>
-  )
-}
-
 export function SsoSettings() {
   return (
-    <EntitlementGate feature="sso" mode="lock" fallback={<SsoLocked />}>
+    <EntitlementGate
+      feature="sso"
+      mode="lock"
+      fallback={
+        <UpgradePrompt
+          feature="sso"
+          title="Single Sign-On"
+          description="SAML / OIDC login and SCIM provisioning let members sign in through your identity provider."
+        />
+      }
+    >
       <SsoSettingsForm />
     </EntitlementGate>
   )

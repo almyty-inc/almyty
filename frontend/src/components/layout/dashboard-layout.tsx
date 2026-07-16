@@ -50,6 +50,7 @@ import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { EmailVerificationBanner } from '@/components/layout/email-verification-banner'
+import { PlanBadge } from '@/components/plan-indicator'
 
 // Suspense fallback for lazy page chunks. Rendered INSIDE the main
 // landmark so the sidebar + header + <main> stay mounted during
@@ -273,6 +274,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Plan</span>
+                <PlanBadge />
+              </div>
             </div>
           )}
 

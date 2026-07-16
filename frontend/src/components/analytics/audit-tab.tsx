@@ -1,15 +1,73 @@
 import React, { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, Filter, ScrollText, Users } from 'lucide-react'
+import { Activity, Download, Filter, Lock, ScrollText, Users } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { analyticsApi, auditLogsApi } from '@/lib/api'
+import { analyticsApi, auditExportApi, auditLogsApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
+import { useNotifications } from '@/store/app'
+import { EntitlementGate } from '@/components/entitlement-gate'
+import { tierForEntitlement } from '@/lib/plan-catalog'
 import type { AuditLogEntry } from '@/types'
+
+/** Locked affordance shown when the license lacks the audit_export entitlement. */
+function AuditExportLocked() {
+  const tier = tierForEntitlement('audit_export')
+  return (
+    <Link
+      to="/settings/billing"
+      className="inline-flex items-center gap-1.5 rounded-md border border-dashed px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+      title={`Audit export is part of the ${tier.label} plan`}
+    >
+      <Lock className="h-3.5 w-3.5" />
+      Export ({tier.label})
+    </Link>
+  )
+}
+
+/** Export buttons shown when the license grants audit_export. */
+function AuditExportButtons({
+  resourceType,
+  action,
+}: {
+  resourceType: string
+  action: string
+}) {
+  const { error } = useNotifications()
+  const [busy, setBusy] = useState<'json' | 'csv' | null>(null)
+
+  const download = async (format: 'json' | 'csv') => {
+    setBusy(format)
+    try {
+      const params: Record<string, string> = {}
+      if (resourceType) params.resourceType = resourceType
+      if (action) params.action = action
+      await auditExportApi.download(format, params)
+    } catch (err: any) {
+      error('Export failed', err?.response?.data?.message || 'Could not export the audit log.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <Button variant="outline" size="sm" className="h-7 text-xs" disabled={busy !== null} onClick={() => download('csv')}>
+        <Download className="h-3.5 w-3.5 mr-1" />
+        {busy === 'csv' ? 'Exporting...' : 'CSV'}
+      </Button>
+      <Button variant="outline" size="sm" className="h-7 text-xs" disabled={busy !== null} onClick={() => download('json')}>
+        <Download className="h-3.5 w-3.5 mr-1" />
+        {busy === 'json' ? 'Exporting...' : 'JSON'}
+      </Button>
+    </div>
+  )
+}
 
 import { formatMs, formatNumber } from './format'
 import { StatCard } from './stat-card'
@@ -195,6 +253,16 @@ export function AuditTab() {
             Clear filters
           </Button>
         )}
+
+        <div className="ml-auto">
+          <EntitlementGate
+            feature="audit_export"
+            mode="lock"
+            fallback={<AuditExportLocked />}
+          >
+            <AuditExportButtons resourceType={auditResourceFilter} action={auditActionFilter} />
+          </EntitlementGate>
+        </div>
       </div>
 
       {/* Audit log table */}
