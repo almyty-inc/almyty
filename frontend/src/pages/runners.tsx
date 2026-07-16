@@ -247,7 +247,7 @@ function RunnersHeader({
   return (
     <div className="flex items-center justify-between">
       <div>
-        <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+        <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">
           Runners
         </h1>
         <p className="text-muted-foreground">
