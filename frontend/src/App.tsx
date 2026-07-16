@@ -23,6 +23,9 @@ import { VerifyEmailPage } from '@/pages/auth/verify-email'
 // Store
 import { useAuthStore } from '@/store/auth'
 
+// Analytics — fire a PostHog $pageview on every client-side route change.
+import { usePageviews } from '@/hooks/use-pageviews'
+
 // Lazy-loaded pages — code-split into separate chunks
 const DashboardPage = lazy(() => import('@/pages/dashboard').then(m => ({ default: m.DashboardPage })))
 const GatewaysPage = lazy(() => import('@/pages/gateways').then(m => ({ default: m.GatewaysPage })))
@@ -72,6 +75,11 @@ function DashboardLayoutOutlet() {
 
 function App() {
   const { checkAuth } = useAuthStore()
+
+  // Emit a PostHog $pageview on each SPA navigation (capture_pageview is
+  // disabled at init, so this is what records client-side route changes).
+  // Mounted here because App renders under <BrowserRouter> (main.tsx).
+  usePageviews()
 
   // Initialize auth state on app start
   useEffect(() => {
