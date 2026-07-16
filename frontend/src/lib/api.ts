@@ -292,6 +292,7 @@ export const authApi = {
     apiPost('/auth/api-keys', data),
 
   resendVerification: () => apiPost('/auth/resend-verification'),
+  verifyEmail: (token: string) => apiPost('/auth/verify-email', { token }),
 }
 
 // Notifications API
@@ -388,8 +389,10 @@ export const billingApi = {
 
   getInvoices: (orgId: string) => apiGet(`/billing/${orgId}/invoices`),
 
-  createCheckout: (orgId: string, data: { plan: string; seats?: number }) =>
-    apiPost<{ url: string }>(`/billing/${orgId}/checkout`, data),
+  createCheckout: (
+    orgId: string,
+    data: { plan: string; seats?: number; interval?: 'month' | 'year' },
+  ) => apiPost<{ url: string }>(`/billing/${orgId}/checkout`, data),
 
   createPortal: (orgId: string) =>
     apiPost<{ url: string }>(`/billing/${orgId}/portal`, {}),
@@ -959,6 +962,28 @@ export const auditLogsApi = {
   },
   getResourceHistory: (resourceType: string, resourceId: string, limit?: number) =>
     apiGet(`/audit-logs/resource?resourceType=${resourceType}&resourceId=${resourceId}${limit ? `&limit=${limit}` : ''}`),
+}
+
+// EE audit-export (gated on the `audit_export` entitlement — Business+). The
+// download endpoint streams a file with a Content-Disposition attachment
+// header, so we fetch it as a blob and trigger a browser download. Cookie auth
+// flows automatically via withCredentials.
+export const auditExportApi = {
+  download: async (format: 'json' | 'csv', params?: Record<string, string>) => {
+    const query = new URLSearchParams({ format, ...(params || {}) }).toString()
+    const res = await api.get(`/audit-export?${query}`, { responseType: 'blob' })
+    const disposition = res.headers?.['content-disposition'] || ''
+    const match = /filename="?([^"]+)"?/.exec(disposition)
+    const filename = match?.[1] || `audit-log.${format}`
+    const url = window.URL.createObjectURL(res.data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  },
 }
 
 // Credentials Vault API

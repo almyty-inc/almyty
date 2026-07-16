@@ -28,6 +28,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { gatewaysApi, toolsApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
+import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { CreateGatewayDialog } from '@/components/gateways/create-gateway-dialog'
@@ -182,6 +183,7 @@ export function GatewaysPage() {
       return await gatewaysApi.create(payload)
     },
     onSuccess: async (result) => {
+      captureEvent('gateway_deployed')
       // Show success message first
       success('Success', result?.message || 'Gateway created successfully')
 
