@@ -18,6 +18,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { LoginPage } from '@/pages/auth/login'
 import { OAuthConsentPage } from '@/pages/oauth/consent'
 import { RegisterPage } from '@/pages/auth/register'
+import { VerifyEmailPage } from '@/pages/auth/verify-email'
 
 // Store
 import { useAuthStore } from '@/store/auth'
@@ -130,6 +131,7 @@ function App() {
             <Routes>
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
+              <Route path="verify-email" element={<VerifyEmailPage />} />
               <Route path="*" element={<Navigate to="/auth/login" replace />} />
             </Routes>
           </AuthLayout>
