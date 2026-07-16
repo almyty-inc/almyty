@@ -1045,6 +1045,58 @@ export const approvalsApi = {
     apiPost(`/approvals/${id}/reject`, { decisionReason }),
 }
 
+// Approval Policies API (EE — gated by the `approval_policy` entitlement).
+// Decides WHEN an approval is required (match conditions) and WHO must sign
+// off (sequential quorum steps). Distinct from approvalsApi, which decides
+// individual pending requests.
+export type ApprovalMatchOp = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin'
+
+export interface ApprovalMatchCondition {
+  attr: string
+  op: ApprovalMatchOp
+  value: unknown
+}
+
+export interface ApprovalStep {
+  name: string
+  approverRole: string
+  minApprovals: number
+}
+
+export interface ApprovalPolicy {
+  id: string
+  organizationId: string
+  name: string
+  description: string | null
+  teamId: string | null
+  match: ApprovalMatchCondition[]
+  steps: ApprovalStep[]
+  priority: number
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UpsertApprovalPolicy {
+  name: string
+  description?: string | null
+  teamId?: string | null
+  match?: ApprovalMatchCondition[]
+  steps?: ApprovalStep[]
+  priority?: number
+  enabled?: boolean
+}
+
+export const approvalPoliciesApi = {
+  list: () => apiGet<ApprovalPolicy[]>('/approval-policies'),
+  getById: (id: string) => apiGet<ApprovalPolicy>(`/approval-policies/${id}`),
+  create: (data: UpsertApprovalPolicy) =>
+    apiPost<ApprovalPolicy>('/approval-policies', data),
+  update: (id: string, data: Partial<UpsertApprovalPolicy>) =>
+    apiPatch<ApprovalPolicy>(`/approval-policies/${id}`, data),
+  delete: (id: string) => apiDel(`/approval-policies/${id}`),
+}
+
 export const teamsApi = {
   list: (organizationId: string) =>
     apiGet(`/organizations/${organizationId}/teams`),
