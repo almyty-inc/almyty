@@ -8,6 +8,7 @@ const posthogMock = {
   identify: vi.fn(),
   reset: vi.fn(),
   capture: vi.fn(),
+  register: vi.fn(),
 }
 
 vi.mock('posthog-js', () => ({
@@ -59,7 +60,11 @@ describe('analytics wrapper — keyed (enabled)', () => {
     posthogMock.identify.mockClear()
     posthogMock.reset.mockClear()
     posthogMock.capture.mockClear()
+    posthogMock.register.mockClear()
     vi.stubEnv('VITE_POSTHOG_KEY', 'phc_test_key')
+    // Pin a tracked environment — jsdom's host is localhost, which the
+    // wrapper (correctly) treats as development and would not track.
+    vi.stubEnv('VITE_APP_ENV', 'production')
   })
 
   afterEach(() => {
@@ -154,5 +159,56 @@ describe('analytics wrapper — keyed (enabled)', () => {
     await a.initAnalytics()
     a.captureEvent('gateway_deployed', { channelType: 'slack' })
     expect(posthogMock.capture).toHaveBeenCalledWith('gateway_deployed', { channelType: 'slack' })
+  })
+
+  it('tags every event with the environment super-property', async () => {
+    vi.stubEnv('VITE_APP_ENV', 'staging')
+    const a = await loadAnalytics()
+    await a.initAnalytics()
+    expect(posthogMock.register).toHaveBeenCalledWith({ environment: 'staging' })
+  })
+})
+
+describe('analytics wrapper — environment gating', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    posthogMock.init.mockClear()
+    posthogMock.register.mockClear()
+    vi.stubEnv('VITE_POSTHOG_KEY', 'phc_test_key')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('does NOT track development (key set, but env is development)', async () => {
+    vi.stubEnv('VITE_APP_ENV', 'development')
+    const a = await loadAnalytics()
+    await a.initAnalytics()
+    expect(posthogMock.init).not.toHaveBeenCalled()
+  })
+
+  it('defaults to development (untracked) for an unrecognized host', async () => {
+    // No VITE_APP_ENV override; jsdom host is localhost -> development.
+    const a = await loadAnalytics()
+    await a.initAnalytics()
+    expect(posthogMock.init).not.toHaveBeenCalled()
+  })
+
+  it('tracks staging and production', async () => {
+    for (const env of ['staging', 'production'] as const) {
+      vi.resetModules()
+      posthogMock.init.mockClear()
+      vi.stubEnv('VITE_APP_ENV', env)
+      const a = await loadAnalytics()
+      await a.initAnalytics()
+      expect(posthogMock.init).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it('readEnvironment maps hosts: prod/staging/dev', async () => {
+    const a = await loadAnalytics()
+    // jsdom default host (localhost) -> development
+    expect(a.readEnvironment()).toBe('development')
   })
 })

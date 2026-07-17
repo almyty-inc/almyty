@@ -71,6 +71,30 @@ function readHost(): string {
   return typeof host === 'string' && host.trim() !== '' ? host.trim() : DEFAULT_HOST
 }
 
+export type AppEnvironment = 'production' | 'staging' | 'development'
+
+/**
+ * Which deployment this bundle is running in. Used to (a) keep development
+ * completely untracked and (b) tag staging vs production events so they are
+ * cleanly separable in one shared PostHog project.
+ *
+ * Resolution: an explicit VITE_APP_ENV build override wins; otherwise infer
+ * from the host. Anything that isn't the known prod/staging host — localhost,
+ * *.dev.*, preview builds, unknown — is treated as development (untracked),
+ * which is the safe default: we never want to pollute analytics with local or
+ * unrecognized traffic.
+ */
+export function readEnvironment(): AppEnvironment {
+  const explicit = import.meta.env.VITE_APP_ENV
+  if (explicit === 'production' || explicit === 'staging' || explicit === 'development') {
+    return explicit
+  }
+  const host = typeof window !== 'undefined' ? window.location.hostname : ''
+  if (host === 'app.almyty.com') return 'production'
+  if (host.includes('.staging.')) return 'staging'
+  return 'development'
+}
+
 /**
  * Initialize PostHog once at app bootstrap. No-op (and never touches the
  * network) when VITE_POSTHOG_KEY is unset. Safe to call more than once —
@@ -81,6 +105,10 @@ export async function initAnalytics(): Promise<void> {
   const key = readKey()
   // No key → analytics stays completely dark. Do not import posthog-js.
   if (!key) return
+  // Development (and localhost / preview / unknown hosts) is never tracked —
+  // only staging and production emit events. Import nothing, touch no network.
+  const environment = readEnvironment()
+  if (environment === 'development') return
   initStarted = true
 
   const { default: posthog } = await import('posthog-js')
@@ -100,6 +128,10 @@ export async function initAnalytics(): Promise<void> {
     // (post-login) users do. This is the cookieless funnel contract.
     person_profiles: 'identified_only',
   })
+  // Tag every event with the deployment so staging and production stay
+  // cleanly separable inside the one shared project (filter/breakdown on
+  // `environment`). register() persists it as a super-property on all events.
+  posthog.register({ environment })
   client = posthog
 }
 
