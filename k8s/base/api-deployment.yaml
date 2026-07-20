@@ -22,8 +22,6 @@ spec:
         app: api
         component: backend
     spec:
-      imagePullSecrets:
-      - name: ghcr-secret
       # Pod-level security context. Forces every container in this
       # pod to run as a non-root user regardless of what the image
       # says, drops every Linux capability, and applies the default
@@ -41,7 +39,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: api
-        image: ghcr.io/frane/almyty/api:latest
+        image: almyty/api:latest
         imagePullPolicy: Always
         # Container-level hardening — tighter than the pod-level
         # defaults above. readOnlyRootFilesystem means the container
