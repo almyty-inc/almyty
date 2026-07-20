@@ -29,6 +29,9 @@ services:
 
   # Backend API
   backend:
+    # Self-hosters can pull the published image (docker compose pull);
+    # local dev builds from source via the build context below.
+    image: almyty/api:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -61,6 +64,9 @@ services:
 
   # Frontend
   frontend:
+    # Self-hosters can pull the published image (docker compose pull);
+    # local dev builds from source via the build context below.
+    image: almyty/frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
