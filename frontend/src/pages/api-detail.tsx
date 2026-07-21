@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { QueryError } from '@/components/ui/query-error'
 import { SchemaImportDialog } from '@/components/SchemaImportDialog'
 
 import { CredentialsTab } from '@/components/apis/detail/credentials-tab'
@@ -39,7 +40,7 @@ export function ApiDetailPage() {
   const [schemaDialogOpen, setSchemaDialogOpen] = React.useState(false)
   const [authDialogOpen, setAuthDialogOpen] = React.useState(false)
 
-  const { data: apiData, isLoading } = useQuery({
+  const { data: apiData, isLoading, isError, error: apiError, refetch: refetchApi } = useQuery({
     queryKey: ['api', id],
     queryFn: () => apisApi.getById(id!),
     enabled: !!id,
@@ -122,6 +123,18 @@ export function ApiDetailPage() {
     return (
       <div className="flex items-center justify-center h-96">
         <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <QueryError
+          error={apiError}
+          onRetry={() => refetchApi()}
+          title="Couldn't load API"
+        />
       </div>
     )
   }

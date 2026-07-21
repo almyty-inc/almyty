@@ -24,6 +24,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { QueryError } from '@/components/ui/query-error'
 
 import { llmProvidersApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
@@ -57,7 +58,7 @@ export function LlmProviderDetailPage() {
   const [isSending, setIsSending] = useState(false)
   const chatEndRef = React.useRef<HTMLDivElement>(null)
 
-  const { data: provider, isLoading } = useQuery({
+  const { data: provider, isLoading, isError, error: providerError, refetch: refetchProvider } = useQuery({
     queryKey: ['llm-provider', id],
     queryFn: () => llmProvidersApi.getById(id!),
     enabled: !!id,
@@ -160,6 +161,18 @@ export function LlmProviderDetailPage() {
     return (
       <div className="flex items-center justify-center h-96">
         <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <QueryError
+          error={providerError}
+          onRetry={() => refetchProvider()}
+          title="Couldn't load provider"
+        />
       </div>
     )
   }

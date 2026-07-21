@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/store/auth'
 import { useNotifications } from '@/store/app'
+import { authApi } from '@/lib/api'
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),
@@ -25,6 +26,12 @@ export function LoginPage() {
   const { success, error } = useNotifications()
   const [showPassword, setShowPassword] = React.useState(false)
   const [loginError, setLoginError] = React.useState<string | null>(null)
+  // When login is refused with EMAIL_NOT_VERIFIED, we swap the form for a
+  // "verify your email" prompt with a resend action. Holds the address the
+  // login attempt used so we can resend without re-asking.
+  const [unverifiedEmail, setUnverifiedEmail] = React.useState<string | null>(null)
+  const [resending, setResending] = React.useState(false)
+  const [resent, setResent] = React.useState(false)
 
   const {
     register,
@@ -55,6 +62,7 @@ export function LoginPage() {
 
   const onSubmit = async (data: LoginFormData) => {
     setLoginError(null)
+    setResent(false)
     try {
       await login(data.email, data.password)
       success('Login successful', 'Welcome back!')
@@ -64,10 +72,81 @@ export function LoginPage() {
         navigate(returnTo ?? '/dashboard')
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 'Invalid credentials. Please check your email and password.'
+      // The backend refuses unverified accounts with a distinct
+      // EMAIL_NOT_VERIFIED code (403). Surface the verify-your-email prompt
+      // instead of a dead "invalid credentials" end.
+      const envelope = err.response?.data
+      const code = envelope?.error?.code ?? envelope?.code
+      if (code === 'EMAIL_NOT_VERIFIED') {
+        setUnverifiedEmail(envelope?.error?.email ?? data.email)
+        return
+      }
+      const errorMessage = envelope?.error?.message || envelope?.message || 'Invalid credentials. Please check your email and password.'
       setLoginError(errorMessage)
       error('Login failed', errorMessage)
     }
+  }
+
+  const handleResendVerification = async () => {
+    if (!unverifiedEmail) return
+    setResending(true)
+    try {
+      await authApi.resendVerificationByEmail(unverifiedEmail)
+      // Neutral confirmation — the endpoint is enumeration-safe, so we don't
+      // assert anything about whether the account exists.
+      setResent(true)
+    } catch {
+      // Even on transport error, keep the neutral message; nothing here is
+      // account-state-revealing.
+      setResent(true)
+    } finally {
+      setResending(false)
+    }
+  }
+
+  if (unverifiedEmail) {
+    return (
+      <div>
+        <h1 className="text-2xl font-heading font-bold mb-2">Please verify your email</h1>
+        <p className="text-sm text-muted-foreground mb-6">
+          Your account isn&apos;t verified yet. We sent a verification link to{' '}
+          <span className="font-medium text-foreground">{unverifiedEmail}</span>. Click the
+          link in that email to activate your account, then sign in.
+        </p>
+
+        {resent ? (
+          <div className="mb-4 p-3 bg-muted border border-border rounded-md">
+            <p className="text-sm text-muted-foreground">
+              If an account exists for that address, we&apos;ve re-sent the verification link.
+              Check your inbox (and spam folder).
+            </p>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            className="w-full"
+            onClick={handleResendVerification}
+            disabled={resending}
+            aria-disabled={resending}
+          >
+            {resending ? 'Sending…' : 'Resend verification email'}
+          </Button>
+        )}
+
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            className="text-sm font-medium text-primary hover:text-primary/80"
+            onClick={() => {
+              setUnverifiedEmail(null)
+              setResent(false)
+            }}
+          >
+            Back to sign in
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
