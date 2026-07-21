@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 
 import { AuthService, JwtPayload, AuthTokens } from './auth.service';
@@ -545,6 +545,8 @@ describe('AuthService', () => {
         id: 'user-123',
         email: loginDto.email,
         isActive: true,
+        isVerified: true,
+        verifiedAt: new Date(),
         passwordHash,
         organizationMemberships: [],
       } as User;
@@ -604,6 +606,8 @@ describe('AuthService', () => {
         id: 'user-123',
         email: 'test@example.com',
         isActive: true,
+        isVerified: true,
+        verifiedAt: new Date(),
         passwordHash,
         organizationMemberships: [],
       } as User;
@@ -1275,8 +1279,40 @@ describe('AuthService email verification', () => {
     });
   });
 
-  describe('non-blocking login', () => {
-    it('validateUser succeeds for an unverified user (verification never blocks login)', async () => {
+  describe('email-verification enforcement on login', () => {
+    it('rejects an unverified user with EMAIL_NOT_VERIFIED and issues no token', async () => {
+      const { svc, userRepo, jwt } = makeDirect();
+      const passwordHash = await bcrypt.hash('Password123!', 4);
+      userRepo.findOne.mockResolvedValue({
+        id: 'u1',
+        email: 'a@example.com',
+        passwordHash,
+        isActive: true,
+        isVerified: false,
+        verifiedAt: null,
+        organizationMemberships: [],
+      });
+
+      // Correct password but unverified -> specific ForbiddenException.
+      let thrown: any;
+      try {
+        await svc.validateUser('a@example.com', 'Password123!');
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(ForbiddenException);
+      const resp: any = thrown.getResponse();
+      expect(resp.code).toBe('EMAIL_NOT_VERIFIED');
+      expect(resp.email).toBe('a@example.com');
+      // login() goes through validateUser, so it must reject the same way
+      // and never mint a token.
+      await expect(
+        svc.login({ email: 'a@example.com', password: 'Password123!' } as any),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('does not reveal verification state when the password is wrong', async () => {
       const { svc, userRepo } = makeDirect();
       const passwordHash = await bcrypt.hash('Password123!', 4);
       userRepo.findOne.mockResolvedValue({
@@ -1289,9 +1325,94 @@ describe('AuthService email verification', () => {
         organizationMemberships: [],
       });
 
-      const user = await svc.validateUser('a@example.com', 'Password123!');
+      // Wrong password short-circuits to null before the verification gate,
+      // so an attacker cannot use the specific error as an oracle.
+      const user = await svc.validateUser('a@example.com', 'WrongPassword!');
+      expect(user).toBeNull();
+    });
+
+    it('lets a verified user log in normally (founder / existing base unaffected)', async () => {
+      const { svc, userRepo, jwt } = makeDirect();
+      const passwordHash = await bcrypt.hash('Password123!', 4);
+      const verified = {
+        id: 'founder',
+        email: 'founder@almyty.com',
+        firstName: 'Fran',
+        lastName: 'B',
+        passwordHash,
+        isActive: true,
+        isVerified: true,
+        verifiedAt: new Date('2024-01-01'),
+        tokenVersion: 0,
+        organizationMemberships: [],
+      };
+      userRepo.findOne.mockResolvedValue(verified);
+
+      const user = await svc.validateUser('founder@almyty.com', 'Password123!');
       expect(user).not.toBeNull();
-      expect(user!.verifiedAt).toBeNull();
+      expect(user!.id).toBe('founder');
+
+      const tokens = await svc.login({ email: 'founder@almyty.com', password: 'Password123!' } as any);
+      expect(tokens.accessToken).toBeTruthy();
+      expect(jwt.sign).toHaveBeenCalled();
+    });
+
+    it('lets a legacy verified user (verifiedAt set, isVerified false) log in', async () => {
+      const { svc, userRepo } = makeDirect();
+      const passwordHash = await bcrypt.hash('Password123!', 4);
+      userRepo.findOne.mockResolvedValue({
+        id: 'legacy',
+        email: 'legacy@almyty.com',
+        passwordHash,
+        isActive: true,
+        isVerified: false,
+        verifiedAt: new Date('2023-06-01'),
+        organizationMemberships: [],
+      });
+
+      const user = await svc.validateUser('legacy@almyty.com', 'Password123!');
+      expect(user).not.toBeNull();
+    });
+  });
+
+  describe('requestEmailVerificationByEmail (unauthenticated resend)', () => {
+    it('sends a fresh link for an unverified account', async () => {
+      const { svc, userRepo, jwt, mail } = makeDirect();
+      userRepo.findOne.mockResolvedValue({
+        id: 'u1',
+        email: 'a@example.com',
+        firstName: 'Ada',
+        isVerified: false,
+        verifiedAt: null,
+      });
+      jwt.sign.mockReturnValue('verify-token');
+
+      await svc.requestEmailVerificationByEmail('a@example.com');
+
+      expect(mail.sendEmailVerification).toHaveBeenCalledWith('a@example.com', 'verify-token', 'Ada');
+    });
+
+    it('no-ops (no mail) for an already-verified account', async () => {
+      const { svc, userRepo, mail } = makeDirect();
+      userRepo.findOne.mockResolvedValue({
+        id: 'u1',
+        email: 'a@example.com',
+        isVerified: true,
+        verifiedAt: new Date(),
+      });
+
+      await svc.requestEmailVerificationByEmail('a@example.com');
+
+      expect(mail.sendEmailVerification).not.toHaveBeenCalled();
+    });
+
+    it('no-ops (no mail) for an unknown address — no enumeration oracle', async () => {
+      const { svc, userRepo, mail } = makeDirect();
+      userRepo.findOne.mockResolvedValue(null);
+
+      await svc.requestEmailVerificationByEmail('nobody@example.com');
+
+      expect(mail.sendEmailVerification).not.toHaveBeenCalled();
     });
   });
 
