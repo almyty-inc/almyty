@@ -68,6 +68,17 @@ export class AnalyticsService {
     // logging interceptor stores in metadata — org-wide protocol routes
     // (e.g. POST /mcp) have no single gateway, and an inner join silently
     // dropped every such request from the tiles.
+    // RequestLog only ever holds genuine gateway/protocol/tool-execution
+    // traffic: the request-logging interceptor early-returns for anything
+    // that is neither a resolved-gateway request (ProtocolContext) nor a
+    // protocol/tool-execute path, so internal management XHR (GET /apis,
+    // GET /gateways/..., dashboard/settings calls) is never written here.
+    //
+    // The old `metadata->>'protocol' IS NOT NULL` guard was therefore both
+    // redundant AND lossy: tool-execution logs (`.../tools/:id/execute`) are
+    // logged with no protocol, so the guard silently zeroed real traffic that
+    // the Request Log surface (getRequestLogs, which has no such guard) still
+    // showed. Scope on org only — the same reliable gate getRequestLogs uses.
     const [
       totalRequests24h,
       totalRequests7d,
@@ -78,13 +89,11 @@ export class AnalyticsService {
       llmSessions24h,
       llmCost7d,
     ] = await Promise.all([
-      // Only count protocol requests (MCP, UTCP, A2A, Skills), not internal management API calls
       this.requestLogRepository
         .createQueryBuilder('log')
         .leftJoin('log.gateway', 'gw')
         .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
-        .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getCount()
         .catch(() => 0),
       this.requestLogRepository
@@ -92,7 +101,6 @@ export class AnalyticsService {
         .leftJoin('log.gateway', 'gw')
         .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
         .andWhere('log.timestamp >= :since', { since: last7d })
-        .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getCount()
         .catch(() => 0),
       this.toolExecutionRepository.count({
@@ -107,7 +115,6 @@ export class AnalyticsService {
         .select('AVG(log.responseTime)', 'avg')
         .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
-        .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getRawOne()
         .then(r => Math.round(r?.avg || 0))
         .catch(() => 0),
@@ -117,7 +124,6 @@ export class AnalyticsService {
         .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
         .andWhere('log.statusCode >= 500')
-        .andWhere("log.metadata->>'protocol' IS NOT NULL")
         .getCount()
         .catch(() => 0),
       this.conversationRepository.count({
@@ -332,7 +338,6 @@ export class AnalyticsService {
       .addSelect('AVG(log.responseTime)', 'avgResponseTime')
       .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
       .andWhere('log.timestamp >= :since', { since })
-      .andWhere("log.metadata->>'protocol' IS NOT NULL")
       .groupBy('bucket')
       .orderBy('bucket', 'ASC')
       .getRawMany();
