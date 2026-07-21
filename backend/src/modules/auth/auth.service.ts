@@ -20,6 +20,8 @@ import { ReferralsService } from '../referrals/referrals.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { CaptchaService } from './captcha.service';
+import { normalizeEmail, isDisposableEmail } from './email-normalization';
 
 export interface JwtPayload {
   sub: string;
@@ -58,6 +60,11 @@ export class AuthService {
     private readonly auditLogService: AuditLogService,
     private readonly mailService: MailService,
     private readonly referralsService: ReferralsService,
+    // CAPTCHA verification (ships dark; no-op unless a secret is configured).
+    // @Optional() so unit tests and community builds that don't provide it
+    // fall back to "no CAPTCHA enforced".
+    @Optional()
+    private readonly captchaService?: CaptchaService,
     // Notification pipeline (@Global module) — @Optional() so unit tests
     // and community builds without it keep working (welcome notification
     // is simply skipped).
@@ -69,9 +76,40 @@ export class AuthService {
     createUserDto: CreateUserDto,
     context?: { referralCode?: string; ipAddress?: string },
   ): Promise<AuthTokens> {
-    // Check if user already exists
+    // ── Signup abuse protection (runs before any DB write) ───────────────
+
+    // 1. CAPTCHA gate. No-op when unconfigured (ships dark); when a secret is
+    //    set, a missing/invalid token is rejected. Fails closed on verifier
+    //    errors — see CaptchaService.
+    if (this.captchaService && this.captchaService.isEnabled()) {
+      const ok = await this.captchaService.verify(
+        createUserDto.captchaToken,
+        context?.ipAddress,
+      );
+      if (!ok) {
+        throw new BadRequestException('CAPTCHA verification failed');
+      }
+    }
+
+    // 2. Reject known disposable / throwaway mailbox domains outright.
+    if (isDisposableEmail(createUserDto.email)) {
+      throw new BadRequestException(
+        'Disposable email addresses are not allowed. Please use a permanent email address.',
+      );
+    }
+
+    // 3. Canonicalize the address (gmail dots + `+tag` stripped, domain
+    //    aliases folded) and dedupe on it so a bot can't farm many accounts
+    //    from one real inbox. The stored `email` remains the raw user input
+    //    (that's what we deliver mail to); `normalizedEmail` is the identity
+    //    key we enforce uniqueness on.
+    const normalizedEmail = normalizeEmail(createUserDto.email);
+
+    // Check if user already exists — on BOTH the raw address and its
+    // normalized form. The unique DB index on normalizedEmail is the hard
+    // guarantee; this is the friendly-error fast path.
     const existingUser = await this.userRepository.findOne({
-      where: { email: createUserDto.email },
+      where: [{ email: createUserDto.email }, { normalizedEmail }],
     });
 
     if (existingUser) {
@@ -106,10 +144,14 @@ export class AuthService {
     //
     // A transaction makes the three writes atomic: either all three
     // commit, or the DB rolls them all back.
-    const { savedUser, savedOrganizationId } = await this.userRepository.manager.transaction(async (tx) => {
+    let savedUser: User;
+    let savedOrganizationId: string;
+    try {
+      ({ savedUser, savedOrganizationId } = await this.userRepository.manager.transaction(async (tx) => {
       // Create user inside the transaction
       const user = tx.create(User, {
         email: createUserDto.email,
+        normalizedEmail,
         passwordHash,
         firstName: createUserDto.firstName,
         lastName: createUserDto.lastName,
@@ -160,7 +202,17 @@ export class AuthService {
       }));
 
       return { savedUser: saved, savedOrganizationId: savedOrganization.id };
-    });
+      }));
+    } catch (err: any) {
+      // Race: two alias signups (e.g. foo@ and f.o.o@) can pass the
+      // pre-check simultaneously and collide on the unique index. Postgres
+      // reports 23505; surface it as the same friendly duplicate error
+      // rather than a raw 500.
+      if (err?.code === '23505') {
+        throw new BadRequestException('User with this email already exists');
+      }
+      throw err;
+    }
 
     // Referral attribution (outside the transaction, additive): a failure
     // here must never fail or roll back a successful registration.
@@ -181,6 +233,17 @@ export class AuthService {
     // Post-registration notifications (fire-and-forget, outside the
     // transaction): the verification link email and the welcome
     // notification must never fail a successful registration.
+    //
+    // VERIFICATION GATE (current behavior, deliberately left non-blocking):
+    // a fresh account is unverified (verifiedAt = null) and login + the app
+    // work fully while unverified — validateUser() only checks isActive. The
+    // only feature gated on verification today is referral-reward payout
+    // (referrals.service checks verifiedAt/isVerified). Making login itself
+    // hard-require verification would lock out the entire existing unverified
+    // user base and contradicts the documented non-blocking design, so the
+    // gate here stays at "send the verification email + show the in-app
+    // banner". The robust abuse defenses are the per-IP rate limit, disposable
+    // rejection, gmail-alias dedupe, and (when enabled) CAPTCHA above.
     this.requestEmailVerification(savedUser.id).catch(() => {});
     if (this.notifications) {
       const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
