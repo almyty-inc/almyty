@@ -4,8 +4,11 @@
  *   <PlanBadge />            — the org's current tier, links to Settings -> Billing
  *   <UpgradePrompt feature/> — a "this is a <tier> feature" lock state with a CTA
  *
- * Both read the org's entitlements via `useEntitlement` so they stay in sync
- * with the license the backend actually granted.
+ * The badge reads the org's *billing plan* (via `useBillingPlan`) because that
+ * is the authoritative source for the tier LABEL: Free and Pro grant identical
+ * (empty) EE-entitlement sets, so entitlements alone cannot tell a paying Pro
+ * org apart from a Free one. Entitlements still drive per-feature gating, which
+ * is what <UpgradePrompt/> and the feature matrix use.
  */
 import { Link } from 'react-router-dom'
 import { Lock, Sparkles } from 'lucide-react'
@@ -14,7 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { useEntitlement } from '@/hooks/use-entitlement'
+import { useBillingPlan } from '@/hooks/use-billing-plan'
 import {
   PLANS,
   PLAN_ENTITLEMENTS,
@@ -27,10 +30,12 @@ import {
 const BILLING_PATH = '/settings/billing'
 
 /**
- * Derive the org's plan tier from its entitlement snapshot. The billing status
- * endpoint carries the canonical plan string, but entitlements are what the app
- * gates on, so we infer the highest tier whose entitlement set the license
- * fully covers. Falls back to Free when nothing EE is granted.
+ * Derive the highest tier whose EE entitlement set a license fully covers.
+ *
+ * NOTE: this is NOT a reliable source for the plan LABEL — Free and Pro both
+ * grant no EE entitlements, so this returns 'free' for a Pro org. The badge
+ * therefore reads the billing plan instead (see <PlanBadge/>). This helper is
+ * retained only for reasoning about which EE feature tier a license unlocks.
  */
 export function planFromEntitlements(entitlements: string[]): PlanKey {
   // Walk highest -> lowest so byo_kms/chargeback map to enterprise before business.
@@ -62,13 +67,16 @@ interface PlanBadgeProps {
 
 /** Small, persistent indicator of the org's current plan tier. */
 export function PlanBadge({ plan, asLink = true, className }: PlanBadgeProps) {
-  const { entitlements, isLoading } = useEntitlement()
+  // An explicit `plan` prop is authoritative; skip the billing fetch then.
+  const { plan: billingPlan, isLoading } = useBillingPlan({ enabled: plan === undefined })
 
-  if (isLoading && plan === undefined) {
+  // Until the billing status resolves, render a skeleton rather than flashing a
+  // wrong "Free". An explicit `plan` prop bypasses the fetch entirely.
+  if (plan === undefined && (isLoading || billingPlan === undefined)) {
     return <span className={cn('inline-block h-5 w-14 rounded bg-muted animate-pulse', className)} />
   }
 
-  const key: PlanKey = plan !== undefined ? toPlanKey(plan) : planFromEntitlements(entitlements)
+  const key: PlanKey = plan !== undefined ? toPlanKey(plan) : billingPlan!
   const meta = PLANS[key]
 
   const badge = (
