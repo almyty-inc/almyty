@@ -179,6 +179,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     )
   }
 
+  // Resolve the section title shown in the desktop utility bar from
+  // the nav table (single source of truth). Longest matching href
+  // wins so nested routes (e.g. /agents/:id) still resolve to their
+  // parent section; unknown authed paths fall back to a neutral
+  // label rather than showing nothing.
+  const currentSection =
+    navigation
+      .filter((item) => item.href && location.pathname.startsWith(item.href))
+      .sort((a, b) => b.href.length - a.href.length)[0]?.name ?? 'almyty'
+
   const handleLogout = () => {
     logout()
     navigate('/auth/login')
@@ -434,11 +444,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </header>
 
-        {/* Desktop utility bar — persistent home for the notification
-         * bell. There is no desktop header (command palette + user
+        {/* Desktop utility bar — a compact bar that gives the current
+         * section a title (left) and hosts the notification bell
+         * (right). There is no desktop header (command palette + user
          * menu live in the sidebar), and floating the bell over the
-         * page content would collide with per-page action buttons. */}
-        <div className="hidden lg:flex items-center justify-end h-11 px-4 sm:px-6 lg:px-8 border-b bg-background">
+         * page content would collide with per-page action buttons.
+         * Keeping this thin (h-10) avoids the tall empty band that
+         * previously wasted vertical space above every page. */}
+        <div className="hidden lg:flex items-center justify-between h-10 px-4 sm:px-6 lg:px-8 border-b bg-background">
+          <h1 className="text-sm font-heading font-medium text-foreground">{currentSection}</h1>
           <NotificationBell />
         </div>
 
