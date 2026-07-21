@@ -266,6 +266,24 @@ spec:
               name: almyty-secrets
               key: PLATFORM_METRICS_TOKEN
               optional: true
+        # Sentry error tracking. Optional: with SENTRY_DSN unset the
+        # backend never initializes Sentry (no client, no network) and
+        # the exception filter's 5xx capture is a no-op — so the deploy
+        # boots identically whether or not error tracking is configured.
+        # SENTRY_ENVIRONMENT tags events (staging vs production) in one
+        # shared project; falls back to NODE_ENV when unset.
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: SENTRY_DSN
+              optional: true
+        - name: SENTRY_ENVIRONMENT
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: SENTRY_ENVIRONMENT
+              optional: true
         # CORS allowlist env var — the new CORS config in main.ts
         # replaces the old `origin: true` wildcard with a concrete
         # allowlist derived from these fields. CORS_ALLOWED_ORIGINS
