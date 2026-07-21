@@ -63,7 +63,7 @@ jobs:
         if: inputs.package != 'all' && inputs.package != matrix.id
         run: echo "Skipping ${{ matrix.npm_name }}" && exit 0
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: inputs.package == 'all' || inputs.package == matrix.id
 
       - uses: actions/setup-node@v6

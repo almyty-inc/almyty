@@ -42,7 +42,7 @@ jobs:
             file: ./Dockerfile.allinone
             target: ''
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Resolve version
         id: ver
