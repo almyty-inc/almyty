@@ -20,6 +20,18 @@ export class User {
   @Column({ unique: true })
   email: string;
 
+  /**
+   * Canonical form of `email` used to dedupe abuse aliases at registration:
+   * gmail dots stripped, `+tag` sub-addressing removed, domain aliases
+   * folded (googlemail.com -> gmail.com). Two addresses that reach the same
+   * real inbox collapse to one value here, so a bot can't farm many accounts
+   * from a single mailbox. See email-normalization.ts. Unique-indexed.
+   * Nullable only so the backfill migration can populate legacy rows.
+   */
+  @Column({ nullable: true })
+  @Index({ unique: true })
+  normalizedEmail: string | null;
+
   @Column()
   @Exclude()
   passwordHash: string;
