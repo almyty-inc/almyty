@@ -37,14 +37,23 @@ jobs:
             context: ./docs-site
             file: ./docs-site/Dockerfile
             target: ''
+          - image: almyty
+            context: .
+            file: ./Dockerfile.allinone
+            target: ''
     steps:
       - uses: actions/checkout@v6
 
       - name: Resolve version
         id: ver
         run: |
+          # Semver from the tag: v1.2.3 -> 1.2.3, 1.2, 1 (+ latest).
           VERSION="${GITHUB_REF_NAME#v}"
+          MAJOR="${VERSION%%.*}"
+          MINOR="${VERSION#*.}"; MINOR="${MINOR%%.*}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "major=${MAJOR}" >> "$GITHUB_OUTPUT"
+          echo "minor=${MAJOR}.${MINOR}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -69,6 +78,8 @@ jobs:
           sbom: true
           tags: |
             almyty/${{ matrix.image }}:${{ steps.ver.outputs.version }}
+            almyty/${{ matrix.image }}:${{ steps.ver.outputs.minor }}
+            almyty/${{ matrix.image }}:${{ steps.ver.outputs.major }}
             almyty/${{ matrix.image }}:latest
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
