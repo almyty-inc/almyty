@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, Optional } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -20,6 +20,8 @@ import { ReferralsService } from '../referrals/referrals.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { CaptchaService } from './captcha.service';
+import { normalizeEmail, isDisposableEmail } from './email-normalization';
 
 export interface JwtPayload {
   sub: string;
@@ -58,6 +60,11 @@ export class AuthService {
     private readonly auditLogService: AuditLogService,
     private readonly mailService: MailService,
     private readonly referralsService: ReferralsService,
+    // CAPTCHA verification (ships dark; no-op unless a secret is configured).
+    // @Optional() so unit tests and community builds that don't provide it
+    // fall back to "no CAPTCHA enforced".
+    @Optional()
+    private readonly captchaService?: CaptchaService,
     // Notification pipeline (@Global module) — @Optional() so unit tests
     // and community builds without it keep working (welcome notification
     // is simply skipped).
@@ -69,9 +76,40 @@ export class AuthService {
     createUserDto: CreateUserDto,
     context?: { referralCode?: string; ipAddress?: string },
   ): Promise<AuthTokens> {
-    // Check if user already exists
+    // ── Signup abuse protection (runs before any DB write) ───────────────
+
+    // 1. CAPTCHA gate. No-op when unconfigured (ships dark); when a secret is
+    //    set, a missing/invalid token is rejected. Fails closed on verifier
+    //    errors — see CaptchaService.
+    if (this.captchaService && this.captchaService.isEnabled()) {
+      const ok = await this.captchaService.verify(
+        createUserDto.captchaToken,
+        context?.ipAddress,
+      );
+      if (!ok) {
+        throw new BadRequestException('CAPTCHA verification failed');
+      }
+    }
+
+    // 2. Reject known disposable / throwaway mailbox domains outright.
+    if (isDisposableEmail(createUserDto.email)) {
+      throw new BadRequestException(
+        'Disposable email addresses are not allowed. Please use a permanent email address.',
+      );
+    }
+
+    // 3. Canonicalize the address (gmail dots + `+tag` stripped, domain
+    //    aliases folded) and dedupe on it so a bot can't farm many accounts
+    //    from one real inbox. The stored `email` remains the raw user input
+    //    (that's what we deliver mail to); `normalizedEmail` is the identity
+    //    key we enforce uniqueness on.
+    const normalizedEmail = normalizeEmail(createUserDto.email);
+
+    // Check if user already exists — on BOTH the raw address and its
+    // normalized form. The unique DB index on normalizedEmail is the hard
+    // guarantee; this is the friendly-error fast path.
     const existingUser = await this.userRepository.findOne({
-      where: { email: createUserDto.email },
+      where: [{ email: createUserDto.email }, { normalizedEmail }],
     });
 
     if (existingUser) {
@@ -106,10 +144,14 @@ export class AuthService {
     //
     // A transaction makes the three writes atomic: either all three
     // commit, or the DB rolls them all back.
-    const { savedUser, savedOrganizationId } = await this.userRepository.manager.transaction(async (tx) => {
+    let savedUser: User;
+    let savedOrganizationId: string;
+    try {
+      ({ savedUser, savedOrganizationId } = await this.userRepository.manager.transaction(async (tx) => {
       // Create user inside the transaction
       const user = tx.create(User, {
         email: createUserDto.email,
+        normalizedEmail,
         passwordHash,
         firstName: createUserDto.firstName,
         lastName: createUserDto.lastName,
@@ -160,7 +202,17 @@ export class AuthService {
       }));
 
       return { savedUser: saved, savedOrganizationId: savedOrganization.id };
-    });
+      }));
+    } catch (err: any) {
+      // Race: two alias signups (e.g. foo@ and f.o.o@) can pass the
+      // pre-check simultaneously and collide on the unique index. Postgres
+      // reports 23505; surface it as the same friendly duplicate error
+      // rather than a raw 500.
+      if (err?.code === '23505') {
+        throw new BadRequestException('User with this email already exists');
+      }
+      throw err;
+    }
 
     // Referral attribution (outside the transaction, additive): a failure
     // here must never fail or roll back a successful registration.
@@ -181,6 +233,17 @@ export class AuthService {
     // Post-registration notifications (fire-and-forget, outside the
     // transaction): the verification link email and the welcome
     // notification must never fail a successful registration.
+    //
+    // VERIFICATION GATE (current behavior, deliberately left non-blocking):
+    // a fresh account is unverified (verifiedAt = null) and login + the app
+    // work fully while unverified — validateUser() only checks isActive. The
+    // only feature gated on verification today is referral-reward payout
+    // (referrals.service checks verifiedAt/isVerified). Making login itself
+    // hard-require verification would lock out the entire existing unverified
+    // user base and contradicts the documented non-blocking design, so the
+    // gate here stays at "send the verification email + show the in-app
+    // banner". The robust abuse defenses are the per-IP rate limit, disposable
+    // rejection, gmail-alias dedupe, and (when enabled) CAPTCHA above.
     this.requestEmailVerification(savedUser.id).catch(() => {});
     if (this.notifications) {
       const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
@@ -239,6 +302,25 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
       return null;
+    }
+
+    // Email-verification gate. The password is proven correct at this point,
+    // so surfacing a specific "not verified" error leaks nothing an
+    // unauthenticated attacker couldn't already infer (they hold the
+    // password). Unverified accounts are refused tokens; a distinct
+    // ForbiddenException with a machine-readable code lets the frontend
+    // offer a "resend verification" path instead of a dead "invalid
+    // credentials" end. Verified users (verifiedAt set OR isVerified true)
+    // are unaffected — this never locks out the existing verified base.
+    if (!user.verifiedAt && !user.isVerified) {
+      throw new ForbiddenException({
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Please verify your email address before signing in.',
+        // The address is echoed back so the login page can pre-fill the
+        // resend-verification call without asking for it again. It is not
+        // sensitive here — the caller already supplied it.
+        email: user.email,
+      });
     }
 
     return user;
@@ -550,6 +632,28 @@ export class AuthService {
     const token = this.mintEmailVerificationToken(user);
     await this.mailService.sendEmailVerification(user.email, token, user.firstName);
     return { alreadyVerified: false };
+  }
+
+  /**
+   * (Re-)send the verification link addressed by email, for the
+   * unauthenticated login-blocked case: a user who tried to log in and was
+   * refused with EMAIL_NOT_VERIFIED has no token to authenticate the JWT
+   * resend route, so this variant keys off the email instead.
+   *
+   * Deliberately non-enumerating: it always resolves without revealing
+   * whether the address exists or is already verified. The caller (login
+   * page) shows the same neutral "if an account exists, we've re-sent the
+   * link" confirmation regardless.
+   */
+  async requestEmailVerificationByEmail(email: string): Promise<void> {
+    if (!email) return;
+    const user = await this.userRepository.findOne({ where: { email } });
+    // Silently no-op for unknown or already-verified accounts — no oracle.
+    if (!user || user.verifiedAt || user.isVerified) {
+      return;
+    }
+    const token = this.mintEmailVerificationToken(user);
+    await this.mailService.sendEmailVerification(user.email, token, user.firstName);
   }
 
   /** Purpose-scoped signed verification token (7 day expiry). */

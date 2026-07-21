@@ -18,6 +18,12 @@ ENV VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY
 # absolute URL (e.g. https://app.almyty.com/ingest) to align origins.
 ARG VITE_POSTHOG_HOST=/ingest
 ENV VITE_POSTHOG_HOST=$VITE_POSTHOG_HOST
+# Sentry error tracking (baked at build time). Empty by default →
+# Sentry never initializes (no-op). Set the DSN to light it up.
+ARG VITE_SENTRY_DSN=
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
+ARG VITE_TURNSTILE_SITE_KEY=
+ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
 
 RUN npx vite build
 
