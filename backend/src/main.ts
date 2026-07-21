@@ -6,6 +6,7 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { createSpaRootMiddleware } from './common/frontend/frontend-static';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 // No global response interceptor — each controller is responsible for consistent {success, data} format
@@ -67,6 +68,14 @@ async function bootstrap() {
     }),
   );
   app.use(cookieParser());
+
+  // Single-image (almyty/almyty) SPA root fallback. Serves index.html for a
+  // bare `GET /` HTML navigation, which the unified gateway's `@All('/')`
+  // controller would otherwise shadow. No-op (null) for the api-only image.
+  const spaRootMiddleware = createSpaRootMiddleware();
+  if (spaRootMiddleware) {
+    app.use(spaRootMiddleware);
+  }
 
   // CORS configuration — origin allowlist from env, NOT `origin: true`.
   //
