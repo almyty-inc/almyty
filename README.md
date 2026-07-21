@@ -44,6 +44,17 @@ cd frontend && npm run dev    # http://localhost:3002
 
 See the [self-hosting guide](https://docs.almyty.com/self-hosting) for production deployment with Kubernetes.
 
+### Images
+
+Two ways to self-host:
+
+- **`almyty/api` + `almyty/frontend`** — the API and the UI as separate images, for Kubernetes and scale-out deployments.
+- **`almyty/almyty`** — a single image that serves both the API and the UI on one origin, for simple self-hosting. Point it at an external postgres + redis:
+
+  ```bash
+  docker compose -f docker-compose.allinone.yml up -d   # http://localhost:3000
+  ```
+
 ## How it works
 
 ```
