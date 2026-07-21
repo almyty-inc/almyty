@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { QueryError } from '@/components/ui/query-error'
 
 import { CodeBlock } from '@/components/ui/code-block'
 import { toolsApi, workspacesApi } from '@/lib/api'
@@ -29,7 +30,7 @@ export function ToolDetailPage() {
   const [executionResult, setExecutionResult] = useState<Record<string, any> | null>(null)
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('')
 
-  const { data: toolData, isLoading } = useQuery({
+  const { data: toolData, isLoading, isError, error: toolError, refetch: refetchTool } = useQuery({
     queryKey: ['tool', id],
     queryFn: async () => {
       if (!currentOrganization?.id) throw new Error('No organization selected')
@@ -112,6 +113,18 @@ export function ToolDetailPage() {
     return (
       <div className="flex items-center justify-center h-96">
         <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <QueryError
+          error={toolError}
+          onRetry={() => refetchTool()}
+          title="Couldn't load tool"
+        />
       </div>
     )
   }
