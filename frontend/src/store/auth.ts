@@ -21,7 +21,7 @@ interface AuthState {
   isLoading: boolean
   hasHydrated: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string, firstName: string, lastName: string, organizationName: string) => Promise<void>
+  register: (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string) => Promise<void>
   logout: () => void
   updateProfile: (data: Partial<User>) => Promise<void>
   checkAuth: () => Promise<void>
@@ -85,14 +85,14 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (email: string, password: string, firstName: string, lastName: string, organizationName: string) => {
+      register: async (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string) => {
         set({ isLoading: true })
         // Same reasoning as login(): wipe any prior session's
         // currentOrganization so the next /auth/profile call carries the
         // new user's identity, not the stale id.
         localStorage.removeItem('almyty-org-store')
         try {
-          const response = await authApi.register({ email, password, firstName, lastName, organizationName })
+          const response = await authApi.register({ email, password, firstName, lastName, organizationName, captchaToken })
           const { accessToken } = response
 
           // httpOnly cookie is set by the backend; no localStorage copy

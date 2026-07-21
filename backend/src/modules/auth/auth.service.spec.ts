@@ -15,6 +15,7 @@ import { LoginDto } from './dto/login.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { MailService } from '../mail/mail.service';
 import { ReferralsService } from '../referrals/referrals.service';
+import { CaptchaService } from './captcha.service';
 
 // Unmock bcrypt from global setup to test actual hashing
 jest.unmock('bcryptjs');
@@ -28,6 +29,7 @@ describe('AuthService', () => {
   let userOrganizationRepository: jest.Mocked<Repository<UserOrganization>>;
   let jwtService: jest.Mocked<JwtService>;
   let referralsService: any;
+  let captchaService: any;
 
   beforeEach(async () => {
     // register() now wraps user + org + membership in a DB transaction,
@@ -132,6 +134,15 @@ describe('AuthService', () => {
           provide: ReferralsService,
           useValue: { attributeSignup: jest.fn().mockResolvedValue(null) },
         },
+        {
+          provide: CaptchaService,
+          // Disabled by default (ships dark) so existing register tests are
+          // unaffected; individual tests flip isEnabled/verify as needed.
+          useValue: {
+            isEnabled: jest.fn().mockReturnValue(false),
+            verify: jest.fn().mockResolvedValue(true),
+          },
+        },
       ],
     }).compile();
 
@@ -143,6 +154,7 @@ describe('AuthService', () => {
     jwtService = module.get(JwtService);
     mailService = module.get(MailService);
     referralsService = module.get(ReferralsService);
+    captchaService = module.get(CaptchaService);
 
     // Reset repository mocks but not bcrypt mocks
     userRepository.findOne.mockReset();
@@ -416,6 +428,106 @@ describe('AuthService', () => {
       await expect(service.register(createUserDto))
         .rejects
         .toThrow(new BadRequestException('Organization name is already taken'));
+    });
+
+    // ── Signup abuse protection ─────────────────────────────────────────
+
+    describe('email normalization + dedupe', () => {
+      it('dedupes gmail dot-injection aliases against an existing account', async () => {
+        // A user already exists under the canonical normalizedEmail; the
+        // dotted alias must be rejected as a duplicate.
+        const dotted: CreateUserDto = { ...createUserDto, email: 'f.o.o@gmail.com' };
+        userRepository.findOne.mockResolvedValue({ id: 'existing' } as User);
+
+        await expect(service.register(dotted))
+          .rejects
+          .toThrow(new BadRequestException('User with this email already exists'));
+
+        // The dedupe lookup must include the normalized form.
+        const call = userRepository.findOne.mock.calls[0][0] as any;
+        expect(call.where).toEqual(
+          expect.arrayContaining([
+            { email: 'f.o.o@gmail.com' },
+            { normalizedEmail: 'foo@gmail.com' },
+          ]),
+        );
+      });
+
+      it('stores the normalized email (dots + tag stripped) on a new account', async () => {
+        const tagged: CreateUserDto = { ...createUserDto, email: 'f.o.o+promo@gmail.com' };
+        organizationRepository.findOne.mockResolvedValue(null);
+        organizationRepository.create.mockReturnValue({ id: 'org-1' } as Organization);
+        organizationRepository.save.mockResolvedValue({ id: 'org-1' } as Organization);
+        userOrganizationRepository.create.mockReturnValue({} as UserOrganization);
+        userOrganizationRepository.save.mockResolvedValue({} as UserOrganization);
+        jwtService.sign.mockReturnValue('mock-token');
+
+        let created: any;
+        userRepository.create.mockImplementation((u) => { created = u; return u as User; });
+        userRepository.save.mockImplementation((u) => Promise.resolve({ ...u, id: 'user-1' } as User));
+        userRepository.findOne
+          .mockResolvedValueOnce(null) // dedupe check
+          .mockResolvedValueOnce(null) // verification lookup
+          .mockResolvedValueOnce({ id: 'user-1', organizationMemberships: [] } as any);
+
+        await service.register(tagged);
+
+        expect(created.email).toBe('f.o.o+promo@gmail.com'); // raw preserved
+        expect(created.normalizedEmail).toBe('foo@gmail.com'); // canonicalized
+      });
+    });
+
+    describe('disposable email rejection', () => {
+      it('rejects a known disposable domain before any DB write', async () => {
+        const disposable: CreateUserDto = { ...createUserDto, email: 'bot@mailinator.com' };
+
+        await expect(service.register(disposable))
+          .rejects
+          .toThrow(/Disposable email addresses are not allowed/);
+
+        expect(userRepository.findOne).not.toHaveBeenCalled();
+      });
+
+      it('accepts a normal domain', async () => {
+        mockSuccessfulRegistration();
+        const result = await service.register(createUserDto);
+        expect(result.accessToken).toBe('mock-token');
+      });
+    });
+
+    describe('CAPTCHA gate', () => {
+      it('is a no-op when unconfigured (register proceeds)', async () => {
+        captchaService.isEnabled.mockReturnValue(false);
+        mockSuccessfulRegistration();
+
+        const result = await service.register(createUserDto);
+
+        expect(result.accessToken).toBe('mock-token');
+        expect(captchaService.verify).not.toHaveBeenCalled();
+      });
+
+      it('rejects when enabled and the token is missing/invalid', async () => {
+        captchaService.isEnabled.mockReturnValue(true);
+        captchaService.verify.mockResolvedValue(false);
+
+        await expect(service.register({ ...createUserDto, captchaToken: 'bad' }))
+          .rejects
+          .toThrow(new BadRequestException('CAPTCHA verification failed'));
+
+        // Rejected before touching the DB.
+        expect(userRepository.findOne).not.toHaveBeenCalled();
+      });
+
+      it('proceeds when enabled and the token verifies', async () => {
+        captchaService.isEnabled.mockReturnValue(true);
+        captchaService.verify.mockResolvedValue(true);
+        mockSuccessfulRegistration();
+
+        const result = await service.register({ ...createUserDto, captchaToken: 'good' });
+
+        expect(result.accessToken).toBe('mock-token');
+        expect(captchaService.verify).toHaveBeenCalledWith('good', undefined);
+      });
     });
   });
 
@@ -1058,6 +1170,8 @@ describe('AuthService email verification', () => {
     const mail: any = { sendEmailVerification: jest.fn().mockResolvedValue(true) };
     const audit: any = { log: jest.fn().mockResolvedValue(null) };
     const referrals: any = { attributeSignup: jest.fn().mockResolvedValue(null) };
+    // Disabled-by-default CAPTCHA so register side-effect tests are unaffected.
+    const captcha: any = { isEnabled: jest.fn().mockReturnValue(false), verify: jest.fn().mockResolvedValue(true) };
     const svc = new AuthService(
       userRepo,
       {} as any,
@@ -1067,6 +1181,7 @@ describe('AuthService email verification', () => {
       audit,
       mail,
       referrals,
+      captcha,
       overrides.notifications,
     );
     return { svc, userRepo, orgRepo, jwt, mail };

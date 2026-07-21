@@ -272,7 +272,7 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
-  register: (data: { email: string; password: string; firstName: string; lastName: string; organizationName: string }) =>
+  register: (data: { email: string; password: string; firstName: string; lastName: string; organizationName: string; captchaToken?: string }) =>
     apiPost('/auth/register', data),
   
   login: (data: { email: string; password: string }) =>
@@ -336,7 +336,7 @@ export const organizationsApi = {
     apiPost(`/organizations/${id}/members`, data),
   
   updateMemberRole: (id: string, userId: string, data: { role: string }) =>
-    apiPatch(`/organizations/${id}/members/${userId}`, data),
+    apiPut(`/organizations/${id}/members/${userId}`, data),
   
   removeMember: (id: string, userId: string) =>
     apiDel(`/organizations/${id}/members/${userId}`),
@@ -624,14 +624,16 @@ export const toolsApi = {
 
 // MCP Sources API (external MCP servers as tool sources)
 export const mcpSourcesApi = {
-  getAll: (organizationId: string) => apiGet(`/organizations//mcp-sources`),
+  getAll: (organizationId: string) => apiGet(`/organizations/${organizationId}/mcp-sources`),
 
   create: (organizationId: string, data: { name: string; url: string; description?: string; bearerToken?: string }) =>
-    apiPost(`/organizations//mcp-sources`, data),
+    apiPost(`/organizations/${organizationId}/mcp-sources`, data),
 
-  sync: (organizationId: string, id: string) => apiPost(`/organizations//mcp-sources//sync`),
+  sync: (organizationId: string, id: string) =>
+    apiPost(`/organizations/${organizationId}/mcp-sources/${id}/sync`),
 
-  delete: (organizationId: string, id: string) => apiDel(`/organizations//mcp-sources/`),
+  delete: (organizationId: string, id: string) =>
+    apiDel(`/organizations/${organizationId}/mcp-sources/${id}`),
 }
 
 // LLM Providers API
@@ -901,8 +903,6 @@ export const agentsApi = {
   getRun: (id: string, runId: string) => apiGet(`/agents/${id}/runs/${runId}`),
   cancelRun: (id: string, runId: string) => apiPost(`/agents/${id}/runs/${runId}/cancel`),
   sendRunInput: (id: string, runId: string, input: string) => apiPost(`/agents/${id}/runs/${runId}/input`, { input }),
-  // Interfaces
-  getInterfaces: (id: string) => apiGet(`/interfaces?agentId=${id}`),
 }
 
 // Runs API (standalone access)
@@ -1084,20 +1084,6 @@ export const filesApi = {
   },
   download: (id: string) => api.get(`/files/${id}/download`, { responseType: 'blob' }),
   delete: (id: string) => apiDel(`/files/${id}`),
-}
-
-// Interfaces API
-export const interfacesApi = {
-  getAll: (agentId?: string) => {
-    const qs = agentId ? `?agentId=${agentId}` : ''
-    return apiGet(`/interfaces${qs}`)
-  },
-  getById: (id: string) => apiGet(`/interfaces/${id}`),
-  create: (data: any) => apiPost('/interfaces', data),
-  update: (id: string, data: any) => apiPatch(`/interfaces/${id}`, data),
-  delete: (id: string) => apiDel(`/interfaces/${id}`),
-  activate: (id: string) => apiPost(`/interfaces/${id}/activate`),
-  deactivate: (id: string) => apiPost(`/interfaces/${id}/deactivate`),
 }
 
 // Audit Logs API
