@@ -293,6 +293,12 @@ export const authApi = {
 
   resendVerification: () => apiPost('/auth/resend-verification'),
   verifyEmail: (token: string) => apiPost('/auth/verify-email', { token }),
+
+  // Enumeration-safe: the backend always returns 200 regardless of whether
+  // the email maps to an account, so the UI must not reveal the outcome.
+  forgotPassword: (email: string) => apiPost('/auth/forgot-password', { email }),
+  resetPassword: (token: string, password: string) =>
+    apiPost('/auth/reset-password', { token, password }),
 }
 
 // Notifications API

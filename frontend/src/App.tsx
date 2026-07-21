@@ -15,9 +15,11 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Toaster } from '@/components/ui/toaster'
 
 // Auth pages (kept eager — first thing users see)
+import { ForgotPasswordPage } from '@/pages/auth/forgot-password'
 import { LoginPage } from '@/pages/auth/login'
 import { OAuthConsentPage } from '@/pages/oauth/consent'
 import { RegisterPage } from '@/pages/auth/register'
+import { ResetPasswordPage } from '@/pages/auth/reset-password'
 import { VerifyEmailPage } from '@/pages/auth/verify-email'
 
 // Store
@@ -140,6 +142,8 @@ function App() {
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
               <Route path="verify-email" element={<VerifyEmailPage />} />
+              <Route path="forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="reset-password" element={<ResetPasswordPage />} />
               <Route path="*" element={<Navigate to="/auth/login" replace />} />
             </Routes>
           </AuthLayout>
