@@ -179,9 +179,11 @@ jobs:
     name: Build & push almyty (single self-host image)
     runs-on: ubuntu-latest
     needs: [meta, changes]
-    # The all-in-one image bakes the SPA into the API, so it must rebuild when
-    # EITHER backend or frontend changed (and always on tag / manual dispatch).
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
+    # Self-hosters consume the all-in-one via tagged releases (release.yml also
+    # builds it on v* tags), so it does NOT need to build on every branch push
+    # and must stay OFF the deploy critical path (it's slow: frontend+backend,
+    # multi-arch). Build it only on tag pushes and manual dispatch.
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v6
 
@@ -215,7 +217,12 @@ jobs:
     # must NOT dispatch a deploy for an image tag that was never built (infra
     # would then fail pulling a non-existent tag). `always()` keeps this job
     # evaluating even though some needed build jobs are skipped.
-    needs: [meta, build-api, build-frontend, build-docs, build-almyty]
+    #
+    # NOTE: build-almyty is intentionally NOT a dependency here. The all-in-one
+    # image is slow to build and only ships to self-hosters via releases; the
+    # SaaS rollout only pulls the api + frontend images, so it must not wait on
+    # build-almyty. That job keeps building independently off the critical path.
+    needs: [meta, build-api, build-frontend, build-docs]
     if: |
       always() &&
       needs.meta.outputs.is_branch == 'true' &&
@@ -223,8 +230,7 @@ jobs:
       (
         needs.build-api.result == 'success' ||
         needs.build-frontend.result == 'success' ||
-        needs.build-docs.result == 'success' ||
-        needs.build-almyty.result == 'success'
+        needs.build-docs.result == 'success'
       )
     steps:
       - name: Fire repository_dispatch
