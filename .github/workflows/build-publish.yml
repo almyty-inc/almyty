@@ -31,6 +31,7 @@ jobs:
       sha_tag: ${{ steps.m.outputs.sha_tag }}
       latest_tag: ${{ steps.m.outputs.latest_tag }}
       is_branch: ${{ steps.m.outputs.is_branch }}
+      api_url: ${{ steps.m.outputs.api_url }}
     steps:
       - uses: actions/checkout@v6
 
@@ -42,14 +43,17 @@ jobs:
           #   immutable build tag  = <pfx>-<shortsha> (12-char sha)
           # `latest` is NOT published here — it means "newest stable release"
           # and is minted only by release.yml on v* tags.
+          # API_URL is baked into the frontend at build time (VITE_API_BASE_URL).
+          # Missing it = the SPA calls http://localhost:3000 and prod login breaks.
           case "${{ github.ref_name }}" in
-            master)      ENV=production;  PFX=prod ;;
-            staging)     ENV=staging;     PFX=staging ;;
-            development) ENV=development;  PFX=dev ;;
-            *)           ENV=development;  PFX=dev ;;
+            master)      ENV=production;  PFX=prod;    API_URL="https://api.almyty.com" ;;
+            staging)     ENV=staging;     PFX=staging; API_URL="https://api.staging.almyty.com" ;;
+            development) ENV=development;  PFX=dev;     API_URL="https://api.dev.almyty.com" ;;
+            *)           ENV=development;  PFX=dev;     API_URL="https://api.dev.almyty.com" ;;
           esac
           SHORT_SHA="${GITHUB_SHA::12}"
           echo "environment=$ENV" >> "$GITHUB_OUTPUT"
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
           echo "env_prefix=$PFX" >> "$GITHUB_OUTPUT"
           echo "sha_tag=${PFX}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "latest_tag=${PFX}" >> "$GITHUB_OUTPUT"
@@ -132,6 +136,10 @@ jobs:
           target: production
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            VITE_API_BASE_URL=${{ needs.meta.outputs.api_url }}
+            VITE_POSTHOG_KEY=${{ vars.VITE_POSTHOG_KEY || 'phc_wLKPNJ2JTUp7vbdjPKXcieuA6vJrjjDSib4HrSNzfV4e' }}
+            VITE_POSTHOG_HOST=/ingest
           tags: |
             almyty/frontend:${{ needs.meta.outputs.sha_tag }}
             almyty/frontend:${{ needs.meta.outputs.latest_tag }}
