@@ -59,6 +59,7 @@ const AcceptInvitePage = lazy(() => import('@/pages/accept-invite').then(m => ({
 const CliLoginPage = lazy(() => import('@/pages/cli-login').then(m => ({ default: m.CliLoginPage })))
 const ReferralRedirectPage = lazy(() => import('@/pages/referral-redirect').then(m => ({ default: m.ReferralRedirectPage })))
 const NotificationsPage = lazy(() => import('@/pages/notifications').then(m => ({ default: m.NotificationsPage })))
+const NotFoundPage = lazy(() => import('@/pages/not-found').then(m => ({ default: m.NotFoundPage })))
 
 // Layout wrapper that mounts once via parent Route + Outlet, so
 // useLocation() inside the layout always reflects the *current*
@@ -124,6 +125,12 @@ function App() {
           <Route path="/organizations" element={<OrganizationsPage />} />
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          {/* Unknown authed path → a real 404 inside the shell, NOT a
+              silent redirect to the dashboard (which read as "my page
+              vanished"). Sits inside the DashboardLayout parent route
+              so it stays auth-protected: an unauthenticated visitor is
+              still bounced to /auth/login by the layout. */}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
 
         {/* Invite accept */}
@@ -154,12 +161,6 @@ function App() {
         
         {/* Default redirect */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        {/* Unknown path → kick users to the dashboard, NOT to the
-            login page. The dashboard is auth-protected, so an
-            unauthenticated visitor still ends up at /auth/login, but
-            an authenticated user who typo'd a URL or hit a stale
-            bookmark no longer sees an apparent logout screen. */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
       <Toaster />
     </>
