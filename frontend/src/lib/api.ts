@@ -217,7 +217,11 @@ api.interceptors.response.use(
     // picks up and surfaces as a toast. We deliberately keep the
     // message user-facing — "You don't have permission" instead of
     // exposing the raw backend error shape.
-    if (error.response?.status === 403) {
+    // EMAIL_NOT_VERIFIED is a 403 the login page handles inline (verify-email
+    // prompt + resend). Suppress the generic "no permission" toast for it so
+    // the two don't fight.
+    const errCode = (error.response?.data as any)?.error?.code ?? (error.response?.data as any)?.code
+    if (error.response?.status === 403 && errCode !== 'EMAIL_NOT_VERIFIED') {
       const backendMsg = (error.response.data as any)?.message
       const detail = {
         url: config?.url as string | undefined,
@@ -292,6 +296,12 @@ export const authApi = {
     apiPost('/auth/api-keys', data),
 
   resendVerification: () => apiPost('/auth/resend-verification'),
+  // Unauthenticated resend, keyed off the email — used by the login page
+  // when a login attempt is refused with EMAIL_NOT_VERIFIED (no token yet
+  // to reach the authenticated resend route). Enumeration-safe: the backend
+  // always returns 200, so the UI shows a neutral confirmation.
+  resendVerificationByEmail: (email: string) =>
+    apiPost('/auth/resend-verification-email', { email }),
   verifyEmail: (token: string) => apiPost('/auth/verify-email', { token }),
 
   // Enumeration-safe: the backend always returns 200 regardless of whether
