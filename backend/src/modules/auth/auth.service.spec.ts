@@ -964,6 +964,8 @@ describe('AuthService', () => {
       userRepository.findOne.mockResolvedValue(mockUser);
 
       await expect(service.changePassword('user-1', 'wrongPassword', 'newPassword')).rejects.toThrow(BadRequestException);
+      // The password must NOT be changed when the current one is wrong.
+      expect(userRepository.save).not.toHaveBeenCalled();
     });
   });
 

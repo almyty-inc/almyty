@@ -109,8 +109,16 @@ import { loadEeModules } from './ee-loader';
 // Configuration
 import { databaseConfig } from './config/database.config';
 
+// Optional single-image frontend serving (almyty/almyty). Returns [] for the
+// plain api image, so the module tree is unchanged when SERVE_FRONTEND is off.
+import { frontendStaticImports } from './common/frontend/frontend-static';
+
 @Module({
   imports: [
+    // Serve the built React SPA when running as the single self-host image.
+    // No-op ([]) for the default api-only deployment.
+    ...frontendStaticImports(),
+
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
