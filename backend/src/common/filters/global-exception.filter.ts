@@ -87,12 +87,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         `Unhandled error on ${request.method} ${request.path}: ${exception.message}`,
         exception.stack,
       );
-      this.captureToSentry(exception);
     } else {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
       message = 'Internal server error';
       code = 'INTERNAL_ERROR';
       this.logger.error(`Unknown error on ${request.method} ${request.path}`, exception);
+    }
+
+    // Report server-side failures (5xx) to Sentry — including thrown
+    // HttpExceptions that resolve to a 5xx (e.g. ServiceUnavailable). 4xx
+    // are client errors and are never reported. Log a structured 5xx line
+    // (method, path, status) so failures are traceable even when Sentry
+    // is dark. No-op when SENTRY_DSN is unset.
+    if (status >= 500) {
+      this.logger.error(
+        `5xx on ${request.method} ${request.path} -> ${status}: ${message}`,
+      );
       this.captureToSentry(exception);
     }
 

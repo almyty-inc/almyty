@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, MaxLength, IsNotEmpty } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, IsNotEmpty, IsOptional } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -57,4 +57,14 @@ export class CreateUserDto {
   @MaxLength(100)
   @IsNotEmpty()
   organizationName: string;
+
+  @ApiProperty({
+    description:
+      'CAPTCHA response token (Cloudflare Turnstile / hCaptcha). Only required when CAPTCHA is enabled server-side; ignored otherwise.',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  captchaToken?: string;
 }
