@@ -27,6 +27,8 @@ describe('AuthController', () => {
       confirmPasswordReset: jest.fn(),
       changePassword: jest.fn(),
       verifyEmail: jest.fn(),
+      requestEmailVerification: jest.fn(),
+      requestEmailVerificationByEmail: jest.fn(),
       isOrganizationNameAvailable: jest.fn(),
     };
 
@@ -197,6 +199,23 @@ describe('AuthController', () => {
         'access-token',
         expect.objectContaining({ httpOnly: true, path: '/' }),
       );
+    });
+  });
+
+  describe('resendVerificationByEmail', () => {
+    it('calls the service and returns a neutral confirmation', async () => {
+      authService.requestEmailVerificationByEmail.mockResolvedValue(undefined as any);
+
+      const result = await controller.resendVerificationByEmail('a@example.com');
+
+      expect(authService.requestEmailVerificationByEmail).toHaveBeenCalledWith('a@example.com');
+      expect(result.success).toBe(true);
+      expect(result.message).toMatch(/verification link/i);
+    });
+
+    it('rejects a missing email', async () => {
+      await expect(controller.resendVerificationByEmail('' as any)).rejects.toThrow(BadRequestException);
+      expect(authService.requestEmailVerificationByEmail).not.toHaveBeenCalled();
     });
   });
 
