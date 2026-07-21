@@ -32,6 +32,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../../entities/user.entity';
@@ -450,31 +451,20 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post('change-password')
+  // The frontend calls PATCH /auth/change-password; this route was previously
+  // registered as POST, so every password change 404'd in production.
+  @Patch('change-password')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Change user password' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        currentPassword: { type: 'string' },
-        newPassword: { type: 'string', minLength: 8 },
-      },
-      required: ['currentPassword', 'newPassword'],
-    },
-  })
   @ApiResponse({ status: 200, description: 'Password changed successfully' })
   @ApiResponse({ status: 400, description: 'Current password is incorrect' })
   async changePassword(
     @CurrentUser() user: User,
-    @Body('currentPassword') currentPassword: string,
-    @Body('newPassword') newPassword: string,
+    @Body() changePasswordDto: ChangePasswordDto,
   ) {
-    if (!currentPassword || !newPassword) {
-      throw new BadRequestException('Current password and new password are required');
-    }
-    
+    const { currentPassword, newPassword } = changePasswordDto;
+
     await this.authService.changePassword(user.id, currentPassword, newPassword);
 
     return {
