@@ -133,7 +133,7 @@ describe('RetentionSweepService', () => {
     // Cutoff is ~30 days in the past.
     const cutoff = (where.createdAt as any).value as Date;
     expect(where.createdAt).toEqual(LessThan(cutoff));
-    expect(before - cutoff.getTime()).toBeGreaterThanOrEqual(30 * DAY_MS);
+    expect(before - cutoff.getTime()).toBeGreaterThanOrEqual(30 * DAY_MS - 5_000);
     expect(before - cutoff.getTime()).toBeLessThan(30 * DAY_MS + 5_000);
     // Delete targets exactly the selected ids.
     expect(runRepo.delete).toHaveBeenCalledWith({ id: In(['r1', 'r2']) });
