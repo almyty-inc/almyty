@@ -56,7 +56,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message = typeof exResponse === 'string'
         ? exResponse
         : (exResponse as any).message || exception.message;
-      code = this.getCodeFromStatus(status);
+      // Honour a machine-readable `code` set on the exception payload
+      // (e.g. ForbiddenException({ code: 'EMAIL_NOT_VERIFIED', ... })) so
+      // callers can branch on a stable code rather than parsing the human
+      // message. Falls back to the status-derived code when none is set.
+      code = (typeof exResponse === 'object' && exResponse !== null && (exResponse as any).code)
+        ? String((exResponse as any).code)
+        : this.getCodeFromStatus(status);
 
       // Flatten array messages from ValidationPipe
       if (Array.isArray(message)) {
