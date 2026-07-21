@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, Optional } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -302,6 +302,25 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
       return null;
+    }
+
+    // Email-verification gate. The password is proven correct at this point,
+    // so surfacing a specific "not verified" error leaks nothing an
+    // unauthenticated attacker couldn't already infer (they hold the
+    // password). Unverified accounts are refused tokens; a distinct
+    // ForbiddenException with a machine-readable code lets the frontend
+    // offer a "resend verification" path instead of a dead "invalid
+    // credentials" end. Verified users (verifiedAt set OR isVerified true)
+    // are unaffected — this never locks out the existing verified base.
+    if (!user.verifiedAt && !user.isVerified) {
+      throw new ForbiddenException({
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Please verify your email address before signing in.',
+        // The address is echoed back so the login page can pre-fill the
+        // resend-verification call without asking for it again. It is not
+        // sensitive here — the caller already supplied it.
+        email: user.email,
+      });
     }
 
     return user;
@@ -613,6 +632,28 @@ export class AuthService {
     const token = this.mintEmailVerificationToken(user);
     await this.mailService.sendEmailVerification(user.email, token, user.firstName);
     return { alreadyVerified: false };
+  }
+
+  /**
+   * (Re-)send the verification link addressed by email, for the
+   * unauthenticated login-blocked case: a user who tried to log in and was
+   * refused with EMAIL_NOT_VERIFIED has no token to authenticate the JWT
+   * resend route, so this variant keys off the email instead.
+   *
+   * Deliberately non-enumerating: it always resolves without revealing
+   * whether the address exists or is already verified. The caller (login
+   * page) shows the same neutral "if an account exists, we've re-sent the
+   * link" confirmation regardless.
+   */
+  async requestEmailVerificationByEmail(email: string): Promise<void> {
+    if (!email) return;
+    const user = await this.userRepository.findOne({ where: { email } });
+    // Silently no-op for unknown or already-verified accounts — no oracle.
+    if (!user || user.verifiedAt || user.isVerified) {
+      return;
+    }
+    const token = this.mintEmailVerificationToken(user);
+    await this.mailService.sendEmailVerification(user.email, token, user.firstName);
   }
 
   /** Purpose-scoped signed verification token (7 day expiry). */
