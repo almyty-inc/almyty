@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 
 import { AuthService, JwtPayload, AuthTokens } from './auth.service';
@@ -15,6 +15,7 @@ import { LoginDto } from './dto/login.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { MailService } from '../mail/mail.service';
 import { ReferralsService } from '../referrals/referrals.service';
+import { CaptchaService } from './captcha.service';
 
 // Unmock bcrypt from global setup to test actual hashing
 jest.unmock('bcryptjs');
@@ -28,6 +29,7 @@ describe('AuthService', () => {
   let userOrganizationRepository: jest.Mocked<Repository<UserOrganization>>;
   let jwtService: jest.Mocked<JwtService>;
   let referralsService: any;
+  let captchaService: any;
 
   beforeEach(async () => {
     // register() now wraps user + org + membership in a DB transaction,
@@ -132,6 +134,15 @@ describe('AuthService', () => {
           provide: ReferralsService,
           useValue: { attributeSignup: jest.fn().mockResolvedValue(null) },
         },
+        {
+          provide: CaptchaService,
+          // Disabled by default (ships dark) so existing register tests are
+          // unaffected; individual tests flip isEnabled/verify as needed.
+          useValue: {
+            isEnabled: jest.fn().mockReturnValue(false),
+            verify: jest.fn().mockResolvedValue(true),
+          },
+        },
       ],
     }).compile();
 
@@ -143,6 +154,7 @@ describe('AuthService', () => {
     jwtService = module.get(JwtService);
     mailService = module.get(MailService);
     referralsService = module.get(ReferralsService);
+    captchaService = module.get(CaptchaService);
 
     // Reset repository mocks but not bcrypt mocks
     userRepository.findOne.mockReset();
@@ -417,6 +429,106 @@ describe('AuthService', () => {
         .rejects
         .toThrow(new BadRequestException('Organization name is already taken'));
     });
+
+    // ── Signup abuse protection ─────────────────────────────────────────
+
+    describe('email normalization + dedupe', () => {
+      it('dedupes gmail dot-injection aliases against an existing account', async () => {
+        // A user already exists under the canonical normalizedEmail; the
+        // dotted alias must be rejected as a duplicate.
+        const dotted: CreateUserDto = { ...createUserDto, email: 'f.o.o@gmail.com' };
+        userRepository.findOne.mockResolvedValue({ id: 'existing' } as User);
+
+        await expect(service.register(dotted))
+          .rejects
+          .toThrow(new BadRequestException('User with this email already exists'));
+
+        // The dedupe lookup must include the normalized form.
+        const call = userRepository.findOne.mock.calls[0][0] as any;
+        expect(call.where).toEqual(
+          expect.arrayContaining([
+            { email: 'f.o.o@gmail.com' },
+            { normalizedEmail: 'foo@gmail.com' },
+          ]),
+        );
+      });
+
+      it('stores the normalized email (dots + tag stripped) on a new account', async () => {
+        const tagged: CreateUserDto = { ...createUserDto, email: 'f.o.o+promo@gmail.com' };
+        organizationRepository.findOne.mockResolvedValue(null);
+        organizationRepository.create.mockReturnValue({ id: 'org-1' } as Organization);
+        organizationRepository.save.mockResolvedValue({ id: 'org-1' } as Organization);
+        userOrganizationRepository.create.mockReturnValue({} as UserOrganization);
+        userOrganizationRepository.save.mockResolvedValue({} as UserOrganization);
+        jwtService.sign.mockReturnValue('mock-token');
+
+        let created: any;
+        userRepository.create.mockImplementation((u) => { created = u; return u as User; });
+        userRepository.save.mockImplementation((u) => Promise.resolve({ ...u, id: 'user-1' } as User));
+        userRepository.findOne
+          .mockResolvedValueOnce(null) // dedupe check
+          .mockResolvedValueOnce(null) // verification lookup
+          .mockResolvedValueOnce({ id: 'user-1', organizationMemberships: [] } as any);
+
+        await service.register(tagged);
+
+        expect(created.email).toBe('f.o.o+promo@gmail.com'); // raw preserved
+        expect(created.normalizedEmail).toBe('foo@gmail.com'); // canonicalized
+      });
+    });
+
+    describe('disposable email rejection', () => {
+      it('rejects a known disposable domain before any DB write', async () => {
+        const disposable: CreateUserDto = { ...createUserDto, email: 'bot@mailinator.com' };
+
+        await expect(service.register(disposable))
+          .rejects
+          .toThrow(/Disposable email addresses are not allowed/);
+
+        expect(userRepository.findOne).not.toHaveBeenCalled();
+      });
+
+      it('accepts a normal domain', async () => {
+        mockSuccessfulRegistration();
+        const result = await service.register(createUserDto);
+        expect(result.accessToken).toBe('mock-token');
+      });
+    });
+
+    describe('CAPTCHA gate', () => {
+      it('is a no-op when unconfigured (register proceeds)', async () => {
+        captchaService.isEnabled.mockReturnValue(false);
+        mockSuccessfulRegistration();
+
+        const result = await service.register(createUserDto);
+
+        expect(result.accessToken).toBe('mock-token');
+        expect(captchaService.verify).not.toHaveBeenCalled();
+      });
+
+      it('rejects when enabled and the token is missing/invalid', async () => {
+        captchaService.isEnabled.mockReturnValue(true);
+        captchaService.verify.mockResolvedValue(false);
+
+        await expect(service.register({ ...createUserDto, captchaToken: 'bad' }))
+          .rejects
+          .toThrow(new BadRequestException('CAPTCHA verification failed'));
+
+        // Rejected before touching the DB.
+        expect(userRepository.findOne).not.toHaveBeenCalled();
+      });
+
+      it('proceeds when enabled and the token verifies', async () => {
+        captchaService.isEnabled.mockReturnValue(true);
+        captchaService.verify.mockResolvedValue(true);
+        mockSuccessfulRegistration();
+
+        const result = await service.register({ ...createUserDto, captchaToken: 'good' });
+
+        expect(result.accessToken).toBe('mock-token');
+        expect(captchaService.verify).toHaveBeenCalledWith('good', undefined);
+      });
+    });
   });
 
   describe('login', () => {
@@ -433,6 +545,8 @@ describe('AuthService', () => {
         id: 'user-123',
         email: loginDto.email,
         isActive: true,
+        isVerified: true,
+        verifiedAt: new Date(),
         passwordHash,
         organizationMemberships: [],
       } as User;
@@ -492,6 +606,8 @@ describe('AuthService', () => {
         id: 'user-123',
         email: 'test@example.com',
         isActive: true,
+        isVerified: true,
+        verifiedAt: new Date(),
         passwordHash,
         organizationMemberships: [],
       } as User;
@@ -1058,6 +1174,8 @@ describe('AuthService email verification', () => {
     const mail: any = { sendEmailVerification: jest.fn().mockResolvedValue(true) };
     const audit: any = { log: jest.fn().mockResolvedValue(null) };
     const referrals: any = { attributeSignup: jest.fn().mockResolvedValue(null) };
+    // Disabled-by-default CAPTCHA so register side-effect tests are unaffected.
+    const captcha: any = { isEnabled: jest.fn().mockReturnValue(false), verify: jest.fn().mockResolvedValue(true) };
     const svc = new AuthService(
       userRepo,
       {} as any,
@@ -1067,6 +1185,7 @@ describe('AuthService email verification', () => {
       audit,
       mail,
       referrals,
+      captcha,
       overrides.notifications,
     );
     return { svc, userRepo, orgRepo, jwt, mail };
@@ -1160,8 +1279,40 @@ describe('AuthService email verification', () => {
     });
   });
 
-  describe('non-blocking login', () => {
-    it('validateUser succeeds for an unverified user (verification never blocks login)', async () => {
+  describe('email-verification enforcement on login', () => {
+    it('rejects an unverified user with EMAIL_NOT_VERIFIED and issues no token', async () => {
+      const { svc, userRepo, jwt } = makeDirect();
+      const passwordHash = await bcrypt.hash('Password123!', 4);
+      userRepo.findOne.mockResolvedValue({
+        id: 'u1',
+        email: 'a@example.com',
+        passwordHash,
+        isActive: true,
+        isVerified: false,
+        verifiedAt: null,
+        organizationMemberships: [],
+      });
+
+      // Correct password but unverified -> specific ForbiddenException.
+      let thrown: any;
+      try {
+        await svc.validateUser('a@example.com', 'Password123!');
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(ForbiddenException);
+      const resp: any = thrown.getResponse();
+      expect(resp.code).toBe('EMAIL_NOT_VERIFIED');
+      expect(resp.email).toBe('a@example.com');
+      // login() goes through validateUser, so it must reject the same way
+      // and never mint a token.
+      await expect(
+        svc.login({ email: 'a@example.com', password: 'Password123!' } as any),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('does not reveal verification state when the password is wrong', async () => {
       const { svc, userRepo } = makeDirect();
       const passwordHash = await bcrypt.hash('Password123!', 4);
       userRepo.findOne.mockResolvedValue({
@@ -1174,9 +1325,94 @@ describe('AuthService email verification', () => {
         organizationMemberships: [],
       });
 
-      const user = await svc.validateUser('a@example.com', 'Password123!');
+      // Wrong password short-circuits to null before the verification gate,
+      // so an attacker cannot use the specific error as an oracle.
+      const user = await svc.validateUser('a@example.com', 'WrongPassword!');
+      expect(user).toBeNull();
+    });
+
+    it('lets a verified user log in normally (founder / existing base unaffected)', async () => {
+      const { svc, userRepo, jwt } = makeDirect();
+      const passwordHash = await bcrypt.hash('Password123!', 4);
+      const verified = {
+        id: 'founder',
+        email: 'founder@almyty.com',
+        firstName: 'Fran',
+        lastName: 'B',
+        passwordHash,
+        isActive: true,
+        isVerified: true,
+        verifiedAt: new Date('2024-01-01'),
+        tokenVersion: 0,
+        organizationMemberships: [],
+      };
+      userRepo.findOne.mockResolvedValue(verified);
+
+      const user = await svc.validateUser('founder@almyty.com', 'Password123!');
       expect(user).not.toBeNull();
-      expect(user!.verifiedAt).toBeNull();
+      expect(user!.id).toBe('founder');
+
+      const tokens = await svc.login({ email: 'founder@almyty.com', password: 'Password123!' } as any);
+      expect(tokens.accessToken).toBeTruthy();
+      expect(jwt.sign).toHaveBeenCalled();
+    });
+
+    it('lets a legacy verified user (verifiedAt set, isVerified false) log in', async () => {
+      const { svc, userRepo } = makeDirect();
+      const passwordHash = await bcrypt.hash('Password123!', 4);
+      userRepo.findOne.mockResolvedValue({
+        id: 'legacy',
+        email: 'legacy@almyty.com',
+        passwordHash,
+        isActive: true,
+        isVerified: false,
+        verifiedAt: new Date('2023-06-01'),
+        organizationMemberships: [],
+      });
+
+      const user = await svc.validateUser('legacy@almyty.com', 'Password123!');
+      expect(user).not.toBeNull();
+    });
+  });
+
+  describe('requestEmailVerificationByEmail (unauthenticated resend)', () => {
+    it('sends a fresh link for an unverified account', async () => {
+      const { svc, userRepo, jwt, mail } = makeDirect();
+      userRepo.findOne.mockResolvedValue({
+        id: 'u1',
+        email: 'a@example.com',
+        firstName: 'Ada',
+        isVerified: false,
+        verifiedAt: null,
+      });
+      jwt.sign.mockReturnValue('verify-token');
+
+      await svc.requestEmailVerificationByEmail('a@example.com');
+
+      expect(mail.sendEmailVerification).toHaveBeenCalledWith('a@example.com', 'verify-token', 'Ada');
+    });
+
+    it('no-ops (no mail) for an already-verified account', async () => {
+      const { svc, userRepo, mail } = makeDirect();
+      userRepo.findOne.mockResolvedValue({
+        id: 'u1',
+        email: 'a@example.com',
+        isVerified: true,
+        verifiedAt: new Date(),
+      });
+
+      await svc.requestEmailVerificationByEmail('a@example.com');
+
+      expect(mail.sendEmailVerification).not.toHaveBeenCalled();
+    });
+
+    it('no-ops (no mail) for an unknown address — no enumeration oracle', async () => {
+      const { svc, userRepo, mail } = makeDirect();
+      userRepo.findOne.mockResolvedValue(null);
+
+      await svc.requestEmailVerificationByEmail('nobody@example.com');
+
+      expect(mail.sendEmailVerification).not.toHaveBeenCalled();
     });
   });
 

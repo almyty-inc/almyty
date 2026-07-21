@@ -86,6 +86,11 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     // Get the user from DB since register only returns tokens
     const userRepo = ds.getRepository(User);
     user = await userRepo.findOne({ where: { email: TEST_EMAIL } });
+    // Login now requires a verified email; mark this fixture user verified
+    // so the OAuth-flow login below succeeds.
+    user.isVerified = true;
+    user.verifiedAt = new Date();
+    user = await userRepo.save(user);
 
     // Link user to our org
     const uoRepo = ds.getRepository(UserOrganization);

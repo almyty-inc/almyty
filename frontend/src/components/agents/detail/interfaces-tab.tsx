@@ -59,7 +59,6 @@ import type { Gateway } from '@/types'
 
 interface InterfacesTabProps {
   agentId: string
-  interfaces: any[] // kept for backwards compat but we fetch our own data
 }
 
 const CHANNEL_TYPES = [

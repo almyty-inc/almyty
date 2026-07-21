@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
@@ -47,7 +48,7 @@ export function GatewayDetailPage() {
   const [securityDialogOpen, setSecurityDialogOpen] = useState(false)
   const [securityTarget, setSecurityTarget] = useState<SecurityTarget | null>(null)
 
-  const { data: gatewayData, isLoading } = useQuery({
+  const { data: gatewayData, isLoading, isError, error: gatewayError, refetch: refetchGateway } = useQuery({
     queryKey: ['gateway', id],
     queryFn: () => gatewaysApi.getById(id!),
     enabled: !!id,
@@ -220,6 +221,18 @@ export function GatewayDetailPage() {
     return (
       <div className="flex items-center justify-center h-96">
         <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <QueryError
+          error={gatewayError}
+          onRetry={() => refetchGateway()}
+          title="Couldn't load gateway"
+        />
       </div>
     )
   }

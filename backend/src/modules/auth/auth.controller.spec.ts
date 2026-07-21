@@ -27,6 +27,8 @@ describe('AuthController', () => {
       confirmPasswordReset: jest.fn(),
       changePassword: jest.fn(),
       verifyEmail: jest.fn(),
+      requestEmailVerification: jest.fn(),
+      requestEmailVerificationByEmail: jest.fn(),
       isOrganizationNameAvailable: jest.fn(),
     };
 
@@ -123,6 +125,52 @@ describe('AuthController', () => {
         expect.objectContaining({ httpOnly: true, path: '/' }),
       );
     });
+
+    it('forwards the CAPTCHA token and client IP to the service', async () => {
+      const createUserDto: any = {
+        email: 'test@example.com',
+        password: 'password123',
+        firstName: 'Test',
+        lastName: 'User',
+        organizationName: 'Test Organization',
+        captchaToken: 'tok-123',
+      };
+      authService.register.mockResolvedValue({
+        accessToken: 'a', refreshToken: 'r', expiresIn: 86400,
+      });
+      const mockRequest: any = {
+        cookies: {},
+        ip: '203.0.113.10',
+        headers: { 'x-forwarded-for': '198.51.100.7' },
+      };
+
+      await controller.register(createUserDto, mockResponse, mockRequest);
+
+      // The DTO (carrying captchaToken) is passed straight through, and the
+      // client IP is resolved from X-Forwarded-For for the CAPTCHA remoteip.
+      expect(authService.register).toHaveBeenCalledWith(
+        expect.objectContaining({ captchaToken: 'tok-123' }),
+        expect.objectContaining({ ipAddress: '198.51.100.7' }),
+      );
+    });
+
+    it('applies a tight per-IP rate limit on the register route (10/hour)', () => {
+      // Regression guard: the @Throttle decorator on register() is the
+      // primary defense against bulk automated signups. If it's ever
+      // removed or loosened past an hour window this test fails.
+      // @nestjs/throttler v6 keys metadata by throttler name suffix.
+      const readValue = (v: any): number =>
+        typeof v === 'function' ? v() : v;
+      const ttl = readValue(
+        Reflect.getMetadata('THROTTLER:TTLdefault', AuthController.prototype.register),
+      );
+      const limit = readValue(
+        Reflect.getMetadata('THROTTLER:LIMITdefault', AuthController.prototype.register),
+      );
+
+      expect(limit).toBe(10);
+      expect(ttl).toBe(60 * 60 * 1000); // one hour, in ms
+    });
   });
 
   describe('login', () => {
@@ -151,6 +199,23 @@ describe('AuthController', () => {
         'access-token',
         expect.objectContaining({ httpOnly: true, path: '/' }),
       );
+    });
+  });
+
+  describe('resendVerificationByEmail', () => {
+    it('calls the service and returns a neutral confirmation', async () => {
+      authService.requestEmailVerificationByEmail.mockResolvedValue(undefined as any);
+
+      const result = await controller.resendVerificationByEmail('a@example.com');
+
+      expect(authService.requestEmailVerificationByEmail).toHaveBeenCalledWith('a@example.com');
+      expect(result.success).toBe(true);
+      expect(result.message).toMatch(/verification link/i);
+    });
+
+    it('rejects a missing email', async () => {
+      await expect(controller.resendVerificationByEmail('' as any)).rejects.toThrow(BadRequestException);
+      expect(authService.requestEmailVerificationByEmail).not.toHaveBeenCalled();
     });
   });
 
