@@ -86,6 +86,31 @@ describe('GlobalExceptionFilter — Sentry 5xx reporting', () => {
     });
   });
 
+  describe('custom error code passthrough', () => {
+    beforeEach(() => sentryMock.isInitialized.mockReturnValue(false));
+
+    it('honours a `code` set on the HttpException response payload', () => {
+      // Mirrors auth.service throwing ForbiddenException({ code: 'EMAIL_NOT_VERIFIED', ... }).
+      const err = new HttpException(
+        { code: 'EMAIL_NOT_VERIFIED', message: 'Please verify your email address before signing in.' },
+        HttpStatus.FORBIDDEN,
+      );
+      filter.catch(err, mockHost);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.FORBIDDEN);
+      const body = mockResponse.json.mock.calls[0][0];
+      expect(body.error.code).toBe('EMAIL_NOT_VERIFIED');
+      expect(body.error.statusCode).toBe(403);
+      expect(body.error.message).toMatch(/verify your email/i);
+    });
+
+    it('falls back to the status-derived code when no custom code is present', () => {
+      filter.catch(new NotFoundException('missing'), mockHost);
+      const body = mockResponse.json.mock.calls[0][0];
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+  });
+
   describe('when Sentry is disabled (DSN unset)', () => {
     beforeEach(() => sentryMock.isInitialized.mockReturnValue(false));
 
