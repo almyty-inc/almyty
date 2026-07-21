@@ -1,0 +1,69 @@
+# Single-image self-host: almyty/almyty
+#
+# One container serves BOTH the API and the built React UI on one origin
+# (port 3000). Postgres and Redis run as their own containers here — they are
+# NOT baked into the image; point at managed/external instances instead by
+# dropping the two service blocks and setting DATABASE_HOST / REDIS_HOST.
+#
+#   docker compose -f docker-compose.allinone.yml up -d
+#   open http://localhost:3000
+#
+# For the scale-out (k8s) deployment use almyty/api + almyty/frontend instead
+# (see docker-compose.yml). This single image is for simple self-hosting.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: almyty
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  almyty:
+    # Pull the published single self-host image. To build locally instead:
+    #   docker build -f Dockerfile.allinone -t almyty/almyty:local .
+    # then set `image: almyty/almyty:local`.
+    image: almyty/almyty:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Serving the SPA is baked into the image (SERVE_FRONTEND=true,
+      # FRONTEND_DIST=/app/public) — no need to set them here.
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DATABASE_NAME=almyty
+      - DB_SSL=false
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # REQUIRED in production — the app refuses to start without these.
+      - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?set ENCRYPTION_KEY (32-byte hex)}
+      # Optional model provider keys.
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:
