@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthService } from './auth.service';
+import { CaptchaService } from './captcha.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
@@ -92,6 +93,7 @@ import { ReferralsModule } from '../referrals/referrals.module';
   ],
   providers: [
     AuthService,
+    CaptchaService,
     JwtStrategy,
     LocalStrategy,
     ApiKeyStrategy,
