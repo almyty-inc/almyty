@@ -56,7 +56,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message = typeof exResponse === 'string'
         ? exResponse
         : (exResponse as any).message || exception.message;
-      code = this.getCodeFromStatus(status);
+      // Honour a machine-readable `code` set on the exception payload
+      // (e.g. ForbiddenException({ code: 'EMAIL_NOT_VERIFIED', ... })) so
+      // callers can branch on a stable code rather than parsing the human
+      // message. Falls back to the status-derived code when none is set.
+      code = (typeof exResponse === 'object' && exResponse !== null && (exResponse as any).code)
+        ? String((exResponse as any).code)
+        : this.getCodeFromStatus(status);
 
       // Flatten array messages from ValidationPipe
       if (Array.isArray(message)) {
@@ -87,12 +93,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         `Unhandled error on ${request.method} ${request.path}: ${exception.message}`,
         exception.stack,
       );
-      this.captureToSentry(exception);
     } else {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
       message = 'Internal server error';
       code = 'INTERNAL_ERROR';
       this.logger.error(`Unknown error on ${request.method} ${request.path}`, exception);
+    }
+
+    // Report server-side failures (5xx) to Sentry — including thrown
+    // HttpExceptions that resolve to a 5xx (e.g. ServiceUnavailable). 4xx
+    // are client errors and are never reported. Log a structured 5xx line
+    // (method, path, status) so failures are traceable even when Sentry
+    // is dark. No-op when SENTRY_DSN is unset.
+    if (status >= 500) {
+      this.logger.error(
+        `5xx on ${request.method} ${request.path} -> ${status}: ${message}`,
+      );
       this.captureToSentry(exception);
     }
 
