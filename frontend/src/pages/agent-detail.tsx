@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
-import { agentsApi, memoriesApi, filesApi, interfacesApi, versionsApi } from '@/lib/api'
+import { agentsApi, memoriesApi, filesApi, versionsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type {
@@ -21,7 +21,6 @@ import type {
   AgentRun,
   Memory,
   AgentFile,
-  AgentInterface,
 } from '@/types'
 
 import { AgentHeader } from '@/components/agents/detail/agent-header'
@@ -169,18 +168,6 @@ export function AgentDetailPage() {
   })
 
   const files: AgentFile[] = Array.isArray(filesData) ? filesData : []
-
-  // Fetch interfaces
-  const { data: interfacesData } = useQuery({
-    queryKey: ['agent-interfaces', id],
-    queryFn: async () => {
-      const d = await interfacesApi.getAll(id!)
-      return Array.isArray(d) ? d : d?.data || []
-    },
-    enabled: !!id && activeTab === 'interfaces',
-  })
-
-  const interfaces: AgentInterface[] = Array.isArray(interfacesData) ? interfacesData : []
 
   // Sync webhook/schedule state from agent data
   React.useEffect(() => {
@@ -349,7 +336,7 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="interfaces" className="space-y-4">
-          <InterfacesTab agentId={id!} interfaces={interfaces} />
+          <InterfacesTab agentId={id!} />
         </TabsContent>
 
         <TabsContent value="skills" className="space-y-4">
