@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -370,41 +371,34 @@ describe('AuthController', () => {
   });
 
   describe('changePassword', () => {
-    it('should change password successfully', async () => {
+    it('should change password successfully and delegate to the service', async () => {
       const mockUser = { id: 'user-1' } as any;
 
       authService.changePassword.mockResolvedValue();
 
-      const result = await controller.changePassword(mockUser, 'oldpass', 'newpass');
+      const result = await controller.changePassword(mockUser, {
+        currentPassword: 'oldpass',
+        newPassword: 'newpassword123',
+      });
 
+      expect(authService.changePassword).toHaveBeenCalledWith('user-1', 'oldpass', 'newpassword123');
       expect(result.success).toBe(true);
       expect(result.data).toBeNull();
       expect(result.message).toBe('Password changed successfully');
     });
 
-    it('should throw error when current password is missing', async () => {
+    it('should propagate the service error when the current password is wrong', async () => {
       const mockUser = { id: 'user-1' } as any;
-      await expect(controller.changePassword(mockUser, '', 'newpass')).rejects.toThrow('Current password and new password are required');
-    });
+      authService.changePassword.mockRejectedValue(
+        new BadRequestException('Current password is incorrect'),
+      );
 
-    it('should throw error when new password is missing', async () => {
-      const mockUser = { id: 'user-1' } as any;
-      await expect(controller.changePassword(mockUser, 'oldpass', '')).rejects.toThrow('Current password and new password are required');
-    });
-
-    it('should throw error when both passwords are missing', async () => {
-      const mockUser = { id: 'user-1' } as any;
-      await expect(controller.changePassword(mockUser, '', '')).rejects.toThrow('Current password and new password are required');
-    });
-
-    it('should throw error when current password is undefined', async () => {
-      const mockUser = { id: 'user-1' } as any;
-      await expect(controller.changePassword(mockUser, undefined, 'newpass')).rejects.toThrow('Current password and new password are required');
-    });
-
-    it('should throw error when new password is undefined', async () => {
-      const mockUser = { id: 'user-1' } as any;
-      await expect(controller.changePassword(mockUser, 'oldpass', undefined)).rejects.toThrow('Current password and new password are required');
+      await expect(
+        controller.changePassword(mockUser, {
+          currentPassword: 'wrongpass',
+          newPassword: 'newpassword123',
+        }),
+      ).rejects.toThrow('Current password is incorrect');
     });
   });
 
