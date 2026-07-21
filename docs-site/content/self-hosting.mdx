@@ -196,6 +196,35 @@ readinessProbe:
   periodSeconds: 10
 ```
 
+## Monitoring and observability
+
+Kubernetes probes keep a single deployment healthy, but they don't tell *you* when something breaks. Wire up external monitoring so failures page you instead of being discovered by hand.
+
+### Uptime checks
+
+External uptime pingers (UptimeRobot, Pingdom, Better Uptime, or a Kubernetes-native probe exporter) can't be provisioned from this repo — configure them in your monitoring tool of choice against these endpoints:
+
+| Endpoint | Purpose | Alert when |
+|----------|---------|------------|
+| `GET /health/ready` | Readiness — API plus its Postgres and Redis dependencies. This is the one to page on. | Non-200, or down for more than one check interval. |
+| `GET /health/live` | Liveness — process is up (does not check dependencies). | Use for restart detection, not paging. |
+| `GET /health` | Full health report (all indicators). | Useful for a status dashboard. |
+
+Recommended baseline: poll `/health/ready` every 30–60s from at least two regions, alert on two consecutive failures. `/health/ready` returns non-200 when the database or Redis is unreachable, so it catches the dependency outages that a bare liveness check would miss.
+
+### Deploy smoke gate
+
+The GitHub Actions deploy workflow runs a one-off migration Job to completion and only rolls out new pods if it succeeds (see [Database migrations](#database-migrations) below). A failed migration stops the deploy instead of shipping pods against a schema they don't expect — so a broken release surfaces at deploy time, not in production.
+
+### Error tracking (Sentry)
+
+almyty ships with optional [Sentry](https://sentry.io) integration on both the API and the frontend. It is **off by default** and a complete no-op until you configure a DSN — no client loads, no network calls, no behavior change. Turn it on to have unhandled errors and 5xx responses surface in Sentry instead of buried in logs.
+
+- **Backend:** set `SENTRY_DSN` (and optionally `SENTRY_ENVIRONMENT`, e.g. `production` / `staging`) on the API. The global exception filter reports 5xx responses and unhandled exceptions; client errors (4xx) are never sent. In Kubernetes these are optional keys on the `almyty-secrets` secret.
+- **Frontend:** set the `VITE_SENTRY_DSN` build-arg when building the frontend image. It captures unhandled errors and errors caught by the app's error boundary. The environment tag is inferred from the host (development stays untracked).
+
+With no DSN set, both stay dark, so you can adopt error tracking without changing anything else about your deployment.
+
 ## Database migrations
 
 How migrations run depends on how you deploy.
