@@ -284,6 +284,15 @@ spec:
               name: almyty-secrets
               key: SENTRY_ENVIRONMENT
               optional: true
+        # Cloudflare Turnstile CAPTCHA on signup. Optional: with
+        # TURNSTILE_SECRET unset the captcha service is a no-op that
+        # always passes, so register works identically unconfigured.
+        - name: TURNSTILE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: TURNSTILE_SECRET
+              optional: true
         # CORS allowlist env var — the new CORS config in main.ts
         # replaces the old `origin: true` wildcard with a concrete
         # allowlist derived from these fields. CORS_ALLOWED_ORIGINS
