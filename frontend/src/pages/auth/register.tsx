@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/store/auth'
 import { useNotifications } from '@/store/app'
 import { apiPost, referralsApi } from '@/lib/api'
+import { CaptchaWidget, isCaptchaEnabled } from '@/components/auth/captcha-widget'
 
 const registerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -50,6 +51,8 @@ export function RegisterPage() {
   const { success, error } = useNotifications()
   const [showPassword, setShowPassword] = React.useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
+  const [captchaToken, setCaptchaToken] = React.useState('')
+  const captchaEnabled = isCaptchaEnabled()
 
   const {
     register,
@@ -63,8 +66,12 @@ export function RegisterPage() {
   })
 
   const onSubmit = async (data: RegisterFormData) => {
+    if (captchaEnabled && !captchaToken) {
+      error('Verification required', 'Please complete the verification challenge.')
+      return
+    }
     try {
-      await registerUser(data.email, data.password, data.firstName, data.lastName, data.organizationName)
+      await registerUser(data.email, data.password, data.firstName, data.lastName, data.organizationName, captchaToken || undefined)
       if (inviteToken) {
         try {
           await apiPost(`/invites/${inviteToken}/accept`, {})
@@ -231,6 +238,12 @@ export function RegisterPage() {
         </div>
         {errors.terms && (
           <p className="text-sm text-red-600">{errors.terms.message}</p>
+        )}
+
+        {captchaEnabled && (
+          <div>
+            <CaptchaWidget onToken={setCaptchaToken} />
+          </div>
         )}
 
         <div>

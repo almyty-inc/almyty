@@ -14,16 +14,25 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { RequestLog } from './entities/request-log.entity';
 import { UsageMetric } from './entities/usage-metric.entity';
 
-// Sentry error tracking — enabled when SENTRY_DSN is configured
+// Sentry error tracking — no-op unless SENTRY_DSN is configured. When set,
+// initializes @sentry/node once at process start so unhandled exceptions and
+// the GlobalExceptionFilter's 5xx reports have a client to send to. Ships
+// dark: with no DSN nothing loads, no network, no error. Environment is
+// tagged from SENTRY_ENVIRONMENT (falling back to NODE_ENV) so staging and
+// production stay separable in one project.
 if (process.env.SENTRY_DSN) {
   try {
     const Sentry = require('@sentry/node');
     Sentry.init({
       dsn: process.env.SENTRY_DSN,
-      environment: process.env.NODE_ENV || 'development',
+      environment:
+        process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development',
+      // Error tracking only by default — no performance tracing until
+      // explicitly opted into. Keeps overhead negligible.
+      tracesSampleRate: 0,
     });
   } catch {
-    // @sentry/node not installed — skip initialization
+    // @sentry/node not installed — skip initialization (stays no-op).
   }
 }
 

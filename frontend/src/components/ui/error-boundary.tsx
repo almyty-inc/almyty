@@ -1,4 +1,5 @@
 import React, { Component, type ReactNode } from 'react'
+import { captureError } from '@/lib/sentry'
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -25,8 +26,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     console.error('[ErrorBoundary]', error, errorInfo)
     this.props.onError?.(error, errorInfo)
 
-    // Sentry capture — uncomment when @sentry/react is installed
-    // import('@sentry/react').then(S => S.captureException(error)).catch(() => {})
+    // Report to Sentry when enabled. No-op when VITE_SENTRY_DSN is unset.
+    captureError(error)
   }
 
   render() {
