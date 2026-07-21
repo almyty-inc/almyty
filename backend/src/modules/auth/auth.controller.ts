@@ -554,4 +554,35 @@ export class AuthController {
         : 'Verification email sent',
     };
   }
+
+  @Public()
+  // Unauthenticated resend for the login-blocked case: a user refused login
+  // with EMAIL_NOT_VERIFIED has no token to reach the JWT resend route, so
+  // this keys off the email. Non-enumerating (always the same neutral
+  // response) and tightly throttled since it sends outbound mail.
+  @Throttle({ default: { limit: 5, ttl: 60 * 60 * 1000 } })
+  @Post('resend-verification-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Re-send the verification link addressed by email (unauthenticated)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { email: { type: 'string', format: 'email' } },
+      required: ['email'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Verification email sent if an unverified account exists' })
+  async resendVerificationByEmail(@Body('email') email: string) {
+    if (!email) {
+      throw new BadRequestException('Email is required');
+    }
+
+    await this.authService.requestEmailVerificationByEmail(email);
+
+    return {
+      success: true,
+      data: null,
+      message: 'If an unverified account exists for this email, a verification link has been sent.',
+    };
+  }
 }

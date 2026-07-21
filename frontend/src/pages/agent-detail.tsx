@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
 import { agentsApi, memoriesApi, filesApi, versionsApi } from '@/lib/api'
@@ -57,7 +58,7 @@ export function AgentDetailPage() {
   const [scheduleInput, setScheduleInput] = useState('{}')
 
   // Fetch agent
-  const { data: agentData, isLoading } = useQuery({
+  const { data: agentData, isLoading, isError, error: agentError, refetch: refetchAgent } = useQuery({
     queryKey: ['agent', id],
     queryFn: () => agentsApi.getById(id!),
     enabled: !!id,
@@ -259,6 +260,18 @@ export function AgentDetailPage() {
     return (
       <div className="flex items-center justify-center h-96">
         <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <QueryError
+          error={agentError}
+          onRetry={() => refetchAgent()}
+          title="Couldn't load agent"
+        />
       </div>
     )
   }
