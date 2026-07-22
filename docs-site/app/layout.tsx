@@ -30,7 +30,7 @@ export const metadata = {
 const navbar = (
   <Navbar
     logo={<span style={{ fontWeight: 800 }}>almyty docs</span>}
-    projectLink="https://github.com/frane/almyty"
+    projectLink="https://github.com/almyty-inc/almyty"
   />
 )
 
@@ -48,7 +48,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           navbar={navbar}
           footer={footer}
           pageMap={pageMap}
-          docsRepositoryBase="https://github.com/frane/almyty/tree/main/docs-site"
+          docsRepositoryBase="https://github.com/almyty-inc/almyty/tree/master/docs-site"
           sidebar={{ defaultMenuCollapseLevel: 1 }}
         >
           {children}
