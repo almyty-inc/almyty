@@ -202,7 +202,11 @@ export function MemoriesPage() {
 
   // ── render ──────────────────────────────────────────────────────────
   if (!orgId) {
-    return <div className="p-8"><EmptyState icon={Brain} title="No organization" description="Switch to an organization to view memory." /></div>
+    return (
+      <div className="space-y-6">
+        <Card><CardContent className="p-0"><EmptyState icon={Brain} title="No organization" description="Switch to an organization to view memory." /></CardContent></Card>
+      </div>
+    )
   }
 
   // `apiPost` already calls `extractData` which peels off the
@@ -217,11 +221,11 @@ export function MemoriesPage() {
   const health: Record<string, { ok: boolean; latency_ms: number }> = (healthQ.data ?? {}) as any
 
   return (
-    <div className="space-y-6 p-8">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2"><Brain className="h-6 w-6" /> Memory</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Memory</h1>
+          <p className="text-muted-foreground">
             Canonical schema v1 — bi-temporal memory + document mode + multi-backend routing.
           </p>
         </div>
@@ -268,7 +272,7 @@ export function MemoriesPage() {
           </div>
 
           {list.isLoading ? <LoadingSpinner /> : items.length === 0 ? (
-            <EmptyState icon={Brain} title="No memories yet" description="Click 'New memory' to write one." />
+            <Card><CardContent className="p-0"><EmptyState icon={Brain} title="No memories yet" description="Click 'New memory' to write one." /></CardContent></Card>
           ) : (
             <div className="grid gap-3">
               {items.map((m) => (
