@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
-import { htmlToText, looksLikeMime, parseMimeMessage } from './mime.helper';
+import {
+  htmlToText,
+  looksLikeMime,
+  parseMimeMessage,
+  ParsedMimeAttachment,
+} from './mime.helper';
 import { verifySvixSignature } from './svix-signature.helper';
 
 @Injectable()
@@ -44,6 +49,24 @@ export class EmailAdapter extends BaseAdapter {
   static referencesRoot(references: any): string | undefined {
     if (typeof references !== 'string') return undefined;
     return references.trim().split(/\s+/)[0] || undefined;
+  }
+
+  /**
+   * Project parsed MIME attachment metadata onto the shared
+   * NormalizedMessage attachment shape (`{ url, type, name }`). Inbound
+   * MIME attachments carry no fetchable URL (we retain metadata only,
+   * not the bytes), so `url` is left empty; richer detail (size,
+   * contentId, disposition) rides along in message metadata.
+   */
+  static mapAttachments(
+    attachments: ParsedMimeAttachment[] | undefined,
+  ): Array<{ url: string; type: string; name: string }> {
+    if (!Array.isArray(attachments)) return [];
+    return attachments.map((a) => ({
+      url: '',
+      type: a.contentType,
+      name: a.filename || '',
+    }));
   }
 
   /**
@@ -153,16 +176,21 @@ export class EmailAdapter extends BaseAdapter {
         EmailAdapter.referencesRoot(parsed.references) ||
         parsed.inReplyTo ||
         parsed.messageId;
+      const attachments = EmailAdapter.mapAttachments(parsed.attachments);
       return {
         text: parsed.text,
         userId: parsed.from || 'unknown',
         threadId: EmailAdapter.threadKey(parsed.from, root || parsed.subject),
+        attachments: attachments.length ? attachments : undefined,
         metadata: {
           subject: parsed.subject,
           from: parsed.from,
           to: parsed.to,
           messageId: parsed.messageId,
           references: parsed.references,
+          // Full per-part detail (size, contentId, disposition) beyond
+          // the normalized {url,type,name} triple.
+          attachments: parsed.attachments,
           source: 'email',
         },
       };
