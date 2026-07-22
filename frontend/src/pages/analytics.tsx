@@ -14,7 +14,7 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { analyticsApi } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import {
   type AnalyticsTab,
@@ -97,24 +97,17 @@ export function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b">
-        {TAB_DEFINITIONS.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-              tab === key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Tabs — shared pill primitive, consistent with every other module */}
+      <Tabs value={tab} onValueChange={(v) => setTab(v as AnalyticsTab)}>
+        <TabsList className="h-auto flex-wrap justify-start">
+          {TAB_DEFINITIONS.map(({ key, label, icon: Icon }) => (
+            <TabsTrigger key={key} value={key} className="gap-1.5">
+              <Icon className="h-4 w-4" />
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {tab === 'overview' && <OverviewTab />}
       {tab === 'requests' && <RequestLogTab />}
