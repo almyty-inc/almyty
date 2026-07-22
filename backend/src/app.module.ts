@@ -48,6 +48,7 @@ import { ExternalAgent } from './entities/external-agent.entity';
 import { SpendBudget } from './entities/spend-budget.entity';
 import { SpendAlert } from './entities/spend-alert.entity';
 import { OrgSsoConfig } from './entities/org-sso-config.entity';
+import { OrgKmsConfig } from './entities/org-kms-config.entity';
 import { BillingEvent } from './entities/billing-event.entity';
 import { ReferralCode } from './entities/referral-code.entity';
 import { Referral } from './entities/referral.entity';
@@ -95,6 +96,7 @@ import { RunnerModule } from './modules/runner/runner.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LicensingModule } from './modules/licensing/licensing.module';
+import { KmsModule } from './modules/kms/kms.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { ProviderUsageModule } from './modules/provider-usage/provider-usage.module';
 import { ReferralsModule } from './modules/referrals/referrals.module';
@@ -214,6 +216,7 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
       McpSource,
       Notification,
       NotificationPreference,
+      OrgKmsConfig,
     ]),
 
     // Rate limiting — backed by Redis so limits are shared across replicas
@@ -315,6 +318,7 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     ReferralsModule,
     RetentionModule,
     NotificationsModule,
+    KmsModule,
     // EE feature modules are loaded dynamically so the OSS build compiles +
     // boots without the commercial `ee/` tree present (loadEeModules() → []).
     ...loadEeModules(),
