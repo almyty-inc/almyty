@@ -1,11 +1,12 @@
 # Dependabot configuration for continuous dependency patching.
 #
-# Opens automated PRs against the default branch whenever a new
-# version of a tracked dependency is published. Combined with the
-# `npm audit` + Trivy jobs in .github/workflows/ci.yml, this is
-# the other half of a working dependency-hygiene story: CI catches
-# KNOWN vulnerable versions on every PR, and Dependabot keeps
-# proposing the patches that make CI pass.
+# Opens automated PRs against the `development` branch (the integration
+# branch — dev promotes to staging then master; deps must flow the same
+# path, never land straight on master). Combined with the `npm audit` +
+# Trivy jobs in .github/workflows/ci.yml, this is the other half of a
+# working dependency-hygiene story: CI catches KNOWN vulnerable versions
+# on every PR, and Dependabot keeps proposing the patches that make CI
+# pass.
 #
 # Scope:
 #
@@ -13,8 +14,10 @@
 #     (frequent enough that a critical advisory lands within days,
 #     rare enough that we don't spam the PR queue with patch bumps)
 #
-#   - .github/workflows: GitHub Actions versions — trivial surface
-#     but the `@v3` / `@v4` pins rot and block on deprecation notices
+#   - .github/workflows: GitHub Actions versions. actions/checkout and
+#     actions/setup-node majors are IGNORED — they're intentionally
+#     pinned at v6 per the repo's Deploy Pins (CLAUDE.md); Dependabot
+#     kept reopening v7 bumps that we have to close by hand.
 #
 #   - docker: the Dockerfile FROM lines for backend / frontend /
 #     docs-site. Base image updates (Alpine CVEs, Node security
@@ -30,6 +33,7 @@ updates:
   # ── Backend (NestJS API) ────────────────────────────────────
   - package-ecosystem: "npm"
     directory: "/backend"
+    target-branch: "development"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -47,6 +51,7 @@ updates:
   # ── Frontend (React/Vite) ───────────────────────────────────
   - package-ecosystem: "npm"
     directory: "/frontend"
+    target-branch: "development"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -64,6 +69,7 @@ updates:
   # ── Docs site (Nextra) ──────────────────────────────────────
   - package-ecosystem: "npm"
     directory: "/docs-site"
+    target-branch: "development"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -81,6 +87,7 @@ updates:
   # ── GitHub Actions workflow pins ────────────────────────────
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "development"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -88,10 +95,17 @@ updates:
     labels:
       - "dependencies"
       - "ci"
+    ignore:
+      # Pinned at v6 per Deploy Pins (CLAUDE.md) — do not bump majors.
+      - dependency-name: "actions/checkout"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "actions/setup-node"
+        update-types: ["version-update:semver-major"]
 
   # ── Dockerfiles ─────────────────────────────────────────────
   - package-ecosystem: "docker"
     directory: "/backend"
+    target-branch: "development"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -101,6 +115,7 @@ updates:
 
   - package-ecosystem: "docker"
     directory: "/frontend"
+    target-branch: "development"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -110,6 +125,7 @@ updates:
 
   - package-ecosystem: "docker"
     directory: "/docs-site"
+    target-branch: "development"
     schedule:
       interval: "weekly"
       day: "monday"
