@@ -1,10 +1,12 @@
 name: CI
 
-# Runs the full test suite on every push to a feature branch and on
-# every PR targeting master. Prior to this workflow there were deploy
-# pipelines but NO test pipeline — PRs could land on master without
-# anything verifying the 4,000+ tests still pass. That was a gap
-# worth closing before the first external contributor lands.
+# Runs the full test suite on every push to development and on every
+# PR targeting a protected branch (development, staging, master), so
+# nothing merges into a promotion branch without the 4,000+ tests,
+# typecheck, and audit passing first. Prior to this workflow there
+# were deploy pipelines but NO test pipeline — code could land
+# unverified. That was a gap worth closing before the first external
+# contributor lands.
 #
 # Three jobs run in parallel:
 #
@@ -27,7 +29,7 @@ on:
   push:
     branches: [development]
   pull_request:
-    branches: [staging, main]
+    branches: [development, staging, master]
   workflow_call:
   workflow_dispatch:
 
