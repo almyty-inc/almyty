@@ -43,6 +43,10 @@
     "tsx": "^4.7.0",
     "typescript": "^5.9.3"
   },
+  "overrides": {
+    "@hono/node-server": "^2.0.5",
+    "esbuild": "^0.28.1"
+  },
   "homepage": "https://almyty.com",
   "repository": {
     "type": "git",
