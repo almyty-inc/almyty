@@ -1,4 +1,14 @@
-import { decryptField, encryptField, isEncrypted } from '../../../common/security/field-crypto';
+import { decryptField, isEncrypted } from '../../../common/security/field-crypto';
+
+/**
+ * Org-aware envelope encryptor. `encryptChannelConfigSecrets` needs an async
+ * encrypt so a BYO-KMS org's secrets are wrapped `encrypted:kms:` while every
+ * other org keeps the same platform `encrypted:gcm:` value. Kept as a narrow
+ * structural type so the helper doesn't depend on the KMS module directly.
+ */
+export interface ChannelSecretEnvelope {
+  encryptForOrg(organizationId: string, plaintext: string): Promise<string>;
+}
 
 /**
  * Channel gateway configuration helpers.
@@ -111,14 +121,22 @@ export function normalizeChannelConfigKeys(
 /**
  * Decrypt secret keys in a channel configuration copy. Plaintext
  * (pre-encryption) values pass through unchanged via decryptField.
+ *
+ * `organizationId` routes customer-managed (`encrypted:kms:`) values through
+ * the registered envelope unwrap hook; platform (`encrypted:gcm:`) / legacy /
+ * plaintext values decrypt exactly as before regardless of it. A BYO-KMS org
+ * must have had its DEK warmed (`EnvelopeCryptoService.warmOrg`) before this
+ * SYNCHRONOUS read, otherwise the kms unwrap throws — the same contract every
+ * other sync entity read follows.
  */
 export function decryptChannelConfig(
   configuration?: Record<string, any> | null,
+  organizationId?: string,
 ): Record<string, any> {
   const out: Record<string, any> = { ...(configuration || {}) };
   for (const key of CHANNEL_SECRET_CONFIG_KEYS) {
     if (typeof out[key] === 'string' && out[key]) {
-      out[key] = decryptField(out[key]);
+      out[key] = decryptField(out[key], organizationId);
     }
   }
   return out;
@@ -128,23 +146,37 @@ export function decryptChannelConfig(
  * The channel read path: normalized keys + decrypted secrets. This is
  * what adapters, webhook registrars, transports and test-connection
  * must receive instead of the raw stored `gateway.configuration`.
+ *
+ * Pass the gateway's `organizationId` so BYO-KMS values decrypt; omitting it
+ * keeps the previous behavior for platform/plaintext values.
  */
 export function getChannelConfig(
   configuration?: Record<string, any> | null,
+  organizationId?: string,
 ): Record<string, any> {
-  return decryptChannelConfig(normalizeChannelConfigKeys(configuration));
+  return decryptChannelConfig(normalizeChannelConfigKeys(configuration), organizationId);
 }
 
 /**
  * Encrypt secret keys in place (idempotent — already-encrypted values
  * are left alone). Used by GatewaysService on create/update.
+ *
+ * Org-aware: a BYO-KMS org's new secrets are wrapped `encrypted:kms:` via the
+ * envelope service; every other org gets the SAME platform `encrypted:gcm:`
+ * value as before (EnvelopeCryptoService falls back to the platform path when
+ * no CMK is in play). Already-encrypted values (either prefix) are skipped, so
+ * this stays idempotent and never re-wraps a stored secret.
  */
-export function encryptChannelConfigSecrets(configuration?: Record<string, any> | null): void {
+export async function encryptChannelConfigSecrets(
+  configuration: Record<string, any> | null | undefined,
+  organizationId: string,
+  envelope: ChannelSecretEnvelope,
+): Promise<void> {
   if (!configuration) return;
   for (const key of CHANNEL_SECRET_CONFIG_KEYS) {
     const value = configuration[key];
     if (typeof value === 'string' && value && !isEncrypted(value) && value !== MASKED_CHANNEL_SECRET) {
-      configuration[key] = encryptField(value);
+      configuration[key] = await envelope.encryptForOrg(organizationId, value);
     }
   }
 }

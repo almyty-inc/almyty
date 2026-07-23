@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -7,6 +7,7 @@ import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.e
 import { Organization } from '../../../entities/organization.entity';
 import { ChannelEvent } from '../../../entities/channel-event.entity';
 import { getChannelConfig } from './channel-config.helper';
+import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 
 /**
  * Automatic inbound-webhook registration for channel gateways whose
@@ -54,6 +55,10 @@ export class ChannelWebhookRegistrar {
     @InjectRepository(ChannelEvent)
     private readonly eventRepository: Repository<ChannelEvent>,
     private readonly configService: ConfigService,
+    // Optional so positional unit tests can construct the registrar; when
+    // present, warms a BYO-KMS org's DEK before the sync getChannelConfig
+    // token reads below.
+    @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
   ) {}
 
   static isRegistrable(type: GatewayType): boolean {
@@ -96,6 +101,9 @@ export class ChannelWebhookRegistrar {
   // ---------------------------------------------------------------------------
 
   private async register(gateway: Gateway): Promise<void> {
+    // Warm the org's DEK so the sync getChannelConfig token reads below can
+    // unwrap a BYO-KMS gateway's `encrypted:kms:` secrets (no-op otherwise).
+    await this.envelopeCrypto?.warmOrg(gateway.organizationId);
     const publicUrl = await this.buildPublicUrl(gateway);
     if (!publicUrl) {
       await this.record(gateway, 'register', 'skipped', null, 'PUBLIC_API_URL not configured');
@@ -126,6 +134,8 @@ export class ChannelWebhookRegistrar {
   }
 
   private async unregister(gateway: Gateway, recordOnGateway = true): Promise<void> {
+    // Warm the org's DEK before the sync getChannelConfig token reads.
+    await this.envelopeCrypto?.warmOrg(gateway.organizationId);
     try {
       switch (gateway.type) {
         case GatewayType.TELEGRAM:
@@ -155,7 +165,7 @@ export class ChannelWebhookRegistrar {
   // ---------------------------------------------------------------------------
 
   private async telegramSetWebhook(gateway: Gateway, publicUrl: string): Promise<void> {
-    const token = getChannelConfig(gateway.configuration).bot_token;
+    const token = getChannelConfig(gateway.configuration, gateway.organizationId).bot_token;
     if (!token) throw new Error('bot_token not configured');
     const res = await this.fetch(
       `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(publicUrl)}`,
@@ -168,7 +178,7 @@ export class ChannelWebhookRegistrar {
   }
 
   private async telegramDeleteWebhook(gateway: Gateway): Promise<void> {
-    const token = getChannelConfig(gateway.configuration).bot_token;
+    const token = getChannelConfig(gateway.configuration, gateway.organizationId).bot_token;
     if (!token) throw new Error('bot_token not configured');
     const res = await this.fetch(`https://api.telegram.org/bot${token}/deleteWebhook`, {
       method: 'POST',
@@ -185,7 +195,7 @@ export class ChannelWebhookRegistrar {
    * SID for the configured phone_number, then update its SmsUrl.
    */
   private async twilioSetWebhook(gateway: Gateway, url: string): Promise<void> {
-    const cfg = getChannelConfig(gateway.configuration);
+    const cfg = getChannelConfig(gateway.configuration, gateway.organizationId);
     const accountSid = cfg.twilio_account_sid;
     const authToken = cfg.twilio_auth_token;
     const phoneNumber = cfg.phone_number;
