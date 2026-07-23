@@ -96,8 +96,8 @@ almyty is the full-stack platform for AI agents, agnostic by design: any LLM, an
 API turned into tools, served over MCP, A2A, UTCP, and Agent Skills. Open source,
 no lock-in.
 
-- Website — https://almyty.com
-- Docs — https://docs.almyty.com
-- Source — https://github.com/almyty-inc/almyty
+- Website: https://almyty.com
+- Docs: https://docs.almyty.com
+- Source: https://github.com/almyty-inc/almyty
 
 Apache-2.0 © Almyty Inc.
