@@ -1,64 +1,64 @@
 # JavaScript Tools
 
-JavaScript tools execute custom JavaScript or TypeScript code in a hardened
-Node.js worker sandbox. They offer maximum flexibility for data transformation,
-computation, and integration with services that lack a ready-made HTTP or
-GraphQL wrapper -- including any npm package you want to pull in.
+A JavaScript tool runs your own JS or TypeScript in a hardened Node.js worker
+sandbox. Reach for it when you need data transformation, computation, or a
+service that has no ready-made HTTP or GraphQL wrapper. You can pull in any npm
+package, and the sandbox keeps adversarial code away from the host.
 
-![Create tool dialog showing the execution method picker](/screenshots/tools-create-dialog.png)
-## In the UI
+![Create Tool dialog with the execution method picker set to Custom JavaScript](/screenshots/tools-create-dialog.png)
 
-1. Navigate to **Tools** and click **Create Tool**
-2. Select **Custom JavaScript** as the execution method
-3. Fill in a **name** and **description**
-4. Define **input parameters** using the JSON Schema builder -- these are injected as `parameters` in your code
-5. Under **Dependencies**, list any npm packages you need (name + version, e.g. `pg` at `^8.20.0`)
-6. Write your code in the editor -- `parameters`, `credentials`, `require`, and optionally `tools` are available in the closure
-7. Click **Test** with sample inputs to verify the output
-8. Click **Create**
+## Create one in the UI
+
+1. Open **Tools**, click **Create Tool**, select **Custom JavaScript**.
+2. Give it a **name** and **description**.
+3. Define **input parameters** in the JSON Schema builder. These arrive as `parameters` in your code.
+4. Under **Dependencies**, list any npm packages you need (name plus version, e.g. `pg` at `^8.20.0`).
+5. Write your code. `parameters`, `credentials`, `require`, and optionally `tools` are available in the closure.
+6. Click **Test** with sample inputs to check the output.
+7. Click **Create**.
 
 ### What you can do in the code editor
 
-- Access input values via `parameters.fieldName`
+- Read input values via `parameters.fieldName`
 - Load npm packages via `require('package-name')`
-- Use credentials from the encrypted vault via `credentials.key`
+- Use vault credentials via `credentials.key`
 - Call other tools via `tools.invoke('tool_name', { ... })` when nested invocation is enabled
 - Return any JSON-serializable value (object, array, string, number, or `null`)
 
-## Via the API
+## The tool definition
 
-```bash
-curl -X POST /organizations/{orgId}/tools \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "calculate_discount",
-    "description": "Calculate discount price based on tier and quantity",
-    "type": "javascript",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "price": { "type": "number", "description": "Original price" },
-        "quantity": { "type": "integer", "description": "Number of items" },
-        "tier": {
-          "type": "string",
-          "enum": ["bronze", "silver", "gold"],
-          "description": "Customer tier"
-        }
-      },
-      "required": ["price", "quantity", "tier"]
+For code-based tools, the `code` field is the tool. A discount calculator
+declares its inputs and its body inline:
+
+```json
+{
+  "name": "calculate_discount",
+  "description": "Calculate discount price based on tier and quantity",
+  "type": "javascript",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "price": { "type": "number", "description": "Original price" },
+      "quantity": { "type": "integer", "description": "Number of items" },
+      "tier": {
+        "type": "string",
+        "enum": ["bronze", "silver", "gold"],
+        "description": "Customer tier"
+      }
     },
-    "code": "const discounts = { bronze: 0.05, silver: 0.10, gold: 0.20 };\nconst discount = discounts[parameters.tier] || 0;\nconst subtotal = parameters.price * parameters.quantity;\nconst discountAmount = subtotal * discount;\nreturn { subtotal, discount: discountAmount, total: subtotal - discountAmount };"
-  }'
+    "required": ["price", "quantity", "tier"]
+  },
+  "code": "const discounts = { bronze: 0.05, silver: 0.10, gold: 0.20 };\nconst discount = discounts[parameters.tier] || 0;\nconst subtotal = parameters.price * parameters.quantity;\nconst discountAmount = subtotal * discount;\nreturn { subtotal, discount: discountAmount, total: subtotal - discountAmount };"
+}
 ```
 
 ## Sandbox architecture
 
 Every execution runs in a dedicated Node.js Worker thread with the stable
 permission model (`--permission`) and a network guard installed before any user
-code loads. The threat model assumes adversarial code -- a compromised tool
-cannot reach the host filesystem, spawn subprocesses, read environment
-variables, or make network calls to internal addresses.
+code loads. The threat model assumes adversarial code: a compromised tool cannot
+reach the host filesystem, spawn subprocesses, read environment variables, or
+make network calls to internal addresses.
 
 ### Injected closure arguments
 
@@ -73,7 +73,7 @@ variables, or make network calls to internal addresses.
 
 Add dependencies to the tool's `dependencies` field (name to version). almyty
 installs them into a per-tool cache on first execution and reuses the cache on
-subsequent runs. Load them with the standard `require()` pattern:
+later runs. Load them with the standard `require()` pattern:
 
 ```javascript
 // Tool declares: { "dependencies": { "pg": "^8.20.0" } }
@@ -109,8 +109,8 @@ Anything not listed is refused at `require()` time with a clear error. `fs`,
 `http`, `https`, `net`, `tls`, `dgram`, `dns`, `child_process`,
 `worker_threads`, `vm`, `inspector`, `os`, `module`, and every other built-in
 that could touch host state are off-limits. If your code needs HTTP, use an
-installed dependency like `axios`, `got`, `undici`, or the global `fetch()` --
-all go through the network guard.
+installed dependency like `axios`, `got`, `undici`, or the global `fetch()`.
+All of them go through the network guard.
 
 ### Filesystem isolation
 
@@ -131,9 +131,9 @@ The worker starts with `--permission --allow-fs-read=<tool-deps-dir>
 
 Outbound connections are intercepted by a network guard that patches
 `dns.lookup`, `net.Socket.prototype.connect`, and
-`dgram.Socket.prototype.send` before user code runs. Every connection
-attempt -- whether from your code, an installed npm package, or a transitive
-dependency -- is classified against the ban list:
+`dgram.Socket.prototype.send` before user code runs. Every connection attempt,
+whether from your code, an installed npm package, or a transitive dependency, is
+classified against the ban list:
 
 | Category | Blocked |
 |----------|---------|
@@ -156,8 +156,8 @@ argument, populated from the tool's encrypted credential store.
 
 ### Nested tool invocation
 
-When the `tools` argument is present, you can invoke other tools by ID
-without opening an HTTP connection to the backend:
+When the `tools` argument is present, you can invoke other tools by ID without
+opening an HTTP connection to the backend:
 
 ```javascript
 const priceResult = await tools.invoke('lookup_price', {
@@ -171,8 +171,8 @@ const discountResult = await tools.invoke('calculate_discount', {
 return discountResult
 ```
 
-Each nested call runs in a fresh worker with the same tenant context and
-the same SSRF + filesystem guards.
+Each nested call runs in a fresh worker with the same tenant context and the
+same SSRF and filesystem guards.
 
 ### Resource limits
 
@@ -184,7 +184,7 @@ the same SSRF + filesystem guards.
 | Concurrent workers | 4 | No (queue backlog capped at 100) |
 
 Exceeding CPU timeout or heap limit terminates the worker and returns a
-`success: false` result with an OOM flag for the memory case.
+`success: false` result, with an OOM flag for the memory case.
 
 ## Error handling
 
@@ -202,7 +202,7 @@ require-not-allowed) propagate the same way.
 
 ## Cancellation
 
-Tool execution honours the caller's `AbortSignal`. If the outer request is
+Tool execution honors the caller's `AbortSignal`. If the outer request is
 cancelled (HTTP client disconnect, parent agent run cancelled, queue timeout),
 the worker is terminated mid-execution and the result is `success: false` with
 `error: 'Sandbox execution cancelled'`.

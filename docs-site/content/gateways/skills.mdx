@@ -1,87 +1,41 @@
 # Skills Gateway
 
-The Skills gateway generates `SKILL.md` files following the [Agent Skills](https://agentskills.io) specification. The almyty Skills CLI installs and auto-injects these files into 30+ AI coding agents, including Cursor, Windsurf, Claude Desktop, and GitHub Copilot.
+Drop your tools into any AI coding agent as installable skills. A Skills gateway renders each tool as a `SKILL.md` file following the [Agent Skills](https://agentskills.io) specification. The almyty Skills CLI installs and auto-injects those files into 30+ agents, including Cursor, Windsurf, Claude Desktop, and GitHub Copilot.
 
-![Gateways page](/screenshots/gateway-detail.png)
+![Gateway detail page](/screenshots/gateway-detail.png)
 
-## In the UI
+## Create the gateway
 
-1. Navigate to **Gateways** in the sidebar
-2. Click **Create Gateway**
-3. Select **Skills** as the protocol
+1. Open **Gateways** in the sidebar and click **Create Gateway**
+2. Select **Skills** as the protocol
 
 ![Create Gateway dialog](/screenshots/gateways-create-dialog.png)
 
-4. Enter a name, slug, and optional description
-5. Click **Create**
-6. Assign tools from the **Tools** tab on the gateway detail page
+3. Enter a name, slug, and optional description
+4. Click **Create**
 
-![Gateways page — empty state](/screenshots/gateway-detail-tools.png)
+Assign tools from the **Tools** tab on the gateway detail page. Each assigned tool becomes one `SKILL.md` file. Copy the gateway slug: you will use it with the Skills CLI.
 
-7. Copy the gateway slug -- you will use it with the Skills CLI
+![Assigning tools on the gateway Tools tab](/screenshots/gateway-detail-tools.png)
 
-## Via the API
+## Install with the Skills CLI
 
-### Create a gateway
-
-```bash
-curl -X POST /gateways \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My Skills Gateway",
-    "type": "skills",
-    "endpoint": "/my-skills"
-  }'
-```
-
-### View generated SKILL.md files
-
-```bash
-curl /gateways/{id}/skills \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-The response contains the rendered SKILL.md content for every tool assigned to the gateway.
-
-## SKILL.md format
-
-Each tool produces a markdown file like this:
-
-```markdown
----
-name: get_users
-description: Retrieve a list of users with pagination
-endpoint: https://your-instance/utcp/acme/my-skills/tools/get_users/invoke
-method: POST
-auth: bearer
----
-
-# get_users
-
-Retrieve a list of users with pagination.
-
-## Parameters
-
-| Name  | Type    | Required | Description              |
-|-------|---------|----------|--------------------------|
-| page  | integer | no       | Page number              |
-| limit | integer | no       | Items per page (default: 20) |
-```
-
-## Skills CLI
-
-Install and manage skills from the terminal.
-
-### Install
+Install the gateway's skills into your local agents:
 
 ```bash
 npx @almyty/skills install @acme/my-skills
 ```
 
+Authenticate first if needed:
+
+```bash
+npx @almyty/skills login
+npx @almyty/skills login --token your-api-key
+```
+
 ### Watch mode
 
-Polls the gateway every 30 seconds and updates SKILL.md files when tools change.
+Poll the gateway every 30 seconds and refresh SKILL.md files when tools change:
 
 ```bash
 npx @almyty/skills watch @acme/my-skills
@@ -100,11 +54,31 @@ npx @almyty/skills list
 npx @almyty/skills remove @acme/my-skills
 ```
 
-### Authentication
+The CLI writes SKILL.md files to each agent's skill directory and registers them for auto-loading.
 
-```bash
-npx @almyty/skills login
-npx @almyty/skills login --token your-api-key
+## SKILL.md format
+
+Each tool produces a markdown file like this:
+
+```markdown
+---
+name: get_users
+description: Retrieve a list of users with pagination
+endpoint: https://api.almyty.com/utcp/acme/my-skills/tools/get_users/invoke
+method: POST
+auth: bearer
+---
+
+# get_users
+
+Retrieve a list of users with pagination.
+
+## Parameters
+
+| Name  | Type    | Required | Description              |
+|-------|---------|----------|--------------------------|
+| page  | integer | no       | Page number              |
+| limit | integer | no       | Items per page (default: 20) |
 ```
 
 ## Supported agents
@@ -116,5 +90,3 @@ npx @almyty/skills login --token your-api-key
 | **Dev Tools** | GitHub Copilot CLI, Aider, Continue, Cody |
 | **Frameworks** | LangChain, LlamaIndex, AutoGPT, CrewAI |
 | **Others** | 20+ additional agents |
-
-The CLI writes SKILL.md files to each agent's skill directory and registers them for auto-loading.

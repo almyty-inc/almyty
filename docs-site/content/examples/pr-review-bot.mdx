@@ -1,18 +1,18 @@
 # 🔍 Review pull requests for bugs and policy
 
-**Stack** — `Trigger: GitHub webhook → agent API / schedule` · `Models: Claude 4.8 + GPT-4o (cross-check)` · `Tools: GitHub API` · `Mode: verify panel + constraints` · `Output: inline PR review comments`
+**Stack**: `Trigger: GitHub webhook → agent API / schedule` · `Models: Claude 4.8 + GPT-4o (cross-check)` · `Tools: GitHub API` · `Mode: verify panel + constraints` · `Output: inline PR review comments`
 
-**Who it's for** — teams where reviews are the bottleneck and the easy stuff eats reviewer time.
-**What it does** — reads a PR diff, flags likely bugs, missing tests, and policy violations (secrets, banned dependencies), and leaves inline comments — so a human reviewer starts from a triaged list instead of a blank diff.
+**Who it's for**: teams where reviews are the bottleneck and the easy stuff eats reviewer time.
+**What it does**: reads a PR diff, flags likely bugs, missing tests, and policy violations (secrets, banned dependencies), and leaves inline comments, so a human reviewer starts from a triaged list instead of a blank diff.
 
 ## Build it
 
 1. **Connect GitHub** (REST/GraphQL via *Connect API*, or `@octokit/rest` as an SDK tool) for PR, diff, and review-comment access.
 2. **Create the agent** with the instruction: *review this diff for correctness, test coverage, and policy; comment inline; do not approve or merge.*
-3. **Encode policy as constraints** — *flag any committed secret; block new dependencies outside the allowlist; require tests for new endpoints.*
-4. **Add a verify panel** — a second-vendor model re-checks each flagged issue so the bot doesn't spam false positives; only findings both models keep get posted.
-5. **Post the review** — the agent leaves inline comments and a summary via the GitHub tools; it never approves.
-6. **Trigger it** — a GitHub webhook calls the agent API on `pull_request.opened`/`synchronize`, or run it on a schedule over open PRs.
+3. **Encode policy as constraints**: *flag any committed secret; block new dependencies outside the allowlist; require tests for new endpoints.*
+4. **Add a verify panel**: a second-vendor model re-checks each flagged issue so the bot doesn't spam false positives; only findings both models keep get posted.
+5. **Post the review**: the agent leaves inline comments and a summary via the GitHub tools; it never approves.
+6. **Trigger it**: a GitHub webhook calls the agent API on `pull_request.opened`/`synchronize`, or run it on a schedule over open PRs.
 
 ## Make it yours
 
@@ -20,7 +20,7 @@
 - Gate merges by requiring the bot's summary to show zero policy violations.
 - Run the [multi-vendor coding fleet](/examples/multi-vendor-coding-fleet) to *fix* what the review finds.
 
-**Uses** — `DevOps` · `GitHub` · `Verification` · `Constraints`
+**Uses**: `DevOps` · `GitHub` · `Verification` · `Constraints`
 
 ## Related
 

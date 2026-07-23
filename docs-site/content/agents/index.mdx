@@ -1,78 +1,70 @@
 # Agents
 
-An agent takes an input, does work with one or more LLMs and tools, and returns
-a result. almyty has two kinds:
+Build an agent from the tools you already have. Draw the steps as a visual
+workflow when a task must run the same way every time, or go autonomous and let
+the model decide what to call. Either way, the result can be checked by a second
+model from a different vendor before it returns.
 
-- **[Autonomous](/agents/autonomous)** — you give it instructions and tools, and
-  the model decides what to do. Several models can collaborate in one agent, the
-  output is verified before it returns, and good runs become reusable skills.
-  This is the default for open-ended work.
-- **[Workflow](/agents/builder)** — you draw the steps as a graph. Use it when a
-  task must run the same way every time.
+![Agent builder canvas with typed nodes wired into a pipeline](/screenshots/agent-builder.png)
 
-![Agents list](/screenshots/agents-list.png)
-
-## Modes
+## Two modes
 
 | Mode | Best for | How it works |
 |------|----------|--------------|
+| **Workflow** | A task that must run the same way every time | A visual graph of typed nodes connected by edges. See the [Builder](/agents/builder). |
 | **Autonomous** | Open-ended reasoning | Instructions, tools, memory, and a verifier panel; the model drives. See [Autonomous agents](/agents/autonomous). |
-| **Workflow** | Deterministic pipelines | A visual DAG of typed nodes connected by edges. See the [Builder](/agents/builder). |
 
-Both modes share the same building blocks underneath — tools, LLM providers,
-memory, verification, scheduling, and the OpenAI-compatible endpoint — so you can
-pick per agent without giving anything up.
+Both modes share the same building blocks: tools, LLM providers, memory,
+verification, scheduling, and the OpenAI-compatible endpoint. Pick per agent
+without giving anything up.
 
-## Create an agent
+### Visual builder
 
-In the UI: **Agents → Create Agent**, then pick **Autonomous** or **Workflow**.
+The canvas opens with a default Input to LLM to Output pipeline. Drag nodes from
+the palette, connect them, and configure each in the side panel. Nodes cover
+input, LLM calls, tool calls, conditions, transforms, and output. See the
+[node types](/agents/node-types) reference for the full set.
 
-- **Autonomous** — enter instructions, attach tools, enable memory, add
-  constraints, and configure the verifier panel. Full detail in
-  [Autonomous agents](/agents/autonomous).
-- **Workflow** — the canvas opens with a default Input → LLM → Output pipeline.
-  Drag nodes from the palette, connect them, and configure each in the side
-  panel. Full detail in the [Builder](/agents/builder).
+### Autonomous
 
-From the list you can activate or deactivate an agent, duplicate it, import one
-from JSON, or delete it.
+Enter instructions, attach tools, enable memory, add constraints, and configure
+the verifier panel. The model plans its own steps, calls tools, and revises when
+a checker fails. Good runs become reusable skills.
 
-### Via the API
+![Autonomous agent configuration with instructions, tools, and the verifier panel](/screenshots/agent-builder-autonomous.png)
 
-```bash
-# Autonomous
-curl -X POST https://api.almyty.com/agents \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Support Agent",
-    "mode": "autonomous",
-    "instructions": "Answer support questions using the knowledge-base tool.",
-    "toolIds": ["tool-uuid-1", "tool-uuid-2"],
-    "memoryEnabled": true
-  }'
+## Cross-vendor verification
 
-# Workflow (abbreviated — see the Builder for the full pipeline shape)
-curl -X POST https://api.almyty.com/agents \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{ "name": "Research Agent", "mode": "workflow", "pipeline": { "nodes": [], "edges": [] } }'
-```
+Before an autonomous agent returns, the verifier panel runs the output past one
+or more checker models. Point the primary model at one vendor and the checkers at
+another, so a mistake from one provider does not sail through unquestioned. A
+failed check sends the agent back to revise. Details in
+[Autonomous agents](/agents/autonomous#verification).
 
-### Invoke an agent
+![Agent detail overview showing configuration, tools, and recent runs](/screenshots/agent-detail-overview.png)
 
-Every agent, whichever mode, answers on the same endpoint:
+## Create and run
+
+In the UI: **Agents to Create Agent**, then pick **Workflow** or **Autonomous**.
+From the list you can activate, deactivate, duplicate, import from JSON, or delete
+an agent.
+
+![Agents list with mode, status, and last run](/screenshots/agents-list.png)
+
+From the terminal, list and run agents with the CLI:
 
 ```bash
-curl -X POST https://api.almyty.com/agents/{id}/invoke \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{ "input": { "query": "What is the weather in Berlin?" } }'
+$ npx @almyty/agents list
+$ npx @almyty/agents run invoice-pipeline --input '{"file_url": "https://example.com/invoice.pdf"}'
 ```
 
-Agents are also reachable through the
+Autonomous runs stream their steps with `--watch` and take safety limits like
+`--max-steps` and `--max-cost-cents`. Full command reference in the
+[Agents CLI](/cli/agents).
+
+Every agent, whichever mode, also answers on the
 [OpenAI-compatible API](/api-reference/openai-compatible), so an existing OpenAI
-SDK can call them by changing the base URL.
+SDK can call it by changing the base URL.
 
 ## Lifecycle
 
@@ -83,21 +75,10 @@ SDK can call them by changing the base URL.
 | `inactive` | Paused; invocations are rejected |
 | `error` | Has a configuration issue |
 
-## Execution model
-
-An **autonomous** agent sends the input to the primary model with its
-instructions and tools, lets the model call tools and reason, runs the
-[verifier panel](/agents/autonomous#verification) over the result, and revises if
-a checker fails.
-
-A **workflow** agent validates the input against the Input node's schema,
-topologically sorts the pipeline, executes each node in dependency order, resolves
-[template expressions](/agents/template-expressions) at runtime, and returns the
-Output node's result.
-
 ## Related
 
-- [Autonomous agents](/agents/autonomous) — verification, constraints, skills, memory
-- [Workflow builder](/agents/builder) — the visual DAG and its node types
-- [Scheduling](/agents/scheduling) and [Webhooks](/agents/webhooks) — run agents on a timer or an event
-- [Versioning](/agents/versioning) — snapshot and roll back an agent
+- [Autonomous agents](/agents/autonomous): verification, constraints, skills, memory
+- [Workflow builder](/agents/builder): the visual graph and how to wire it
+- [Node types](/agents/node-types): every node the builder offers
+- [Scheduling](/agents/scheduling) and [Webhooks](/agents/webhooks): run agents on a timer or an event
+- [Versioning](/agents/versioning): snapshot and roll back an agent

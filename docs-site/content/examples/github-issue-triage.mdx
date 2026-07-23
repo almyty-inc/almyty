@@ -1,18 +1,18 @@
 # 🐙 Triage and label GitHub issues
 
-**Stack** — `Trigger: schedule (poll) or GitHub webhook → agent API` · `Models: your choice` · `Tools: GitHub API or @octokit/rest (npm)` · `Mode: single agent + constraints` · `Memory: project` · `Output: labels, assignee, dedup comment`
+**Stack**: `Trigger: schedule (poll) or GitHub webhook → agent API` · `Models: your choice` · `Tools: GitHub API or @octokit/rest (npm)` · `Mode: single agent + constraints` · `Memory: project` · `Output: labels, assignee, dedup comment`
 
-**Who it's for** — maintainers whose issue tracker is a swamp.
-**What it does** — reads each new issue, labels it (bug / feature / question / needs-repro), links likely duplicates, routes it to the right area owner, and asks for a reproduction when a bug report is missing one.
+**Who it's for**: maintainers whose issue tracker is a swamp.
+**What it does**: reads each new issue, labels it (bug / feature / question / needs-repro), links likely duplicates, routes it to the right area owner, and asks for a reproduction when a bug report is missing one.
 
 ## Build it
 
-1. **Give it GitHub.** Either *Connect API* against the GitHub REST/GraphQL schema, or add the `@octokit/rest` npm package as an [SDK tool](/tools/sdk-tools) — both give typed tools for issues, labels, and comments.
+1. **Give it GitHub.** Either *Connect API* against the GitHub REST/GraphQL schema, or add the `@octokit/rest` npm package as an [SDK tool](/tools/sdk-tools), both give typed tools for issues, labels, and comments.
 2. **Create the agent** with your triage rules: *label by type and area, link duplicates, request a repro for bugs without steps.*
-3. **Add constraints** — *never close an issue; never assign core-team-only labels* — so it can organize without overstepping.
+3. **Add constraints**: *never close an issue; never assign core-team-only labels*, so it can organize without overstepping.
 4. **Turn on project memory** so it recognizes the same bug reported five different ways.
-5. **Let it act** — the agent applies labels, sets an assignee, and posts a short triage comment via the GitHub tools.
-6. **Trigger it** — run it on a schedule to sweep new issues, or have a GitHub webhook call the agent's API on `issues.opened`.
+5. **Let it act**: the agent applies labels, sets an assignee, and posts a short triage comment via the GitHub tools.
+6. **Trigger it**: run it on a schedule to sweep new issues, or have a GitHub webhook call the agent's API on `issues.opened`.
 
 ## Make it yours
 
@@ -20,7 +20,7 @@
 - Escalate suspected security reports to a private channel instead of labeling in the open.
 - Promote a good triage run to a [skill](/gateways/skills) so other repos reuse the rubric.
 
-**Uses** — `DevOps` · `GitHub` · `Constraints` · `Memory`
+**Uses**: `DevOps` · `GitHub` · `Constraints` · `Memory`
 
 ## Related
 

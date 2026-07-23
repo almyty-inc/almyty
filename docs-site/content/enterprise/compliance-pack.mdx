@@ -1,20 +1,22 @@
 # Compliance Pack
 
-Enterprise (`compliance_pack` entitlement). The open-source platform ships the guardrail plugins — **pii-filter** and **security-scanner** — but each agent opts in individually. The compliance pack turns them into **org policy**: a central declaration of which guardrails are mandatory and how strict they are, plus a posture report you can hand to an auditor.
+Enterprise (`compliance_pack` entitlement). Make the guardrails mandatory across the whole org, and get a posture report you can hand to an auditor. The open-source platform ships the guardrail plugins (**pii-filter** and **security-scanner**), but each agent opts in individually. The compliance pack turns them into **org policy**: a central declaration of which guardrails are required and how strict they are.
+
+![An agent's guardrail constraints, which the org policy makes mandatory platform-wide](/screenshots/agent-constraints.png)
 
 This is the operational half of the story told on the [Compliance](/compliance) page: Art. 9 risk management wants demonstrable, organization-wide controls, not per-agent good intentions.
 
 ## The org policy
 
-```bash
-curl -X PUT /compliance/policy \
-  -H "Content-Type: application/json" \
-  -d '{
-    "enforcedPlugins": ["pii-filter", "security-scanner"],
-    "securityThreshold": "medium",
-    "blockOnViolation": true,
-    "piiCategories": []
-  }'
+Set the policy under **Settings** (admin/owner only). It declares which built-in guardrails are enforced org-wide and how they behave:
+
+```json
+{
+  "enforcedPlugins": ["pii-filter", "security-scanner"],
+  "securityThreshold": "medium",
+  "blockOnViolation": true,
+  "piiCategories": []
+}
 ```
 
 | Field | Values | Meaning |
@@ -24,25 +26,19 @@ curl -X PUT /compliance/policy \
 | `blockOnViolation` | boolean | block the offending call vs. log-and-continue |
 | `piiCategories` | string[] | PII categories to filter; empty = all |
 
-**Secure by default**: until an admin configures a policy, the effective policy enforces both plugins with `securityThreshold: medium` and `blockOnViolation: true`. Configuring can only relax from there, deliberately.
-
-`GET /compliance/policy` returns the effective policy (including whether it's the default or configured). Admin/owner only.
+**Secure by default**: until an admin configures a policy, the effective policy enforces both plugins with `securityThreshold: medium` and `blockOnViolation: true`. Configuring can only relax from there, deliberately. Reading the policy back returns the effective policy, including whether it is the default or configured.
 
 ## The posture report
 
-```bash
-curl "/compliance/report?from=2026-06-01&to=2026-07-01"   # defaults: last 30 days
-```
-
-The report is designed to be attached to a conformity file as-is:
+The report is designed to attach to a conformity file as-is (defaults to the last 30 days; the endpoint and its date range are in the [API reference](/api-reference)):
 
 - **Effective policy** for the window.
-- **Enforced controls** — per plugin: enforced or not, and the effective settings (threshold, blocking, categories).
-- **Activity** — audit-log-derived counts: total events, breakdown by action, how many were scannable executions (tool/agent runs), and credential-access events.
-- **Posture score** (0–100) — a blunt summary: 40 points per enforced guardrail plugin, 20 for blocking mode. Full marks means both guardrails enforced and violations blocked, not merely logged.
+- **Enforced controls**: per plugin, enforced or not, and the effective settings (threshold, blocking, categories).
+- **Activity**: audit-log-derived counts (total events, breakdown by action, how many were scannable executions, and credential-access events).
+- **Posture score** (0 to 100): a blunt summary. 40 points per enforced guardrail plugin, 20 for blocking mode. Full marks means both guardrails enforced and violations blocked, not merely logged.
 
 ## Related
 
-- [Compliance](/compliance) — the regulatory mapping this pack supports
-- [Approval policies](/enterprise/approval-policies) — human oversight for consequential actions
-- [Audit export](/enterprise/audit-export) — get the evidence trail into your SIEM
+- [Compliance](/compliance) is the regulatory mapping this pack supports
+- [Approval policies](/enterprise/approval-policies) are human oversight for consequential actions
+- [Audit export](/enterprise/audit-export) gets the evidence trail into your SIEM
