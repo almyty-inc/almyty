@@ -21,6 +21,8 @@ $ almyty agents list
 | `almyty chat [org/slug]` | `@almyty/chat` | Interactive chat REPL |
 | `almyty skills <cmd>` | `@almyty/skills` | Install and manage skills |
 | `almyty mcp <args>` | `@almyty/mcp-server` | Start MCP server |
+| `almyty acp <args>` | `@almyty/acp-server` | Serve an agent over the Agent Client Protocol |
+| `almyty runner <cmd>` | `@almyty/runner` | Run a machine daemon (`runner start`, `runner status`) |
 
 ## Standalone packages
 

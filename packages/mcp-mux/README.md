@@ -1,11 +1,15 @@
 # @almyty/mcp-mux
 
-Southbound stdio-MCP **id-rewrite multiplexer**: fan N client sessions into one
-downstream stdio MCP child over a Unix socket, with safe id remapping, framing
-serialization, response routing, and crash-respawn.
+**Share one stdio MCP server across many clients.** An MCP server launched as a
+subprocess has a single stdin/stdout and normally serves one client at a time.
+This library puts it behind a Unix socket so several clients can use it at once —
+remapping request ids so each response routes back to the right client,
+serializing writes so messages never interleave, and respawning the child if it
+crashes.
 
-> Scope: **southbound MCP only** (almyty as the client/proxy to a downstream MCP
-> server). This package does not touch northbound ACP/A2A serving.
+> Used internally by almyty when it proxies **to** a downstream MCP server. It
+> only handles that proxy-to-server direction; it is not involved in serving
+> almyty's own agents to clients over ACP or A2A.
 
 ## Why
 
