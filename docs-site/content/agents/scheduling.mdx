@@ -1,86 +1,25 @@
 # Scheduling
 
-Agents can run automatically on a recurring interval. This is useful for
-periodic data collection, reporting, monitoring, or any recurring AI workflow.
+Run an agent automatically on a recurring interval, with no external cron to
+wire up. Use it for periodic data collection, reporting, monitoring, or any
+recurring AI workflow.
 
-![The Schedule config on an agent — enable, interval in minutes, optional input JSON](/screenshots/schedule-config.png)
+![The Schedule config on an agent: enable, interval in minutes, optional input JSON](/screenshots/schedule-config.png)
 
-## In the UI
-
-### Creating a Schedule
+## Create a schedule
 
 1. Open the agent's detail page
 2. Click the **Schedule** tab
 3. Set the **Interval** (minimum 5 minutes)
-4. Optionally provide **Static Input** -- a fixed JSON payload sent on each run
+4. Optionally provide **Static Input**, a fixed JSON payload sent on each run
 5. Click **Enable Schedule**
 
 The next scheduled run time appears below the interval setting.
 
-### Removing a Schedule
+## Remove a schedule
 
-1. Open the agent's detail page
-2. Click the **Schedule** tab
-3. Click **Disable Schedule**
-
-Disabling does not delete existing execution history.
-
-## Via the API
-
-### Create a Schedule
-
-```bash
-curl -X POST /agents/{id}/schedule \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "intervalMinutes": 60,
-    "input": { "action": "daily-report" }
-  }'
-```
-
-Response:
-
-```json
-{
-  "success": true,
-  "data": {
-    "scheduleId": "sched-uuid",
-    "intervalMinutes": 60,
-    "nextRunAt": "2026-03-23T15:00:00Z",
-    "input": { "action": "daily-report" }
-  }
-}
-```
-
-### View Schedule
-
-The schedule is included in the agent detail response:
-
-```bash
-curl /agents/{id} \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-```json
-{
-  "id": "agent-uuid",
-  "name": "Daily Reporter",
-  "schedule": {
-    "intervalMinutes": 60,
-    "nextRunAt": "2026-03-23T15:00:00Z",
-    "lastRunAt": "2026-03-23T14:00:00Z",
-    "input": { "action": "daily-report" }
-  }
-}
-```
-
-### Remove Schedule
-
-```bash
-curl -X DELETE /agents/{id}/schedule \
-  -H "Authorization: Bearer $TOKEN"
-```
+On the **Schedule** tab, click **Disable Schedule**. Disabling does not delete
+existing execution history.
 
 ## Configuration Reference
 
@@ -99,43 +38,36 @@ curl -X DELETE /agents/{id}/schedule \
 | Daily digest | 1440 minutes (24h) |
 | Weekly summary | 10080 minutes (7d) |
 
-## Execution History
+## Execution history
 
-Scheduled executions appear in the agent's execution history alongside manual
-invocations. Each scheduled execution is tagged with `trigger: "schedule"` in
-its metadata.
-
-```bash
-curl /agents/{id}/executions?trigger=schedule \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-## Cost Estimation
-
-Check the estimated cost per run before enabling a schedule:
+Scheduled runs appear in the agent's execution history alongside manual
+invocations, each tagged with `trigger: "schedule"` in its metadata. Review them
+on the detail page, or from your terminal:
 
 ```bash
-curl /agents/{id}/cost-estimate \
-  -H "Authorization: Bearer $TOKEN"
+$ npx @almyty/agents runs daily-reporter
 ```
 
-```json
-{
-  "estimatedTokensPerRun": 450,
-  "estimatedCostPerRun": "$0.0045",
-  "estimatedMonthlyCost": "$3.24",
-  "breakdown": [
-    { "node": "llm_1", "tokens": 350, "cost": "$0.0035" },
-    { "node": "llm_2", "tokens": 100, "cost": "$0.0010" }
-  ]
-}
+Filter to just the scheduled failures with `--json` and `jq`:
+
+```bash
+$ npx @almyty/agents runs daily-reporter --json \
+    | jq '[.[] | select(.status == "failed")]'
 ```
 
-Multiply by `(60 * 24 * 30) / intervalMinutes` to get the monthly run count.
+## Cost
+
+Before enabling a frequent schedule, check the estimated cost per run on the
+agent's detail page. To project a month, multiply the per-run cost by the run
+count: `(60 * 24 * 30) / intervalMinutes`. A 60-minute schedule runs 720 times a
+month; a 5-minute schedule runs 8,640 times.
 
 ## Notes
 
 - The agent must be in `active` status for scheduled runs to execute
-- If an execution fails, the schedule continues -- check execution history for errors
+- If an execution fails, the schedule continues: check execution history for errors
 - Deactivating an agent pauses its schedule; reactivating resumes it
 - Deleting the schedule does not affect existing execution history
+
+To manage schedules programmatically, see the
+[API reference](/api-reference/openai-compatible).

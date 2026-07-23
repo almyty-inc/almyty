@@ -1,41 +1,29 @@
 # Audit Export & SIEM Streaming
 
-Enterprise (`audit_export` entitlement). The audit log itself — who did what, to which resource, from which IP — is part of the open-source platform and browsable under [Analytics](/analytics). This feature adds two things security teams actually ask for: **bulk export** for evidence and retention, and **streaming** into the SIEM you already alert from.
+Enterprise (`audit_export` entitlement). Hand security an evidence file, and feed the same events into the SIEM they already alert from. The audit log itself (who did what, to which resource, from which IP) is part of the open-source platform and browsable under [Analytics](/analytics). This feature adds the two things security teams ask for: **bulk export** for evidence and retention, and **streaming** into your SIEM.
+
+![The Audit Trail under Analytics, with Export CSV and Export JSON](/screenshots/analytics-audit.png)
 
 ## Export
 
-One endpoint, JSON or CSV, filterable, up to 50,000 rows per export:
+From the **Audit Trail** tab under [Analytics](/analytics), click **Export CSV** or **Export JSON**. Exports are filterable (date range, `resourceType`, `action`, `userId`) and capped at 50,000 rows. The file downloads as an attachment (`audit-export-YYYY-MM-DD.json|csv`) with an `X-Audit-Export-Count` header.
 
-```bash
-curl -o audit.csv \
-  "/audit-export?format=csv&from=2026-06-01&to=2026-07-01&action=credential_use"
-```
-
-| Query param | Meaning |
-|---|---|
-| `format` | `json` \| `csv` (default `json`) |
-| `from`, `to` | date range |
-| `resourceType`, `action`, `userId` | filters |
-| `limit` | row cap (max 50,000) |
-
-The response downloads as an attachment (`audit-export-YYYY-MM-DD.json|csv`) with an `X-Audit-Export-Count` header. CSV columns: `id, createdAt, organizationId, userId, userEmail, action, resourceType, resourceId, resourceName, status, ipAddress, details`. Admin/owner only.
+CSV columns: `id, createdAt, organizationId, userId, userEmail, action, resourceType, resourceId, resourceName, status, ipAddress, details`. Admin/owner only. The export endpoint and its query parameters are in the [API reference](/api-reference).
 
 ## SIEM streaming
 
-Register a stream target and audit events are forwarded as they occur:
+Register a stream target and audit events are forwarded as they occur. A stream is a target type, an endpoint, a token, and an optional action filter:
 
-```bash
-curl -X POST /audit-export/streams \
-  -H "Content-Type: application/json" \
-  -d '{
-    "target": "splunk_hec",
-    "endpoint": "https://splunk.example.com:8088/services/collector",
-    "token": "…",
-    "actionFilter": ["credential_use", "agent_delete"]
-  }'
+```json
+{
+  "target": "splunk_hec",
+  "endpoint": "https://splunk.example.com:8088/services/collector",
+  "token": "…",
+  "actionFilter": ["credential_use", "agent_delete"]
+}
 ```
 
-`GET /audit-export/streams` lists configured streams; `DELETE /audit-export/streams/:id` removes one. `actionFilter` is optional — omit it to stream everything.
+`actionFilter` is optional: omit it to stream everything. Streams are managed under **Settings** or the [API reference](/api-reference).
 
 ### Targets
 
@@ -47,4 +35,4 @@ curl -X POST /audit-export/streams \
 
 ### Delivery semantics
 
-Streaming is **best-effort**: events are sent one at a time, without batching or retries, and a delivery failure never blocks or fails the action that produced the event. Each stream config records its last successful delivery (`lastDeliveredAt`) and the most recent failure (`lastError`), so a dead endpoint is visible at a glance. Treat the SIEM copy as an operational feed — the database audit log (and its export) remains the system of record.
+Streaming is **best-effort**: events are sent one at a time, without batching or retries, and a delivery failure never blocks or fails the action that produced the event. Each stream config records its last successful delivery (`lastDeliveredAt`) and the most recent failure (`lastError`), so a dead endpoint is visible at a glance. Treat the SIEM copy as an operational feed. The database audit log (and its export) remains the system of record.

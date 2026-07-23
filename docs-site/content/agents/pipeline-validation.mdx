@@ -1,11 +1,12 @@
 # Pipeline Validation
 
-almyty validates every workflow pipeline before it can be activated or invoked.
-Validation runs automatically when you save an agent in the builder and surfaces
-errors directly on the canvas.
-
+A broken pipeline never reaches production: almyty validates every workflow agent
+before it can be activated or invoked. Validation runs automatically when you
+save in the builder and surfaces errors directly on the canvas, so you fix them
+in place.
 
 ![Validation errors on the canvas](/screenshots/agent-builder.png)
+
 ## In the UI
 
 When you save a pipeline in the builder:
@@ -20,7 +21,7 @@ validation warnings but cannot be activated or invoked.
 1. Click **Save** in the builder top bar
 2. Review any errors highlighted on the canvas and in the error panel
 3. Click a node with a red border to open its config panel and fix the issue
-4. Save again -- the error panel clears when all issues are resolved
+4. Save again: the error panel clears when all issues are resolved
 
 ## Validation Rules
 
@@ -53,25 +54,16 @@ validation warnings but cannot be activated or invoked.
 
 Template expressions (`{{...}}`) are checked for:
 
-- **Valid syntax** -- properly closed double curly braces
-- **Valid references** -- referenced node IDs must exist in the pipeline
-- **Upstream dependency** -- referenced nodes must be upstream (executed before) the current node
-- **No self-reference** -- a node cannot reference its own output
+- **Valid syntax**: properly closed double curly braces
+- **Valid references**: referenced node IDs must exist in the pipeline
+- **Upstream dependency**: referenced nodes must be upstream (executed before) the current node
+- **No self-reference**: a node cannot reference its own output
 
-## Via the API
+## Validation errors
 
-Validation happens automatically on save. Errors are returned in the response:
-
-```bash
-curl -X PATCH /agents/{id} \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "pipeline": { ... }
-  }'
-```
-
-If validation fails:
+Validation happens automatically on save, whether you save from the builder or
+update the agent through the API. When a pipeline fails, the response lists each
+problem by node and field:
 
 ```json
 {
@@ -114,12 +106,12 @@ sidebar to configure a provider first.
 ### Invalid Template Expressions
 
 ```
-// Bad -- references a non-existent node
+// Bad: references a non-existent node
 {{nodes.nonexistent.output}}
 
-// Bad -- references a downstream node (not yet executed)
+// Bad: references a downstream node (not yet executed)
 {{nodes.output_1.output}}
 
-// Good -- references an upstream node
+// Good: references an upstream node
 {{nodes.llm_1.output}}
 ```

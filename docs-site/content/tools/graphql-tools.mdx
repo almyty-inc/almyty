@@ -1,62 +1,63 @@
 # GraphQL Tools
 
-GraphQL tools execute a custom query or mutation against a specified endpoint.
-They give you structured variable mapping, automatic type coercion, and
-built-in error detection for GraphQL responses.
+A GraphQL tool runs one query or mutation against an endpoint and hands the
+result back to the agent. You get structured variable mapping, automatic type
+coercion, and error detection tuned to the GraphQL response shape, so the model
+calls a clean named action instead of assembling requests.
 
-![Create tool dialog showing the execution method picker](/screenshots/tools-create-dialog.png)
-## In the UI
+![Create Tool dialog with the execution method picker set to GraphQL](/screenshots/tools-create-dialog.png)
 
-1. Navigate to **Tools** and click **Create Tool**
-2. Select **GraphQL** as the execution method
-3. Fill in a **name** and **description**
-4. Enter the **GraphQL endpoint URL**
-5. Write your **query or mutation** in the query editor
-6. Define **input parameters** -- these map to GraphQL variables via `{{parameters.*}}` expressions
-7. Add **authentication headers** (typically a Bearer token)
-8. Optionally set an **operation name** if your document contains multiple operations
-9. Click **Create**
+## Create one in the UI
+
+1. Open **Tools**, click **Create Tool**, select **GraphQL**.
+2. Give it a **name** and **description**.
+3. Enter the **GraphQL endpoint URL**.
+4. Write the **query or mutation** in the query editor.
+5. Define **input parameters**. These map to GraphQL variables via `{{parameters.*}}` expressions.
+6. Add **authentication headers** (typically a Bearer token).
+7. Optionally set an **operation name** if the document holds multiple operations.
+8. Click **Create**.
 
 ### Variable mapping
 
-GraphQL variables are mapped from tool parameters using template expressions.
-Type coercion happens automatically:
+GraphQL variables are mapped from tool parameters with template expressions, and
+type coercion happens automatically:
 
 - String parameters stay as strings
 - Numeric parameters are passed as numbers
 - Boolean parameters are passed as booleans
 - Object parameters are passed as nested objects
 
-## Via the API
+## The tool definition
 
-```bash
-curl -X POST /organizations/{orgId}/tools \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "search_repositories",
-    "description": "Search GitHub repositories using GraphQL",
-    "type": "graphql",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "query": { "type": "string", "description": "Search query" },
-        "first": { "type": "integer", "description": "Number of results", "default": 10 }
-      },
-      "required": ["query"]
+The query, variable map, and endpoint are the tool. A GitHub repository search
+maps two inputs onto a single `search` query:
+
+```json
+{
+  "name": "search_repositories",
+  "description": "Search GitHub repositories using GraphQL",
+  "type": "graphql",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": { "type": "string", "description": "Search query" },
+      "first": { "type": "integer", "description": "Number of results", "default": 10 }
     },
-    "executionConfig": {
-      "endpoint": "https://api.github.com/graphql",
-      "headers": {
-        "Authorization": "Bearer {{env.GITHUB_TOKEN}}"
-      },
-      "query": "query SearchRepos($query: String!, $first: Int!) { search(query: $query, type: REPOSITORY, first: $first) { repositoryCount edges { node { ... on Repository { name description stargazerCount url } } } } }",
-      "variables": {
-        "query": "{{parameters.query}}",
-        "first": "{{parameters.first}}"
-      }
+    "required": ["query"]
+  },
+  "executionConfig": {
+    "endpoint": "https://api.github.com/graphql",
+    "headers": {
+      "Authorization": "Bearer {{env.GITHUB_TOKEN}}"
+    },
+    "query": "query SearchRepos($query: String!, $first: Int!) { search(query: $query, type: REPOSITORY, first: $first) { repositoryCount edges { node { ... on Repository { name description stargazerCount url } } } } }",
+    "variables": {
+      "query": "{{parameters.query}}",
+      "first": "{{parameters.first}}"
     }
-  }'
+  }
+}
 ```
 
 ## Configuration reference
@@ -82,11 +83,11 @@ GraphQL endpoints typically use Bearer token authentication:
 }
 ```
 
-For APIs requiring custom authentication, add any headers you need.
+For endpoints requiring custom authentication, add any headers you need.
 
 ## Error handling
 
-GraphQL APIs return errors in a specific format:
+GraphQL APIs return errors in a specific shape:
 
 ```json
 {
@@ -101,19 +102,19 @@ GraphQL APIs return errors in a specific format:
 }
 ```
 
-almyty detects GraphQL errors and reports them as tool execution failures,
-including the error messages from the API.
+almyty detects these errors and reports them as tool execution failures,
+including the messages from the API.
 
 ## Response extraction
 
-By default, the entire `data` object from the GraphQL response is returned as
-the tool's result. For complex responses, use a Transform node in an agent
-pipeline to extract specific fields.
+By default the entire `data` object from the response is returned as the tool
+result. For complex responses, use a Transform node in an agent pipeline to
+extract specific fields.
 
 ## Best practices
 
-1. **Use variables** -- never interpolate values directly into the query string
-2. **Name your operations** -- helps with debugging and server-side logging
-3. **Request only needed fields** -- GraphQL's strength is selective field querying
-4. **Handle nullable fields** -- many GraphQL schemas have nullable fields by default
-5. **Test with GraphiQL** -- verify your queries work before creating tools
+1. **Use variables**: never interpolate values directly into the query string.
+2. **Name your operations**: helps with debugging and server-side logging.
+3. **Request only needed fields**: selective field querying is GraphQL's strength.
+4. **Handle nullable fields**: many GraphQL schemas default fields to nullable.
+5. **Test with GraphiQL**: verify queries work before creating tools.
