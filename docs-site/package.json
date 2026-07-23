@@ -20,7 +20,8 @@
   },
   "overrides": {
     "cross-spawn": "^7.0.6",
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
