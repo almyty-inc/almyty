@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -11,6 +16,7 @@ import { OrgKmsConfig } from '../../entities/org-kms-config.entity';
 import {
   decryptField as platformDecryptField,
   encryptField as platformEncryptField,
+  registerEnvelopeUnwrapHook,
 } from '../../common/security/field-crypto';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../licensing/license.constants';
@@ -58,7 +64,7 @@ interface DekCacheEntry {
  * decrypting exactly as before and is never silently misread.
  */
 @Injectable()
-export class EnvelopeCryptoService {
+export class EnvelopeCryptoService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(EnvelopeCryptoService.name);
 
   /** Unwrapped-DEK cache, keyed by organizationId. Plaintext, in-memory only. */
@@ -70,6 +76,20 @@ export class EnvelopeCryptoService {
     private readonly orgLicenseResolver: OrgLicenseResolver,
     private readonly kmsClientFactory: KmsClientFactory,
   ) {}
+
+  /**
+   * Register the synchronous unwrap hook so entity methods (which can't inject
+   * services) can decrypt `encrypted:kms:` values from the warmed DEK cache.
+   */
+  onModuleInit(): void {
+    registerEnvelopeUnwrapHook((organizationId, value) =>
+      this.decryptCached(organizationId, value),
+    );
+  }
+
+  onModuleDestroy(): void {
+    registerEnvelopeUnwrapHook(null);
+  }
 
   /** True if a value is stored in the customer-managed envelope format. */
   static isEnvelope(value: string): boolean {
@@ -116,6 +136,45 @@ export class EnvelopeCryptoService {
   /** Invalidate the cached plaintext DEK for an org (e.g. after CMK rotation). */
   invalidate(organizationId: string): void {
     this.dekCache.delete(organizationId);
+  }
+
+  /**
+   * Prime the in-process DEK cache for an org so subsequent SYNCHRONOUS reads
+   * (entity methods routing `encrypted:kms:` through the registered unwrap hook)
+   * can unwrap without a network round-trip. No-op for orgs without an enabled
+   * CMK — those never produce kms values, so the sync path never needs a DEK.
+   * Call this from an async service method right before handing an entity to
+   * sync consumers (provider helpers, getAuthHeaders, etc.).
+   */
+  async warmOrg(organizationId: string): Promise<void> {
+    if (!organizationId) return;
+    try {
+      await this.loadDek(organizationId);
+    } catch (err) {
+      // A failure to warm is not fatal here — if the org actually has kms
+      // values, the sync read will surface a clear error. Non-kms orgs are
+      // unaffected.
+      this.logger.warn(
+        `warmOrg failed for ${organizationId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Synchronously decrypt an `encrypted:kms:` value using the ALREADY-CACHED
+   * DEK for the org. Backs the registered unwrap hook. Throws if the DEK is not
+   * cached (caller forgot to `warmOrg`) — we never silently fall back, since
+   * that would risk leaking ciphertext downstream.
+   */
+  decryptCached(organizationId: string, value: string): string {
+    const cached = this.dekCache.get(organizationId);
+    if (!cached || cached.expiresAt <= Date.now()) {
+      throw new Error(
+        `No warmed DEK for org ${organizationId} while decrypting a ` +
+          `customer-managed value. Call warmOrg() before sync reads.`,
+      );
+    }
+    return this.gcmDecrypt(cached.dek, value);
   }
 
   // ── internals ────────────────────────────────────────────────────────────

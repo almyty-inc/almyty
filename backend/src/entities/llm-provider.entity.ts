@@ -343,9 +343,40 @@ export class LlmProvider {
   }
 
   /**
-   * Encrypt the API key before it's persisted. Call from the service layer
-   * right before save() (idempotent — already-encrypted values are left
-   * alone). Mirrors Credential.encryptSensitiveData().
+   * Encrypt the API key before it's persisted, using the org's envelope path so
+   * a BYO-KMS org gets `encrypted:kms:` and every other org gets the SAME
+   * platform `encrypted:gcm:` value as `encryptSensitiveData()` produces.
+   * Call from the service layer right before save() (idempotent — already
+   * encrypted values are left alone).
+   */
+  async encryptSensitiveDataForOrg(envelope: {
+    encryptForOrg(orgId: string, plaintext: string): Promise<string>;
+  }): Promise<void> {
+    const key = this.configuration?.apiKey;
+    if (typeof key === 'string' && key.length > 0 && !isEncrypted(key)) {
+      this.configuration.apiKey = await envelope.encryptForOrg(
+        this.organizationId,
+        key,
+      );
+    }
+    const usageKey = this.configuration?.usageApiKey;
+    if (
+      typeof usageKey === 'string' &&
+      usageKey.length > 0 &&
+      !isEncrypted(usageKey)
+    ) {
+      this.configuration.usageApiKey = await envelope.encryptForOrg(
+        this.organizationId,
+        usageKey,
+      );
+    }
+  }
+
+  /**
+   * Encrypt the API key before it's persisted (platform path only). Retained
+   * for callers that have no org/envelope context; the org-aware BYO-KMS path
+   * is `encryptSensitiveDataForOrg()`. Idempotent — already-encrypted values
+   * are left alone. Mirrors Credential.encryptSensitiveData().
    */
   encryptSensitiveData(): void {
     const key = this.configuration?.apiKey;
@@ -365,19 +396,21 @@ export class LlmProvider {
   getDecryptedUsageApiKey(): string | undefined {
     const key = this.configuration?.usageApiKey;
     if (typeof key !== 'string' || key.length === 0) return undefined;
-    return decryptField(key);
+    return decryptField(key, this.organizationId);
   }
 
   /**
    * The plaintext API key for use in an outbound request. Transparently
    * decrypts the stored value; a legacy plaintext value passes through
-   * unchanged. Every read site must go through this, never
-   * configuration.apiKey directly.
+   * unchanged. A customer-managed (`encrypted:kms:`) value is unwrapped via the
+   * registered envelope hook — the org's DEK must be warmed first (the service
+   * layer does this before invoking read paths). Every read site must go
+   * through this, never configuration.apiKey directly.
    */
   getDecryptedApiKey(): string | undefined {
     const key = this.configuration?.apiKey;
     if (typeof key !== 'string' || key.length === 0) return undefined;
-    return decryptField(key);
+    return decryptField(key, this.organizationId);
   }
 
   getAuthHeaders(): Record<string, string> {

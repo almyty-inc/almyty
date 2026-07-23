@@ -11,6 +11,10 @@ import { VersionedEntity } from 'typeorm-versions';
 import { Api } from './api.entity';
 import { Organization } from './organization.entity';
 import * as crypto from 'crypto';
+import {
+  isKmsEnvelope,
+  decryptField,
+} from '../common/security/field-crypto';
 
 const { createHash } = crypto;
 
@@ -179,6 +183,39 @@ export class Credential {
     }
   }
 
+  /** Sensitive config keys that get encrypted at rest. */
+  private static readonly SENSITIVE_FIELDS = [
+    'password', 'secret', 'token', 'key', 'client_secret', 'apiKey',
+    'accessToken', 'refreshToken', 'headerValue', 'clientSecret', 'bearer',
+    'serviceAccountJson',
+  ];
+
+  /**
+   * Org-aware encryption: routes each sensitive field through the org's
+   * envelope path so a BYO-KMS org gets `encrypted:kms:` while every other org
+   * gets the SAME platform `encrypted:gcm:` value `encryptSensitiveData()`
+   * produces. Already-encrypted values (`encrypted:*`) are left as-is, so this
+   * is idempotent and never double-wraps or migrates a kms value.
+   */
+  async encryptSensitiveDataForOrg(envelope: {
+    encryptForOrg(orgId: string, plaintext: string): Promise<string>;
+  }): Promise<void> {
+    if (!this.config || typeof this.config !== 'object') return;
+    const encrypted = { ...this.config };
+
+    for (const field of Credential.SENSITIVE_FIELDS) {
+      const value = encrypted[field];
+      if (!value || typeof value !== 'string') continue;
+      if (value.startsWith('encrypted:')) continue; // already encrypted
+      encrypted[field] = await envelope.encryptForOrg(
+        this.organizationId,
+        value,
+      );
+    }
+
+    this.config = encrypted;
+  }
+
   /**
    * Encrypt a credential value with AES-256-GCM (authenticated).
    *
@@ -208,6 +245,15 @@ export class Credential {
   private decryptValue(encryptedValue: string): string {
     if (!encryptedValue.startsWith('encrypted:')) {
       return encryptedValue;
+    }
+
+    // Customer-managed (BYO-KMS) value — route to the registered envelope
+    // unwrap hook via decryptField, keyed by this credential's org. The org's
+    // DEK must have been warmed by the service layer before this sync read.
+    // Platform (`encrypted:gcm:`) / legacy CBC values fall through to the
+    // unchanged local path below, so existing data is never affected.
+    if (isKmsEnvelope(encryptedValue)) {
+      return decryptField(encryptedValue, this.organizationId);
     }
 
     const parts = encryptedValue.split(':');

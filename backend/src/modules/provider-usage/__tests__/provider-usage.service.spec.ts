@@ -1,4 +1,5 @@
 import { ProviderUsageService } from '../provider-usage.service';
+import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 import {
   providerUsageCapability,
   listProviderUsageCapabilities,
@@ -43,7 +44,7 @@ describe('ProviderUsageService', () => {
     const snapshotRepo = opts.snapshotRepo ?? { upsert: jest.fn(), createQueryBuilder: jest.fn() };
     const providerRepo = opts.providerRepo ?? { find: jest.fn() };
     const conversationRepo = opts.conversationRepo ?? { createQueryBuilder: jest.fn() };
-    return new ProviderUsageService(snapshotRepo, providerRepo, conversationRepo);
+    return new ProviderUsageService(snapshotRepo, providerRepo, conversationRepo, makeEnvelopeCryptoMock());
   }
 
   // ── capability catalog ─────────────────────────────────────────────

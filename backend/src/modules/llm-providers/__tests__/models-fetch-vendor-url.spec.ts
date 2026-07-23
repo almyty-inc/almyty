@@ -1,5 +1,6 @@
 import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { LlmModelsHelper } from '../llm-models.helper';
+import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 
 jest.mock('../providers/safe-request', () => ({
   callLlmProviderHttp: jest.fn(),
@@ -17,7 +18,7 @@ const { callLlmProviderHttp } = require('../providers/safe-request');
  * healthy Mistral provider whose /models call failed with 401.
  */
 describe('fetchOpenAIModels vendor URL resolution', () => {
-  const helper = new LlmModelsHelper();
+  const helper = new LlmModelsHelper(makeEnvelopeCryptoMock());
 
   const makeProvider = (type: LlmProviderType): LlmProvider => {
     const p = new LlmProvider();

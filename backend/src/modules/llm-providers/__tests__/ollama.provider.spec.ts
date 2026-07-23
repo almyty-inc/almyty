@@ -1,6 +1,7 @@
 import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { LlmModelsHelper } from '../llm-models.helper';
 import { LlmChatRunnerHelper } from '../llm-chat-runner.helper';
+import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 import { MessageRole } from '../../../entities/message.entity';
 
 jest.mock('../providers/safe-request', () => {
@@ -76,7 +77,7 @@ describe('ollama keyless auth', () => {
 });
 
 describe('ollama chat dispatch (OpenAI-compat path)', () => {
-  const runner = new LlmChatRunnerHelper({} as any, {} as any, new LlmModelsHelper());
+  const runner = new LlmChatRunnerHelper({} as any, {} as any, new LlmModelsHelper(makeEnvelopeCryptoMock()), makeEnvelopeCryptoMock());
   const session = { context: {} } as any;
   const request = {
     messages: [{ role: MessageRole.USER, content: 'hi' }],
@@ -127,7 +128,7 @@ describe('ollama chat dispatch (OpenAI-compat path)', () => {
 });
 
 describe('ollama models list (/api/tags)', () => {
-  const helper = new LlmModelsHelper();
+  const helper = new LlmModelsHelper(makeEnvelopeCryptoMock());
 
   const tagsResponse = {
     data: {
@@ -182,7 +183,7 @@ describe('ollama models list (/api/tags)', () => {
 });
 
 describe('ollama capabilities and pricing', () => {
-  const helper = new LlmModelsHelper();
+  const helper = new LlmModelsHelper(makeEnvelopeCryptoMock());
 
   it('defaults to the OpenAI-compat capability set (tools + streaming)', () => {
     const caps = helper.getDefaultCapabilities(LlmProviderType.OLLAMA);

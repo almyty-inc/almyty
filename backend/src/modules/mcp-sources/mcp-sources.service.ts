@@ -10,7 +10,7 @@ import { Repository } from 'typeorm';
 
 import { McpSource, McpSourceStatus, McpSourceAuthType } from '../../entities/mcp-source.entity';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
-import { encryptField, decryptField } from '../../common/security/field-crypto';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { computeToolHash } from '../../common/security/tool-integrity';
 import {
   McpClientService,
@@ -55,6 +55,7 @@ export class McpSourcesService {
     @InjectRepository(Tool)
     private readonly toolRepository: Repository<Tool>,
     private readonly mcpClient: McpClientService,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   // ─── CRUD ─────────────────────────────────────────────────────────
@@ -90,7 +91,7 @@ export class McpSourcesService {
       description: input.description?.trim() || null,
       url,
       authType,
-      authConfig: this.encryptAuthConfig(authType, input),
+      authConfig: await this.encryptAuthConfig(organizationId, authType, input),
       status: McpSourceStatus.ACTIVE,
       organizationId,
       createdBy: userId ?? null,
@@ -149,7 +150,7 @@ export class McpSourcesService {
 
     try {
       const { tools: remoteTools, init } = await this.mcpClient.listTools(
-        this.connectionConfig(source),
+        await this.connectionConfig(source),
       );
 
       const mine = await this.findMaterializedTools(source);
@@ -266,7 +267,7 @@ export class McpSourcesService {
     }
 
     const result = await this.mcpClient.callTool(
-      this.connectionConfig(source, options),
+      await this.connectionConfig(source, options),
       mcpConfig.remoteName,
       args ?? {},
     );
@@ -330,23 +331,24 @@ export class McpSourcesService {
     return candidates.filter((t) => t.configuration?.mcp?.sourceId === source.id);
   }
 
-  private connectionConfig(source: McpSource, options: McpExecuteOptions = {}): McpConnectionConfig {
+  private async connectionConfig(source: McpSource, options: McpExecuteOptions = {}): Promise<McpConnectionConfig> {
     return {
       url: source.url,
-      headers: this.decryptAuthHeaders(source),
+      headers: await this.decryptAuthHeaders(source),
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     };
   }
 
-  private encryptAuthConfig(
+  private async encryptAuthConfig(
+    organizationId: string,
     authType: McpSourceAuthType,
     input: CreateMcpSourceInput,
-  ): McpSource['authConfig'] {
+  ): Promise<McpSource['authConfig']> {
     if (authType === 'bearer') {
       const token = (input.bearerToken ?? '').trim();
       if (!token) throw new BadRequestException('bearerToken is required for bearer auth');
-      return { bearerToken: encryptField(token) };
+      return { bearerToken: await this.envelopeCrypto.encryptForOrg(organizationId, token) };
     }
     if (authType === 'headers') {
       const headers = input.headers ?? {};
@@ -358,20 +360,22 @@ export class McpSourcesService {
         if (/[\r\n]/.test(key) || /[\r\n]/.test(String(value))) {
           throw new BadRequestException('header names/values must not contain newlines');
         }
-        encrypted[key] = encryptField(String(value));
+        encrypted[key] = await this.envelopeCrypto.encryptForOrg(organizationId, String(value));
       }
       return { headers: encrypted };
     }
     return null;
   }
 
-  private decryptAuthHeaders(source: McpSource): Record<string, string> {
+  private async decryptAuthHeaders(source: McpSource): Promise<Record<string, string>> {
     const headers: Record<string, string> = {};
+    const orgId = source.organizationId;
     if (source.authType === 'bearer' && source.authConfig?.bearerToken) {
-      headers['Authorization'] = `Bearer ${decryptField(source.authConfig.bearerToken)}`;
+      const token = await this.envelopeCrypto.decryptForOrg(orgId, source.authConfig.bearerToken);
+      headers['Authorization'] = `Bearer ${token}`;
     } else if (source.authType === 'headers' && source.authConfig?.headers) {
       for (const [key, value] of Object.entries(source.authConfig.headers)) {
-        headers[key] = decryptField(value);
+        headers[key] = await this.envelopeCrypto.decryptForOrg(orgId, value);
       }
     }
     return headers;
