@@ -3,10 +3,13 @@ import axios from 'axios';
 
 import { callLlmProviderHttp, llmCallOptionsFor } from './providers/safe-request';
 import { LlmProvider, LlmProviderType } from '../../entities/llm-provider.entity';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 
 @Injectable()
 export class LlmModelsHelper {
   private readonly logger = new Logger(LlmModelsHelper.name);
+
+  constructor(private readonly envelopeCrypto: EnvelopeCryptoService) {}
 
   async fetchModelsFromProvider(provider: LlmProvider): Promise<Array<{
     id: string;
@@ -14,6 +17,9 @@ export class LlmModelsHelper {
     created?: number;
     owned_by?: string;
   }>> {
+    // Warm the org's DEK cache so the sync getDecryptedApiKey reads below can
+    // unwrap a customer-managed key. No-op for non-KMS orgs.
+    await this.envelopeCrypto.warmOrg(provider.organizationId);
     try {
       switch (provider.type) {
         case LlmProviderType.OPENAI:

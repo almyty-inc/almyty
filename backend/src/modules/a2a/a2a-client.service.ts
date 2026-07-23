@@ -6,6 +6,7 @@ import { v4 as uuid } from 'uuid';
 
 import { ExternalAgent } from '../../entities/external-agent.entity';
 import { CredentialsService } from '../credentials/credentials.service';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 
 @Injectable()
 export class A2AClientService {
@@ -15,6 +16,7 @@ export class A2AClientService {
     @InjectRepository(ExternalAgent)
     private readonly externalAgentRepository: Repository<ExternalAgent>,
     private readonly credentialsService: CredentialsService,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   /**
@@ -34,6 +36,8 @@ export class A2AClientService {
         externalAgent.credentialId,
         externalAgent.organizationId,
       );
+      // Warm the org's DEK before sync getAuthHeaders (no-op for non-KMS orgs).
+      await this.envelopeCrypto.warmOrg(credential.organizationId);
       const authHeaders = credential.getAuthHeaders();
       Object.assign(headers, authHeaders);
     } catch (err: any) {

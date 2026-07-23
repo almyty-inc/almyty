@@ -12,6 +12,7 @@ import {
   ProviderUsageCapability,
   providerUsageCapability,
 } from './provider-usage.capability';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 
 /** One normalized daily usage/cost bucket, provider-agnostic. */
 export interface NormalizedUsageBucket {
@@ -89,6 +90,7 @@ export class ProviderUsageService {
     private readonly providerRepo: Repository<LlmProvider>,
     @InjectRepository(Conversation)
     private readonly conversationRepo: Repository<Conversation>,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   getCapability(type: LlmProviderType | string): ProviderUsageCapability {
@@ -133,6 +135,8 @@ export class ProviderUsageService {
       return { supported: false, capability, buckets: [] };
     }
 
+    // Warm the org's DEK before the sync usageCredential read (no-op non-KMS).
+    await this.envelopeCrypto.warmOrg(provider.organizationId);
     const key = this.usageCredential(provider);
     if (!key) {
       return {
