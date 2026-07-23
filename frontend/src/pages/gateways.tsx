@@ -388,11 +388,11 @@ export function GatewaysPage() {
             <EmptyState
               icon={Zap}
               title="No gateways yet"
-              description="Gateways expose your tools and agents via MCP, UTCP, Agent Skills, A2A, ACP, and more. Create one to give Claude, Cursor, or any MCP-compatible client access to your tools."
+              description="A gateway serves a set of tools over MCP, A2A, UTCP, and Agent Skills — one endpoint, every protocol."
               action={
                 <Button onClick={() => setCreateDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Create Gateway
+                  Create gateway
                 </Button>
               }
               className="py-16"
