@@ -1,8 +1,8 @@
 # Visual Pipeline Builder
 
-The pipeline builder is the primary interface for designing workflow agents. It
-provides a ReactFlow canvas where you drag, connect, and configure nodes to
-define your agent's execution graph.
+Design a workflow agent by dragging nodes onto a canvas, connecting them, and
+configuring each one. The builder is a ReactFlow canvas: what you draw is the
+agent's execution graph, run left to right at invocation time.
 
 ![Visual pipeline builder](/screenshots/agent-builder.png)
 
@@ -16,41 +16,46 @@ The builder has three main areas:
 | **Canvas** | Center | The DAG workspace where you arrange and connect nodes |
 | **Node Config Panel** | Right panel (opens on node click) | Configure the selected node's properties |
 
-At the top of the builder, two tabs switch between **Workflow** (visual DAG) and
-**Autonomous** (form-based) modes.
+Two tabs at the top switch between **Workflow** (visual DAG) and **Autonomous**
+(form-based) modes.
 
-## In the UI
+## Build a pipeline
 
-### Adding Nodes
+### Add nodes
 
-1. Open an agent in the builder
-2. Find the node type you need in the **Node Palette** on the left
-3. Drag it onto the canvas
-4. The node appears with default configuration and unconnected handles
+Find the node type you need in the **Node Palette** on the left and drag it onto
+the canvas. It appears with default configuration and unconnected handles.
 
-### Connecting Nodes
+![Node palette](/screenshots/agent-builder-node-palette.png)
 
-1. Hover over a node's output handle (right side)
-2. Click and drag to another node's input handle (left side)
-3. Release to create an edge
-4. Data flows left-to-right along edges at execution time
+### Connect nodes
 
-To remove a connection, click the edge and press **Delete** or **Backspace**.
+Hover a node's output handle (right side), then click and drag to another node's
+input handle (left side) and release to create an edge. Data flows left to right
+along edges at execution time. To remove a connection, click the edge and press
+**Delete** or **Backspace**.
 
-### Configuring a Node
+### Configure a node
 
-1. Click any node on the canvas
-2. The **Node Config Panel** opens on the right
-3. Fill in the required fields (varies by node type)
-4. Changes are saved to the draft automatically
+Click any node to open the **Node Config Panel** on the right, then fill in the
+required fields (they vary by node type). Changes save to the draft automatically.
 
-### Saving and Testing
+### Save and test
 
 1. Click **Save** in the top bar to persist the pipeline
-2. Validation runs automatically -- nodes with errors show a red border
+2. Validation runs automatically: nodes with errors show a red border (see [Pipeline Validation](/agents/pipeline-validation))
 3. Fix any issues listed in the error panel at the bottom
 4. Click **Test** to open the test drawer, provide sample input, and run the pipeline
 5. Review the output and per-node execution details in the test results
+
+Once the agent is active, run it from your terminal:
+
+```bash
+$ npx @almyty/agents run invoice-pipeline \
+    --input '{"file_url": "https://example.com/invoice.pdf"}'
+```
+
+See the [Agents CLI](/cli/agents) for `--watch`, `--json`, and more.
 
 ## Node Types
 
@@ -59,8 +64,8 @@ for quick identification.
 
 | Node Type | Purpose |
 |-----------|---------|
-| **Input** | Entry point -- defines the JSON Schema for incoming data |
-| **Output** | Exit point -- maps the final result from upstream nodes |
+| **Input** | Entry point: defines the JSON Schema for incoming data |
+| **Output** | Exit point: maps the final result from upstream nodes |
 | **LLM Call** | Sends a prompt to an LLM provider and returns the response |
 | **Tool Call** | Invokes a tool with explicit parameter mapping |
 | **Condition** | Branches the pipeline based on a boolean expression (true/false edges) |
@@ -84,13 +89,14 @@ full control over execution order.
 
 Switching to the **Autonomous** tab replaces the canvas with a form:
 
-- **System Instructions** -- free-text prompt describing the agent's behavior
-- **Tools** -- select which tools the agent can call
-- **Memory** -- toggle persistent memory across conversations
-- **Collaboration** -- optionally connect other agents for delegation
+- **System Instructions**: free-text prompt describing the agent's behavior
+- **Tools**: select which tools the agent can call
+- **Memory**: toggle persistent memory across conversations
+- **Collaboration**: optionally connect other agents for delegation
 
 The LLM decides at runtime which tools to call and in what order. Best for
-open-ended tasks where rigid sequencing is unnecessary.
+open-ended tasks where rigid sequencing is unnecessary. See
+[Autonomous agents](/agents/autonomous).
 
 ## Canvas Controls
 
@@ -103,29 +109,26 @@ open-ended tasks where rigid sequencing is unnecessary.
 | Undo | Ctrl/Cmd + Z |
 | Redo | Ctrl/Cmd + Shift + Z |
 
-## Via the API
+## The pipeline object
 
-The pipeline structure set in the builder maps directly to the API's `pipeline`
-object:
+The graph you draw maps directly to a `pipeline` object of `nodes` and `edges`.
+This is what export/import produces, and what the builder stores:
 
-```bash
-curl -X PATCH /agents/{id} \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "pipeline": {
-      "nodes": [
-        { "id": "input_1", "type": "input", "data": { "schema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] } } },
-        { "id": "llm_1", "type": "llm_call", "data": { "providerId": "provider-uuid", "userPromptTemplate": "Answer: {{input.query}}" } },
-        { "id": "output_1", "type": "output", "data": { "mapping": "{{nodes.llm_1.output}}" } }
-      ],
-      "edges": [
-        { "id": "e1", "source": "input_1", "target": "llm_1" },
-        { "id": "e2", "source": "llm_1", "target": "output_1" }
-      ]
-    }
-  }'
+```json
+{
+  "pipeline": {
+    "nodes": [
+      { "id": "input_1", "type": "input", "data": { "schema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] } } },
+      { "id": "llm_1", "type": "llm_call", "data": { "providerId": "provider-uuid", "userPromptTemplate": "Answer: {{input.query}}" } },
+      { "id": "output_1", "type": "output", "data": { "mapping": "{{nodes.llm_1.output}}" } }
+    ],
+    "edges": [
+      { "id": "e1", "source": "input_1", "target": "llm_1" },
+      { "id": "e2", "source": "llm_1", "target": "output_1" }
+    ]
+  }
+}
 ```
 
-Node positions on the canvas are stored in each node's `position` field
-(`{ x, y }`) and are included in export/import payloads.
+Each node's canvas position is stored in its `position` field (`{ x, y }`) and is
+included in export/import payloads.

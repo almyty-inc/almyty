@@ -1,25 +1,26 @@
 # LLM Tools
 
-LLM tools use a language model to generate output based on a prompt template.
-Instead of calling an endpoint or running code, they send a prompt to a
-configured LLM provider and return the model's response -- either as raw text
-or as validated JSON.
+An LLM tool wraps a prompt template as a callable action. Instead of hitting an
+endpoint or running code, it fills a prompt with the tool's inputs, sends it to a
+configured provider, and returns the model's answer as raw text or as validated
+JSON. Use it for summarizing, classifying, extracting, or translating inside a
+larger agent flow.
 
-![Create tool dialog showing the execution method picker](/screenshots/tools-create-dialog.png)
-## In the UI
+![Create Tool dialog with the execution method picker set to LLM](/screenshots/tools-create-dialog.png)
 
-1. Navigate to **Tools** and click **Create Tool**
-2. Select **LLM** as the execution method
-3. Fill in a **name** and **description**
-4. Choose an **LLM provider** and **model** from your configured providers (set these up under **AI Models** first)
-5. Write a **system prompt** with standing instructions for the model
-6. Write a **user prompt template** using `{{parameters.*}}` expressions for dynamic values
-7. Define **input parameters** referenced in the templates
-8. Choose the **output mode**:
-   - **Text** -- returns the raw model response as a string
-   - **JSON** -- instructs the model to return structured JSON, optionally validated against a schema you provide
-9. Adjust **temperature** and **max tokens** if needed
-10. Click **Create**
+## Create one in the UI
+
+1. Open **Tools**, click **Create Tool**, select **LLM**.
+2. Give it a **name** and **description**.
+3. Choose an **LLM provider** and **model** from your configured providers (set these up under **AI Models** first).
+4. Write a **system prompt** with standing instructions for the model.
+5. Write a **user prompt template** using `{{parameters.*}}` expressions for dynamic values.
+6. Define the **input parameters** referenced in the templates.
+7. Choose the **output mode**:
+   - **Text**: returns the raw model response as a string
+   - **JSON**: instructs the model to return structured JSON, optionally validated against a schema you provide
+8. Adjust **temperature** and **max tokens** if needed.
+9. Click **Create**.
 
 ### Output modes
 
@@ -32,8 +33,8 @@ or as validated JSON.
 ```
 
 **JSON mode** parses the response and optionally validates it against an
-`outputSchema` you define. This is useful for classification, entity
-extraction, and any tool whose consumers expect structured data:
+`outputSchema` you define. Use it for classification, entity extraction, and any
+tool whose consumers expect structured data:
 
 ```json
 {
@@ -45,48 +46,48 @@ extraction, and any tool whose consumers expect structured data:
 }
 ```
 
-## Via the API
+## The tool definition
 
-```bash
-curl -X POST /organizations/{orgId}/tools \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "summarize_text",
-    "description": "Summarize a text document into key points",
-    "type": "llm",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "text": { "type": "string", "description": "Text to summarize" },
-        "maxPoints": { "type": "integer", "description": "Maximum bullet points", "default": 5 }
-      },
-      "required": ["text"]
+The prompt template and provider config are the tool. A summarizer maps its text
+input into a user prompt and pins a low temperature for stable output:
+
+```json
+{
+  "name": "summarize_text",
+  "description": "Summarize a text document into key points",
+  "type": "llm",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "text": { "type": "string", "description": "Text to summarize" },
+      "maxPoints": { "type": "integer", "description": "Maximum bullet points", "default": 5 }
     },
-    "executionConfig": {
-      "providerId": "provider-uuid",
-      "model": "gpt-4o",
-      "systemPrompt": "You are a concise summarizer. Extract key points from text.",
-      "promptTemplate": "Summarize the following text into at most {{parameters.maxPoints}} bullet points:\n\n{{parameters.text}}",
-      "temperature": 0.3,
-      "maxTokens": 1024,
-      "outputMode": "text"
-    }
-  }'
+    "required": ["text"]
+  },
+  "executionConfig": {
+    "providerId": "provider-uuid",
+    "model": "gpt-4o",
+    "systemPrompt": "You are a concise summarizer. Extract key points from text.",
+    "promptTemplate": "Summarize the following text into at most {{parameters.maxPoints}} bullet points:\n\n{{parameters.text}}",
+    "temperature": 0.3,
+    "maxTokens": 1024,
+    "outputMode": "text"
+  }
+}
 ```
 
 ## Configuration reference
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `providerId` | string | -- | ID of the LLM provider (required) |
+| `providerId` | string | (required) | ID of the LLM provider |
 | `model` | string | Provider default | Specific model to use |
-| `systemPrompt` | string | -- | System-level instructions |
-| `promptTemplate` | string | -- | User prompt with `{{parameters.*}}` expressions |
+| `systemPrompt` | string | (none) | System-level instructions |
+| `promptTemplate` | string | (none) | User prompt with `{{parameters.*}}` expressions |
 | `temperature` | number | `0.7` | Sampling temperature (0 = deterministic, 2 = creative) |
 | `maxTokens` | number | `1024` | Maximum tokens in the response |
 | `outputMode` | string | `text` | `text` for raw string, `json` for parsed JSON |
-| `outputSchema` | JSON Schema | -- | When `outputMode` is `json`, validates the response |
+| `outputSchema` | JSON Schema | (none) | When `outputMode` is `json`, validates the response |
 
 ## Prompt templates
 
@@ -119,7 +120,7 @@ When using JSON mode, define an output schema to enforce structure:
 
 ## Supported providers
 
-LLM tools work with any configured LLM provider:
+LLM tools work with any configured provider:
 
 | Provider | Models |
 |----------|--------|
@@ -131,7 +132,7 @@ Configure providers in **AI Models** before creating LLM tools.
 
 ## Cost tracking
 
-Each LLM tool execution tracks token usage:
+Each execution tracks token usage:
 
 ```json
 {
