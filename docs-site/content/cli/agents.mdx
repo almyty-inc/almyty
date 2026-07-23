@@ -116,9 +116,10 @@ Autonomous agents can run indefinitely if unchecked. Use these flags to set guar
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--max-steps <n>` | Stop after N execution steps | No limit |
-| `--max-cost-cents <n>` | Stop when LLM cost exceeds N cents | No limit |
-| `--max-duration-ms <n>` | Stop after N milliseconds | No limit |
+| `--max-steps <n>` | Stop after N execution steps | 50 |
+| `--max-cost-cents <n>` | Stop when LLM cost exceeds N cents | 100 |
+| `--max-duration-ms <n>` | Stop after N milliseconds | 3600000 (1 hour) |
+| `--resume <conversation-id>` | Continue a previous autonomous conversation | none |
 
 ```bash
 $ npx @almyty/agents run research-bot \
