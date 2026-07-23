@@ -1,16 +1,16 @@
 # 📚 Deflect L1 questions from your docs
 
-**Stack** — `Trigger: Slack / Discord` · `Models: your choice` · `Tools: docs search, ticket-create API` · `Mode: single agent + constraints` · `Memory: shared` · `Output: answer in-channel, ticket only if it can't`
+**Stack**: `Trigger: Slack / Discord` · `Models: your choice` · `Tools: docs search, ticket-create API` · `Mode: single agent + constraints` · `Memory: shared` · `Output: answer in-channel, ticket only if it can't`
 
-**Who it's for** — teams whose docs already hold the answer, but people ask in Slack anyway.
-**What it does** — answers product and setup questions from your own documentation in the channel, cites the page it used, and only opens a ticket when it genuinely can't answer — so humans see the hard questions, not the FAQ.
+**Who it's for**: teams whose docs already hold the answer, but people ask in Slack anyway.
+**What it does**: answers product and setup questions from your own documentation in the channel, cites the page it used, and only opens a ticket when it genuinely can't answer, so humans see the hard questions, not the FAQ.
 
 ## Build it
 
-1. **Make your docs searchable.** Expose your help center or docs as a search tool — connect a search API (Algolia, your own endpoint) via *Connect API*, or wrap a retrieval endpoint as a JavaScript tool.
+1. **Make your docs searchable.** Expose your help center or docs as a search tool, connect a search API (Algolia, your own endpoint) via *Connect API*, or wrap a retrieval endpoint as a JavaScript tool.
 2. **Create the agent** with the instruction: *answer only from the docs; always cite the page; if the docs don't cover it, say so and open a ticket.*
-3. **Add a constraint** — *never invent a feature or a limit that isn't in the docs* — so it can't hallucinate its way to a confident wrong answer.
-4. **Give it a fallback tool** — your ticket-create API, so an unanswerable question becomes a real ticket with the conversation attached.
+3. **Add a constraint**: *never invent a feature or a limit that isn't in the docs*, so it can't hallucinate its way to a confident wrong answer.
+4. **Give it a fallback tool**: your ticket-create API, so an unanswerable question becomes a real ticket with the conversation attached.
 5. **Turn on shared memory** so recurring gaps ("everyone asks about SSO setup") accumulate and point you at the docs worth writing.
 6. **Publish it on Slack or Discord.** Mention the bot, it answers inline with a citation.
 
@@ -20,7 +20,7 @@
 - Add a verify step so a second model checks the citation actually supports the answer.
 - Log every "docs didn't cover it" to a channel as a content backlog.
 
-**Uses** — `Support` · `Slack` · `Discord` · `Constraints` · `Memory`
+**Uses**: `Support` · `Slack` · `Discord` · `Constraints` · `Memory`
 
 ## Related
 
