@@ -24,10 +24,11 @@ on:
         required: true
         type: choice
         options:
+          - none
           - patch
           - minor
           - major
-        default: patch
+        default: none
 
 permissions:
   id-token: write
@@ -93,13 +94,26 @@ jobs:
           # the trusted publisher configured on npmjs.com for this repo +
           # workflow filename. No NPM_TOKEN needed. Requires npm >= 11.5.
           npm install -g npm@latest
-          npm version ${{ inputs.version_bump }} --no-git-tag-version
+          # 'none' publishes the committed version as-is (clean lockstep);
+          # patch/minor/major bump first if explicitly requested.
+          if [ "${{ inputs.version_bump }}" != "none" ]; then
+            npm version ${{ inputs.version_bump }} --no-git-tag-version
+          fi
+          PKG=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          # Idempotent: skip if this exact version is already on npm, so the
+          # wave is safely re-runnable for the client->dependents bootstrap.
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then
+            echo "$PKG@$VER already published — skipping."
+            echo "SKIP_PUBLISH=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
           npm ci --legacy-peer-deps || npm install --legacy-peer-deps || true
           npm run build || true
           npm publish --access public --provenance
 
       - name: Commit version bump
-        if: inputs.package == 'all' || inputs.package == matrix.id
+        if: (inputs.package == 'all' || inputs.package == matrix.id) && inputs.version_bump != 'none' && env.SKIP_PUBLISH != '1'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
