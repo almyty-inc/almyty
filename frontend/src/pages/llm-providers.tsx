@@ -300,11 +300,11 @@ export function LlmProvidersPage() {
             <EmptyState
               icon={Brain}
               title="No models configured"
-              description="Connect OpenAI, Anthropic, Google, Mistral, xAI, Groq, OpenRouter, Azure, AWS Bedrock, or any of 14 supported providers. Add Provider links you straight to where each vendor issues API keys, and you can test the key before saving. Agents and LLM tools need at least one model to call."
+              description="Connect an LLM provider to power agents and tool generation. Keys stay encrypted at rest."
               action={
                 <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
                   <Plus className="h-4 w-4" />
-                  Add Provider
+                  Add provider
                 </Button>
               }
               className="py-16"

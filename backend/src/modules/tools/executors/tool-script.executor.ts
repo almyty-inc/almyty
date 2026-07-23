@@ -18,6 +18,7 @@ import { NodeSandboxService } from '../node-sandbox/node-sandbox.service';
 import { SdkCodeAssemblerService } from '../node-sandbox/sdk-code-assembler.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tool-execution.types';
 import { getByDotPath } from '../tool-execution-utils';
+import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 
 @Injectable()
 export class ToolScriptExecutor {
@@ -29,6 +30,7 @@ export class ToolScriptExecutor {
     private readonly nodeSandbox: NodeSandboxService,
     private readonly sdkCodeAssembler: SdkCodeAssemblerService,
     private readonly moduleRef: ModuleRef,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   // ─── LLM tool ──────────────────────────────────────────────────
@@ -282,6 +284,8 @@ export class ToolScriptExecutor {
           where: { apiId: api.id, organizationId: tool.organizationId, isActive: true },
         });
         if (credential) {
+          // Warm the org's DEK before the sync decrypt (no-op for non-KMS orgs).
+          await this.envelopeCrypto.warmOrg(credential.organizationId);
           const decrypted = credential.getDecryptedConfig();
           Object.assign(credentials, decrypted);
         }

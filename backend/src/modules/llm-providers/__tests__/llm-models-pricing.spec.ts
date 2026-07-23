@@ -1,4 +1,5 @@
 import { LlmModelsHelper, DEFAULT_MODEL_PRICING, getDefaultModelPricing } from '../llm-models.helper';
+import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 
 /**
@@ -92,7 +93,7 @@ describe('DEFAULT_MODEL_PRICING completeness', () => {
 });
 
 describe('calculateProviderCost', () => {
-  const helper = new LlmModelsHelper();
+  const helper = new LlmModelsHelper(makeEnvelopeCryptoMock());
   const MILLION = 1_000_000;
 
   it('prices mistral-large-latest at $2/$6 per 1M tokens', () => {

@@ -36,7 +36,7 @@ Self-hosted. Your infrastructure, your data.
 ## Quick start
 
 ```bash
-git clone https://github.com/frane/almyty.git
+git clone https://github.com/almyty-inc/almyty.git
 cd almyty
 docker-compose up -d
 cd frontend && npm run dev    # http://localhost:3002
