@@ -153,11 +153,15 @@ const mockRedis = {
         // Each TestAppModule-based DB integration spec sets DATABASE_SCHEMA
         // to a dedicated Postgres schema (pre-created by the spec) so the
         // specs can run in parallel Jest workers without their concurrent
-        // `synchronize` DDL racing on a shared schema. Without this, three
-        // specs (gateway-agent-runs, mcp-oauth-flow, rbac-guard) all ran
-        // `synchronize: true` against `public` at once — the interleaved
-        // CREATE/ALTER/DROP TABLE cycles intermittently tanked one file's
-        // beforeAll wholesale (every test in it failing together).
+        // DDL racing on a shared schema.
+        //
+        // The schema is built by RUNNING THE MIGRATIONS (not `synchronize`)
+        // so these HTTP-level specs exercise the same schema production
+        // uses and the suite catches migration<->entity drift. For an
+        // isolated schema, `search_path` is pinned to `<schema>,public`
+        // BEFORE migrations run so their unqualified CREATE TABLE lands in
+        // the isolated schema while extension objects (uuid_generate_v4,
+        // the `vector` type — installed into public) still resolve.
         //
         // `dropSchema` is enabled only for an isolated (non-public) schema:
         // dropping `public` would nuke sibling specs' tables. Same pattern
@@ -173,8 +177,12 @@ const mockRedis = {
           password: config.get<string>('DATABASE_PASSWORD', 'password'),
           database: config.get<string>('DATABASE_NAME', 'almyty_test'),
           schema,
+          ...(isolated
+            ? { extra: { options: `-c search_path=${schema},public` } }
+            : {}),
           entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
-          synchronize: true,
+          migrations: [__dirname + '/../migrations/*{.ts,.js}'],
+          migrationsRun: true,
           dropSchema: isolated,
           logging: false,
         } as any;
