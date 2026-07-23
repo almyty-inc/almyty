@@ -106,7 +106,7 @@
     "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.28",
     "typeorm-versions": "^0.6.0",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "uuid": "^14.0.0",
     "winston": "^3.19.0",
     "ws": "^8.20.0",
