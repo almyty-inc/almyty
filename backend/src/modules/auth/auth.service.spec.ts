@@ -565,7 +565,7 @@ describe('AuthService', () => {
 
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { email: loginDto.email },
-        relations: ['organizationMemberships', 'organizationMemberships.organization'],
+        relations: { organizationMemberships: { organization: true } },
       });
       expect(userRepository.save).toHaveBeenCalled(); // For updating lastLoginAt
     });
@@ -619,7 +619,7 @@ describe('AuthService', () => {
       expect(result).toBe(mockUser);
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { email: 'test@example.com' },
-        relations: ['organizationMemberships', 'organizationMemberships.organization'],
+        relations: { organizationMemberships: { organization: true } },
       });
     });
 
@@ -684,7 +684,7 @@ describe('AuthService', () => {
       expect(result).toBe(mockUser);
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { id: payload.sub },
-        relations: ['organizationMemberships', 'organizationMemberships.organization'],
+        relations: { organizationMemberships: { organization: true } },
       });
     });
 
@@ -744,7 +744,7 @@ describe('AuthService', () => {
       expect(result).toBe(mockApiKey);
       expect(apiKeyRepository.findOne).toHaveBeenCalledWith({
         where: { keyHash: 'hashed-key' },
-        relations: ['user', 'user.organizationMemberships', 'user.organizationMemberships.organization', 'organization'],
+        relations: { user: { organizationMemberships: { organization: true } }, organization: true },
       });
     });
 

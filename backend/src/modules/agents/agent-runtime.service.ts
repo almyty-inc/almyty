@@ -228,7 +228,7 @@ export class AgentRuntimeService implements OnModuleInit {
         // accepted or rejected).
         const parentRun = await this.runRepository.findOne({
           where: { id: currentParentId, organizationId },
-          select: ['id', 'parentRunId'],
+          select: { id: true, parentRunId: true },
         });
         if (!parentRun || !parentRun.parentRunId) break;
         depth++;
@@ -339,7 +339,7 @@ export class AgentRuntimeService implements OnModuleInit {
       where: agentId
         ? { id: runId, organizationId, agentId }
         : { id: runId, organizationId },
-      relations: ['agent'],
+      relations: { agent: true },
     });
     if (!run) throw new NotFoundException('Run not found');
     return run;

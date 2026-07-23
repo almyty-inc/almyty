@@ -117,7 +117,7 @@ export class ToolExecutorService {
       // not forward a client-supplied value.
       const tool = await this.toolRepository.findOne({
         where: { id: toolId, organizationId: options.organizationId },
-        relations: ['operation', 'operation.api', 'api', 'inputSchema', 'outputSchema'],
+        relations: { operation: { api: true }, api: true, inputSchema: true, outputSchema: true },
       });
 
       if (!tool) {
@@ -133,7 +133,7 @@ export class ToolExecutorService {
       if (options.userId) {
         const user = await this.userRepository.findOne({
           where: { id: options.userId },
-          relations: ['organizationMemberships'],
+          relations: { organizationMemberships: true },
         });
 
         if (!user?.hasPermissionInOrganization(options.organizationId, 'use_tools')) {

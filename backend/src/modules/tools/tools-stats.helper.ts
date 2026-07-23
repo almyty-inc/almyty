@@ -51,7 +51,7 @@ export class ToolsStatsHelper {
         organizationId,
         createdAt: MoreThanOrEqual(since),
       },
-      relations: ['user'],
+      relations: { user: true },
     });
 
     const total = executions.length;
@@ -106,7 +106,7 @@ export class ToolsStatsHelper {
 
     const executions = await this.toolExecutionRepository.find({
       where: { organizationId },
-      relations: ['tool'],
+      relations: { tool: true },
     });
 
     const totalExecutions = executions.length;

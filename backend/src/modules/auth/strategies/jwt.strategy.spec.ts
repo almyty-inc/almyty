@@ -204,10 +204,7 @@ describe('JwtStrategy', () => {
       ).rejects.toThrow(UnauthorizedException);
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        relations: [
-          'organizationMemberships',
-          'organizationMemberships.organization',
-        ],
+        relations: { organizationMemberships: { organization: true } },
       });
     });
 
