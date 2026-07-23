@@ -50,6 +50,12 @@ jobs:
     name: Detect changed areas
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # paths-filter lists a PR's changed files via the API on
+    # pull_request events, which needs pull-requests:read (the default
+    # token is contents:read only -> "Resource not accessible").
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
