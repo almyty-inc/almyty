@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "Install API skills into AI coding agents — Claude Code, Cursor, Windsurf, Copilot, Codex",
+  "description": "Install any API as a skill into Claude Code, Cursor, Windsurf, Copilot, or Codex \u2014 almyty turns OpenAPI and GraphQL into agent-ready skills.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -43,5 +43,14 @@
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
     "vitest": "^4.1.0"
+  },
+  "homepage": "https://almyty.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almyty-inc/almyty.git",
+    "directory": "packages/skills-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/almyty-inc/almyty/issues"
   }
 }

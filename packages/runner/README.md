@@ -57,6 +57,16 @@ A minimal `~/.almyty/config.json`:
 
 See [docs/runner.md](../../docs/runner.md) for the load-bearing design decisions: Streamable HTTP transport, no per-tool wrappers, PTY by default, detected vs configured fields, resource scoping, and config layering.
 
-## License
+.
 
-BSL-1.1.
+## About almyty
+
+almyty is the full-stack platform for AI agents, agnostic by design: any LLM, any
+API turned into tools, served over MCP, A2A, UTCP, and Agent Skills. Open source,
+no lock-in.
+
+- Website — https://almyty.com
+- Docs — https://docs.almyty.com
+- Source — https://github.com/almyty-inc/almyty
+
+Apache-2.0 © Almyty Inc.

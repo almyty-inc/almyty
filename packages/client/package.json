@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "Shared HTTP client and credential resolver for almyty CLI packages",
+  "description": "Shared HTTP client and credential resolver used by the almyty CLIs. Reads ~/.almyty/credentials.json; not usually installed on its own.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -28,5 +28,14 @@
     "@types/node": "^25.4.0",
     "typescript": "^5.3.0",
     "vitest": "^4.1.0"
+  },
+  "homepage": "https://almyty.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almyty-inc/almyty.git",
+    "directory": "packages/client"
+  },
+  "bugs": {
+    "url": "https://github.com/almyty-inc/almyty/issues"
   }
 }
