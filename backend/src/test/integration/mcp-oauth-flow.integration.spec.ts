@@ -36,7 +36,7 @@ import { useIsolatedSchema, ensureSchema } from './isolated-schema.helper';
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
 const describeIfDb = SHOULD_RUN ? describe : describe.skip;
 
-// Isolate this spec into its own Postgres schema so its `synchronize`
+// Isolate this spec into its own Postgres schema so its migration
 // DDL can't race with gateway-agent-runs (the other TestAppModule DB
 // spec) when Jest runs them in parallel workers. Set BEFORE the module
 // compiles — TestAppModule reads DATABASE_SCHEMA at that point.
@@ -69,7 +69,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     // Re-assert the schema right before compile (defensive against
     // --runInBand, where both TestAppModule specs share one process and
     // module-load order would otherwise decide the winner), then
-    // pre-create it; the DataSource dropSchema + synchronizes into it.
+    // pre-create it; the DataSource dropSchema + runs migrations into it.
     useIsolatedSchema(SCHEMA);
     await ensureSchema(SCHEMA);
 
