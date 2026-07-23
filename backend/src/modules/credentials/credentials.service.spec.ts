@@ -484,7 +484,7 @@ describe('CredentialsService', () => {
       expect(result.apis[0].name).toBe('Weather API');
       expect(llmProviderRepository.find).toHaveBeenCalledWith({
         where: { credentialId: 'cred-1', organizationId: 'org-1' },
-        select: ['id', 'name', 'type', 'status'],
+        select: { id: true, name: true, type: true, status: true },
       });
     });
 
@@ -540,7 +540,7 @@ describe('CredentialsService', () => {
       expect(result[1].agent).toBeNull();
       expect(apiKeyRepository.find).toHaveBeenCalledWith({
         where: { organizationId: 'org-1' },
-        relations: ['gateway'],
+        relations: { gateway: true },
         order: { createdAt: 'DESC' },
       });
     });

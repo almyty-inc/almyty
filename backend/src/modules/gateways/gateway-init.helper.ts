@@ -87,7 +87,7 @@ export class GatewayInitHelper {
   async ensureSystemGateway(organizationId: string): Promise<Gateway> {
     const existing = await this.gatewayRepository.findOne({
       where: { organizationId, isSystem: true, endpoint: '/almyty' },
-      relations: ['authConfigs'],
+      relations: { authConfigs: true },
     });
 
     if (existing) return existing;

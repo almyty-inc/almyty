@@ -168,7 +168,7 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
         return {
           ...config,
           autoLoadEntities: true,
-        };
+        } as any;
       },
     }),
 

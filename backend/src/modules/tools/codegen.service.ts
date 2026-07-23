@@ -44,7 +44,7 @@ export class CodegenService {
     }
     const tool = await this.toolRepository.findOne({
       where: { id: toolId, organizationId },
-      relations: ['operation'],
+      relations: { operation: true },
     });
 
     if (!tool) {
@@ -78,7 +78,7 @@ export class CodegenService {
 
     const gatewayTools = await this.gatewayToolRepository.find({
       where: { gatewayId, isActive: true },
-      relations: ['tool', 'tool.operation'],
+      relations: { tool: { operation: true } },
     });
 
     const tools = gatewayTools.map(gt => gt.tool).filter(Boolean);

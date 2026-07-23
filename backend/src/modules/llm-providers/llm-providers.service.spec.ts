@@ -218,7 +218,7 @@ describe('LlmProvidersService', () => {
       expect(organizationRepository.findOne).toHaveBeenCalledWith({ where: { id: 'org-1' } });
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
       expect(mockUser.hasPermissionInOrganization).toHaveBeenCalledWith('org-1', 'manage_llm_providers');
       expect(llmProviderRepository.create).toHaveBeenCalled();

@@ -18,7 +18,7 @@ export class CustomVersionSubscriber implements EntitySubscriberInterface {
   async afterInsert(event: InsertEvent<any>) {
     if (isVersioningSkipped(event.queryRunner?.data)) return;
     if (isVersionedEntity(event.entity)) {
-      await VersionRepository(event.connection).saveVersion(
+      await VersionRepository(event.connection as any).saveVersion(
         event.entity,
         VersionEvent.INSERT,
         getVersionOwner(),
@@ -29,7 +29,7 @@ export class CustomVersionSubscriber implements EntitySubscriberInterface {
   async afterUpdate(event: UpdateEvent<any>) {
     if (isVersioningSkipped(event.queryRunner?.data)) return;
     if (event.entity && isVersionedEntity(event.entity)) {
-      await VersionRepository(event.connection).saveVersion(
+      await VersionRepository(event.connection as any).saveVersion(
         event.entity,
         VersionEvent.UPDATE,
         getVersionOwner(),
@@ -40,7 +40,7 @@ export class CustomVersionSubscriber implements EntitySubscriberInterface {
   async beforeRemove(event: RemoveEvent<any>) {
     if (isVersioningSkipped(event.queryRunner?.data)) return;
     if (event.entity && isVersionedEntity(event.entity)) {
-      await VersionRepository(event.connection).saveVersion(
+      await VersionRepository(event.connection as any).saveVersion(
         event.entity,
         VersionEvent.REMOVE,
         getVersionOwner(),

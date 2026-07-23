@@ -52,10 +52,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Only load organizationMemberships, skip apiKeys for performance
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
-      relations: [
-        'organizationMemberships',
-        'organizationMemberships.organization',
-      ],
+      relations: {
+        organizationMemberships: { organization: true },
+      },
     });
 
     if (!user || !user.isActive) {

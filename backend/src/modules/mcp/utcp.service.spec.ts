@@ -136,7 +136,7 @@ describe('UtcpService — spec compliance', () => {
       expect(manual.tools.map((t) => t.name)).toEqual(['assigned']);
       expect(gatewayToolRepo.find).toHaveBeenCalledWith({
         where: { gatewayId: 'gw-1', isActive: true },
-        relations: ['tool'],
+        relations: { tool: true },
       });
     });
   });

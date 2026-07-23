@@ -292,7 +292,7 @@ export class AuthService {
   async validateUser(email: string, password: string): Promise<User | null> {
     const user = await this.userRepository.findOne({
       where: { email },
-      relations: ['organizationMemberships', 'organizationMemberships.organization'],
+      relations: { organizationMemberships: { organization: true } },
     });
 
     if (!user || !user.isActive) {
@@ -329,7 +329,7 @@ export class AuthService {
   async validateJwtPayload(payload: JwtPayload): Promise<User | null> {
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
-      relations: ['organizationMemberships', 'organizationMemberships.organization'],
+      relations: { organizationMemberships: { organization: true } },
     });
 
     if (!user || !user.isActive) {
@@ -342,7 +342,7 @@ export class AuthService {
   async validateApiKey(keyHash: string): Promise<ApiKey | null> {
     const apiKey = await this.apiKeyRepository.findOne({
       where: { keyHash },
-      relations: ['user', 'user.organizationMemberships', 'user.organizationMemberships.organization', 'organization'],
+      relations: { user: { organizationMemberships: { organization: true } }, organization: true },
     });
 
     if (!apiKey || !apiKey.canMakeRequest()) {
@@ -360,7 +360,7 @@ export class AuthService {
     // Load user organizations for JWT payload
     const userWithOrgs = await this.userRepository.findOne({
       where: { id: user.id },
-      relations: ['organizationMemberships', 'organizationMemberships.organization'],
+      relations: { organizationMemberships: { organization: true } },
     });
 
     const payload: JwtPayload = {
@@ -399,7 +399,7 @@ export class AuthService {
 
       const user = await this.userRepository.findOne({
         where: { id: payload.sub },
-        relations: ['organizationMemberships', 'organizationMemberships.organization'],
+        relations: { organizationMemberships: { organization: true } },
       });
 
       if (!user || !user.isActive) {
@@ -426,7 +426,7 @@ export class AuthService {
     if (!orgId) {
       const user = await this.userRepository.findOne({
         where: { id: userId },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
       if (user?.organizationMemberships?.length === 1) {
         orgId = user.organizationMemberships[0].organizationId;
@@ -667,7 +667,7 @@ export class AuthService {
   async updateProfile(userId: string, updateProfileDto: UpdateProfileDto): Promise<User> {
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: ['organizationMemberships', 'organizationMemberships.organization'],
+      relations: { organizationMemberships: { organization: true } },
     });
 
     if (!user) {

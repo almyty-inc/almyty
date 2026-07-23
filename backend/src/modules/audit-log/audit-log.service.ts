@@ -61,7 +61,7 @@ export class AuditLogService {
       let userEmail = options.userEmail;
       if (options.userId && !userEmail) {
         try {
-          const user = await this.userRepository.findOne({ where: { id: options.userId }, select: ['id', 'email'] });
+          const user = await this.userRepository.findOne({ where: { id: options.userId }, select: { id: true, email: true } });
           if (user) {
             userEmail = user.email;
           }

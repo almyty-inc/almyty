@@ -70,7 +70,7 @@ export class AgentRunReaperService implements OnModuleInit, OnModuleDestroy {
 
     const stuck = await this.runRepository.find({
       where: { status: AgentRunStatus.RUNNING, updatedAt: LessThan(cutoff) },
-      select: ['id'],
+      select: { id: true },
       take: REAP_BATCH,
     });
     if (stuck.length === 0) return 0;
