@@ -95,6 +95,8 @@ almyty runner start --name laptop         # register this machine as a runner
 
 Each subcommand maps to a standalone npm package — `@almyty/auth`, `@almyty/agents`, `@almyty/chat`, `@almyty/skills`, `@almyty/mcp-server`, `@almyty/runner` — and the umbrella delegates to whichever you call. See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
 
+**Versioning.** The CLI packages share one version line and release together as a suite (`@almyty/* 1.x`). That is separate from the platform's own versioning, which is the Docker images and `v0.x` git tags. Any CLI 1.x works with platform 0.1 and later, so the two numbers moving independently is expected.
+
 ### Skills
 
 Install almyty tools as [Agent Skills](https://agentskills.io) into 30+ coding agents (Claude Code, Cursor, Copilot, Windsurf, …):
