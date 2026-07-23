@@ -1,0 +1,54 @@
+name: Docker Hub tag retention
+
+# Prunes the unbounded per-commit image tags (dev-<sha>/staging-<sha>/
+# prod-<sha>) and orphaned cosign .sig/.att objects that build-publish.yml
+# accumulates on every push. Keeps moving env tags, semver releases, and
+# the most recent builds per environment. See scripts/dockerhub-prune.js.
+
+on:
+  schedule:
+    - cron: '17 4 * * *'   # daily 04:17 UTC (from the default branch)
+  # Also run when the pruner itself changes on development — this both
+  # validates edits to the script and bootstraps the first cleanup before
+  # the workflow has reached the default branch (schedule/dispatch only
+  # fire from there).
+  push:
+    branches: [development]
+    paths:
+      - 'scripts/dockerhub-prune.js'
+      - '.github/workflows/dockerhub-prune.yml'
+  workflow_dispatch:
+    inputs:
+      keep_sha:
+        description: 'Immutable <pfx>-<sha> build tags to keep per environment'
+        required: false
+        default: '10'
+      dry_run:
+        description: 'List what would be deleted without deleting'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dockerhub-prune
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Prune Docker Hub tags
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          REPOS: 'api,frontend,docs,almyty'
+          KEEP_SHA: ${{ github.event.inputs.keep_sha || '10' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
+        run: node scripts/dockerhub-prune.js
