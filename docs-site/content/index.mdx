@@ -1,247 +1,77 @@
-# Getting Started
+# Get started
 
-almyty turns any API into AI-ready tools and lets you build multi-LLM agent pipelines with a visual builder. Serve everything via MCP, A2A, UTCP, Agent Skills, or an OpenAI-compatible API.
+almyty turns any API into tools your AI agents can call, served over MCP, A2A, UTCP, and Agent Skills. This page takes you from an empty account to your own API running inside Claude Code (or Cursor, or any MCP client) in a few minutes.
 
-## The Pipeline
-
-The core workflow follows four steps: **API** → **Tools** → **Gateway** → **Agent**.
-
-1. **Connect an API** — point almyty at an OpenAPI, GraphQL, SOAP, Protobuf, or SDK schema
-2. **Generate tools** — each operation becomes an executable tool with typed parameters
-3. **Create a gateway** — expose your tools via MCP, A2A, UTCP, or Agent Skills
-4. **Build an agent** — compose tools and LLM calls into a visual pipeline
-
-## Create an Account
-
-![Sign up](/screenshots/auth-register.png)
-
-Go to your almyty instance and click **Sign up**. Fill in your name, email, organization name, and a password. You'll land on the dashboard immediately after registration.
-
-## Dashboard
-
-![Dashboard](/screenshots/dashboard-populated.png)
-
-The dashboard shows an onboarding checklist that walks you through each step of the pipeline. Click any step to jump directly to the relevant page.
-
-Use **⌘K** (or **Ctrl+K**) anywhere to open the command palette for quick navigation.
-
-![Command Palette](/screenshots/command-palette.png)
-
-## Connect Your First API
-
-![APIs page](/screenshots/apis-list.png)
-
-Navigate to **APIs** in the sidebar. Click **Connect API** to open the import dialog.
-
-![Import dialog](/screenshots/apis-import-dialog.png)
-
-Provide a name, select the schema type, and paste your schema URL or content. Check **Generate Tools** to automatically create tools from each operation.
-
-almyty supports:
-- **OpenAPI 3.x** (JSON or YAML)
-- **GraphQL** (introspection or SDL)
-- **SOAP** (WSDL documents)
-- **Protobuf** (.proto definitions)
-- **SDK** (npm packages with discoverable exports)
-
-**Via the API:**
+Do every step in the UI or from the CLI. Start on the [hosted platform](https://app.almyty.com) (no card required), or [self-host](/self-hosting) with one container.
 
 ```bash
-curl -X POST /apis \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My REST API",
-    "type": "openapi",
-    "baseUrl": "https://api.example.com/v1"
-  }'
+npm install -g @almyty/cli
+almyty login
 ```
 
-## Generate Tools
+## 1. Turn an API into tools
 
-![Tools page](/screenshots/tools-list.png)
+Open **APIs → Connect API**, give it a name, and paste a schema URL. OpenAPI, GraphQL, SOAP, Protobuf, or an npm SDK all work. Leave **Generate Tools** checked.
 
-Navigate to **Tools** to manage your tools. After importing an API schema with **Generate Tools** enabled, each operation automatically becomes a tool with typed parameters and validation.
+![Import an API](/screenshots/apis-import-dialog.png)
 
-You can also create custom tools manually:
+Every operation in the schema becomes a typed, validated tool. No code.
 
-![Create Tool dialog](/screenshots/tools-create-dialog.png)
+![Tools generated from the schema](/screenshots/quickstart-api-imported.png)
 
-Five execution methods are available: **HTTP**, **JavaScript** (sandboxed), **GraphQL**, **LLM** (prompt-based), and **SDK**.
+## 2. Publish a gateway
 
-**Via the API:**
+Tools reach your AI through a gateway. Open **Gateways → Create Gateway**, pick **MCP**, and assign the tools you just made from the **Tool Scoping** tab.
+
+![A gateway with tools assigned](/screenshots/gateway-detail-tools.png)
+
+One gateway is reachable over every protocol at once:
+
+| Protocol | For |
+|----------|-----|
+| **MCP** | Claude Code, Cursor, Windsurf, and other MCP clients |
+| **A2A** | Google's Agent-to-Agent orchestration |
+| **UTCP** | Universal Tool Call Protocol |
+| **Agent Skills** | 30+ AI coding agents via SKILL.md |
+
+## 3. Call it from your AI (the payoff)
+
+Point your assistant at the gateway and your API is live inside it. Grab the endpoint from the gateway's **Integrations** tab (it looks like `https://api.almyty.com/your-org/petstore`) and a key from its **Authentication** panel. Then, in Claude Code:
 
 ```bash
-curl -X POST /organizations/{orgId}/tools \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "my_tool",
-    "description": "Does something useful",
-    "type": "function",
-    "executionMethod": "http",
-    "parameters": { "type": "object", "properties": {} }
-  }'
+claude mcp add petstore --transport http \
+  --header "x-api-key: gw_live_..." \
+  https://api.almyty.com/your-org/petstore
 ```
 
-## Create a Gateway
+![Your API's tools inside Claude Code](/screenshots/quickstart-claude-config.png)
 
-![Gateways page](/screenshots/gateway-detail.png)
+Ask Claude to do something and it calls your API directly:
 
-Gateways expose your tools to AI agents via standardized protocols. Navigate to **Gateways** and click **Create Gateway**.
+![Claude calling the gateway](/screenshots/quickstart-gateway-mcp.png)
 
-![Create Gateway dialog](/screenshots/gateways-create-dialog.png)
-
-Choose a protocol:
-
-| Protocol | Use Case |
-|----------|----------|
-| **MCP** | Claude, Cursor, Windsurf, and other MCP-compatible clients |
-| **A2A** | Google's Agent-to-Agent protocol for multi-agent orchestration |
-| **UTCP** | Universal Tool Call Protocol for broad compatibility |
-| **Skills** | SKILL.md-based injection for 30+ AI coding agents |
-
-After creating a gateway, open it to assign tools from the **Tool Scoping** tab and configure authentication.
-
-**Via the API:**
+If your client only speaks stdio, run the gateway as a local proxy instead:
 
 ```bash
-curl -X POST /gateways \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My MCP Gateway",
-    "type": "mcp",
-    "endpoint": "/my-gateway"
-  }'
+npx @almyty/mcp-server your-org/petstore
 ```
 
-## Build an Agent
+That's the whole loop: **API → tools → gateway → your AI calling it.**
 
-![Agents page](/screenshots/agents-list.png)
+## Build an agent (optional)
 
-Navigate to **Agents** and click **Create Agent**. The visual pipeline builder lets you compose agent workflows by dragging nodes onto a canvas.
+Instead of handing tools to someone else's AI, build your own agent on top of them. Compose LLM calls, tool calls, conditions, and loops on a visual canvas, or run an autonomous agent that figures out the steps itself, with cross-vendor verification, memory, and human approvals built in.
 
-![Agent builder](/screenshots/agent-builder.png)
+![An agent built on your tools](/screenshots/agent-detail-overview.png)
 
-Ten node types are available: `input`, `output`, `llm_call`, `tool_call`, `condition`, `transform`, `loop`, `parallel`, `merge`, and `sub_agent`. Connect them to define the execution flow.
+Agents serve over the same protocols and an OpenAI-compatible endpoint, so anything that talks to OpenAI talks to your agent.
 
-For autonomous agents, switch to **Autonomous** mode to configure instructions, tool access, memory, and multi-agent collaboration without a pipeline graph.
+## Where to next
 
-**Via the API:**
+- [Connect an LLM provider](/llm-providers): bring your own keys, mix vendors
+- [Drive almyty from the CLI](/cli): agents, chat, skills, runners, one login
+- [Build agents](/agents): the visual builder and autonomous mode
+- [Gateways in depth](/gateways/mcp): auth, scoping, every protocol
+- [Examples](/examples): end-to-end builds you can copy
 
-```bash
-curl -X POST /agents \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My Agent",
-    "description": "Answers questions using my API tools",
-    "pipeline": { "nodes": [...], "edges": [...] }
-  }'
-```
-
-## Configure LLM Providers
-
-![Models page](/screenshots/models.png)
-
-Navigate to **Models** in the sidebar. Click **Add Provider** to connect an LLM.
-
-![Add Provider dialog](/screenshots/llm-providers-create.png)
-
-almyty supports 14 providers: OpenAI, Anthropic, Google Gemini, Azure OpenAI, AWS Bedrock, Google Vertex, Mistral, Cohere, Groq, Together, Perplexity, DeepSeek, Ollama, and custom endpoints.
-
-## Manage Credentials
-
-![Credentials vault](/screenshots/credentials-vault.png)
-
-The **Credentials** page stores encrypted API keys, bearer tokens, and OAuth2 credentials. These are used by your APIs and tools for authenticated requests.
-
-![Add credential](/screenshots/credentials-add.png)
-
-The **Access Keys** tab is where you generate API keys for CLI tools and programmatic access. Click **Generate Key**, pick a scope, and copy the key — it's shown only once. Use it with `Authorization: Bearer ak_live_...` or let the CLI handle it via `npx @almyty/auth login`.
-
-## Analytics and Audit
-
-![Analytics overview](/screenshots/analytics-overview.png)
-
-The **Analytics** page shows real-time usage across all protocols. Seven tabs cover: Overview, Request Log, Tools, Gateways, LLM usage, Agents, and Audit Trail.
-
-![Audit trail](/screenshots/analytics-audit.png)
-
-The audit trail records every sensitive action (create, update, delete, execute) with user, timestamp, resource, and IP.
-
-## Memory
-
-![Memories page](/screenshots/memory.png)
-
-Agents can store and recall facts, preferences, and context. Create memories manually or let agents auto-save key facts from conversations.
-
-## Keyboard Shortcuts
-
-Press **?** anywhere to see available shortcuts.
-
-![Keyboard shortcuts](/screenshots/keyboard-shortcuts.png)
-
-## Connect to almyty via MCP
-
-almyty is a remote MCP server. Any MCP-compatible client (Claude Code, Cursor, Windsurf, Copilot, Gemini CLI) can connect directly — no CLI install needed.
-
-### Connect the platform (manage almyty from your AI tools)
-
-Add the almyty MCP endpoint to your client:
-
-Claude Code:
-```bash
-claude mcp add almyty --transport http https://api.almyty.com/mcp
-```
-
-Cursor / Windsurf (`.cursor/mcp.json`):
-```json
-{
-  "mcpServers": {
-    "almyty": {
-      "url": "https://api.almyty.com/mcp"
-    }
-  }
-}
-```
-
-This gives your AI assistant tools to manage almyty: create APIs, import schemas, generate tools, build agents, set up gateways.
-
-### Connect a specific gateway (use your API tools from your AI tools)
-
-Each gateway has its own MCP endpoint. Find it on the gateway's **Integrations** tab, or construct it as:
-
-```
-https://api.almyty.com/{org}/{gateway-slug}
-```
-
-Claude Code:
-```bash
-claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
-```
-
-Pass your gateway key as an `x-api-key` header (generate it in the gateway's
-**Authentication** panel).
-
-### Discovery
-
-MCP clients that support server discovery can find almyty at:
-
-```
-https://api.almyty.com/mcp/.well-known/mcp
-```
-
-### Using the CLI proxy (optional, lower token overhead)
-
-For skill-first mode (2 tools instead of N, ~300 tokens/turn instead of ~4,000):
-
-```bash
-npx @almyty/auth login
-npx @almyty/mcp-server acme/petstore
-```
-
-## Next Steps
-
-- [Tools](/tools) — deep dive into each tool type
-- [Gateways](/gateways/mcp) — protocol-specific configuration
-- [Agents](/agents) — pipeline builder, scheduling, webhooks
-- [API Reference](/api-reference/authentication) — full HTTP API documentation
-- [CLI](/cli) — command-line tools for automation
+Prefer to run almyty from your AI tools directly? almyty is itself an MCP server: see [Control almyty via MCP](/control-via-mcp).
