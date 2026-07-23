@@ -62,7 +62,7 @@ export class GatewayToolTransferHelper {
 
       const user = await this.userRepository.findOne({
         where: { id: userId },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
 
       if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateway_tools')) {
@@ -71,12 +71,12 @@ export class GatewayToolTransferHelper {
 
       const sourceTools = await this.gatewayToolRepository.find({
         where: { gatewayId: sourceGatewayId },
-        relations: ['tool'],
+        relations: { tool: true },
       });
 
       const existingTargetTools = await this.gatewayToolRepository.find({
         where: { gatewayId: targetGatewayId },
-        select: ['toolId'],
+        select: { toolId: true },
       });
 
       const existingToolIds = new Set(existingTargetTools.map(t => t.toolId));

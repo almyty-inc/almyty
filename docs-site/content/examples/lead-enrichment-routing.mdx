@@ -1,26 +1,26 @@
 # 📈 Enrich and route inbound leads
 
-**Stack** — `Trigger: your form/CRM calls the agent API` · `Models: your choice` · `Tools: CRM API (HubSpot/Salesforce), enrichment API` · `Mode: single agent + constraints` · `Output: scored + routed lead, Slack ping`
+**Stack**: `Trigger: your form/CRM calls the agent API` · `Models: your choice` · `Tools: CRM API (HubSpot/Salesforce), enrichment API` · `Mode: single agent + constraints` · `Output: scored + routed lead, Slack ping`
 
-**Who it's for** — sales teams where good leads sit in a queue while reps chase noise.
-**What it does** — takes a new lead, enriches it (company size, industry, tech stack), scores it against your ICP, writes the lead back to the CRM with a reason, and pings the right rep in Slack for anything hot.
+**Who it's for**: sales teams where good leads sit in a queue while reps chase noise.
+**What it does**: takes a new lead, enriches it (company size, industry, tech stack), scores it against your ICP, writes the lead back to the CRM with a reason, and pings the right rep in Slack for anything hot.
 
 ## Build it
 
-1. **Connect your CRM and an enrichment source.** *Connect API* for HubSpot or Salesforce, and for Clearbit or a similar enrichment endpoint — each becomes typed tools.
+1. **Connect your CRM and an enrichment source.** *Connect API* for HubSpot or Salesforce, and for Clearbit or a similar enrichment endpoint, each becomes typed tools.
 2. **Create the agent** with your qualification rubric in the instructions: *enrich, score against ICP (mid-market SaaS, 50+ seats), and set a routing owner.*
-3. **Encode the rules as constraints** — *never mark a personal-email lead as enterprise; always fill the score-reason field* — so scoring stays consistent, not vibes.
-4. **Write back to the CRM** — the agent updates the lead record with score, segment, and reason via the CRM tools.
-5. **Notify** — publish on Slack so hot leads land in `#sales` with the enrichment summary and a link to the record.
-6. **Trigger it** — have your web form or CRM webhook call the agent's API on lead creation.
+3. **Encode the rules as constraints**: *never mark a personal-email lead as enterprise; always fill the score-reason field*, so scoring stays consistent, not vibes.
+4. **Write back to the CRM**: the agent updates the lead record with score, segment, and reason via the CRM tools.
+5. **Notify**: publish on Slack so hot leads land in `#sales` with the enrichment summary and a link to the record.
+6. **Trigger it**: have your web form or CRM webhook call the agent's API on lead creation.
 
 ## Make it yours
 
-- Add a `debate` collaboration for borderline scores — two models argue fit, a judge decides.
+- Add a `debate` collaboration for borderline scores, two models argue fit, a judge decides.
 - Draft a first-touch email as part of the run (see [Draft follow-ups from meeting notes](/examples/meeting-notes-to-crm)).
 - Route by territory or product line with a lookup tool.
 
-**Uses** — `Sales` · `CRM` · `Slack` · `Constraints`
+**Uses**: `Sales` · `CRM` · `Slack` · `Constraints`
 
 ## Related
 

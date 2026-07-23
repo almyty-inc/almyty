@@ -1,19 +1,19 @@
 # Deploy Your Agent to Your Channels
 
-Agents are most useful where your users already are. Deploying an agent to a channel takes two halves: paste the platform's credentials into almyty, then point the platform at almyty's webhook URL — and for a growing set of platforms that second half is registered automatically. This page walks through both halves for every supported channel.
+Agents are most useful where your users already are. Deploying an agent to a channel takes two halves: paste the platform's credentials into almyty, then point the platform at almyty's webhook URL. For a growing set of platforms that second half is registered automatically. This page walks through both halves for every supported channel.
 
-![Deploying a channel on an agent — pick the platform, name it, paste its credentials](/screenshots/interfaces-channel-config.png)
+![Deploying a channel on an agent: pick the platform, name it, paste its credentials](/screenshots/interfaces-channel-config.png)
 
 ## How a deployment works
 
 1. Open the agent's **Interfaces** tab, click **Deploy Channel**, and pick a platform.
 2. Paste the platform credentials from the table below. They are encrypted at rest like every other credential.
-3. After deploying, the **Setup** panel shows your channel's inbound webhook URL — `https://<api-host>/<org>/<channel>` — with a copy button and a platform-specific checklist. Paste the URL into the platform's console where a manual step is needed; for Telegram and Twilio-backed channels the webhook is registered automatically where the platform supports it.
+3. After deploying, the **Setup** panel shows your channel's inbound webhook URL (`https://<api-host>/<org>/<channel>`) with a copy button and a platform-specific checklist. Paste the URL into the platform's console where a manual step is needed; for Telegram and Twilio-backed channels the webhook is registered automatically where the platform supports it.
 4. Click **Test connection** in the setup panel. It performs a real authentication probe against the platform, so a bad token surfaces immediately instead of on the first missed message.
 
-Messages then round-trip: platform → adapter (verify, normalize) → agent run → adapter (format for the platform) → reply.
+Messages then round-trip: platform, to adapter (verify, normalize), to agent run, back to adapter (format for the platform), to reply.
 
-![The Channel Setup panel — your exact webhook URL or embed snippet, the platform-side checklist, and a live connection test](/screenshots/interfaces-channel-setup.png)
+![The Channel Setup panel: your exact webhook URL or embed snippet, the platform-side checklist, and a live connection test](/screenshots/interfaces-channel-setup.png)
 
 ## Supported channels
 
@@ -23,16 +23,16 @@ Messages then round-trip: platform → adapter (verify, normalize) → agent run
 | **Telegram** | Bot webhook (registered automatically) | Bot API `sendMessage` | Bot token |
 | **Discord** | Gateway events | Channel messages | Bot token |
 | **WhatsApp** (Twilio) | Twilio webhook (registered automatically), `X-Twilio-Signature` verified | Twilio Messages API | Account SID, auth token, WhatsApp sender |
-| **WhatsApp Cloud** (Meta) — rolling out | Meta callback webhook, app-secret verified | WhatsApp Cloud API | Access token, phone number ID, verify token, app secret |
-| **SMS** (Twilio) — rolling out | Twilio webhook (registered automatically), `X-Twilio-Signature` verified | Twilio Messages API | Account SID, auth token, phone number |
-| **Microsoft Teams** | Bot Framework activities, JWT verified | Bot Framework replies | Bot ID + password (Azure bot registration) |
+| **WhatsApp Cloud** (Meta), rolling out | Meta callback webhook, app-secret verified | WhatsApp Cloud API | Access token, phone number ID, verify token, app secret |
+| **SMS** (Twilio), rolling out | Twilio webhook (registered automatically), `X-Twilio-Signature` verified | Twilio Messages API | Account SID, auth token, phone number |
+| **Microsoft Teams** | Bot Framework activities, JWT verified | Bot Framework replies | Bot ID and password (Azure bot registration) |
 | **Google Chat** | Space webhook, verification token | Incoming webhook | Webhook URL, verification token |
 | **Signal** | signal-cli REST bridge webhook | Bridge send API | Self-hosted signal-cli bridge URL, phone number |
 | **Matrix** | Homeserver sync | Room `send` | Homeserver URL, access token, room ID |
-| **IRC** | IRC↔HTTP bridge webhook | Bridge send | Bridge webhook URL |
+| **IRC** | IRC-to-HTTP bridge webhook | Bridge send | Bridge webhook URL |
 | **Email** | Inbound MIME parsing | Resend API | Resend API key |
 | **Webhook** | Any HTTP POST, optional HMAC verification | POST to your callback URL | Callback URL, optional shared secret |
-| **Chat Widget** | Widget POST | SSE / polling delivery | Nothing — embed the snippet |
+| **Chat Widget** | Widget POST | SSE / polling delivery | Nothing, just embed the snippet |
 
 Every inbound request is authenticated against the platform's mechanism before it reaches an agent: Slack and Webhook use HMAC signatures, WhatsApp validates the Twilio signature, Teams verifies the Bot Framework JWT, Google Chat checks its verification token. Requests that fail verification are rejected, never queued.
 
@@ -51,7 +51,7 @@ The setup panel in the app shows the same checklist for the channel you deployed
 ### Telegram
 
 1. Message [@BotFather](https://t.me/BotFather), run `/newbot`, and copy the bot token into the channel's configuration.
-2. Done — the webhook is registered automatically on deploy.
+2. Done. The webhook is registered automatically on deploy.
 
 ### WhatsApp and SMS (Twilio)
 
@@ -59,11 +59,11 @@ The setup panel in the app shows the same checklist for the channel you deployed
 2. Enter the sender number (your WhatsApp sender or SMS phone number).
 3. The number's inbound webhook is registered automatically where the platform supports it. SMS is rolling out.
 
-### WhatsApp Cloud (Meta) — rolling out
+### WhatsApp Cloud (Meta), rolling out
 
 1. Create a Meta app with the WhatsApp product at [developers.facebook.com](https://developers.facebook.com).
 2. Paste the access token, phone number ID, verify token, and app secret into the channel's configuration.
-3. In the app's **WhatsApp → Configuration** page, paste your almyty webhook URL as the callback URL, using the same verify token.
+3. In the app's **WhatsApp, Configuration** page, paste your almyty webhook URL as the callback URL, using the same verify token.
 4. Subscribe the app to the `messages` webhook field.
 
 ### Discord
@@ -71,7 +71,7 @@ The setup panel in the app shows the same checklist for the channel you deployed
 1. Create an application and bot at [discord.com/developers/applications](https://discord.com/developers/applications).
 2. Enable the **MESSAGE CONTENT** intent under Bot settings.
 3. Invite the bot to your server via an OAuth2 URL with the `bot` scope.
-4. No webhook needed — almyty connects out to the Discord gateway.
+4. No webhook needed. almyty connects out to the Discord gateway.
 
 ### Google Chat
 
@@ -91,11 +91,11 @@ The setup panel in the app shows the same checklist for the channel you deployed
 ### Matrix
 
 1. Enter the homeserver URL, an access token for the bot account, and the room ID.
-2. No webhook needed — almyty syncs from the homeserver.
+2. No webhook needed. almyty syncs from the homeserver.
 
 ### IRC
 
-1. Run an IRC↔HTTP bridge and enter the server, port, channel, and nick.
+1. Run an IRC-to-HTTP bridge and enter the server, port, channel, and nick.
 2. Point the bridge's outbound webhook at your almyty webhook URL.
 
 ### Email
@@ -116,17 +116,17 @@ Copy the embed snippet from the setup panel into your site's HTML, just before t
 <script src="https://<api-host>/gateways/<gateway-id>/widget.js" async></script>
 ```
 
-No webhook needed — the widget talks to almyty directly.
+No webhook needed. The widget talks to almyty directly.
 
 ## Customizing the chat widget
 
-Chat-widget gateways get a **widget builder** on their gateway page: title, color, position, launcher icon, theme, and greeting — with a live preview that runs the exact `widget.js` the gateway serves, and the one-line embed snippet.
+Chat-widget gateways get a **widget builder** on their gateway page: title, color, position, launcher icon, theme, and greeting, with a live preview that runs the exact `widget.js` the gateway serves, and the one-line embed snippet.
 
-![The widget builder — customize and preview the embeddable widget, then copy the snippet](/screenshots/widget-builder.png)
+![The widget builder: customize and preview the embeddable widget, then copy the snippet](/screenshots/widget-builder.png)
 
 ## AI disclosure (EU AI Act Art. 50)
 
-Every channel has an **AI disclosure** setting — in the deploy dialog it is the "Disclose AI identity on first message" checkbox. When enabled, the first outbound message of each conversation is preceded by a disclosure line — by default:
+Every channel has an **AI disclosure** setting. In the deploy dialog it is the "Disclose AI identity on first message" checkbox. When enabled, the first outbound message of each conversation is preceded by a disclosure line, by default:
 
 > You are chatting with an AI assistant.
 
@@ -134,6 +134,6 @@ The text is overridable per channel. If you deploy agents to the public in the E
 
 ## Operational notes
 
-- **Signal and IRC** need a small self-hosted bridge (signal-cli-rest-api, an IRC↔HTTP bridge); the adapter documents the exact contract it expects.
+- **Signal and IRC** need a small self-hosted bridge (signal-cli-rest-api, an IRC-to-HTTP bridge); the adapter documents the exact contract it expects.
 - **Rate limits** are the platform's own; the adapter surfaces platform errors on the run rather than retrying blindly.
 - Adapter health and per-channel traffic appear in [Analytics](/analytics); failed deliveries are recorded on the run.

@@ -119,7 +119,7 @@ export class ProviderUsagePullProcessor implements OnApplicationBootstrap {
     // every provider usage endpoint, so skip it before we make any
     // network call.
     const providers = await this.providerRepository.find({
-      select: ['organizationId', 'configuration'],
+      select: { organizationId: true, configuration: true },
     });
 
     const orgIds = new Set<string>();

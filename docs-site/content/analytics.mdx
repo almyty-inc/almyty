@@ -1,16 +1,16 @@
 # Analytics
 
-The analytics dashboard gives you real-time visibility into usage across all protocols, tools, agents, and LLM providers. Seven tabs cover different aspects of your organization's activity. The numbers are live — gateway traffic, tool executions, and agent runs feed the tiles and charts as they happen, with a 30-second refresh on the Overview tab.
+See what every protocol, tool, agent, and LLM provider is doing in real time. Seven tabs cover different aspects of your organization's activity, and the numbers are live: gateway traffic, tool executions, and agent runs feed the tiles and charts as they happen, with a 30-second refresh on the Overview tab.
 
 ![Analytics overview](/screenshots/analytics-overview.png)
 
 ## In the UI
 
-1. Navigate to **Analytics** in the sidebar
-2. The **Overview** tab loads by default, showing aggregate metrics
-3. Use the date range picker in the top-right corner to filter data
-4. Click any of the seven tabs to drill into a specific area
-5. Click **Export** on any tab to download the data as CSV
+1. Open **Analytics** in the sidebar.
+2. The **Overview** tab loads by default, showing aggregate metrics.
+3. Use the date range picker in the top-right corner to filter data.
+4. Click any of the seven tabs to drill into a specific area.
+5. Click **Export** on any tab to download the data as CSV.
 
 ## Tabs
 
@@ -24,7 +24,7 @@ Paginated list of every gateway request with timestamp, tool name, protocol, sta
 
 ### Tools
 
-Per-tool breakdown: execution count, success rate, average duration, and last-used time. Sorted by most-used by default. Counts every execution path — direct test runs, MCP `tools/call`, UTCP `execute`, and agent `tool_call` nodes all roll up here.
+Per-tool breakdown: execution count, success rate, average duration, and last-used time. Sorted by most-used by default. Counts every execution path: direct test runs, MCP `tools/call`, UTCP `execute`, and agent `tool_call` nodes all roll up here.
 
 ![Tools tab](/screenshots/analytics-tools.png)
 
@@ -50,37 +50,6 @@ Chronological log of every sensitive action (create, update, delete, execute) wi
 
 ![Audit trail](/screenshots/analytics-audit.png)
 
-## Via the API
-
-### Usage metrics
-
-```bash
-curl "/usage-metrics?startDate=2026-04-01&endDate=2026-04-09" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Request logs
-
-```bash
-curl "/request-logs?page=1&limit=50" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Audit trail
-
-```bash
-curl "/audit-logs?page=1&limit=50" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Export
-
-```bash
-curl "/usage-metrics/export?startDate=2026-04-01&endDate=2026-04-09&format=csv" \
-  -H "Authorization: Bearer $TOKEN" \
-  -o metrics.csv
-```
-
 ## Metrics reference
 
 | Metric | Description |
@@ -96,3 +65,7 @@ curl "/usage-metrics/export?startDate=2026-04-01&endDate=2026-04-09&format=csv" 
 ## Retention
 
 Usage metrics and request logs are retained for 90 days by default, then pruned by a background sweep. Self-hosted deployments can change the window with the `METRICS_RETENTION_DAYS` environment variable, or set it to `0` to keep everything. See [Self-Hosting](/self-hosting) for the full list of environment variables.
+
+## API
+
+Usage metrics, request logs, audit logs, and CSV export are available over REST. See the [API reference](/api-reference).

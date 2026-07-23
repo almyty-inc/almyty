@@ -1,22 +1,29 @@
 # Autonomous Agents
 
-An autonomous agent gets instructions, a set of tools, and a goal, then decides
-which tools to call and how to answer. There is no pipeline to draw; the model
-controls the flow. (For the opposite approach, where you wire each step
-yourself, see [workflow agents](/agents/builder).)
-
-What makes them more than a prompt: several models collaborate inside one agent,
-the output is verified before it returns, the agent keeps memory and constraints
-across runs, and good runs become reusable skills. You set all of this up on the
-agent's detail page.
+Give an agent instructions, a set of tools, and a goal. It decides which tools
+to call and how to answer, with no pipeline to draw. Several models can
+collaborate inside one agent, the output is checked before it returns, and the
+agent carries memory and constraints from one run to the next. (For the opposite
+approach, where you wire each step yourself, see [workflow agents](/agents/builder).)
 
 ![Autonomous agent detail](/screenshots/agent-detail-overview.png)
+
+You configure all of this on the agent's detail page. To run one from your
+terminal:
+
+```bash
+$ npx @almyty/agents run support-orchestrator \
+    --input '{"ticket": "Where is my order #4821?"}' --watch
+```
+
+`--watch` streams each step (tool calls, verifier verdicts, revisions) as the run
+unfolds. See the [Agents CLI](/cli/agents) for the full command set.
 
 ## Multiple models in one agent
 
 An autonomous agent has one **primary** model that does the work and any number
 of **verifier** models that review it. Each can use a different provider, so one
-agent can span vendors — the Customer Support Orchestrator above runs GPT-4o as
+agent can span vendors. The Customer Support Orchestrator above runs GPT-4o as
 primary with a GPT-4o reviewer and a Gemini reviewer. The **Models &
 Verification** panel on the detail page shows the lineup.
 
@@ -29,7 +36,7 @@ how many times the agent may revise.
 
 ![Configure the verifier panel](/screenshots/agent-verify-config-dialog.png)
 
-Reviewers are refute-only — each tries to find a reason the answer is wrong. How
+Reviewers are refute-only: each tries to find a reason the answer is wrong. How
 their verdicts combine:
 
 | Policy | The answer passes when |
@@ -58,9 +65,11 @@ way: point an agent at several other agents and choose how they work together.
 Each member can be a different model, and the judge that settles the result can
 be a different model again.
 
+![Agents collaborating in a debate](/screenshots/agent-collab-debate.png)
+
 | Mode | What it does |
 |------|--------------|
-| Sequential | Members run one after another, each fed the previous member's output — a chain. |
+| Sequential | Members run one after another, each fed the previous member's output (a chain). |
 | Parallel | All members run at once on the same input. A judge merges their outputs into one answer; without a judge they are returned together. |
 | Race | All members run at once; the first to finish wins. Every racer's cost is still counted, so a budget cap holds. |
 | Debate | Members argue over several rounds, each round seeing all prior responses. A judge then reads the debate and writes the final answer. |
@@ -68,7 +77,7 @@ be a different model again.
 The judge is any agent you choose, so a Claude debate can be settled by GPT-4o,
 or the reverse.
 
-(Workflow agents have a separate **consensus** merge node — a judge that combines
+(Workflow agents have a separate **consensus** merge node: a judge that combines
 branch outputs. That is a node, not a collaboration mode.)
 
 ## Constraints
@@ -76,7 +85,7 @@ branch outputs. That is a node, not a collaboration mode.)
 Constraints are per-agent rules that keep an agent from repeating mistakes. Add
 them on the agent's **Constraints** tab, or let the agent learn them: when a run
 fails, the lesson is distilled into a new constraint automatically. Active
-constraints are always-on — applied on every run — which makes them distinct from
+constraints are always-on, applied on every run, which makes them distinct from
 [memory](/memory), which is recalled by relevance.
 
 ![Constraints tab](/screenshots/agent-constraints.png)
@@ -84,12 +93,12 @@ constraints are always-on — applied on every run — which makes them distinct
 For the Support Orchestrator the active rules read like "never promise a refund
 over $500 without approval," "Scale-plan customers get a four-hour SLA," and
 "keep replies under 150 words." A blocked run can add its own: "a run was blocked
-for issuing a $900 refund without approval — gate refunds over $500."
+for issuing a $900 refund without approval, gate refunds over $500."
 
 ## Promote a run to a skill
 
 When a run goes well, promote it from the **Promote to skill** dialog. almyty
-distills the run — its tool sequence and output — into an
+distills the run (its tool sequence and output) into an
 [Agent Skills](https://agentskills.io) `SKILL.md`, stored and versioned. From the
 **Skills** tab you can view it, replay it, or delete it. The skill is served over
 the [Skills gateway](/gateways/skills) and REST, so another agent, or your editor
@@ -98,7 +107,7 @@ via [`@almyty/skills`](/cli/skills), can call it instead of re-deriving the step
 ![A promoted skill's SKILL.md, distilled from a run, with the tool procedure](/screenshots/agent-skill-viewer.png)
 
 A reasoning-only run produces the procedure in prose; a run that called tools
-lists them in order ("1. Look up order status, 2. Search the knowledge base, …"),
+lists them in order ("1. Look up order status, 2. Search the knowledge base, ..."),
 so the skill captures the real steps.
 
 ## Memory
@@ -115,23 +124,19 @@ automatically; there is nothing to watch.
 
 ## Create an autonomous agent
 
-In the UI: **Agents → Create Agent → Autonomous**, enter instructions, attach
-tools, enable memory, add constraints, and configure the verifier panel — all
-from the form.
+In the UI: **Agents -> Create Agent -> Autonomous**, enter instructions, attach
+tools, enable memory, add constraints, and configure the verifier panel, all from
+the form.
 
-A minimal version over the API:
+![Autonomous agent form in the builder](/screenshots/agent-builder-autonomous.png)
 
-```bash
-curl -X POST https://api.almyty.com/agents \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{ "name": "Support Orchestrator", "mode": "autonomous",
-        "instructions": "Triage tickets, draft replies, escalate refunds over $500.",
-        "toolIds": ["<tool-id>"], "memoryEnabled": true }'
-```
+Once it is active, invoke it from the terminal with
+`npx @almyty/agents run <name> --input '{...}'`, or from any client via the
+[OpenAI-compatible API](/api-reference/openai-compatible).
 
 ## Related
 
-- [Approvals](/approvals) — pause a run for human sign-off before irreversible actions
-- [Memory](/memory) — persistent, embedding-based recall
-- [Gateways: Skills](/gateways/skills) — serve promoted skills to any client
-- [Workflow builder](/agents/builder) — the deterministic alternative
+- [Approvals](/approvals): pause a run for human sign-off before irreversible actions
+- [Memory](/memory): persistent, embedding-based recall
+- [Gateways: Skills](/gateways/skills): serve promoted skills to any client
+- [Workflow builder](/agents/builder): the deterministic alternative

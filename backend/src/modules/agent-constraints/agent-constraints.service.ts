@@ -28,7 +28,7 @@ export class AgentConstraintsService {
   async listActiveRules(organizationId: string, agentId: string): Promise<string[]> {
     const rows = await this.repo.find({
       where: { organizationId, agentId, active: true },
-      select: ['rule'],
+      select: { rule: true },
       order: { createdAt: 'ASC' },
     });
     return rows.map((r) => r.rule);

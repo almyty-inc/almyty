@@ -20,7 +20,7 @@ export const AppDataSource = new DataSource(versionsConfig({
   synchronize: false,
   logging: configService.get('NODE_ENV') === 'development',
   ssl: configService.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
-}));
+}) as any);
 
 // Database configuration for NestJS - Using PostgreSQL
 export const databaseConfig = {

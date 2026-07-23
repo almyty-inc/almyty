@@ -23,7 +23,14 @@ Or use the UI: log into your almyty account and head to **Runners → Start a ru
 
 ## What the runner does
 
-The runner exposes a small process surface (spawn, write, read, signal, wait_for_idle, wait, list, shell.exec, runner.info) over a persistent connection to almyty. Agents call those methods, scoped to a workspace, and the runner runs the actual processes on your machine. It does not bake in any tool-specific knowledge: there is no `claude_code.run` or `codex.run`. Tool intelligence lives in agent prompts; the runner is generic.
+The runner exposes a method surface over a persistent connection to almyty, and runs the actual work on your machine, scoped to a workspace:
+
+- `process.*` — `spawn`, `write`, `close_input`, `read`, `signal`, `wait`, `wait_for_idle`, `list`
+- `runner.info` — capabilities and status
+- `agent.*` — `spawn`, `list`, `status` for almyty agent processes
+- `coding.*` — `start`, `input`, `list`, `status`, `stop` for coding-CLI sessions
+
+The generic `process.*` layer has no tool-specific knowledge — there is no `claude_code.run` or `codex.run`. The `coding.*` layer adds a thin registry of coding CLIs (Claude Code, Codex, Gemini, Cursor, opencode, Crush, Copilot, Grok, aider) so agents can drive them without knowing each tool's invocation and prompt quirks.
 
 ## Config
 
@@ -57,6 +64,18 @@ A minimal `~/.almyty/config.json`:
 
 See [docs/runner.md](../../docs/runner.md) for the load-bearing design decisions: Streamable HTTP transport, no per-tool wrappers, PTY by default, detected vs configured fields, resource scoping, and config layering.
 
-## License
+.
 
-BSL-1.1.
+## About almyty
+
+almyty is the full-stack platform for AI agents, agnostic by design: any LLM, any
+API turned into tools, served over MCP, A2A, UTCP, and Agent Skills. Open source,
+no lock-in.
+
+- Website: https://almyty.com
+- Docs: https://docs.almyty.com
+- Source: https://github.com/almyty-inc/almyty
+
+This CLI is part of the `@almyty/*` suite (versioned together at 1.x) and works with the almyty platform 0.1 and later.
+
+Apache-2.0 © Almyty Inc.

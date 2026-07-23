@@ -69,7 +69,7 @@ export class ToolsService {
 
       const user = await this.userRepository.findOne({
         where: { id: userId },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
 
       if (!user?.hasPermissionInOrganization(organizationId, 'create_tools')) {
@@ -101,7 +101,7 @@ export class ToolsService {
       if (createToolDto.operationId) {
         operation = await this.operationRepository.findOne({
           where: { id: createToolDto.operationId },
-          relations: ['api'],
+          relations: { api: true },
         });
 
         if (!operation || operation.api.organizationId !== organizationId) {
@@ -178,7 +178,7 @@ export class ToolsService {
     try {
       const tool = await this.toolRepository.findOne({
         where: { id: toolId, organizationId },
-        relations: ['categories'],
+      relations: { categories: true },
       });
 
       if (!tool) {
@@ -329,16 +329,14 @@ export class ToolsService {
     organizationId: string,
     includeRelations = true
   ): Promise<Tool> {
-    const relations = includeRelations ? [
-      'categories',
-      'operation',
-      'operation.api',
-      'inputSchema',
-      'outputSchema',
-      'versions',
-      'gatewayAssociations',
-      'gatewayAssociations.gateway',
-    ] : [];
+    const relations = includeRelations ? {
+      categories: true,
+      operation: { api: true },
+      inputSchema: true,
+      outputSchema: true,
+      versions: true,
+      gatewayAssociations: { gateway: true },
+    } : {};
 
     const tool = await this.toolRepository.findOne({
       where: { id: toolId, organizationId },
@@ -550,7 +548,6 @@ export class ToolsService {
     return this.toolVersionRepository.find({
       where: { toolId: tool.id },
       order: { createdAt: 'DESC' },
-      relations: ['createdByUser'],
     });
   }
 

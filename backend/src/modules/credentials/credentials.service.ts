@@ -282,13 +282,13 @@ export class CredentialsService {
     // Find LLM providers using this credential
     const llmProviders = await this.llmProviderRepository.find({
       where: { credentialId: id, organizationId },
-      select: ['id', 'name', 'type', 'status'],
+      select: { id: true, name: true, type: true, status: true },
     });
 
     // Find APIs that have credentials with this id
     const apis = await this.apiRepository.find({
       where: { organizationId },
-      relations: ['credentials'],
+      relations: { credentials: true },
     });
 
     const matchingApis = apis
@@ -305,7 +305,7 @@ export class CredentialsService {
   async findAllAccessKeys(organizationId: string): Promise<any[]> {
     const keys = await this.apiKeyRepository.find({
       where: { organizationId },
-      relations: ['gateway'],
+      relations: { gateway: true },
       order: { createdAt: 'DESC' },
     });
 
@@ -315,7 +315,7 @@ export class CredentialsService {
       if (key.agentId) {
         agent = await this.agentRepository.findOne({
           where: { id: key.agentId },
-          select: ['id', 'name'],
+          select: { id: true, name: true },
         });
       }
 

@@ -126,7 +126,15 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
       password: process.env.DATABASE_PASSWORD || '',
       database: process.env.DATABASE_NAME || 'almyty_test',
       schema: 'import_schema_test',
-      synchronize: true,
+      // Build the schema by RUNNING THE MIGRATIONS (not `synchronize`)
+      // so the suite validates the real migration path. `search_path`
+      // is pinned to `<schema>,public` so the migrations' unqualified
+      // CREATE TABLE lands in the isolated schema while extension
+      // objects (uuid_generate_v4, the `vector` type) resolve from
+      // public.
+      extra: { options: '-c search_path=import_schema_test,public' },
+      migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
+      migrationsRun: true,
       dropSchema: true,
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
       logging: false,

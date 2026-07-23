@@ -23,6 +23,14 @@ const agents = await client.listAgents();
 - `loadCredentials()` -- raw file read
 - `CREDENTIALS_FILE` -- path to `~/.almyty/credentials.json`
 
-## License
+## About almyty
 
-BSL-1.1
+almyty is the full-stack platform for AI agents, agnostic by design: any LLM, any
+API turned into tools, served over MCP, A2A, UTCP, and Agent Skills. Open source,
+no lock-in.
+
+- Website: https://almyty.com
+- Docs: https://docs.almyty.com
+- Source: https://github.com/almyty-inc/almyty
+
+Apache-2.0 © Almyty Inc.

@@ -26,20 +26,26 @@ describeIfDb('OAuth discovery org slug resolution (real DB)', () => {
       password: process.env.DATABASE_PASSWORD || 'password',
       database: process.env.DATABASE_NAME || 'almyty_test',
     };
-    // Isolate this raw-DataSource spec on its own schema so its
-    // synchronize DDL doesn't race the other DB-integration specs that
-    // also synchronize against `public` under parallel jest workers —
-    // the same isolation every sibling integration spec already uses.
+    // Isolate this raw-DataSource spec on its own schema so its DDL
+    // doesn't race the other DB-integration specs under parallel jest
+    // workers — the same isolation every sibling integration spec uses.
     const bootstrap = new DataSource({ ...conn, entities: [] });
     await bootstrap.initialize();
     await bootstrap.query('CREATE SCHEMA IF NOT EXISTS oauth_discovery_test');
     await bootstrap.destroy();
+    // Build the schema by RUNNING THE MIGRATIONS (not `synchronize`)
+    // so the suite validates the real migration path. `search_path`
+    // is pinned to `<schema>,public` so the migrations' unqualified
+    // CREATE TABLE lands in the isolated schema while extension
+    // objects (uuid_generate_v4, the `vector` type) resolve from public.
     ds = new DataSource({
       ...conn,
       entities: [path.join(__dirname, '../../entities/*.entity{.ts,.js}')],
       schema: 'oauth_discovery_test',
+      extra: { options: '-c search_path=oauth_discovery_test,public' },
+      migrations: [path.join(__dirname, '../../migrations/*{.ts,.js}')],
+      migrationsRun: true,
       dropSchema: true,
-      synchronize: true,
     });
     await ds.initialize();
   });

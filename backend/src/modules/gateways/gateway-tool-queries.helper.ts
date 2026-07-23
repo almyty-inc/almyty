@@ -109,7 +109,7 @@ export class GatewayToolQueriesHelper {
   async getGatewayTool(gatewayToolId: string, organizationId: string): Promise<GatewayTool> {
     const gatewayTool = await this.gatewayToolRepository.findOne({
       where: { id: gatewayToolId },
-      relations: ['gateway', 'tool'],
+      relations: { gateway: true, tool: true },
     });
 
     if (!gatewayTool || gatewayTool.gateway.organizationId !== organizationId) {
@@ -130,7 +130,7 @@ export class GatewayToolQueriesHelper {
 
     const associatedTools = await this.gatewayToolRepository.find({
       where: { gatewayId },
-      select: ['toolId'],
+      select: { toolId: true },
     });
 
     const associatedToolIds = associatedTools.map(at => at.toolId);
@@ -164,7 +164,7 @@ export class GatewayToolQueriesHelper {
 
       const user = await this.userRepository.findOne({
         where: { id: userId },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
 
       if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateway_tools')) {
