@@ -31,6 +31,7 @@ import { BadRequestException } from '@nestjs/common';
 
 import { CredentialService } from '../../modules/apis/credential.service';
 import { Credential, CredentialType } from '../../entities/credential.entity';
+import { makeEnvelopeCryptoMock } from '../envelope-crypto.mock';
 
 jest.setTimeout(20_000);
 
@@ -129,7 +130,7 @@ describe('CredentialService.refreshOAuthToken — real HTTP round trip', () => {
       findOne: jest.fn().mockResolvedValue({ id: 'api-1', baseUrl: 'https://example.com' }),
     };
 
-    const service = new CredentialService(credentialRepo, apiRepo);
+    const service = new CredentialService(credentialRepo, apiRepo, makeEnvelopeCryptoMock());
     return { service, credRow, savedRows };
   }
 

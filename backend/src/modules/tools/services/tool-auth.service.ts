@@ -25,6 +25,7 @@ import { AxiosRequestConfig } from 'axios';
 import { Api } from '../../../entities/api.entity';
 import { Credential, CredentialType } from '../../../entities/credential.entity';
 import { ToolExecutionOptions } from '../tool-execution.types';
+import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 
 @Injectable()
 export class ToolAuthService {
@@ -34,6 +35,7 @@ export class ToolAuthService {
     @InjectRepository(Credential)
     private readonly credentialRepository: Repository<Credential>,
     private readonly moduleRef: ModuleRef,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   /**
@@ -153,6 +155,8 @@ export class ToolAuthService {
     }
 
     config.headers = config.headers || {};
+    // Warm the org's DEK before sync getAuthHeaders (no-op for non-KMS orgs).
+    await this.envelopeCrypto.warmOrg(credential.organizationId);
     const authHeaders = credential.getAuthHeaders();
     Object.assign(config.headers as Record<string, string>, authHeaders);
 

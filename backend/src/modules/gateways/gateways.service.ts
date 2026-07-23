@@ -15,10 +15,16 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
-import { encryptChannelConfigSecrets, restoreMaskedChannelSecrets } from './channels/channel-config.helper';
+import {
+  encryptChannelConfigSecrets,
+  restoreMaskedChannelSecrets,
+  type ChannelSecretEnvelope,
+} from './channels/channel-config.helper';
+import { encryptField as platformEncryptField } from '../../common/security/field-crypto';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
 import { EmailProvisioningService } from './channels/email-provisioning.service';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -161,6 +167,11 @@ export class GatewaysService {
     // Optional for the same reason: email inbound-address provisioning
     // must never be required to construct the service.
     @Optional() private readonly emailProvisioner?: EmailProvisioningService,
+    // Optional so positional unit tests can construct the service without
+    // it. When absent, channel-secret encryption falls back to the platform
+    // path (byte-identical to the pre-KMS behavior); when present, a BYO-KMS
+    // org's secrets are wrapped with the customer CMK.
+    @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
   ) {}
 
   /**
@@ -229,8 +240,25 @@ export class GatewaysService {
    * idempotent so an already-encrypted value round-trips through
    * update unchanged.
    */
-  private encryptConfigSecrets(configuration?: Record<string, any>): void {
-    encryptChannelConfigSecrets(configuration);
+  private async encryptConfigSecrets(
+    configuration: Record<string, any> | undefined,
+    organizationId: string,
+  ): Promise<void> {
+    await encryptChannelConfigSecrets(configuration, organizationId, this.secretEnvelope());
+  }
+
+  /**
+   * Envelope used to encrypt channel secrets. Prefers the injected
+   * EnvelopeCryptoService (org-aware BYO-KMS routing); when it is absent
+   * (positional unit tests), falls back to the platform field-crypto path,
+   * which produces the exact same `encrypted:gcm:` value as before.
+   */
+  private secretEnvelope(): ChannelSecretEnvelope {
+    if (this.envelopeCrypto) return this.envelopeCrypto;
+    return {
+      encryptForOrg: (_organizationId: string, plaintext: string) =>
+        Promise.resolve(platformEncryptField(plaintext)),
+    };
   }
 
   async createGateway(
@@ -301,7 +329,7 @@ export class GatewaysService {
       );
 
       // Encrypt channel OAuth client secrets at rest before persisting.
-      this.encryptConfigSecrets(createGatewayDto.configuration);
+      await this.encryptConfigSecrets(createGatewayDto.configuration, organizationId);
 
       // Create the gateway
       const gateway = this.gatewayRepository.create({
@@ -391,7 +419,7 @@ export class GatewaysService {
       // Validate configuration if updated
       if (updateGatewayDto.configuration) {
         this.init.validateGatewayConfiguration(gateway.type, gateway.configuration);
-        this.encryptConfigSecrets(gateway.configuration);
+        await this.encryptConfigSecrets(gateway.configuration, organizationId);
       }
 
       const updatedGateway = await this.gatewayRepository.save(gateway);
