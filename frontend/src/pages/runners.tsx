@@ -186,18 +186,19 @@ export function RunnersPage() {
 
       {!isLoading && runners.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Cpu className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No runners registered</h3>
-            <p className="text-muted-foreground mb-6 text-center max-w-md">
-              A runner is a long-running daemon you start on a machine you own. It accepts jobs from your agents and runs processes locally — Claude Code, Codex, git, npm, anything on PATH.
-            </p>
-            <Button size="lg" onClick={() => navigate('/runners/new')}>
-              <Plus className="mr-2 h-4 w-4" />
-              Start a runner
-            </Button>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={Cpu}
+              title="No runners registered"
+              description="A runner connects one of your machines and publishes its capabilities as tools. Code and credentials stay local."
+              action={
+                <Button onClick={() => navigate('/runners/new')}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Set up runner
+                </Button>
+              }
+              className="py-16"
+            />
           </CardContent>
         </Card>
       ) : (
