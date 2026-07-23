@@ -108,7 +108,7 @@ jobs:
             echo "SKIP_PUBLISH=1" >> "$GITHUB_ENV"
             exit 0
           fi
-          npm ci --legacy-peer-deps || npm install --legacy-peer-deps || true
+          npm install --legacy-peer-deps --no-audit --no-fund
           npm run build || true
           npm publish --access public --provenance
 
