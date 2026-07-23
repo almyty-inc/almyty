@@ -106,14 +106,16 @@ jobs:
             --type spdxjson \
             "almyty/${{ matrix.image }}@${DIGEST}"
 
-  # Roll the released version out to production. Prod is deployed ONLY from
-  # here (build-publish.yml deploys dev/staging only), pinning the semver
-  # tag so `kubectl` shows the running version — never a digest.
-  deploy-production:
+  # Trigger the production rollout. This does NOT deploy — it only fires a
+  # repository_dispatch at almyty-inc/infra, whose deploy.yml owns the actual
+  # cluster rollout (migration, kubectl, smoke, rollback). Same pattern
+  # build-publish.yml uses for dev/staging. We pass the semver tag so infra
+  # pins almyty/api:<version> and kubectl shows the running version.
+  trigger-prod-deploy:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - name: Fire production deploy (by version tag)
+      - name: Dispatch production deploy to infra (by version tag)
         env:
           GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
         run: |
