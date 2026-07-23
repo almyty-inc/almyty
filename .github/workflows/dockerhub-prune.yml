@@ -22,7 +22,7 @@ on:
       keep_sha:
         description: 'Immutable <pfx>-<sha> build tags to keep per environment'
         required: false
-        default: '10'
+        default: '2'
       dry_run:
         description: 'List what would be deleted without deleting'
         type: boolean
@@ -49,6 +49,9 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           REPOS: 'api,frontend,docs,almyty'
-          KEEP_SHA: ${{ github.event.inputs.keep_sha || '10' }}
+          # Deploys pin images by digest now (build no longer mints <pfx>-<sha>
+          # tags), so only the currently-deployed build + 1 rollback spare per
+          # env need to survive. Legacy sha tags get cleaned to this floor.
+          KEEP_SHA: ${{ github.event.inputs.keep_sha || '2' }}
           DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
         run: node scripts/dockerhub-prune.js
