@@ -49,7 +49,7 @@ export class UnifiedAgentHelper {
       if (agent.toolIds?.length) {
         const toolRepo = this.agentRepository.manager.getRepository(Tool);
         const toolEntities = await toolRepo
-          .find({ where: { id: In(agent.toolIds) }, select: ['id', 'name', 'description'] })
+          .find({ where: { id: In(agent.toolIds) }, select: { id: true, name: true, description: true } })
           .catch(() => []);
         tools = toolEntities.map(t => ({ id: t.id, name: t.name, description: t.description }));
       }
@@ -333,7 +333,7 @@ export class UnifiedAgentHelper {
     const messages = await msgRepo.find({
       where: { conversationId: convId },
       order: { createdAt: 'ASC' },
-      select: ['id', 'role', 'content', 'createdAt'],
+      select: { id: true, role: true, content: true, createdAt: true },
     });
 
     return res.json({

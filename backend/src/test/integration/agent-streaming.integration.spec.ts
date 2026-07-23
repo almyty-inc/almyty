@@ -124,7 +124,7 @@ describe('Agent Streaming (integration)', () => {
           if (where.agentId && r.agentId !== where.agentId) return false;
           return true;
         });
-        if (found && relations?.includes('agent')) {
+        if (found && relations?.agent) {
           found.agent = agentStore.find(a => a.id === found.agentId) || null as any;
         }
         return Promise.resolve(found || null);

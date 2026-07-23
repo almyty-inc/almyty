@@ -1,18 +1,18 @@
 /**
  * Shared helper for TestAppModule-based DB integration specs.
  *
- * These specs run through TestAppModule, whose TypeORM DataSource is
- * configured with `synchronize: true`. When several such specs run in
- * parallel Jest workers against the same Postgres schema, their
- * interleaved CREATE/ALTER/DROP TABLE cycles race and one file's
- * beforeAll intermittently blows up wholesale (every test failing
- * together). Isolating each spec into its own schema removes the race.
+ * These specs run through TestAppModule, whose TypeORM DataSource builds
+ * its schema by RUNNING THE MIGRATIONS (`migrationsRun: true`). When
+ * several such specs run in parallel Jest workers against the same
+ * Postgres schema, their interleaved DDL races and one file's beforeAll
+ * intermittently blows up wholesale (every test failing together).
+ * Isolating each spec into its own schema removes the race.
  *
  * Call `useIsolatedSchema('my_spec_test')` at module load time, BEFORE
  * `Test.createTestingModule(...).compile()` — TestAppModule reads
  * DATABASE_SCHEMA from ConfigService at DataSource-build time, so the
  * env var must already be set. `ensureSchema()` pre-creates the schema
- * because TypeORM's `dropSchema + synchronize` assumes it exists.
+ * because TypeORM's `dropSchema` + migrations assumes it exists.
  */
 import { DataSource } from 'typeorm';
 
@@ -26,7 +26,7 @@ export function useIsolatedSchema(schema: string): void {
 
 /**
  * Pre-create the isolated schema via a throwaway connection so the
- * TestAppModule DataSource can dropSchema + synchronize into it.
+ * TestAppModule DataSource can dropSchema + run migrations into it.
  */
 export async function ensureSchema(schema: string): Promise<void> {
   const bootstrap = new DataSource({

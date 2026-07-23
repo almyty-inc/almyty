@@ -57,10 +57,17 @@ export class KmsClientFactory {
 
   private clientFor(ref: KmsKeyRef): KMSClient {
     const region = ref.region || this.regionFromArn(ref.keyArn);
-    const key = region || 'default';
+    // Optional endpoint override for local emulators (e.g. LocalStack KMS).
+    // Unset in every real deployment, so the AWS SDK talks to real KMS as
+    // before; set only by integration specs / self-hosted emulator setups.
+    const endpoint = process.env.AWS_KMS_ENDPOINT || undefined;
+    const key = `${region || 'default'}|${endpoint || ''}`;
     let client = this.clients.get(key);
     if (!client) {
-      client = new KMSClient(region ? { region } : {});
+      const config: Record<string, unknown> = {};
+      if (region) config.region = region;
+      if (endpoint) config.endpoint = endpoint;
+      client = new KMSClient(config);
       this.clients.set(key, client);
     }
     return client;

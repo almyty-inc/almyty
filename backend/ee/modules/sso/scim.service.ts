@@ -149,7 +149,7 @@ export class ScimService {
 
     const memberships = await this.membershipRepo.find({
       where: { organizationId: orgId },
-      relations: ['user'],
+      relations: { user: true },
     });
     const resources = memberships
       .filter((m) => m.user)

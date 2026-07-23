@@ -280,7 +280,7 @@ export class GatewaysService {
 
       const user = await this.userRepository.findOne({
         where: { id: userId },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
 
       if (!user?.hasPermissionInOrganization(organizationId, 'create_gateways')) {
@@ -461,14 +461,14 @@ export class GatewaysService {
     // Try matching by endpoint (which is already a slug like /httpbin-skills-gateway)
     let gateway = await this.gatewayRepository.findOne({
       where: { organizationId: organization.id, endpoint: `/${gatewayNameSlug}` },
-      relations: ['tools', 'tools.tool', 'authConfigs'],
+      relations: { tools: { tool: true }, authConfigs: true },
     });
 
     // Fallback: match by slugified name
     if (!gateway) {
       const gateways = await this.gatewayRepository.find({
         where: { organizationId: organization.id },
-        relations: ['tools', 'tools.tool', 'authConfigs'],
+        relations: { tools: { tool: true }, authConfigs: true },
       });
       gateway = gateways.find(g =>
         g.name.toLowerCase().replace(/\s+/g, '-') === gatewayNameSlug
@@ -487,11 +487,10 @@ export class GatewaysService {
     organizationId: string,
     includeRelations = true
   ): Promise<Gateway> {
-    const relations = includeRelations ? [
-      'tools',
-      'tools.tool',
-      'authConfigs',
-    ] : [];
+    const relations = includeRelations ? {
+      tools: { tool: true },
+      authConfigs: true,
+    } : {};
 
     const gateway = await this.gatewayRepository.findOne({
       where: { id: gatewayId, organizationId },

@@ -181,7 +181,7 @@ export class CredentialService {
   async testCredential(credentialId: string, organizationId: string): Promise<{ success: boolean; message: string }> {
     const credential = await this.credentialRepository.findOne({
       where: { id: credentialId, organizationId },
-      relations: ['api'],
+      relations: { api: true },
     });
 
     if (!credential) throw new NotFoundException('Credential not found');

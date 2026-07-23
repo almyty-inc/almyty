@@ -105,7 +105,7 @@ export class OrganizationsService {
   async findAll(userId: string): Promise<Organization[]> {
     const memberships = await this.userOrganizationRepository.find({
       where: { userId, isActive: true },
-      relations: ['organization'],
+      relations: { organization: true },
       order: { joinedAt: 'DESC' },
     });
 
@@ -115,13 +115,12 @@ export class OrganizationsService {
   async findOne(id: string): Promise<Organization> {
     const organization = await this.organizationRepository.findOne({
       where: { id },
-      relations: [
-        'members',
-        'members.user',
-        'teams',
-        'apis',
-        'gateways',
-      ],
+      relations: {
+        members: { user: true },
+        teams: true,
+        apis: true,
+        gateways: true,
+      },
     });
 
     if (!organization) {
@@ -134,11 +133,10 @@ export class OrganizationsService {
   async findBySlug(slug: string): Promise<Organization> {
     const organization = await this.organizationRepository.findOne({
       where: { slug },
-      relations: [
-        'members',
-        'members.user',
-        'teams',
-      ],
+      relations: {
+        members: { user: true },
+        teams: true,
+      },
     });
 
     if (!organization) {
@@ -211,7 +209,7 @@ export class OrganizationsService {
     // Get all members
     const members = await this.userOrganizationRepository.find({
       where: { organizationId, isActive: true },
-      relations: ['user'],
+      relations: { user: true },
       order: { joinedAt: 'ASC' },
     });
 
@@ -460,7 +458,7 @@ export class OrganizationsService {
 
     return this.teamRepository.find({
       where: { organizationId, isActive: true },
-      relations: ['members', 'members.user'],
+      relations: { members: { user: true } },
       order: { createdAt: 'DESC' },
     });
   }
@@ -579,7 +577,7 @@ export class OrganizationsService {
 
     const memberships = await this.userTeamRepository.find({
       where: { teamId, isActive: true },
-      relations: ['user'],
+      relations: { user: true },
       order: { joinedAt: 'ASC' },
     });
 

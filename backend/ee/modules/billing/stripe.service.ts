@@ -1,7 +1,11 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
-import { STRIPE_SECRET_KEY_ENV, STRIPE_WEBHOOK_SECRET_ENV } from './billing.constants';
+import {
+  STRIPE_API_BASE_ENV,
+  STRIPE_SECRET_KEY_ENV,
+  STRIPE_WEBHOOK_SECRET_ENV,
+} from './billing.constants';
 
 /**
  * Thin, mockable wrapper over the Stripe SDK. Every Stripe call the billing
@@ -29,9 +33,33 @@ export class StripeService {
           'Billing is not configured (STRIPE_SECRET_KEY is unset)',
         );
       }
-      this.client = new Stripe(key);
+      this.client = new Stripe(key, this.stripeOptions());
     }
     return this.client;
+  }
+
+  /**
+   * Build the Stripe SDK options. When `STRIPE_API_BASE` is set (local
+   * `stripe-mock` in integration tests) its protocol/host/port are applied so
+   * the SDK talks to the emulator; otherwise no overrides are passed and the
+   * SDK targets `api.stripe.com` exactly as before.
+   */
+  private stripeOptions(): ConstructorParameters<typeof Stripe>[1] {
+    const base = this.config.get<string>(STRIPE_API_BASE_ENV);
+    if (!base) return undefined;
+    try {
+      const url = new URL(base);
+      const protocol = url.protocol.replace(/:$/, '') as 'http' | 'https';
+      const port = url.port
+        ? Number(url.port)
+        : protocol === 'https'
+          ? 443
+          : 80;
+      return { protocol, host: url.hostname, port };
+    } catch {
+      this.logger.warn(`Ignoring malformed ${STRIPE_API_BASE_ENV}: ${base}`);
+      return undefined;
+    }
   }
 
   createCustomer(params: Stripe.CustomerCreateParams): Promise<Stripe.Customer> {

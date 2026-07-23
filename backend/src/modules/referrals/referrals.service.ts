@@ -310,7 +310,7 @@ export class ReferralsService {
     if (!referral.referredUserId) return false;
     const referee = await this.userRepository.findOne({
       where: { id: referral.referredUserId },
-      select: ['id', 'verifiedAt', 'isVerified'],
+      select: { id: true, verifiedAt: true, isVerified: true },
     });
     return !!(referee && (referee.verifiedAt || referee.isVerified));
   }

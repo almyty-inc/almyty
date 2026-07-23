@@ -100,7 +100,7 @@ export class ProviderHealthProcessor implements OnApplicationBootstrap {
   async handleRecheck(_job?: Job): Promise<{ checked: number; unhealthy: number }> {
     const providers = await this.providerRepository.find({
       where: { status: LlmProviderStatus.ACTIVE },
-      select: ['id', 'organizationId', 'name'],
+      select: { id: true, organizationId: true, name: true },
       order: { createdAt: 'ASC' },
     });
 

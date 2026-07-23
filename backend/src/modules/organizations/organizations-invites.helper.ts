@@ -165,7 +165,7 @@ export class OrganizationsInvitesHelper {
     // Check membership-based invites (existing users)
     const membership = await this.userOrganizationRepository.findOne({
       where: { inviteToken: token },
-      relations: ['organization'],
+      relations: { organization: true },
     });
 
     if (membership) {
@@ -275,7 +275,7 @@ export class OrganizationsInvitesHelper {
     // Check membership-based invites (existing users)
     const membership = await this.userOrganizationRepository.findOne({
       where: { inviteToken: token },
-      relations: ['organization'],
+      relations: { organization: true },
     });
 
     if (membership) {

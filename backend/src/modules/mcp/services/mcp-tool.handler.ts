@@ -55,7 +55,7 @@ export class McpToolHandler {
     if (gatewayId) {
       const gatewayTools = await this.gatewayToolRepository.find({
         where: { gatewayId, isActive: true },
-        relations: ['tool'],
+        relations: { tool: true },
       });
       tools = gatewayTools.map((gt: any) => gt.tool).filter(Boolean);
       this.logger.log(`[GATEWAY-SCOPE] Returning ${tools.length} tools for gateway ${gatewayId}`);
@@ -101,7 +101,7 @@ export class McpToolHandler {
 
     const categories = await this.toolCategoryRepository.find({
       where: { organizationId, isActive: true },
-      relations: ['tools'],
+      relations: { tools: true },
       order: { sortOrder: 'ASC', name: 'ASC' },
     });
 
@@ -202,7 +202,7 @@ export class McpToolHandler {
 
     const allTools = await this.toolRepository.find({
       where: { status: ToolStatus.ACTIVE, organizationId },
-      relations: ['categories', 'operation'],
+      relations: { categories: true, operation: true },
     });
 
     const tool = allTools.find(t => this.sanitizeToolName(t.name) === toolName);
@@ -351,7 +351,7 @@ export class McpToolHandler {
     if (gatewayId) {
       const gatewayTools = await this.gatewayToolRepository.find({
         where: { gatewayId, isActive: true },
-        relations: ['tool', 'tool.categories'],
+        relations: { tool: { categories: true } },
       });
       return gatewayTools.map((gt: any) => gt.tool).filter(Boolean);
     }
@@ -363,7 +363,7 @@ export class McpToolHandler {
     if (gatewayId) {
       const gatewayTools = await this.gatewayToolRepository.find({
         where: { gatewayId },
-        relations: ['tool'],
+        relations: { tool: true },
       });
       return gatewayTools
         .map((gt) => gt.tool)

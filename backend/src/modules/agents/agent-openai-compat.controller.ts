@@ -385,7 +385,7 @@ export class AgentOpenAICompatController {
 
     const apiKey = await this.apiKeyRepository.findOne({
       where: { keyHash, isActive: true },
-      relations: ['organization'],
+      relations: { organization: true },
     });
 
     if (!apiKey) {

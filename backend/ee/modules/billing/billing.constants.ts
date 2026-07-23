@@ -14,6 +14,15 @@ export const STRIPE_SECRET_KEY_ENV = 'STRIPE_SECRET_KEY';
 export const STRIPE_WEBHOOK_SECRET_ENV = 'STRIPE_WEBHOOK_SECRET';
 
 /**
+ * Optional base URL override for the Stripe API, e.g. `http://localhost:12111`
+ * for the official `stripe-mock` emulator in integration tests. Unset in every
+ * real deployment, so the SDK talks to `api.stripe.com` exactly as before.
+ * Accepts `protocol://host[:port]`; the parts are handed to the Stripe SDK's
+ * `protocol`/`host`/`port` options.
+ */
+export const STRIPE_API_BASE_ENV = 'STRIPE_API_BASE';
+
+/**
  * Ed25519 PRIVATE key (PEM or base64 PEM) used to SIGN entitlement tokens on
  * successful payment. This is a vendor secret held only by the hosted control
  * plane — never shipped in the OSS build. The matching PUBLIC key is what the

@@ -61,7 +61,14 @@ describeIfDb('Runner + Workspace (real Postgres)', () => {
       database: process.env.DATABASE_NAME || 'almyty_test',
       schema: 'runner_workspace_test',
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
-      synchronize: true,
+      // Build the schema by RUNNING THE MIGRATIONS (not `synchronize`)
+      // so the suite validates the real migration path. `search_path`
+      // is pinned to `<schema>,public` BEFORE migrations run so their
+      // unqualified CREATE TABLE lands in the isolated schema while
+      // uuid_generate_v4() (uuid-ossp lives in public) resolves.
+      extra: { options: '-c search_path=runner_workspace_test,public' },
+      migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
+      migrationsRun: true,
       dropSchema: true,
     });
     await ds.initialize();
