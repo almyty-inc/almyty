@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "Skill-first API proxy for any LLM — turns APIs into AI skills via MCP with minimal token overhead",
+  "description": "Serve any almyty gateway to Claude Code or any MCP client \u2014 turn your APIs into MCP tools with a single command.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -42,5 +42,18 @@
     "@types/node": "^25.5.0",
     "tsx": "^4.7.0",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "@hono/node-server": "^2.0.5",
+    "esbuild": "^0.28.1"
+  },
+  "homepage": "https://almyty.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almyty-inc/almyty.git",
+    "directory": "packages/mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/almyty-inc/almyty/issues"
   }
 }

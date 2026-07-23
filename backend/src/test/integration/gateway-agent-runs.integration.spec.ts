@@ -35,7 +35,7 @@ import { AuthService } from '../../modules/auth/auth.service';
 import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service';
 import { useIsolatedSchema, ensureSchema } from './isolated-schema.helper';
 
-// Isolate this spec into its own Postgres schema so its `synchronize`
+// Isolate this spec into its own Postgres schema so its migration
 // DDL can't race with the other TestAppModule DB specs (mcp-oauth-flow,
 // rbac-guard) when Jest runs them in parallel workers. Set BEFORE the
 // testing module compiles — TestAppModule reads DATABASE_SCHEMA then.
@@ -91,7 +91,7 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
     // Re-assert the schema right before compile (defensive against
     // --runInBand, where both TestAppModule specs share one process and
     // module-load order would otherwise decide the winner), then
-    // pre-create it; the DataSource dropSchema + synchronizes into it.
+    // pre-create it; the DataSource dropSchema + runs migrations into it.
     useIsolatedSchema(SCHEMA);
     await ensureSchema(SCHEMA);
 

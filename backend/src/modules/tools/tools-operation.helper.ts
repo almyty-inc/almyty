@@ -34,7 +34,7 @@ export class ToolsOperationHelper {
     // Load the operation with its API
     const operationWithApi = await this.operationRepository.findOne({
       where: { id: operation.id },
-      relations: ['api'],
+      relations: { api: true },
     });
 
     if (!operationWithApi) {
@@ -115,7 +115,7 @@ export class ToolsOperationHelper {
     // Load the operation with its API
     const operationWithApi = await this.operationRepository.findOne({
       where: { id: operation.id },
-      relations: ['api'],
+      relations: { api: true },
     });
 
     if (!operationWithApi) {

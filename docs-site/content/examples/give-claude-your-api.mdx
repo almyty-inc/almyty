@@ -1,25 +1,25 @@
 # 🔌 Give Claude Code your own API
 
-**Stack** — `Trigger: Claude Code / any MCP client` · `Tools: your API (any schema)` · `Gateway: MCP (+ A2A, UTCP)` · `Auth: x-api-key` · `Output: Claude calls your API`
+**Stack**: `Trigger: Claude Code / any MCP client` · `Tools: your API (any schema)` · `Gateway: MCP (+ A2A, UTCP)` · `Auth: x-api-key` · `Output: Claude calls your API`
 
-**Who it's for** — anyone who wants Claude Code, Cursor, or Claude Desktop to call an API they already run.
+**Who it's for**: anyone who wants Claude Code, Cursor, or Claude Desktop to call an API they already run.
 
-This recipe is **real** — the *Petstore MCP* gateway below is live in the demo org, serving 19
+This recipe is **real**: the *Petstore MCP* gateway below is live in the demo org, serving 19
 Swagger Petstore tools over MCP with 14 real requests logged.
 
 ## Build it
 
-1. **Connect the API.** In *APIs → Connect API*, paste a schema URL — OpenAPI, GraphQL, SOAP/WSDL,
+1. **Connect the API.** In *APIs → Connect API*, paste a schema URL, OpenAPI, GraphQL, SOAP/WSDL,
    or Protobuf. almyty generates a typed tool for every operation. (The demo imported Swagger
    Petstore: 19 operations → 19 tools.)
 
-   ![The imported Swagger Petstore — 19 operations turned into tools](/screenshots/quickstart-api-imported.png)
+   ![The imported Swagger Petstore, 19 operations turned into tools](/screenshots/quickstart-api-imported.png)
 
 2. **Publish an MCP gateway.** Group the tools to expose and publish them as an **MCP** gateway,
-   then generate an `x-api-key` on its Authentication panel. Scope exactly which tools it serves —
+   then generate an `x-api-key` on its Authentication panel. Scope exactly which tools it serves , 
    here, 19 of 55 available tools.
 
-   ![The Petstore MCP gateway — endpoint, API keys, and tool scoping](/screenshots/gateway-petstore-config.png)
+   ![The Petstore MCP gateway, endpoint, API keys, and tool scoping](/screenshots/gateway-petstore-config.png)
 
 3. **Grab the endpoint.** The gateway's **Integrations** tab gives you the live MCP endpoint
    (`https://api.almyty.com/{org}/{gateway}`), plus SSE and discovery URLs:
@@ -42,7 +42,7 @@ Swagger Petstore tools over MCP with 14 real requests logged.
 - Rotate or revoke keys per client from the Authentication panel (the demo has three: a default key, a quickstart key, and a docs key).
 - Front a [legacy SOAP service](/examples/modernize-legacy-soap) the same way.
 
-**Uses** — `Platform` · `MCP` · `Claude Code`
+**Uses**: `Platform` · `MCP` · `Claude Code`
 
 ## Related
 

@@ -134,7 +134,7 @@ export class ApisService {
     // generation even started.
     return this.apiRepository.findOne({
       where: { id, organizationId },
-      relations: ['operations'],
+      relations: { operations: true },
     });
   }
 
@@ -150,12 +150,25 @@ export class ApisService {
     if (type) qb.andWhere('api.type = :type', { type });
     if (status) qb.andWhere('api.status = :status', { status });
     // Count, don't load: a Stripe-class API has hundreds of operations
-    // with large JSON columns — the list only needs the number.
-    qb.loadRelationCountAndMap('api.operationCount', 'api.operations');
+    // with large JSON columns — the list only needs the number. typeorm 1.x
+    // dropped loadRelationCountAndMap, so we attach the count as a correlated
+    // subquery and read it back via getRawAndEntities.
+    qb.addSelect(
+      (sub) =>
+        sub
+          .select('COUNT(op.id)', 'cnt')
+          .from(Operation, 'op')
+          .where('op."apiId" = api.id'),
+      'api_operationCount',
+    );
     qb.orderBy('api.createdAt', 'DESC').skip((page - 1) * limit).take(limit);
 
-    const [apis, total] = await qb.getManyAndCount();
-    return { apis, total };
+    const total = await qb.getCount();
+    const { entities, raw } = await qb.getRawAndEntities();
+    entities.forEach((api, i) => {
+      api.operationCount = Number(raw[i]?.api_operationCount ?? 0);
+    });
+    return { apis: entities, total };
   }
 
   async createHttpApi(data: {
@@ -356,7 +369,7 @@ export class ApisService {
   ): Promise<void> {
     const found = await this.apiRepository.findOne({
       where: { id: apiId, organizationId },
-      select: ['id'],
+      select: { id: true },
     });
     if (!found) {
       throw new NotFoundException('API not found');

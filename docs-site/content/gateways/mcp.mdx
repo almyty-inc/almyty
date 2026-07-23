@@ -1,89 +1,39 @@
 # MCP Gateway
 
-The Model Context Protocol (MCP) gateway exposes your tools via JSON-RPC 2.0 to any MCP-compatible client, including Claude, Cursor, Windsurf, and VS Code Copilot. almyty supports HTTP, SSE, and WebSocket transports.
+Expose your tools to any MCP-compatible client. An MCP gateway serves your tools over JSON-RPC 2.0 so Claude Code, Cursor, Windsurf, and VS Code Copilot can list and call them directly. almyty supports HTTP, SSE, and WebSocket transports.
 
-![Gateways page](/screenshots/gateway-detail.png)
+![MCP endpoints on the gateway Integrations tab](/screenshots/quickstart-mcp-endpoints.png)
 
-## In the UI
+## Create the gateway
 
-1. Navigate to **Gateways** in the sidebar
-2. Click **Create Gateway**
-3. Select **MCP** as the protocol
+1. Open **Gateways** in the sidebar and click **Create Gateway**
+2. Select **MCP** as the protocol
 
 ![Create Gateway dialog](/screenshots/gateways-create-dialog.png)
 
-4. Enter a name, slug (used in the endpoint URL), and optional description
-5. Under **Transport**, choose HTTP (default), SSE, or WebSocket
-6. Click **Create**
-7. On the gateway detail page, open the **Tools** tab to assign tools
+3. Enter a name, a slug (used in the endpoint URL), and an optional description
+4. Under **Transport**, choose HTTP (default), SSE, or WebSocket
+5. Click **Create**
 
-![Gateways page — empty state](/screenshots/gateway-detail-tools.png)
+On the gateway detail page, open the **Tools** tab to assign the tools this gateway should expose, then use the **Authentication** tab to add an auth method before going live.
 
-8. Use the **Authentication** tab to add an auth method before going live
+![Assigning tools on the gateway Tools tab](/screenshots/gateway-detail-tools.png)
 
-Your MCP endpoint is available at:
+Your MCP endpoint follows this pattern:
 
 ```
-/{org-slug}/{gateway-slug}
+https://api.almyty.com/{org}/{gateway-slug}
 ```
 
-## Via the API
+## Connect a client
 
-### Create a gateway
+### Claude Code
 
 ```bash
-curl -X POST /gateways \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My MCP Gateway",
-    "type": "mcp",
-    "endpoint": "/my-tools",
-    "configuration": {
-      "transport": "http"
-    }
-  }'
+claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
 ```
 
-### List tools (JSON-RPC)
-
-```bash
-curl -X POST /acme/my-tools \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/list",
-    "id": 1
-  }'
-```
-
-### Call a tool (JSON-RPC)
-
-```bash
-curl -X POST /acme/my-tools \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "get_users",
-      "arguments": { "page": 1, "limit": 10 }
-    },
-    "id": 2
-  }'
-```
-
-## Transport options
-
-| Transport | URL pattern | Use case |
-|-----------|-------------|----------|
-| **HTTP** | `POST /{org}/{slug}` | Standard request-response |
-| **SSE** | `GET /{org}/{slug}/sse` | Streaming, long-running tools |
-| **WebSocket** | `WS /{org}/{slug}/ws` | Bidirectional, real-time |
-
-## Connecting clients
+Pass your gateway key as an `x-api-key` header (generate it in the gateway's **Authentication** panel).
 
 ### Claude Desktop
 
@@ -92,27 +42,44 @@ Add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "my-tools": {
-      "url": "https://your-instance/acme/my-tools",
+    "petstore": {
+      "url": "https://api.almyty.com/acme/petstore",
       "headers": {
-        "Authorization": "Bearer your-api-key"
+        "x-api-key": "your-gateway-key"
       }
     }
   }
 }
 ```
 
-### Cursor
+### Cursor / Windsurf
 
-In Cursor settings, add:
+Add to `.cursor/mcp.json`:
 
 ```json
 {
-  "name": "my-tools",
-  "url": "https://your-instance/acme/my-tools",
-  "apiKey": "your-api-key"
+  "mcpServers": {
+    "petstore": {
+      "url": "https://api.almyty.com/acme/petstore",
+      "headers": {
+        "x-api-key": "your-gateway-key"
+      }
+    }
+  }
 }
 ```
+
+![Claude client configured with an almyty gateway](/screenshots/quickstart-claude-config.png)
+
+Once connected, the client calls `tools/list` and `tools/call` for you. You do not build those requests by hand.
+
+## Transport options
+
+| Transport | URL pattern | Use case |
+|-----------|-------------|----------|
+| **HTTP** | `POST /{org}/{slug}` | Standard request-response |
+| **SSE** | `GET /{org}/{slug}/sse` | Streaming, long-running tools |
+| **WebSocket** | `WS /{org}/{slug}/ws` | Bidirectional, real-time |
 
 ## MCP tool schema
 
@@ -137,15 +104,12 @@ Tools exposed through the gateway follow the MCP tool format:
 
 MCP gateways with OAuth enabled expose discovery endpoints automatically:
 
-```bash
-# Authorization server metadata
-curl /acme/my-tools/.well-known/oauth-authorization-server
-
-# Protected resource metadata
-curl /acme/my-tools/.well-known/oauth-protected-resource
+```
+https://api.almyty.com/acme/petstore/.well-known/oauth-authorization-server
+https://api.almyty.com/acme/petstore/.well-known/oauth-protected-resource
 ```
 
-On 401 responses, the gateway returns a `WWW-Authenticate` header linking to the protected resource metadata so MCP clients can initiate the OAuth flow automatically. See [Gateway Authentication](/gateways/authentication) for the full OAuth 2.1 walkthrough.
+On 401 responses, the gateway returns a `WWW-Authenticate` header linking to the protected resource metadata so MCP clients can start the OAuth flow automatically. See [Gateway Authentication](/gateways/authentication) for the full OAuth 2.1 walkthrough.
 
 ## Error codes
 

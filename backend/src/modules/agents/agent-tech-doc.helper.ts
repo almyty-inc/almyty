@@ -604,7 +604,7 @@ export class AgentTechDocHelper {
       toolIds.length > 0
         ? await this.toolRepository.find({
             where: { id: In(toolIds), organizationId },
-            relations: ['api'],
+            relations: { api: true },
           })
         : [];
     const foundById = new Map(found.map((t) => [t.id, t]));

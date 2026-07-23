@@ -1,50 +1,19 @@
 # Gateway Authentication
 
-Every gateway request is authenticated before any tool executes. almyty enforces a default-deny policy -- gateways with no auth configured reject all requests with 401.
+Every gateway request is authenticated before any tool runs. almyty is default-deny: a gateway with no auth configured rejects all requests with 401. You add auth once, and it guards every transport (MCP, UTCP, A2A) on that gateway.
 
-![Gateways page — empty state](/screenshots/gateway-detail-tools.png)
+![Gateway detail page](/screenshots/gateway-detail.png)
 
-## In the UI
+## Add auth in the UI
 
-1. Open a gateway's detail page
-2. Click the **Authentication** tab
-3. Click **Add Auth Method**
-4. Select a type (API Key, Bearer Token, Basic Auth, JWT, OAuth 2.1, or None)
-5. Fill in the configuration and click **Save**
+1. Open a gateway's detail page and click the **Authentication** tab
+2. Click **Add Auth Method**
+3. Select a type: API Key, Bearer Token, Basic Auth, JWT, OAuth 2.1, or None
+4. Fill in the configuration and click **Save**
 
-To generate API keys for the gateway, click **Manage Keys** after adding an API Key or Bearer Token auth method. The raw key is shown once at creation time.
+To issue API keys, click **Manage Keys** after adding an API Key or Bearer Token method. The raw key is shown once at creation time, then stored only as a SHA-256 hash. Keys support optional expiry, scopes, and `lastUsedAt` tracking.
 
-## Via the API
-
-### Add an auth method
-
-```bash
-curl -X POST /gateways/{id}/auth \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "api_key",
-    "isRequired": true,
-    "configuration": {
-      "keyHeader": "X-API-Key"
-    }
-  }'
-```
-
-### Generate an API key
-
-```bash
-curl -X POST /gateways/{id}/auth/api-keys \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Production Key",
-    "scopes": ["tools:read", "tools:execute"],
-    "expiresAt": "2027-01-01T00:00:00Z"
-  }'
-```
-
-Response (key shown once):
+A generated key looks like this (the `key` field appears only in this one response):
 
 ```json
 {
@@ -56,86 +25,52 @@ Response (key shown once):
 }
 ```
 
-### List and revoke keys
-
-```bash
-# List keys
-curl /gateways/{id}/auth/api-keys \
-  -H "Authorization: Bearer $TOKEN"
-
-# Revoke a key
-curl -X DELETE /gateways/{id}/auth/api-keys/{keyId} \
-  -H "Authorization: Bearer $TOKEN"
-```
-
 ## Authentication methods
 
 | Method | Header / Parameter | Use case |
 |--------|-------------------|----------|
-| **None** | -- | Public/development gateways (must be explicitly set) |
+| **None** | (none) | Public/development gateways (must be set explicitly) |
 | **API Key** | `X-API-Key` header or `api_key` query param | Machine-to-machine |
 | **Bearer Token** | `Authorization: Bearer <token>` | Programmatic access |
 | **Basic Auth** | `Authorization: Basic <base64>` | Legacy integrations |
 | **JWT** | `Authorization: Bearer <jwt>` | Signed, self-contained tokens |
 | **OAuth 2.1** | `Authorization: Bearer <oauth-token>` | Full authorization code flow with PKCE |
 
+### API Key and Bearer Token
+
+Pass the key one of three ways: an `X-API-Key` header, an `api_key` query parameter, or an `Authorization: Bearer` header. In an MCP client config, set it as a header:
+
+```json
+{
+  "mcpServers": {
+    "petstore": {
+      "url": "https://api.almyty.com/acme/petstore",
+      "headers": { "x-api-key": "almyty_gw_abc123..." }
+    }
+  }
+}
+```
+
+### Basic Auth
+
+Decodes the `Authorization: Basic` header, looks up the user by email, and verifies the password with bcrypt.
+
+### JWT
+
+Verifies the JWT signature using the secret configured on the auth method (or the server's `JWT_SECRET` as a fallback). The payload must contain `sub` or `userId`.
+
 ## Enforcement pipeline
 
-Every request to `/mcp/*`, `/utcp/*`, or `/a2a/*` passes through the same pipeline:
+Every request to a gateway endpoint passes through the same pipeline:
 
 1. Resolve the organization and gateway from the URL
 2. Load all active auth configs for that gateway
-3. If no auth configs exist, reject (401)
-4. Try each required auth method in order -- first success wins
+3. If no auth configs exist, reject with 401
+4. Try each required auth method in order: first success wins
 5. If all fail, reject with the last error (401 or 403)
 6. If valid, execute the request
 
 Discovery endpoints (`.well-known/*`, Agent Cards) are always public.
-
-## API Key and Bearer Token
-
-Keys are stored as SHA-256 hashes. The raw key is only shown once.
-
-```bash
-# Via custom header
-curl /acme/my-tools \
-  -H "X-API-Key: almyty_gw_abc123..."
-
-# Via query parameter
-curl "/acme/my-tools?api_key=almyty_gw_abc123..."
-
-# Via Bearer header
-curl /acme/my-tools \
-  -H "Authorization: Bearer almyty_gw_abc123..."
-```
-
-Keys support optional expiry, scopes, and `lastUsedAt` tracking.
-
-## Basic Auth
-
-Decodes the `Authorization: Basic` header, looks up the user by email, and verifies the password with bcrypt.
-
-```bash
-curl /acme/my-tools \
-  -H "Authorization: Basic $(echo -n 'user@example.com:password' | base64)"
-```
-
-## JWT
-
-Verifies the JWT signature using the secret configured on the auth method (or falls back to the server's `JWT_SECRET`). The payload must contain `sub` or `userId`.
-
-```bash
-curl -X POST /gateways/{id}/auth \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "jwt",
-    "isRequired": true,
-    "configuration": {
-      "secret": "your-jwt-signing-secret"
-    }
-  }'
-```
 
 ## OAuth 2.1 (MCP OAuth)
 
@@ -147,62 +82,22 @@ almyty implements a full OAuth 2.1 authorization server per the MCP specificatio
 - Authorization Server Metadata (RFC 8414)
 - Protected Resource Metadata (RFC 9728)
 
-### Discovery
+MCP clients handle this flow for you. On a 401, the gateway returns a `WWW-Authenticate` header pointing at the protected resource metadata, and a compatible client registers itself, runs the authorization code exchange, and attaches the token automatically.
 
-```bash
-curl /acme/my-tools/.well-known/oauth-authorization-server
-curl /acme/my-tools/.well-known/oauth-protected-resource
-```
-
-### Client registration
-
-```bash
-curl -X POST /acme/my-tools/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "client_name": "My MCP Client",
-    "redirect_uris": ["http://localhost:3000/callback"],
-    "grant_types": ["authorization_code", "refresh_token"],
-    "response_types": ["code"],
-    "token_endpoint_auth_method": "none"
-  }'
-```
-
-### Authorization code flow
-
-**Step 1** -- Redirect user to authorize:
+### Discovery endpoints
 
 ```
-GET /acme/my-tools/authorize
-  ?response_type=code
-  &client_id=mcp_client_abc123...
-  &redirect_uri=http://localhost:3000/callback
-  &code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
-  &code_challenge_method=S256
-  &scope=tools:read tools:execute
-  &state=random-state-value
+https://api.almyty.com/acme/petstore/.well-known/oauth-authorization-server
+https://api.almyty.com/acme/petstore/.well-known/oauth-protected-resource
 ```
 
-**Step 2** -- Exchange code for tokens:
+### Flow endpoints
 
-```bash
-curl -X POST /acme/my-tools/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=authorization_code\
-  &code=auth_code_here\
-  &redirect_uri=http://localhost:3000/callback\
-  &client_id=mcp_client_abc123...\
-  &code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
-```
-
-**Step 3** -- Use the access token:
-
-```bash
-curl -X POST /acme/my-tools \
-  -H "Authorization: Bearer almyty_at_..." \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
-```
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /acme/petstore/register` | Dynamic Client Registration |
+| `GET /acme/petstore/authorize` | Start the authorization code flow (with `code_challenge`, `code_challenge_method=S256`) |
+| `POST /acme/petstore/token` | Exchange the code (plus `code_verifier`) for tokens |
 
 ### Token lifetimes
 
@@ -212,11 +107,11 @@ curl -X POST /acme/my-tools \
 | Refresh token | 30 days |
 | Authorization code | 10 minutes |
 
-Refresh tokens are rotated on use. Revoking a refresh token also revokes its access tokens.
+Refresh tokens rotate on use. Revoking a refresh token also revokes its access tokens.
 
 ## Validation rules
 
-### IP restrictions
+Auth methods can carry extra validation. Restrict by IP range:
 
 ```json
 {
@@ -226,7 +121,7 @@ Refresh tokens are rotated on use. Revoking a refresh token also revokes its acc
 }
 ```
 
-### Required headers
+Or require specific headers:
 
 ```json
 {
@@ -246,4 +141,4 @@ Refresh tokens are rotated on use. Revoking a refresh token also revokes its acc
 
 ## Multiple auth methods
 
-A gateway can have multiple auth methods. Each is either required or optional. Required methods are tried in order -- first match wins. You can combine methods for gradual migration (e.g., add OAuth while keeping API keys active).
+A gateway can carry several auth methods, each marked required or optional. Required methods are tried in order (first match wins), so you can combine them for a gradual migration, for example adding OAuth while keeping API keys active.

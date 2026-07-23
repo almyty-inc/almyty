@@ -1,10 +1,10 @@
 # Enterprise
 
-almyty is open core. Everything you've read about so far — agents, tools, gateways, memory, runners, approvals, spend budgets, the basic audit log — is Apache-2.0 and free forever. A small set of enterprise features lives under `backend/ee/` in the same repository under a commercial license (see [LICENSING.md](https://github.com/almyty/almyty/blob/main/LICENSING.md)).
+almyty is open core. Everything covered so far (agents, tools, gateways, memory, runners, approvals, spend budgets, the basic audit log) is Apache-2.0 and free forever. A small set of enterprise features lives under `backend/ee/` in the same repository under a commercial license (see [LICENSING.md](https://github.com/almyty/almyty/blob/main/LICENSING.md)).
 
 ## One image, gated at runtime
 
-There is no separate enterprise build to deploy. The official `almyty/api` Docker image ships with the enterprise modules compiled in; every enterprise route is gated at runtime by a license check. Without a license the platform runs as the **community** edition and enterprise endpoints return **HTTP 402 Payment Required**:
+There is no separate enterprise build to deploy. The official `almyty/api` Docker image ships with the enterprise modules compiled in, and every enterprise route is gated at runtime by a license check. Without a license the platform runs as the **community** edition and enterprise endpoints return **HTTP 402 Payment Required**:
 
 ```json
 {
@@ -15,18 +15,11 @@ There is no separate enterprise build to deploy. The official `almyty/api` Docke
 }
 ```
 
-402 is deliberate — it means "unlicensed", distinct from 403 "unauthorized".
+402 is deliberate: it means "unlicensed", distinct from 403 "unauthorized".
 
 ## License keys
 
-Set your license token via the `ALMYTY_LICENSE_KEY` environment variable on the backend. Tokens are Ed25519-signed and verified **offline** against a public key baked into the build — no phone-home, no license server, air-gap friendly. An invalid or expired token fails safe to the community edition (logged, never a crash).
-
-Check what your deployment is entitled to:
-
-```bash
-curl /licensing/entitlements
-# → { "edition": "enterprise", "entitlements": [...], "limits": {...}, "expiresAt": ... }
-```
+Set your license token via the `ALMYTY_LICENSE_KEY` environment variable on the backend. Tokens are Ed25519-signed and verified **offline** against a public key baked into the build: no phone-home, no license server, air-gap friendly. An invalid or expired token fails safe to the community edition (logged, never a crash). Your current edition, entitlements, and limits are shown under **Settings**, and available programmatically via the licensing endpoint in the [API reference](/api-reference).
 
 ## Entitlements
 
@@ -40,14 +33,8 @@ curl /licensing/entitlements
 | `chargeback` | Per-team cost attribution + spend forecast | below |
 | `byo_kms` | Customer-managed KMS keys | not yet available (endpoint returns 501) |
 
-The free tier is a floor, not a trial: core roles (owner/admin/member, team leads), the basic audit log, single-gate [approvals](/approvals), and [spend budgets](/cost-governance) all stay in the open-source edition. Note that an organization's *plan* (`free`/`pro`) is billing metadata — enterprise features are gated by the license, never by the plan field.
+The free tier is a floor, not a trial: core roles (owner/admin/member, team leads), the basic audit log, single-gate [approvals](/approvals), and [spend budgets](/cost-governance) all stay in the open-source edition. Note that an organization's *plan* (`free`/`pro`) is billing metadata: enterprise features are gated by the license, never by the plan field.
 
 ## Chargeback
 
-With the `chargeback` entitlement, one endpoint turns the open-source spend data into an internal billing report:
-
-```bash
-curl "/chargeback/report?period=month&granularity=day&forecastPeriods=1"
-```
-
-Returns total spend for the window, **per-team** and per-agent attribution, a spend timeseries, and a linear forecast for the next period(s). Admin/owner only. It layers on the same spend pipeline as [cost governance](/cost-governance) — no separate metering.
+With the `chargeback` entitlement, one report turns the open-source spend data into an internal billing statement: total spend for a window, **per-team** and per-agent attribution, a spend timeseries, and a linear forecast for the next period(s). Admin/owner only. It layers on the same spend pipeline as [cost governance](/cost-governance) with no separate metering. The report endpoint (period, granularity, and forecast parameters) is documented in the [API reference](/api-reference).

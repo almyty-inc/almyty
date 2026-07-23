@@ -259,7 +259,7 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     for (let batch = 0; batch < MAX_BATCHES_PER_CLASS; batch++) {
       const rows = await this.conversationRepository.find({
         where: { organizationId, createdAt: LessThan(cutoff) },
-        select: ['id'],
+        select: { id: true },
         take: SWEEP_BATCH,
       });
       if (rows.length === 0) break;
@@ -288,7 +288,7 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
   ): Promise<number> {
     const gateways = await this.gatewayRepository.find({
       where: { organizationId },
-      select: ['id'],
+      select: { id: true },
     });
     if (gateways.length === 0) return 0;
     return this.batchDelete(this.requestLogRepository, {

@@ -1,110 +1,43 @@
 # A2A Gateway
 
-The Agent-to-Agent (A2A) gateway implements Google's A2A protocol for multi-agent interoperability. Other A2A-compatible agents can discover your gateway's capabilities via its Agent Card and send tasks using JSON-RPC.
+Let other AI agents discover and use your tools. An A2A gateway implements Google's Agent-to-Agent protocol: any A2A-compatible agent reads your gateway's Agent Card, sees what it can do, and sends it tasks over JSON-RPC.
 
-![Gateways page](/screenshots/gateway-detail.png)
+![Gateway detail page](/screenshots/gateway-detail.png)
 
-## In the UI
+## Create the gateway
 
-1. Navigate to **Gateways** in the sidebar
-2. Click **Create Gateway**
-3. Select **A2A** as the protocol
+1. Open **Gateways** in the sidebar and click **Create Gateway**
+2. Select **A2A** as the protocol
 
 ![Create Gateway dialog](/screenshots/gateways-create-dialog.png)
 
-4. Enter a name, slug, and optional description
-5. Under **Capabilities**, toggle streaming and push notifications as needed
-6. Click **Create**
-7. Assign tools from the **Tools** tab on the gateway detail page
+3. Enter a name, slug, and optional description
+4. Under **Capabilities**, toggle streaming and push notifications as needed
+5. Click **Create**
 
-![Gateways page — empty state](/screenshots/gateway-detail-tools.png)
+Assign tools from the **Tools** tab on the gateway detail page, then configure authentication before exposing the gateway externally.
 
-8. Configure authentication before exposing the gateway externally
+![Assigning tools on the gateway Tools tab](/screenshots/gateway-detail-tools.png)
 
-Your A2A endpoint is available at:
-
-```
-/a2a/{org-slug}/{gateway-slug}
-```
-
-The Agent Card is auto-generated at:
+Your A2A endpoint follows this pattern:
 
 ```
-/a2a/{org-slug}/{gateway-slug}/.well-known/agent.json
+https://api.almyty.com/a2a/{org}/{gateway-slug}
 ```
 
-## Via the API
+The Agent Card is generated automatically at:
 
-### Create a gateway
-
-```bash
-curl -X POST /gateways \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My A2A Agent",
-    "type": "a2a",
-    "endpoint": "/my-agent",
-    "configuration": {
-      "agentCapabilities": {
-        "streaming": false,
-        "pushNotifications": false
-      }
-    }
-  }'
+```
+https://api.almyty.com/a2a/{org}/{gateway-slug}/.well-known/agent.json
 ```
 
-### Send a task
+## Connect an agent
 
-```bash
-curl -X POST /a2a/acme/my-agent \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tasks/send",
-    "params": {
-      "id": "task-uuid",
-      "message": {
-        "role": "user",
-        "parts": [
-          { "type": "text", "text": "Get me the list of active users" }
-        ]
-      }
-    },
-    "id": 1
-  }'
+Give the calling agent your Agent Card URL. It reads the card, discovers your skills, and starts sending tasks. No manual request building on your side.
+
 ```
-
-### Get task status
-
-```bash
-curl -X POST /a2a/acme/my-agent \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tasks/get",
-    "params": { "id": "task-uuid" },
-    "id": 2
-  }'
+https://api.almyty.com/a2a/acme/my-agent/.well-known/agent.json
 ```
-
-### Cancel a task
-
-```bash
-curl -X POST /a2a/acme/my-agent \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tasks/cancel",
-    "params": { "id": "task-uuid" },
-    "id": 3
-  }'
-```
-
-## Agent Card
 
 Every A2A gateway generates a JSON Agent Card describing its capabilities:
 
@@ -112,7 +45,7 @@ Every A2A gateway generates a JSON Agent Card describing its capabilities:
 {
   "name": "My A2A Agent",
   "description": "Tools exposed via A2A protocol",
-  "url": "https://your-instance/a2a/acme/my-agent",
+  "url": "https://api.almyty.com/a2a/acme/my-agent",
   "version": "1.0.0",
   "capabilities": {
     "streaming": false,
@@ -128,7 +61,17 @@ Every A2A gateway generates a JSON Agent Card describing its capabilities:
 }
 ```
 
-Register the Agent Card URL with other agents to enable discovery.
+## Supported methods
+
+Calling agents send JSON-RPC requests to the endpoint using these methods:
+
+| Method | Description |
+|--------|-------------|
+| `tasks/send` | Send a new task |
+| `tasks/get` | Get the status and result of a task |
+| `tasks/cancel` | Cancel a running task |
+
+A `tasks/send` message carries a `role` and one or more `parts` (for example a text part with the instruction). The gateway returns a task `id` you can poll with `tasks/get`.
 
 ## Task lifecycle
 
@@ -140,10 +83,4 @@ Register the Agent Card URL with other agents to enable discovery.
 | `failed` | Task execution failed |
 | `canceled` | Task was canceled |
 
-## Supported methods
-
-| Method | Description |
-|--------|-------------|
-| `tasks/send` | Send a new task |
-| `tasks/get` | Get the status and result of a task |
-| `tasks/cancel` | Cancel a running task |
+See [Gateway Authentication](/gateways/authentication) to secure the endpoint. Discovery endpoints such as the Agent Card stay public so other agents can find you.

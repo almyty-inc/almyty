@@ -43,7 +43,6 @@ import { LlmProvider } from '../../entities/llm-provider.entity';
 import { AuditLogService } from '../../modules/audit-log/audit-log.service';
 import { Provenance, MemoryError, Tier } from '../../modules/memory/canonical/canonical.types';
 import { LIMITS } from '../../modules/memory/canonical/canonical.constants';
-import { MemoryCanonicalInit1745300000000 } from '../../migrations/1745300000000-MemoryCanonicalInit';
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
 const describeIfDb = SHOULD_RUN ? describe : describe.skip;
@@ -108,38 +107,26 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
       password: process.env.DATABASE_PASSWORD || '',
       database: process.env.DATABASE_NAME || 'almyty_test',
       schema: 'canonical_memory_test',
-      synchronize: false,
+      // Build the schema by RUNNING THE MIGRATIONS (not `synchronize`)
+      // so the suite validates the real migration path — including the
+      // MemoryCanonicalInit migration that creates the pgvector-backed
+      // `memories` tables this spec exercises. `dropSchema` keeps
+      // re-runs clean (only the isolated schema is dropped).
+      migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
+      migrationsRun: true,
+      dropSchema: true,
       logging: false,
-      // Pin search_path on every connection (pool) so raw SQL through
-      // DataSource.query — used by hybridSearch / asOf / etc. for
-      // pgvector operators — finds the canonical_memory_test tables
-      // AND resolves the `vector` type from public.
+      // Pin search_path on every connection (pool) so the migrations'
+      // unqualified CREATE TABLE lands in canonical_memory_test AND so
+      // raw SQL through DataSource.query — used by hybridSearch / asOf
+      // / etc. for pgvector operators — finds those tables while the
+      // `vector` type resolves from public.
       extra: {
         options: '-c search_path=canonical_memory_test,public',
       },
       entities: [CanonicalMemory, CanonicalMemoryWorkspaceConfig, CanonicalMemorySoftcapWarning],
     });
     await ds.initialize();
-
-    // Run the migration DDL against the dedicated test schema. The
-    // queryRunner doesn't auto-set search_path on a per-connection
-    // basis when the DataSource carries `schema:`; force it so the
-    // migration's unqualified CREATE TABLE statements land in the
-    // intended schema and the repositories (which DO qualify with
-    // the schema) find the tables.
-    const queryRunner = ds.createQueryRunner();
-    await queryRunner.connect();
-    // Include `public` on the search path so the `vector` type
-    // (provided by the pgvector extension installed into public)
-    // resolves while the migration's tables land in the test schema.
-    await queryRunner.query(`SET search_path TO canonical_memory_test, public`);
-    // Drop any leftover tables from a prior failed run.
-    await queryRunner.query(`DROP TABLE IF EXISTS memory_softcap_warnings CASCADE`);
-    await queryRunner.query(`DROP TABLE IF EXISTS memory_workspace_config CASCADE`);
-    await queryRunner.query(`DROP TABLE IF EXISTS memories CASCADE`);
-    const migration = new MemoryCanonicalInit1745300000000();
-    await migration.up(queryRunner);
-    await queryRunner.release();
 
     // Stub embedding service: returns a deterministic 1536-dim vector
     // (matches the column's vector(1536) constraint and the canonical

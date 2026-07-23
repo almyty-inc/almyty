@@ -175,7 +175,7 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
       try {
         const run = await this.runRepository.findOne({
           where: { id: runId },
-          select: ['id', 'status', 'updatedAt'],
+          select: { id: true, status: true, updatedAt: true },
         });
         if (!run) {
           this.runEmitters.delete(runId);

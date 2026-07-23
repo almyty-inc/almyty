@@ -186,7 +186,7 @@ export class GatewayToolService {
       // Check user permissions
       const user = await this.userRepository.findOne({
         where: { id: userId },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
 
       if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateway_tools')) {
@@ -225,7 +225,7 @@ export class GatewayToolService {
     try {
       const gatewayTool = await this.gatewayToolRepository.findOne({
         where: { id: gatewayToolId },
-        relations: ['gateway', 'tool'],
+        relations: { gateway: true, tool: true },
       });
 
       if (!gatewayTool || gatewayTool.gateway.organizationId !== organizationId) {
@@ -235,7 +235,7 @@ export class GatewayToolService {
       // Check user permissions
       const user = await this.userRepository.findOne({
         where: { id: userId },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
 
       if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateway_tools')) {
@@ -266,7 +266,7 @@ export class GatewayToolService {
     try {
       const gatewayTool = await this.gatewayToolRepository.findOne({
         where: { id: gatewayToolId },
-        relations: ['gateway', 'tool'],
+        relations: { gateway: true, tool: true },
       });
 
       if (!gatewayTool || gatewayTool.gateway.organizationId !== organizationId) {
@@ -276,7 +276,7 @@ export class GatewayToolService {
       // Check user permissions
       const user = await this.userRepository.findOne({
         where: { id: userId },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
 
       if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateway_tools')) {
@@ -336,7 +336,7 @@ export class GatewayToolService {
 
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: ['organizationMemberships'],
+      relations: { organizationMemberships: true },
     });
 
     if (!user?.hasPermissionInOrganization(organizationId, 'manage_gateway_tools')) {

@@ -12,8 +12,8 @@
  * This spec closes that gap. For each of the eight tenant-scoped
  * services it:
  *
- *   1. Spins up a real Postgres DataSource with `synchronize: true`
- *      so the schema is an exact reflection of the entity decorators.
+ *   1. Spins up a real Postgres DataSource and RUNS THE MIGRATIONS
+ *      so the schema is the same one production builds.
  *   2. Seeds TWO organizations, A and B, plus an owner user in each
  *      (TypeORM FK + audit log writes need a real user row).
  *   3. Creates a tenant-scoped row in both orgs.
@@ -79,10 +79,10 @@ interface TwoOrgFixture {
 }
 
 async function setupTwoOrgFixture(): Promise<TwoOrgFixture> {
-  // TypeORM's dropSchema+synchronize flow tries to CREATE TABLE in
-  // the named schema before re-creating the schema itself, so on a
-  // fresh DB the spec dies with `schema "cross_tenant_test" does
-  // not exist`. Pre-create via a throwaway connection.
+  // TypeORM's `dropSchema` drops the named schema at connection init;
+  // the migrations then create tables in it. On a fresh DB that would
+  // die with `schema "cross_tenant_test" does not exist`, so pre-create
+  // it via a throwaway connection.
   const bootstrap = new DataSource({
     type: 'postgres',
     host: process.env.DATABASE_HOST || '127.0.0.1',
@@ -99,8 +99,13 @@ async function setupTwoOrgFixture(): Promise<TwoOrgFixture> {
   // parallel Jest workers running different DB specs at the same
   // time don't step on each other's table creation / drop cycles.
   // `dropSchema: true` + `schema: 'cross_tenant_test'` means
-  // TypeORM drops only that schema (not public), then synchronizes
-  // all our entities into it.
+  // TypeORM drops only that schema (not public). The schema is
+  // built by RUNNING THE MIGRATIONS (not `synchronize`) so the
+  // suite validates the real migration path and catches
+  // migration<->entity drift. `search_path` is pinned to
+  // `<schema>,public` so the migrations' unqualified CREATE TABLE
+  // lands in the isolated schema while extension objects
+  // (uuid_generate_v4, the `vector` type) resolve from public.
   const ds = new DataSource({
     type: 'postgres',
     host: process.env.DATABASE_HOST || '127.0.0.1',
@@ -109,7 +114,9 @@ async function setupTwoOrgFixture(): Promise<TwoOrgFixture> {
     password: process.env.DATABASE_PASSWORD || '',
     database: process.env.DATABASE_NAME || 'almyty_test',
     schema: 'cross_tenant_test',
-    synchronize: true,
+    extra: { options: '-c search_path=cross_tenant_test,public' },
+    migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
+    migrationsRun: true,
     dropSchema: true,
     entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
     logging: false,
