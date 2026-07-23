@@ -1,8 +1,10 @@
 # Organizations
 
-Organizations are the top-level tenant boundary in almyty. Every resource — APIs, tools, gateways, agents, credentials, and LLM providers — belongs to exactly one organization. Users can belong to multiple organizations and switch between them.
+Keep every team's work isolated and control who can touch what. Organizations are the top-level tenant boundary in almyty: every resource (APIs, tools, gateways, agents, credentials, and LLM providers) belongs to exactly one organization. Users can belong to multiple organizations and switch between them, and roles decide what each member can do.
 
-## Creating an Organization
+![Members and teams](/screenshots/settings-teams.png)
+
+## Creating an organization
 
 When you sign up, your first organization is created automatically from the name you provide during registration.
 
@@ -10,29 +12,27 @@ When you sign up, your first organization is created automatically from the name
 
 To create additional organizations:
 
-1. Navigate to **Settings** in the sidebar
-2. In the **Organization** tab, scroll to the bottom and click **Create Organization**
-3. Enter a name and optional description
-4. You'll be set as the **owner** of the new organization
+1. Open **Settings** in the sidebar.
+2. In the **Organization** tab, scroll to the bottom and click **Create Organization**.
+3. Enter a name and optional description.
+4. You are set as the **owner** of the new organization.
 
-## Switching Organizations
+## Switching organizations
 
-Click the organization name in the **sidebar footer** (below the nav links). A dropdown shows all organizations you belong to. Click one to switch — all pages immediately scope to that organization's data.
+Click the organization name in the **sidebar footer** (below the nav links). A dropdown shows all organizations you belong to. Click one to switch; all pages immediately scope to that organization's data.
 
-## Managing Members
+## Managing members
 
-Navigate to **Settings** and open the **Members & Teams** tab.
-
-![Members and teams](/screenshots/settings-teams.png)
+Open **Settings** and the **Members & Teams** tab.
 
 ### Inviting members
 
-1. Click **Invite Member**
-2. Enter their email address
-3. Select a role (owner, admin, member, or viewer)
-4. Click **Send Invite**
+1. Click **Invite Member**.
+2. Enter their email address.
+3. Select a role (owner, admin, member, or viewer).
+4. Click **Send Invite**.
 
-The invitee receives an email with a link to accept. If they don't have an account, the link takes them to the sign-up page with the invite pre-attached.
+The invitee receives an email with a link to accept. If they do not have an account, the link takes them to the sign-up page with the invite pre-attached.
 
 ### Changing roles
 
@@ -66,23 +66,21 @@ Click the menu icon on a member row and select **Remove**. Removing a member rev
 
 ## Teams
 
-Teams are sub-groups within an organization for finer-grained access control. Every organization gets a default **"Everyone"** team on creation — every member is automatically a member of it. Org owners are added as `team_admin` (lead); other roles are added as `team_member`.
-
-![Teams](/screenshots/settings-teams.png)
+Teams are sub-groups within an organization for finer-grained access control. Every organization gets a default **"Everyone"** team on creation; every member is automatically a member of it. Org owners are added as `team_admin` (lead); other roles are added as `team_member`.
 
 Resources (tools, agents, gateways, runners, credentials, APIs, LLM providers) can be created with one of two visibility settings:
 
-- **Org-wide** (`visibility='org'`) — visible to every member of the organization.
-- **Team** (`visibility='team'`, with a `teamId`) — visible only to members of that team.
+- **Org-wide** (`visibility='org'`): visible to every member of the organization.
+- **Team** (`visibility='team'`, with a `teamId`): visible only to members of that team.
 
-When picking a team for a new resource, you can only park it in a team you're `team_admin` (lead) of. Org owners and admins can park resources in any team.
+When picking a team for a new resource, you can only park it in a team you are `team_admin` (lead) of. Org owners and admins can park resources in any team.
 
 ### Creating a team
 
-1. In **Settings** → **Members & Teams**, open the **Teams** sub-tab
-2. Click **Create Team**
-3. Enter a name and (optional) description
-4. Add members from the organization
+1. In **Settings**, **Members & Teams**, open the **Teams** sub-tab.
+2. Click **Create Team**.
+3. Enter a name and (optional) description.
+4. Add members from the organization.
 
 The default "Everyone" team cannot be deleted (its delete button is disabled), but it can be renamed.
 
@@ -90,8 +88,8 @@ The default "Everyone" team cannot be deleted (its delete button is disabled), b
 
 | Role | Description |
 |------|-------------|
-| **team_admin** (`lead`) | Manages team membership, can rename the team, and is authorized to manage team-scoped resources (incl. approving HITL gates for that team). |
-| **team_member** (`member`) | Standard team member — can read/use team-scoped resources but not manage them. |
+| **team_admin** (`lead`) | Manages team membership, can rename the team, and is authorized to manage team-scoped resources (including approving HITL gates for that team). |
+| **team_member** (`member`) | Standard team member. Can read/use team-scoped resources but not manage them. |
 
 ### Authorization model
 
@@ -105,52 +103,8 @@ The full picture, for a member acting on a resource:
 | Org member, `team_member` of resource's team | `team` | ✓ | ✗ |
 | Org member, not in resource's team | `team` | ✗ | ✗ |
 
-Resources without `teamId` are treated as `org`-wide. The default "Everyone" team is *not* the same as org-wide — putting a resource in "Everyone" means every org member can see it (same effect today), but if you ever shrink the team's membership it becomes a real boundary.
+Resources without `teamId` are treated as `org`-wide. The default "Everyone" team is *not* the same as org-wide: putting a resource in "Everyone" means every org member can see it (same effect today), but if you ever shrink the team's membership it becomes a real boundary.
 
-## Via the API
+## API
 
-### Create an organization
-
-```bash
-curl -X POST /organizations \
-  -H "Content-Type: application/json" \
-  -d '{ "name": "Acme Corp", "description": "Production org" }'
-```
-
-### List members
-
-```bash
-curl /organizations/{orgId}/members
-```
-
-### Invite a member
-
-```bash
-curl -X POST /organizations/{orgId}/members \
-  -H "Content-Type: application/json" \
-  -d '{ "email": "dev@acme.com", "role": "member" }'
-```
-
-### Update role
-
-```bash
-curl -X PATCH /organizations/{orgId}/members/{userId} \
-  -H "Content-Type: application/json" \
-  -d '{ "role": "admin" }'
-```
-
-### Create a team
-
-```bash
-curl -X POST /organizations/{orgId}/teams \
-  -H "Content-Type: application/json" \
-  -d '{ "name": "Backend Team" }'
-```
-
-### Delete an organization
-
-Only the owner can delete an organization. This permanently removes all resources.
-
-```bash
-curl -X DELETE /organizations/{orgId}
-```
+Organization, member, and team management is available over REST (only the owner can delete an organization, which permanently removes all resources). See the [API reference](/api-reference).

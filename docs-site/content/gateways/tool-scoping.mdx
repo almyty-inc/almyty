@@ -1,65 +1,17 @@
 # Tool Scoping
 
-Tool scoping controls which tools are exposed through each gateway. A gateway starts with no tools assigned -- you explicitly choose which tools to include so each gateway has a focused, purpose-specific surface area.
+Decide exactly which tools each gateway exposes. A gateway starts empty and you assign tools into it, so every gateway has a focused, purpose-built surface: a read-only public one, a full-access internal one, one per team. Nothing is exposed until you choose it.
 
-![Gateways page — empty state](/screenshots/gateway-detail-tools.png)
+![Assigning tools on the gateway Tools tab](/screenshots/gateway-detail-tools.png)
 
-## In the UI
+## Assign tools in the UI
 
-1. Open the gateway detail page
-2. Click the **Tools** tab
-3. Click **Add Tools** to see all available tools in your organization
-4. Select one or more tools and click **Assign**
-5. Use the presets dropdown (All, None, Read Only, Admin, Public) for quick selection
-6. Toggle individual tools on or off with the **Enabled** switch
-7. Click a tool row to configure per-gateway rate limits and security policies
-
-## Via the API
-
-### Assign a single tool
-
-```bash
-curl -X POST /gateways/{gatewayId}/tools \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "toolId": "tool-uuid"
-  }'
-```
-
-### Bulk assignment
-
-```bash
-curl -X POST /gateways/{gatewayId}/tools/bulk \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "toolIds": ["tool-1", "tool-2", "tool-3"]
-  }'
-```
-
-### Remove a tool
-
-```bash
-curl -X DELETE /gateways/{gatewayId}/tools/{toolId} \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Remove all tools
-
-```bash
-curl -X DELETE /gateways/{gatewayId}/tools \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### List available tools
-
-Returns tools in the organization that are not yet assigned to this gateway.
-
-```bash
-curl /gateways/{gatewayId}/tools/available \
-  -H "Authorization: Bearer $TOKEN"
-```
+1. Open the gateway detail page and click the **Tools** tab
+2. Click **Add Tools** to see every tool in your organization
+3. Select one or more tools and click **Assign**
+4. Use the presets dropdown for quick selection (see below)
+5. Toggle individual tools on or off with the **Enabled** switch
+6. Click a tool row to set per-gateway rate limits and security policies
 
 ## Presets
 
@@ -73,20 +25,17 @@ curl /gateways/{gatewayId}/tools/available \
 
 ## Per-gateway tool configuration
 
-Each assignment can carry gateway-specific overrides:
+Each assignment can carry gateway-specific overrides, set from the tool row on the **Tools** tab. The stored config looks like this:
 
-```bash
-curl -X PATCH /gateways/{gatewayId}/tools/{gatewayToolId} \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "enabled": true,
-    "rateLimit": 100,
-    "securityPolicy": {
-      "requireAuth": true,
-      "allowedScopes": ["tools:execute"]
-    }
-  }'
+```json
+{
+  "enabled": true,
+  "rateLimit": 100,
+  "securityPolicy": {
+    "requireAuth": true,
+    "allowedScopes": ["tools:execute"]
+  }
+}
 ```
 
 | Field | Type | Description |
@@ -95,12 +44,11 @@ curl -X PATCH /gateways/{gatewayId}/tools/{gatewayToolId} \
 | `rateLimit` | number | Max requests per minute for this tool |
 | `securityPolicy` | object | Gateway-specific security overrides |
 
+The same tool can be read-only on a public gateway and rate-limited differently on an internal one. Overrides live on the assignment, not the tool itself.
+
 ## Usage statistics
 
-```bash
-curl /gateways/{gatewayId}/tools/stats \
-  -H "Authorization: Bearer $TOKEN"
-```
+Each gateway tracks per-tool usage so you can see what is actually being called. The stats include call counts, success rate, and latency:
 
 ```json
 {
@@ -119,8 +67,10 @@ curl /gateways/{gatewayId}/tools/stats \
 
 ## Common patterns
 
-**Read-only public gateway** -- assign only GET/query tools, enable API key auth, set rate limits per tool.
+**Read-only public gateway:** assign only GET/query tools, enable API key auth, set per-tool rate limits.
 
-**Internal admin gateway** -- assign all tools, require Bearer token auth, no rate limits.
+**Internal admin gateway:** assign all tools, require Bearer token auth, no rate limits.
 
-**Per-team gateways** -- create separate gateways for different teams (e.g., marketing gets analytics tools, engineering gets deployment tools), each with its own API keys.
+**Per-team gateways:** create separate gateways per team (marketing gets analytics tools, engineering gets deployment tools), each with its own keys and scopes.
+
+See [Gateway Authentication](/gateways/authentication) for the auth and scope options referenced above.
