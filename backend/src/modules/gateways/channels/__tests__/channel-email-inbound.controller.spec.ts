@@ -50,7 +50,11 @@ describe('ChannelEmailInboundController', () => {
       headers: {
         'svix-id': 'msg_1',
         'svix-timestamp': timestamp,
-        'svix-signature': `v1,${tamper ? signature.replace(/^./, 'X') : signature}`,
+        // Flip the first base64 char to a guaranteed-different one so the
+        // tamper is deterministic. The old `replace(/^./, 'X')` was a no-op
+        // ~1/64 of the time (when the signature already started with 'X'),
+        // which left a valid signature and flaked this test.
+        'svix-signature': `v1,${tamper ? (signature[0] === 'A' ? 'B' : 'A') + signature.slice(1) : signature}`,
         'content-type': 'application/json',
       },
       rawBody: Buffer.from(rawBody),
