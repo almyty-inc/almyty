@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { CheckCircle2, Eye, EyeOff, XCircle } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, Loader2, XCircle } from 'lucide-react'
 
 import { authApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -105,17 +105,6 @@ export function ResetPasswordPage() {
       <p className="text-sm text-muted-foreground mb-6">
         Choose a new password for your account.
       </p>
-      {submitError && (
-        <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md">
-          <p className="text-sm text-destructive">{submitError}</p>
-          <Link
-            to="/auth/forgot-password"
-            className="mt-1 inline-block text-sm font-medium text-primary hover:text-primary/80"
-          >
-            Request a new link
-          </Link>
-        </div>
-      )}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
           <Label htmlFor="password">New password</Label>
@@ -166,13 +155,35 @@ export function ResetPasswordPage() {
         </div>
 
         <div>
+          {submitError && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md"
+            >
+              <p className="text-sm text-destructive">{submitError}</p>
+              <Link
+                to="/auth/forgot-password"
+                className="mt-1 inline-block text-sm font-medium text-primary hover:text-primary/80"
+              >
+                Request a new link
+              </Link>
+            </div>
+          )}
           <Button
             type="submit"
             className="w-full"
             disabled={isSubmitting}
             aria-disabled={isSubmitting}
           >
-            {isSubmitting ? 'Resetting...' : 'Reset password'}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                Resetting...
+              </>
+            ) : (
+              'Reset password'
+            )}
           </Button>
         </div>
       </form>
