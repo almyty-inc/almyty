@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,6 +52,7 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = React.useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
   const [captchaToken, setCaptchaToken] = React.useState('')
+  const [registerError, setRegisterError] = React.useState<string | null>(null)
   const captchaEnabled = isCaptchaEnabled()
 
   const {
@@ -66,6 +67,7 @@ export function RegisterPage() {
   })
 
   const onSubmit = async (data: RegisterFormData) => {
+    setRegisterError(null)
     if (captchaEnabled && !captchaToken) {
       error('Verification required', 'Please complete the verification challenge.')
       return
@@ -84,10 +86,10 @@ export function RegisterPage() {
       }
       navigate('/dashboard')
     } catch (err: any) {
-      error(
-        'Registration failed',
+      const message =
         err.response?.data?.message || 'Please check your information and try again.'
-      )
+      setRegisterError(message)
+      error('Registration failed', message)
     }
   }
 
@@ -247,6 +249,15 @@ export function RegisterPage() {
         )}
 
         <div>
+          {registerError && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md"
+            >
+              <p className="text-sm text-destructive">{registerError}</p>
+            </div>
+          )}
           <Button
             type="submit"
             className="w-full"
@@ -254,7 +265,14 @@ export function RegisterPage() {
             aria-disabled={isLoading}
             title={isLoading ? 'Creating your account…' : undefined}
           >
-            {isLoading ? 'Creating account...' : 'Create account'}
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                Creating account...
+              </>
+            ) : (
+              'Create account'
+            )}
           </Button>
         </div>
       </form>

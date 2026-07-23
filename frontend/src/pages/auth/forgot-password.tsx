@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { MailCheck } from 'lucide-react'
+import { Loader2, MailCheck } from 'lucide-react'
 
 import { authApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -74,11 +74,6 @@ export function ForgotPasswordPage() {
       <p className="text-sm text-muted-foreground mb-6">
         Enter your email and we'll send you a link to reset it.
       </p>
-      {submitError && (
-        <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md">
-          <p className="text-sm text-destructive">{submitError}</p>
-        </div>
-      )}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
           <Label htmlFor="email">Email address</Label>
@@ -98,13 +93,29 @@ export function ForgotPasswordPage() {
         </div>
 
         <div>
+          {submitError && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md"
+            >
+              <p className="text-sm text-destructive">{submitError}</p>
+            </div>
+          )}
           <Button
             type="submit"
             className="w-full"
             disabled={isSubmitting}
             aria-disabled={isSubmitting}
           >
-            {isSubmitting ? 'Sending...' : 'Send reset link'}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                Sending...
+              </>
+            ) : (
+              'Send reset link'
+            )}
           </Button>
         </div>
       </form>
