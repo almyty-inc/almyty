@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "Single installable almyty CLI — login, agents, chat, skills, mcp under one binary",
+  "description": "The almyty CLI \u2014 one login for agents, chat, skills, an MCP server, and a machine runner. Part of almyty, the full-stack platform for AI agents.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -44,5 +44,14 @@
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
     "vitest": "^4.1.0"
+  },
+  "homepage": "https://almyty.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almyty-inc/almyty.git",
+    "directory": "packages/almyty-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/almyty-inc/almyty/issues"
   }
 }

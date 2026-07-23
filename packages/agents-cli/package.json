@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "List, run, and manage almyty agents from the command line",
+  "description": "Run and manage almyty agents from your terminal \u2014 list, invoke workflow or autonomous runs, stream steps, and inspect run history.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -35,5 +35,14 @@
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
     "vitest": "^4.1.0"
+  },
+  "homepage": "https://almyty.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almyty-inc/almyty.git",
+    "directory": "packages/agents-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/almyty-inc/almyty/issues"
   }
 }
