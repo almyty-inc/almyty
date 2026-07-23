@@ -1,6 +1,9 @@
 {
   "name": "@almyty/client",
-  "version": "0.2.0",
+  "version": "1.2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Shared HTTP client and credential resolver for almyty CLI packages",
   "type": "module",
   "main": "dist/index.js",

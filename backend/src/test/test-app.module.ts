@@ -150,6 +150,21 @@ const mockRedis = {
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
+        // Each TestAppModule-based DB integration spec sets DATABASE_SCHEMA
+        // to a dedicated Postgres schema (pre-created by the spec) so the
+        // specs can run in parallel Jest workers without their concurrent
+        // `synchronize` DDL racing on a shared schema. Without this, three
+        // specs (gateway-agent-runs, mcp-oauth-flow, rbac-guard) all ran
+        // `synchronize: true` against `public` at once — the interleaved
+        // CREATE/ALTER/DROP TABLE cycles intermittently tanked one file's
+        // beforeAll wholesale (every test in it failing together).
+        //
+        // `dropSchema` is enabled only for an isolated (non-public) schema:
+        // dropping `public` would nuke sibling specs' tables. Same pattern
+        // the standalone integration specs use (bump-stats, cross-tenant,
+        // canonical-memory, etc.).
+        const schema = config.get<string>('DATABASE_SCHEMA') || 'public';
+        const isolated = schema !== 'public';
         return {
           type: 'postgres',
           host: config.get<string>('DATABASE_HOST', 'localhost'),
@@ -157,8 +172,10 @@ const mockRedis = {
           username: config.get<string>('DATABASE_USERNAME', 'postgres'),
           password: config.get<string>('DATABASE_PASSWORD', 'password'),
           database: config.get<string>('DATABASE_NAME', 'almyty_test'),
+          schema,
           entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
           synchronize: true,
+          dropSchema: isolated,
           logging: false,
         } as any;
       },
