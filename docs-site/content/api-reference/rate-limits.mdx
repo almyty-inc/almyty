@@ -15,7 +15,7 @@ Limits vary by endpoint type and authentication method.
 | Agent Invocations (`/agents/:id/invoke`) | 60 requests | per minute |
 | Gateway Endpoints (`/mcp/*`, `/a2a/*`, `/utcp/*`) | 300 requests | per minute |
 | Analytics (`/analytics/*`) | 30 requests | per minute |
-| Health Checks (`/health*`) | No limit | — |
+| Health Checks (`/health*`) | No limit |, |
 
 ## Rate Limit Headers
 
@@ -129,9 +129,9 @@ stays within limits. The burst window is typically 10 seconds.
 
 ## Best Practices
 
-1. **Respect `Retry-After`** — Always wait the specified duration before retrying
-2. **Implement backoff** — Use exponential backoff for retry logic
-3. **Cache responses** — Avoid unnecessary repeated requests
-4. **Batch operations** — Use bulk endpoints where available (e.g., `/tools/bulk`)
-5. **Monitor headers** — Track `X-RateLimit-Remaining` to proactively slow down
-6. **Use webhooks** — For event-driven workflows, use webhooks instead of polling
+1. **Respect `Retry-After`**: Always wait the specified duration before retrying
+2. **Implement backoff**: Use exponential backoff for retry logic
+3. **Cache responses**: Avoid unnecessary repeated requests
+4. **Batch operations**: Use bulk endpoints where available (e.g., `/tools/bulk`)
+5. **Monitor headers**: Track `X-RateLimit-Remaining` to proactively slow down
+6. **Use webhooks**: For event-driven workflows, use webhooks instead of polling

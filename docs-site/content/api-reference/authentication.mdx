@@ -5,13 +5,13 @@
 
 The almyty API uses JWT (JSON Web Tokens) for authentication. The web UI
 receives its token as an `httpOnly` `SameSite=lax` cookie so JavaScript
-running in the page can't read it — cross-site scripting and compromised
+running in the page can't read it, cross-site scripting and compromised
 npm packages can't steal the session. Programmatic clients and CLIs use
 a Bearer `Authorization` header with an API key they can mint from
 Settings → API Keys (or via the CLI login flow).
 
 Every token carries `iss: "almyty"` + `aud: "almyty-api"` claims and is
-signed with HS256. Both claims are enforced on verification — tokens
+signed with HS256. Both claims are enforced on verification, tokens
 issued by another service that happens to share the signing secret are
 refused with "jwt issuer invalid".
 
@@ -131,7 +131,7 @@ API keys are long-lived tokens for scripts, CI pipelines, and CLI tools. They do
 2. Open the **Access Keys** tab
 3. Click **Generate Key**
 4. Pick a name, select the gateway or agent to scope it to, and choose permissions
-5. **Copy the key immediately** — it's shown only once
+5. **Copy the key immediately**: it's shown only once
 
 The key looks like `ak_live_abc123...`. Use it anywhere a Bearer token is expected:
 
@@ -139,7 +139,7 @@ The key looks like `ak_live_abc123...`. Use it anywhere a Bearer token is expect
 curl /apis -H "Authorization: Bearer ak_live_abc123..."
 ```
 
-For CLI tools, run `npx @almyty/auth login` instead — it opens your browser, authenticates, and stores the key at `~/.almyty/credentials.json` so every CLI picks it up automatically.
+For CLI tools, run `npx @almyty/auth login` instead, it opens your browser, authenticates, and stores the key at `~/.almyty/credentials.json` so every CLI picks it up automatically.
 
 To revoke: **Credentials** → **Access Keys** → menu → **Revoke**.
 
@@ -196,7 +196,7 @@ curl https://api.almyty.com/gateways \
 
 Some endpoints also accept the org id as a path parameter (e.g.
 `/organizations/{orgId}/tools`). In that case the path wins and the
-header is ignored — so the path must match a membership you actually
+header is ignored, so the path must match a membership you actually
 have.
 
 ### Switching orgs from a multi-org account
