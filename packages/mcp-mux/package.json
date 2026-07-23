@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "stdio-MCP multiplexer \u2014 fans many client sessions into one downstream MCP child over a Unix socket, rewriting ids. Internal almyty plumbing.",
+  "description": "Share one stdio MCP server subprocess across many concurrent clients over a Unix socket \u2014 remaps request ids, serializes writes, respawns on crash. Internal almyty plumbing.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
