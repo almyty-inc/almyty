@@ -41,6 +41,33 @@ export function isEncrypted(value: string): boolean {
   return typeof value === 'string' && value.startsWith('encrypted:');
 }
 
+/**
+ * Prefix for customer-managed (BYO-KMS) envelope values. A column may hold a
+ * mix of `encrypted:kms:` (customer CMK) and `encrypted:gcm:` (platform) rows;
+ * routing is by prefix so platform/plaintext values are never misread.
+ */
+export const KMS_ENVELOPE_PREFIX = 'encrypted:kms:';
+
+export function isKmsEnvelope(value: string): boolean {
+  return typeof value === 'string' && value.startsWith(KMS_ENVELOPE_PREFIX);
+}
+
+/**
+ * Synchronous unwrap hook for `encrypted:kms:` values, registered by
+ * `EnvelopeCryptoService` at module init. It decrypts from the in-process DEK
+ * cache, so callers on the sync read path (entity methods) must have warmed the
+ * org's DEK first (via `EnvelopeCryptoService.warmOrg`). When no hook is
+ * registered (KMS module absent) or the value isn't a kms envelope, the
+ * platform path runs unchanged — so non-KMS deployments and existing
+ * gcm/cbc/plaintext values behave exactly as before.
+ */
+export type EnvelopeUnwrapHook = (organizationId: string, value: string) => string;
+let envelopeUnwrapHook: EnvelopeUnwrapHook | null = null;
+
+export function registerEnvelopeUnwrapHook(hook: EnvelopeUnwrapHook | null): void {
+  envelopeUnwrapHook = hook;
+}
+
 export function encryptField(value: string): string {
   const iv = randomBytes(12); // 96-bit IV, GCM standard
   const cipher = createCipheriv('aes-256-gcm', getKey(), iv);
@@ -50,7 +77,30 @@ export function encryptField(value: string): string {
   return `encrypted:gcm:${iv.toString('hex')}:${tag.toString('hex')}:${ct}`;
 }
 
-export function decryptField(value: string): string {
+/**
+ * Decrypt a stored field. Routing is by the stored ciphertext prefix:
+ *  - `encrypted:kms:` (customer-managed) delegates to the registered envelope
+ *    unwrap hook — `organizationId` is required to pick the org's DEK.
+ *  - `encrypted:gcm:` / legacy `encrypted:` / plaintext take the unchanged
+ *    platform path, so existing data keeps decrypting regardless of KMS state.
+ */
+export function decryptField(value: string, organizationId?: string): string {
+  if (isKmsEnvelope(value)) {
+    if (!envelopeUnwrapHook) {
+      throw new Error(
+        'Encountered a customer-managed (encrypted:kms:) value but no envelope ' +
+          'unwrap hook is registered. Is KmsModule loaded?',
+      );
+    }
+    if (!organizationId) {
+      throw new Error(
+        'Cannot decrypt a customer-managed (encrypted:kms:) value without an ' +
+          'organizationId to select the CMK-wrapped DEK.',
+      );
+    }
+    return envelopeUnwrapHook(organizationId, value);
+  }
+
   if (!isEncrypted(value)) return value; // plaintext / not-yet-migrated
 
   const parts = value.split(':');

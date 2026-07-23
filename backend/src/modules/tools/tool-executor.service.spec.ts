@@ -10,6 +10,8 @@ import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
 import { ToolGrpcExecutor } from './executors/tool-grpc.executor';
 import { ToolScriptExecutor } from './executors/tool-script.executor';
 import { ToolAuthService } from './services/tool-auth.service';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { makeEnvelopeCryptoMock } from '../../test/envelope-crypto.mock';
 import { hashCacheObject, sleep as sleepUtil } from './tool-execution-utils';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
@@ -93,6 +95,7 @@ describe('ToolExecutorService', () => {
         ToolGrpcExecutor,
         ToolScriptExecutor,
         ToolAuthService,
+        { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
         {
           provide: getRepositoryToken(Tool),
           useValue: {

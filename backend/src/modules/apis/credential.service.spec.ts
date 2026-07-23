@@ -3,6 +3,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { CredentialService, CreateCredentialDto, UpdateCredentialDto } from './credential.service';
 import { Credential, CredentialType } from '../../entities/credential.entity';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { makeEnvelopeCryptoMock } from '../../test/envelope-crypto.mock';
 import { Api } from '../../entities/api.entity';
 
 // Mock axios for testCredential and refreshOAuthToken
@@ -44,6 +46,7 @@ describe('CredentialService', () => {
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
     encryptSensitiveData: jest.fn(),
+    encryptSensitiveDataForOrg: jest.fn().mockResolvedValue(undefined),
     getDecryptedConfig: jest.fn().mockReturnValue({ apiKey: 'sk-test-12345678' }),
     getAuthHeaders: jest.fn().mockReturnValue({ 'X-API-Key': 'sk-test-12345678' }),
     getQueryParams: jest.fn().mockReturnValue({}),
@@ -57,6 +60,7 @@ describe('CredentialService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CredentialService,
+        { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
         {
           provide: getRepositoryToken(Credential),
           useValue: {
@@ -111,7 +115,7 @@ describe('CredentialService', () => {
         apiId: 'api-1',
         organizationId: 'org-1',
       }));
-      expect(cred.encryptSensitiveData).toHaveBeenCalled();
+      expect(cred.encryptSensitiveDataForOrg).toHaveBeenCalled();
       expect(credentialRepository.save).toHaveBeenCalledWith(cred);
       expect(result).toBeDefined();
     });
@@ -258,7 +262,7 @@ describe('CredentialService', () => {
       await service.updateCredential('cred-1', 'org-1', dto);
 
       // encryptSensitiveData should have been called (config was changed)
-      expect(cred.encryptSensitiveData).toHaveBeenCalled();
+      expect(cred.encryptSensitiveDataForOrg).toHaveBeenCalled();
       // save should have been called with the credential
       expect(credentialRepository.save).toHaveBeenCalledWith(cred);
     });
@@ -271,7 +275,7 @@ describe('CredentialService', () => {
       const dto: UpdateCredentialDto = { name: 'New Name' };
       await service.updateCredential('cred-1', 'org-1', dto);
 
-      expect(cred.encryptSensitiveData).not.toHaveBeenCalled();
+      expect(cred.encryptSensitiveDataForOrg).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when credential not found', async () => {
@@ -508,7 +512,7 @@ describe('CredentialService', () => {
         accessToken: 'new-access-token',
         refreshToken: 'new-refresh-token',
       }));
-      expect(cred.encryptSensitiveData).toHaveBeenCalled();
+      expect(cred.encryptSensitiveDataForOrg).toHaveBeenCalled();
       expect(credentialRepository.save).toHaveBeenCalled();
     });
 
@@ -679,8 +683,8 @@ describe('CredentialService', () => {
       }));
       expect(stale.config).toEqual({ stale: true });
       expect(stale.name).toBe('STALE NAME');
-      expect(fresh.encryptSensitiveData).toHaveBeenCalled();
-      expect(stale.encryptSensitiveData).not.toHaveBeenCalled();
+      expect(fresh.encryptSensitiveDataForOrg).toHaveBeenCalled();
+      expect(stale.encryptSensitiveDataForOrg).not.toHaveBeenCalled();
       // The save call must persist the fresh object, not the stale one.
       const savedArg = (credentialRepository.save as jest.Mock).mock.calls[0][0];
       expect(savedArg).toBe(fresh);

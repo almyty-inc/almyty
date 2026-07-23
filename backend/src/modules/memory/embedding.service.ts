@@ -9,6 +9,7 @@ import {
   ollamaPrivateUrlsAllowed,
 } from '../../common/security/url-validator';
 import { LIMITS } from './canonical/canonical.constants';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 
 /**
  * Sentinel model id recorded when the deterministic hash fallback
@@ -129,6 +130,7 @@ export class EmbeddingService {
   constructor(
     @InjectRepository(LlmProvider)
     private readonly llmProviderRepository: Repository<LlmProvider>,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   /**
@@ -144,6 +146,8 @@ export class EmbeddingService {
       try {
         const provider = await this.getEmbeddingProvider(organizationId);
         const backend = provider ? EMBEDDING_BACKENDS[provider.type] : undefined;
+        // Warm the org's DEK before the sync key read (no-op for non-KMS orgs).
+        await this.envelopeCrypto.warmOrg(organizationId);
         const apiKey = provider?.getDecryptedApiKey();
         // Keyless backends (Ollama) may proceed without an API key.
         if (provider && backend && (apiKey || !backend.requiresApiKey)) {

@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 
 import { Credential } from '../../entities/credential.entity';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { ApiKey } from '../../entities/api-key.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { Api } from '../../entities/api.entity';
@@ -39,6 +40,7 @@ export class CredentialsService {
     private agentRepository: Repository<Agent>,
     private readonly auditLogService: AuditLogService,
     private readonly accessPolicy: AccessPolicyService,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   // ──────────────────────────────────────────────
@@ -150,8 +152,10 @@ export class CredentialsService {
       teamId: data.visibility === 'team' ? (data.teamId ?? null) : null,
     });
 
-    // Encrypt sensitive data before saving
-    credential.encryptSensitiveData();
+    // Encrypt sensitive data before saving. Org-aware envelope path: a
+    // BYO-KMS org gets encrypted:kms:, every other org keeps the same
+    // platform encrypted:gcm: ciphertext as before.
+    await credential.encryptSensitiveDataForOrg(this.envelopeCrypto);
 
     const saved = await this.credentialRepository.save(credential);
     this.logger.log(`Credential created: ${saved.id} (${saved.name}) for org ${organizationId}`);
@@ -227,7 +231,7 @@ export class CredentialsService {
 
     if (data.config !== undefined) {
       credential.config = data.config;
-      credential.encryptSensitiveData();
+      await credential.encryptSensitiveDataForOrg(this.envelopeCrypto);
     }
 
     const saved = await this.credentialRepository.save(credential);
