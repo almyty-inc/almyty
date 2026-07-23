@@ -15,6 +15,9 @@ on:
           - chat-cli
           - almyty-cli
           - acp-server
+          - runner
+          - client
+          - mcp-mux
           - all
       version_bump:
         description: 'Version bump type'
@@ -58,6 +61,15 @@ jobs:
           - id: acp-server
             npm_name: "@almyty/acp-server"
             dir: packages/acp-server
+          - id: runner
+            npm_name: "@almyty/runner"
+            dir: packages/runner
+          - id: client
+            npm_name: "@almyty/client"
+            dir: packages/client
+          - id: mcp-mux
+            npm_name: "@almyty/mcp-mux"
+            dir: packages/mcp-mux
     steps:
       - name: Skip if not selected
         if: inputs.package != 'all' && inputs.package != matrix.id
