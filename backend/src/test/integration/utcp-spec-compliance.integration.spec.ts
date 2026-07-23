@@ -61,12 +61,11 @@ describeIfDb('UTCP spec compliance (real Postgres)', () => {
   let gateway: Gateway;
 
   beforeAll(async () => {
-    // TypeORM's `dropSchema: true` is "drop the named schema, then
-    // synchronize", but synchronize tries to CREATE TABLE in that
-    // schema before re-creating the schema itself, so a clean DB
-    // (or a previous failed run that left the schema absent) blows
-    // up with `schema "utcp_spec_test" does not exist`. Pre-create
-    // it via a throwaway connection.
+    // TypeORM's `dropSchema: true` drops the named schema at connection
+    // init; the migrations then create tables in it. A clean DB (or a
+    // previous failed run that left the schema absent) blows up with
+    // `schema "utcp_spec_test" does not exist`, so pre-create it via a
+    // throwaway connection.
     const bootstrap = new DataSource({
       type: 'postgres',
       host: process.env.DATABASE_HOST || '127.0.0.1',
@@ -87,7 +86,15 @@ describeIfDb('UTCP spec compliance (real Postgres)', () => {
       password: process.env.DATABASE_PASSWORD || '',
       database: process.env.DATABASE_NAME || 'almyty_test',
       schema: 'utcp_spec_test',
-      synchronize: true,
+      // Build the schema by RUNNING THE MIGRATIONS (not `synchronize`)
+      // so the suite validates the real migration path. `search_path`
+      // is pinned to `<schema>,public` so the migrations' unqualified
+      // CREATE TABLE lands in the isolated schema while extension
+      // objects (uuid_generate_v4, the `vector` type) resolve from
+      // public.
+      extra: { options: '-c search_path=utcp_spec_test,public' },
+      migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
+      migrationsRun: true,
       dropSchema: true,
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
       logging: false,

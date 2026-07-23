@@ -7,10 +7,9 @@
  * SQL fragment, a mismatched operator precedence, or an incompatible
  * column type would all pass the mocked tests and only surface at
  * runtime. This file closes that gap: it spins up a real Postgres
- * DataSource, `synchronize: true` to create the schema from the
- * entity decorators, seeds a row, calls the real helper, and reads
- * the row back to assert the post-update column values are what we
- * expect.
+ * DataSource, RUNS THE MIGRATIONS to build the schema, seeds a row,
+ * calls the real helper, and reads the row back to assert the
+ * post-update column values are what we expect.
  *
  * Run locally against the docker-compose `postgres` service (port
  * 5433 with the default credentials) or any other reachable Postgres
@@ -46,11 +45,10 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
   let orgId: string;
 
   beforeAll(async () => {
-    // TypeORM's `dropSchema:true + synchronize:true` is "drop the named
-    // schema then create tables in it", but synchronize tries to create
-    // tables BEFORE the schema itself is recreated. On a fresh DB or
-    // after a previous failed run that left the schema absent, this
-    // explodes with `schema "bump_stats_test" does not exist`. Pre-
+    // TypeORM's `dropSchema: true` drops the named schema at connection
+    // init; the migrations then create tables in it. On a fresh DB (or
+    // after a previous failed run that left the schema absent) that
+    // explodes with `schema "bump_stats_test" does not exist`, so pre-
     // create it via a throwaway connection.
     const bootstrap = new DataSource({
       type: 'postgres',
@@ -74,10 +72,18 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
       // Use a spec-specific Postgres schema so this spec can run
       // in parallel with other DB integration specs (e.g.
       // cross-tenant-isolation) without them stepping on each
-      // other's DROP TABLE / CREATE TABLE cycles. TypeORM's
-      // `synchronize + dropSchema` only affects the named schema.
+      // other's DROP TABLE / CREATE TABLE cycles. `dropSchema` +
+      // `schema` only affect the named schema.
       schema: 'bump_stats_test',
-      synchronize: true,
+      // Build the schema by RUNNING THE MIGRATIONS (not `synchronize`)
+      // so the suite validates the real migration path and catches
+      // migration<->entity drift. `search_path` is pinned to
+      // `<schema>,public` so the migrations' unqualified CREATE TABLE
+      // lands in the isolated schema while extension objects
+      // (uuid_generate_v4, the `vector` type) resolve from public.
+      extra: { options: '-c search_path=bump_stats_test,public' },
+      migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
+      migrationsRun: true,
       dropSchema: true,
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
       logging: false,
