@@ -1,11 +1,13 @@
 # Template Expressions
 
-Template expressions let nodes in an agent pipeline reference data from the
-invocation input or from other nodes' outputs. They use `{{...}}` syntax and
-are resolved at runtime just before each node executes.
-
+Wire data between pipeline nodes without writing glue code. A template
+expression pulls a value from the invocation input or from another node's output,
+using `{{...}}` syntax, resolved at runtime just before each node executes. Type
+`{{` in any node config field and the builder autocompletes the available
+sources.
 
 ![Template expressions in node config](/screenshots/agent-builder.png)
+
 ## Syntax
 
 ```
@@ -126,7 +128,7 @@ return { name };
 
 ## Best Practices
 
-1. **Keep expressions simple** -- use Transform nodes for complex data manipulation
-2. **Validate your schema** -- define Input node schemas to catch bad data early
-3. **Use meaningful node IDs** -- `search_api` is clearer than `tool_1` in expressions
-4. **Test incrementally** -- use the agent test panel to verify expressions resolve correctly
+1. **Keep expressions simple**: use Transform nodes for complex data manipulation
+2. **Validate your schema**: define Input node schemas to catch bad data early
+3. **Use meaningful node IDs**: `search_api` is clearer than `tool_1` in expressions
+4. **Test incrementally**: use the agent test panel to verify expressions resolve correctly

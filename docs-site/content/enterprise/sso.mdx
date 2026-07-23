@@ -1,29 +1,23 @@
 # SSO & SCIM
 
-Enterprise (`sso` entitlement). Per-organization single sign-on via **SAML 2.0** or **OIDC**, plus **SCIM 2.0** for user and group provisioning from your IdP (Okta, Entra ID, and compatible).
+Enterprise (`sso` entitlement). Let your team sign in with the identity provider you already run, and keep the member list in sync automatically. Per-organization single sign-on via **SAML 2.0** or **OIDC**, plus **SCIM 2.0** for user and group provisioning from your IdP (Okta, Entra ID, and compatible).
 
-SSO issues the same httpOnly `access_token` cookie as password login — there is no parallel session mechanism, and everything downstream (RBAC, teams, audit) works identically.
+SSO issues the same httpOnly `access_token` cookie as password login. There is no parallel session mechanism, and everything downstream (RBAC, teams, audit) works identically.
 
 ## Configuration
 
-Each org has one SSO config, managed by org owners/admins under **Settings** or via the API:
+Each org has one SSO config, managed by org owners/admins under **Settings**. Configure OIDC (discovery-based) with just-in-time provisioning:
 
-```bash
-# Read current config (secrets masked; includes computed loginUrl and scimBaseUrl)
-curl /sso/settings
-
-# Configure OIDC with JIT provisioning
-curl -X PUT /sso/settings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "protocol": "oidc",
-    "enabled": true,
-    "oidcIssuerUrl": "https://login.example.com",
-    "oidcClientId": "almyty",
-    "oidcClientSecret": "…",
-    "jitProvisioning": true,
-    "defaultRole": "member"
-  }'
+```json
+{
+  "protocol": "oidc",
+  "enabled": true,
+  "oidcIssuerUrl": "https://login.example.com",
+  "oidcClientId": "almyty",
+  "oidcClientSecret": "…",
+  "jitProvisioning": true,
+  "defaultRole": "member"
+}
 ```
 
 | Field | Notes |
@@ -35,7 +29,7 @@ curl -X PUT /sso/settings \
 | `jitProvisioning` | create unknown users on first login (see below) |
 | `defaultRole` | org role for JIT-provisioned users (default `member`) |
 
-Set `PUBLIC_API_URL` on the backend so generated URLs (SAML ACS, metadata, SCIM base, login links) point at your public API origin rather than an internal hostname.
+Reading the config back masks secrets and includes the computed `loginUrl` and `scimBaseUrl`. Set `PUBLIC_API_URL` on the backend so generated URLs (SAML ACS, metadata, SCIM base, login links) point at your public API origin rather than an internal hostname.
 
 ## Login endpoints
 
@@ -51,24 +45,17 @@ Per-org, unauthenticated by design:
 
 On a verified assertion the user is resolved by email:
 
-- **Existing active member** → logged in.
-- **Deactivated member** → 401.
-- **Unknown user** → created with the org's `defaultRole` — but only if `jitProvisioning` is on. Otherwise 401, deferring membership to SCIM or invites.
+- **Existing active member**: logged in.
+- **Deactivated member**: 401.
+- **Unknown user**: created with the org's `defaultRole`, but only if `jitProvisioning` is on. Otherwise 401, deferring membership to SCIM or invites.
 
 ## SCIM provisioning
 
-SCIM lets your IdP drive the member list instead of (or alongside) JIT. Generate a bearer token:
-
-```bash
-curl -X POST /sso/settings/scim-token
-# → { "token": "scim_…" }  — also enables SCIM for the org
-```
-
-Point your IdP at the SCIM base URL from `GET /sso/settings` and use the token as the bearer credential.
+SCIM lets your IdP drive the member list instead of (or alongside) JIT. Generate a bearer token under **Settings** (this also enables SCIM for the org), point your IdP at the SCIM base URL shown there, and use the token as the bearer credential.
 
 Supported operations under `/scim/v2` (authenticated by the SCIM token, scoped to your org):
 
-- **Users**: `POST`, `GET` (list; filter support is limited to `userName eq "…"`), `GET/PUT/PATCH /Users/:id`, `DELETE /Users/:id`
-- **Groups**: `POST`, `GET`, `GET/PATCH /Groups/:id`, `DELETE /Groups/:id` — groups map to almyty [teams](/organizations)
+- **Users**: create, list (filter support is limited to `userName eq "…"`), read, replace, patch, delete by id
+- **Groups**: create, list, read, patch, delete by id. Groups map to almyty [teams](/organizations)
 
-Deprovisioning (PATCH `active: false` or DELETE) deactivates the user's **org membership**, not their account — they lose access to your org but their user survives if they belong to other orgs. Both Okta and Entra PATCH payload shapes are handled.
+Deprovisioning (patch `active: false` or delete) deactivates the user's **org membership**, not their account. They lose access to your org, but their user survives if they belong to other orgs. Both Okta and Entra patch payload shapes are handled.

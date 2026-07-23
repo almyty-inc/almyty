@@ -1,7 +1,9 @@
 # Node Types
 
-Workflow agents support 10 node types. Each performs a specific function within
-the pipeline and connects to other nodes via edges on the canvas.
+Every step in a workflow agent is a node. There are 10 types, each doing one job,
+wired together by edges on the canvas. Drag them from the palette in the
+[builder](/agents/builder); this page is the reference for what each one needs
+and what it hands downstream.
 
 ![Node palette in the agent builder](/screenshots/agent-builder-node-palette.png)
 
@@ -10,10 +12,10 @@ the pipeline and connects to other nodes via edges on the canvas.
 | Node Type | Required Fields | Output available as |
 |-----------|----------------|---------------------|
 | **Input** | `schema` | `{{input.*}}` |
-| **Output** | `mapping` | -- (terminal node) |
+| **Output** | `mapping` | (terminal node) |
 | **LLM Call** | `providerId`, `userPromptTemplate` | `{{nodes.<id>.output}}` |
 | **Tool Call** | `toolId` | `{{nodes.<id>.output}}` |
-| **Condition** | `expression` | -- (routes to true/false branches) |
+| **Condition** | `expression` | (routes to true/false branches) |
 | **Transform** | `code` | `{{nodes.<id>.output}}` |
 | **Loop** | `iterableExpression` | `{{nodes.<id>.output}}` |
 | **Parallel** | `branches` | `{{nodes.<id>.output}}` |
