@@ -1,51 +1,44 @@
 # Approval Policies
 
-Enterprise (`approval_policy` entitlement). Single-gate [approvals](/approvals) — one authorized reviewer approves or rejects a paused run — are free and enough for most workflows. Approval policies add structured sign-off on top: **multi-step** chains ("finance first, then an admin"), **conditional** matching ("only for refunds over $1,000"), and **quorum** ("any two reviewers").
+Enterprise (`approval_policy` entitlement). Require the right people to sign off before a consequential action goes through: finance then an admin, two reviewers for a quorum, or a gate that only trips over a dollar threshold. Single-gate [approvals](/approvals) (one authorized reviewer approves or rejects a paused run) are free and enough for most workflows. Approval policies add structured sign-off on top: **multi-step** chains, **conditional** matching ("only for refunds over $1,000"), and **quorum** ("any two reviewers").
 
-When no policy matches a request, the OSS single-gate behavior applies unchanged — policies are an overlay, not a replacement.
+![A refund over threshold paused for human approval, with Approve and Reject](/screenshots/approval-refund-820.png)
+
+When no policy matches a request, the OSS single-gate behavior applies unchanged. Policies are an overlay, not a replacement.
 
 ## Anatomy of a policy
 
-```bash
-curl -X POST /approval-policies \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "large-refunds",
-    "match": [
-      { "attr": "toolName", "op": "eq", "value": "issue_refund" },
-      { "attr": "amount", "op": "gt", "value": 1000 }
-    ],
-    "steps": [
-      { "name": "Finance review", "approverRole": "finance", "minApprovals": 1 },
-      { "name": "Admin sign-off", "approverRole": "admin", "minApprovals": 1 }
-    ],
-    "priority": 10,
-    "enabled": true
-  }'
+Create policies under **Settings**, or via the API. A policy is a match condition, an ordered set of sign-off steps, and a priority:
+
+```json
+{
+  "name": "large-refunds",
+  "match": [
+    { "attr": "toolName", "op": "eq", "value": "issue_refund" },
+    { "attr": "amount", "op": "gt", "value": 1000 }
+  ],
+  "steps": [
+    { "name": "Finance review", "approverRole": "finance", "minApprovals": 1 },
+    { "name": "Admin sign-off", "approverRole": "admin", "minApprovals": 1 }
+  ],
+  "priority": 10,
+  "enabled": true
+}
 ```
 
-- **`match`** — conditions over the approval request's context (`agentId`, `toolName`, `amount`, and whatever the requesting agent put in the payload), ANDed. Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`. An empty `match` matches every request.
-- **`steps`** — ordered sign-off stages. Each step names an `approverRole` (an org role or a [custom role](/enterprise/advanced-rbac) name; `"*"` accepts anyone authorized to approve) and a `minApprovals` count (≥ 1).
-- **`priority`** — when several enabled policies match, the highest priority wins; exactly one policy governs a request.
-- **`teamId`** — optional; scope the policy to one team's agents.
+- **`match`**: conditions over the approval request's context (`agentId`, `toolName`, `amount`, and whatever the requesting agent put in the payload), ANDed. Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`. An empty `match` matches every request.
+- **`steps`**: ordered sign-off stages. Each step names an `approverRole` (an org role or a [custom role](/enterprise/advanced-rbac) name; `"*"` accepts anyone authorized to approve) and a `minApprovals` count (at least 1).
+- **`priority`**: when several enabled policies match, the highest priority wins; exactly one policy governs a request.
+- **`teamId`**: optional; scope the policy to one team's agents.
 
 A plain quorum is just a single step: `{ "approverRole": "*", "minApprovals": 2 }`.
 
 ## Evaluation rules
 
-- **Steps are sequential.** Step 2 accepts no approvals until step 1 is satisfied — an admin clicking early doesn't pre-fill a later stage.
-- **No double-counting.** Each individual approval is credited to exactly one step. A user who holds both the finance and admin roles cannot satisfy both steps of the example above with a single approval — two distinct sign-offs means two people (or at minimum two explicit approvals).
-- **Progress is inspectable**: each pending request under a policy reports per-step state (required, collected, satisfied) and the current step, so the Approvals UI can show "1 of 2 stages complete".
+- **Steps are sequential.** Step 2 accepts no approvals until step 1 is satisfied. An admin clicking early doesn't pre-fill a later stage.
+- **No double-counting.** Each individual approval is credited to exactly one step. A user who holds both the finance and admin roles cannot satisfy both steps of the example above with a single approval: two distinct sign-offs means two people (or at minimum two explicit approvals).
+- **Progress is inspectable.** Each pending request under a policy reports per-step state (required, collected, satisfied) and the current step, so the Approvals UI can show "1 of 2 stages complete".
 
-## Via the API
+## Managing policies
 
-CRUD under `/approval-policies`, org admin/owner only:
-
-```bash
-curl /approval-policies              # list
-curl /approval-policies/{id}         # read
-curl -X PATCH /approval-policies/{id} -d '{"enabled": false}'
-curl -X DELETE /approval-policies/{id}
-```
-
-Reviewers themselves keep using the normal approve/reject endpoints from [Approvals](/approvals) — the policy engine decides when the request as a whole is satisfied.
+Policy CRUD (list, read, enable/disable, delete) is org admin/owner only, under **Settings** or the [API reference](/api-reference). Reviewers themselves keep using the normal approve/reject actions from [Approvals](/approvals). The policy engine decides when the request as a whole is satisfied.

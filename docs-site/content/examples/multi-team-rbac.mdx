@@ -1,16 +1,16 @@
 # 👥 Role-based access for a multi-team org
 
-**Stack** — `Org: teams + members` · `Roles: per-resource permissions` · `Isolation: agents, tools, gateways, credentials` · `Output: least-privilege by default`
+**Stack**: `Org: teams + members` · `Roles: per-resource permissions` · `Isolation: agents, tools, gateways, credentials` · `Output: least-privilege by default`
 
-**Who it's for** — an org where support, finance, and platform teams share almyty but shouldn't share everything.
-**What it does** — gives each team its own agents, tools, gateways, and credentials, with role-based access controlling who can view, edit, run, or approve — so a support engineer can't touch the finance agent's refund tools, and no one has more than they need.
+**Who it's for**: an org where support, finance, and platform teams share almyty but shouldn't share everything.
+**What it does**: gives each team its own agents, tools, gateways, and credentials, with role-based access controlling who can view, edit, run, or approve, so a support engineer can't touch the finance agent's refund tools, and no one has more than they need.
 
 ## Build it
 
-1. **Create teams** for your org units — Support, Finance, Platform — under one organization.
+1. **Create teams** for your org units, Support, Finance, Platform, under one organization.
 2. **Assign roles** per resource: viewer, editor, operator, admin. A role governs whether someone can see a resource, change it, run it, or approve its actions.
-3. **Scope resources to teams** — the support agent, its tools, and its gateway belong to Support; finance's refund tools stay in Finance.
-4. **Keep credentials isolated** — each team's [vault](/credentials) entries are theirs; a shared key never leaks across team lines.
+3. **Scope resources to teams**: the support agent, its tools, and its gateway belong to Support; finance's refund tools stay in Finance.
+4. **Keep credentials isolated**: each team's [vault](/credentials) entries are theirs; a shared key never leaks across team lines.
 5. **Combine with approval policies** so a sensitive action requires an approver from the owning team, not just anyone.
 
 ## Make it yours
@@ -19,7 +19,7 @@
 - Pair with [SSO/SCIM](/examples/sso-scim-onboarding) so roles map to directory groups and deprovision automatically.
 - Every access decision is in the [audit trail](/examples/audit-to-siem).
 
-**Uses** — `Enterprise` · `RBAC` · `Multi-tenant`
+**Uses**: `Enterprise` · `RBAC` · `Multi-tenant`
 
 ## Related
 

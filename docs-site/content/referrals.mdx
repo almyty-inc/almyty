@@ -1,10 +1,10 @@
 # Referrals
 
-Invite other builders to almyty and both sides get free pro time. The program is built into the open-source platform — no external tracking, one httpOnly cookie, rewards applied as plan-expiry extensions.
+Invite other builders to almyty and both sides get free pro time. The program is built into the open-source platform: no external tracking, one httpOnly cookie, rewards applied as plan-expiry extensions.
 
 ## How it works
 
-1. **Get your link.** Settings → Referrals, or `GET /referrals/code`. Every user gets one permanent 8-character code and a share link of the form:
+1. **Get your link.** Open **Settings, Referrals**. Every user gets one permanent 8-character code and a share link of the form:
 
    ```
    https://app.example.com/r/AB3D7XKQ
@@ -15,8 +15,8 @@ Invite other builders to almyty and both sides get free pro time. The program is
 3. **They sign up.** The cookie is consumed at registration (single-use). If the referral is clean, their new organization starts with **30 days of pro** immediately.
 
 4. **You get rewarded** as they become a real user:
-   - **+14 days** of pro when their org *activates* — created at least one gateway **and** completed at least one agent run.
-   - **+30 more days** if their org converts to a paid plan (an actual subscription — the free pro trial doesn't count).
+   - **+14 days** of pro when their org *activates*: created at least one gateway **and** completed at least one agent run.
+   - **+30 more days** if their org converts to a paid plan (an actual subscription; the free pro trial doesn't count).
 
 Qualification is checked by a background sweep every 10 minutes, so rewards land shortly after the milestone, not instantly.
 
@@ -27,34 +27,22 @@ Qualification is checked by a background sweep every 10 minutes, so rewards land
 - **Free-tier banking**: if your org is on the free plan when a reward lands, the days are banked (`accruedRewardDays`, visible in your stats) and applied automatically when your org is on pro.
 - **Enterprise orgs are excluded** on both sides: they can't create codes, can't be attributed as referrer or referee, and banked days are never applied to them.
 
-Referral lifecycle: `pending` → `qualified` (activation, +14d) → `rewarded` (paid conversion, +30d, terminal).
+Referral lifecycle: `pending`, then `qualified` (activation, +14d), then `rewarded` (paid conversion, +30d, terminal).
 
 ## Abuse review
 
 Two signals flag a referral for review at signup:
 
-- **`disposable_email`** — the referee registered with a known throwaway-email domain.
-- **`same_ip`** — the referee registered from the same IP the code was created from, or the same IP as an earlier referral by the same referrer.
+- **`disposable_email`**: the referee registered with a known throwaway-email domain.
+- **`same_ip`**: the referee registered from the same IP the code was created from, or the same IP as an earlier referral by the same referrer.
 
 A flagged referral is created but neutralized: the referee gets no signup bonus, and it never qualifies or rewards automatically. It shows as `pending_review` in your referral list and stats until an operator clears it.
 
-## Via the API
+## Your referral data
 
-All endpoints are under `/referrals`; the first three require authentication.
+**Settings, Referrals** shows your code and share link, your funnel (invited, qualified, rewarded, pending review), your `totalRewardDays`, and banked `accruedRewardDays`. Your per-referral list carries statuses and reward days only, no referred-user PII. The same data is available programmatically under `/referrals` in the [API reference](/api-reference).
 
-```bash
-# Your code + share link (created on first call)
-curl /referrals/code
-
-# Your funnel: invited / qualified / rewarded / pendingReview,
-# totalRewardDays and banked accruedRewardDays
-curl /referrals/stats
-
-# Your referrals (statuses and reward days only — no referred-user PII)
-curl /referrals
-```
-
-`GET /referrals/attribute/:code` is the public endpoint behind `/r/<code>` links — it sets the cookie and redirects to registration (rate-limited to 20 requests/hour per IP). Append `?format=json` to get `{"attributed": true|false}` instead of a redirect.
+The public endpoint behind `/r/<code>` links sets the attribution cookie and redirects to registration (rate-limited to 20 requests/hour per IP); appending `?format=json` returns `{"attributed": true|false}` instead of a redirect.
 
 ## Configuration (self-hosting)
 

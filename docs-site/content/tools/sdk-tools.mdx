@@ -1,60 +1,53 @@
 # SDK Tools
 
-SDK tools let you import an npm package and auto-generate tools from its
-exported functions. Point almyty at a package like `stripe`, `@aws-sdk/client-s3`,
-or `lodash`, and it discovers the public API, infers parameter schemas, and
-creates callable tools -- no manual wiring required.
+An SDK tool set is generated from an npm package. Point almyty at a package like
+`stripe`, `@aws-sdk/client-s3`, or `lodash`, and it discovers the public API,
+infers parameter schemas, and creates one callable tool per function. You review
+and pick the functions you want, with no manual wiring.
 
-![Create tool dialog showing the execution method picker](/screenshots/tools-create-dialog.png)
-## In the UI
+![Create Tool dialog with the execution method picker set to SDK](/screenshots/tools-create-dialog.png)
 
-1. Navigate to **Tools** and click **Create Tool**
-2. Select **SDK** as the execution method
-3. Enter the **npm package name** and **version** (e.g. `stripe` at `^17.0.0`)
-4. Click **Discover** -- almyty installs the package in a sandbox, introspects its exports, and lists the available functions with their signatures
-5. Select which **functions** you want to generate tools from (or select all)
-6. Review the auto-generated **name**, **description**, and **parameter schema** for each tool -- edit any that need refinement
-7. Click **Create** to generate the tools
+## Create them in the UI
+
+1. Open **Tools**, click **Create Tool**, select **SDK**.
+2. Enter the **npm package name** and **version** (e.g. `stripe` at `^17.0.0`).
+3. Click **Discover**. almyty installs the package in a sandbox, introspects its exports, and lists the functions with their signatures.
+4. Select which **functions** to generate tools from (or select all).
+5. Review the auto-generated **name**, **description**, and **parameter schema** per tool, editing any that need refinement.
+6. Click **Create** to generate the tools.
 
 ### How discovery works
 
 When you click Discover, almyty:
 
-1. Installs the package (and its dependencies) in an isolated environment
-2. Loads the module and enumerates its named exports and default export
-3. For each exported function or class method, infers a parameter schema from TypeScript types (if the package ships `.d.ts` files) or from JSDoc annotations
-4. Presents the discovered functions in a table with name, description (from JSDoc or TS docs), and the inferred input schema
+1. Installs the package (and its dependencies) in an isolated environment.
+2. Loads the module and enumerates its named exports and default export.
+3. For each exported function or class method, infers a parameter schema from TypeScript types (if the package ships `.d.ts` files) or from JSDoc annotations.
+4. Presents the discovered functions in a table with name, description (from JSDoc or TS docs), and the inferred input schema.
 
-You can filter the list, deselect functions you don't need, and edit parameter
+You filter the list, deselect functions you don't need, and edit parameter
 descriptions before creating the tools.
 
 ### What gets created
 
 Each selected function becomes a JavaScript tool under the hood. The generated
-code:
+code `require()`s the package, calls the selected function with the input
+parameters, and returns the result. These tools run in the same hardened sandbox
+as all [JavaScript tools](/tools/javascript-tools), with the same filesystem
+isolation, SSRF guard, and resource limits.
 
-- `require()`s the package
-- Calls the selected function with the input parameters
-- Returns the result
+## Discovery payload and response
 
-The tools run in the same hardened sandbox as all [JavaScript tools](/tools/javascript-tools),
-with the same filesystem isolation, SSRF guard, and resource limits.
+Discovery takes a package name and version:
 
-## Via the API
-
-### Discover package exports
-
-```bash
-curl -X POST /organizations/{orgId}/tools/sdk/discover \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "package": "stripe",
-    "version": "^17.0.0"
-  }'
+```json
+{
+  "package": "stripe",
+  "version": "^17.0.0"
+}
 ```
 
-Response:
+It returns the introspected exports, methods, and inferred schemas:
 
 ```json
 {
@@ -83,21 +76,20 @@ Response:
 }
 ```
 
-### Generate tools from discovered exports
+## Generation payload and response
 
-```bash
-curl -X POST /organizations/{orgId}/tools/sdk/generate \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "package": "stripe",
-    "version": "^17.0.0",
-    "functions": ["customers.create", "customers.retrieve", "charges.create"],
-    "credentialId": "credential-uuid"
-  }'
+Generation takes the package, the chosen functions, and a linked credential:
+
+```json
+{
+  "package": "stripe",
+  "version": "^17.0.0",
+  "functions": ["customers.create", "customers.retrieve", "charges.create"],
+  "credentialId": "credential-uuid"
+}
 ```
 
-Response:
+It returns the tools it created, one per function:
 
 ```json
 {
@@ -111,15 +103,14 @@ Response:
 
 ## Credentials
 
-Many SDK packages require API keys or secrets. Link a credential from the
-vault when generating tools -- the credential values are passed to your tools
-via the `credentials` closure argument at execution time, never hardcoded into
-the generated code.
+Many SDK packages need API keys or secrets. Link a credential from the vault when
+generating tools. The credential values reach your tools through the
+`credentials` closure argument at execution time, never hardcoded into the
+generated code.
 
 ## Supported packages
 
-Any npm package that can be installed in a Node.js environment works. Common
-examples:
+Any npm package that installs in a Node.js environment works. Common examples:
 
 | Package | Use case |
 |---------|----------|
@@ -134,10 +125,6 @@ examples:
 
 ## Limitations
 
-- Packages that require native `.node` addons are not supported (the sandbox
-  blocks native addon loading)
-- Discovery relies on TypeScript declarations or JSDoc -- packages with no type
-  information produce tools with generic `object` parameter schemas that you
-  will need to refine manually
-- Class-based packages (like `stripe`) require constructor arguments (API keys,
-  config) -- these are wired through credentials, not parameters
+- Packages that require native `.node` addons are not supported (the sandbox blocks native addon loading).
+- Discovery relies on TypeScript declarations or JSDoc. Packages with no type information produce tools with generic `object` parameter schemas that you refine manually.
+- Class-based packages (like `stripe`) require constructor arguments (API keys, config). These are wired through credentials, not parameters.

@@ -1,6 +1,6 @@
 # Cost Governance
 
-LLM spend fails in two ways: a single run loops and burns money fast, or a fleet of well-behaved agents quietly accumulates a surprising bill. almyty addresses both with two separate mechanisms, plus a way to check its own math against your provider's invoice:
+Put a hard ceiling on LLM spend before a bill surprises you. Spend fails in two ways: a single run loops and burns money fast, or a fleet of well-behaved agents quietly accumulates a large bill. almyty covers both with two separate mechanisms, plus a way to check its own math against your provider's invoice.
 
 | Mechanism | Scope | When checked | On breach |
 |---|---|---|---|
@@ -10,22 +10,11 @@ LLM spend fails in two ways: a single run loops and burns money fast, or a fleet
 
 ## Per-run limits
 
-Every agent run carries a `limits` set. You can pass them when starting a run:
-
-```bash
-curl -X POST /agents/{id}/runs \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "input": "Reconcile yesterday'\''s payouts",
-    "maxCostCents": 200,
-    "maxSteps": 40
-  }'
-```
+Every agent run carries a `limits` set. You can pass them when starting a run (fields: `maxCostCents`, `maxSteps`, `maxDurationMs`, `maxToolCalls`).
 
 Defaults if you pass nothing: `maxSteps: 50`, `maxDurationMs: 3600000` (1 hour), `maxCostCents: 100` ($1), `maxToolCalls: 100`. Sub-agent runs spawned by an agent get tighter defaults (`maxSteps: 20`, `maxCostCents: 50`).
 
-Limits are checked after every step. When accumulated run cost crosses `maxCostCents`, the run stops with status `failed` and error `BUDGET_EXCEEDED`. This is a kill switch for a single runaway run — it knows nothing about what other runs spent.
+Limits are checked after every step. When accumulated run cost crosses `maxCostCents`, the run stops with status `failed` and error `BUDGET_EXCEEDED`. This is a kill switch for a single runaway run; it knows nothing about what other runs spent.
 
 ## Spend budgets
 
@@ -33,20 +22,20 @@ A spend budget is a period ceiling that applies **across runs**: "this org spend
 
 | Field | Values | Meaning |
 |---|---|---|
-| `periodType` | `day` \| `month` (default `month`) | budget window; periods roll over at UTC midnight / first of the month UTC |
+| `periodType` | `day` or `month` (default `month`) | budget window; periods roll over at UTC midnight / first of the month UTC |
 | `limitCents` | positive integer | the ceiling for the period, in cents |
-| `behavior` | `warn_log` \| `reject` (default `warn_log`) | what happens when the limit is reached |
-| `softThresholdPct` | 1–100 (default `80`) | percentage at which a soft alert fires |
+| `behavior` | `warn_log` or `reject` (default `warn_log`) | what happens when the limit is reached |
+| `softThresholdPct` | 1 to 100 (default `80`) | percentage at which a soft alert fires |
 | `agentId` | optional | scope the budget to one agent; omit for org-wide |
 | `active` | boolean (default `true`) | inactive budgets are kept for history but never enforced |
 
 ### Enforcement
 
-Budgets are checked when a run starts, before anything is created — a rejected run leaves no run row behind. For each active budget matching the org (and agent, if scoped), almyty sums the period-to-date spend of agent runs:
+Budgets are checked when a run starts, before anything is created, so a rejected run leaves no run row behind. For each active budget matching the org (and agent, if scoped), almyty sums the period-to-date spend of agent runs:
 
-- **Soft threshold crossed** → a `soft` alert is recorded and org owners/admins are emailed. The run proceeds.
-- **Limit reached** with `behavior: warn_log` → a `hard` alert is recorded and emailed. The run still proceeds.
-- **Limit reached** with `behavior: reject` → the run is rejected with **HTTP 403**:
+- **Soft threshold crossed**: a `soft` alert is recorded and org owners/admins are emailed. The run proceeds.
+- **Limit reached** with `behavior: warn_log`: a `hard` alert is recorded and emailed. The run still proceeds.
+- **Limit reached** with `behavior: reject`: the run is rejected with **HTTP 403**:
 
 ```json
 {
@@ -64,53 +53,19 @@ Budgets are checked when a run starts, before anything is created — a rejected
 
 Alerts are deduplicated: at most one alert per budget, per period, per level (`soft`/`hard`), so a hot budget sends two emails per period, not two per run. Alert and email failures never block the run path.
 
-Two things worth knowing about what counts: budget enforcement sums **agent-run** spend (failed and cancelled runs included — the money was spent), and only agent runs — direct conversations with an agent outside a run are not counted against budgets.
-
-### Via the API
-
-All endpoints live under `/budgets` (tag "Cost Governance"). Reads need `member` or above; mutations need `admin` or `owner`. Multi-org users must send `X-Organization-Id`.
-
-```bash
-# Create a monthly $500 org-wide hard cap
-curl -X POST /budgets \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "periodType": "month",
-    "limitCents": 50000,
-    "behavior": "reject",
-    "softThresholdPct": 80
-  }'
-
-# List, update, delete
-curl /budgets
-curl -X PATCH /budgets/{id} -d '{"limitCents": 75000}'
-curl -X DELETE /budgets/{id}
-```
-
-**Spend rollup** — powers the Cost tab, usable directly:
-
-```bash
-curl "/budgets/spend?period=month&granularity=day"
-```
-
-Returns `totalCents`, a `timeseries` of `{periodStart, spentCents, runCount}` buckets (`granularity`: `day` | `week` | `month`), and a `byAgent` breakdown (top 50 agents by spend).
-
-**Alerts**:
-
-```bash
-curl "/budgets/alerts?limit=100"   # newest first, limit clamped to 500
-```
+Two things worth knowing about what counts: budget enforcement sums **agent-run** spend (failed and cancelled runs included, since the money was spent), and only agent runs. Direct conversations with an agent outside a run are not counted against budgets.
 
 ## The Cost tab
 
-**Analytics → Cost** shows the same data in the UI: total spend for the selected period (day/month toggle), a per-day spend chart, the top agents by spend, and the provider reconciliation table below. Admins get a sync button to pull fresh provider actuals.
+**Analytics, Cost** shows the same data in the UI: total spend for the selected period (day/month toggle), a per-day spend chart, the top agents by spend, and the provider reconciliation table below. Admins get a sync button to pull fresh provider actuals.
 
 ## Provider usage reconciliation
 
-almyty's cost numbers are estimates computed from token counts and price tables. Your provider's usage API is the authoritative record. Reconciliation pulls the provider's own daily usage and cost ("actuals"), stores them as snapshots, and shows the delta against almyty's estimate — so you notice drift from price changes, untracked usage on a shared key, or a miscalibrated price table.
+almyty's cost numbers are estimates computed from token counts and price tables. Your provider's usage API is the authoritative record. Reconciliation pulls the provider's own daily usage and cost ("actuals"), stores them as snapshots, and shows the delta against almyty's estimate, so you notice drift from price changes, untracked usage on a shared key, or a miscalibrated price table.
 
-**Supported providers**: OpenAI and Anthropic. Other provider types are listed by the capabilities endpoint with `supported: false` and an explanatory note — no network call is made for them.
+**Supported providers**: OpenAI and Anthropic. Other provider types are listed by the capabilities endpoint with `supported: false` and an explanatory note; no network call is made for them.
+
+Reconciliation returns one row per provider: `estimateCents`, `estimateTokens`, `actualCents`, `actualTokens`, `deltaCents` (actual minus estimate), and `deltaPct`. The `actual*` fields are `null` until a sync has run. Sync is on demand; re-syncing a window overwrites the existing snapshots (upsert per provider per day), so it is safe to run repeatedly.
 
 ### The admin-key caveat
 
@@ -119,29 +74,14 @@ Both providers gate their usage APIs behind **admin-scoped keys**, separate from
 - **OpenAI**: an Admin key (`sk-admin-...`) with the `api.usage.read` scope. A normal `sk-...` key gets a 401.
 - **Anthropic**: an Admin API key (`sk-ant-admin...`) for the organization usage/cost report endpoints.
 
-Set it as `usageApiKey` in the provider's configuration (Models → provider → settings). It is encrypted at rest like the inference key and masked in API responses. If no `usageApiKey` is set, almyty falls back to the inference key — which will typically 401 on the usage endpoints; the error shows up in the sync result.
+Set it as `usageApiKey` in the provider's configuration (Models, provider, settings). It is encrypted at rest like the inference key and masked in API responses. If no `usageApiKey` is set, almyty falls back to the inference key, which will typically 401 on the usage endpoints; the error shows up in the sync result.
 
-### Via the API
+## API
 
-```bash
-# Which of my providers support actuals, and what key they need
-curl /provider-usage/capabilities
-
-# Estimate vs. actuals for the current month
-curl "/provider-usage/reconciliation?period=month"
-
-# Pull fresh snapshots (admin/owner only; defaults to current month)
-curl -X POST /provider-usage/sync \
-  -H "Content-Type: application/json" \
-  -d '{"providerId": "…"}'
-```
-
-Reconciliation returns one row per provider: `estimateCents`, `estimateTokens`, `actualCents`, `actualTokens`, `deltaCents` (actual − estimate), and `deltaPct`. `actual*` fields are `null` until a sync has run.
-
-Sync is **on demand** — there is no background schedule. Re-syncing a window overwrites the existing snapshots (upsert per provider per day), so it is safe to run repeatedly.
+Budgets, spend rollups, alerts, and reconciliation live under `/budgets` and `/provider-usage`. Reads need `member` or above; mutations need `admin` or `owner`; multi-org users must send `X-Organization-Id`. See the [API reference](/api-reference).
 
 ## Related
 
-- [Analytics](/analytics) — where the Cost tab lives
-- [AI Models](/llm-providers) — provider configuration, including `usageApiKey`
-- Enterprise [chargeback reports](/enterprise) — per-team attribution and forecasting on top of the same spend data
+- [Analytics](/analytics): where the Cost tab lives
+- [AI Models](/llm-providers): provider configuration, including `usageApiKey`
+- Enterprise [chargeback reports](/enterprise): per-team attribution and forecasting on top of the same spend data

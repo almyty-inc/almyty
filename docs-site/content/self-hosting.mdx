@@ -26,7 +26,7 @@ backend API, and the frontend (with an optional nginx profile for production):
 ```yaml
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     environment:
       POSTGRES_DB: almyty
       POSTGRES_USER: postgres
@@ -65,22 +65,22 @@ volumes:
 ### Quick start
 
 ```bash
-git clone https://github.com/almyty/almyty.git
+git clone https://github.com/almyty-inc/almyty.git
 cd almyty
 cp .env.example .env   # edit with your values
 docker-compose up -d
 ```
 
-The frontend is available at `http://localhost:8080` and the backend API at `http://localhost:4000`.
+The frontend is available at `http://localhost:4001` and the backend API at `http://localhost:4000`.
 
 ### Services
 
 | Service | Image | Port (host) | Port (container) |
 |---------|-------|-------------|-------------------|
-| `postgres` | postgres:16-alpine | 5432 | 5432 |
-| `redis` | redis:7-alpine | 6379 | 6379 |
+| `postgres` | postgres:16-alpine | 5433 | 5432 |
+| `redis` | redis:7-alpine | 6380 | 6379 |
 | `backend` | almyty/api | 4000 | 3000 |
-| `frontend` | almyty/frontend | 8080 | 8080 |
+| `frontend` | almyty/frontend | 4001 | 3000 |
 
 ### Building from source
 

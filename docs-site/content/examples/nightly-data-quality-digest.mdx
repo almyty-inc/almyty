@@ -1,21 +1,21 @@
 # 🌙 Post a nightly data-quality digest
 
-**Stack** — `Trigger: schedule (interval)` · `Models: your choice` · `Tools: warehouse/query API` · `Mode: single agent + memory` · `Output: Slack digest via channel or webhook`
+**Stack**: `Trigger: schedule (interval)` · `Models: your choice` · `Tools: warehouse/query API` · `Mode: single agent + memory` · `Output: Slack digest via channel or webhook`
 
-**Who it's for** — data teams who find out about broken pipelines from angry stakeholders.
-**What it does** — every night it checks freshness, row-count deltas, and null-rate spikes across your key tables, groups the problems, and posts a short digest to Slack — or says "all clear" — before anyone opens a dashboard.
+**Who it's for**: data teams who find out about broken pipelines from angry stakeholders.
+**What it does**: every night it checks freshness, row-count deltas, and null-rate spikes across your key tables, groups the problems, and posts a short digest to Slack, or says "all clear", before anyone opens a dashboard.
 
 ## Build it
 
 1. **Connect the warehouse.** *Connect API* to a query endpoint over your warehouse (or a metrics API) for the checks you care about.
 2. **Create the agent** with: *run the freshness and anomaly checks, group failures by table, and write a short digest; if nothing's wrong, say so.*
 3. **Turn on memory** so it can say "third night in a row for `orders_fct`" instead of reporting each night in isolation.
-4. **Put it on a schedule** — on the agent's *Schedule* panel, enable it and set the interval (nightly, or hourly for tighter loops). almyty triggers it with no external cron.
+4. **Put it on a schedule**: on the agent's *Schedule* panel, enable it and set the interval (nightly, or hourly for tighter loops). almyty triggers it with no external cron.
 
 ![The agent's schedule and webhook panels](/screenshots/schedule-config.png)
 
-5. **Deliver the result** — publish on Slack for an in-channel post, or register an outbound webhook so almyty POSTs the digest to your endpoint when the run finishes.
-6. **Review runs** — every night's run is in the audit trail with exactly what it queried.
+5. **Deliver the result**: publish on Slack for an in-channel post, or register an outbound webhook so almyty POSTs the digest to your endpoint when the run finishes.
+6. **Review runs**: every night's run is in the audit trail with exactly what it queried.
 
 ## Make it yours
 
@@ -23,7 +23,7 @@
 - Page someone via a PagerDuty tool when a check is critical, not just informational.
 - Feed thresholds from a config table so analysts tune it without touching the agent.
 
-**Uses** — `Data` · `Scheduled` · `Slack` · `Memory`
+**Uses**: `Data` · `Scheduled` · `Slack` · `Memory`
 
 ## Related
 

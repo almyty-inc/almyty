@@ -1,19 +1,18 @@
 # Versioning and Rollback
 
-Every change to an agent — and to your tools, APIs, and gateways — is tracked
-automatically. The **Change History** shows each version (who changed it and
-when, expandable to the exact field diff), and you can roll back to any of them.
-Below it, an **Audit Log** records the full activity trail. Nothing to turn on.
+Every change to an agent (and to your tools, APIs, and gateways) is tracked
+automatically, so you can always see what changed and undo it. The **Change
+History** shows each version (who changed it and when, expandable to the exact
+field diff), and you can roll back to any of them. Below it, an **Audit Log**
+records the full activity trail. Nothing to turn on.
 
-![Change History and Audit Log on an agent — every change tracked, expandable to a diff, with version saves](/screenshots/versioning-history.png)
+![Change History and Audit Log on an agent: every change tracked, expandable to a diff, with version saves](/screenshots/versioning-history.png)
 
 ## What's tracked
 
 Created, configuration updated, tools changed, activated/deactivated, a version
-saved, a rollback, an invocation — each with the timestamp, the user, and what
+saved, a rollback, an invocation: each with the timestamp, the user, and what
 changed.
-
-| Event | Description |
 
 | Event | Description |
 |-------|-------------|
@@ -28,22 +27,17 @@ changed.
 
 When you are about to make a big change, save a snapshot first. On the agent's
 **Versions** tab, click **Save Version** and write a short changelog; almyty
-stores the full configuration with an auto-incremented version number. To
-restore one, find it in the list and click **Rollback** — the agent's
+stores the full configuration with an auto-incremented version number.
+
+![Saving a version and the version list](/screenshots/versioning.png)
+
+To restore one, find it in the list and click **Rollback**. The agent's
 configuration is replaced with that snapshot, and the rollback itself is recorded
 in the audit log. Rolling back never deletes newer versions, so you can roll
 forward again at any time.
 
-Save a version over the API:
-
-```bash
-curl -X POST https://api.almyty.com/agents/{id}/versions \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{ "changelog": "Added a Gemini reviewer to the verify panel" }'
-```
-
 ## Good practice
 
 - Save a version before restructuring an agent, so there is always a restore point.
-- Write a real changelog — it is what makes the history useful later.
+- Write a real changelog: it is what makes the history useful later.
 - Test the agent after a rollback to confirm the restored configuration behaves.

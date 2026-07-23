@@ -1,9 +1,9 @@
 # 🔒 Air-gapped, self-hosted agents
 
-**Stack** — `Deploy: Docker Compose / Kubernetes (your infra)` · `Models: local (Ollama, vLLM)` · `Secrets: your vault` · `State: your Postgres` · `Output: agents, nothing leaves the network`
+**Stack**: `Deploy: Docker Compose / Kubernetes (your infra)` · `Models: local (Ollama, vLLM)` · `Secrets: your vault` · `State: your Postgres` · `Output: agents, nothing leaves the network`
 
-**Who it's for** — teams handling records that legally cannot leave the network — patient data, case files, trading positions.
-**What it does** — runs the whole platform on your own infrastructure against a local model, so agents work end to end without a single call crossing the boundary. Because the core is open source (Apache-2.0), this is configuration, not a special edition — the hosted service runs the same code.
+**Who it's for**: teams handling records that legally cannot leave the network, patient data, case files, trading positions.
+**What it does**: runs the whole platform on your own infrastructure against a local model, so agents work end to end without a single call crossing the boundary. Because the core is open source (Apache-2.0), this is configuration, not a special edition, the hosted service runs the same code.
 
 ## Build it
 
@@ -11,21 +11,21 @@
 
    ![The Compose file for a self-hosted deployment](/screenshots/self-hosting-compose.png)
 
-2. **Point at a local model** — add an AI Model whose base URL is a server you run (Ollama, vLLM, any OpenAI-compatible endpoint) inside the network. Inference stays on your hardware.
+2. **Point at a local model**: add an AI Model whose base URL is a server you run (Ollama, vLLM, any OpenAI-compatible endpoint) inside the network. Inference stays on your hardware.
 
    ![Adding a local, OpenAI-compatible model](/screenshots/llm-providers-create.png)
 
-3. **Keep secrets and data in place** — keys in your own [Credentials](/credentials) vault, memory in your Postgres, tools executed by a [runner](/runner) on machines you control.
+3. **Keep secrets and data in place**: keys in your own [Credentials](/credentials) vault, memory in your Postgres, tools executed by a [runner](/runner) on machines you control.
 
    ![The credentials vault, local](/screenshots/credentials-vault.png)
 
 ## Make it yours
 
-- The same governance — [verify gates, approvals, audit](/examples/governed-refund-agent) — applies unchanged, just inside your walls.
+- The same governance, [verify gates, approvals, audit](/examples/governed-refund-agent), applies unchanged, just inside your walls.
 - Use a runner to reach on-prem systems the cluster can't ([Give an agent a machine](/examples/expose-any-machine)).
 - Nothing has to cross the boundary: model calls, tool calls, secrets, and state all stay internal.
 
-**Uses** — `Enterprise` · `Self-host` · `Compliance`
+**Uses**: `Enterprise` · `Self-host` · `Compliance`
 
 ## Related
 

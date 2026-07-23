@@ -1,0 +1,38 @@
+# ACP server
+
+Serve any almyty agent over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP), so editors and clients that speak ACP can talk to it directly. Zed and JetBrains, among others, are ACP clients.
+
+```bash
+npx @almyty/acp-server acme/my-agent
+```
+
+## Usage
+
+Pass the agent by name, UUID, or `org/slug`:
+
+```bash
+almyty-acp my-agent
+almyty-acp acme/my-agent
+```
+
+The server speaks ACP over stdio (newline-delimited JSON), which is how ACP clients launch and connect to it.
+
+## Connect from an editor
+
+Point your editor's ACP agent config at the command. For Zed, add an entry that runs `npx @almyty/acp-server <agent>`; the editor starts the process and connects over stdio. JetBrains and other ACP clients follow the same pattern: the client owns the process, the server bridges it to your almyty agent.
+
+## Authentication
+
+Reads the shared `~/.almyty/credentials.json`. Log in first, or set the environment directly:
+
+| Variable | Description |
+|----------|-------------|
+| `ALMYTY_TOKEN` | API key (or auto-read from the credentials file) |
+| `ALMYTY_URL` | Backend URL (default `https://api.almyty.com`) |
+
+```bash
+npx @almyty/auth login
+npx @almyty/acp-server acme/my-agent
+```
+
+Prefer MCP instead? Serve the same agent's gateway to any MCP client with the [MCP server](/cli/mcp-server).
