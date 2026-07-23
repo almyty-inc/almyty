@@ -21,6 +21,7 @@ import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 
 import { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters } from './dto/llm-providers.dto';
 export type { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters };
@@ -131,6 +132,7 @@ export class LlmProvidersService {
     private readonly statsHelper: LlmStatsHelper,
     private readonly runner: LlmChatRunnerHelper,
     private readonly accessPolicy: AccessPolicyService,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   async createProvider(
@@ -179,8 +181,10 @@ export class LlmProvidersService {
         status: LlmProviderStatus.ACTIVE,
       });
 
-      // Encrypt the API key at rest before it touches the DB.
-      provider.encryptSensitiveData();
+      // Encrypt the API key at rest before it touches the DB. Routes through
+      // the org's envelope path: a BYO-KMS org gets encrypted:kms:, every other
+      // org gets the same platform encrypted:gcm: value as before.
+      await provider.encryptSensitiveDataForOrg(this.envelopeCrypto);
       const savedProvider = await this.llmProviderRepository.save(provider);
 
       // Perform initial health check. Pass the org we just created
@@ -260,8 +264,8 @@ export class LlmProvidersService {
       }
 
       // Re-encrypt before persisting (idempotent for an already-encrypted
-      // key that wasn't changed in this update).
-      provider.encryptSensitiveData();
+      // key that wasn't changed in this update). Org-aware envelope path.
+      await provider.encryptSensitiveDataForOrg(this.envelopeCrypto);
       const updatedProvider = await this.llmProviderRepository.save(provider);
 
       // Perform health check after update, scoped to the same org

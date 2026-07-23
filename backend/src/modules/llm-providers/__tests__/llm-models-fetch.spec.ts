@@ -1,4 +1,5 @@
 import { LlmModelsHelper } from '../llm-models.helper';
+import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 import { LlmProviderType } from '../../../entities/llm-provider.entity';
 import { callLlmProviderHttp } from '../providers/safe-request';
 
@@ -9,7 +10,7 @@ jest.mock('../providers/safe-request', () => ({
 const mockedCall = callLlmProviderHttp as jest.Mock;
 
 describe('LlmModelsHelper.fetchModelsByType', () => {
-  const helper = new LlmModelsHelper();
+  const helper = new LlmModelsHelper(makeEnvelopeCryptoMock());
 
   beforeEach(() => {
     jest.clearAllMocks();

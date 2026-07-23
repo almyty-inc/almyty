@@ -110,7 +110,7 @@ export class SkillRendererHelper {
             ' currently requires the caller to pass the full SOAP' +
             ' envelope as `--envelope` and the namespaced action as' +
             ' `--action` — this is being improved server-side.' +
-            ' See https://github.com/frane/almyty for status.',
+            ' See https://github.com/almyty-inc/almyty for status.',
         );
         lines.push('');
       }
