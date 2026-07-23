@@ -66,8 +66,14 @@ args = ["-y", "@almyty/mcp-server"]
 
 ## Modes
 
-- **Skill-first** (default): Exposes 2 tools (`almyty_execute` + `almyty_search`) and loads skills on demand. Keeps context small.
-- **Full**: Exposes all tools individually. Set `ALMYTY_MODE=full` to enable.
+- **Skill-first** (default): exposes two tools — `almyty_execute` and `almyty_search` — and loads skills on demand, so the model discovers and runs tools without every schema in context.
+- **Full**: registers every gateway tool individually. Set `ALMYTY_MODE=full` to enable.
+
+Both modes also register ten management tools for building on almyty from your
+assistant: `almyty_list_apis`, `almyty_create_api`, `almyty_import_schema`,
+`almyty_list_gateways`, `almyty_create_gateway`, `almyty_assign_tool`,
+`almyty_list_agents`, `almyty_create_agent`, `almyty_invoke_agent`, and
+`almyty_add_provider`.
 
 ## Environment variables
 
@@ -76,16 +82,20 @@ args = ["-y", "@almyty/mcp-server"]
 | `ALMYTY_URL` | API URL (default: `https://api.almyty.com`) |
 | `ALMYTY_TOKEN` | Auth token |
 | `ALMYTY_GATEWAY_ID` | Scope to a specific gateway |
-| `ALMYTY_MODE` | `skill` (default) or `full` |
+| `ALMYTY_MODE` | `skill-first` (default) or `full` |
 
 ## Authentication
 
 Requires `npx @almyty/auth login` first. Reads credentials from `~/.almyty/credentials.json`.
 
-## Docs
+## About almyty
 
-https://almyty.com/docs
+almyty is the full-stack platform for AI agents, agnostic by design: any LLM, any
+API turned into tools, served over MCP, A2A, UTCP, and Agent Skills. Open source,
+no lock-in.
 
-## License
+- Website — https://almyty.com
+- Docs — https://docs.almyty.com
+- Source — https://github.com/almyty-inc/almyty
 
-BSL-1.1
+Apache-2.0 © Almyty Inc.

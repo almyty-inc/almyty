@@ -152,7 +152,7 @@ export class LlmProvidersService {
 
       const user = await this.userRepository.findOne({
         where: { id: userId },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
 
       if (!user?.hasPermissionInOrganization(organizationId, 'manage_llm_providers')) {
@@ -516,7 +516,7 @@ export class LlmProvidersService {
   async getSession(sessionId: string, organizationId: string): Promise<Conversation> {
     const session = await this.conversationRepository.findOne({
       where: { id: sessionId, organizationId },
-      relations: ['provider', 'messages'],
+      relations: { provider: true, messages: true },
     });
 
     if (!session) {

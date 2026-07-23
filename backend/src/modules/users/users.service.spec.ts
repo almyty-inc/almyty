@@ -85,7 +85,7 @@ describe('UsersService', () => {
       expect(result).toBe(mockUser);
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        relations: ['organizationMemberships', 'organizationMemberships.organization', 'apiKeys'],
+        relations: { organizationMemberships: { organization: true }, apiKeys: true },
       });
     });
 
@@ -112,7 +112,7 @@ describe('UsersService', () => {
       expect(result).toBe(mockUser);
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { email: 'test@example.com' },
-        relations: ['organizationMemberships', 'organizationMemberships.organization'],
+        relations: { organizationMemberships: { organization: true } },
       });
     });
 
@@ -148,7 +148,7 @@ describe('UsersService', () => {
 
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        relations: ['organizationMemberships', 'organizationMemberships.organization', 'apiKeys'],
+        relations: { organizationMemberships: { organization: true }, apiKeys: true },
       });
       expect(userRepository.save).toHaveBeenCalled();
       expect(result.firstName).toBe('Jane');

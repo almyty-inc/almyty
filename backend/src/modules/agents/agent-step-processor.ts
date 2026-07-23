@@ -36,7 +36,7 @@ export class AgentStepProcessor {
   ) {}
 
   async processStep(runId: string): Promise<'continue' | 'done' | 'waiting'> {
-    const run = await this.s.runRepository.findOne({ where: { id: runId }, relations: ['agent'] });
+    const run = await this.s.runRepository.findOne({ where: { id: runId }, relations: { agent: true } });
     if (!run) {
       this.s.logger.warn(`Run ${runId} not found, skipping`);
       return 'done';
@@ -152,7 +152,7 @@ export class AgentStepProcessor {
       if (agent.agentConfig?.canCallAgents) {
         const otherAgents = await this.s.agentRepository.find({
           where: { organizationId: run.organizationId, status: 'active' as any, isTemporary: false },
-          select: ['id', 'name', 'description'],
+          select: { id: true, name: true, description: true },
         });
         subAgentDefs = otherAgents
           .filter(a => a.id !== agent.id)

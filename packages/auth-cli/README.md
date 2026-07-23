@@ -38,10 +38,14 @@ $ npx @almyty/auth whoami
 
 `login` runs entirely on your machine. It starts a loopback HTTP server, opens your browser to the almyty login page, and receives the token via POST body -- never in a URL. No password enters the CLI process.
 
-## Docs
+## About almyty
 
-https://almyty.com/docs
+almyty is the full-stack platform for AI agents, agnostic by design: any LLM, any
+API turned into tools, served over MCP, A2A, UTCP, and Agent Skills. Open source,
+no lock-in.
 
-## License
+- Website — https://almyty.com
+- Docs — https://docs.almyty.com
+- Source — https://github.com/almyty-inc/almyty
 
-BSL-1.1
+Apache-2.0 © Almyty Inc.

@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "almyty runner: long-running CLI daemon that executes processes on a user's machine on behalf of almyty agents.",
+  "description": "Connect your own machine to almyty \u2014 a small daemon that lets agents run tools and coding CLIs locally, with code and credentials staying on your box.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -41,5 +41,14 @@
     "cli"
   ],
   "author": "almyty",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "homepage": "https://almyty.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almyty-inc/almyty.git",
+    "directory": "packages/runner"
+  },
+  "bugs": {
+    "url": "https://github.com/almyty-inc/almyty/issues"
+  }
 }

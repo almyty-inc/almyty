@@ -136,7 +136,7 @@ describe('GatewayResolverService', () => {
           organizationId: mockOrganization.id,
           status: GatewayStatus.ACTIVE,
         },
-        relations: ['organization', 'authConfigs'],
+        relations: { organization: true, authConfigs: true },
       });
     });
 

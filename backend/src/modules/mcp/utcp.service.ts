@@ -115,7 +115,7 @@ export class UtcpService {
   private async resolveTools(gateway: Gateway): Promise<Tool[]> {
     const assignments = await this.gatewayToolRepository.find({
       where: { gatewayId: gateway.id, isActive: true },
-      relations: ['tool'],
+      relations: { tool: true },
     });
     return assignments
       .map((a) => a.tool)
@@ -154,7 +154,7 @@ export class UtcpService {
 
     const operation = await this.operationRepository.findOne({
       where: { id: tool.operationId },
-      relations: ['api'],
+      relations: { api: true },
     });
     if (!operation || !operation.api) {
       return null;

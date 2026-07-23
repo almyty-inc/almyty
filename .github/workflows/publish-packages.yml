@@ -24,10 +24,19 @@ on:
         required: true
         type: choice
         options:
+          - none
           - patch
           - minor
           - major
-        default: patch
+        default: none
+      dist_tag:
+        description: 'npm dist-tag channel (latest = prod, next = prerelease)'
+        required: true
+        type: choice
+        options:
+          - latest
+          - next
+        default: latest
 
 permissions:
   id-token: write
@@ -87,16 +96,47 @@ jobs:
       - name: Build and publish ${{ matrix.npm_name }}
         if: inputs.package == 'all' || inputs.package == matrix.id
         working-directory: ${{ matrix.dir }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm version ${{ inputs.version_bump }} --no-git-tag-version
-          npm ci || npm install
+          # OIDC trusted publishing: npm authenticates via the GitHub
+          # Actions id-token (permissions: id-token: write above) against
+          # the trusted publisher configured on npmjs.com for this repo +
+          # workflow filename. No NPM_TOKEN needed. Requires npm >= 11.5.
+          npm install -g npm@latest
+          if [ "${{ inputs.dist_tag }}" = "next" ]; then
+            # Prerelease channel: derive a throwaway <version>-next.<run>
+            # from the committed version and publish it to the 'next' tag.
+            # This overrides the version_bump 'none' path and is never
+            # committed back to the repo (see the Commit step guard).
+            BASE=$(node -p "require('./package.json').version")
+            npm version "${BASE}-next.${{ github.run_number }}" --no-git-tag-version
+          elif [ "${{ inputs.version_bump }}" != "none" ]; then
+            # 'none' publishes the committed version as-is (clean lockstep);
+            # patch/minor/major bump first if explicitly requested.
+            npm version ${{ inputs.version_bump }} --no-git-tag-version
+          fi
+          PKG=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          # Idempotent: skip if this exact version is already on npm, so the
+          # wave is safely re-runnable for the client->dependents bootstrap.
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then
+            echo "$PKG@$VER already published — skipping."
+            echo "SKIP_PUBLISH=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          # Drop the lockfile: several CLI packages pin @almyty/* to
+          # file:../ links (unbuilt local source in CI). Without the
+          # lockfile npm resolves them from the published registry versions.
+          rm -f package-lock.json
+          npm install --legacy-peer-deps --no-audit --no-fund
           npm run build || true
-          npm publish --access public
+          if [ "${{ inputs.dist_tag }}" = "next" ]; then
+            npm publish --access public --provenance --tag next
+          else
+            npm publish --access public --provenance
+          fi
 
       - name: Commit version bump
-        if: inputs.package == 'all' || inputs.package == matrix.id
+        if: (inputs.package == 'all' || inputs.package == matrix.id) && inputs.dist_tag != 'next' && inputs.version_bump != 'none' && env.SKIP_PUBLISH != '1'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

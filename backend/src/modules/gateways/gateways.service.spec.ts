@@ -1324,7 +1324,7 @@ describe('GatewaysService', () => {
 
       expect(gatewayRepository.find).toHaveBeenCalledWith({
         where: { organizationId: 'org-1', status: 'active' },
-        relations: ['tools', 'tools.tool'],
+        relations: { tools: { tool: true } },
       });
     });
 
@@ -1401,7 +1401,7 @@ describe('GatewaysService', () => {
       expect(result).toHaveLength(2);
       expect(gatewayRepository.find).toHaveBeenCalledWith({
         where: { organizationId: 'org-1', status: 'active' },
-        relations: ['tools', 'tools.tool', 'organization'],
+        relations: { tools: { tool: true }, organization: true },
       });
     });
 
@@ -1413,7 +1413,7 @@ describe('GatewaysService', () => {
       expect(result).toEqual([]);
       expect(gatewayRepository.find).toHaveBeenCalledWith({
         where: { organizationId: 'org-1', status: 'active' },
-        relations: ['tools', 'tools.tool', 'organization'],
+        relations: { tools: { tool: true }, organization: true },
       });
     });
   });

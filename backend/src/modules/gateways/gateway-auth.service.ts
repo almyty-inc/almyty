@@ -175,7 +175,7 @@ export class GatewayAuthService {
     try {
       const gatewayAuth = await this.gatewayAuthRepository.findOne({
         where: { id: authId },
-        relations: ['gateway'],
+        relations: { gateway: true },
       });
 
       if (!gatewayAuth || gatewayAuth.gateway.organizationId !== organizationId) {
@@ -219,7 +219,7 @@ export class GatewayAuthService {
   async deleteGatewayAuth(authId: string, organizationId: string): Promise<void> {
     const gatewayAuth = await this.gatewayAuthRepository.findOne({
       where: { id: authId },
-      relations: ['gateway'],
+      relations: { gateway: true },
     });
 
     if (!gatewayAuth || gatewayAuth.gateway.organizationId !== organizationId) {
@@ -340,7 +340,7 @@ export class GatewayAuthService {
   async listGatewayApiKeys(gatewayId: string, organizationId: string): Promise<ApiKey[]> {
     return this.apiKeyRepository.find({
       where: { gatewayId, organizationId, isActive: true },
-      select: ['id', 'name', 'keyPrefix', 'scopes', 'isActive', 'expiresAt', 'lastUsedAt', 'createdAt', 'gatewayId'],
+      select: { id: true, name: true, keyPrefix: true, scopes: true, isActive: true, expiresAt: true, lastUsedAt: true, createdAt: true, gatewayId: true },
       order: { createdAt: 'DESC' },
     });
   }

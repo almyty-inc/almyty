@@ -212,7 +212,7 @@ export class GatewaysStatsHelper {
 
     const gateways = await this.gatewayRepository.find({
       where: { organizationId, status: GatewayStatus.ACTIVE },
-      relations: ['tools', 'tools.tool'],
+      relations: { tools: { tool: true } },
     });
 
     const results: Array<{
@@ -356,7 +356,7 @@ export class GatewaysStatsHelper {
   async getAllUserGateways(organizationId: string): Promise<Gateway[]> {
     return this.gatewayRepository.find({
       where: { organizationId, status: GatewayStatus.ACTIVE },
-      relations: ['tools', 'tools.tool', 'organization'],
+      relations: { tools: { tool: true }, organization: true },
     });
   }
 

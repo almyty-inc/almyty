@@ -46,7 +46,7 @@ export class SkillGeneratorService {
     }
     const tool = await this.toolRepository.findOne({
       where: { id: toolId, organizationId },
-      relations: ['categories', 'operation', 'operation.api'],
+      relations: { categories: true, operation: { api: true } },
     });
 
     if (!tool) {
@@ -227,7 +227,7 @@ export class SkillGeneratorService {
   private async getGatewayTools(gatewayId: string): Promise<Tool[]> {
     const gatewayTools = await this.gatewayToolRepository.find({
       where: { gatewayId, isActive: true },
-      relations: ['tool', 'tool.categories', 'tool.operation', 'tool.operation.api'],
+      relations: { tool: { categories: true, operation: { api: true } } },
     });
 
     return gatewayTools.map(gt => gt.tool).filter(Boolean);

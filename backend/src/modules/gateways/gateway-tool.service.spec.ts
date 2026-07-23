@@ -745,7 +745,7 @@ describe('GatewayToolService', () => {
       expect(result).toBe(mockGatewayTool);
       expect(gatewayToolRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'gateway-tool-1' },
-        relations: ['gateway', 'tool'],
+        relations: { gateway: true, tool: true },
       });
     });
 

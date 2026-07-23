@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "ACP agent server for almyty — expose any almyty agent via the Agent Client Protocol",
+  "description": "Expose any almyty agent over the Agent Client Protocol (ACP) \u2014 drop your agent into ACP-compatible editors and clients.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -39,5 +39,14 @@
     "tsx": "^4.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.1.0"
+  },
+  "homepage": "https://almyty.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almyty-inc/almyty.git",
+    "directory": "packages/acp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/almyty-inc/almyty/issues"
   }
 }
