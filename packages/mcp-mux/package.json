@@ -4,11 +4,13 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "Southbound stdio-MCP id-rewrite multiplexer: fan N sessions into one downstream MCP child over a Unix socket.",
+  "description": "stdio-MCP multiplexer \u2014 fans many client sessions into one downstream MCP child over a Unix socket, rewriting ids. Internal almyty plumbing.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
@@ -24,7 +26,22 @@
     "typescript": "^5.3.0",
     "vitest": "^4.1.0"
   },
-  "keywords": ["almyty", "mcp", "multiplexer", "stdio", "proxy"],
+  "keywords": [
+    "almyty",
+    "mcp",
+    "multiplexer",
+    "stdio",
+    "proxy"
+  ],
   "author": "almyty",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "homepage": "https://almyty.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almyty-inc/almyty.git",
+    "directory": "packages/mcp-mux"
+  },
+  "bugs": {
+    "url": "https://github.com/almyty-inc/almyty/issues"
+  }
 }
