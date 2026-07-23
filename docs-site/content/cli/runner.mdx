@@ -1,0 +1,49 @@
+# Runner
+
+Connect one of your machines to almyty. Agents can then run tools, shell commands, and coding CLIs on it, while your code and credentials stay local.
+
+```bash
+npx @almyty/runner start --name my-laptop
+```
+
+![A connected runner](/screenshots/runner-detail.png)
+
+Once it is running, the machine appears under **Runners** and its capabilities show up as tools any agent can call.
+
+## Commands
+
+```bash
+almyty runner start [options]   # register this machine and run the daemon
+almyty runner status            # show the local daemon status
+almyty runner stop              # send SIGTERM to the local daemon
+```
+
+## Options for `start`
+
+| Flag | Does |
+|------|------|
+| `--name <name>` | Runner name, `[a-zA-Z0-9_-]`, up to 64 chars |
+| `--label key=value` | Add a routing label. Repeat for several |
+| `--config <path>` | JSON config file, overrides global and project config |
+| `--url <backend-url>` | Override the backend URL, e.g. `https://api.almyty.com` |
+
+```bash
+almyty runner start --name build-box --label gpu=true --label region=eu
+```
+
+## Safe by default
+
+A runner executes untrusted agent requests, so it starts locked down: container isolation, a concurrency cap, no outbound network, and no package installs, until you opt in through its config. See [docs/runner.md](https://github.com/almyty-inc/almyty/blob/master/docs/runner.md) for the config schema and the full method surface (`process.*`, `agent.*`, `coding.*`).
+
+## Drive coding CLIs from chat
+
+With a runner online, [`almyty chat`](/cli/chat) can dispatch tasks to coding agents (Claude Code, Codex, Gemini, Cursor, aider, and more) on that machine using `/code`. One agent session orchestrating a coding CLI on your own hardware, output streaming back to you.
+
+## Authentication
+
+Reads the shared `~/.almyty/credentials.json`. Log in first, or set `ALMYTY_TOKEN`:
+
+```bash
+npx @almyty/auth login
+npx @almyty/runner start --name my-laptop
+```

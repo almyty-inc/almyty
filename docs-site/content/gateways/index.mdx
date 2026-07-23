@@ -1,0 +1,67 @@
+# Gateways
+
+Publish your tools once, reach them from any agent or client. A gateway takes the
+tools you have already built and exposes them over MCP, A2A, UTCP, and Agent Skills,
+each from its own authenticated endpoint. You pick which tools a gateway serves, so
+every endpoint has a focused, purpose-built surface.
+
+![A gateway detail page with its assigned tools, endpoint, and auth](/screenshots/gateway-detail-tools.png)
+
+## The payoff
+
+Scope a gateway to the tools you want, generate a key on its Authentication tab, then
+add it to Claude Code in one line:
+
+```bash
+claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
+# clients send: x-api-key: <your gateway key>
+```
+
+```text
+> look up pet #2 and show its status
+  Claude calls getPetById via almyty -> "Rosie", available
+```
+
+The same gateway also answers over A2A and UTCP, so other agents and frameworks reach
+the identical tools without a rebuild.
+
+## Create one
+
+1. Open **Gateways** in the sidebar and click **Create Gateway**
+2. Pick a protocol (MCP, A2A, UTCP, or Skills), name it, and set a slug
+3. Open the **Tools** tab and assign the tools this gateway should serve
+4. Open the **Authentication** tab and add an auth method before going live
+
+![The Create Gateway dialog](/screenshots/gateways-create-dialog.png)
+
+The gateway's **Integrations** tab gives you the live endpoint plus discovery URLs to
+paste into any client:
+
+![A gateway's MCP endpoint, SSE, and discovery URLs](/screenshots/gateway-petstore-integration.png)
+
+## Protocols
+
+One set of tools, four ways to reach them. Start with the protocol your client speaks:
+
+| Protocol | Reach it with | Endpoint |
+|----------|---------------|----------|
+| [MCP](/gateways/mcp) | Claude, Cursor, Windsurf, VS Code Copilot | `api.almyty.com/{org}/{gateway}` |
+| [A2A](/gateways/a2a) | Google A2A agents, via the Agent Card | `api.almyty.com/a2a/{org}/{gateway}` |
+| [UTCP](/gateways/utcp) | Any HTTP client or agent framework | `api.almyty.com/utcp/{org}/{gateway}` |
+| [Agent Skills](/gateways/skills) | 30+ coding agents, via the Skills CLI | Installed as `SKILL.md` files |
+
+Agents you build on almyty also get an [OpenAI-compatible endpoint](/api-reference/openai-compatible),
+so anything that talks to the OpenAI API can call an agent without code changes.
+
+## Control what each gateway exposes
+
+- **[Authentication](/gateways/authentication)**: default-deny on every gateway. Add API
+  key, bearer, basic, JWT, OAuth 2.1, and manage keys per client.
+- **[Tool scoping](/gateways/tool-scoping)**: choose exactly which tools a gateway serves,
+  with per-gateway rate limits and security policies on each tool.
+
+## Related
+
+- [Connect an API and turn it into tools](/tools)
+- [Give Claude Code your own API](/examples/give-claude-your-api)
+- [MCP server CLI](/cli/mcp-server)

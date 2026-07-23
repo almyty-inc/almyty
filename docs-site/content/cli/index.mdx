@@ -1,84 +1,59 @@
-# CLI Tools
+# CLI
 
-almyty ships six npm packages that cover authentication, agent management, skill installation, interactive chat, and MCP server proxying. All packages share credentials via `~/.almyty/credentials.json`.
+Drive almyty from your terminal. One login covers agent runs, chat, skill installs, an MCP proxy, and a machine runner. Install the umbrella binary, or run any package straight from `npx`.
+
+```bash
+npm install -g @almyty/cli
+almyty login
+almyty agents run research-bot
+```
 
 ![almyty CLI help](/screenshots/cli/almyty-help.png)
 
-## Install
+## One login, every command
 
-Install the umbrella CLI globally for a single `almyty` binary, or run any package standalone via `npx`:
-
-```bash
-# Umbrella (all commands under one binary)
-$ npm install -g @almyty/cli
-$ almyty login
-$ almyty skills install acme/petstore
-
-# Or standalone packages via npx
-$ npx @almyty/auth login
-$ npx @almyty/skills install acme/petstore
-```
-
-## Packages
-
-| Package | Binary | Purpose |
-|---------|--------|---------|
-| `@almyty/auth` | `almyty-auth` | Login, logout, identity |
-| `@almyty/agents` | `almyty-agents` | List, run, and inspect agents |
-| `@almyty/chat` | `almyty-chat` | Interactive agent chat REPL |
-| `@almyty/skills` | `almyty-skills` | Install API skills into AI coding agents |
-| `@almyty/mcp-server` | `almyty-mcp` | MCP server proxy for any LLM client |
-| `@almyty/cli` | `almyty` | Umbrella CLI (delegates to all above) |
-
-## Authentication
-
-All CLIs read credentials from `~/.almyty/credentials.json` (mode 0600). Authenticate once:
+`almyty login` opens your browser, authenticates, and writes a key to `~/.almyty/credentials.json` (mode 0600). Every CLI reads it, so you log in once.
 
 ```bash
-$ npx @almyty/auth login
+almyty login                       # browser login
+almyty login --token ak_live_...   # or pass a key directly
 ```
 
-This opens your browser, authenticates via your almyty account, and mints a long-lived API key. You can also pass a token directly:
-
-```bash
-$ npx @almyty/auth login --token <your-api-key>
-```
-
-Environment variables override the credentials file:
+Two environment variables override the file when you need them (CI, containers):
 
 | Variable | Description |
 |----------|-------------|
 | `ALMYTY_TOKEN` | API key or token |
-| `ALMYTY_URL` | Backend URL (default: `https://api.almyty.com`) |
+| `ALMYTY_URL` | Backend URL (default `https://api.almyty.com`) |
 
-## Skill references
+## The commands
 
-Skills are addressed as `org/gateway` or `org/gateway/skill`:
+Each subcommand is also a standalone package you can `npx` without installing anything.
+
+| Command | Package | Does |
+|---------|---------|------|
+| [`almyty login`](/cli/authentication) | `@almyty/auth` | Browser login shared by every CLI |
+| [`almyty agents`](/cli/agents) | `@almyty/agents` | List, run, and inspect agents |
+| [`almyty chat`](/cli/chat) | `@almyty/chat` | Talk to an agent in an interactive REPL |
+| [`almyty skills`](/cli/skills) | `@almyty/skills` | Install API skills into AI coding agents |
+| [`almyty mcp`](/cli/mcp-server) | `@almyty/mcp-server` | Serve a gateway to any MCP client |
+| [`almyty runner`](/cli/runner) | `@almyty/runner` | Connect your machine so agents run tools on it |
+| [`almyty acp`](/cli/acp-server) | `@almyty/acp-server` | Serve an agent over the Agent Client Protocol |
+
+Run any of them standalone:
 
 ```bash
-$ npx @almyty/skills install acme/petstore           # all skills from a gateway
-$ npx @almyty/skills install acme/petstore/get-pet    # single skill
-$ npx @almyty/skills run acme/petstore/get-pet --id 3 # execute a skill
+npx @almyty/agents run research-bot
+npx @almyty/chat acme/support-bot
+npx @almyty/skills install acme/petstore
 ```
 
-## MCP server
+## Plug a gateway into Claude Code
 
-The MCP server connects your almyty **gateway** to any MCP-compatible client. You create a gateway in the UI, assign tools to it, then point the MCP server at that gateway:
+The fastest payoff: point Claude Code (or any MCP client) at a gateway and its tools are live in your assistant.
 
 ```bash
-# Claude Code
-$ claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
-
-# Cursor (.cursor/mcp.json)
-{
-  "mcpServers": {
-    "petstore": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server", "acme/petstore"]
-    }
-  }
-}
+claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
 ```
 
-The gateway ID is `org/slug` from the gateway detail page. See [MCP Server](/cli/mcp-server) for all client configs and modes.
-
+The gateway id is `org/slug` from the gateway's detail page. See [MCP server](/cli/mcp-server) for every client config and the skill-first mode that keeps token overhead low.
