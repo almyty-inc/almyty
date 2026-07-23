@@ -44,7 +44,7 @@ export class McpContentHandler {
       // Scope to APIs that have tools assigned to this gateway
       const gatewayTools = await this.gatewayToolRepository.find({
         where: { gatewayId, isActive: true },
-        relations: ['tool'],
+        relations: { tool: true },
       });
       const apiIds = [...new Set(gatewayTools.map(gt => gt.tool?.apiId).filter(Boolean))];
       if (apiIds.length === 0) {
@@ -52,14 +52,14 @@ export class McpContentHandler {
       } else {
         const allResources = await this.resourceRepository.find({
           where: { api: { organizationId } },
-          relations: ['api'],
+          relations: { api: true },
         });
         resources = allResources.filter(r => apiIds.includes(r.api?.id));
       }
     } else {
       resources = await this.resourceRepository.find({
         where: { api: { organizationId } },
-        relations: ['api'],
+        relations: { api: true },
       });
     }
 
@@ -97,7 +97,7 @@ export class McpContentHandler {
     const resourceId = match[1];
     const resource = await this.resourceRepository.findOne({
       where: { id: resourceId, api: { organizationId } },
-      relations: ['api'],
+      relations: { api: true },
     });
 
     if (!resource) {

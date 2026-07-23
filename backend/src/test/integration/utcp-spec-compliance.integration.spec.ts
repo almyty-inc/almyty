@@ -226,7 +226,7 @@ describeIfDb('UTCP spec compliance (real Postgres)', () => {
     // `gateway.authConfigs` populated).
     gateway = (await gatewayRepo.findOne({
       where: { id: gateway.id },
-      relations: ['authConfigs'],
+      relations: { authConfigs: true },
     })) as Gateway;
 
     // ─── Wire UtcpService against real repos ─────────────────────

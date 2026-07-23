@@ -10,9 +10,9 @@
 #
 # Scope:
 #
-#   - backend + frontend + docs-site: npm ecosystem, weekly cadence
-#     (frequent enough that a critical advisory lands within days,
-#     rare enough that we don't spam the PR queue with patch bumps)
+#   - backend + frontend + docs-site: npm ecosystem, monthly cadence
+#     (a critical advisory still lands within a few weeks, and one
+#     grouped PR a month keeps the review queue quiet)
 #
 #   - .github/workflows: GitHub Actions versions. actions/checkout and
 #     actions/setup-node majors are IGNORED — they're intentionally
@@ -25,9 +25,10 @@
 #     runs Trivy against a deploy months later.
 #
 # Opens max 5 PRs per ecosystem at a time so a lock-file regen burst
-# doesn't overwhelm review. Groups minor+patch bumps into a single
-# PR per ecosystem — security advisories and major bumps come as
-# individual PRs so they can be reviewed independently.
+# doesn't overwhelm review. Each npm ecosystem groups ALL version bumps
+# (major + minor + patch) into a single monthly PR, so a whole month of
+# updates lands as one green branch instead of a dozen separate PRs.
+# Security advisories still open as their own PRs regardless of grouping.
 version: 2
 updates:
   # ── Backend (NestJS API) ────────────────────────────────────
@@ -35,7 +36,7 @@ updates:
     directory: "/backend"
     target-branch: "development"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
     open-pull-requests-limit: 5
     labels:
@@ -45,6 +46,7 @@ updates:
       backend-minor-and-patch:
         applies-to: version-updates
         update-types:
+          - "major"
           - "minor"
           - "patch"
 
@@ -53,7 +55,7 @@ updates:
     directory: "/frontend"
     target-branch: "development"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
     open-pull-requests-limit: 5
     labels:
@@ -63,6 +65,7 @@ updates:
       frontend-minor-and-patch:
         applies-to: version-updates
         update-types:
+          - "major"
           - "minor"
           - "patch"
 
@@ -71,7 +74,7 @@ updates:
     directory: "/docs-site"
     target-branch: "development"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
     open-pull-requests-limit: 3
     labels:
@@ -81,6 +84,7 @@ updates:
       docs-minor-and-patch:
         applies-to: version-updates
         update-types:
+          - "major"
           - "minor"
           - "patch"
 
@@ -89,7 +93,7 @@ updates:
     directory: "/"
     target-branch: "development"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
     open-pull-requests-limit: 3
     labels:
@@ -107,7 +111,7 @@ updates:
     directory: "/backend"
     target-branch: "development"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
     labels:
       - "dependencies"
@@ -117,7 +121,7 @@ updates:
     directory: "/frontend"
     target-branch: "development"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
     labels:
       - "dependencies"
@@ -127,7 +131,7 @@ updates:
     directory: "/docs-site"
     target-branch: "development"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
     labels:
       - "dependencies"

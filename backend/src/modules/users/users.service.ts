@@ -94,7 +94,7 @@ export class UsersService {
   private async assertUserInOrg(userId: string, organizationId: string): Promise<void> {
     const exists = await this.userOrganizationRepository.findOne({
       where: { userId, organizationId },
-      select: ['id'],
+      select: { id: true },
     });
     if (!exists) {
       throw new NotFoundException('User not found');
@@ -104,11 +104,10 @@ export class UsersService {
   async findOne(id: string): Promise<User> {
     const user = await this.userRepository.findOne({
       where: { id },
-      relations: [
-        'organizationMemberships',
-        'organizationMemberships.organization',
-        'apiKeys',
-      ],
+      relations: {
+        organizationMemberships: { organization: true },
+        apiKeys: true,
+      },
     });
 
     if (!user) {
@@ -121,10 +120,9 @@ export class UsersService {
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepository.findOne({
       where: { email },
-      relations: [
-        'organizationMemberships',
-        'organizationMemberships.organization',
-      ],
+      relations: {
+        organizationMemberships: { organization: true },
+      },
     });
   }
 
@@ -276,7 +274,7 @@ export class UsersService {
     // For now, return basic API key usage data
     const apiKeys = await this.apiKeyRepository.find({
       where: { userId: id },
-      select: ['id', 'name', 'lastUsedAt', 'createdAt'],
+      select: { id: true, name: true, lastUsedAt: true, createdAt: true },
       order: { lastUsedAt: 'DESC' },
     });
 
@@ -311,7 +309,7 @@ export class UsersService {
     // we'd silently mass-mutate users in another org.
     const memberships = await this.userOrganizationRepository.find({
       where: { organizationId, userId: In(userIds) },
-      select: ['userId'],
+      select: { userId: true },
     });
     const allowedIds = memberships.map(m => m.userId);
     if (allowedIds.length === 0) return;

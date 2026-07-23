@@ -103,7 +103,7 @@ export class GatewayProtocolService {
     try {
       const gateway = await this.gatewayRepository.findOne({
         where: { id: request.gatewayId },
-        relations: ['tools', 'tools.tool', 'authConfigs'],
+        relations: { tools: { tool: true }, authConfigs: true },
       });
 
       if (!gateway) {
@@ -390,7 +390,7 @@ export class GatewayProtocolService {
     try {
       const gateway = await this.gatewayRepository.findOne({
         where: { id: gatewayId },
-        relations: ['tools', 'authConfigs'],
+        relations: { tools: true, authConfigs: true },
       });
 
       if (!gateway || !gateway.canAcceptRequests()) {

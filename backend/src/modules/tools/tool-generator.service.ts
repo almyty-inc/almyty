@@ -69,7 +69,7 @@ export class ToolGeneratorService {
       // Get all operations for the API
       let operations = await this.operationRepository.find({
         where: { apiId: api.id, isActive: true },
-        relations: ['resource'],
+        relations: { resource: true },
       });
 
       // Apply filters
@@ -455,7 +455,7 @@ export class ToolGeneratorService {
   async regenerateToolFromOperation(toolId: string): Promise<Tool> {
     const tool = await this.toolRepository.findOne({
       where: { id: toolId },
-      relations: ['operation', 'operation.api'],
+      relations: { operation: { api: true } },
     });
 
     if (!tool || !tool.operation) {

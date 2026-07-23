@@ -130,7 +130,7 @@ export class GatewayAuthValidators {
     // org on both the gateway-specific and org-wide paths.
     const gateway = await this.gatewayRepository.findOne({
       where: { id: authConfig.gatewayId },
-      select: ['id', 'organizationId'],
+      select: { id: true, organizationId: true },
     });
     if (!gateway) {
       return { isValid: false, error: 'Gateway not found', errorCode: 'GATEWAY_NOT_FOUND' };
@@ -145,7 +145,7 @@ export class GatewayAuthValidators {
         { keyHash, isActive: true, gatewayId: authConfig.gatewayId, organizationId: gateway.organizationId },
         { keyHash, isActive: true, gatewayId: null as any, organizationId: gateway.organizationId },
       ],
-      relations: ['user', 'user.organizationMemberships'],
+      relations: { user: { organizationMemberships: true } },
     });
 
     if (!apiKeyRecord) {
@@ -211,7 +211,7 @@ export class GatewayAuthValidators {
     // hash matched. Same class of bug as the API_KEY path above.
     const gateway = await this.gatewayRepository.findOne({
       where: { id: authConfig.gatewayId },
-      select: ['id', 'organizationId'],
+      select: { id: true, organizationId: true },
     });
     if (!gateway) {
       return { isValid: false, error: 'Gateway not found', errorCode: 'GATEWAY_NOT_FOUND' };
@@ -220,7 +220,7 @@ export class GatewayAuthValidators {
     const tokenHash = hashKey(token);
     const apiKeyRecord = await this.apiKeyRepository.findOne({
       where: { keyHash: tokenHash, isActive: true, organizationId: gateway.organizationId },
-      relations: ['user', 'user.organizationMemberships'],
+      relations: { user: { organizationMemberships: true } },
     });
 
     if (!apiKeyRecord) {
@@ -278,7 +278,7 @@ export class GatewayAuthValidators {
       // Look up user by email
       const user = await this.userRepository.findOne({
         where: { email: username },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
 
       if (!user || !user.isActive) {
@@ -306,7 +306,7 @@ export class GatewayAuthValidators {
       // gateway was being accessed — a silent cross-org bypass.
       const gateway = await this.gatewayRepository.findOne({
         where: { id: authConfig.gatewayId },
-        select: ['id', 'organizationId'],
+        select: { id: true, organizationId: true },
       });
       if (!gateway) {
         return { isValid: false, error: 'Gateway not found', errorCode: 'GATEWAY_NOT_FOUND' };
@@ -380,7 +380,7 @@ export class GatewayAuthValidators {
       if (payload.sub || payload.userId) {
         user = await this.userRepository.findOne({
           where: { id: payload.sub || payload.userId },
-          relations: ['organizationMemberships'],
+          relations: { organizationMemberships: true },
         });
       }
 
@@ -388,7 +388,7 @@ export class GatewayAuthValidators {
       // subject actually belongs to it (when a user was found).
       const gateway = await this.gatewayRepository.findOne({
         where: { id: authConfig.gatewayId },
-        select: ['id', 'organizationId'],
+        select: { id: true, organizationId: true },
       });
       const gatewayOrgId = gateway?.organizationId;
 

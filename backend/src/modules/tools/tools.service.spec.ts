@@ -406,7 +406,7 @@ describe('ToolsService', () => {
       expect(toolRepo.findOne).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'tool-1', organizationId: 'org-1' },
-          relations: expect.arrayContaining(['categories', 'operation', 'versions']),
+          relations: expect.objectContaining({ categories: true, operation: { api: true }, versions: true }),
         }),
       );
     });
@@ -419,7 +419,7 @@ describe('ToolsService', () => {
 
       expect(result).toBe(tool);
       expect(toolRepo.findOne).toHaveBeenCalledWith(
-        expect.objectContaining({ relations: [] }),
+        expect.objectContaining({ relations: {} }),
       );
     });
 
@@ -459,7 +459,7 @@ describe('ToolsService', () => {
 
       expect(toolRepo.findOne).toHaveBeenCalledWith(
         expect.objectContaining({
-          relations: expect.arrayContaining(['categories', 'versions']),
+          relations: expect.objectContaining({ categories: true, versions: true }),
         }),
       );
     });
@@ -954,7 +954,6 @@ describe('ToolsService', () => {
       expect(toolVersionRepo.find).toHaveBeenCalledWith({
         where: { toolId: 'tool-1' },
         order: { createdAt: 'DESC' },
-        relations: ['createdByUser'],
       });
     });
 

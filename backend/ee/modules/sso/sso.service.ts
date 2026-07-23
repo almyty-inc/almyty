@@ -9,7 +9,7 @@ import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { SAML, Profile } from '@node-saml/passport-saml';
-import { Issuer } from 'openid-client';
+import * as oidc from 'openid-client';
 
 import { User } from '../../../src/entities/user.entity';
 import {
@@ -123,7 +123,15 @@ export class SsoService {
 
   // ── OIDC ────────────────────────────────────────────────────────────
 
-  /** Overridable factory so unit tests can inject a fake OIDC client. */
+  /**
+   * Overridable factory so unit tests can inject a fake OIDC client.
+   *
+   * openid-client v6 replaced the class-based `Issuer`/`Client` API with a
+   * functional one built around a discovered `Configuration`. We wrap that
+   * Configuration in a thin adapter exposing the two methods the callers use
+   * (`authorizationUrl` + `callback`), which keeps this factory's contract
+   * stable for the unit tests that stub it.
+   */
   async buildOidcClient(config: DecryptedSsoConfig): Promise<any> {
     if (
       !config.oidcIssuerUrl ||
@@ -133,13 +141,53 @@ export class SsoService {
     ) {
       throw new BadRequestException('OIDC is not fully configured');
     }
-    const issuer = await Issuer.discover(config.oidcIssuerUrl);
-    return new issuer.Client({
-      client_id: config.oidcClientId,
-      client_secret: config.oidcClientSecretPlain,
-      redirect_uris: [config.oidcRedirectUri],
-      response_types: ['code'],
-    });
+    const issuerUrl = new URL(config.oidcIssuerUrl);
+    // openid-client v6 (via oauth4webapi) rejects non-HTTPS issuers by
+    // default. Permit HTTP only for loopback issuers — local dev IdPs and
+    // the oauth2-mock-server integration test — never for a real remote IdP.
+    const isLoopback =
+      issuerUrl.protocol === 'http:' &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(issuerUrl.hostname);
+    const discoveryOptions = isLoopback
+      ? { execute: [oidc.allowInsecureRequests] }
+      : undefined;
+    const configuration = await oidc.discovery(
+      issuerUrl,
+      config.oidcClientId,
+      config.oidcClientSecretPlain,
+      undefined,
+      discoveryOptions,
+    );
+    const redirectUri = config.oidcRedirectUri;
+    return {
+      authorizationUrl(parameters: Record<string, string>): string {
+        return oidc
+          .buildAuthorizationUrl(configuration, {
+            redirect_uri: redirectUri,
+            response_type: 'code',
+            ...parameters,
+          })
+          .href;
+      },
+      async callback(
+        _redirectUri: string,
+        params: Record<string, any>,
+        checks: { state?: string } = {},
+      ): Promise<{ claims: () => Record<string, any> }> {
+        const currentUrl = new URL(redirectUri);
+        for (const [key, value] of Object.entries(params)) {
+          if (value !== undefined && value !== null) {
+            currentUrl.searchParams.set(key, String(value));
+          }
+        }
+        const tokens = await oidc.authorizationCodeGrant(
+          configuration,
+          currentUrl,
+          { expectedState: checks.state },
+        );
+        return { claims: () => tokens.claims() ?? {} };
+      },
+    };
   }
 
   async getOidcLoginUrl(

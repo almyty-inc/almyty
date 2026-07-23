@@ -44,7 +44,7 @@ export class PromotedSkillsService {
   ): Promise<PromotedSkill> {
     const run = await this.runRepository.findOne({
       where: { id: runId, organizationId },
-      relations: ['agent'],
+      relations: { agent: true },
     });
     if (!run) {
       throw new NotFoundException('Run not found');
@@ -125,7 +125,7 @@ export class PromotedSkillsService {
   async listForServing(organizationId: string): Promise<Array<{ name: string; content: string }>> {
     const skills = await this.skillRepository.find({
       where: { organizationId },
-      select: ['slug', 'content'],
+      select: { slug: true, content: true },
     });
     return skills.map((s) => ({ name: s.slug, content: s.content }));
   }
