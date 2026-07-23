@@ -48,10 +48,14 @@ Configure as an external ACP agent with command `npx -y @almyty/acp-server <agen
 
 Requires `npx @almyty/auth login` first. Reads credentials from `~/.almyty/credentials.json`.
 
-## Docs
+## About almyty
 
-https://almyty.com/docs
+almyty is the full-stack platform for AI agents, agnostic by design: any LLM, any
+API turned into tools, served over MCP, A2A, UTCP, and Agent Skills. Open source,
+no lock-in.
 
-## License
+- Website — https://almyty.com
+- Docs — https://docs.almyty.com
+- Source — https://github.com/almyty-inc/almyty
 
-BSL-1.1
+Apache-2.0 © Almyty Inc.
