@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { ChannelInstallation } from '../../../entities/channel-installation.entity';
 import { Gateway } from '../../../entities/gateway.entity';
 import { OrganizationRole } from '../../../entities/user-organization.entity';
-import { encryptField, decryptField } from '../../../common/security/field-crypto';
+import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 
 /** Credential keys whose values are encrypted at rest. */
@@ -35,6 +35,7 @@ export class ChannelInstallationService {
   constructor(
     @InjectRepository(ChannelInstallation)
     private readonly installationRepository: Repository<ChannelInstallation>,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
     // @Global notifications pipeline; @Optional() keeps existing unit
     // tests (constructed without it) working.
     @Optional()
@@ -47,7 +48,7 @@ export class ChannelInstallationService {
    * with fresh credentials and bump installedAt.
    */
   async upsert(gateway: Gateway, input: UpsertInstallationInput): Promise<ChannelInstallation> {
-    const encrypted = this.encryptCredentials(input.credentials);
+    const encrypted = await this.encryptCredentials(gateway.organizationId, input.credentials);
 
     let installation = await this.installationRepository.findOne({
       where: { gatewayId: gateway.id, externalTenantId: input.externalTenantId },
@@ -114,7 +115,7 @@ export class ChannelInstallationService {
       where: { gatewayId, externalTenantId, status: 'active' },
     });
     if (!installation || !installation.credentials) return null;
-    return this.decryptCredentials(installation.credentials);
+    return this.decryptCredentials(installation.organizationId, installation.credentials);
   }
 
   /** Sanitized list for the dashboard — credentials never leave the server. */
@@ -158,19 +159,41 @@ export class ChannelInstallationService {
   // Crypto helpers
   // ---------------------------------------------------------------------------
 
-  private encryptCredentials(credentials: Record<string, any>): Record<string, any> {
+  /**
+   * Encrypt the secret credential keys for an org. A BYO-KMS org's secrets
+   * are wrapped `encrypted:kms:` via the customer CMK; every other org keeps
+   * the same platform `encrypted:gcm:` value as before (EnvelopeCryptoService
+   * falls back to the platform path when no CMK is in play).
+   */
+  private async encryptCredentials(
+    organizationId: string,
+    credentials: Record<string, any>,
+  ): Promise<Record<string, any>> {
     const out: Record<string, any> = {};
     for (const [key, value] of Object.entries(credentials || {})) {
       if (value == null) continue;
-      out[key] = SECRET_CREDENTIAL_KEYS.has(key) ? encryptField(String(value)) : value;
+      out[key] = SECRET_CREDENTIAL_KEYS.has(key)
+        ? await this.envelopeCrypto.encryptForOrg(organizationId, String(value))
+        : value;
     }
     return out;
   }
 
-  private decryptCredentials(credentials: Record<string, any>): Record<string, any> {
+  /**
+   * Decrypt stored credentials. Prefix routing means platform / plaintext
+   * (not-yet-migrated) values decrypt exactly as before; `encrypted:kms:`
+   * values are unwrapped via the org's CMK.
+   */
+  private async decryptCredentials(
+    organizationId: string,
+    credentials: Record<string, any>,
+  ): Promise<Record<string, any>> {
     const out: Record<string, any> = {};
     for (const [key, value] of Object.entries(credentials)) {
-      out[key] = typeof value === 'string' ? decryptField(value) : value;
+      out[key] =
+        typeof value === 'string'
+          ? await this.envelopeCrypto.decryptForOrg(organizationId, value)
+          : value;
     }
     return out;
   }

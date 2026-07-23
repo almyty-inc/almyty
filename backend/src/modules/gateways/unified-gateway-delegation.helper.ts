@@ -14,6 +14,7 @@ import { GatewayRateLimitService } from './gateway-rate-limit.service';
 import { ChannelGatewayService } from './channels/channel-gateway.service';
 import { WhatsAppCloudAdapter } from './channels/adapters/whatsapp-cloud.adapter';
 import { getChannelConfig } from './channels/channel-config.helper';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { Organization } from '../../entities/organization.entity';
 import { McpService } from '../mcp/mcp.service';
 import { AlmytyMcpService } from '../mcp/almyty-mcp.service';
@@ -76,6 +77,10 @@ export class UnifiedGatewayDelegation {
     private readonly gatewayRateLimit: GatewayRateLimitService,
     private readonly channelGatewayService: ChannelGatewayService,
     @Optional() private readonly metrics?: MetricsRecorderService,
+    // Optional so positional unit tests can construct the helper; when
+    // present, warms a BYO-KMS org's DEK before the sync getChannelConfig
+    // reads on the channel webhook path.
+    @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
   ) {}
 
   async handleGatewayRequest(
@@ -172,6 +177,11 @@ export class UnifiedGatewayDelegation {
     res: Response,
     body: any,
   ) {
+    // Warm the org's DEK before the sync getChannelConfig reads below so a
+    // BYO-KMS gateway's `encrypted:kms:` secrets unwrap (no-op for non-KMS
+    // orgs, which never produce kms values).
+    await this.envelopeCrypto?.warmOrg(gateway.organizationId);
+
     // Meta's webhook verification handshake for WhatsApp Cloud is a
     // GET (hub.mode=subscribe&hub.verify_token=...&hub.challenge=...)
     // that must be answered with the raw challenge string. This is the
@@ -180,7 +190,7 @@ export class UnifiedGatewayDelegation {
     if (req.method === 'GET' && gateway.type === GatewayType.WHATSAPP_CLOUD) {
       const challenge = WhatsAppCloudAdapter.handleVerification(
         (req.query as Record<string, any>) ?? {},
-        getChannelConfig(gateway.configuration),
+        getChannelConfig(gateway.configuration, gateway.organizationId),
       );
       if (challenge === null) {
         throw new HttpException('Webhook verification failed', HttpStatus.FORBIDDEN);
@@ -210,7 +220,7 @@ export class UnifiedGatewayDelegation {
       : undefined;
 
     const adapter = this.channelGatewayService.getAdapter(gateway.type);
-    const verified = await adapter.verifyWebhook(body, headers, getChannelConfig(gateway.configuration), rawBody);
+    const verified = await adapter.verifyWebhook(body, headers, getChannelConfig(gateway.configuration, gateway.organizationId), rawBody);
     if (!verified) {
       this.bumpGatewayCounters(gateway.id, false);
       throw new HttpException('Webhook signature verification failed', HttpStatus.UNAUTHORIZED);

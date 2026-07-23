@@ -3,7 +3,17 @@ import { NotFoundException } from '@nestjs/common';
 import { ChannelInstallationService } from '../channel-installation.service';
 import { ChannelInstallation } from '../../../../entities/channel-installation.entity';
 import { Gateway } from '../../../../entities/gateway.entity';
-import { isEncrypted, decryptField } from '../../../../common/security/field-crypto';
+import { isEncrypted, decryptField, encryptField } from '../../../../common/security/field-crypto';
+
+/**
+ * Platform-path envelope stub — mirrors EnvelopeCryptoService for a non-KMS
+ * org (encrypt -> `encrypted:gcm:`, decrypt via prefix routing). Keeps these
+ * store tests asserting the unchanged platform behavior without a live KMS.
+ */
+const platformEnvelope = {
+  encryptForOrg: (_orgId: string, plaintext: string) => Promise.resolve(encryptField(plaintext)),
+  decryptForOrg: (_orgId: string, value: string) => Promise.resolve(decryptField(value)),
+};
 
 /**
  * Unit coverage for the multi-workspace installation store: upsert
@@ -24,7 +34,7 @@ describe('ChannelInstallationService', () => {
       save: jest.fn(async (inst: any) => ({ id: 'inst-1', ...inst })),
       count: jest.fn(),
     };
-    service = new ChannelInstallationService(repo);
+    service = new ChannelInstallationService(repo, platformEnvelope as any);
   });
 
   describe('upsert', () => {

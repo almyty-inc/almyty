@@ -13,7 +13,8 @@ import { WebSocket } from 'ws';
 
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { ChannelGatewayService } from './channel-gateway.service';
-import { getChannelConfig } from './channel-config.helper';
+import { getChannelConfig, normalizeChannelConfigKeys } from './channel-config.helper';
+import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 
 /**
  * Discord delivers inbound messages over a persistent Gateway
@@ -108,6 +109,13 @@ const NON_RESUMABLE_CLOSE_CODES = new Set([4007, 4009]);
 
 interface DiscordConnection {
   gateway: Gateway;
+  /**
+   * Decrypted bot token, resolved once per connect via the org-aware
+   * envelope path and cached here. Reading it once (rather than decrypting on
+   * every IDENTIFY/RESUME frame) keeps the sync socket handshake independent
+   * of the DEK cache TTL for the life of the connection.
+   */
+  botToken: string | null;
   socket: DiscordSocket | null;
   sessionId: string | null;
   resumeUrl: string | null;
@@ -162,6 +170,9 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
     // Optional: without redis (local dev, unit tests) the transport
     // runs in single-instance mode and connects unconditionally.
     @Optional() @InjectRedis() private readonly redis?: DiscordLeaseRedis,
+    // Optional so positional unit tests can construct the transport; when
+    // present, decrypts a BYO-KMS gateway's kms bot token via the org's CMK.
+    @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -201,8 +212,14 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
    */
   sync(gateway: Gateway): void {
     if (gateway.type !== GatewayType.DISCORD) return;
+    // Presence check only — inspect the stored (still-encrypted) value
+    // rather than decrypting, so this sync entry point never touches the
+    // CMK. The token is decrypted later, in connect(), at an async seam.
+    const rawToken = normalizeChannelConfigKeys(gateway.configuration).bot_token;
     const shouldRun =
-      gateway.status === GatewayStatus.ACTIVE && !!getChannelConfig(gateway.configuration).bot_token;
+      gateway.status === GatewayStatus.ACTIVE &&
+      typeof rawToken === 'string' &&
+      rawToken.length > 0;
     if (shouldRun) {
       this.start(gateway);
     } else {
@@ -215,6 +232,7 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
     this.stop(gateway.id);
     const conn: DiscordConnection = {
       gateway,
+      botToken: null,
       socket: null,
       sessionId: null,
       resumeUrl: null,
@@ -417,6 +435,12 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
   private connect(conn: DiscordConnection): void {
     if (conn.stopped || !conn.leaseHeld) return;
 
+    // Kick off (non-blocking) a DEK warm for a BYO-KMS gateway so the token
+    // is unwrappable by the time Discord's HELLO arrives (a network round
+    // trip away). No-op for non-KMS orgs. The socket opens synchronously
+    // below regardless, preserving the pre-KMS connect behavior.
+    void this.envelopeCrypto?.warmOrg(conn.gateway.organizationId);
+
     const url =
       conn.canResume && conn.resumeUrl
         ? this.withGatewayParams(conn.resumeUrl)
@@ -463,6 +487,24 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
     switch (payload.op) {
       case Op.HELLO:
         this.startHeartbeats(conn, socket, payload.d?.heartbeat_interval ?? 41250);
+        // Resolve the bot token now (HELLO precedes the IDENTIFY/RESUME
+        // frame). The org's DEK was warmed at connect(), so a BYO-KMS
+        // gateway's `encrypted:kms:` token unwraps via this sync read;
+        // platform / plaintext tokens are unaffected. Cache on conn so the
+        // frames below (and later resumes on the same connection) never
+        // re-decrypt. A cold-cache kms read throws -> recycle rather than
+        // send a bad/empty token.
+        try {
+          conn.botToken =
+            getChannelConfig(conn.gateway.configuration, conn.gateway.organizationId)
+              .bot_token ?? null;
+        } catch (err: any) {
+          this.logger.error(
+            `discord bot token decrypt failed (gateway ${conn.gateway.id}): ${err?.message ?? err}`,
+          );
+          this.recycle(conn, socket, conn.canResume);
+          break;
+        }
         if (conn.canResume && conn.sessionId && conn.seq !== null) {
           this.sendResume(conn, socket);
         } else {
@@ -536,7 +578,7 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
     this.sendJson(socket, {
       op: Op.IDENTIFY,
       d: {
-        token: getChannelConfig(conn.gateway.configuration).bot_token,
+        token: conn.botToken,
         intents: DISCORD_INTENTS,
         properties: { os: process.platform, browser: 'almyty', device: 'almyty' },
       },
@@ -547,7 +589,7 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
     this.sendJson(socket, {
       op: Op.RESUME,
       d: {
-        token: getChannelConfig(conn.gateway.configuration).bot_token,
+        token: conn.botToken,
         session_id: conn.sessionId,
         seq: conn.seq,
       },
