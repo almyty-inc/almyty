@@ -19,6 +19,7 @@
  * otherwise flap in environments without a DB) stay mock-only.
  */
 import { DataSource, Repository } from 'typeorm';
+import { makeEnvelopeCryptoMock } from '../envelope-crypto.mock';
 
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Tool, ToolStatus, ToolType } from '../../entities/tool.entity';
@@ -341,6 +342,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         new LlmStatsHelper(conversationRepo, providerRepo),
         {} as any, // runner
         { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // accessPolicy
+        makeEnvelopeCryptoMock(), // envelopeCrypto
       );
     });
 

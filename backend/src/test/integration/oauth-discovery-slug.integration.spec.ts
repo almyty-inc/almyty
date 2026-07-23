@@ -18,14 +18,27 @@ describeIfDb('OAuth discovery org slug resolution (real DB)', () => {
   let ds: DataSource;
 
   beforeAll(async () => {
-    ds = new DataSource({
-      type: 'postgres',
+    const conn = {
+      type: 'postgres' as const,
       host: process.env.DATABASE_HOST || 'localhost',
       port: parseInt(process.env.DATABASE_PORT || '5432'),
       username: process.env.DATABASE_USERNAME || 'postgres',
       password: process.env.DATABASE_PASSWORD || 'password',
       database: process.env.DATABASE_NAME || 'almyty_test',
+    };
+    // Isolate this raw-DataSource spec on its own schema so its
+    // synchronize DDL doesn't race the other DB-integration specs that
+    // also synchronize against `public` under parallel jest workers —
+    // the same isolation every sibling integration spec already uses.
+    const bootstrap = new DataSource({ ...conn, entities: [] });
+    await bootstrap.initialize();
+    await bootstrap.query('CREATE SCHEMA IF NOT EXISTS oauth_discovery_test');
+    await bootstrap.destroy();
+    ds = new DataSource({
+      ...conn,
       entities: [path.join(__dirname, '../../entities/*.entity{.ts,.js}')],
+      schema: 'oauth_discovery_test',
+      dropSchema: true,
       synchronize: true,
     });
     await ds.initialize();

@@ -6,6 +6,8 @@ import { McpSourcesService } from '../mcp-sources.service';
 import { McpClientService, McpClientError } from '../mcp-client.service';
 import { McpSource, McpSourceStatus } from '../../../entities/mcp-source.entity';
 import { Tool, ToolType, ToolStatus } from '../../../entities/tool.entity';
+import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
+import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 import { encryptField, decryptField, isEncrypted } from '../../../common/security/field-crypto';
 
 describe('McpSourcesService', () => {
@@ -66,6 +68,7 @@ describe('McpSourcesService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         McpSourcesService,
+        { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
         { provide: getRepositoryToken(McpSource), useValue: sourceRepository },
         { provide: getRepositoryToken(Tool), useValue: toolRepository },
         { provide: McpClientService, useValue: mcpClient },

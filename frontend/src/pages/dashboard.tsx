@@ -1,22 +1,20 @@
 import React, { useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Activity,
   AlertTriangle,
   ArrowRight,
-  Check,
-  Circle,
-  ChevronRight,
 } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { gatewaysApi, toolsApi, apisApi, agentsApi, analyticsApi } from '@/lib/api'
+import { gatewaysApi, toolsApi, apisApi, agentsApi, analyticsApi, onboardingApi } from '@/lib/api'
+import { GettingStartedCard, useOnboarding, useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
+import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
-import { useAuthStore } from '@/store/auth'
 import { pluralize } from '@/lib/utils'
 import type { RequestLog } from '@/types'
 
@@ -34,39 +32,6 @@ const humanizePath = (path: string, method: string) => {
   return `${method} ${path.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '…')}`
 }
 
-function ChecklistItem({ done, label, description, action }: {
-  done: boolean
-  label: string
-  description: string
-  action: () => void
-}) {
-  return (
-    <button
-      onClick={action}
-      className={`flex items-center gap-3 w-full text-left p-3 rounded-lg border transition-colors ${
-        done
-          ? 'bg-muted border-muted opacity-60'
-          : 'hover:border-primary hover:bg-primary/5 cursor-pointer'
-      }`}
-    >
-      {done ? (
-        <div className="flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-600 shrink-0">
-          <Check className="h-4 w-4" />
-        </div>
-      ) : (
-        <Circle className="h-6 w-6 text-muted-foreground shrink-0" />
-      )}
-      <div className="flex-1 min-w-0">
-        <div className={`text-sm font-medium ${done ? 'line-through text-muted-foreground' : ''}`}>
-          {label}
-        </div>
-        <div className="text-xs text-muted-foreground">{description}</div>
-      </div>
-      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-    </button>
-  )
-}
-
 export function DashboardPage() {
   useEffect(() => {
     document.title = 'Dashboard | almyty'
@@ -74,9 +39,27 @@ export function DashboardPage() {
   }, [])
 
   const { currentOrganization } = useOrganizationStore()
-  const { user } = useAuthStore()
   const orgId = currentOrganization?.id
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  // Server-computed onboarding checklist. Derived from real entity
+  // state, so CLI-driven completions check themselves off here too.
+  const { data: onboarding } = useOnboarding(orgId)
+
+  const seedSample = useSeedSampleWorkspace(orgId)
+
+  const dismissOnboarding = useMutation({
+    mutationFn: () => onboardingApi.setDismissed(orgId as string, true),
+    onSuccess: (next) => {
+      captureEvent('onboarding_dismissed', {
+        steps_done: next
+          ? Object.values(next.steps).filter(Boolean).length
+          : undefined,
+      })
+      queryClient.invalidateQueries({ queryKey: ['onboarding', orgId] })
+    },
+  })
 
   const { data: gatewaysData, isLoading: loadingGateways } = useQuery({
     queryKey: ['gateways', orgId],
@@ -132,10 +115,11 @@ export function DashboardPage() {
 
   const recentLogs = recentLogsData?.data || []
 
-  // Onboarding: show checklist when not all steps are complete
-  const userGateways = gateways.filter((g: any) => !g.isSystem)
-  const allStepsComplete = apis.length > 0 && tools.length > 0 && userGateways.length > 0 && agents.length > 0
-  const showOnboarding = !allStepsComplete
+  // Onboarding: the card is shown while the org has not yet reached the
+  // "real" activation milestone and the user has not dismissed it. The
+  // completion of each step is computed server-side (see useOnboarding).
+  const showOnboarding =
+    !!onboarding && !onboarding.dismissed && !onboarding.activatedRealAt
 
   // Action items: APIs with no generated tools
   // Tools connect to APIs through operations, not directly via apiId
@@ -180,73 +164,12 @@ export function DashboardPage() {
       </div>
 
       {showOnboarding ? (
-        /* Getting Started Checklist */
-        <Card className="border-t-2 border-t-violet-500/20">
-          <CardHeader>
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <CardTitle className="text-lg">
-                  {user?.name ? `Welcome, ${user.name.split(' ')[0]}` : 'Welcome to almyty'}
-                </CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Four steps from an API schema to a live AI-ready gateway. Open any step and we'll walk you through.
-                </p>
-              </div>
-              {(() => {
-                const done = [apis.length > 0, tools.length > 0, userGateways.length > 0, agents.length > 0].filter(Boolean).length
-                const pct = Math.round((done / 4) * 100)
-                return (
-                  <div className="flex flex-col items-end gap-1 min-w-[140px]">
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {done} of 4 complete
-                    </span>
-                    <div
-                      role="progressbar"
-                      aria-label="Onboarding progress"
-                      aria-valuenow={done}
-                      aria-valuemin={0}
-                      aria-valuemax={4}
-                      className="h-1.5 w-full rounded-full bg-muted overflow-hidden"
-                    >
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-all duration-500 ease-out"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })()}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <ChecklistItem
-                done={apis.length > 0}
-                label="Connect your first API"
-                description="Import an OpenAPI, GraphQL, SOAP, or Protobuf schema to auto-generate tools"
-                action={() => navigate('/apis?new=1')}
-              />
-              <ChecklistItem
-                done={tools.length > 0}
-                label="Generate tools from your API"
-                description="Each API operation becomes one callable tool with a typed parameter schema"
-                action={() => navigate('/tools')}
-              />
-              <ChecklistItem
-                done={userGateways.length > 0}
-                label="Create a gateway"
-                description="Serve your tools and agents via MCP, UTCP, A2A, Agent Skills, and more"
-                action={() => navigate('/gateways?new=1')}
-              />
-              <ChecklistItem
-                done={agents.length > 0}
-                label="Build an agent"
-                description="Orchestrate LLM calls, tool calls, conditions, and loops in the visual DAG builder"
-                action={() => navigate('/agents/new')}
-              />
-            </div>
-          </CardContent>
-        </Card>
+        <GettingStartedCard
+          state={onboarding}
+          onSeedSample={() => seedSample.mutate()}
+          seeding={seedSample.isPending}
+          onDismiss={() => dismissOnboarding.mutate()}
+        />
       ) : (
         <>
           {/* Pipeline: APIs → Tools → Gateways → Agents */}

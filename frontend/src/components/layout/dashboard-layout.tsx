@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { SetupPill } from '@/components/onboarding/setup-pill'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -362,6 +363,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             >
               {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
             </Button>
+          </div>
+
+          {/* Onboarding setup pill — lingers until real activation */}
+          <div className={cn("flex-shrink-0", sidebarCollapsed ? "px-2 pt-2" : "px-4 pt-3")}>
+            <SetupPill collapsed={sidebarCollapsed} />
           </div>
 
           {/* User Menu */}

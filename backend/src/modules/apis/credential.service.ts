@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import axios from 'axios';
 
 import { Credential, CredentialType } from '../../entities/credential.entity';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { Api } from '../../entities/api.entity';
 import { validateUrl } from '../../common/security/url-validator';
 
@@ -50,6 +51,7 @@ export class CredentialService {
     private credentialRepository: Repository<Credential>,
     @InjectRepository(Api)
     private apiRepository: Repository<Api>,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   /**
@@ -93,8 +95,8 @@ export class CredentialService {
       organizationId,
     });
 
-    // Encrypt before saving
-    credential.encryptSensitiveData();
+    // Encrypt before saving (org-aware envelope path).
+    await credential.encryptSensitiveDataForOrg(this.envelopeCrypto);
 
     const saved = await this.credentialRepository.save(credential);
 
@@ -153,7 +155,7 @@ export class CredentialService {
 
     if (dto.config) {
       credential.config = dto.config;
-      credential.encryptSensitiveData();
+      await credential.encryptSensitiveDataForOrg(this.envelopeCrypto);
     }
 
     const saved = await this.credentialRepository.save(credential);
@@ -202,6 +204,8 @@ export class CredentialService {
     }
 
     try {
+      // Warm the org's DEK before sync getAuthHeaders (no-op for non-KMS orgs).
+      await this.envelopeCrypto.warmOrg(credential.organizationId);
       const headers = credential.getAuthHeaders();
       const params = credential.getQueryParams();
 
@@ -267,6 +271,8 @@ export class CredentialService {
       return freshCredential;
     }
 
+    // Warm the org's DEK before the sync decrypt read (no-op for non-KMS orgs).
+    await this.envelopeCrypto.warmOrg(freshCredential.organizationId);
     const config = freshCredential.getDecryptedConfig();
     const refreshToken = config.refreshToken;
     const tokenEndpoint = config.tokenEndpoint;
@@ -326,7 +332,7 @@ export class CredentialService {
         freshCredential.expiresAt = new Date(Date.now() + expires_in * 1000);
       }
 
-      freshCredential.encryptSensitiveData();
+      await freshCredential.encryptSensitiveDataForOrg(this.envelopeCrypto);
       await this.credentialRepository.save(freshCredential);
 
       this.logger.log(`OAuth2 token refreshed for credential ${freshCredential.id}`);

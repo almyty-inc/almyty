@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
-import { decryptField } from '../../../common/security/field-crypto';
+import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { ChannelInstallationService } from './channel-installation.service';
 import { ChannelInstallation } from '../../../entities/channel-installation.entity';
 
@@ -38,6 +38,7 @@ export class SlackInstallService {
   constructor(
     private readonly configService: ConfigService,
     private readonly installationService: ChannelInstallationService,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -86,8 +87,13 @@ export class SlackInstallService {
   // OAuth flow
   // ---------------------------------------------------------------------------
 
-  /** The gateway's Slack app OAuth client credentials, or throws 400. */
-  getClientCredentials(gateway: Gateway): { clientId: string; clientSecret: string } {
+  /**
+   * The gateway's Slack app OAuth `client_id` (public, stored plaintext), or
+   * throws 400 when the gateway isn't configured for multi-workspace installs.
+   * Split from the secret so the authorize-URL path stays synchronous and
+   * never touches the CMK.
+   */
+  getClientId(gateway: Gateway): string {
     const cfg = gateway.configuration || {};
     const clientId = cfg.client_id || cfg.clientId;
     const rawSecret = cfg.client_secret || cfg.clientSecret;
@@ -96,7 +102,26 @@ export class SlackInstallService {
         'This Slack channel is not configured for multi-workspace installs (client_id and client_secret required)',
       );
     }
-    return { clientId: String(clientId), clientSecret: decryptField(String(rawSecret)) };
+    return String(clientId);
+  }
+
+  /**
+   * The gateway's Slack app OAuth client credentials, or throws 400. The
+   * `client_secret` is decrypted org-aware: a BYO-KMS org's secret is
+   * unwrapped via the customer CMK, platform / plaintext values decrypt
+   * exactly as before (prefix routing in EnvelopeCryptoService).
+   */
+  async getClientCredentials(
+    gateway: Gateway,
+  ): Promise<{ clientId: string; clientSecret: string }> {
+    const cfg = gateway.configuration || {};
+    const clientId = this.getClientId(gateway);
+    const rawSecret = cfg.client_secret || cfg.clientSecret;
+    const clientSecret = await this.envelopeCrypto.decryptForOrg(
+      gateway.organizationId,
+      String(rawSecret),
+    );
+    return { clientId, clientSecret };
   }
 
   isInstallable(gateway: Gateway): boolean {
@@ -118,7 +143,7 @@ export class SlackInstallService {
 
   /** The slack.com/oauth/v2/authorize URL the install endpoint 302s to. */
   buildAuthorizeUrl(gateway: Gateway, requestBase?: string): string {
-    const { clientId } = this.getClientCredentials(gateway);
+    const clientId = this.getClientId(gateway);
     const params = new URLSearchParams({
       client_id: clientId,
       scope: SLACK_INSTALL_SCOPES,
@@ -143,7 +168,7 @@ export class SlackInstallService {
       throw new BadRequestException('Invalid or expired state');
     }
 
-    const { clientId, clientSecret } = this.getClientCredentials(gateway);
+    const { clientId, clientSecret } = await this.getClientCredentials(gateway);
 
     const fetchImpl = globalThis.fetch || (await import('node-fetch')).default;
     const res = await (fetchImpl as any)('https://slack.com/api/oauth.v2.access', {

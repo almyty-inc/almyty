@@ -131,7 +131,7 @@ describe('EmailAdapter', () => {
       expect(r.metadata?.subject).toBe('a subject folded across two lines');
     });
 
-    it('handles nested multipart (mixed containing alternative) and skips attachments', () => {
+    it('handles nested multipart (mixed containing alternative) and captures attachment metadata', () => {
       const mime = [
         'From: dave@example.com',
         'Subject: nested',
@@ -151,13 +151,69 @@ describe('EmailAdapter', () => {
         '--INNER--',
         '--OUTER',
         'Content-Type: application/pdf; name="doc.pdf"',
+        'Content-Disposition: attachment; filename="doc.pdf"',
         'Content-Transfer-Encoding: base64',
         '',
         'JVBERi0xLjQ=',
         '--OUTER--',
       ].join('\r\n');
       const r = adapter.normalizeInbound(mime);
+      // The text body still wins even with a trailing attachment part.
       expect(r.text).toBe('nested plain body');
+      // Attachment metadata surfaces on the normalized message.
+      expect(r.attachments).toEqual([
+        { url: '', type: 'application/pdf', name: 'doc.pdf' },
+      ]);
+      // Richer per-part detail (size, disposition) rides in metadata.
+      expect(r.metadata?.attachments).toHaveLength(1);
+      const att = r.metadata?.attachments[0];
+      expect(att.contentType).toBe('application/pdf');
+      expect(att.filename).toBe('doc.pdf');
+      expect(att.disposition).toBe('attachment');
+      // base64 "JVBERi0xLjQ=" decodes to the 8-byte "%PDF-1.4".
+      expect(att.size).toBe(8);
+    });
+
+    it('leaves attachments undefined for a plain text-only message', () => {
+      const mime = [
+        'From: eve@example.com',
+        'Subject: no files',
+        'Content-Type: text/plain',
+        '',
+        'just text',
+      ].join('\r\n');
+      const r = adapter.normalizeInbound(mime);
+      expect(r.attachments).toBeUndefined();
+      expect(r.metadata?.attachments).toEqual([]);
+    });
+
+    it('captures an inline image attachment with its content-id', () => {
+      const mime = [
+        'From: frank@example.com',
+        'Subject: inline',
+        'Content-Type: multipart/related; boundary="REL"',
+        '',
+        '--REL',
+        'Content-Type: text/html',
+        '',
+        '<p>see <img src="cid:logo123"></p>',
+        '--REL',
+        'Content-Type: image/png; name="logo.png"',
+        'Content-Disposition: inline; filename="logo.png"',
+        'Content-ID: <logo123>',
+        'Content-Transfer-Encoding: base64',
+        '',
+        'iVBORw0KGgo=',
+        '--REL--',
+      ].join('\r\n');
+      const r = adapter.normalizeInbound(mime);
+      expect(r.attachments).toEqual([
+        { url: '', type: 'image/png', name: 'logo.png' },
+      ]);
+      const att = r.metadata?.attachments[0];
+      expect(att.contentType).toBe('image/png');
+      expect(att.contentId).toBe('logo123');
+      expect(att.disposition).toBe('inline');
     });
   });
 

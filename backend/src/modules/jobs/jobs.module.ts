@@ -4,7 +4,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { SchemaImportProcessor } from './processors/schema-import.processor';
 import { ProviderHealthProcessor, PROVIDER_HEALTH_QUEUE } from './processors/provider-health.processor';
+import { ProviderUsagePullProcessor, PROVIDER_USAGE_PULL_QUEUE } from './processors/provider-usage-pull.processor';
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
+import { ProviderUsageModule } from '../provider-usage/provider-usage.module';
 import { ApisModule } from '../apis/apis.module';
 import { ToolsModule} from '../tools/tools.module';
 import { SchemaParserModule } from '../schema-parser/schema-parser.module';
@@ -48,12 +50,17 @@ import { LlmProvider } from '../../entities/llm-provider.entity';
     // cheap; the repeatable job is only scheduled when
     // PROVIDER_HEALTH_RECHECK_CRON is set (see the processor).
     BullModule.registerQueue({ name: PROVIDER_HEALTH_QUEUE }),
+    // Scheduled external usage/cost pull (P7). Defaults to daily; the
+    // processor no-ops for orgs without a usage API key. Cadence via
+    // PROVIDER_USAGE_PULL_CRON (or =off to disable).
+    BullModule.registerQueue({ name: PROVIDER_USAGE_PULL_QUEUE }),
     SchemaParserModule,
     ToolsModule,
     forwardRef(() => ApisModule),
     LlmProvidersModule,
+    ProviderUsageModule,
   ],
-  providers: [SchemaImportProcessor, ProviderHealthProcessor],
+  providers: [SchemaImportProcessor, ProviderHealthProcessor, ProviderUsagePullProcessor],
   exports: [BullModule, SchemaImportProcessor],
 })
 export class JobsModule {}
