@@ -106,6 +106,24 @@ jobs:
             --type spdxjson \
             "almyty/${{ matrix.image }}@${DIGEST}"
 
+  # Roll the released version out to production. Prod is deployed ONLY from
+  # here (build-publish.yml deploys dev/staging only), pinning the semver
+  # tag so `kubectl` shows the running version — never a digest.
+  deploy-production:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fire production deploy (by version tag)
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Deploying production at almyty/*:${VERSION}"
+          gh api repos/almyty-inc/infra/dispatches \
+            -f event_type=deploy \
+            -F client_payload[environment]="production" \
+            -F client_payload[image_tag]="${VERSION}"
+
   # Create the GitHub Release object so tags self-document (release.yml
   # otherwise only publishes images). Idempotent — edits if it exists.
   github-release:
