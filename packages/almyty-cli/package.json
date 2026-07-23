@@ -1,6 +1,9 @@
 {
   "name": "@almyty/cli",
-  "version": "0.1.4",
+  "version": "1.2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Single installable almyty CLI — login, agents, chat, skills, mcp under one binary",
   "type": "module",
   "main": "dist/index.js",
@@ -28,13 +31,13 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/auth": "^0.1.0",
-    "@almyty/agents": "^0.1.0",
-    "@almyty/chat": "^0.1.0",
-    "@almyty/skills": "^1.0.2",
-    "@almyty/mcp-server": "^1.0.0",
-    "@almyty/acp-server": "^1.0.0",
-    "@almyty/runner": "^0.1.0"
+    "@almyty/auth": "^1.2.0",
+    "@almyty/agents": "^1.2.0",
+    "@almyty/chat": "^1.2.0",
+    "@almyty/skills": "^1.2.0",
+    "@almyty/mcp-server": "^1.2.0",
+    "@almyty/acp-server": "^1.2.0",
+    "@almyty/runner": "^1.2.0"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",
