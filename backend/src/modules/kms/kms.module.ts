@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { OrgKmsConfig } from '../../entities/org-kms-config.entity';
@@ -16,6 +16,7 @@ import { KmsController } from './kms.controller';
  * otherwise. `LicensingModule` is @Global, so `OrgLicenseResolver` (used to
  * check the `byo_kms` entitlement per org) is injectable without importing it.
  */
+@Global()
 @Module({
   imports: [TypeOrmModule.forFeature([OrgKmsConfig])],
   controllers: [KmsController],

@@ -4,6 +4,8 @@ import { NotFoundException, ForbiddenException, BadRequestException } from '@nes
 import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
 import { callOpenAI, callAnthropic, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { makeEnvelopeCryptoMock } from '../../test/envelope-crypto.mock';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
 import { Message, MessageRole, MessageStatus } from '../../entities/message.entity';
 import { User } from '../../entities/user.entity';
@@ -62,6 +64,7 @@ describe('LlmProvidersService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LlmProvidersService,
+        { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
         {
           provide: getRepositoryToken(LlmProvider),
           useValue: {

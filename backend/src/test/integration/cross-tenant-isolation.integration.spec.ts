@@ -32,6 +32,7 @@
  */
 import { DataSource } from 'typeorm';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { makeEnvelopeCryptoMock } from '../envelope-crypto.mock';
 
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
@@ -513,6 +514,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
             return { bypass: true, teamIds: [] };
           }),
         } as any, // AccessPolicyService
+        makeEnvelopeCryptoMock(), // envelopeCrypto
       );
 
       const credRepo = fx.ds.getRepository(Credential);
@@ -652,7 +654,8 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         {} as any, // chatHelper
         {} as any, // statsHelper
         {} as any, // runner
-        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => { qb.andWhere(`${alias}."organizationId" = :_orgId`, { _orgId: organizationId }); return { bypass: true, teamIds: [] }; }) } as any, // accessPolicy
+        { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => { qb.andWhere(`${alias}.\"organizationId\" = :_orgId`, { _orgId: organizationId }); return { bypass: true, teamIds: [] }; }) } as any, // accessPolicy
+        makeEnvelopeCryptoMock(), // envelopeCrypto
       );
 
       const provRepo = fx.ds.getRepository(LlmProvider);

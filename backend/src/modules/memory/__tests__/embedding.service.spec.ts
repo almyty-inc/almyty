@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import axios from 'axios';
 import { EmbeddingService, HASH_EMBEDDING_MODEL } from '../embedding.service';
+import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
+import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../../entities/llm-provider.entity';
 
 jest.mock('axios');
@@ -34,6 +36,7 @@ describe('EmbeddingService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EmbeddingService,
+        { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
         {
           provide: getRepositoryToken(LlmProvider),
           useValue: { find: repoFind },

@@ -4,6 +4,8 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { CredentialsService } from './credentials.service';
 import { Credential } from '../../entities/credential.entity';
 import { ApiKey } from '../../entities/api-key.entity';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { makeEnvelopeCryptoMock } from '../../test/envelope-crypto.mock';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { Api } from '../../entities/api.entity';
 import { Gateway } from '../../entities/gateway.entity';
@@ -24,6 +26,7 @@ describe('CredentialsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CredentialsService,
+        { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
         {
           provide: getRepositoryToken(Credential),
           useValue: {
@@ -192,6 +195,7 @@ describe('CredentialsService', () => {
         ...createData,
         organizationId: 'org-1',
         encryptSensitiveData: jest.fn(),
+        encryptSensitiveDataForOrg: jest.fn().mockResolvedValue(undefined),
       };
 
       credentialRepository.create.mockReturnValue(mockCreated);
@@ -208,7 +212,7 @@ describe('CredentialsService', () => {
           keyLocation: 'header',
         }),
       );
-      expect(mockCreated.encryptSensitiveData).toHaveBeenCalled();
+      expect(mockCreated.encryptSensitiveDataForOrg).toHaveBeenCalled();
       expect(credentialRepository.save).toHaveBeenCalledWith(mockCreated);
       // Returned value should have masked config
       expect(result.config.apiKey).toBe('sk-r****7890');
@@ -227,6 +231,7 @@ describe('CredentialsService', () => {
         ...createData,
         organizationId: 'org-1',
         encryptSensitiveData: jest.fn(),
+        encryptSensitiveDataForOrg: jest.fn().mockResolvedValue(undefined),
       };
       credentialRepository.create.mockReturnValue(mockCreated);
       credentialRepository.save.mockResolvedValue(mockCreated);
@@ -252,6 +257,7 @@ describe('CredentialsService', () => {
         ...createData,
         organizationId: 'org-1',
         encryptSensitiveData: jest.fn(),
+        encryptSensitiveDataForOrg: jest.fn().mockResolvedValue(undefined),
       };
       credentialRepository.create.mockReturnValue(mockCreated);
       credentialRepository.save.mockResolvedValue(mockCreated);
@@ -279,6 +285,7 @@ describe('CredentialsService', () => {
         ...createData,
         organizationId: 'org-1',
         encryptSensitiveData: jest.fn(),
+        encryptSensitiveDataForOrg: jest.fn().mockResolvedValue(undefined),
       };
       credentialRepository.create.mockReturnValue(mockCreated);
       credentialRepository.save.mockResolvedValue(mockCreated);
@@ -316,6 +323,7 @@ describe('CredentialsService', () => {
         organizationId: 'org-1',
         config: { apiKey: 'encrypted:abc:def' },
         encryptSensitiveData: jest.fn(),
+        encryptSensitiveDataForOrg: jest.fn().mockResolvedValue(undefined),
       };
 
       credentialRepository.findOne.mockResolvedValue(existing);
@@ -328,7 +336,7 @@ describe('CredentialsService', () => {
       );
 
       expect(existing.name).toBe('Updated Name');
-      expect(existing.encryptSensitiveData).toHaveBeenCalled();
+      expect(existing.encryptSensitiveDataForOrg).toHaveBeenCalled();
       expect(credentialRepository.save).toHaveBeenCalledWith(existing);
     });
 
@@ -340,6 +348,7 @@ describe('CredentialsService', () => {
         teamId: null,
         config: {},
         encryptSensitiveData: jest.fn(),
+        encryptSensitiveDataForOrg: jest.fn().mockResolvedValue(undefined),
       };
       credentialRepository.findOne.mockResolvedValue(existing);
       credentialRepository.save.mockResolvedValue(existing);
@@ -362,6 +371,7 @@ describe('CredentialsService', () => {
         teamId: 'team-uuid-old',
         config: {},
         encryptSensitiveData: jest.fn(),
+        encryptSensitiveDataForOrg: jest.fn().mockResolvedValue(undefined),
       };
       credentialRepository.findOne.mockResolvedValue(existing);
       credentialRepository.save.mockResolvedValue(existing);
@@ -380,6 +390,7 @@ describe('CredentialsService', () => {
         teamId: 'team-1',
         config: {},
         encryptSensitiveData: jest.fn(),
+        encryptSensitiveDataForOrg: jest.fn().mockResolvedValue(undefined),
       };
       credentialRepository.findOne.mockResolvedValue(existing);
       accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'forbidden' });
@@ -398,6 +409,7 @@ describe('CredentialsService', () => {
         teamId: null,
         config: {},
         encryptSensitiveData: jest.fn(),
+        encryptSensitiveDataForOrg: jest.fn().mockResolvedValue(undefined),
       };
       credentialRepository.findOne.mockResolvedValue(existing);
       accessPolicy.canAccess.mockResolvedValueOnce({ allowed: true, reason: 'ok' });

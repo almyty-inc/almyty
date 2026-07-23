@@ -11,6 +11,7 @@ import * as Redis from 'ioredis';
 import { randomBytes, createHash } from 'crypto';
 
 import { Credential, CredentialType } from '../../entities/credential.entity';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { validateUrl } from '../../common/security/url-validator';
 
 export interface OAuth2Preset {
@@ -140,6 +141,7 @@ export class OAuth2Service {
     @InjectRepository(Credential)
     private readonly credentialRepository: Repository<Credential>,
     @InjectRedis() private readonly redis: Redis.Redis,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   /**
@@ -363,8 +365,8 @@ export class OAuth2Service {
       },
     });
 
-    // Encrypt sensitive data before saving
-    credential.encryptSensitiveData();
+    // Encrypt sensitive data before saving (org-aware envelope path).
+    await credential.encryptSensitiveDataForOrg(this.envelopeCrypto);
 
     const saved = await this.credentialRepository.save(credential);
     this.logger.log(
@@ -459,8 +461,8 @@ export class OAuth2Service {
       },
     });
 
-    // Encrypt sensitive data before saving
-    credential.encryptSensitiveData();
+    // Encrypt sensitive data before saving (org-aware envelope path).
+    await credential.encryptSensitiveDataForOrg(this.envelopeCrypto);
 
     const saved = await this.credentialRepository.save(credential);
     this.logger.log(

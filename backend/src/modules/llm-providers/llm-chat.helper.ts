@@ -18,6 +18,7 @@ import { ChatRequest, ChatResponse, StreamChunk } from './dto/llm-providers.dto'
 import { callLlmProviderHttp } from './providers/safe-request';
 import { safeErrorBody, safeErrorMessage, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
 import { ToolExecutionOptions } from '../tools/tool-executor.service';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 
 @Injectable()
 export class LlmChatHelper {
@@ -41,6 +42,7 @@ export class LlmChatHelper {
     private readonly providers: LlmProvidersService,
     private readonly stats: LlmStatsHelper,
     private readonly runner: LlmChatRunnerHelper,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   async chat(
@@ -358,6 +360,11 @@ export class LlmChatHelper {
 
       const costFn = this.modelsHelper.calculateProviderCost.bind(this.modelsHelper);
       let response: ChatResponse;
+
+      // Streaming dispatches straight to callOpenAIStream/callAnthropicStream
+      // (bypassing runner.callLlmProvider), so warm the org's DEK here too
+      // before the sync getAuthHeaders read. No-op for non-KMS orgs.
+      await this.envelopeCrypto.warmOrg(provider.organizationId);
 
       switch (provider.type) {
         case LlmProviderType.OPENAI:
