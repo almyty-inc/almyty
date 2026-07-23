@@ -64,6 +64,7 @@ import { NotificationPreference } from './entities/notification-preference.entit
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { ApisModule } from './modules/apis/apis.module';
 import { ToolsModule } from './modules/tools/tools.module';
 import { McpSourcesModule } from './modules/mcp-sources/mcp-sources.module';
@@ -279,6 +280,7 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     AuthModule,
     UsersModule,
     OrganizationsModule,
+    OnboardingModule,
     SchemaParserModule,
     JsonSchemaTranslatorModule,
     ToolsModule,

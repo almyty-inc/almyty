@@ -14,6 +14,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
+import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
 import { Switch } from '@/components/ui/switch'
 import {
   Select,
@@ -124,6 +125,7 @@ export function ToolsPage() {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
   const navigate = useNavigate()
+  const seedSample = useSeedSampleWorkspace(currentOrganization?.id)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -602,11 +604,21 @@ return new Promise((resolve, reject) => {
                   <EmptyState
                     icon={Wrench}
                     title="No tools yet"
-                    description="Tools are what your agents call. Import an API to auto-generate tools from its operations, or create one by hand for an HTTP endpoint, GraphQL query, JavaScript script, or LLM prompt."
+                    description="Tools are generated from your APIs. Import an API and its operations appear here."
                     action={
-                      <Button onClick={() => setIsCreateDialogOpen(true)}>
+                      <Button onClick={() => navigate('/apis?new=1')}>
                         <Plus className="h-4 w-4 mr-2" />
-                        Create Tool
+                        Import API
+                      </Button>
+                    }
+                    secondaryAction={
+                      <Button
+                        variant="outline"
+                        className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                        onClick={() => seedSample.mutate()}
+                        disabled={seedSample.isPending || !currentOrganization}
+                      >
+                        {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
                       </Button>
                     }
                     className="py-16"

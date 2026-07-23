@@ -13,6 +13,7 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
+import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
 import { SchemaImportDialog } from '@/components/SchemaImportDialog'
 
 import { apisApi } from '@/lib/api'
@@ -37,6 +38,7 @@ export function ApisPage() {
   const { success, error } = useNotifications()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const seedSample = useSeedSampleWorkspace(currentOrganization?.id)
 
   // Get all tools to show accurate counts per API
   const { data: allToolsData } = useQuery({
@@ -297,11 +299,21 @@ export function ApisPage() {
                     <EmptyState
                       icon={Globe}
                       title="Connect your first API"
-                      description="Point almyty at an OpenAPI, GraphQL, SOAP, Protobuf, or SDK package and every operation becomes a tool your agents can call."
+                      description="Import an OpenAPI, GraphQL, SOAP, or Protobuf schema — every operation becomes a typed tool."
                       action={
                         <Button onClick={() => setCreateDialogOpen(true)}>
                           <Plus className="h-4 w-4 mr-2" />
                           Import API
+                        </Button>
+                      }
+                      secondaryAction={
+                        <Button
+                          variant="outline"
+                          className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                          onClick={() => seedSample.mutate()}
+                          disabled={seedSample.isPending || !currentOrganization}
+                        >
+                          {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
                         </Button>
                       }
                       className="py-16"
