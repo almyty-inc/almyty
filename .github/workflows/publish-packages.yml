@@ -29,6 +29,14 @@ on:
           - minor
           - major
         default: none
+      dist_tag:
+        description: 'npm dist-tag channel (latest = prod, next = prerelease)'
+        required: true
+        type: choice
+        options:
+          - latest
+          - next
+        default: latest
 
 permissions:
   id-token: write
@@ -94,9 +102,16 @@ jobs:
           # the trusted publisher configured on npmjs.com for this repo +
           # workflow filename. No NPM_TOKEN needed. Requires npm >= 11.5.
           npm install -g npm@latest
-          # 'none' publishes the committed version as-is (clean lockstep);
-          # patch/minor/major bump first if explicitly requested.
-          if [ "${{ inputs.version_bump }}" != "none" ]; then
+          if [ "${{ inputs.dist_tag }}" = "next" ]; then
+            # Prerelease channel: derive a throwaway <version>-next.<run>
+            # from the committed version and publish it to the 'next' tag.
+            # This overrides the version_bump 'none' path and is never
+            # committed back to the repo (see the Commit step guard).
+            BASE=$(node -p "require('./package.json').version")
+            npm version "${BASE}-next.${{ github.run_number }}" --no-git-tag-version
+          elif [ "${{ inputs.version_bump }}" != "none" ]; then
+            # 'none' publishes the committed version as-is (clean lockstep);
+            # patch/minor/major bump first if explicitly requested.
             npm version ${{ inputs.version_bump }} --no-git-tag-version
           fi
           PKG=$(node -p "require('./package.json').name")
@@ -114,10 +129,14 @@ jobs:
           rm -f package-lock.json
           npm install --legacy-peer-deps --no-audit --no-fund
           npm run build || true
-          npm publish --access public --provenance
+          if [ "${{ inputs.dist_tag }}" = "next" ]; then
+            npm publish --access public --provenance --tag next
+          else
+            npm publish --access public --provenance
+          fi
 
       - name: Commit version bump
-        if: (inputs.package == 'all' || inputs.package == matrix.id) && inputs.version_bump != 'none' && env.SKIP_PUBLISH != '1'
+        if: (inputs.package == 'all' || inputs.package == matrix.id) && inputs.dist_tag != 'next' && inputs.version_bump != 'none' && env.SKIP_PUBLISH != '1'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
