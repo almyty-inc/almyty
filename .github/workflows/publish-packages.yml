@@ -108,6 +108,10 @@ jobs:
             echo "SKIP_PUBLISH=1" >> "$GITHUB_ENV"
             exit 0
           fi
+          # Drop the lockfile: several CLI packages pin @almyty/* to
+          # file:../ links (unbuilt local source in CI). Without the
+          # lockfile npm resolves them from the published registry versions.
+          rm -f package-lock.json
           npm install --legacy-peer-deps --no-audit --no-fund
           npm run build || true
           npm publish --access public --provenance
