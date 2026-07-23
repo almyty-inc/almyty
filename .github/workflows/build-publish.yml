@@ -91,8 +91,6 @@ jobs:
     # Always build on tag pushes / manual dispatch; on branch pushes only
     # when backend or k8s changed.
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true'
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v6
 
@@ -103,11 +101,10 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Push only the moving env tag. The deploy pins the exact image by the
-      # digest emitted below (steps.build.outputs.digest), so there is no
-      # per-commit tag to accumulate on Docker Hub.
+      # Push the moving env tag (dev|staging|prod). release.yml additionally
+      # tags v* builds with the semver (0.1.4/0.1/0/latest). No per-commit
+      # tags, no digests.
       - uses: docker/build-push-action@v7
-        id: build
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -123,8 +120,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [meta, changes]
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true'
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v6
 
@@ -135,9 +130,8 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Push only the moving env tag; deploy pins by digest (see build-api).
+      # Push the moving env tag; release.yml adds the semver tags on v* builds.
       - uses: docker/build-push-action@v7
-        id: build
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
@@ -225,10 +219,14 @@ jobs:
     # SaaS rollout only pulls the api + frontend images, so it must not wait on
     # build-almyty. That job keeps building independently off the critical path.
     needs: [meta, build-api, build-frontend, build-docs]
+    # Only dev/staging auto-deploy on push, pinned to their moving env tag.
+    # Production is NOT deployed here — it deploys from release.yml on a
+    # version tag (git tag v0.1.4) so prod always runs a named semver.
     if: |
       always() &&
       needs.meta.outputs.is_branch == 'true' &&
       github.ref_type == 'branch' &&
+      github.ref_name != 'master' &&
       (
         needs.build-api.result == 'success' ||
         needs.build-frontend.result == 'success' ||
@@ -240,16 +238,9 @@ jobs:
           GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
           ENVIRONMENT: ${{ needs.meta.outputs.environment }}
           MOVING_TAG: ${{ needs.meta.outputs.latest_tag }}
-          API_DIGEST: ${{ needs.build-api.outputs.digest }}
-          FRONTEND_DIGEST: ${{ needs.build-frontend.outputs.digest }}
         run: |
-          # Deploy the EXACT images built this run, by digest. If a build was
-          # skipped (its area didn't change), pin its moving <pfx> tag, which
-          # still points at the currently-running image — a no-op restart.
-          if [ -n "$API_DIGEST" ]; then API_IMG="almyty/api@${API_DIGEST}"; else API_IMG="almyty/api:${MOVING_TAG}"; fi
-          if [ -n "$FRONTEND_DIGEST" ]; then FE_IMG="almyty/frontend@${FRONTEND_DIGEST}"; else FE_IMG="almyty/frontend:${MOVING_TAG}"; fi
+          # Deploy dev/staging by their moving env tag (dev|staging). No digest.
           gh api repos/almyty-inc/infra/dispatches \
             -f event_type=deploy \
             -F client_payload[environment]="$ENVIRONMENT" \
-            -F client_payload[api_image]="$API_IMG" \
-            -F client_payload[frontend_image]="$FE_IMG"
+            -F client_payload[image_tag]="$MOVING_TAG"
