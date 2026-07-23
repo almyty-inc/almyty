@@ -2,8 +2,14 @@ import { BadRequestException } from '@nestjs/common';
 
 import { SlackInstallService, SLACK_INSTALL_SCOPES } from '../slack-install.service';
 import { Gateway, GatewayType } from '../../../../entities/gateway.entity';
-import { encryptField } from '../../../../common/security/field-crypto';
+import { encryptField, decryptField } from '../../../../common/security/field-crypto';
 import { installFetchMock, parseSentForm } from '../adapters/__tests__/test-helpers';
+
+/** Platform-path envelope stub (non-KMS org) — prefix-routing decrypt. */
+const platformEnvelope = {
+  encryptForOrg: (_orgId: string, plaintext: string) => Promise.resolve(encryptField(plaintext)),
+  decryptForOrg: (_orgId: string, value: string) => Promise.resolve(decryptField(value)),
+};
 
 /**
  * Slack OAuth install flow: signed-state minting/verification, the
@@ -40,7 +46,11 @@ describe('SlackInstallService', () => {
         metadata: input.metadata,
       })),
     };
-    service = new SlackInstallService({ get: configGet } as any, installations as any);
+    service = new SlackInstallService(
+      { get: configGet } as any,
+      installations as any,
+      platformEnvelope as any,
+    );
   });
 
   describe('state signing', () => {
