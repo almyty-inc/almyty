@@ -80,7 +80,7 @@ export class GatewayResolverService {
         organizationId,
         status: GatewayStatus.ACTIVE,
       },
-      relations: ['organization', 'authConfigs'],
+      relations: { organization: true, authConfigs: true },
     });
 
     if (!gateway) {

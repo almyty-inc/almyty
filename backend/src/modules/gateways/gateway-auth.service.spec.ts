@@ -517,7 +517,7 @@ describe('GatewayAuthService - Real Business Logic', () => {
 
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { email: 'user@example.com' },
-        relations: ['organizationMemberships'],
+        relations: { organizationMemberships: true },
       });
     });
 

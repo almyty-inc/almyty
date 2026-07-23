@@ -49,7 +49,7 @@ export class GatewayToolStatsHelper {
     // Get all gateway tools
     const gatewayTools = await this.gatewayToolRepository.find({
       where: { gatewayId },
-      relations: ['tool'],
+      relations: { tool: true },
     });
 
     const totalTools = gatewayTools.length;

@@ -122,7 +122,7 @@ export class NotificationsService {
       if (input.email) {
         const rows = await this.users.find({
           where: { id: In(targetIds) },
-          select: ['id', 'email', 'firstName'],
+          select: { id: true, email: true, firstName: true },
         });
         userById = new Map(rows.map((u) => [u.id, u]));
       }
@@ -202,7 +202,7 @@ export class NotificationsService {
           role: In(input.roleTarget.orgRoles),
           isActive: true,
         },
-        select: ['userId', 'inviteAccepted', 'inviteToken'],
+        select: { userId: true, inviteAccepted: true, inviteToken: true },
       });
       for (const m of memberships) {
         // Skip memberships that are pending invites (row exists but the
@@ -219,7 +219,7 @@ export class NotificationsService {
           role: TeamRole.LEAD,
           isActive: true,
         },
-        select: ['userId'],
+        select: { userId: true },
       });
       for (const l of leads) ids.add(l.userId);
     }

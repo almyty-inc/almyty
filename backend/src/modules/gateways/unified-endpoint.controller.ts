@@ -87,7 +87,7 @@ export class UnifiedEndpointController {
           type: In([GatewayType.A2A, GatewayType.ACP, GatewayType.OPENAI_CHAT]),
           agentId: Not(IsNull()),
         },
-        relations: ['authConfigs'],
+        relations: { authConfigs: true },
         order: { createdAt: 'ASC' },
       });
       if (defaultGw) {
@@ -124,7 +124,7 @@ export class UnifiedEndpointController {
       where: apiKey.gatewayId
         ? { id: apiKey.gatewayId, status: GatewayStatus.ACTIVE }
         : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
-      relations: ['authConfigs'],
+      relations: { authConfigs: true },
     });
 
     if (!gateway || !gateway.agentId) {
@@ -214,7 +214,7 @@ export class UnifiedEndpointController {
       where: apiKey.gatewayId
         ? { id: apiKey.gatewayId, status: GatewayStatus.ACTIVE }
         : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
-      relations: ['authConfigs'],
+      relations: { authConfigs: true },
     });
 
     if (!gateway?.agentId) {
@@ -264,7 +264,7 @@ export class UnifiedEndpointController {
         organizationId: organization.id,
         status: GatewayStatus.ACTIVE,
       },
-      relations: ['authConfigs'],
+      relations: { authConfigs: true },
     });
 
     if (gateway) {
@@ -316,7 +316,7 @@ export class UnifiedEndpointController {
         organizationId: organization.id,
         status: GatewayStatus.ACTIVE,
       },
-      relations: ['authConfigs'],
+      relations: { authConfigs: true },
     });
 
     if (gateway) {

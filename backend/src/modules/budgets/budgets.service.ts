@@ -317,12 +317,12 @@ export class BudgetsService {
         { organizationId, role: OrganizationRole.OWNER, isActive: true },
         { organizationId, role: OrganizationRole.ADMIN, isActive: true },
       ],
-      select: ['userId'],
+      select: { userId: true },
     });
     if (memberships.length === 0) return [];
     const users = await this.userRepo.find({
       where: { id: In(memberships.map((m) => m.userId)) },
-      select: ['id', 'email'],
+      select: { id: true, email: true },
     });
     return users
       .filter((u): u is User => !!u.email)
