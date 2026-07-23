@@ -1,6 +1,9 @@
 {
   "name": "@almyty/acp-server",
-  "version": "1.0.16",
+  "version": "1.2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "ACP agent server for almyty — expose any almyty agent via the Agent Client Protocol",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +31,7 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/client": "^0.1.0",
+    "@almyty/client": "^1.2.0",
     "eventsource-parser": "^3.0.0"
   },
   "devDependencies": {

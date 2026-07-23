@@ -1,6 +1,9 @@
 {
   "name": "@almyty/mcp-mux",
-  "version": "0.1.0",
+  "version": "1.2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Southbound stdio-MCP id-rewrite multiplexer: fan N sessions into one downstream MCP child over a Unix socket.",
   "type": "module",
   "main": "dist/index.js",
