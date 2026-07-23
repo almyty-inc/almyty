@@ -33,6 +33,14 @@ import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Tool, ToolType } from '../../entities/tool.entity';
 import { AuthService } from '../../modules/auth/auth.service';
 import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service';
+import { useIsolatedSchema, ensureSchema } from './isolated-schema.helper';
+
+// Isolate this spec into its own Postgres schema so its `synchronize`
+// DDL can't race with the other TestAppModule DB specs (mcp-oauth-flow,
+// rbac-guard) when Jest runs them in parallel workers. Set BEFORE the
+// testing module compiles — TestAppModule reads DATABASE_SCHEMA then.
+const SCHEMA = 'gateway_runs_test';
+if (!SKIP) useIsolatedSchema(SCHEMA);
 
 (SKIP ? describe.skip : describe)('Gateway agent runs (integration)', () => {
   let app: INestApplication;
@@ -79,6 +87,13 @@ import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service'
       getRunEmitter: jest.fn().mockReturnValue(null),
       subscribeRunEvents: jest.fn().mockResolvedValue(undefined),
     };
+
+    // Re-assert the schema right before compile (defensive against
+    // --runInBand, where both TestAppModule specs share one process and
+    // module-load order would otherwise decide the winner), then
+    // pre-create it; the DataSource dropSchema + synchronizes into it.
+    useIsolatedSchema(SCHEMA);
+    await ensureSchema(SCHEMA);
 
     const module: TestingModule = await Test.createTestingModule({
       imports: [TestAppModule],

@@ -139,7 +139,7 @@ jobs:
           PGPASSWORD: postgres
         run: |
           psql -h 127.0.0.1 -U postgres -d almyty_test -c \
-            "CREATE SCHEMA IF NOT EXISTS bump_stats_test; CREATE SCHEMA IF NOT EXISTS cross_tenant_test; CREATE SCHEMA IF NOT EXISTS canonical_memory_test;"
+            "CREATE SCHEMA IF NOT EXISTS bump_stats_test; CREATE SCHEMA IF NOT EXISTS cross_tenant_test; CREATE SCHEMA IF NOT EXISTS canonical_memory_test; CREATE SCHEMA IF NOT EXISTS gateway_runs_test; CREATE SCHEMA IF NOT EXISTS mcp_oauth_test;"
           psql -h 127.0.0.1 -U postgres -d almyty_test -c \
             "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
 
