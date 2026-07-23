@@ -1,15 +1,15 @@
 # 📦 Turn an npm package into tools
 
-**Stack** — `Tools: any npm package (stripe, @aws-sdk, octokit)` · `Execution: SDK (sandboxed)` · `Secrets: Credentials vault` · `Output: typed tools, no wrappers`
+**Stack**: `Tools: any npm package (stripe, @aws-sdk, octokit)` · `Execution: SDK (sandboxed)` · `Secrets: Credentials vault` · `Output: typed tools, no wrappers`
 
-**Who it's for** — anyone who wants an agent to use a library — Stripe, AWS, GitHub — without hand-writing a tool per function.
-**What it does** — points almyty at an npm package, introspects its exports, and turns the functions you pick into typed tools that run in a hardened sandbox. Re-run discovery when the SDK updates and the parameters follow — no schema drift.
+**Who it's for**: anyone who wants an agent to use a library, Stripe, AWS, GitHub, without hand-writing a tool per function.
+**What it does**: points almyty at an npm package, introspects its exports, and turns the functions you pick into typed tools that run in a hardened sandbox. Re-run discovery when the SDK updates and the parameters follow, no schema drift.
 
 ## Build it
 
 1. **Add the package as an SDK tool.** *Tools → Create Tool*, choose **SDK**, enter the package and version (`stripe` at `^17.0.0`), and click **Discover**: almyty installs it in a sandbox and infers a parameter schema for each function from the package's own TypeScript types.
-2. **Keep the functions you want.** Select the ones you need — `charges.create`, `refunds.create`, `customers.retrieve` — review the generated names and parameters, and create them. Each is a JavaScript tool that `require()`s the package.
-3. **Give it its secret.** Store the API key in the [Credentials](/credentials) vault and reference it from the tool — injected at run time, never in a prompt.
+2. **Keep the functions you want.** Select the ones you need, `charges.create`, `refunds.create`, `customers.retrieve`, review the generated names and parameters, and create them. Each is a JavaScript tool that `require()`s the package.
+3. **Give it its secret.** Store the API key in the [Credentials](/credentials) vault and reference it from the tool, injected at run time, never in a prompt.
 4. **Attach and use.** Add the tools to an agent or publish them on a gateway; the agent calls `refunds.create` like any other tool.
 
 ![Your new tools, ready to attach or publish](/screenshots/tools-list.png)
@@ -20,7 +20,7 @@
 - Combine with a [connected API](/examples/give-claude-your-api) on the same gateway.
 - Re-run **Discover** after an SDK bump to refresh parameters.
 
-**Uses** — `Platform` · `SDK tools` · `Integrations`
+**Uses**: `Platform` · `SDK tools` · `Integrations`
 
 ## Related
 

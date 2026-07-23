@@ -1,19 +1,19 @@
 # ✅ Enforce approval policies org-wide
 
-**Stack** — `Policy: action + threshold → required approver` · `Pause: request_approval` · `Queue: Approvals page` · `Output: consistent, provable sign-off`
+**Stack**: `Policy: action + threshold → required approver` · `Pause: request_approval` · `Queue: Approvals page` · `Output: consistent, provable sign-off`
 
-**Who it's for** — teams that can't leave "should a human approve this?" to each agent's prompt.
-**What it does** — defines approval as org policy, not per-agent instruction: rules map an action and threshold to the role that must sign off. Any agent hitting a gated action pauses for the right approver — the same way, every time, with a record.
+**Who it's for**: teams that can't leave "should a human approve this?" to each agent's prompt.
+**What it does**: defines approval as org policy, not per-agent instruction: rules map an action and threshold to the role that must sign off. Any agent hitting a gated action pauses for the right approver, the same way, every time, with a record.
 
 ## Build it
 
-1. **Write the policies** — e.g. *refunds over $500 → finance lead*, *any external send → manager*, *production config change → admin*. Rules live at the org level, above any single agent.
-2. **Reference the gate in agents** — the agent calls `request_approval` for the action; the policy decides who must approve and when.
-3. **Route to the queue** — the run pauses at `waiting_approval` and the request lands on the [Approvals](/approvals) page with full context. Here the demo's support agent hit its refund rule on a real **$820 Brightway Logistics** claim and stopped for a human:
+1. **Write the policies**: e.g. *refunds over $500 → finance lead*, *any external send → manager*, *production config change → admin*. Rules live at the org level, above any single agent.
+2. **Reference the gate in agents**: the agent calls `request_approval` for the action; the policy decides who must approve and when.
+3. **Route to the queue**: the run pauses at `waiting_approval` and the request lands on the [Approvals](/approvals) page with full context. Here the demo's support agent hit its refund rule on a real **$820 Brightway Logistics** claim and stopped for a human:
 
    ![A real refund escalation waiting for approval](/screenshots/approval-refund-820.png)
-4. **Approve or reject** — the run resumes or stops on their decision; both outcomes are recorded.
-5. **Prove it** — every approval and its decider is in the audit trail (see [Stream your audit trail to a SIEM](/examples/audit-to-siem)).
+4. **Approve or reject**: the run resumes or stops on their decision; both outcomes are recorded.
+5. **Prove it**: every approval and its decider is in the audit trail (see [Stream your audit trail to a SIEM](/examples/audit-to-siem)).
 
 ## Make it yours
 
@@ -21,7 +21,7 @@
 - Different approvers per team via [RBAC](/examples/multi-team-rbac).
 - Apply the same policy across every agent so a new agent inherits the guardrails.
 
-**Uses** — `Enterprise` · `Approvals` · `Governance`
+**Uses**: `Enterprise` · `Approvals` · `Governance`
 
 ## Related
 
