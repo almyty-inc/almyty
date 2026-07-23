@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -152,11 +152,6 @@ export function LoginPage() {
   return (
     <div>
       <h1 className="text-2xl font-heading font-bold mb-6">Sign in</h1>
-      {loginError && (
-        <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md">
-          <p className="text-sm text-destructive">{loginError}</p>
-        </div>
-      )}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
           <Label htmlFor="email">Email address</Label>
@@ -224,6 +219,15 @@ export function LoginPage() {
         </div>
 
         <div>
+          {loginError && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md"
+            >
+              <p className="text-sm text-destructive">{loginError}</p>
+            </div>
+          )}
           <Button
             type="submit"
             className="w-full"
@@ -231,7 +235,14 @@ export function LoginPage() {
             aria-disabled={isLoading}
             title={isLoading ? 'Signing you in…' : undefined}
           >
-            {isLoading ? 'Signing in...' : 'Sign in'}
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                Signing in...
+              </>
+            ) : (
+              'Sign in'
+            )}
           </Button>
         </div>
       </form>
