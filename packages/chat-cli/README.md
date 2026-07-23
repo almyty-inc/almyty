@@ -18,12 +18,20 @@ Usage:
   npx @almyty/chat                    # interactive agent picker
 
 Commands:
-  /agents   browse and switch agents
-  /tools    show available tools
-  /help     show commands
-  /clear    clear conversation
-  /quit     exit (shows resume command)
+  /agents      browse and switch agents
+  /tools       show available tools
+  /runners     list your runners + coding CLIs
+  /code        run a coding task on a runner
+  /code-stop   stop the active coding session
+  /esc         leave coding mode (session keeps running)
+  /help        show commands
+  /clear       clear conversation
+  /quit        exit (shows resume command)
 ```
+
+Slash commands accept fuzzy prefixes and aliases (e.g. `/sw` for `/agents`,
+`/q` for `/quit`). `/runners` and `/code` dispatch coding tasks to a machine
+connected via [`@almyty/runner`](https://www.npmjs.com/package/@almyty/runner).
 
 ## Features
 
