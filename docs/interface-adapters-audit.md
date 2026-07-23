@@ -89,7 +89,10 @@ real credentials/infrastructure — tracked in **#242** ("live e2e cred-gated").
   `raw`/`mime`/`email` field) or pre-parsed JSON. The MIME parser is in-tree
   (`adapters/mime.helper.ts`) and dependency-free — `mailparser` was
   deliberately not added because the adapter contract is synchronous and only
-  headers + a text body are needed. Outbound remains Resend-specific.
+  headers + a text body are needed. Attachment **metadata** (filename, content
+  type, decoded byte size, content-id, disposition) is surfaced on the
+  normalized message (`attachments`) and in `metadata.attachments`; the bytes
+  are not retained. Outbound remains Resend-specific.
 - **Signal / IRC** are code-complete against documented bridge contracts
   (signal-cli-rest-api; an HTTP↔IRC bridge whose exact send/receive shapes are
   specified in the IRC adapter docblock). Both still require a self-hosted

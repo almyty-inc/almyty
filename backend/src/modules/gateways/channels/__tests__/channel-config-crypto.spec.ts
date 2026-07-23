@@ -9,6 +9,16 @@ import {
   restoreMaskedChannelSecrets,
 } from '../channel-config.helper';
 import { encryptField, isEncrypted } from '../../../../common/security/field-crypto';
+
+/**
+ * Platform-path envelope stub: mirrors EnvelopeCryptoService for a non-KMS
+ * org (produces the same `encrypted:gcm:` value field-crypto does). Lets these
+ * helper tests assert the unchanged platform behavior without a live KMS.
+ */
+const platformEnvelope = {
+  encryptForOrg: (_orgId: string, plaintext: string) => Promise.resolve(encryptField(plaintext)),
+};
+const ORG = 'org-test';
 import { ChannelGatewayService } from '../channel-gateway.service';
 import { Gateway, GatewayType } from '../../../../entities/gateway.entity';
 import { ChatWidgetAdapter } from '../adapters/chat-widget.adapter';
@@ -44,7 +54,7 @@ describe('teams bot_password coverage', () => {
 
 describe('channel-config.helper', () => {
   describe('encryptChannelConfigSecrets', () => {
-    it('encrypts every secret key and leaves non-secrets alone', () => {
+    it('encrypts every secret key and leaves non-secrets alone', async () => {
       const config: Record<string, any> = {
         bot_token: 'xoxb-plain',
         signing_secret: 'shh',
@@ -60,7 +70,7 @@ describe('channel-config.helper', () => {
         webhook_url: 'https://example.com/hook',
       };
 
-      encryptChannelConfigSecrets(config);
+      await encryptChannelConfigSecrets(config, ORG, platformEnvelope);
 
       for (const key of [
         'bot_token',
@@ -81,16 +91,16 @@ describe('channel-config.helper', () => {
       expect(config.webhook_url).toBe('https://example.com/hook');
     });
 
-    it('is idempotent for already-encrypted values', () => {
+    it('is idempotent for already-encrypted values', async () => {
       const config: Record<string, any> = { bot_token: encryptField('xoxb-1') };
       const before = config.bot_token;
-      encryptChannelConfigSecrets(config);
+      await encryptChannelConfigSecrets(config, ORG, platformEnvelope);
       expect(config.bot_token).toBe(before);
     });
 
-    it('never encrypts the masked placeholder', () => {
+    it('never encrypts the masked placeholder', async () => {
       const config: Record<string, any> = { bot_token: MASKED_CHANNEL_SECRET };
-      encryptChannelConfigSecrets(config);
+      await encryptChannelConfigSecrets(config, ORG, platformEnvelope);
       expect(config.bot_token).toBe(MASKED_CHANNEL_SECRET);
     });
   });

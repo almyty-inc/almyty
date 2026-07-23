@@ -26,6 +26,7 @@ import {
   validateUrlAllowingPrivate,
   ollamaPrivateUrlsAllowed,
 } from '../../common/security/url-validator';
+import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 
 /**
  * Provider-call mechanics extracted from LlmChatHelper:
@@ -43,6 +44,7 @@ export class LlmChatRunnerHelper {
     @Inject(forwardRef(() => ToolExecutorService))
     private readonly toolExecutorService: ToolExecutorService,
     private readonly modelsHelper: LlmModelsHelper,
+    private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   async callLlmProvider(
@@ -51,6 +53,11 @@ export class LlmChatRunnerHelper {
     session: Conversation,
     tools: Tool[]
   ): Promise<ChatResponse> {
+    // Warm the org's DEK cache before any sync key read (getAuthHeaders /
+    // getDecryptedApiKey). No-op for non-KMS orgs. This is the single choke
+    // point for outbound provider calls, so it covers chat, streaming, and the
+    // health check path.
+    await this.envelopeCrypto.warmOrg(provider.organizationId);
     const maxRetries = 2;
     const backoffDelays = [1000, 3000]; // 1s, 3s exponential backoff
     let lastError: any;

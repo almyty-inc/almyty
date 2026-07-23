@@ -272,7 +272,16 @@ export function MemoriesPage() {
           </div>
 
           {list.isLoading ? <LoadingSpinner /> : items.length === 0 ? (
-            <Card><CardContent className="p-0"><EmptyState icon={Brain} title="No memories yet" description="Click 'New memory' to write one." /></CardContent></Card>
+            <Card><CardContent className="p-0"><EmptyState
+              icon={Brain}
+              title="No memories yet"
+              description="Memory gives agents recall across runs — per-agent or shared, with bi-temporal history."
+              action={
+                <Button onClick={() => setPutOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" /> New memory
+                </Button>
+              }
+            /></CardContent></Card>
           ) : (
             <div className="grid gap-3">
               {items.map((m) => (

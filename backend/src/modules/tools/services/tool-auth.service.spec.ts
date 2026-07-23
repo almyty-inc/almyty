@@ -13,6 +13,8 @@ import { ModuleRef } from '@nestjs/core';
 import { ToolAuthService } from './tool-auth.service';
 import { Credential } from '../../../entities/credential.entity';
 import { Api } from '../../../entities/api.entity';
+import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
+import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 
 describe('ToolAuthService.applyApiAuth — api_key field-name compatibility', () => {
   let service: ToolAuthService;
@@ -21,6 +23,7 @@ describe('ToolAuthService.applyApiAuth — api_key field-name compatibility', ()
     const moduleRef = await Test.createTestingModule({
       providers: [
         ToolAuthService,
+        { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
         { provide: getRepositoryToken(Credential), useValue: { findOne: jest.fn().mockResolvedValue(null) } },
         { provide: ModuleRef, useValue: { get: jest.fn() } },
       ],
