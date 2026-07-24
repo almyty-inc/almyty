@@ -37,14 +37,28 @@ export const DEFAULT_APP_URL = 'https://app.almyty.com';
  * they are easy to tune in one place. An email is only "due" once the
  * user is at least this many days old AND the corresponding step is still
  * missing AND that email has not already been sent.
+ *
+ * Each threshold is ENV-OVERRIDABLE (LIFECYCLE_STATE_NUDGE_DAY,
+ * LIFECYCLE_SHOWCASE_DAY, LIFECYCLE_LAST_TOUCH_DAY,
+ * LIFECYCLE_SWEEP_LOOKBACK_DAYS) so the staging verify harness (and any
+ * operator tuning) can shift the windows without a redeploy. An unset or
+ * non-numeric value falls back to the production default below.
  * MARKETING: refine copy + cadence
  */
+/** Read a positive-integer day threshold from env, else the default. */
+function envDay(name: string, fallback: number): number {
+  const raw = (process.env[name] ?? '').trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : fallback;
+}
+
 /** State-aware nudge (provider/api/gateway/first_call): T+2d. */
-export const STATE_NUDGE_DAY = 2;
+export const STATE_NUDGE_DAY = envDay('LIFECYCLE_STATE_NUDGE_DAY', 2);
 /** "Give claude your api" concrete showcase: T+5d. */
-export const SHOWCASE_DAY = 5;
+export const SHOWCASE_DAY = envDay('LIFECYCLE_SHOWCASE_DAY', 5);
 /** Last touch ("here's what people build", then stop): T+10d. */
-export const LAST_TOUCH_DAY = 10;
+export const LAST_TOUCH_DAY = envDay('LIFECYCLE_LAST_TOUCH_DAY', 10);
 
 /**
  * Only signups from roughly the last window are swept. Older accounts
@@ -53,7 +67,7 @@ export const LAST_TOUCH_DAY = 10;
  * LAST_TOUCH_DAY so the day-10 touch (and a just-after-10 activation
  * congrats) still falls inside the window.
  */
-export const SWEEP_LOOKBACK_DAYS = 11;
+export const SWEEP_LOOKBACK_DAYS = envDay('LIFECYCLE_SWEEP_LOOKBACK_DAYS', 11);
 
 /** Shape stored under user.preferences.lifecycle. All timestamps are ISO strings. */
 interface LifecycleState {
