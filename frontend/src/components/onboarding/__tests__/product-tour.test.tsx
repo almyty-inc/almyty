@@ -49,12 +49,11 @@ beforeEach(() => {
 
 describe('TOUR_STEPS', () => {
   it('is built with the expected ordered steps', () => {
-    expect(TOUR_STEPS.map((s) => s.id)).toEqual(['provider', 'api', 'gateway', 'call'])
+    expect(TOUR_STEPS.map((s) => s.id)).toEqual(['api', 'gateway', 'call'])
   })
 
   it('anchors each step to a real data-tour element and has copy', () => {
     expect(TOUR_STEPS.map((s) => s.element)).toEqual([
-      '[data-tour="nav-provider"]',
       '[data-tour="nav-api"]',
       '[data-tour="nav-gateway"]',
       '[data-tour="getting-started-first-call"]',

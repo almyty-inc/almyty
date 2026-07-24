@@ -26,18 +26,11 @@ export interface TourStep {
  */
 export const TOUR_STEPS: TourStep[] = [
   {
-    id: 'provider',
-    element: '[data-tour="nav-provider"]',
-    title: 'Connect a model',
-    description:
-      'Pick the AI that powers everything you build here: OpenAI, Claude, or a free model on your own machine. Takes a minute.',
-  },
-  {
     id: 'api',
     element: '[data-tour="nav-api"]',
     title: 'Turn an API into tools',
     description:
-      'Paste any API. almyty turns every endpoint into a tool your AI can actually call. No code, no wrappers.',
+      'Start here. Paste any API and almyty turns every endpoint into a tool your AI can actually call. No code, no wrappers.',
   },
   {
     id: 'gateway',
