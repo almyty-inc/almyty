@@ -30,28 +30,28 @@ export const TOUR_STEPS: TourStep[] = [
     element: '[data-tour="nav-provider"]',
     title: 'Connect a model',
     description:
-      'Start here. Connect an LLM provider (OpenAI, Anthropic, or keyless local Ollama). It powers agents and tool generation.',
+      'Pick the AI that powers everything you build here: OpenAI, Claude, or a free model on your own machine. Takes a minute.',
   },
   {
     id: 'api',
     element: '[data-tour="nav-api"]',
     title: 'Turn an API into tools',
     description:
-      'Import an OpenAPI, GraphQL, SOAP, or Protobuf schema and every operation becomes a typed tool. No code.',
+      'Paste any API. almyty turns every endpoint into a tool your AI can actually call. No code, no wrappers.',
   },
   {
     id: 'gateway',
     element: '[data-tour="nav-gateway"]',
-    title: 'Publish a gateway',
+    title: 'Make it usable by AI',
     description:
-      'One endpoint that serves your tools over MCP, A2A, UTCP, and Agent Skills.',
+      'Get one link. Claude, Cursor, or any agent can now use your tools through it.',
   },
   {
     id: 'call',
     element: '[data-tour="getting-started-first-call"]',
     title: 'Use it from Claude Code',
     description:
-      'Run `claude mcp add` with your gateway URL and your tools show up in Claude Code.',
+      'Paste one command and your tools show up live inside Claude Code. That is the whole loop.',
   },
 ]
 
