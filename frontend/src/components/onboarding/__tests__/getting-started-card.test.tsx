@@ -32,24 +32,37 @@ describe('GettingStartedCard', () => {
     vi.clearAllMocks()
   })
 
-  it('renders 0 of 4 complete on an empty org', () => {
+  it('renders 0 of 3 complete on an empty org', () => {
     render(<GettingStartedCard state={makeState()} />)
-    expect(screen.getByText('0 of 4 complete')).toBeInTheDocument()
+    expect(screen.getByText('0 of 3 complete')).toBeInTheDocument()
     const bar = screen.getByRole('progressbar', { name: /onboarding progress/i })
     expect(bar).toHaveAttribute('aria-valuenow', '0')
   })
 
   it('reflects server-computed step completion in the progress ring', () => {
+    // provider is intentionally NOT a ring step (it is the contextual
+    // agent on-ramp), so only api/gateway/first_call count toward the ring.
     render(
       <GettingStartedCard
-        state={makeState({ steps: { provider: true, api: true, gateway: false, first_call: false, external_client: false } })}
+        state={makeState({ steps: { provider: true, api: true, gateway: true, first_call: false, external_client: false } })}
       />,
     )
-    expect(screen.getByText('2 of 4 complete')).toBeInTheDocument()
+    expect(screen.getByText('2 of 3 complete')).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: /onboarding progress/i })).toHaveAttribute(
       'aria-valuenow',
       '2',
     )
+  })
+
+  it('shows the model on-ramp only while no model is connected', () => {
+    const { rerender } = render(<GettingStartedCard state={makeState()} />)
+    expect(screen.getByText(/Building agents on almyty/i)).toBeInTheDocument()
+    rerender(
+      <GettingStartedCard
+        state={makeState({ steps: { provider: true, api: false, gateway: false, first_call: false, external_client: false } })}
+      />,
+    )
+    expect(screen.queryByText(/Building agents on almyty/i)).not.toBeInTheDocument()
   })
 
   it('shows the external-client bonus row only after first_call', () => {
