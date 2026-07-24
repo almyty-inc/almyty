@@ -1047,7 +1047,7 @@ async function teardown(r: Repos, quiet: boolean): Promise<CleanupCounts> {
   let orgIds: string[] = [];
   if (userIds.length) {
     const orgs: Array<{ organizationId: string }> = await r.ds.query(
-      `SELECT DISTINCT "organizationId" FROM user_organizations WHERE "userId" = ANY($1)`,
+      `SELECT DISTINCT "organizationId" FROM user_organizations WHERE "userId" = ANY($1::uuid[])`,
       [userIds],
     );
     orgIds = orgs.map((o) => o.organizationId);
@@ -1073,49 +1073,49 @@ async function teardown(r: Repos, quiet: boolean): Promise<CleanupCounts> {
     counts.logs += await del(
       `DELETE FROM request_logs
          WHERE metadata->>'organizationId' = ANY($1)
-            OR "gatewayId" IN (SELECT id FROM gateways WHERE "organizationId" = ANY($1))
+            OR "gatewayId" IN (SELECT id FROM gateways WHERE "organizationId" = ANY($1::uuid[]))
          RETURNING id`,
       [orgIds],
     );
     // gateway_tools join rows for these orgs' gateways.
     await del(
       `DELETE FROM gateway_tools
-         WHERE "gatewayId" IN (SELECT id FROM gateways WHERE "organizationId" = ANY($1))
+         WHERE "gatewayId" IN (SELECT id FROM gateways WHERE "organizationId" = ANY($1::uuid[]))
          RETURNING id`,
       [orgIds],
     );
     counts.gateways += await del(
-      `DELETE FROM gateways WHERE "organizationId" = ANY($1) RETURNING id`,
+      `DELETE FROM gateways WHERE "organizationId" = ANY($1::uuid[]) RETURNING id`,
       [orgIds],
     );
     counts.tools += await del(
-      `DELETE FROM tools WHERE "organizationId" = ANY($1) RETURNING id`,
+      `DELETE FROM tools WHERE "organizationId" = ANY($1::uuid[]) RETURNING id`,
       [orgIds],
     );
     counts.providers += await del(
-      `DELETE FROM llm_providers WHERE "organizationId" = ANY($1) RETURNING id`,
+      `DELETE FROM llm_providers WHERE "organizationId" = ANY($1::uuid[]) RETURNING id`,
       [orgIds],
     );
     counts.apis += await del(
-      `DELETE FROM apis WHERE "organizationId" = ANY($1) RETURNING id`,
+      `DELETE FROM apis WHERE "organizationId" = ANY($1::uuid[]) RETURNING id`,
       [orgIds],
     );
   }
 
   if (userIds.length) {
     await del(
-      `DELETE FROM user_organizations WHERE "userId" = ANY($1) RETURNING id`,
+      `DELETE FROM user_organizations WHERE "userId" = ANY($1::uuid[]) RETURNING id`,
       [userIds],
     );
     counts.users += await del(
-      `DELETE FROM users WHERE id = ANY($1) RETURNING id`,
+      `DELETE FROM users WHERE id = ANY($1::uuid[]) RETURNING id`,
       [userIds],
     );
   }
 
   if (orgIds.length) {
     counts.orgs += await del(
-      `DELETE FROM organizations WHERE id = ANY($1) RETURNING id`,
+      `DELETE FROM organizations WHERE id = ANY($1::uuid[]) RETURNING id`,
       [orgIds],
     );
   }
