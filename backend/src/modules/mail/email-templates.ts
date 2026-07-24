@@ -100,7 +100,7 @@ export function renderBaseLayout(input: BaseLayoutInput): string {
         ${footerNote}
       </div>
       <div style="text-align: center; padding: 20px 8px 0;">
-        <p style="font-size: 12px; color: ${TEXT_FAINT}; margin: 0;">almyty — the open platform for AI agents</p>
+        <p style="font-size: 12px; color: ${TEXT_FAINT}; margin: 0;">almyty: the full-stack platform for AI agents</p>
         ${orgLine}
       </div>
     </div>
@@ -211,7 +211,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
         heading: `Approval ${outcome}`,
         bodyHtml:
           para(
-            `The approval gate on your run${p.agentName ? ` of <strong>${esc(p.agentName)}</strong>` : ''} was <strong>${esc(outcome)}</strong>${outcome === 'approved' ? ' — the run is resuming' : ' — the run was terminated'}.`,
+            `The approval gate on your run${p.agentName ? ` of <strong>${esc(p.agentName)}</strong>` : ''} was <strong>${esc(outcome)}</strong>${outcome === 'approved' ? ', the run is resuming' : ', the run was terminated'}.`,
           ) + (p.decisionReason ? para(`Note from the approver: <em>${esc(p.decisionReason)}</em>`) : ''),
         button: p.runUrl ? { label: 'View run', url: p.runUrl } : undefined,
         orgName: p.organizationName,
@@ -265,7 +265,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
   },
 
   'referral.qualified': (p) => ({
-    subject: 'Your referral qualified — reward on the way',
+    subject: 'Your referral qualified, reward on the way',
     html: renderBaseLayout({
       heading: 'Your referral qualified',
       bodyHtml:
@@ -288,7 +288,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     html: renderBaseLayout({
       heading: 'Your referral upgraded to a paid plan',
       bodyHtml:
-        para('An organization you referred converted to a paid plan — thank you for spreading the word.') +
+        para('An organization you referred converted to a paid plan. Thank you for spreading the word.') +
         (p.days
           ? para(
               `<strong>${esc(p.days)} day${Number(p.days) === 1 ? '' : 's'}</strong> of pro ${p.banked ? 'have been banked to your account' : 'have been added to your plan'}.`,
@@ -352,6 +352,184 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     }),
     text: flattenText(
       `Retention sweep deleted ${p.totalDeleted ?? 0} expired records.${p.summary ? ` Breakdown: ${p.summary}.` : ''}`,
+    ),
+  }),
+
+  // ── Lifecycle activation emails (new-signup cadence) ─────────────────
+  // Sent by the lifecycle module: welcome on verify, a state-aware T+2
+  // nudge, a T+5 showcase, a T+10 last touch, and a post-activation
+  // congrats. Every one carries an unsubscribe link (params.unsubscribeUrl)
+  // in the footer. `appUrl` defaults to https://app.almyty.com in the
+  // service. Cadence day thresholds are exported constants in
+  // lifecycle-email.service.ts.
+  // MARKETING: refine copy + cadence
+
+  // Welcome: fires on email verification. Payoff-first, CLI-forward CTA.
+  // MARKETING: refine copy + cadence
+  'lifecycle.welcome': (p) => ({
+    subject: 'Your first agent is minutes away on almyty',
+    html: renderBaseLayout({
+      heading: `Welcome to almyty${p.firstName ? `, ${esc(p.firstName)}` : ''}`,
+      bodyHtml:
+        para(
+          'Point almyty at an API and it generates the tools, wires up a gateway, and serves your agents over MCP. No glue code.',
+        ) +
+        para(
+          'Fastest path: install the CLI and run <code>npx @almyty/auth login</code>, then <code>npx @almyty/skills search "weather"</code> to see what an activated workspace feels like.',
+        ),
+      button: { label: 'Open your dashboard', url: p.appUrl },
+      footerNote: `You are getting almyty setup tips because you just signed up. Not useful right now? Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `Welcome to almyty${p.firstName ? `, ${p.firstName}` : ''}. Point almyty at an API and it generates the tools and serves your agents over MCP. Start: ${p.appUrl} (CLI: npx @almyty/auth login). Unsubscribe: ${p.unsubscribeUrl}`,
+    ),
+  }),
+
+  // State-aware nudge (T+2): no provider connected yet.
+  // MARKETING: refine copy + cadence
+  'lifecycle.nudge-provider': (p) => ({
+    subject: 'Connect a model and almyty comes alive',
+    html: renderBaseLayout({
+      heading: `One step to a working workspace${p.firstName ? `, ${esc(p.firstName)}` : ''}`,
+      bodyHtml:
+        para(
+          'Everything in almyty runs on a model provider. Add one and your agents can actually think: OpenAI, Anthropic, Mistral, or a local Ollama, whichever you already use.',
+        ) +
+        para(
+          'Ollama needs no key at all, so you can be running fully local in under a minute.',
+        ),
+      button: { label: 'Add a model provider', url: p.appUrl },
+      footerNote: `You are getting almyty setup tips because you signed up recently. Done, or not interested? Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `Connect a model provider and almyty comes alive: OpenAI, Anthropic, Mistral, or a keyless local Ollama. Add one: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+    ),
+  }),
+
+  // State-aware nudge (T+2): provider present but no API yet.
+  // MARKETING: refine copy + cadence
+  'lifecycle.nudge-api': (p) => ({
+    subject: 'Turn any API into agent tools on almyty',
+    html: renderBaseLayout({
+      heading: 'Import an API, get tools for free',
+      bodyHtml:
+        para(
+          'Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty generates a tool for every operation, then hangs them off a gateway your agents can call.',
+        ) +
+        para(
+          'No schema handy? Start from the sample workspace in your dashboard and watch the whole path light up.',
+        ),
+      button: { label: 'Import an API', url: p.appUrl },
+      footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty generates a tool per operation, served over a gateway. Import one: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+    ),
+  }),
+
+  // State-aware nudge: api present but no gateway yet.
+  // MARKETING: refine copy + cadence
+  'lifecycle.nudge-gateway': (p) => ({
+    subject: 'Publish a gateway and your tools go live',
+    html: renderBaseLayout({
+      heading: 'One gateway away from callable tools',
+      bodyHtml:
+        para(
+          'Your tools are generated. A gateway is what serves them: to your agents, over MCP, A2A, UTCP, or an OpenAI-compatible endpoint. Publish one and anything that speaks the protocol can call your tools.',
+        ) +
+        para(
+          'Pick the tools, name the gateway, and almyty gives you the connection string.',
+        ),
+      button: { label: 'Publish a gateway', url: p.appUrl },
+      footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `Your tools are generated. Publish a gateway to serve them over MCP, A2A, UTCP, or an OpenAI-compatible endpoint: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+    ),
+  }),
+
+  // State-aware nudge: gateway published but no external/first call yet.
+  // MARKETING: refine copy + cadence
+  'lifecycle.nudge-first-call': (p) => ({
+    subject: 'Give Claude your API in one command',
+    html: renderBaseLayout({
+      heading: 'Make the first call: point an agent at your gateway',
+      bodyHtml:
+        para(
+          'Your gateway is live but nothing has called it yet. The payoff moment is one command away: run <code>claude mcp add</code> with your gateway URL and Claude can use every tool you generated.',
+        ) +
+        para(
+          'Prefer the almyty CLI? <code>npx @almyty/chat your-agent</code> drops you into a REPL against the same tools.',
+        ),
+      button: { label: 'Make your first call', url: p.appUrl },
+      footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `Your gateway is live but nothing has called it. Run claude mcp add with your gateway URL, or npx @almyty/chat your-agent. Details: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+    ),
+  }),
+
+  // Showcase (T+5, still not activated): one concrete ~5-min win + docs.
+  // MARKETING: refine copy + cadence
+  'lifecycle.example-showcase': (p) => ({
+    subject: 'Give Claude your API in about five minutes',
+    html: renderBaseLayout({
+      heading: 'A concrete five-minute win',
+      bodyHtml:
+        para(
+          'Here is the shortest path from zero to a working agent: take any API you already use, import its schema, publish a gateway, and run <code>claude mcp add</code> against it. Five minutes, no glue code, and Claude can call your API.',
+        ) +
+        para(
+          'The in-app docs walk the whole path step by step, from schema import to the first call.',
+        ),
+      button: { label: 'Try the five-minute path', url: p.appUrl },
+      footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `Give claude your API in about five minutes: import a schema, publish a gateway, run claude mcp add. Start: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+    ),
+  }),
+
+  // Last touch (T+10, still not activated): show range, then stop.
+  // MARKETING: refine copy + cadence
+  'lifecycle.last-touch': (p) => ({
+    subject: 'What people build on almyty (last note)',
+    html: renderBaseLayout({
+      heading: 'A few things people build on almyty',
+      bodyHtml:
+        para(
+          'Teams use almyty to turn internal APIs into MCP tools their coding agents can call, to wire multi-LLM agent pipelines with the visual builder, and to run those agents on their own machines with the runner.',
+        ) +
+        para(
+          'This is the last setup email we will send. If almyty is not the right fit right now, no worries: everything is here when you come back.',
+        ),
+      button: { label: 'See what you can build', url: p.appUrl },
+      footerNote: `This is the final almyty setup email. Prefer none at all? Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `What people build on almyty: internal APIs as MCP tools, multi-LLM agent pipelines, agents running on their own machines via the runner. This is the last setup email we will send: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+    ),
+  }),
+
+  // Post-activation congrats (fires ON first successful call, once). The
+  // one lifecycle email that sends AFTER activation: the good moment.
+  // MARKETING: refine copy + cadence
+  'lifecycle.activated-congrats': (p) => ({
+    subject: 'Your first agent call landed on almyty',
+    html: renderBaseLayout({
+      heading: `Nicely done${p.firstName ? `, ${esc(p.firstName)}` : ''}: you are live`,
+      bodyHtml:
+        para(
+          'That was your first successful call through almyty. From here it only gets more useful: add verify panels to catch bad runs, give agents memory so they remember across calls, and use runners to execute on your own machines.',
+        ) +
+        para(
+          'The in-app docs cover each of these next steps whenever you are ready.',
+        ),
+      button: { label: 'Explore what is next', url: p.appUrl },
+      footerNote: `You are getting this because you just activated your almyty workspace. Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `Your first almyty call landed. Next: verify panels, agent memory, and runners for on-machine execution. Explore: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 };
