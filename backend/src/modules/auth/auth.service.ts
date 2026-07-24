@@ -259,6 +259,16 @@ export class AuthService {
     this.requestEmailVerification(savedUser.id).catch(() => {});
     if (this.notifications) {
       const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
+      // Exactly one welcome EMAIL in both modes. When lifecycle emails are on,
+      // lifecycle.welcome (enqueued on first verification) is the sole welcome
+      // email, so account.welcome stays in-app only — otherwise register-then-
+      // verify sends two "Welcome to almyty" emails. When lifecycle is off,
+      // account.welcome keeps its email as the fallback welcome.
+      const lifecycleRaw = (process.env.LIFECYCLE_EMAILS_ENABLED ?? '')
+        .trim()
+        .toLowerCase();
+      const lifecycleEnabled =
+        lifecycleRaw === 'true' || lifecycleRaw === '1' || lifecycleRaw === 'yes';
       this.notifications
         .emit({
           type: 'account.welcome',
@@ -267,13 +277,17 @@ export class AuthService {
           title: 'Welcome to almyty',
           body: `Your organization ${createUserDto.organizationName} is ready. Connect an API and build your first agent.`,
           link: '/dashboard',
-          email: {
-            template: 'account.welcome',
-            params: {
-              organizationName: createUserDto.organizationName,
-              dashboardUrl: `${baseUrl}/dashboard`,
-            },
-          },
+          ...(lifecycleEnabled
+            ? {}
+            : {
+                email: {
+                  template: 'account.welcome',
+                  params: {
+                    organizationName: createUserDto.organizationName,
+                    dashboardUrl: `${baseUrl}/dashboard`,
+                  },
+                },
+              }),
         })
         .catch(() => {});
     }
