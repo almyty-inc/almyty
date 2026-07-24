@@ -109,8 +109,9 @@ async function pruneRepo(repo, token) {
   const del = [];
   for (const t of tags) {
     if (keep.has(t.name)) continue;
-    const sig = t.name.match(SIGATT);
-    if (sig && protectedDigests.has(sig[1])) { keep.add(t.name); continue; }
+    // cosign sha256-*.sig/.att tags are pruned too — releases no longer
+    // tag-sign (provenance/SBOM live inside the image index instead), so
+    // these are just hash-shaped tag clutter.
     del.push(t.name);
   }
 

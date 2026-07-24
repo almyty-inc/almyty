@@ -62,9 +62,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-
       - name: Build & push
         id: build
         uses: docker/build-push-action@v7
@@ -76,6 +73,16 @@ jobs:
           push: true
           provenance: true
           sbom: true
+          # Frontend needs these baked in at build time (only the frontend
+          # Dockerfile consumes them; other images ignore them). Releases are
+          # production, so point the SPA at the prod API — WITHOUT this the
+          # bundle defaults to http://localhost:3000 and prod login/reset break.
+          build-args: |
+            VITE_API_BASE_URL=https://api.almyty.com
+            VITE_POSTHOG_KEY=${{ vars.VITE_POSTHOG_KEY || 'phc_wLKPNJ2JTUp7vbdjPKXcieuA6vJrjjDSib4HrSNzfV4e' }}
+            VITE_POSTHOG_HOST=/ingest
+            VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
+            VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY }}
           tags: |
             almyty/${{ matrix.image }}:${{ steps.ver.outputs.version }}
             almyty/${{ matrix.image }}:${{ steps.ver.outputs.minor }}
@@ -83,28 +90,10 @@ jobs:
             almyty/${{ matrix.image }}:latest
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
-
-      - name: Sign image (keyless)
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          cosign sign --yes "almyty/${{ matrix.image }}@${DIGEST}"
-
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: almyty/${{ matrix.image }}@${{ steps.build.outputs.digest }}
-          format: spdx-json
-          output-file: sbom-${{ matrix.image }}.spdx.json
-
-      - name: Attest SBOM
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          cosign attest --yes \
-            --predicate sbom-${{ matrix.image }}.spdx.json \
-            --type spdxjson \
-            "almyty/${{ matrix.image }}@${DIGEST}"
+          # provenance + sbom above are attached inside the image index
+          # (verifiable via `docker buildx imagetools inspect`); they do NOT
+          # create sha256-*.sig/.att tags. Cosign tag-signing was removed to
+          # keep the tag list clean (moving + semver only).
 
   # Trigger the production rollout. This does NOT deploy — it only fires a
   # repository_dispatch at almyty-inc/infra, whose deploy.yml owns the actual
