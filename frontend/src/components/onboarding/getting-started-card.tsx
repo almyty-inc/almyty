@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, Circle, ChevronRight, Compass, Sparkles, X } from 'lucide-react'
+import { Bot, Check, Circle, ChevronRight, Compass, Sparkles, X } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,9 +9,15 @@ import { onboardingApi, type OnboardingState } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
 
 /**
- * The four steps that make up the progress ring, in fixed order.
- * `external_client` is intentionally excluded from the ring — it is an
- * optional bonus surfaced once first_call lands (per the spec).
+ * The three steps that make up the progress ring, in fixed order — the
+ * hero path: turn an API into tools, publish a gateway, use it from an AI
+ * client. None of these require an almyty-side model (the model is the
+ * client's, e.g. Claude Code), so connecting one is intentionally NOT a
+ * ring step. It is surfaced as a contextual on-ramp (see MODEL_STEP) for
+ * the agent / LLM-tool / memory path, which does need a model.
+ *
+ * `external_client` is likewise excluded from the ring — it is an optional
+ * bonus surfaced once first_call lands (per the spec).
  */
 const CORE_STEPS: {
   key: keyof OnboardingState['steps']
@@ -20,13 +26,6 @@ const CORE_STEPS: {
   cta: string
   to: string
 }[] = [
-  {
-    key: 'provider',
-    label: 'Connect an AI model',
-    description: 'OpenAI, Claude, or a free local one. It powers everything you build.',
-    cta: 'Connect a model',
-    to: '/llm-providers?new=1',
-  },
   {
     key: 'api',
     label: 'Turn an API into tools',
@@ -49,6 +48,19 @@ const CORE_STEPS: {
     to: '/agents',
   },
 ]
+
+/**
+ * Contextual on-ramp, shown outside the ring once a model is missing. It
+ * targets the second family of journeys (agents, LLM-backed tools, memory)
+ * that genuinely need an almyty-configured model — without forcing it on
+ * the tool/gateway hero path that doesn't.
+ */
+const MODEL_STEP = {
+  label: 'Building agents on almyty?',
+  description: 'Connect a model to power agents, LLM-backed tools, and memory.',
+  cta: 'Connect a model',
+  to: '/llm-providers?new=1',
+}
 
 export interface GettingStartedCardProps {
   state: OnboardingState
@@ -107,7 +119,7 @@ export function GettingStartedCard({
           <div>
             <CardTitle className="text-lg">Getting started</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Four steps from an API schema to a live, AI-ready gateway. Open any step and we&apos;ll walk you through.
+              Three steps from an API schema to a live, AI-ready gateway. Open any step and we&apos;ll walk you through.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -215,6 +227,22 @@ export function GettingStartedCard({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Contextual on-ramp for the agent / LLM-tool / memory path.
+              Not a ring step — the hero flow above needs no almyty model. */}
+          {!state.steps.provider && (
+            <button
+              onClick={() => navigate(MODEL_STEP.to)}
+              className="flex items-center gap-3 w-full text-left p-3 rounded-lg border border-dashed border-violet-500/30 hover:bg-violet-500/5 transition-colors"
+            >
+              <Bot className="h-6 w-6 text-violet-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium">{MODEL_STEP.label}</div>
+                <div className="text-xs text-muted-foreground">{MODEL_STEP.description}</div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            </button>
           )}
         </div>
 
