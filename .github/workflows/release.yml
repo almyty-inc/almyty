@@ -33,10 +33,6 @@ jobs:
             context: ./frontend
             file: ./frontend/Dockerfile
             target: production
-          - image: docs
-            context: ./docs-site
-            file: ./docs-site/Dockerfile
-            target: ''
           - image: almyty
             context: .
             file: ./Dockerfile.allinone
@@ -95,11 +91,112 @@ jobs:
           # create sha256-*.sig/.att tags. Cosign tag-signing was removed to
           # keep the tag list clean (moving + semver only).
 
+  # Docs (Next.js/nextra) is built OUTSIDE the `release` matrix and off the
+  # prod-deploy critical path: its static-generation workers crash under qemu
+  # with SIGILL when arm64 is cross-built on an amd64 runner, and gating the
+  # prod rollout on that flake once already skipped a release. Build each arch
+  # natively (amd64 on ubuntu-latest, arm64 on the free public-repo
+  # ubuntu-24.04-arm runner), push by digest, then stitch the semver tags.
+  release-docs:
+    name: Release docs (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: amd64
+            runner: ubuntu-latest
+          - platform: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ./docs-site
+          file: ./docs-site/Dockerfile
+          platforms: linux/${{ matrix.platform }}
+          provenance: true
+          sbom: true
+          outputs: type=image,name=almyty/docs,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=docs-${{ matrix.platform }}
+          cache-to: type=gha,scope=docs-${{ matrix.platform }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-docs-digest-${{ matrix.platform }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release-docs-manifest:
+    name: Release docs (manifest)
+    needs: release-docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve version
+        id: ver
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          MAJOR="${VERSION%%.*}"
+          MINOR="${VERSION#*.}"; MINOR="${MINOR%%.*}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "major=${MAJOR}" >> "$GITHUB_OUTPUT"
+          echo "minor=${MAJOR}.${MINOR}" >> "$GITHUB_OUTPUT"
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: release-docs-digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create manifest list and push (all semver tags)
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t "almyty/docs:${VERSION}" \
+            -t "almyty/docs:${MINOR}" \
+            -t "almyty/docs:${MAJOR}" \
+            -t "almyty/docs:latest" \
+            $(printf 'almyty/docs@sha256:%s ' *)
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          MINOR: ${{ steps.ver.outputs.minor }}
+          MAJOR: ${{ steps.ver.outputs.major }}
+
   # Trigger the production rollout. This does NOT deploy — it only fires a
   # repository_dispatch at almyty-inc/infra, whose deploy.yml owns the actual
   # cluster rollout (migration, kubectl, smoke, rollback). Same pattern
   # build-publish.yml uses for dev/staging. We pass the semver tag so infra
   # pins almyty/api:<version> and kubectl shows the running version.
+  #
+  # Intentionally needs ONLY `release` (api/frontend/almyty), NOT release-docs:
+  # prod pulls api + frontend, and gating the rollout on the docs image (a slow
+  # flake-prone build) once already skipped a whole release.
   trigger-prod-deploy:
     needs: release
     runs-on: ubuntu-latest
