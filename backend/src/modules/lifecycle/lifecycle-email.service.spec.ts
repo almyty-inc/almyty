@@ -4,9 +4,9 @@ import { JwtService } from '@nestjs/jwt';
 
 import {
   LifecycleEmailService,
-  NUDGE_PROVIDER_DAY,
-  NUDGE_API_DAY,
-  NUDGE_FINAL_DAY,
+  STATE_NUDGE_DAY,
+  SHOWCASE_DAY,
+  LAST_TOUCH_DAY,
 } from './lifecycle-email.service';
 import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
@@ -91,12 +91,22 @@ describe('LifecycleEmailService', () => {
     jest.clearAllMocks();
   });
 
+  /** Configure a single-candidate sweep with the given user + steps. */
+  function primeSweep(user: User, stepState: ReturnType<typeof steps>) {
+    userRepo.find.mockResolvedValue([user]);
+    userRepo.findOne.mockResolvedValue(user); // for writeState
+    onboardingService.getState.mockResolvedValue({ steps: stepState });
+  }
+
+  /** The template name of the (single) send this sweep, if any. */
+  function sentTemplate(): string | undefined {
+    return mailService.sendTemplate.mock.calls[0]?.[1];
+  }
+
   // ── sendWelcome ────────────────────────────────────────────────────
 
   it('sends the welcome email once, then dedupes', async () => {
     const user = makeUser(0);
-    // First call: no welcome recorded. writeState reloads the user, so
-    // findOne is called twice (send-time load + writeState load).
     userRepo.findOne.mockResolvedValue(user);
 
     await service.sendWelcome(USER_ID);
@@ -107,11 +117,9 @@ describe('LifecycleEmailService', () => {
       'lifecycle.welcome',
       expect.objectContaining({ firstName: 'Ada', unsubscribeUrl: expect.any(String) }),
     );
-    // welcome timestamp persisted
     const last = saved[saved.length - 1];
     expect(last.lifecycle.welcome).toEqual(expect.any(String));
 
-    // Second run with the welcome already recorded: no send.
     mailService.sendTemplate.mockClear();
     userRepo.findOne.mockResolvedValue(makeUser(0, { welcome: last.lifecycle.welcome }));
     await service.sendWelcome(USER_ID);
@@ -138,100 +146,115 @@ describe('LifecycleEmailService', () => {
     expect(userRepo.findOne).not.toHaveBeenCalled();
   });
 
-  // ── runNudgeSweep targeting ────────────────────────────────────────
+  // ── State-aware nudge (T+2) targeting ──────────────────────────────
 
-  it('sends the provider nudge at day >= 1 when no provider connected', async () => {
-    const user = makeUser(NUDGE_PROVIDER_DAY, {});
-    userRepo.find.mockResolvedValue([user]);
-    userRepo.findOne.mockResolvedValue(user); // for writeState
-    onboardingService.getState.mockResolvedValue({ steps: steps() });
-
+  it('T+2 with no provider -> nudge-provider', async () => {
+    primeSweep(makeUser(STATE_NUDGE_DAY, {}), steps());
     const res = await service.runNudgeSweep();
-
     expect(res.sent).toBe(1);
-    expect(mailService.sendTemplate).toHaveBeenCalledTimes(1);
-    expect(mailService.sendTemplate).toHaveBeenCalledWith(
-      user.email,
-      'lifecycle.nudge-provider',
-      expect.any(Object),
-    );
-    expect(saved[saved.length - 1].lifecycle.nudgeProvider).toEqual(expect.any(String));
+    expect(sentTemplate()).toBe('lifecycle.nudge-provider');
+    expect(saved[saved.length - 1].lifecycle.stateNudge).toEqual(expect.any(String));
   });
 
-  it('sends the api nudge at day >= 3 when provider present but no gateway', async () => {
-    const user = makeUser(NUDGE_API_DAY, { nudgeProvider: '2020-01-01' });
-    userRepo.find.mockResolvedValue([user]);
-    userRepo.findOne.mockResolvedValue(user);
-    onboardingService.getState.mockResolvedValue({ steps: steps({ provider: true }) });
-
+  it('T+2 with provider but no api -> nudge-api', async () => {
+    primeSweep(makeUser(STATE_NUDGE_DAY, {}), steps({ provider: true }));
     await service.runNudgeSweep();
-
-    expect(mailService.sendTemplate).toHaveBeenCalledWith(
-      user.email,
-      'lifecycle.nudge-api',
-      expect.any(Object),
-    );
+    expect(sentTemplate()).toBe('lifecycle.nudge-api');
   });
 
-  it('sends the final nudge at day >= 7 when still not activated', async () => {
-    const user = makeUser(NUDGE_FINAL_DAY, {
-      nudgeProvider: '2020-01-01',
-      nudgeApi: '2020-01-02',
-    });
-    userRepo.find.mockResolvedValue([user]);
-    userRepo.findOne.mockResolvedValue(user);
-    onboardingService.getState.mockResolvedValue({ steps: steps({ provider: true, api: true, gateway: true }) });
-
+  it('T+2 with api but no gateway -> nudge-gateway', async () => {
+    primeSweep(makeUser(STATE_NUDGE_DAY, {}), steps({ provider: true, api: true }));
     await service.runNudgeSweep();
-
-    expect(mailService.sendTemplate).toHaveBeenCalledWith(
-      user.email,
-      'lifecycle.nudge-final',
-      expect.any(Object),
-    );
+    expect(sentTemplate()).toBe('lifecycle.nudge-gateway');
   });
 
-  it('sends at most one nudge per user per sweep', async () => {
-    // Day 7, nothing done and nothing sent: multiple nudges are "due" but
-    // only the most-progressed (final) one fires.
-    const user = makeUser(NUDGE_FINAL_DAY, {});
-    userRepo.find.mockResolvedValue([user]);
-    userRepo.findOne.mockResolvedValue(user);
-    onboardingService.getState.mockResolvedValue({ steps: steps() });
-
+  it('T+2 with gateway but no first_call -> nudge-first-call', async () => {
+    primeSweep(makeUser(STATE_NUDGE_DAY, {}), steps({ provider: true, api: true, gateway: true }));
     await service.runNudgeSweep();
-
-    expect(mailService.sendTemplate).toHaveBeenCalledTimes(1);
+    expect(sentTemplate()).toBe('lifecycle.nudge-first-call');
   });
 
-  it('dedupes an already-sent nudge', async () => {
-    const user = makeUser(NUDGE_PROVIDER_DAY, { nudgeProvider: '2020-01-01' });
-    userRepo.find.mockResolvedValue([user]);
-    userRepo.findOne.mockResolvedValue(user);
-    onboardingService.getState.mockResolvedValue({ steps: steps() });
-
+  it('dedupes the state-aware nudge (stateNudge already sent)', async () => {
+    primeSweep(makeUser(STATE_NUDGE_DAY, { stateNudge: '2020-01-01' }), steps());
     const res = await service.runNudgeSweep();
-
     expect(res.sent).toBe(0);
     expect(mailService.sendTemplate).not.toHaveBeenCalled();
   });
 
-  it('never nudges an activated user (first_call true)', async () => {
-    const user = makeUser(NUDGE_FINAL_DAY, {});
-    userRepo.find.mockResolvedValue([user]);
-    userRepo.findOne.mockResolvedValue(user);
-    onboardingService.getState.mockResolvedValue({ steps: steps({ first_call: true }) });
+  // ── Showcase (T+5) + last touch (T+10) ─────────────────────────────
 
+  it('T+5 still not activated -> example-showcase', async () => {
+    primeSweep(makeUser(SHOWCASE_DAY, { stateNudge: '2020-01-01' }), steps());
+    await service.runNudgeSweep();
+    expect(sentTemplate()).toBe('lifecycle.example-showcase');
+    expect(saved[saved.length - 1].lifecycle.showcase).toEqual(expect.any(String));
+  });
+
+  it('T+10 still not activated -> last-touch', async () => {
+    primeSweep(
+      makeUser(LAST_TOUCH_DAY, { stateNudge: '2020-01-01', showcase: '2020-01-02' }),
+      steps(),
+    );
+    await service.runNudgeSweep();
+    expect(sentTemplate()).toBe('lifecycle.last-touch');
+    expect(saved[saved.length - 1].lifecycle.lastTouch).toEqual(expect.any(String));
+  });
+
+  it('dedupes last-touch (already sent) and sends nothing else', async () => {
+    primeSweep(
+      makeUser(LAST_TOUCH_DAY, {
+        stateNudge: '2020-01-01',
+        showcase: '2020-01-02',
+        lastTouch: '2020-01-03',
+      }),
+      steps(),
+    );
     const res = await service.runNudgeSweep();
-
     expect(res.sent).toBe(0);
     expect(mailService.sendTemplate).not.toHaveBeenCalled();
-    // activated is marked
-    expect(saved[saved.length - 1].lifecycle.activated).toEqual(expect.any(String));
+  });
+
+  it('sends at most one email per sweep (day 10, nothing sent yet -> only last-touch)', async () => {
+    primeSweep(makeUser(LAST_TOUCH_DAY, {}), steps());
+    await service.runNudgeSweep();
+    expect(mailService.sendTemplate).toHaveBeenCalledTimes(1);
+    expect(sentTemplate()).toBe('lifecycle.last-touch');
+  });
+
+  // ── Activation congrats ────────────────────────────────────────────
+
+  it('sends activated-congrats when first_call transitions to true', async () => {
+    primeSweep(makeUser(SHOWCASE_DAY, { stateNudge: '2020-01-01' }), steps({ first_call: true }));
+    const res = await service.runNudgeSweep();
+    expect(res.sent).toBe(1);
+    expect(sentTemplate()).toBe('lifecycle.activated-congrats');
+    const last = saved[saved.length - 1];
+    expect(last.lifecycle.activatedCongrats).toEqual(expect.any(String));
+  });
+
+  it('activated-congrats is the ONLY email that sends post-activation (dedupes after)', async () => {
+    // Already-activated + congrats already sent: no further email, even
+    // though the user is well past the last-touch day.
+    primeSweep(
+      makeUser(LAST_TOUCH_DAY, { activatedCongrats: '2020-01-05', activated: '2020-01-05' }),
+      steps({ provider: true, api: true, gateway: true, first_call: true }),
+    );
+    const res = await service.runNudgeSweep();
+    expect(res.sent).toBe(0);
+    expect(mailService.sendTemplate).not.toHaveBeenCalled();
+  });
+
+  it('never sends a nudge/showcase/last-touch to an activated user (only congrats)', async () => {
+    // Day 10, activated, congrats not yet sent: the ONLY email is congrats,
+    // never last-touch.
+    primeSweep(makeUser(LAST_TOUCH_DAY, {}), steps({ first_call: true }));
+    await service.runNudgeSweep();
+    expect(mailService.sendTemplate).toHaveBeenCalledTimes(1);
+    expect(sentTemplate()).toBe('lifecycle.activated-congrats');
   });
 
   it('skips opted-out users in the sweep', async () => {
-    const user = makeUser(NUDGE_FINAL_DAY, { optOut: true });
+    const user = makeUser(LAST_TOUCH_DAY, { optOut: true });
     userRepo.find.mockResolvedValue([user]);
     onboardingService.getState.mockResolvedValue({ steps: steps() });
 
@@ -244,7 +267,7 @@ describe('LifecycleEmailService', () => {
 
   it('no-ops runNudgeSweep when LIFECYCLE_EMAILS_ENABLED is unset (default off)', async () => {
     delete process.env.LIFECYCLE_EMAILS_ENABLED;
-    userRepo.find.mockResolvedValue([makeUser(NUDGE_FINAL_DAY, {})]);
+    userRepo.find.mockResolvedValue([makeUser(LAST_TOUCH_DAY, {})]);
 
     const res = await service.runNudgeSweep();
 
