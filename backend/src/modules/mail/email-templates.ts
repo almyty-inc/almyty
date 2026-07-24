@@ -417,7 +417,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
           'Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty turns every operation into a typed tool. No code required.',
         ) +
         para(
-          'No schema handy? Load the Petstore sample and watch the tools appear.',
+          'No schema handy? Load the sample workspace and watch the tools appear.',
         ),
       button: { label: 'Import an API', url: p.appUrl },
       footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
