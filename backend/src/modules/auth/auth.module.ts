@@ -20,10 +20,15 @@ import { ApiKey } from '../../entities/api-key.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UserOrganization } from '../../entities/user-organization.entity';
 import { ReferralsModule } from '../referrals/referrals.module';
+import { BullModule } from '@nestjs/bull';
+import { LIFECYCLE_EMAIL_QUEUE } from '../lifecycle/lifecycle-email.processor';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, ApiKey, Organization, UserOrganization]),
+    // Lifecycle activation-email queue so AuthService can enqueue a
+    // welcome job on email verification (@InjectQueue).
+    BullModule.registerQueue({ name: LIFECYCLE_EMAIL_QUEUE }),
     ReferralsModule,
     PassportModule,
     JwtModule.registerAsync({

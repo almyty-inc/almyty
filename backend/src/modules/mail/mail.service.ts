@@ -10,11 +10,34 @@ export interface SendEmailOptions {
   text?: string;
 }
 
+/**
+ * A record of one successful send. `id` is the provider (Resend) message
+ * id — previously only logged; buffered here so an in-process verifier
+ * (see scripts/lifecycle-staging-verify.ts) can look the message up via
+ * the Resend API and confirm delivery + rendering. In the dev/no-key
+ * path there is no provider id, so `id` is null.
+ */
+export interface RecentSend {
+  to: string;
+  subject: string;
+  id: string | null;
+  at: string; // ISO timestamp
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
   private resend: Resend | null = null;
   private readonly fromEmail: string;
+
+  /**
+   * Tiny ring buffer of recent successful sends (last N). This is a
+   * diagnostics aid for the staging verifier and is harmless in prod:
+   * capped tightly, holds only to/subject/id/at (no bodies, no PII beyond
+   * the recipient already in the send call), and is never persisted.
+   */
+  private static readonly RECENT_SENDS_CAP = 50;
+  private readonly recentSends: RecentSend[] = [];
 
   constructor() {
     const apiKey = process.env.RESEND_API_KEY;
@@ -38,6 +61,7 @@ export class MailService {
     if (!this.resend) {
       this.logger.log(`[MAIL-DEV] To: ${options.to} | Subject: ${options.subject}`);
       this.logger.log(`[MAIL-DEV] Body: ${options.text || options.html.substring(0, 200)}`);
+      this.recordSend(options.to, options.subject, null);
       return true;
     }
 
@@ -65,11 +89,33 @@ export class MailService {
       }
 
       this.logger.log(`Email sent to ${options.to} (id: ${data?.id})`);
+      this.recordSend(options.to, options.subject, data?.id ?? null);
       return true;
     } catch (err: any) {
       this.logger.error(`Email send error: ${err.message}`);
       return false;
     }
+  }
+
+  /** Append a successful send to the capped ring buffer. */
+  private recordSend(to: string, subject: string, id: string | null): void {
+    this.recentSends.push({ to, subject, id, at: new Date().toISOString() });
+    if (this.recentSends.length > MailService.RECENT_SENDS_CAP) {
+      this.recentSends.splice(
+        0,
+        this.recentSends.length - MailService.RECENT_SENDS_CAP,
+      );
+    }
+  }
+
+  /** Recent successful sends (newest last), for in-process verification. */
+  getRecentSends(): RecentSend[] {
+    return [...this.recentSends];
+  }
+
+  /** Return and clear the recent-sends buffer. */
+  drainRecentSends(): RecentSend[] {
+    return this.recentSends.splice(0, this.recentSends.length);
   }
 
   /**

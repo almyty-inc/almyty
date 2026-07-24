@@ -103,6 +103,7 @@ import { ProviderUsageModule } from './modules/provider-usage/provider-usage.mod
 import { ReferralsModule } from './modules/referrals/referrals.module';
 import { RetentionModule } from './modules/retention/retention.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { LifecycleModule } from './modules/lifecycle/lifecycle.module';
 // EE feature modules (sso, rbac, audit-export, approval-policies, billing,
 // ee-stubs, compliance, chargeback) live under `ee/` and are loaded at
 // runtime via the ee-loader — NOT statically imported here, so this file
@@ -320,6 +321,7 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     ReferralsModule,
     RetentionModule,
     NotificationsModule,
+    LifecycleModule,
     KmsModule,
     // EE feature modules are loaded dynamically so the OSS build compiles +
     // boots without the commercial `ee/` tree present (loadEeModules() → []).
