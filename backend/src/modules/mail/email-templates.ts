@@ -100,7 +100,7 @@ export function renderBaseLayout(input: BaseLayoutInput): string {
         ${footerNote}
       </div>
       <div style="text-align: center; padding: 20px 8px 0;">
-        <p style="font-size: 12px; color: ${TEXT_FAINT}; margin: 0;">almyty — the open platform for AI agents</p>
+        <p style="font-size: 12px; color: ${TEXT_FAINT}; margin: 0;">almyty: the full-stack platform for AI agents</p>
         ${orgLine}
       </div>
     </div>
@@ -211,7 +211,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
         heading: `Approval ${outcome}`,
         bodyHtml:
           para(
-            `The approval gate on your run${p.agentName ? ` of <strong>${esc(p.agentName)}</strong>` : ''} was <strong>${esc(outcome)}</strong>${outcome === 'approved' ? ' — the run is resuming' : ' — the run was terminated'}.`,
+            `The approval gate on your run${p.agentName ? ` of <strong>${esc(p.agentName)}</strong>` : ''} was <strong>${esc(outcome)}</strong>${outcome === 'approved' ? ', the run is resuming' : ', the run was terminated'}.`,
           ) + (p.decisionReason ? para(`Note from the approver: <em>${esc(p.decisionReason)}</em>`) : ''),
         button: p.runUrl ? { label: 'View run', url: p.runUrl } : undefined,
         orgName: p.organizationName,
@@ -265,7 +265,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
   },
 
   'referral.qualified': (p) => ({
-    subject: 'Your referral qualified — reward on the way',
+    subject: 'Your referral qualified, reward on the way',
     html: renderBaseLayout({
       heading: 'Your referral qualified',
       bodyHtml:
@@ -288,7 +288,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     html: renderBaseLayout({
       heading: 'Your referral upgraded to a paid plan',
       bodyHtml:
-        para('An organization you referred converted to a paid plan — thank you for spreading the word.') +
+        para('An organization you referred converted to a paid plan. Thank you for spreading the word.') +
         (p.days
           ? para(
               `<strong>${esc(p.days)} day${Number(p.days) === 1 ? '' : 's'}</strong> of pro ${p.banked ? 'have been banked to your account' : 'have been added to your plan'}.`,
