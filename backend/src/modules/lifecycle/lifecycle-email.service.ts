@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { JwtService } from '@nestjs/jwt';
 import { MoreThan, Not, IsNull, Repository } from 'typeorm';
 
 import { User } from '../../entities/user.entity';
@@ -94,7 +94,6 @@ export class LifecycleEmailService {
     private readonly userOrgRepo: Repository<UserOrganization>,
     private readonly mailService: MailService,
     private readonly onboardingService: OnboardingService,
-    private readonly jwtService: JwtService,
   ) {}
 
   /**
@@ -120,28 +119,37 @@ export class LifecycleEmailService {
   }
 
   /**
-   * Signed, purpose-scoped unsubscribe token. Reuses the app JwtService
-   * (same signing key as the rest of auth) with a distinct `purpose` so
-   * it can never be confused with a session/verification token. No expiry
-   * on purpose: an unsubscribe link should keep working forever.
+   * Compact, purpose-scoped HMAC unsubscribe token.
    */
   private signUnsubToken(userId: string): string {
-    return this.jwtService.sign({ userId, purpose: 'lifecycle-unsub' });
+    // Compact HMAC token (userId.sig) rather than a JWT — a JWT made the
+    // unsubscribe URL enormous. Purpose-scoped so it can't double as a
+    // session token; no expiry (unsubscribe must work forever).
+    const sig = createHmac('sha256', process.env.JWT_SECRET || '')
+      .update(`lifecycle-unsub:${userId}`)
+      .digest('base64url')
+      .slice(0, 16);
+    return `${userId}.${sig}`;
   }
 
   /** Verify an unsubscribe token; returns the userId or null. */
   verifyUnsubToken(token: string): string | null {
     if (!token || typeof token !== 'string') return null;
-    try {
-      const payload = this.jwtService.verify(token) as {
-        userId?: string;
-        purpose?: string;
-      };
-      if (payload?.purpose !== 'lifecycle-unsub' || !payload.userId) return null;
-      return payload.userId;
-    } catch {
+    const dot = token.indexOf('.');
+    if (dot <= 0) return null;
+    const userId = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const expected = createHmac('sha256', process.env.JWT_SECRET || '')
+      .update(`lifecycle-unsub:${userId}`)
+      .digest('base64url')
+      .slice(0, 16);
+    if (
+      sig.length !== expected.length ||
+      !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+    ) {
       return null;
     }
+    return userId;
   }
 
   /** Absolute unsubscribe URL embedded in every lifecycle email footer. */

@@ -10,8 +10,9 @@ name: Build & Publish Images
 on:
   push:
     branches: [development, staging, master]
-    tags:
-      - 'v*'
+    # NOT on v* tags — release.yml owns tagged builds (semver images +
+    # prod deploy). build-publish on a tag mis-resolves the ref as `dev`
+    # and duplicates the release build, so it stays branch-only.
   workflow_dispatch:
 
 permissions:
