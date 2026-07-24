@@ -396,13 +396,13 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
           'Everything in almyty runs on a model provider. Add one and your agents can actually think: OpenAI, Anthropic, Mistral, or a local Ollama, whichever you already use.',
         ) +
         para(
-          'Ollama needs no key at all, so you can be running fully local in under a minute.',
+          'Ollama needs no key at all, so you can run fully local if you prefer.',
         ),
-      button: { label: 'Add a model provider', url: p.appUrl },
+      button: { label: 'Add a model provider', url: `${p.appUrl}/llm-providers` },
       footerNote: `You are getting almyty setup tips because you signed up recently. Done, or not interested? Unsubscribe: ${p.unsubscribeUrl}`,
     }),
     text: flattenText(
-      `Connect a model provider and almyty comes alive: OpenAI, Anthropic, Mistral, or a keyless local Ollama. Add one: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+      `Connect a model provider and almyty comes alive: OpenAI, Anthropic, Mistral, or a keyless local Ollama. Add one: ${p.appUrl}/llm-providers. Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 
@@ -417,13 +417,13 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
           'Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty turns every operation into a typed tool. No code required.',
         ) +
         para(
-          'No schema handy? Load the Petstore sample and watch the tools appear.',
+          'Use an API you already work with. That is when almyty clicks: your own endpoints, callable by an agent in minutes.',
         ),
-      button: { label: 'Import an API', url: p.appUrl },
+      button: { label: 'Import an API', url: `${p.appUrl}/apis` },
       footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
     }),
     text: flattenText(
-      `Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty turns every operation into a typed tool, no code. Import one: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+      `Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty turns every operation into a typed tool, no code. Import one: ${p.appUrl}/apis. Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 
@@ -440,11 +440,11 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
         para(
           'Pick the tools, name the gateway, and almyty gives you the connection string.',
         ),
-      button: { label: 'Publish a gateway', url: p.appUrl },
+      button: { label: 'Publish a gateway', url: `${p.appUrl}/gateways` },
       footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
     }),
     text: flattenText(
-      `Your tools are generated. Publish a gateway to serve them over MCP, A2A, UTCP, or an OpenAI-compatible endpoint: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+      `Your tools are generated. Publish a gateway to serve them over MCP, A2A, UTCP, or an OpenAI-compatible endpoint: ${p.appUrl}/gateways. Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 
@@ -461,11 +461,11 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
         para(
           "The exact command, with your gateway URL and key, is on the gateway's Integrations tab.",
         ),
-      button: { label: 'Make your first call', url: p.appUrl },
+      button: { label: 'Make your first call', url: `${p.appUrl}/gateways` },
       footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
     }),
     text: flattenText(
-      `Your gateway is live but nothing has called it. Run claude mcp add with your gateway URL (grab it from the gateway's Integrations tab). Details: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+      `Your gateway is live but nothing has called it. Run claude mcp add with your gateway URL (grab it from the gateway's Integrations tab). Details: ${p.appUrl}/gateways. Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 
@@ -482,11 +482,11 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
         para(
           'The in-app docs walk the whole path step by step, from schema import to the first call.',
         ),
-      button: { label: 'Try the five-minute path', url: p.appUrl },
+      button: { label: 'Try the five-minute path', url: `${p.appUrl}/apis` },
       footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
     }),
     text: flattenText(
-      `Give Claude your API in about five minutes: import a schema, publish a gateway, run claude mcp add. Start: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+      `Give Claude your API in about five minutes: import a schema, publish a gateway, run claude mcp add. Start: ${p.appUrl}/apis. Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 
