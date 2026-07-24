@@ -9,6 +9,7 @@ const posthogMock = {
   reset: vi.fn(),
   capture: vi.fn(),
   register: vi.fn(),
+  startSessionRecording: vi.fn(),
 }
 
 vi.mock('posthog-js', () => ({
@@ -61,6 +62,7 @@ describe('analytics wrapper — keyed (enabled)', () => {
     posthogMock.reset.mockClear()
     posthogMock.capture.mockClear()
     posthogMock.register.mockClear()
+    posthogMock.startSessionRecording.mockClear()
     vi.stubEnv('VITE_POSTHOG_KEY', 'phc_test_key')
     // Pin a tracked environment — jsdom's host is localhost, which the
     // wrapper (correctly) treats as development and would not track.
@@ -96,6 +98,30 @@ describe('analytics wrapper — keyed (enabled)', () => {
     const a = await loadAnalytics()
     await a.initAnalytics()
     expect(posthogMock.init.mock.calls[0][1].capture_pageview).toBe(false)
+  })
+
+  it('configures privacy-safe session replay that stays styled', async () => {
+    const a = await loadAnalytics()
+    await a.initAnalytics()
+    const sr = posthogMock.init.mock.calls[0][1].session_recording
+    // Every input (password + email on auth pages) is masked.
+    expect(sr.maskAllInputs).toBe(true)
+    // CSS is inlined into snapshots so the replay renders styled instead of
+    // a giant unstyled logo (un-inlined <link href> the player can't fetch).
+    expect(sr.inlineStylesheet).toBe(true)
+    // We do NOT blanket-mask text — that would blank the whole page.
+    expect(sr.maskTextSelector).toBeUndefined()
+    expect(sr.maskAllText).toBeUndefined()
+  })
+
+  it('holds recording at init, then starts it once the document is loaded', async () => {
+    const a = await loadAnalytics()
+    await a.initAnalytics()
+    // Recording is deferred so the first full snapshot inlines the (loaded)
+    // stylesheet and captures the mounted form, not a pre-mount frame.
+    expect(posthogMock.init.mock.calls[0][1].disable_session_recording).toBe(true)
+    // jsdom's document is already 'complete', so we start immediately.
+    expect(posthogMock.startSessionRecording).toHaveBeenCalledTimes(1)
   })
 
   it('honors VITE_POSTHOG_HOST override (aligned proxy origin)', async () => {
@@ -174,6 +200,7 @@ describe('analytics wrapper — environment gating', () => {
     vi.resetModules()
     posthogMock.init.mockClear()
     posthogMock.register.mockClear()
+    posthogMock.startSessionRecording.mockClear()
     vi.stubEnv('VITE_POSTHOG_KEY', 'phc_test_key')
   })
 
