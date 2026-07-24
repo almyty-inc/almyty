@@ -354,6 +354,96 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
       `Retention sweep deleted ${p.totalDeleted ?? 0} expired records.${p.summary ? ` Breakdown: ${p.summary}.` : ''}`,
     ),
   }),
+
+  // ── Lifecycle activation emails (new-signup nudges) ──────────────────
+  // Sent by the lifecycle module to verified signups who haven't activated
+  // yet. Every one carries an unsubscribe link (params.unsubscribeUrl) in
+  // the footer. `appUrl` defaults to https://app.almyty.com in the service.
+  // MARKETING: refine copy + cadence
+
+  // Welcome: fires on email verification. Payoff-first, CLI-forward CTA.
+  // MARKETING: refine copy + cadence
+  'lifecycle.welcome': (p) => ({
+    subject: 'Your first agent is minutes away on almyty',
+    html: renderBaseLayout({
+      heading: `Welcome to almyty${p.firstName ? `, ${esc(p.firstName)}` : ''}`,
+      bodyHtml:
+        para(
+          'Point almyty at an API and it generates the tools, wires up a gateway, and serves your agents over MCP. No glue code.',
+        ) +
+        para(
+          'Fastest path: install the CLI and run <code>npx @almyty/auth login</code>, then <code>npx @almyty/skills search "weather"</code> to see what an activated workspace feels like.',
+        ),
+      button: { label: 'Open your dashboard', url: p.appUrl },
+      footerNote: `You are getting almyty setup tips because you just signed up. Not useful right now? Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `Welcome to almyty${p.firstName ? `, ${p.firstName}` : ''}. Point almyty at an API and it generates the tools and serves your agents over MCP. Start: ${p.appUrl} (CLI: npx @almyty/auth login). Unsubscribe: ${p.unsubscribeUrl}`,
+    ),
+  }),
+
+  // Nudge 1 (day >= 1, no provider connected yet).
+  // MARKETING: refine copy + cadence
+  'lifecycle.nudge-provider': (p) => ({
+    subject: 'Connect a model and almyty comes alive',
+    html: renderBaseLayout({
+      heading: `One step to a working workspace${p.firstName ? `, ${esc(p.firstName)}` : ''}`,
+      bodyHtml:
+        para(
+          'Everything in almyty runs on a model provider. Add one and your agents can actually think: OpenAI, Anthropic, Mistral, or a local Ollama, whichever you already use.',
+        ) +
+        para(
+          'Ollama needs no key at all, so you can be running fully local in under a minute.',
+        ),
+      button: { label: 'Add a model provider', url: p.appUrl },
+      footerNote: `You are getting almyty setup tips because you signed up recently. Done, or not interested? Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `Connect a model provider and almyty comes alive: OpenAI, Anthropic, Mistral, or a keyless local Ollama. Add one: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+    ),
+  }),
+
+  // Nudge 2 (day >= 3, has provider but no API/gateway yet).
+  // MARKETING: refine copy + cadence
+  'lifecycle.nudge-api': (p) => ({
+    subject: 'Turn any API into agent tools on almyty',
+    html: renderBaseLayout({
+      heading: 'Import an API, get tools for free',
+      bodyHtml:
+        para(
+          'Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty generates a tool for every operation, then hangs them off a gateway your agents can call.',
+        ) +
+        para(
+          'No schema handy? Start from the sample workspace in your dashboard and watch the whole path light up.',
+        ),
+      button: { label: 'Import an API', url: p.appUrl },
+      footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty generates a tool per operation, served over a gateway. Import one: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+    ),
+  }),
+
+  // Nudge 3 (day >= 7, still not activated). Last one, offer help.
+  // MARKETING: refine copy + cadence
+  'lifecycle.nudge-final': (p) => ({
+    subject: 'Anything blocking your first agent run?',
+    html: renderBaseLayout({
+      heading: 'Still here to help you ship your first agent',
+      bodyHtml:
+        para(
+          'You signed up for almyty but have not made your first agent run yet. If something got in the way, it is worth two minutes to get unstuck: the sample workspace runs end to end with one click.',
+        ) +
+        para(
+          'This is the last setup email we will send. Reply to this message if you hit a wall and a human will help.',
+        ),
+      button: { label: 'Run the sample workspace', url: p.appUrl },
+      footerNote: `This is the final almyty setup email. Prefer none at all? Unsubscribe: ${p.unsubscribeUrl}`,
+    }),
+    text: flattenText(
+      `You have not made your first agent run yet. The sample workspace runs end to end with one click: ${p.appUrl}. This is the last setup email we will send. Unsubscribe: ${p.unsubscribeUrl}`,
+    ),
+  }),
 };
 
 /** Generic fallback so an unknown template id still yields a branded email. */
