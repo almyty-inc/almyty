@@ -1,0 +1,158 @@
+[
+  {
+    "sheet": 1,
+    "components": [
+      "AlertDialog",
+      "AlertDialogAction",
+      "AlertDialogCancel",
+      "AlertDialogContent",
+      "AlertDialogDescription",
+      "AlertDialogFooter",
+      "AlertDialogHeader",
+      "AlertDialogOverlay",
+      "AlertDialogPortal",
+      "AlertDialogTitle",
+      "AlertDialogTrigger",
+      "ApiTypeBadge",
+      "Avatar",
+      "AvatarFallback",
+      "AvatarImage",
+      "Badge"
+    ]
+  },
+  {
+    "sheet": 2,
+    "components": [
+      "Button",
+      "Card",
+      "CardContent",
+      "CardDescription",
+      "CardFooter",
+      "CardHeader",
+      "CardTitle",
+      "Checkbox",
+      "CodeBlock",
+      "CodeEditor",
+      "Command",
+      "CommandDialog",
+      "CommandEmpty",
+      "CommandGroup",
+      "CommandInput",
+      "CommandItem"
+    ]
+  },
+  {
+    "sheet": 3,
+    "components": [
+      "CommandList",
+      "DataTable",
+      "Dialog",
+      "DialogClose",
+      "DialogContent",
+      "DialogDescription",
+      "DialogFooter",
+      "DialogHeader",
+      "DialogOverlay",
+      "DialogPortal",
+      "DialogTitle",
+      "DialogTrigger",
+      "DropdownMenu",
+      "DropdownMenuCheckboxItem",
+      "DropdownMenuContent",
+      "DropdownMenuGroup"
+    ]
+  },
+  {
+    "sheet": 4,
+    "components": [
+      "DropdownMenuItem",
+      "DropdownMenuLabel",
+      "DropdownMenuPortal",
+      "DropdownMenuRadioGroup",
+      "DropdownMenuRadioItem",
+      "DropdownMenuSeparator",
+      "DropdownMenuShortcut",
+      "DropdownMenuSub",
+      "DropdownMenuSubContent",
+      "DropdownMenuSubTrigger",
+      "DropdownMenuTrigger",
+      "EmptyState",
+      "ErrorBoundary",
+      "Input",
+      "Label",
+      "LoadingSpinner"
+    ]
+  },
+  {
+    "sheet": 5,
+    "components": [
+      "Progress",
+      "ProtocolBadge",
+      "QueryError",
+      "Select",
+      "SelectContent",
+      "SelectGroup",
+      "SelectItem",
+      "SelectLabel",
+      "SelectScrollDownButton",
+      "SelectScrollUpButton",
+      "SelectSeparator",
+      "SelectTrigger",
+      "SelectValue",
+      "Separator",
+      "Sheet",
+      "SheetClose"
+    ]
+  },
+  {
+    "sheet": 6,
+    "components": [
+      "SheetContent",
+      "SheetDescription",
+      "SheetFooter",
+      "SheetHeader",
+      "SheetOverlay",
+      "SheetPortal",
+      "SheetTitle",
+      "SheetTrigger",
+      "Skeleton",
+      "Slider",
+      "StatCard",
+      "Switch",
+      "Table",
+      "TableBody",
+      "TableCaption",
+      "TableCell"
+    ]
+  },
+  {
+    "sheet": 7,
+    "components": [
+      "TableFooter",
+      "TableHead",
+      "TableHeader",
+      "TableRow",
+      "Tabs",
+      "TabsContent",
+      "TabsList",
+      "TabsTrigger",
+      "TeamFilter",
+      "Textarea",
+      "Toast",
+      "ToastAction",
+      "ToastClose",
+      "ToastDescription",
+      "Toaster",
+      "ToastProvider"
+    ]
+  },
+  {
+    "sheet": 8,
+    "components": [
+      "ToastTitle",
+      "ToastViewport",
+      "VisibilityBadge",
+      "VisibilityField"
+    ]
+  }
+]

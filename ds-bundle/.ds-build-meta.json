@@ -1,0 +1,9 @@
+{
+  "namespace": "AlmytyDS",
+  "source": "almyty-frontend@1.0.0",
+  "shape": "package",
+  "provider": null,
+  "componentCount": 116,
+  "skippedStoryIds": [],
+  "runtimeFontPrefixes": []
+}
