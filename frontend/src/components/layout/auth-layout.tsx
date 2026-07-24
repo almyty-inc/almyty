@@ -12,7 +12,10 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <div className="flex items-center gap-2">
-            <img src="/almyty-icon-48.svg" alt="almyty" className="w-10 h-10" />
+            {/* width/height attrs give the logo an intrinsic size that holds
+                even with no CSS applied (e.g. rrweb session replays), so it
+                doesn't balloon to fill the frame. */}
+            <img src="/almyty-icon-48.svg" alt="almyty" width={40} height={40} className="w-10 h-10" />
             <span className="text-2xl font-heading font-medium tracking-tight text-foreground">almyty</span>
           </div>
         </div>
