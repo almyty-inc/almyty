@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { JwtService } from '@nestjs/jwt';
 
 import {
   LifecycleEmailService,
@@ -79,7 +78,6 @@ describe('LifecycleEmailService', () => {
         { provide: getRepositoryToken(UserOrganization), useValue: userOrgRepo },
         { provide: MailService, useValue: mailService },
         { provide: OnboardingService, useValue: onboardingService },
-        { provide: JwtService, useValue: { sign: jest.fn().mockReturnValue('tok'), verify: jest.fn() } },
       ],
     }).compile();
 
@@ -286,17 +284,18 @@ describe('LifecycleEmailService', () => {
     expect(last.lifecycle.welcome).toBe('x'); // other keys preserved
   });
 
-  it('verifies a valid unsubscribe token and rejects a wrong-purpose one', async () => {
-    const jwt = (service as any).jwtService as { verify: jest.Mock };
-    jwt.verify.mockReturnValueOnce({ userId: USER_ID, purpose: 'lifecycle-unsub' });
-    expect(service.verifyUnsubToken('good')).toBe(USER_ID);
+  it('round-trips a valid unsubscribe token and rejects tampered/garbage ones', () => {
+    const token = (service as any).signUnsubToken(USER_ID) as string;
+    expect(token.startsWith(`${USER_ID}.`)).toBe(true);
+    expect(service.verifyUnsubToken(token)).toBe(USER_ID);
 
-    jwt.verify.mockReturnValueOnce({ userId: USER_ID, purpose: 'email_verify' });
-    expect(service.verifyUnsubToken('wrong-purpose')).toBeNull();
-
-    jwt.verify.mockImplementationOnce(() => {
-      throw new Error('bad sig');
-    });
+    // tampered signature -> null
+    expect(service.verifyUnsubToken(`${USER_ID}.deadbeefdeadbeef`)).toBeNull();
+    // sig lifted onto a different userId -> null (sig is userId-bound)
+    const sig = token.split('.')[1];
+    expect(service.verifyUnsubToken(`someone-else.${sig}`)).toBeNull();
+    // malformed
     expect(service.verifyUnsubToken('garbage')).toBeNull();
+    expect(service.verifyUnsubToken('')).toBeNull();
   });
 });
