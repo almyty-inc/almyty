@@ -127,12 +127,60 @@ export async function initAnalytics(): Promise<void> {
     // Anonymous visitors never get a person profile; only identified
     // (post-login) users do. This is the cookieless funnel contract.
     person_profiles: 'identified_only',
+    // Session replay config. Two things make a B2B auth-page replay both
+    // usable AND privacy-safe:
+    //   Privacy — maskAllInputs masks EVERY <input>, so the password and
+    //   email fields on /auth/* are never captured as plaintext. We do NOT
+    //   set maskTextSelector/maskAllText: masking text too would blank the
+    //   whole page (the replay becomes empty boxes). The static labels and
+    //   headings here carry nothing sensitive.
+    //   Styling — inlineStylesheet copies the app's CSS *into* each
+    //   snapshot. Without it rrweb leaves the built stylesheet as a bare
+    //   <link href="/assets/index-<hash>.css">, which the replay player (a
+    //   sandboxed iframe on the PostHog origin) cannot fetch — and the hash
+    //   changes every deploy — so the DOM renders unstyled and the logo
+    //   <img> balloons to its intrinsic size. The "giant centered almyty
+    //   logo" replay was exactly that: an un-inlined stylesheet.
+    session_recording: {
+      maskAllInputs: true,
+      inlineStylesheet: true,
+      recordCrossOriginIframes: false,
+    },
+    // Hold recording until the document has fully loaded (see
+    // startRecordingOnLoad). initAnalytics() runs at the top of main.tsx —
+    // before React mounts and, on a cold load, before /assets/index-<hash>
+    // .css has parsed. A first full snapshot taken in that window can't read
+    // the stylesheet's CSSOM yet, so the CSS isn't inlined and the replay is
+    // unstyled. Deferring the first snapshot to 'load' guarantees the CSS is
+    // present and that the mounted form is what gets captured.
+    disable_session_recording: true,
   })
   // Tag every event with the deployment so staging and production stay
   // cleanly separable inside the one shared project (filter/breakdown on
   // `environment`). register() persists it as a super-property on all events.
   posthog.register({ environment })
   client = posthog
+  // Recording was held at init (disable_session_recording); turn it on
+  // once the stylesheet is guaranteed loaded so the first snapshot renders.
+  startRecordingOnLoad(posthog)
+}
+
+/**
+ * Begin session replay only after the document has fully loaded, so the
+ * app stylesheet is parsed and rrweb can inline it into the very first full
+ * snapshot (see the disable_session_recording note in initAnalytics). By
+ * 'load' React has also mounted, so the captured DOM is the real page — not
+ * a pre-mount bootstrap frame. If the document is already complete (e.g. a
+ * warm client-side entry), start immediately.
+ */
+function startRecordingOnLoad(posthog: PostHog): void {
+  if (typeof document === 'undefined') return
+  const start = () => posthog.startSessionRecording()
+  if (document.readyState === 'complete') {
+    start()
+  } else {
+    window.addEventListener('load', start, { once: true })
+  }
 }
 
 /**
