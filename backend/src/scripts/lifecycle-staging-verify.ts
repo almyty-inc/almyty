@@ -349,22 +349,31 @@ function assertSafeToRun(): string {
 
   const host = (process.env.DATABASE_HOST ?? '').toLowerCase();
   const name = (process.env.DATABASE_NAME ?? '').toLowerCase();
-  const looksStaging =
-    host.includes('staging') || name.includes('staging');
-  if (!looksStaging) {
-    problems.push(
-      `DATABASE_HOST/DATABASE_NAME must contain "staging" ` +
-        `(host="${host}", name="${name}") — refusing to touch a possibly-prod DB`,
-    );
-  }
 
-  // Belt and suspenders: never run if anything screams prod.
+  // Never run against prod. On this infra all envs share ONE managed DB
+  // server (apifai-db-…) with separate databases per env (staging=apifai,
+  // prod=almyty, dev=almyty_dev), so a host substring can't distinguish
+  // them — we hard-block the prod database name explicitly, plus any
+  // prod-ish token anywhere.
   const prodish = [host, name].some(
     (v) => v.includes('prod') || v.includes('production'),
   );
-  if (prodish) {
+  if (prodish || name === 'almyty') {
     problems.push(
-      'DATABASE_HOST/DATABASE_NAME contains "prod" — hard abort',
+      `DATABASE looks like prod (host="${host}", name="${name}") — hard abort`,
+    );
+  }
+
+  // Accept only a clearly-staging name, OR an explicit operator confirmation
+  // of the exact DB being targeted: STAGING_TEST_DB must equal DATABASE_NAME.
+  // This forces the runner to name the non-prod DB on purpose.
+  const looksStaging = host.includes('staging') || name.includes('staging');
+  const confirmedDb = (process.env.STAGING_TEST_DB ?? '').trim().toLowerCase();
+  if (!looksStaging && confirmedDb !== name) {
+    problems.push(
+      `DATABASE_NAME "${name}" is not obviously staging — set ` +
+        `STAGING_TEST_DB=${name} to confirm you are targeting the intended ` +
+        `non-prod DB (refusing to touch a possibly-prod DB otherwise)`,
     );
   }
 
