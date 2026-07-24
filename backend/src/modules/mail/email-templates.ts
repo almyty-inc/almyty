@@ -372,16 +372,16 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
       heading: `Welcome to almyty${p.firstName ? `, ${esc(p.firstName)}` : ''}`,
       bodyHtml:
         para(
-          'Point almyty at an API and it generates the tools, wires up a gateway, and serves your agents over MCP. No glue code.',
+          'almyty turns any API into tools your agents can call, served over MCP, A2A, UTCP, and Agent Skills. No glue code.',
         ) +
         para(
-          'Fastest path: install the CLI and run <code>npx @almyty/auth login</code>, then <code>npx @almyty/skills search "weather"</code> to see what an activated workspace feels like.',
+          'The fastest first win: connect a model, point almyty at an API, and call it from Claude Code, usually a few minutes. Install the CLI to start: <code>npm install -g @almyty/cli</code> then <code>almyty login</code>.',
         ),
       button: { label: 'Open your dashboard', url: p.appUrl },
       footerNote: `You are getting almyty setup tips because you just signed up. Not useful right now? Unsubscribe: ${p.unsubscribeUrl}`,
     }),
     text: flattenText(
-      `Welcome to almyty${p.firstName ? `, ${p.firstName}` : ''}. Point almyty at an API and it generates the tools and serves your agents over MCP. Start: ${p.appUrl} (CLI: npx @almyty/auth login). Unsubscribe: ${p.unsubscribeUrl}`,
+      `Welcome to almyty${p.firstName ? `, ${p.firstName}` : ''}. almyty turns any API into tools your agents call over MCP, A2A, UTCP, and Agent Skills. Get started: ${p.appUrl} (CLI: npm install -g @almyty/cli, then almyty login). Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 
@@ -414,16 +414,16 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
       heading: 'Import an API, get tools for free',
       bodyHtml:
         para(
-          'Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty generates a tool for every operation, then hangs them off a gateway your agents can call.',
+          'Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty turns every operation into a typed tool. No code required.',
         ) +
         para(
-          'No schema handy? Start from the sample workspace in your dashboard and watch the whole path light up.',
+          'No schema handy? Load the Petstore sample and watch the tools appear.',
         ),
       button: { label: 'Import an API', url: p.appUrl },
       footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
     }),
     text: flattenText(
-      `Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty generates a tool per operation, served over a gateway. Import one: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+      `Paste an OpenAPI, GraphQL, SOAP, or Protobuf schema and almyty turns every operation into a typed tool, no code. Import one: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 
@@ -459,13 +459,13 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
           'Your gateway is live but nothing has called it yet. The payoff moment is one command away: run <code>claude mcp add</code> with your gateway URL and Claude can use every tool you generated.',
         ) +
         para(
-          'Prefer the almyty CLI? <code>npx @almyty/chat your-agent</code> drops you into a REPL against the same tools.',
+          "The exact command, with your gateway URL and key, is on the gateway's Integrations tab.",
         ),
       button: { label: 'Make your first call', url: p.appUrl },
       footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
     }),
     text: flattenText(
-      `Your gateway is live but nothing has called it. Run claude mcp add with your gateway URL, or npx @almyty/chat your-agent. Details: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+      `Your gateway is live but nothing has called it. Run claude mcp add with your gateway URL (grab it from the gateway's Integrations tab). Details: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 
@@ -486,7 +486,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
       footerNote: `You are getting almyty setup tips because you signed up recently. Not for you? Unsubscribe: ${p.unsubscribeUrl}`,
     }),
     text: flattenText(
-      `Give claude your API in about five minutes: import a schema, publish a gateway, run claude mcp add. Start: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+      `Give Claude your API in about five minutes: import a schema, publish a gateway, run claude mcp add. Start: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 
