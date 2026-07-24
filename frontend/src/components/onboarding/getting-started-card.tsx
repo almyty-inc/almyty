@@ -249,7 +249,7 @@ export function GettingStartedCard({
         {!state.sampleWorkspace && onSeedSample && (
           <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-dashed border-cyan-400/40 p-3">
             <div className="text-sm text-muted-foreground">
-              Prefer to explore first? Load a ready-made Petstore workspace.
+              Prefer to explore first? Load a ready-made sample workspace.
             </div>
             <Button
               variant="outline"

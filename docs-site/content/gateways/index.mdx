@@ -13,13 +13,13 @@ Scope a gateway to the tools you want, generate a key on its Authentication tab,
 add it to Claude Code in one line:
 
 ```bash
-claude mcp add weather --transport http https://api.almyty.com/acme/weather
+claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
 # clients send: x-api-key: <your gateway key>
 ```
 
 ```text
-> what's the 3-day forecast for Berlin?
-  Claude calls getForecast via almyty -> clear, 18C rising to 24C
+> look up pet #2 and show its status
+  Claude calls getPetById via almyty -> "Rosie", available
 ```
 
 The same gateway also answers over A2A and UTCP, so other agents and frameworks reach
@@ -37,7 +37,7 @@ the identical tools without a rebuild.
 The gateway's **Integrations** tab gives you the live endpoint plus discovery URLs to
 paste into any client:
 
-![A gateway's MCP endpoint, SSE, and discovery URLs](/screenshots/gateway-weather-integration.png)
+![A gateway's MCP endpoint, SSE, and discovery URLs](/screenshots/gateway-petstore-integration.png)
 
 ## Protocols
 
