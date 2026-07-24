@@ -13,8 +13,10 @@ import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { gatewaysApi, toolsApi, apisApi, agentsApi, analyticsApi, onboardingApi } from '@/lib/api'
 import { GettingStartedCard, useOnboarding, useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
+import { useProductTour } from '@/components/onboarding/product-tour'
 import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
+import { useAuthStore } from '@/store/auth'
 import { pluralize } from '@/lib/utils'
 import type { RequestLog } from '@/types'
 
@@ -42,10 +44,30 @@ export function DashboardPage() {
   const orgId = currentOrganization?.id
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
+
+  // Coach-mark product tour (see components/onboarding/product-tour.tsx).
+  const { startTour, maybeAutoStart } = useProductTour(user?.id)
 
   // Server-computed onboarding checklist. Derived from real entity
   // state, so CLI-driven completions check themselves off here too.
   const { data: onboarding } = useOnboarding(orgId)
+
+  // Auto-start the coach-mark tour once, on the dashboard, for a user
+  // whose onboarding is incomplete and who has not yet seen or dismissed
+  // it. `maybeAutoStart` no-ops when the seen flag is set, when
+  // onboarding is complete, or after it has already fired this mount. The
+  // short delay lets the sidebar and getting-started card paint their
+  // `data-tour` anchors before the spotlight looks for them.
+  useEffect(() => {
+    if (!onboarding) return
+    const cardVisible = !onboarding.dismissed && !onboarding.activatedRealAt
+    if (!cardVisible) return
+    const s = onboarding.steps
+    const complete = s.provider && s.api && s.gateway && s.first_call
+    const t = window.setTimeout(() => maybeAutoStart(complete), 500)
+    return () => window.clearTimeout(t)
+  }, [onboarding, maybeAutoStart])
 
   const seedSample = useSeedSampleWorkspace(orgId)
 
@@ -169,6 +191,7 @@ export function DashboardPage() {
           onSeedSample={() => seedSample.mutate()}
           seeding={seedSample.isPending}
           onDismiss={() => dismissOnboarding.mutate()}
+          onStartTour={() => startTour({ manual: true })}
         />
       ) : (
         <>
