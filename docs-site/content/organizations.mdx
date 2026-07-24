@@ -97,11 +97,11 @@ The full picture, for a member acting on a resource:
 
 | Caller role | Resource visibility | Read/Use | Manage |
 |---|---|---|---|
-| Org owner / admin | any | ✓ | ✓ |
-| Org member (no team) | `org` | ✓ | requires explicit org-level perm |
-| Org member, `team_admin` of resource's team | `team` | ✓ | ✓ |
-| Org member, `team_member` of resource's team | `team` | ✓ | ✗ |
-| Org member, not in resource's team | `team` | ✗ | ✗ |
+| Org owner / admin | any | Yes | Yes |
+| Org member (no team) | `org` | Yes | requires explicit org-level perm |
+| Org member, `team_admin` of resource's team | `team` | Yes | Yes |
+| Org member, `team_member` of resource's team | `team` | Yes | No |
+| Org member, not in resource's team | `team` | No | No |
 
 Resources without `teamId` are treated as `org`-wide. The default "Everyone" team is *not* the same as org-wide: putting a resource in "Everyone" means every org member can see it (same effect today), but if you ever shrink the team's membership it becomes a real boundary.
 
