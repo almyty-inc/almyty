@@ -188,10 +188,10 @@ describe('analytics wrapper — keyed (enabled)', () => {
   })
 
   it('tags every event with the environment super-property', async () => {
-    vi.stubEnv('VITE_APP_ENV', 'staging')
+    vi.stubEnv('VITE_APP_ENV', 'production')
     const a = await loadAnalytics()
     await a.initAnalytics()
-    expect(posthogMock.register).toHaveBeenCalledWith({ environment: 'staging' })
+    expect(posthogMock.register).toHaveBeenCalledWith({ environment: 'production' })
   })
 })
 
@@ -222,14 +222,18 @@ describe('analytics wrapper — environment gating', () => {
     expect(posthogMock.init).not.toHaveBeenCalled()
   })
 
-  it('tracks staging and production', async () => {
-    for (const env of ['staging', 'production'] as const) {
+  it('tracks production only, not staging or development', async () => {
+    vi.stubEnv('VITE_APP_ENV', 'production')
+    let a = await loadAnalytics()
+    await a.initAnalytics()
+    expect(posthogMock.init).toHaveBeenCalledTimes(1)
+    for (const env of ['staging', 'development'] as const) {
       vi.resetModules()
       posthogMock.init.mockClear()
       vi.stubEnv('VITE_APP_ENV', env)
-      const a = await loadAnalytics()
+      a = await loadAnalytics()
       await a.initAnalytics()
-      expect(posthogMock.init).toHaveBeenCalledTimes(1)
+      expect(posthogMock.init).not.toHaveBeenCalled()
     }
   })
 
