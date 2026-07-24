@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, Circle, ChevronRight, Sparkles, X } from 'lucide-react'
+import { Check, Circle, ChevronRight, Compass, Sparkles, X } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -55,6 +55,8 @@ export interface GettingStartedCardProps {
   onSeedSample?: () => void
   seeding?: boolean
   onDismiss?: () => void
+  /** When provided, renders a 'Take a tour' button that starts the coach-mark tour on demand. */
+  onStartTour?: () => void
 }
 
 /**
@@ -89,6 +91,7 @@ export function GettingStartedCard({
   onSeedSample,
   seeding,
   onDismiss,
+  onStartTour,
 }: GettingStartedCardProps) {
   const navigate = useNavigate()
   useOnboardingAnalytics(state)
@@ -125,6 +128,17 @@ export function GettingStartedCard({
                   style={{ width: `${pct}%` }}
                 />
               </div>
+            {onStartTour && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-violet-500/30 text-violet-500 hover:bg-violet-500/10 shrink-0"
+                onClick={onStartTour}
+              >
+                <Compass className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Take a tour</span>
+              </Button>
+            )}
             </div>
             {onDismiss && (
               <Button
@@ -146,6 +160,7 @@ export function GettingStartedCard({
             return (
               <button
                 key={step.key}
+                data-tour={step.key === 'first_call' ? 'getting-started-first-call' : undefined}
                 onClick={() => navigate(step.to)}
                 className={`flex items-center gap-3 w-full text-left p-3 rounded-lg border transition-colors ${
                   done
