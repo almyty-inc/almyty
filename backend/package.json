@@ -1,7 +1,7 @@
 {
   "name": "almyty-backend",
   "version": "1.0.0",
-  "description": "almyty backend — open platform for building, deploying, and running AI agents",
+  "description": "almyty backend \u2014 open platform for building, deploying, and running AI agents",
   "author": "Almyty Inc. <hello@almyty.com>",
   "private": true,
   "license": "Apache-2.0",
@@ -131,7 +131,8 @@
     },
     "typeorm-versions": {
       "typeorm": "^1.1.0"
-    }
+    },
+    "js-yaml": "5.2.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.21",
