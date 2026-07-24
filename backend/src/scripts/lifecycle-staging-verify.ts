@@ -2,10 +2,26 @@
  * Lifecycle-email STAGING verification harness.
  *
  * Seeds throwaway verified users into a *staging* database, drives the
- * real LifecycleEmailService against real onboarding state, and asserts
- * the expected `preferences.lifecycle.*` marker was written (i.e. the
- * email was sent). Emails DO send for real via Resend to plus-aliases of
- * a single inbox you control, so a human can eyeball the rendering.
+ * real LifecycleEmailService against real onboarding state, and verifies
+ * each scenario across THREE layers:
+ *   1. logic        — the expected `preferences.lifecycle.*` marker was
+ *                     written (the service decided to send).
+ *   2. local-render — renderEmailTemplate() output for that template
+ *                     carries the expected subject/CTA copy + the
+ *                     unsubscribe URL and contains no em-dash. Always
+ *                     runs; pure, no network.
+ *   3. resend       — the message id captured from MailService's recent-
+ *                     sends buffer is looked up via the Resend API
+ *                     (GET https://api.resend.com/emails/{id}): HTTP 200,
+ *                     delivery state not bounced/failed/complained, and
+ *                     the stored html carries the same copy + unsubscribe
+ *                     URL + no em-dash. SKIPPED when RESEND_API_KEY unset.
+ *
+ * Emails DO send for real via Resend to plus-aliases of a single inbox you
+ * control, so a human can also eyeball the rendering.
+ *
+ * NETWORK: layer 3 needs egress to api.resend.com from wherever this runs
+ * (e.g. the staging pod). Without a key / egress, layers 1+2 still run.
  *
  * SAFETY: refuses to run unless STAGING_TEST_CONFIRM=1 AND the configured
  * DATABASE_HOST / DATABASE_NAME clearly names a staging DB. It must never
@@ -73,6 +89,8 @@ import { Tool, ToolType, ToolStatus } from '../entities/tool.entity';
 import { RequestLog } from '../entities/request-log.entity';
 import { LifecycleEmailService } from '../modules/lifecycle/lifecycle-email.service';
 import { OnboardingService } from '../modules/onboarding/onboarding.service';
+import { MailService } from '../modules/mail/mail.service';
+import { renderEmailTemplate } from '../modules/mail/email-templates';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -95,11 +113,194 @@ type Scenario =
   | 'opt-out'
   | 'dedupe';
 
+/** Outcome of one verification layer. status 'skip' = not applicable/no key. */
+interface LayerResult {
+  status: 'pass' | 'fail' | 'skip';
+  detail: string;
+}
+
 interface Result {
   scenario: string;
-  pass: boolean;
-  detail: string;
   email: string;
+  /** Layer 1: the expected preferences.lifecycle key was written. */
+  logic: LayerResult;
+  /** Layer 2: local renderEmailTemplate() html has the right copy. */
+  localRender: LayerResult;
+  /** Layer 3: Resend accepted + rendered the message (network). */
+  resend: LayerResult;
+}
+
+/** A scenario passes overall when no layer failed (skips are OK). */
+function overallPass(r: Result): boolean {
+  return (
+    r.logic.status !== 'fail' &&
+    r.localRender.status !== 'fail' &&
+    r.resend.status !== 'fail' &&
+    // logic must actively pass; render/resend may legitimately skip.
+    r.logic.status === 'pass'
+  );
+}
+
+const EM_DASH = '—'; // — : templates deliberately use commas, never this.
+
+/**
+ * Per-template rendering expectations. `subject` and every `markers`
+ * entry must appear verbatim in the rendered output; the unsubscribe URL
+ * (passed in params) must appear too, and the html must contain no
+ * em-dash. Copy pulled from email-templates.ts so a copy edit that drops
+ * a CTA is caught here.
+ */
+const TEMPLATE_EXPECT: Record<
+  string,
+  { subject: string; markers: string[] }
+> = {
+  'lifecycle.welcome': {
+    subject: 'Your first agent is minutes away on almyty',
+    markers: ['Welcome to almyty', 'Open your dashboard'],
+  },
+  'lifecycle.nudge-provider': {
+    subject: 'Connect a model and almyty comes alive',
+    markers: ['Add a model provider', 'Ollama'],
+  },
+  'lifecycle.nudge-api': {
+    subject: 'Turn any API into agent tools on almyty',
+    markers: ['Import an API', 'OpenAPI'],
+  },
+  'lifecycle.nudge-gateway': {
+    subject: 'Publish a gateway and your tools go live',
+    markers: ['Publish a gateway', 'callable tools'],
+  },
+  'lifecycle.nudge-first-call': {
+    subject: 'Give Claude your API in one command',
+    markers: ['Make your first call', 'claude mcp add'],
+  },
+  'lifecycle.example-showcase': {
+    subject: 'Give Claude your API in about five minutes',
+    markers: ['Try the five-minute path', 'five-minute'],
+  },
+  'lifecycle.last-touch': {
+    subject: 'What people build on almyty (last note)',
+    markers: ['See what you can build', 'final almyty setup email'],
+  },
+  'lifecycle.activated-congrats': {
+    subject: 'Your first agent call landed on almyty',
+    markers: ['you are live', 'Explore what is next'],
+  },
+};
+
+/**
+ * Layer 2 — local render. Renders the template with the same params the
+ * service uses and asserts subject + copy markers + unsubscribe URL are
+ * present and no em-dash appears. Pure, no network.
+ */
+function checkLocalRender(
+  templateKey: string,
+  params: { firstName?: string; appUrl: string; unsubscribeUrl: string },
+): LayerResult {
+  const expect = TEMPLATE_EXPECT[templateKey];
+  if (!expect) {
+    return { status: 'fail', detail: `no expectation for ${templateKey}` };
+  }
+  const rendered = renderEmailTemplate(templateKey, params);
+  const problems: string[] = [];
+
+  if (!rendered.subject.includes(expect.subject)) {
+    problems.push(`subject missing "${expect.subject}"`);
+  }
+  for (const m of expect.markers) {
+    if (!rendered.html.includes(m)) problems.push(`html missing "${m}"`);
+  }
+  if (!rendered.html.includes(params.unsubscribeUrl)) {
+    problems.push('html missing unsubscribe URL');
+  }
+  if (rendered.html.includes(EM_DASH)) {
+    problems.push('html contains an em-dash');
+  }
+
+  return problems.length === 0
+    ? { status: 'pass', detail: `${templateKey} rendered OK` }
+    : { status: 'fail', detail: `${templateKey}: ${problems.join('; ')}` };
+}
+
+/**
+ * Layer 3 — Resend delivery + rendered content. Looks up the message by
+ * id via the Resend API and asserts it was accepted (HTTP 200), not
+ * bounced/failed/complained, and its stored html carries the expected
+ * copy + unsubscribe URL + no em-dash. Skips (no fail) when unset key.
+ */
+async function checkResendDelivery(
+  id: string | null,
+  templateKey: string,
+  unsubscribeUrl: string,
+  apiKey: string | undefined,
+): Promise<LayerResult> {
+  if (!apiKey) {
+    return { status: 'skip', detail: 'RESEND_API_KEY unset' };
+  }
+  if (!id) {
+    return {
+      status: 'fail',
+      detail: 'no Resend message id captured for this send',
+    };
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`https://api.resend.com/emails/${id}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+  } catch (err: any) {
+    return { status: 'fail', detail: `Resend fetch error: ${err?.message}` };
+  }
+
+  if (res.status !== 200) {
+    return { status: 'fail', detail: `Resend GET returned HTTP ${res.status}` };
+  }
+
+  const body: any = await res.json().catch(() => ({}));
+  const problems: string[] = [];
+
+  // Resend returns last_event (e.g. delivered/bounced) and/or a status.
+  const state = String(body.last_event ?? body.status ?? '').toLowerCase();
+  if (['bounced', 'failed', 'complained'].includes(state)) {
+    problems.push(`delivery state is "${state}"`);
+  }
+
+  const html = String(body.html ?? '');
+  const expect = TEMPLATE_EXPECT[templateKey];
+  if (expect) {
+    for (const m of expect.markers) {
+      if (!html.includes(m)) problems.push(`resend html missing "${m}"`);
+    }
+  }
+  if (unsubscribeUrl && !html.includes(unsubscribeUrl)) {
+    problems.push('resend html missing unsubscribe URL');
+  }
+  if (html.includes(EM_DASH)) {
+    problems.push('resend html contains an em-dash');
+  }
+
+  return problems.length === 0
+    ? {
+        status: 'pass',
+        detail: `Resend id ${id} state="${state || 'accepted'}" render OK`,
+      }
+    : { status: 'fail', detail: `id ${id}: ${problems.join('; ')}` };
+}
+
+/**
+ * Find the most recent send whose recipient matches `email` and return
+ * its Resend id (may be null on the dev/no-key path). Reads the live
+ * MailService buffer; the harness drains between scenarios so at most the
+ * current scenario's sends are present.
+ */
+function idForRecipient(
+  sends: { to: string; id: string | null }[],
+  email: string,
+): { found: boolean; id: string | null } {
+  const matches = sends.filter((s) => s.to === email);
+  if (matches.length === 0) return { found: false, id: null };
+  return { found: true, id: matches[matches.length - 1].id };
 }
 
 // ── Recipient derivation (no hardcoded address) ──────────────────────────────
@@ -379,6 +580,7 @@ async function main(): Promise<void> {
   };
   const lifecycle = app.get(LifecycleEmailService);
   const onboarding = app.get(OnboardingService);
+  const mail = app.get(MailService);
 
   if (!lifecycle.isEnabled()) {
     console.error(
@@ -389,17 +591,82 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const apiKey = process.env.RESEND_API_KEY;
+  // Mirror LifecycleEmailService.appUrl() so local-render params match the
+  // service's. Kept in sync with lifecycle-email.service.ts.
+  const appUrl =
+    process.env.APP_URL || process.env.FRONTEND_URL || 'https://app.almyty.com';
+
   const results: Result[] = [];
   const emailed: string[] = [];
+
   const record = (res: Result) => {
     results.push(res);
-    const mark = res.pass ? 'PASS' : 'FAIL';
-    console.log(`  [${mark}] ${res.scenario} <${res.email}> — ${res.detail}`);
+    const cell = (l: LayerResult) =>
+      l.status === 'pass' ? 'PASS' : l.status === 'skip' ? 'SKIP' : 'FAIL';
+    const overall = overallPass(res) ? 'PASS' : 'FAIL';
+    console.log(
+      `  [${overall}] ${res.scenario} <${res.email}>\n` +
+        `        logic=${cell(res.logic)} (${res.logic.detail})\n` +
+        `        local-render=${cell(res.localRender)} (${res.localRender.detail})\n` +
+        `        resend=${cell(res.resend)} (${res.resend.detail})`,
+    );
+  };
+
+  /**
+   * Shared layer-2 + layer-3 verification for a scenario that SHOULD have
+   * sent `templateKey` to `email` for user `userId`. Drains the mail
+   * buffer, matches the send, runs local render + Resend checks. Callers
+   * still compute the layer-1 (prefs key) result themselves.
+   */
+  const verifySend = async (
+    userId: string,
+    email: string,
+    templateKey: string,
+  ): Promise<{ localRender: LayerResult; resend: LayerResult }> => {
+    const params = {
+      firstName: 'Lifecycle',
+      appUrl,
+      unsubscribeUrl: lifecycle.unsubscribeUrl(userId),
+    };
+    const localRender = checkLocalRender(templateKey, params);
+
+    const sends = mail.drainRecentSends();
+    const { found, id } = idForRecipient(sends, email);
+    if (!found) {
+      return {
+        localRender,
+        resend: {
+          status: 'fail',
+          detail: `no send recorded to ${email} (expected ${templateKey})`,
+        },
+      };
+    }
+    emailed.push(email);
+    const resend = await checkResendDelivery(
+      id,
+      templateKey,
+      params.unsubscribeUrl,
+      apiKey,
+    );
+    return { localRender, resend };
+  };
+
+  /** For scenarios that must NOT send: assert the buffer is empty. */
+  const skipSendLayers = (
+    reason: string,
+  ): { localRender: LayerResult; resend: LayerResult } => {
+    mail.drainRecentSends();
+    return {
+      localRender: { status: 'skip', detail: reason },
+      resend: { status: 'skip', detail: reason },
+    };
   };
 
   try {
     // Clean any leftovers from a previous aborted run before seeding.
     await teardown(r, /*quiet*/ true);
+    mail.drainRecentSends(); // start from a clean buffer
 
     // 1) welcome ────────────────────────────────────────────────────────────
     {
@@ -407,12 +674,20 @@ async function main(): Promise<void> {
       const { user } = await seedUser(r, 'welcome', email, 0);
       await lifecycle.sendWelcome(user.id);
       const st = await lifecycleState(r, user.id);
-      emailed.push(email);
+      const { localRender, resend } = await verifySend(
+        user.id,
+        email,
+        'lifecycle.welcome',
+      );
       record({
         scenario: 'welcome',
         email,
-        pass: !!st.welcome,
-        detail: st.welcome ? `welcome set @ ${st.welcome}` : 'welcome NOT set',
+        logic: {
+          status: st.welcome ? 'pass' : 'fail',
+          detail: st.welcome ? `welcome set @ ${st.welcome}` : 'welcome NOT set',
+        },
+        localRender,
+        resend,
       });
     }
 
@@ -423,14 +698,22 @@ async function main(): Promise<void> {
       const steps = (await onboarding.getState(org.id, user.id)).steps;
       await lifecycle.runNudgeSweep();
       const st = await lifecycleState(r, user.id);
-      emailed.push(email);
+      const { localRender, resend } = await verifySend(
+        user.id,
+        email,
+        'lifecycle.nudge-provider',
+      );
       record({
         scenario: 'nudge-provider',
         email,
-        pass: !!st.stateNudge && steps.provider === false,
-        detail:
-          `stateNudge=${st.stateNudge ?? 'unset'}, ` +
-          `provider-step=${steps.provider} (expected template lifecycle.nudge-provider)`,
+        logic: {
+          status: !!st.stateNudge && steps.provider === false ? 'pass' : 'fail',
+          detail:
+            `stateNudge=${st.stateNudge ?? 'unset'}, provider-step=${steps.provider} ` +
+            `(expected lifecycle.nudge-provider)`,
+        },
+        localRender,
+        resend,
       });
     }
 
@@ -442,14 +725,25 @@ async function main(): Promise<void> {
       const steps = (await onboarding.getState(org.id, user.id)).steps;
       await lifecycle.runNudgeSweep();
       const st = await lifecycleState(r, user.id);
-      emailed.push(email);
+      const { localRender, resend } = await verifySend(
+        user.id,
+        email,
+        'lifecycle.nudge-api',
+      );
       record({
         scenario: 'nudge-api',
         email,
-        pass: !!st.stateNudge && steps.provider === true && steps.api === false,
-        detail:
-          `stateNudge=${st.stateNudge ?? 'unset'}, ` +
-          `provider=${steps.provider} api=${steps.api} (expected lifecycle.nudge-api)`,
+        logic: {
+          status:
+            !!st.stateNudge && steps.provider === true && steps.api === false
+              ? 'pass'
+              : 'fail',
+          detail:
+            `stateNudge=${st.stateNudge ?? 'unset'}, provider=${steps.provider} ` +
+            `api=${steps.api} (expected lifecycle.nudge-api)`,
+        },
+        localRender,
+        resend,
       });
     }
 
@@ -462,15 +756,25 @@ async function main(): Promise<void> {
       const steps = (await onboarding.getState(org.id, user.id)).steps;
       await lifecycle.runNudgeSweep();
       const st = await lifecycleState(r, user.id);
-      emailed.push(email);
+      const { localRender, resend } = await verifySend(
+        user.id,
+        email,
+        'lifecycle.nudge-gateway',
+      );
       record({
         scenario: 'nudge-gateway',
         email,
-        pass:
-          !!st.stateNudge && steps.api === true && steps.gateway === false,
-        detail:
-          `stateNudge=${st.stateNudge ?? 'unset'}, ` +
-          `api=${steps.api} gateway=${steps.gateway} (expected lifecycle.nudge-gateway)`,
+        logic: {
+          status:
+            !!st.stateNudge && steps.api === true && steps.gateway === false
+              ? 'pass'
+              : 'fail',
+          detail:
+            `stateNudge=${st.stateNudge ?? 'unset'}, api=${steps.api} ` +
+            `gateway=${steps.gateway} (expected lifecycle.nudge-gateway)`,
+        },
+        localRender,
+        resend,
       });
     }
 
@@ -484,18 +788,27 @@ async function main(): Promise<void> {
       const steps = (await onboarding.getState(org.id, user.id)).steps;
       await lifecycle.runNudgeSweep();
       const st = await lifecycleState(r, user.id);
-      emailed.push(email);
+      const { localRender, resend } = await verifySend(
+        user.id,
+        email,
+        'lifecycle.nudge-first-call',
+      );
       record({
         scenario: 'nudge-first-call',
         email,
-        pass:
-          !!st.stateNudge &&
-          steps.gateway === true &&
-          steps.first_call === false,
-        detail:
-          `stateNudge=${st.stateNudge ?? 'unset'}, ` +
-          `gateway=${steps.gateway} first_call=${steps.first_call} ` +
-          `(expected lifecycle.nudge-first-call)`,
+        logic: {
+          status:
+            !!st.stateNudge &&
+            steps.gateway === true &&
+            steps.first_call === false
+              ? 'pass'
+              : 'fail',
+          detail:
+            `stateNudge=${st.stateNudge ?? 'unset'}, gateway=${steps.gateway} ` +
+            `first_call=${steps.first_call} (expected lifecycle.nudge-first-call)`,
+        },
+        localRender,
+        resend,
       });
     }
 
@@ -506,12 +819,20 @@ async function main(): Promise<void> {
       const steps = (await onboarding.getState(org.id, user.id)).steps;
       await lifecycle.runNudgeSweep();
       const st = await lifecycleState(r, user.id);
-      emailed.push(email);
+      const { localRender, resend } = await verifySend(
+        user.id,
+        email,
+        'lifecycle.example-showcase',
+      );
       record({
         scenario: 'showcase',
         email,
-        pass: !!st.showcase && steps.first_call === false,
-        detail: st.showcase ? `showcase set @ ${st.showcase}` : 'showcase NOT set',
+        logic: {
+          status: !!st.showcase && steps.first_call === false ? 'pass' : 'fail',
+          detail: st.showcase ? `showcase set @ ${st.showcase}` : 'showcase NOT set',
+        },
+        localRender,
+        resend,
       });
     }
 
@@ -522,14 +843,22 @@ async function main(): Promise<void> {
       const steps = (await onboarding.getState(org.id, user.id)).steps;
       await lifecycle.runNudgeSweep();
       const st = await lifecycleState(r, user.id);
-      emailed.push(email);
+      const { localRender, resend } = await verifySend(
+        user.id,
+        email,
+        'lifecycle.last-touch',
+      );
       record({
         scenario: 'last-touch',
         email,
-        pass: !!st.lastTouch && steps.first_call === false,
-        detail: st.lastTouch
-          ? `lastTouch set @ ${st.lastTouch}`
-          : 'lastTouch NOT set',
+        logic: {
+          status: !!st.lastTouch && steps.first_call === false ? 'pass' : 'fail',
+          detail: st.lastTouch
+            ? `lastTouch set @ ${st.lastTouch}`
+            : 'lastTouch NOT set',
+        },
+        localRender,
+        resend,
       });
     }
 
@@ -541,14 +870,25 @@ async function main(): Promise<void> {
       const steps = (await onboarding.getState(org.id, user.id)).steps;
       await lifecycle.runNudgeSweep();
       const st = await lifecycleState(r, user.id);
-      emailed.push(email);
+      const { localRender, resend } = await verifySend(
+        user.id,
+        email,
+        'lifecycle.activated-congrats',
+      );
       record({
         scenario: 'congrats',
         email,
-        pass: !!st.activatedCongrats && !st.stateNudge && steps.first_call === true,
-        detail:
-          `activatedCongrats=${st.activatedCongrats ?? 'unset'}, ` +
-          `stateNudge=${st.stateNudge ?? 'unset (expected)'} first_call=${steps.first_call}`,
+        logic: {
+          status:
+            !!st.activatedCongrats && !st.stateNudge && steps.first_call === true
+              ? 'pass'
+              : 'fail',
+          detail:
+            `activatedCongrats=${st.activatedCongrats ?? 'unset'}, ` +
+            `stateNudge=${st.stateNudge ?? 'unset (expected)'} first_call=${steps.first_call}`,
+        },
+        localRender,
+        resend,
       });
     }
 
@@ -562,16 +902,25 @@ async function main(): Promise<void> {
       const st = await lifecycleState(r, user.id);
       // opted out → no send markers; only optOut itself present.
       const sendKeys = Object.keys(st).filter((k) => k !== 'optOut');
+      const sends = mail.drainRecentSends();
+      const sentToUser = sends.some((s) => s.to === email);
       record({
         scenario: 'opt-out',
         email,
-        pass: st.optOut === true && sendKeys.length === 0,
-        detail:
-          sendKeys.length === 0
-            ? 'no send markers written (opt-out honored)'
-            : `unexpected markers: ${sendKeys.join(', ')}`,
+        logic: {
+          status:
+            st.optOut === true && sendKeys.length === 0 && !sentToUser
+              ? 'pass'
+              : 'fail',
+          detail:
+            sendKeys.length === 0 && !sentToUser
+              ? 'no send markers written and no email dispatched (opt-out honored)'
+              : `unexpected markers: ${sendKeys.join(', ')}; sent=${sentToUser}`,
+        },
+        // Nothing should have been sent, so render/resend are N/A.
+        localRender: { status: 'skip', detail: 'no send expected (opt-out)' },
+        resend: { status: 'skip', detail: 'no send expected (opt-out)' },
       });
-      // Not pushed to `emailed`: opt-out must not send.
     }
 
     // 10) dedupe (provider scenario swept TWICE) → 2nd run sets nothing new ────
@@ -581,19 +930,33 @@ async function main(): Promise<void> {
       await lifecycle.runNudgeSweep();
       const first = await lifecycleState(r, user.id);
       const firstStamp = first.stateNudge;
+      // First sweep sent one email; verify it before the 2nd sweep so the
+      // buffer is scoped to run #1.
+      const firstVerify = await verifySend(
+        user.id,
+        email,
+        'lifecycle.nudge-provider',
+      );
       const secondResult = await lifecycle.runNudgeSweep();
       const second = await lifecycleState(r, user.id);
-      emailed.push(email); // first run legitimately emails once
+      const secondSends = mail.drainRecentSends();
+      const secondSent = secondSends.some((s) => s.to === email);
       const unchanged =
-        !!firstStamp && second.stateNudge === firstStamp;
+        !!firstStamp && second.stateNudge === firstStamp && !secondSent;
       record({
         scenario: 'dedupe',
         email,
-        pass: unchanged,
-        detail: unchanged
-          ? `stateNudge stable across 2 sweeps (@ ${firstStamp}); ` +
-            `2nd sweep sent=${secondResult.sent}`
-          : `marker changed on 2nd sweep: ${firstStamp} -> ${second.stateNudge}`,
+        logic: {
+          status: unchanged ? 'pass' : 'fail',
+          detail: unchanged
+            ? `stateNudge stable across 2 sweeps (@ ${firstStamp}); ` +
+              `2nd sweep sent=${secondResult.sent}, 2nd email dispatched=${secondSent}`
+            : `changed on 2nd sweep: marker ${firstStamp} -> ${second.stateNudge}, ` +
+              `2nd email dispatched=${secondSent}`,
+        },
+        // Layer 2/3 validate the single legit first-run send.
+        localRender: firstVerify.localRender,
+        resend: firstVerify.resend,
       });
     }
   } finally {
@@ -609,9 +972,23 @@ async function main(): Promise<void> {
   }
 
   // Summary ──────────────────────────────────────────────────────────────────
-  const passed = results.filter((x) => x.pass).length;
+  const passed = results.filter(overallPass).length;
+  const layerTally = (pick: (r: Result) => LayerResult) => {
+    const p = results.filter((r) => pick(r).status === 'pass').length;
+    const f = results.filter((r) => pick(r).status === 'fail').length;
+    const s = results.filter((r) => pick(r).status === 'skip').length;
+    return `pass=${p} fail=${f} skip=${s}`;
+  };
   console.log('\n──────────── SUMMARY ────────────');
   console.log(`  ${passed}/${results.length} scenarios PASSED`);
+  console.log(`  logic:        ${layerTally((r) => r.logic)}`);
+  console.log(`  local-render: ${layerTally((r) => r.localRender)}`);
+  console.log(`  resend:       ${layerTally((r) => r.resend)}`);
+  if (!apiKey) {
+    console.log(
+      '  (resend layer SKIPPED: RESEND_API_KEY unset — layers 1+2 still ran)',
+    );
+  }
   if (emailed.length) {
     console.log('\n  Emails dispatched via Resend (eyeball rendering):');
     for (const e of emailed) console.log(`    - ${e}`);
