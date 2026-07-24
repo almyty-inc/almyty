@@ -118,8 +118,11 @@ export class OnboardingService {
       .createQueryBuilder('log')
       .leftJoin('log.gateway', 'gw')
       .where(
-        "(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)",
-        { orgId: organizationId },
+        // gw.organizationId is uuid; log.metadata->>'organizationId' is text.
+        // Bind the metadata side as a separate TEXT param so Postgres doesn't
+        // infer the shared param as uuid (which throws: text = uuid).
+        "(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)",
+        { orgId: organizationId, orgIdText: organizationId },
       )
       .andWhere('log.statusCode >= 200 AND log.statusCode < 300')
       .orderBy('log.timestamp', 'ASC')
@@ -131,8 +134,11 @@ export class OnboardingService {
       .createQueryBuilder('log')
       .leftJoin('log.gateway', 'gw')
       .where(
-        "(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgId)",
-        { orgId: organizationId },
+        // gw.organizationId is uuid; log.metadata->>'organizationId' is text.
+        // Bind the metadata side as a separate TEXT param so Postgres doesn't
+        // infer the shared param as uuid (which throws: text = uuid).
+        "(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)",
+        { orgId: organizationId, orgIdText: organizationId },
       )
       .andWhere('log.statusCode >= 200 AND log.statusCode < 300')
       .andWhere('log.gatewayId IS NOT NULL')
