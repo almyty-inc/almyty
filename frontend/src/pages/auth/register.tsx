@@ -258,27 +258,12 @@ export function RegisterPage() {
               <p className="text-sm text-destructive">{registerError}</p>
             </div>
           )}
-          {/* Make the CAPTCHA gate explicit: without this, users click a
-              submit that silently no-ops (register funnel showed ~2.6 clicks
-              per person and a large drop here), then leave. Disable the button
-              and point at the check instead. */}
-          {captchaEnabled && !captchaToken && (
-            <p className="mb-3 text-sm text-muted-foreground" aria-live="polite">
-              Complete the &ldquo;Verify you are human&rdquo; check above to create your account.
-            </p>
-          )}
           <Button
             type="submit"
             className="w-full"
-            disabled={isLoading || (captchaEnabled && !captchaToken)}
-            aria-disabled={isLoading || (captchaEnabled && !captchaToken)}
-            title={
-              isLoading
-                ? 'Creating your account…'
-                : captchaEnabled && !captchaToken
-                  ? 'Complete the verification check first'
-                  : undefined
-            }
+            disabled={isLoading}
+            aria-disabled={isLoading}
+            title={isLoading ? 'Creating your account…' : undefined}
           >
             {isLoading ? (
               <>
