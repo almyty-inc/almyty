@@ -83,20 +83,20 @@ interface DashboardLayoutProps {
 // onboarding flow tells them. Previously Agents was first,
 // which rewarded existing users who already knew they wanted
 // an agent but left newcomers wondering what to click first.
-const navigation = [
+const navigation: { name: string; href: string; icon: any; dataTour?: string }[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   // Core workflow — follows the APIs → Tools → Gateways → Agents
   // pipeline narrative.
-  { name: 'APIs', href: '/apis', icon: Globe },
+  { name: 'APIs', href: '/apis', icon: Globe, dataTour: 'nav-api' },
   { name: 'Tools', href: '/tools', icon: Wrench },
-  { name: 'Gateways', href: '/gateways', icon: Zap },
+  { name: 'Gateways', href: '/gateways', icon: Zap, dataTour: 'nav-gateway' },
   { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'Runners', href: '/runners', icon: Cpu },
   { name: 'Credentials', href: '/credentials', icon: Key },
   { name: 'Approvals', href: '/approvals', icon: Shield },
   // Configuration
   { name: 'divider', href: '', icon: null as any },
-  { name: 'Models', href: '/llm-providers', icon: Brain },
+  { name: 'Models', href: '/llm-providers', icon: Brain, dataTour: 'nav-provider' },
   { name: 'Memory', href: '/memories', icon: Database },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
@@ -320,6 +320,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               return (
                 <NavLink
                   key={item.name}
+                  data-tour={item.dataTour}
                   to={item.href}
                   end={item.href === '/dashboard'}
                   title={sidebarCollapsed ? item.name : undefined}
