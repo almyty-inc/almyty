@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, Circle, ChevronRight, Sparkles, X } from 'lucide-react'
+import { Bot, Check, Circle, ChevronRight, Compass, Sparkles, X } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,9 +9,15 @@ import { onboardingApi, type OnboardingState } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
 
 /**
- * The four steps that make up the progress ring, in fixed order.
- * `external_client` is intentionally excluded from the ring — it is an
- * optional bonus surfaced once first_call lands (per the spec).
+ * The three steps that make up the progress ring, in fixed order — the
+ * hero path: turn an API into tools, publish a gateway, use it from an AI
+ * client. None of these require an almyty-side model (the model is the
+ * client's, e.g. Claude Code), so connecting one is intentionally NOT a
+ * ring step. It is surfaced as a contextual on-ramp (see MODEL_STEP) for
+ * the agent / LLM-tool / memory path, which does need a model.
+ *
+ * `external_client` is likewise excluded from the ring — it is an optional
+ * bonus surfaced once first_call lands (per the spec).
  */
 const CORE_STEPS: {
   key: keyof OnboardingState['steps']
@@ -21,40 +27,48 @@ const CORE_STEPS: {
   to: string
 }[] = [
   {
-    key: 'provider',
-    label: 'Connect an LLM provider',
-    description: 'Power agents and tool generation. Keys stay encrypted at rest.',
-    cta: 'Add provider',
-    to: '/llm-providers?new=1',
-  },
-  {
     key: 'api',
-    label: 'Import your first API',
-    description: 'Every operation in an OpenAPI, GraphQL, SOAP, or Protobuf schema becomes a typed tool.',
-    cta: 'Import API',
+    label: 'Turn an API into tools',
+    description: 'Paste a schema and get ready-to-use tools. No code.',
+    cta: 'Add an API',
     to: '/apis?new=1',
   },
   {
     key: 'gateway',
-    label: 'Create a gateway with tools',
-    description: 'One endpoint that serves your tools over MCP, A2A, UTCP, and Agent Skills.',
-    cta: 'Create gateway',
+    label: 'Make it usable by AI',
+    description: 'Get one link Claude and other agents can call.',
+    cta: 'Create a gateway',
     to: '/gateways?new=1',
   },
   {
     key: 'first_call',
-    label: 'Make your first call',
-    description: 'Run an agent or hit a gateway to see the pipeline end to end.',
+    label: 'See it work',
+    description: 'Use your tools from Claude Code, live.',
     cta: 'Try it',
     to: '/agents',
   },
 ]
+
+/**
+ * Contextual on-ramp, shown outside the ring once a model is missing. It
+ * targets the second family of journeys (agents, LLM-backed tools, memory)
+ * that genuinely need an almyty-configured model — without forcing it on
+ * the tool/gateway hero path that doesn't.
+ */
+const MODEL_STEP = {
+  label: 'Building agents on almyty?',
+  description: 'Connect a model to power agents, LLM-backed tools, and memory.',
+  cta: 'Connect a model',
+  to: '/llm-providers?new=1',
+}
 
 export interface GettingStartedCardProps {
   state: OnboardingState
   onSeedSample?: () => void
   seeding?: boolean
   onDismiss?: () => void
+  /** When provided, renders a 'Take a tour' button that starts the coach-mark tour on demand. */
+  onStartTour?: () => void
 }
 
 /**
@@ -89,6 +103,7 @@ export function GettingStartedCard({
   onSeedSample,
   seeding,
   onDismiss,
+  onStartTour,
 }: GettingStartedCardProps) {
   const navigate = useNavigate()
   useOnboardingAnalytics(state)
@@ -104,7 +119,7 @@ export function GettingStartedCard({
           <div>
             <CardTitle className="text-lg">Getting started</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Four steps from an API schema to a live, AI-ready gateway. Open any step and we&apos;ll walk you through.
+              Three steps from an API schema to a live, AI-ready gateway. Open any step and we&apos;ll walk you through.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -125,6 +140,17 @@ export function GettingStartedCard({
                   style={{ width: `${pct}%` }}
                 />
               </div>
+            {onStartTour && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-violet-500/30 text-violet-500 hover:bg-violet-500/10 shrink-0"
+                onClick={onStartTour}
+              >
+                <Compass className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Take a tour</span>
+              </Button>
+            )}
             </div>
             {onDismiss && (
               <Button
@@ -146,6 +172,7 @@ export function GettingStartedCard({
             return (
               <button
                 key={step.key}
+                data-tour={step.key === 'first_call' ? 'getting-started-first-call' : undefined}
                 onClick={() => navigate(step.to)}
                 className={`flex items-center gap-3 w-full text-left p-3 rounded-lg border transition-colors ${
                   done
@@ -200,6 +227,22 @@ export function GettingStartedCard({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Contextual on-ramp for the agent / LLM-tool / memory path.
+              Not a ring step — the hero flow above needs no almyty model. */}
+          {!state.steps.provider && (
+            <button
+              onClick={() => navigate(MODEL_STEP.to)}
+              className="flex items-center gap-3 w-full text-left p-3 rounded-lg border border-dashed border-violet-500/30 hover:bg-violet-500/5 transition-colors"
+            >
+              <Bot className="h-6 w-6 text-violet-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium">{MODEL_STEP.label}</div>
+                <div className="text-xs text-muted-foreground">{MODEL_STEP.description}</div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            </button>
           )}
         </div>
 

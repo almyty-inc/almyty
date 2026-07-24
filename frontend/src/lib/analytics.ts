@@ -105,10 +105,11 @@ export async function initAnalytics(): Promise<void> {
   const key = readKey()
   // No key → analytics stays completely dark. Do not import posthog-js.
   if (!key) return
-  // Development (and localhost / preview / unknown hosts) is never tracked —
-  // only staging and production emit events. Import nothing, touch no network.
+  // PRODUCTION ONLY. Staging (and development / localhost / preview / unknown
+  // hosts) never emit events — otherwise staging QA traffic pollutes the one
+  // shared PostHog project. Import nothing, touch no network off prod.
   const environment = readEnvironment()
-  if (environment === 'development') return
+  if (environment !== 'production') return
   initStarted = true
 
   const { default: posthog } = await import('posthog-js')
