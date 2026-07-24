@@ -4,6 +4,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
 
 import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
@@ -19,6 +21,10 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { ReferralsService } from '../referrals/referrals.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  LIFECYCLE_EMAIL_QUEUE,
+  LIFECYCLE_WELCOME_JOB,
+} from '../lifecycle/lifecycle-email.processor';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { CaptchaService } from './captcha.service';
 import { normalizeEmail, isDisposableEmail } from './email-normalization';
@@ -70,6 +76,12 @@ export class AuthService {
     // is simply skipped).
     @Optional()
     private readonly notifications?: NotificationsService,
+    // Activation lifecycle-email queue — @Optional() so unit tests and
+    // builds without the lifecycle module still construct AuthService.
+    // A missing queue simply skips enqueuing the welcome job.
+    @Optional()
+    @InjectQueue(LIFECYCLE_EMAIL_QUEUE)
+    private readonly lifecycleQueue?: Queue,
   ) {}
 
   async register(
@@ -608,11 +620,26 @@ export class AuthService {
       throw new BadRequestException('Invalid verification token');
     }
 
+    const wasAlreadyVerified = !!user.verifiedAt;
     user.isVerified = true;
     user.verifiedAt = user.verifiedAt ?? new Date();
     user.verificationToken = null;
 
     await this.userRepository.save(user);
+
+    // Activation lifecycle: enqueue the welcome email on the FIRST
+    // verification only. Best-effort and fully isolated — email must
+    // never break the verification path, so any queue error is swallowed.
+    // The per-send opt-in gate + dedupe live in LifecycleEmailService.
+    if (!wasAlreadyVerified && this.lifecycleQueue) {
+      try {
+        await this.lifecycleQueue.add(LIFECYCLE_WELCOME_JOB, { userId: user.id });
+      } catch (err: any) {
+        // Swallow: verification already succeeded and was persisted.
+        // eslint-disable-next-line no-console
+        console.warn(`Failed to enqueue lifecycle welcome for ${user.id}: ${err?.message}`);
+      }
+    }
   }
 
   /**
