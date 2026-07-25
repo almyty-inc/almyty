@@ -58,3 +58,7 @@ _internal/
 
 # Never commit license signing keys (forgeable entitlements)
 backend/scripts/license/*.pem
+
+# Claude DesignSync working dir (generated tooling + deps; regenerated on demand, not app source)
+.ds-sync/
+.design-sync/
