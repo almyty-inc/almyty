@@ -17,6 +17,10 @@
   <a href="https://docs.almyty.com/self-hosting">Self-hosting</a>
 </p>
 
+<p align="center">
+  <img src="docs-site/public/screenshots/agent-detail-overview.png" alt="An almyty agent: a GPT-4o primary model with a cross-vendor verifier panel (GPT-4o and Gemini) checking every output, plus its tools, schedule, and OpenAI-compatible endpoint" width="860">
+</p>
+
 ---
 
 In university I learned about service-oriented architecture. Services discovering each other, understanding what they do, composing themselves. I loved the idea but kept wondering how that's supposed to work when computers don't actually understand anything.
