@@ -122,6 +122,7 @@
   },
   "overrides": {
     "js-yaml": "5.2.2",
-    "postcss": "$postcss"
+    "postcss": "$postcss",
+    "brace-expansion": "^5.0.8"
   }
 }
