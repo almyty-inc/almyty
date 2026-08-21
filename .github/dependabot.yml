@@ -42,6 +42,12 @@ updates:
     labels:
       - "dependencies"
       - "backend"
+    ignore:
+      # Backend uses the TypeScript compiler API (SDK introspector).
+      # TS 7 restructures the package so `import * as ts from 'typescript'`
+      # no longer exports Symbol/TypeChecker. Needs a dedicated port.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       backend-minor-and-patch:
         applies-to: version-updates
@@ -80,6 +86,10 @@ updates:
     labels:
       - "dependencies"
       - "docs"
+    ignore:
+      # Next.js 16 still needs the TypeScript 6 compiler API.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       docs-minor-and-patch:
         applies-to: version-updates
