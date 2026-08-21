@@ -210,7 +210,7 @@ jobs:
     if: needs.build-docs.result == 'success'
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/digests
           pattern: docs-digest-*
