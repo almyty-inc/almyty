@@ -45,6 +45,9 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
 # Stage 3: Production - serve with nginx
 FROM nginx:1.31-alpine AS production
 
+# CA bundle required for proxy_ssl_verify of PostHog upstreams.
+RUN apk add --no-cache ca-certificates && update-ca-certificates
+
 # Remove default nginx config
 RUN rm /etc/nginx/conf.d/default.conf
 
