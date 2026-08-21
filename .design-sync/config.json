@@ -1,0 +1,10 @@
+{
+  "projectId": "3c21c63e-72a4-4e0e-a641-b22aecdeb275",
+  "shape": "package",
+  "pkg": "almyty-frontend",
+  "globalName": "AlmytyDS",
+  "srcDir": "src/components/ui",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": "dist/assets/index-To_jvoug.css",
+  "readmeHeader": ".design-sync/conventions.md"
+}
