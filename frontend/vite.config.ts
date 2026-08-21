@@ -26,13 +26,19 @@ export default defineConfig({
       // proxy that runs in production (frontend/nginx.conf). Events go to
       // the same-origin /ingest path so ad blockers can't drop them, and
       // dev forwards them on to PostHog Cloud EU. /ingest/static/* serves
-      // the SDK asset bundle from the assets host; everything else is
-      // ingestion. Keep /ingest/static before /ingest so it wins.
+      // the SDK asset bundle; /ingest/array/* is SDK remote config;
+      // everything else is ingestion. Keep more-specific paths first.
       '/ingest/static': {
         target: 'https://eu-assets.i.posthog.com',
         changeOrigin: true,
         secure: true,
         rewrite: (p) => p.replace(/^\/ingest\/static/, '/static'),
+      },
+      '/ingest/array': {
+        target: 'https://eu-assets.i.posthog.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (p) => p.replace(/^\/ingest\/array/, '/array'),
       },
       '/ingest': {
         target: 'https://eu.i.posthog.com',
