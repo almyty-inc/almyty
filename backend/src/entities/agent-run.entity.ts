@@ -121,10 +121,15 @@ export class AgentRun {
   @Column({ nullable: true })
   parentRunId: string;
 
-  @CreateDateColumn()
+  /**
+   * Zone-aware on purpose. A bare `timestamp` is read back in the Node
+   * process's local zone, which made every run look hours old on a host
+   * that was not UTC and broke the wall-clock budget in checkRunLimits.
+   */
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
   @ManyToOne(() => Agent, { onDelete: 'CASCADE' })

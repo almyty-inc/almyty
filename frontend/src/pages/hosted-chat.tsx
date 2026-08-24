@@ -221,31 +221,39 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
 
   const disclosure = disclosureLine(branding)
   const showEmpty = messages.length === 0
+  const hasHistory = (conversations?.length ?? 0) > 0
 
   return (
     <div style={style} className="flex min-h-screen bg-background text-foreground">
-      <Sidebar
-        open={sidebarOpen}
-        branding={branding}
-        conversations={conversations ?? []}
-        activeId={conversationId}
-        onOpen={openConversation}
-        onNew={startNew}
-        onClose={() => setSidebarOpen(false)}
-      />
+      {/* A first-time visitor has no history, so a permanent rail would
+          be 300px of empty white next to the thing they came for. It
+          appears once there is something in it. */}
+      {hasHistory && (
+        <Sidebar
+          open={sidebarOpen}
+          branding={branding}
+          conversations={conversations ?? []}
+          activeId={conversationId}
+          onOpen={openConversation}
+          onNew={startNew}
+          onClose={() => setSidebarOpen(false)}
+        />
+      )}
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 border-b px-4 py-3">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            aria-label="Conversations"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
+          {hasHistory && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              aria-label="Conversations"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+          )}
           <BrandMark branding={branding} />
         </header>
 
@@ -350,18 +358,20 @@ function EmptyState({
   onPick: (prompt: string) => void
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-      <h1 className="font-heading text-2xl font-semibold">
+    <div className="flex flex-1 flex-col items-center justify-end pb-8 text-center">
+      <h1 className="font-heading text-3xl font-semibold tracking-tight">
         {branding.greeting || `How can I help?`}
       </h1>
       {branding.suggestedPrompts.length > 0 && (
-        <div className="mt-8 grid w-full max-w-xl gap-2 sm:grid-cols-2">
+        // auto-fit rather than a fixed column count: three prompts
+        // centre as a row instead of wrapping to 2 + an orphan.
+        <div className="mt-8 grid w-full max-w-2xl justify-center gap-2 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
           {branding.suggestedPrompts.map((prompt) => (
             <button
               key={prompt}
               type="button"
               onClick={() => onPick(prompt)}
-              className="rounded-xl border bg-card px-4 py-3 text-left text-sm transition-colors hover:border-[var(--tenant)]"
+              className="rounded-xl border bg-card px-4 py-3 text-left text-sm transition-colors hover:border-[var(--tenant)] hover:bg-[color-mix(in_srgb,var(--tenant)_6%,transparent)]"
             >
               {prompt}
             </button>
