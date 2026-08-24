@@ -1,0 +1,5 @@
+#!/bin/sh
+# Layer A copy check. Install with:
+#   git config core.hooksPath docs-site/scripts
+# or copy this file to .git/hooks/pre-commit.
+cd "$(git rev-parse --show-toplevel)/docs-site" && node scripts/check-copy.mjs
