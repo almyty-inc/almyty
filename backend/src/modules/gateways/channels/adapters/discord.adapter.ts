@@ -6,6 +6,14 @@ export class DiscordAdapter extends BaseAdapter {
   private readonly logger = new Logger(DiscordAdapter.name);
   readonly type = 'discord';
 
+  /**
+   * Discord inbound never arrives as an HTTP webhook: the bot holds an
+   * authenticated gateway websocket (discord-gateway.transport.ts) and
+   * messages come down that socket. There is no signature to check
+   * because there is no untrusted HTTP entry point.
+   */
+  protected readonly inboundIsUnauthenticatedByDesign = true;
+
   normalizeInbound(rawPayload: any): NormalizedMessage {
     return {
       text: rawPayload.content || '',

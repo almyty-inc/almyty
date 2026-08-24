@@ -30,8 +30,14 @@ describe('WebhookAdapter', () => {
       return crypto.createHmac('sha256', secret).update(JSON.stringify(body)).digest('hex');
     }
 
-    it('returns true when no secret configured', async () => {
-      expect(await adapter.verifyWebhook(payload, {}, {})).toBe(true);
+    it('refuses inbound when no secret is configured', async () => {
+      expect(await adapter.verifyWebhook(payload, {}, {})).toBe(false);
+    });
+
+    it('rejects rather than throwing when the signature length differs', async () => {
+      expect(
+        await adapter.verifyWebhook(payload, { 'x-webhook-signature': 'deadbeef' }, { secret }),
+      ).toBe(false);
     });
     it('accepts a correctly-signed payload', async () => {
       const ok = await adapter.verifyWebhook(payload, { 'x-webhook-signature': sign(payload) }, { secret });

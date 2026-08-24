@@ -116,14 +116,16 @@ describe('WhatsAppAdapter', () => {
       expect(ok).toBe(false);
     });
 
-    it('skips verification when webhook_url is not configured', async () => {
+    it('refuses inbound when webhook_url is not configured', async () => {
+      // Twilio signs the exact URL it called, so without webhook_url the
+      // signature cannot be reconstructed and the request is refused.
       const ok = await adapter.verifyWebhook(twilioPayload, {}, { twilio_auth_token: authToken });
-      expect(ok).toBe(true);
+      expect(ok).toBe(false);
     });
 
-    it('skips verification when twilio_auth_token is not configured', async () => {
+    it('refuses inbound when twilio_auth_token is not configured', async () => {
       const ok = await adapter.verifyWebhook(twilioPayload, {}, { webhook_url: webhookUrl });
-      expect(ok).toBe(true);
+      expect(ok).toBe(false);
     });
   });
 });

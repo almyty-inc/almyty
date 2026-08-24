@@ -51,7 +51,9 @@ export class GoogleChatAdapter extends BaseAdapter {
 
   async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>): Promise<boolean> {
     // Google Chat uses bearer tokens for verification
-    if (!config.verification_token) return true;
+    // Fail closed: without the verification token there is nothing to
+    // distinguish Google Chat from any other caller.
+    if (!config.verification_token) return false;
     const token = headers['authorization']?.replace('Bearer ', '');
     return token === config.verification_token;
   }

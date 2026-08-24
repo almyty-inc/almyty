@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto';
 import { EventEmitter } from 'events';
 
 import { ChannelGatewayService } from '../channel-gateway.service';
@@ -40,7 +41,7 @@ describe('ChannelGatewayService installation resolution', () => {
     gateway.status = GatewayStatus.ACTIVE;
     gateway.agentId = 'agent-1';
     gateway.organizationId = 'org-1';
-    gateway.configuration = { bot_token: 'xoxb-gateway-default' };
+    gateway.configuration = { bot_token: 'xoxb-gateway-default', signing_secret: SIGNING_SECRET };
     gateway.totalRequests = 0;
     gateway.successfulRequests = 0;
     return gateway;
@@ -50,6 +51,22 @@ describe('ChannelGatewayService installation resolution', () => {
     ...(teamId ? { team_id: teamId } : {}),
     event: { type: 'message', text: 'hi there', user: 'U1', channel: 'C1', ts: '111.222' },
   });
+
+  /**
+   * Inbound now fails closed, so every one of these has to arrive
+   * correctly signed or the pipeline refuses it before it ever reaches
+   * installation resolution.
+   */
+  const SIGNING_SECRET = 'installation-resolution-secret';
+  const signedHeaders = (payload: unknown): Record<string, string> => {
+    const timestamp = '1700000000';
+    const basestring = `v0:${timestamp}:${JSON.stringify(payload)}`;
+    return {
+      'x-slack-request-timestamp': timestamp,
+      'x-slack-signature':
+        'v0=' + createHmac('sha256', SIGNING_SECRET).update(basestring).digest('hex'),
+    };
+  };
 
   const buildService = (withInstallations: boolean) =>
     new ChannelGatewayService(
@@ -121,7 +138,7 @@ describe('ChannelGatewayService installation resolution', () => {
     installationService.resolveCredentials.mockResolvedValue({ bot_token: 'xoxb-tenant-T777' });
     const service = buildService(true);
 
-    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), {});
+    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
     await completeRunAndFlush();
 
     expect(installationService.resolveCredentials).toHaveBeenCalledWith('gw-1', 'T777');
@@ -134,7 +151,7 @@ describe('ChannelGatewayService installation resolution', () => {
     installationService.resolveCredentials.mockResolvedValue(null);
     const service = buildService(true);
 
-    await service.handleInboundMessage(makeGateway(), slackEvent('T404'), {});
+    await service.handleInboundMessage(makeGateway(), slackEvent('T404'), signedHeaders(slackEvent('T404')));
     await completeRunAndFlush();
 
     expect(installationService.resolveCredentials).toHaveBeenCalledWith('gw-1', 'T404');
@@ -144,7 +161,7 @@ describe('ChannelGatewayService installation resolution', () => {
   it('keeps single-credential behavior when the payload has no tenant id', async () => {
     const service = buildService(true);
 
-    await service.handleInboundMessage(makeGateway(), slackEvent(undefined), {});
+    await service.handleInboundMessage(makeGateway(), slackEvent(undefined), signedHeaders(slackEvent(undefined)));
     await completeRunAndFlush();
 
     expect(installationService.resolveCredentials).not.toHaveBeenCalled();
@@ -154,7 +171,7 @@ describe('ChannelGatewayService installation resolution', () => {
   it('works unchanged when the installation subsystem is absent (optional dependency)', async () => {
     const service = buildService(false);
 
-    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), {});
+    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
     await completeRunAndFlush();
 
     expect(fetchMock.calls[0].init.headers.Authorization).toBe('Bearer xoxb-gateway-default');
@@ -164,7 +181,7 @@ describe('ChannelGatewayService installation resolution', () => {
     installationService.resolveCredentials.mockRejectedValue(new Error('db down'));
     const service = buildService(true);
 
-    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), {});
+    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
     await completeRunAndFlush();
 
     // Lookup failure degrades to the gateway's own credentials.
