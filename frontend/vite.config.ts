@@ -22,6 +22,17 @@ export default defineConfig({
     host: '0.0.0.0',
     port: parseInt(process.env.PORT || '3000'),
     proxy: {
+      // Same-origin API for the hosted chat app, mirroring the ingress
+      // rule that routes /api on a tenant host to the API service. The
+      // hosted chat client must be same-origin or the anonymous session
+      // cookie lands on the wrong host and every visitor looks new on
+      // every request. VITE_API_TARGET overrides the port for anyone
+      // whose 3000 is already taken.
+      '/api': {
+        target: process.env.VITE_API_TARGET || 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ''),
+      },
       // PostHog reverse proxy for local dev — mirrors the nginx /ingest
       // proxy that runs in production (frontend/nginx.conf). Events go to
       // the same-origin /ingest path so ad blockers can't drop them, and
