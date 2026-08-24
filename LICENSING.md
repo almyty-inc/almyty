@@ -24,16 +24,16 @@ allowed to key off `plan`.** Enforcement instead runs through a signed license.
 
 `backend/src/modules/licensing/` is the single source of truth for entitlements.
 
-- **License token** — an Ed25519-signed, offline-verifiable token decoding to
+- **License token**: an Ed25519-signed, offline-verifiable token decoding to
   `{ entitlements: string[], limits: Record<string, number>, expiresAt }`.
   Format: `v1.<base64url(payload)>.<base64url(signature)>`. It is verified with a
   public key only, so air-gapped deployments validate without calling home.
-- **`LicenseService`** — resolves the active feature set. `has(feature)` and
+- **`LicenseService`**: resolves the active feature set. `has(feature)` and
   `limit(key)` are the API. With no token (the OSS default) it returns the
   **community** entitlement set; a tampered or expired token is rejected and also
   falls back to community. A valid token unions its EE entitlements onto the
   community baseline.
-- **Public key** — built-in default (`DEFAULT_LICENSE_PUBLIC_KEY`), overridable
+- **Public key**: built-in default (`DEFAULT_LICENSE_PUBLIC_KEY`), overridable
   via `ALMYTY_LICENSE_PUBLIC_KEY`. The token is supplied via `ALMYTY_LICENSE_KEY`
   (or `ALMYTY_LICENSE_TOKEN`). The matching **private** signing key is held
   offline by the vendor and is not in this repo. A dev keypair for local testing
@@ -60,7 +60,7 @@ Read the active entitlements at `GET /licensing/entitlements`:
 
 `frontend/src/hooks/useEntitlement.ts` fetches `/licensing/entitlements` and
 exposes `has(feature)` / `limit(key)` / `edition`. The `<EntitlementGate>`
-component hides or locks EE-only UI. These are UX affordances only — the backend
+component hides or locks EE-only UI. These are UX affordances only. The backend
 guard is the real boundary.
 
 ## Build model: OSS vs EE
@@ -82,7 +82,7 @@ one-image open-core model): the EE modules are present in the image but every
 EE route is entitlement-gated at runtime and returns 402 without a valid license
 token. Building from source with `npm run build` produces the pure-OSS artifact. The EE feature modules live in `backend/ee/modules/` and are
 loaded at runtime through `backend/src/ee-loader.ts`, which returns an empty list
-when the `ee/` tree is absent — the OSS build compiles and runs without it. A
+when the `ee/` tree is absent: the OSS build compiles and runs without it. A
 minimal reference stub shows the exact
 shape a real EE module takes (an entitlement-gated controller). Because it lives
 under `backend/ee/`, it does not affect the OSS build or tests.
