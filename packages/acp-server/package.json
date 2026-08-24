@@ -48,5 +48,8 @@
   },
   "bugs": {
     "url": "https://github.com/almyty-inc/almyty/issues"
+  },
+  "overrides": {
+    "postcss": "^8.5.23"
   }
 }
