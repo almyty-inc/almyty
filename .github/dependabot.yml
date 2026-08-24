@@ -48,6 +48,9 @@ updates:
       # no longer exports Symbol/TypeChecker. Needs a dedicated port.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # v9 is ESM-only and Jest cannot load it.
+      - dependency-name: "oauth2-mock-server"
+        update-types: ["version-update:semver-major"]
     groups:
       backend-minor-and-patch:
         applies-to: version-updates
