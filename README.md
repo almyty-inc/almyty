@@ -29,11 +29,11 @@ Twenty years of better APIs, better protocols, better tooling. Computers still d
 
 ## What almyty does
 
-Point it at an API schema — OpenAPI, GraphQL, SOAP, Protobuf — and each operation becomes a tool. Or point it at an npm package (`pg`, `stripe`, `@aws-sdk/*`, etc.) and almyty generates tools from the SDK surface automatically. No code needed for either path. When you do need custom logic, write sandboxed JavaScript with full npm access — runs in a Node 24 worker thread with filesystem, process, and network restrictions enforced.
+Point it at an API schema (OpenAPI, GraphQL, SOAP, Protobuf) and each operation becomes a tool. Or point it at an npm package (`pg`, `stripe`, `@aws-sdk/*`, etc.) and almyty generates tools from the SDK surface automatically. No code needed for either path. When you do need custom logic, write sandboxed JavaScript with full npm access: it runs in a Node 24 worker thread with filesystem, process, and network restrictions enforced.
 
 Build agents with a visual pipeline builder. Chain LLM calls, tool calls, conditions, loops, parallel fan-out, sub-agents. Or skip the pipeline and run autonomous agents that figure out the steps themselves. Either way, you get scheduling, webhooks, human-in-the-loop, and an OpenAI-compatible chat API.
 
-Expose everything through gateways. Tools and agents are served over [MCP](https://docs.almyty.com/gateways/mcp), [A2A](https://docs.almyty.com/gateways/a2a), [UTCP](https://docs.almyty.com/gateways/utcp), [Agent Skills](https://docs.almyty.com/gateways/skills), and the [OpenAI-compatible API](https://docs.almyty.com/api-reference/openai-compatible) — from a single endpoint per gateway (`/{org}/{gateway}`). Connect agents to Slack, Discord, Telegram, email, or any webhook. You pick the protocol, almyty translates.
+Expose everything through gateways. Tools and agents are served over [MCP](https://docs.almyty.com/gateways/mcp), [A2A](https://docs.almyty.com/gateways/a2a), [UTCP](https://docs.almyty.com/gateways/utcp), [Agent Skills](https://docs.almyty.com/gateways/skills), and the [OpenAI-compatible API](https://docs.almyty.com/api-reference/openai-compatible) from a single endpoint per gateway (`/{org}/{gateway}`). Connect agents to Slack, Discord, Telegram, email, or any webhook. You pick the protocol, almyty translates.
 
 Self-hosted. Your infrastructure, your data.
 
@@ -52,8 +52,8 @@ See the [self-hosting guide](https://docs.almyty.com/self-hosting) for productio
 
 Two ways to self-host:
 
-- **`almyty/api` + `almyty/frontend`** — the API and the UI as separate images, for Kubernetes and scale-out deployments.
-- **`almyty/almyty`** — a single image that serves both the API and the UI on one origin, for simple self-hosting. Point it at an external postgres + redis:
+- **`almyty/api` + `almyty/frontend`**: the API and the UI as separate images, for Kubernetes and scale-out deployments.
+- **`almyty/almyty`**: a single image that serves both the API and the UI on one origin, for simple self-hosting. Point it at an external postgres + redis:
 
   ```bash
   docker compose -f docker-compose.allinone.yml up -d   # http://localhost:3000
@@ -97,7 +97,7 @@ almyty mcp                                # run almyty as an MCP server proxy
 almyty runner start --name laptop         # register this machine as a runner
 ```
 
-Each subcommand maps to a standalone npm package — `@almyty/auth`, `@almyty/agents`, `@almyty/chat`, `@almyty/skills`, `@almyty/mcp-server`, `@almyty/runner` — and the umbrella delegates to whichever you call. See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
+Each subcommand maps to a standalone npm package (`@almyty/auth`, `@almyty/agents`, `@almyty/chat`, `@almyty/skills`, `@almyty/mcp-server`, `@almyty/runner`) and the umbrella delegates to whichever you call. See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
 
 **Versioning.** The CLI packages share one version line and release together as a suite (`@almyty/* 1.x`). That is separate from the platform's own versioning, which is the Docker images and `v0.x` git tags. Any CLI 1.x works with platform 0.1 and later, so the two numbers moving independently is expected.
 
@@ -133,7 +133,7 @@ cd frontend && npx playwright test   # E2E
 
 ## Compliance
 
-almyty ships the operational pieces the EU AI Act asks deployers for: per-channel AI disclosure (Art. 50), human-in-the-loop approvals (Art. 14), run/audit logging (Art. 12), and a per-agent technical-documentation export (Annex IV). The full mapping — including GDPR, CRA, and the enterprise-questionnaire regimes — lives on the docs site under **Compliance**. Vulnerability reporting: see [SECURITY.md](./SECURITY.md).
+almyty ships the operational pieces the EU AI Act asks deployers for: per-channel AI disclosure (Art. 50), human-in-the-loop approvals (Art. 14), run/audit logging (Art. 12), and a per-agent technical-documentation export (Annex IV). The full mapping, including GDPR, CRA, and the enterprise-questionnaire regimes, lives on the docs site under **Compliance**. Vulnerability reporting: see [SECURITY.md](./SECURITY.md).
 
 ## License
 

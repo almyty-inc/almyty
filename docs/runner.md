@@ -6,6 +6,8 @@ This doc captures the load-bearing decisions behind the runner and workspace sub
 
 Every coding agent CLI on the market is single-vendor: Claude Code calls Anthropic models, Codex calls OpenAI's, gemini-cli calls Google's, aider lets you pick but each subagent is still locked to one provider per turn. The wedge: let an almyty workflow orchestrate any CLI coding agent with any model, on the user's machine, in one coherent workspace. PM agent (any model) plans, dispatches subtasks to specialist agents (different CLIs, different models), all editing the same codebase on the same runner.
 
+**v1 limit:** one runner per account. Multi-machine registration is not available yet.
+
 Every load-bearing decision below serves that wedge.
 
 ## Topology
