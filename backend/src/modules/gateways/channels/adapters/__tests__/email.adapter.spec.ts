@@ -368,8 +368,8 @@ describe('EmailAdapter', () => {
       };
     };
 
-    it('accepts everything when no secret is configured (legacy behavior)', async () => {
-      await expect(adapter.verifyWebhook({ a: 1 }, {}, {})).resolves.toBe(true);
+    it('refuses inbound when no signing secret is configured', async () => {
+      await expect(adapter.verifyWebhook({ a: 1 }, {}, {})).resolves.toBe(false);
     });
 
     it('accepts a correctly signed raw body', async () => {

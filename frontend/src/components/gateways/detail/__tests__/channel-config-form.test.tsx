@@ -14,6 +14,8 @@ describe('isChannelType', () => {
     expect(isChannelType('slack')).toBe(true)
     expect(isChannelType('discord')).toBe(true)
     expect(isChannelType('chat_widget')).toBe(true)
+    expect(isChannelType('sms')).toBe(true)
+    expect(isChannelType('whatsapp_cloud')).toBe(true)
   })
 
   it('rejects non-channel gateway types', () => {
@@ -130,7 +132,7 @@ describe('ChannelConfigForm', () => {
     })
   })
 
-  it('renders WhatsApp Twilio triple', () => {
+  it('renders WhatsApp Twilio triple plus the URL that turns signature checks on', () => {
     render(
       <ChannelConfigForm
         gateway={{ id: 'gw-4', type: 'whatsapp', configuration: {} }}
@@ -142,6 +144,39 @@ describe('ChannelConfigForm', () => {
     expect(screen.getByLabelText(/Twilio Account SID/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Twilio auth token/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/From phone number/i)).toBeInTheDocument()
+    // Twilio signs the exact URL it calls, so without webhook_url the
+    // adapter skips verification entirely. The field has to be here or
+    // the only way to get a verified WhatsApp channel is auto-registration.
+    expect(screen.getByLabelText(/Inbound webhook URL/i)).toBeInTheDocument()
+  })
+
+  it('renders SMS fields', () => {
+    render(
+      <ChannelConfigForm
+        gateway={{ id: 'gw-6', type: 'sms', configuration: {} }}
+        type="sms"
+        onSave={vi.fn()}
+        onTestConnection={vi.fn()}
+      />,
+    )
+    expect(screen.getByLabelText(/Twilio Account SID/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/From phone number/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Inbound webhook URL/i)).toBeInTheDocument()
+  })
+
+  it('renders WhatsApp Cloud (Meta) fields', () => {
+    render(
+      <ChannelConfigForm
+        gateway={{ id: 'gw-7', type: 'whatsapp_cloud', configuration: {} }}
+        type="whatsapp_cloud"
+        onSave={vi.fn()}
+        onTestConnection={vi.fn()}
+      />,
+    )
+    expect(screen.getByLabelText(/Access token/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Phone number ID/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Verify token/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/App secret/i)).toBeInTheDocument()
   })
 
   it('renders no fields for chat_widget', () => {

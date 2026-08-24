@@ -35,10 +35,27 @@ export abstract class BaseAdapter {
   abstract sendResponse(interfaceConfig: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void>;
 
   /**
-   * Verify webhook signature/authenticity (optional)
+   * Declared by the two adapters that genuinely have no inbound webhook
+   * to verify: discord, whose inbound arrives over an authenticated
+   * gateway websocket rather than HTTP, and the chat widget, which is
+   * public by design. Nothing else may set it. Every other adapter
+   * either verifies inbound or refuses it.
+   */
+  protected readonly inboundIsUnauthenticatedByDesign: boolean = false;
+
+  /**
+   * Verify that an inbound request really came from the platform it
+   * claims to.
+   *
+   * Fails CLOSED. An adapter that does not override this refuses every
+   * inbound request, and an adapter that overrides it must refuse when
+   * its secret is unconfigured rather than waving the request through.
+   * The previous default returned true, which meant a publicly
+   * reachable gateway with no secret set accepted forged payloads from
+   * anyone and ran the agent on them.
    */
   async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>, rawBody?: string): Promise<boolean> {
-    return true; // Override in specific adapters
+    return this.inboundIsUnauthenticatedByDesign;
   }
 
   /**

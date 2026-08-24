@@ -41,6 +41,17 @@ describe('UnifiedGatewayDelegation — whatsapp_cloud + sms', () => {
       },
     } as unknown as Gateway);
 
+  const TWILIO_AUTH_TOKEN = 'twilio-auth-token';
+  const TWILIO_WEBHOOK_URL = 'https://api.almyty.example/acme/sms-bot';
+
+  /** Twilio signs the exact URL plus the sorted form params. */
+  const twilioSignature = (params: Record<string, string>): string => {
+    const data = Object.keys(params)
+      .sort()
+      .reduce((acc, key) => acc + key + String(params[key] ?? ''), TWILIO_WEBHOOK_URL);
+    return crypto.createHmac('sha1', TWILIO_AUTH_TOKEN).update(data, 'utf-8').digest('base64');
+  };
+
   const smsGateway = () =>
     ({
       id: 'gw-sms-1',
@@ -48,7 +59,12 @@ describe('UnifiedGatewayDelegation — whatsapp_cloud + sms', () => {
       organizationId: 'org-1',
       agentId: 'agent-1',
       isSystem: false,
-      configuration: { twilio_account_sid: 'AC1', twilio_auth_token: 't', phone_number: '+1' },
+      configuration: {
+        twilio_account_sid: 'AC1',
+        twilio_auth_token: TWILIO_AUTH_TOKEN,
+        phone_number: '+1',
+        webhook_url: TWILIO_WEBHOOK_URL,
+      },
     } as unknown as Gateway);
 
   const makeReq = (opts: {
@@ -212,7 +228,9 @@ describe('UnifiedGatewayDelegation — whatsapp_cloud + sms', () => {
 
     it('treats sms gateways as channel webhooks (no almyty API-key auth)', async () => {
       const body = { Body: 'hi', From: '+15551234567', To: '+1' };
-      const req = makeReq({ body });
+      // Twilio inbound now has to carry a valid X-Twilio-Signature: the
+      // adapter refuses unsigned requests instead of waving them through.
+      const req = makeReq({ body, headers: { 'x-twilio-signature': twilioSignature(body) } });
       const res = makeRes();
 
       await handle(smsGateway(), req, res, body);
