@@ -33,10 +33,6 @@ jobs:
             context: ./frontend
             file: ./frontend/Dockerfile
             target: production
-          - image: almyty
-            context: .
-            file: ./Dockerfile.allinone
-            target: ''
     steps:
       - uses: actions/checkout@v6
 
@@ -188,15 +184,119 @@ jobs:
           MINOR: ${{ steps.ver.outputs.minor }}
           MAJOR: ${{ steps.ver.outputs.major }}
 
+  # All-in-one self-host image (almyty/almyty). Same native-arch split as
+  # docs: qemu-cross arm64 on ubuntu-latest hangs (npm ci / native addons
+  # for frontend+backend, and branch builds never cache this image). Off
+  # the prod-deploy critical path — SaaS pulls api + frontend only.
+  # Self-host SPA talks same-origin, so VITE_API_BASE_URL stays empty
+  # (do NOT bake https://api.almyty.com).
+  release-almyty:
+    name: Release almyty (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: amd64
+            runner: ubuntu-latest
+          - platform: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile.allinone
+          target: production
+          platforms: linux/${{ matrix.platform }}
+          provenance: true
+          sbom: true
+          build-args: |
+            VITE_API_BASE_URL=
+            VITE_POSTHOG_KEY=${{ vars.VITE_POSTHOG_KEY }}
+            VITE_POSTHOG_HOST=/ingest
+            VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
+            VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY }}
+          outputs: type=image,name=almyty/almyty,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=almyty-${{ matrix.platform }}
+          cache-to: type=gha,scope=almyty-${{ matrix.platform }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-almyty-digest-${{ matrix.platform }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release-almyty-manifest:
+    name: Release almyty (manifest)
+    needs: release-almyty
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve version
+        id: ver
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          MAJOR="${VERSION%%.*}"
+          MINOR="${VERSION#*.}"; MINOR="${MINOR%%.*}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "major=${MAJOR}" >> "$GITHUB_OUTPUT"
+          echo "minor=${MAJOR}.${MINOR}" >> "$GITHUB_OUTPUT"
+
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: /tmp/digests
+          pattern: release-almyty-digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create manifest list and push (all semver tags)
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t "almyty/almyty:${VERSION}" \
+            -t "almyty/almyty:${MINOR}" \
+            -t "almyty/almyty:${MAJOR}" \
+            -t "almyty/almyty:latest" \
+            $(printf 'almyty/almyty@sha256:%s ' *)
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          MINOR: ${{ steps.ver.outputs.minor }}
+          MAJOR: ${{ steps.ver.outputs.major }}
+
   # Trigger the production rollout. This does NOT deploy — it only fires a
   # repository_dispatch at almyty-inc/infra, whose deploy.yml owns the actual
   # cluster rollout (migration, kubectl, smoke, rollback). Same pattern
   # build-publish.yml uses for dev/staging. We pass the semver tag so infra
   # pins almyty/api:<version> and kubectl shows the running version.
   #
-  # Intentionally needs ONLY `release` (api/frontend/almyty), NOT release-docs:
-  # prod pulls api + frontend, and gating the rollout on the docs image (a slow
-  # flake-prone build) once already skipped a whole release.
+  # Intentionally needs ONLY `release` (api + frontend). NOT release-docs
+  # and NOT release-almyty: prod pulls api + frontend. Gating rollout on
+  # docs (qemu SIGILL) or the all-in-one image (qemu hang on v0.1.9) skips a release.
   trigger-prod-deploy:
     needs: release
     runs-on: ubuntu-latest
