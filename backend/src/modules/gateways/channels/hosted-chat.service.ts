@@ -6,6 +6,8 @@ import { createHash, randomBytes } from 'crypto';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { EndUser } from '../../../entities/end-user.entity';
 import { Conversation, ConversationStatus } from '../../../entities/conversation.entity';
+import { Message, MessageRole } from '../../../entities/message.entity';
+import { AgentRun } from '../../../entities/agent-run.entity';
 import {
   HostedChatConfig,
   hostedChatConfigFrom,
@@ -32,6 +34,10 @@ export class HostedChatService {
     private readonly endUserRepository: Repository<EndUser>,
     @InjectRepository(Conversation)
     private readonly conversationRepository: Repository<Conversation>,
+    @InjectRepository(Message)
+    private readonly messageRepository: Repository<Message>,
+    @InjectRepository(AgentRun)
+    private readonly runRepository: Repository<AgentRun>,
   ) {}
 
   /**
@@ -174,5 +180,45 @@ export class HostedChatService {
         title: (title || '').slice(0, 120) || 'New chat',
       }),
     );
+  }
+
+  /**
+   * Whether a run belongs to this visitor.
+   *
+   * A run id is a UUID, but it still arrives from a caller on a public
+   * endpoint. Confirming ownership through the conversation, rather than
+   * trusting the id, is what stops one visitor streaming another's
+   * reply by guessing or replaying.
+   */
+  async runBelongsToEndUser(runId: string, endUser: EndUser): Promise<boolean> {
+    const run = await this.runRepository.findOne({ where: { id: runId } });
+    if (!run?.conversationId) return false;
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: run.conversationId, endUserId: endUser.id },
+    });
+    return !!conversation;
+  }
+
+  /**
+   * Replay a conversation. Only the turns a person should see: tool
+   * calls and system scaffolding stay out of a public transcript.
+   */
+  async listMessages(
+    conversation: Conversation,
+  ): Promise<Array<{ id: string; role: string; content: string; createdAt: Date }>> {
+    const messages = await this.messageRepository.find({
+      where: { conversationId: conversation.id },
+      order: { createdAt: 'ASC' },
+      take: 500,
+    });
+
+    return messages
+      .filter((m) => m.role === MessageRole.USER || m.role === MessageRole.ASSISTANT)
+      .map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: typeof m.getTextContent === 'function' ? m.getTextContent() : m.content,
+        createdAt: m.createdAt,
+      }));
   }
 }
