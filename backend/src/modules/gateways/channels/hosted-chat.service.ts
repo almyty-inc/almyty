@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
@@ -13,6 +13,8 @@ import {
   HostedChatConfig,
   hostedChatConfigFrom,
 } from './hosted-chat.config';
+import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
+import { AuditLogService } from '../../audit-log/audit-log.service';
 import {
   CustomDomainConfig,
   VERIFICATION_RECORD_PREFIX,
@@ -44,6 +46,8 @@ export class HostedChatService {
     private readonly messageRepository: Repository<Message>,
     @InjectRepository(AgentRun)
     private readonly runRepository: Repository<AgentRun>,
+    @Optional()
+    private readonly auditLogService?: AuditLogService,
   ) {}
 
   /**
@@ -281,6 +285,36 @@ export class HostedChatService {
         return { verified: false, error: 'No TXT record found at that name yet.' };
       }
       return { verified: false, error: `Could not read DNS: ${err?.message ?? err}` };
+    }
+  }
+
+  /**
+   * Record that a tenant removed the Art. 50 disclosure.
+   *
+   * Publishing already refuses this without the white-label
+   * entitlement, so reaching here means it was allowed. It is still
+   * audited: a deployer who later has to show a regulator when their
+   * disclosure stopped appearing needs a record with a date on it, and
+   * "we checked an entitlement" is not that record.
+   */
+  async recordDisclosureRemoval(gateway: Gateway, userId: string | null): Promise<void> {
+    try {
+      await this.auditLogService?.log({
+        organizationId: gateway.organizationId,
+        userId: userId ?? undefined,
+        action: AuditAction.UPDATE,
+        resourceType: AuditResource.GATEWAY,
+        resourceId: gateway.id,
+        resourceName: gateway.name,
+        details: {
+          change: 'ai_disclosure_removed',
+          surface: 'hosted_chat',
+          article: 'EU AI Act Art. 50',
+        },
+      });
+    } catch {
+      // An audit write must not be why a save fails; the entitlement
+      // check that permitted this already happened.
     }
   }
 }
