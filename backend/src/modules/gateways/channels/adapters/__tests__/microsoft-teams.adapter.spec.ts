@@ -187,9 +187,11 @@ describe('MicrosoftTeamsAdapter', () => {
       expect(await adapter.verifyWebhook(teamsActivity, { authorization: 'Bearer not-a-jwt' }, config)).toBe(false);
     });
 
-    it('skips verification when bot_id is not configured', async () => {
+    it('refuses inbound when bot_id is not configured', async () => {
+      // bot_id is the JWT audience, so without it the activity cannot be
+      // attributed to Teams at all.
       const fetchSpy = installJwksFetch();
-      expect(await adapter.verifyWebhook(teamsActivity, {}, {})).toBe(true);
+      expect(await adapter.verifyWebhook(teamsActivity, {}, {})).toBe(false);
       expect(fetchSpy).not.toHaveBeenCalled();
     });
   });

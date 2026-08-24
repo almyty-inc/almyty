@@ -278,7 +278,9 @@ export const SURFACE_CATALOG: readonly SurfaceDescriptor[] = Object.freeze([
     humanFacing: true,
     inboundAuth: {
       mechanism: 'jwt',
-      requiredConfigKeys: [],
+      // bot_id is the audience the Bot Framework JWT is verified
+      // against, so verification cannot run without it.
+      requiredConfigKeys: ['bot_id'],
       unauthenticatedByDesign: false,
     },
     edition: 'core',

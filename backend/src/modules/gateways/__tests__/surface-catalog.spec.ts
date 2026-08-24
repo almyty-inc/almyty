@@ -83,8 +83,11 @@ describe('surface catalog', () => {
       expect(status.reason).toContain('is set');
     });
 
-    it('treats Teams as verified with no per-gateway configuration', () => {
-      expect(inboundAuthStatus(GatewayType.MICROSOFT_TEAMS, {})).toEqual({
+    it('requires bot_id before Teams inbound can be verified', () => {
+      const missing = inboundAuthStatus(GatewayType.MICROSOFT_TEAMS, {});
+      expect(missing.verified).toBe(false);
+      expect(missing.reason).toContain('bot_id');
+      expect(inboundAuthStatus(GatewayType.MICROSOFT_TEAMS, { bot_id: 'app-id' })).toEqual({
         verified: true,
         reason: null,
       });
