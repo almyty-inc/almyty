@@ -53,6 +53,14 @@ export class Conversation {
   @Column({ nullable: true })
   userId: string;
 
+  /**
+   * The outside visitor this conversation belongs to, for hosted chat
+   * and widget surfaces. Null for conversations owned by a logged-in
+   * dashboard user or driven straight through a protocol gateway.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  endUserId: string | null;
+
   @Column()
   organizationId: string;
 
