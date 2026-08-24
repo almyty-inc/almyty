@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight, Search, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { RunLimitsSection, type RunLimitsConfig } from '@/components/agents/builder/run-limits-section'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -30,7 +31,11 @@ export interface AutonomousConfigProps {
   tools: any[]
   memoryConfig: { enabled?: boolean; autoSave?: boolean }
   onMemoryConfigChange: (v: AutonomousConfigProps['memoryConfig']) => void
-  agentConfig: { canCallAgents?: boolean; canCreateAgents?: boolean }
+  agentConfig: {
+    canCallAgents?: boolean
+    canCreateAgents?: boolean
+    runLimits?: RunLimitsConfig
+  }
   onAgentConfigChange: (v: AutonomousConfigProps['agentConfig']) => void
   collaboration: {
     enabled: boolean
@@ -192,6 +197,14 @@ export function AutonomousConfig({
           </label>
         </CardContent>
       </Card>
+
+      {/* Run limits — the ceilings a run cannot exceed. Sits next to
+          capabilities on purpose: what an agent may do and how far it
+          may go are the same decision. */}
+      <RunLimitsSection
+        value={agentConfig.runLimits ?? {}}
+        onChange={(runLimits) => onAgentConfigChange({ ...agentConfig, runLimits })}
+      />
 
       {/* Collaboration */}
       <Card>
