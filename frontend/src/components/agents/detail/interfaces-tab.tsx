@@ -59,6 +59,8 @@ import type { Gateway } from '@/types'
 
 interface InterfacesTabProps {
   agentId: string
+  /** Shown on the canvas hub node. */
+  agentName?: string
 }
 
 const CHANNEL_TYPES = [
@@ -80,7 +82,10 @@ const CHANNEL_TYPES = [
   { value: 'chat_widget', label: 'Chat Widget' },
 ]
 
-export function InterfacesTab({ agentId }: InterfacesTabProps) {
+import { SurfacesCanvas } from '@/components/agents/surfaces/surfaces-canvas'
+import type { SurfaceDescriptor } from '@/components/agents/surfaces/surface-types'
+
+export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
 
@@ -91,6 +96,23 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
   // Deployed channel whose setup instructions are open. Set right after a
   // successful deploy and from the "Setup" button on every channel card.
   const [setupGateway, setSetupGateway] = useState<Gateway | null>(null)
+  // The canvas is the default view: one agent, its surfaces around it.
+  // The list stays for scanning many gateways at once.
+  const [view, setView] = useState<'canvas' | 'list'>('canvas')
+
+  // Which surfaces exist and which are usable is the backend's answer,
+  // not a hardcoded list here, so a gated or retired surface shows up
+  // without a frontend change.
+  const { data: surfacesData } = useQuery({
+    queryKey: ['surface-catalog'],
+    queryFn: () => gatewaysApi.listSurfaces(),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const catalog: SurfaceDescriptor[] = (() => {
+    const raw = (surfacesData as any)?.data ?? surfacesData
+    return Array.isArray(raw) ? raw : []
+  })()
 
   // Fetch agent-kind gateways for this agent
   const { data: gatewaysData, isLoading } = useQuery({
@@ -137,20 +159,66 @@ export function InterfacesTab({ agentId }: InterfacesTabProps) {
     <>
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-semibold">Deployed Channels</h3>
-          <p className="text-xs text-muted-foreground">Gateways where this agent is accessible</p>
+          <h3 className="text-base font-semibold">Surfaces</h3>
+          <p className="text-xs text-muted-foreground">Everywhere this agent is reachable</p>
         </div>
-        <Button size="sm" onClick={() => setDeployInterfaceOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Deploy Channel
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-md border p-0.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={view === 'canvas' ? 'secondary' : 'ghost'}
+              className="h-7 px-2.5"
+              onClick={() => setView('canvas')}
+            >
+              Canvas
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={view === 'list' ? 'secondary' : 'ghost'}
+              className="h-7 px-2.5"
+              onClick={() => setView('list')}
+            >
+              List
+            </Button>
+          </div>
+          <Button size="sm" onClick={() => setDeployInterfaceOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Deploy Channel
+          </Button>
+        </div>
       </div>
+
+      {view === 'canvas' && !isLoading && (
+        <SurfacesCanvas
+          agentName={agentName || 'This agent'}
+          catalog={catalog}
+          published={gateways.map((gw) => ({
+            id: gw.id,
+            type: gw.type as string,
+            name: gw.name,
+            configuration: (gw as any).configuration,
+          }))}
+          onSelectPublished={(surface) => {
+            const gateway = gateways.find((gw) => gw.id === surface.id)
+            if (gateway) setSetupGateway(gateway)
+          }}
+          onAddSurface={(surface) => {
+            // Drop straight into the deploy dialog with the surface the
+            // operator clicked already chosen.
+            setNewInterfaceType(surface.type)
+            setInterfaceConfig(getDefaultInterfaceConfig(surface.type))
+            setDeployInterfaceOpen(true)
+          }}
+        />
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      ) : gateways.length === 0 ? (
+      ) : view === 'canvas' ? null : gateways.length === 0 ? (
         <Card>
           <CardContent className="py-8">
             <p className="text-sm text-muted-foreground text-center">
