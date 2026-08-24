@@ -46,8 +46,8 @@
     "codemirror-graphql": "^2.2.7",
     "date-fns": "^4.4.0",
     "driver.js": "^1.8.0",
-    "lucide-react": "^1.32.0",
-    "posthog-js": "^1.418.1",
+    "lucide-react": "^1.33.0",
+    "posthog-js": "^1.418.6",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-hook-form": "^7.85.0",
@@ -72,7 +72,7 @@
     "@types/react-dom": "^19.2.4",
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.58.1",
-    "@vitejs/plugin-react": "^6.0.5",
+    "@vitejs/plugin-react": "^6.1.0",
     "@vitest/coverage-v8": "^4.1.11",
     "autoprefixer": "^10.5.4",
     "axios-mock-adapter": "^2.1.0",
@@ -83,7 +83,7 @@
     "postcss": "^8.5.26",
     "tailwindcss": "^4.2.4",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1",
+    "vite": "^8.2.2",
     "vitest": "^4.1.4"
   },
   "scripts": {
