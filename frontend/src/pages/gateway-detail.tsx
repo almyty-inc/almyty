@@ -339,10 +339,11 @@ export function GatewayDetailPage() {
       {/* Chat widget builder — customize + live-preview the embeddable widget */}
       {gateway.type === 'chat_widget' && <WidgetBuilder gateway={gateway} />}
 
-      {/* Hosted chat app — the same agent as a standalone branded site on
-          its own subdomain. Shares the widget's colour and greeting
-          vocabulary rather than introducing a second branding model. */}
-      {gateway.type === 'chat_widget' && (
+      {/* Hosted chat app — a standalone branded site on its own
+          subdomain. Its own surface rather than a widget setting: the
+          widget is a bubble in someone else's page, this is a site. They
+          share the branding vocabulary, not the gateway. */}
+      {gateway.type === 'hosted_chat' && (
         <HostedChatBuilder
           gateway={{
             id: gateway.id,

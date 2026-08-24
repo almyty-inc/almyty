@@ -385,6 +385,19 @@ export const SURFACE_CATALOG: readonly SurfaceDescriptor[] = Object.freeze([
   // Human surfaces
   // ---------------------------------------------------------------
   {
+    type: GatewayType.HOSTED_CHAT,
+    label: 'Hosted chat app',
+    category: 'human',
+    kind: GatewayKind.AGENT,
+    available: true,
+    unavailableReason: null,
+    humanFacing: true,
+    // Anyone with the link can open it; abuse is bounded by the
+    // surface's cost cap and rate limits, which publishing requires.
+    inboundAuth: NO_INBOUND_AUTH,
+    edition: 'core',
+  },
+  {
     type: GatewayType.CHAT_WIDGET,
     label: 'Embeddable web widget',
     category: 'human',
