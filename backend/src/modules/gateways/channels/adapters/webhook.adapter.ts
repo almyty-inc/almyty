@@ -40,10 +40,16 @@ export class WebhookAdapter extends BaseAdapter {
   }
 
   async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>, rawBody?: string): Promise<boolean> {
-    if (!config.secret) return true;
+    // Fail closed: without a shared secret any caller could drive the
+    // agent through this endpoint.
+    if (!config.secret) return false;
     const signature = headers['x-webhook-signature'];
     if (!signature) return false;
     const expected = crypto.createHmac('sha256', config.secret).update(rawBody ?? JSON.stringify(payload)).digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+    // Length-check before timingSafeEqual, which throws on mismatched
+    // buffer lengths.
+    const a = Buffer.from(expected);
+    const b = Buffer.from(String(signature));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
   }
 }

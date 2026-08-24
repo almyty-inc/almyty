@@ -253,7 +253,8 @@ export class EmailAdapter extends BaseAdapter {
     rawBody?: string,
   ): Promise<boolean> {
     const secret = config?.resend_inbound_signing_secret;
-    if (!secret) return true;
+    // Fail closed: an unsigned inbound mail webhook is anyone's to forge.
+    if (!secret) return false;
     const body =
       rawBody ?? (typeof payload === 'string' ? payload : JSON.stringify(payload ?? {}));
     return verifySvixSignature(body, headers || {}, secret);

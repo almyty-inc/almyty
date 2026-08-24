@@ -28,6 +28,8 @@ export type ChannelType =
   | 'discord'
   | 'telegram'
   | 'whatsapp'
+  | 'whatsapp_cloud'
+  | 'sms'
   | 'microsoft_teams'
   | 'google_chat'
   | 'signal'
@@ -42,6 +44,8 @@ export const CHANNEL_TYPES: ChannelType[] = [
   'discord',
   'telegram',
   'whatsapp',
+  'whatsapp_cloud',
+  'sms',
   'microsoft_teams',
   'google_chat',
   'signal',
@@ -80,6 +84,19 @@ const FIELD_SETS: Record<ChannelType, FieldDef[]> = {
     { key: 'twilio_account_sid', label: 'Twilio Account SID', placeholder: 'ACxxxxxxxx', required: true },
     { key: 'twilio_auth_token', label: 'Twilio auth token', secret: true, required: true },
     { key: 'phone_number', label: 'From phone number', placeholder: 'whatsapp:+15551234567', required: true },
+    { key: 'webhook_url', label: 'Inbound webhook URL', placeholder: 'https://api.example.com/acme/support-bot', required: false, helper: 'The exact URL Twilio calls. Twilio signs the full URL, so inbound signature checks stay off until this is set. Filled in automatically when the webhook is registered for you.' },
+  ],
+  whatsapp_cloud: [
+    { key: 'access_token', label: 'Access token', placeholder: 'Meta system-user token', secret: true, required: true },
+    { key: 'phone_number_id', label: 'Phone number ID', placeholder: 'Cloud API phone number ID, not the E.164', required: true },
+    { key: 'verify_token', label: 'Verify token', placeholder: 'Any string, echoed during Meta webhook setup', secret: true, required: true },
+    { key: 'app_secret', label: 'App secret', secret: true, required: false, helper: 'Verifies the X-Hub-Signature-256 header on inbound messages. Inbound is unverified while this is empty.' },
+  ],
+  sms: [
+    { key: 'twilio_account_sid', label: 'Twilio Account SID', placeholder: 'ACxxxxxxxx', required: true },
+    { key: 'twilio_auth_token', label: 'Twilio auth token', secret: true, required: true },
+    { key: 'phone_number', label: 'From phone number', placeholder: '+15551234567', required: true },
+    { key: 'webhook_url', label: 'Inbound webhook URL', placeholder: 'https://api.example.com/acme/support-bot', required: false, helper: 'The exact URL Twilio calls. Twilio signs the full URL, so inbound signature checks stay off until this is set. Filled in automatically when the webhook is registered for you.' },
   ],
   microsoft_teams: [
     { key: 'bot_id', label: 'Bot ID', placeholder: 'Azure AD app (client) ID', required: true },

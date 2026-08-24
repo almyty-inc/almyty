@@ -88,7 +88,8 @@ export class IrcAdapter extends BaseAdapter {
    */
   async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>): Promise<boolean> {
     const expected = config.inbound_token;
-    if (!expected) return true;
+    // Fail closed: the bridge must present a token.
+    if (!expected) return false;
 
     const authz = headers['authorization'] || '';
     const presented = authz.startsWith('Bearer ')
