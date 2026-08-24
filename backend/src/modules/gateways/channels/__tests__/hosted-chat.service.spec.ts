@@ -27,6 +27,7 @@ describe('HostedChatService', () => {
   let conversationRepository: any;
   let messageRepository: any;
   let runRepository: any;
+  let auditLogService: any;
   let service: HostedChatService;
   let qb: any;
 
@@ -50,12 +51,14 @@ describe('HostedChatService', () => {
     };
     messageRepository = { find: jest.fn(async () => []) };
     runRepository = { findOne: jest.fn(async () => null) };
+    auditLogService = { log: jest.fn(async () => null) };
     service = new HostedChatService(
       gatewayRepository,
       endUserRepository,
       conversationRepository,
       messageRepository,
       runRepository,
+      auditLogService as any,
     );
   });
 
@@ -270,6 +273,40 @@ describe('HostedChatService', () => {
     it('returns null for an empty hostname without touching the database', async () => {
       await expect(service.findByCustomDomain('')).resolves.toBeNull();
       expect(gatewayRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('recordDisclosureRemoval', () => {
+    it('records who removed the Art. 50 disclosure and when', async () => {
+      // Publishing already gated this on the entitlement; the audit row
+      // is what a deployer shows a regulator later.
+      await service.recordDisclosureRemoval(gateway(), 'user-1');
+      expect(auditLogService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: 'org-1',
+          userId: 'user-1',
+          details: expect.objectContaining({
+            change: 'ai_disclosure_removed',
+            article: 'EU AI Act Art. 50',
+          }),
+        }),
+      );
+    });
+
+    it('never lets a failed audit write break the save', async () => {
+      auditLogService.log.mockRejectedValueOnce(new Error('audit sink down'));
+      await expect(service.recordDisclosureRemoval(gateway(), 'user-1')).resolves.toBeUndefined();
+    });
+
+    it('works without an audit service wired at all', async () => {
+      const bare = new HostedChatService(
+        gatewayRepository,
+        endUserRepository,
+        conversationRepository,
+        messageRepository,
+        runRepository,
+      );
+      await expect(bare.recordDisclosureRemoval(gateway(), null)).resolves.toBeUndefined();
     });
   });
 });
