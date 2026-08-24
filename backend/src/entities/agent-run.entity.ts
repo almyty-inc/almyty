@@ -89,6 +89,19 @@ export class AgentRun {
   @Column({ default: 0 })
   executionTime: number;
 
+  /**
+   * Depth of this run inside the run-scoped budget ledger. A run started
+   * directly is 0; a sub-agent or collaboration member is its parent's
+   * depth plus one. Bounded by the resolved maxRecursionDepth so nested
+   * work stays inside one budget rather than multiplying alongside it.
+   */
+  @Column({ default: 0 })
+  recursionDepth: number;
+
+  /** Tool calls made so far, checked against the resolved maxToolCalls. */
+  @Column({ default: 0 })
+  toolCallCount: number;
+
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
 
@@ -99,6 +112,10 @@ export class AgentRun {
     maxCostCents?: number;
     maxTokens?: number;
     maxToolCalls?: number;
+    maxRecursionDepth?: number;
+    truncationPolicy?: 'drop_oldest' | 'summarise' | 'fail';
+    toolErrorRetries?: number;
+    toolErrorFeedback?: 'full' | 'summarised' | 'suppressed';
   };
 
   @Column({ nullable: true })
