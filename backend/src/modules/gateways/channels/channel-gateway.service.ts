@@ -256,6 +256,15 @@ export class ChannelGatewayService {
               sendConfig ?? getChannelConfig(gateway.configuration, gateway.organizationId),
               formatted,
               {
+              // Every key normalizeInbound recorded is forwarded, because
+              // adapters read reply-routing hints straight off this object
+              // under the platform's own name: Telegram wants chatId,
+              // Discord wants channelId, email wants messageId/references
+              // for In-Reply-To. Listing them one by one is how those three
+              // ended up undefined at send time, which sent Telegram and
+              // Discord replies to a literal "undefined" id and silently
+              // dropped mail threading.
+              ...(normalized.metadata ?? {}),
               threadId: normalized.threadId,
               channel: normalized.metadata?.channel,
               userId: normalized.userId,
