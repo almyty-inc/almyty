@@ -54,7 +54,7 @@ export class HostedChatService {
     // configuration is jsonb; match the slug inside the hostedChat block.
     const gateway = await this.gatewayRepository
       .createQueryBuilder('gateway')
-      .where('gateway.type = :type', { type: GatewayType.CHAT_WIDGET })
+      .where('gateway.type = :type', { type: GatewayType.HOSTED_CHAT })
       .andWhere("gateway.configuration -> 'hostedChat' ->> 'slug' = :slug", { slug: normalized })
       .getOne();
 
