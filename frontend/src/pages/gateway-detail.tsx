@@ -35,6 +35,7 @@ import {
   isChannelType,
 } from '@/components/gateways/detail/channel-config-form'
 import { WidgetBuilder } from '@/components/gateways/widget-builder'
+import { HostedChatBuilder } from '@/components/gateways/hosted-chat-builder'
 
 export function GatewayDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -337,6 +338,24 @@ export function GatewayDetailPage() {
 
       {/* Chat widget builder — customize + live-preview the embeddable widget */}
       {gateway.type === 'chat_widget' && <WidgetBuilder gateway={gateway} />}
+
+      {/* Hosted chat app — a standalone branded site on its own
+          subdomain. Its own surface rather than a widget setting: the
+          widget is a bubble in someone else's page, this is a site. They
+          share the branding vocabulary, not the gateway. */}
+      {gateway.type === 'hosted_chat' && (
+        <HostedChatBuilder
+          gateway={{
+            id: gateway.id,
+            configuration: gateway.configuration,
+            costCapCents: (gateway as any).costCapCents ?? null,
+            rateLimits: {
+              perEndUser: (gateway as any).rateLimits?.requestsPerMinute ?? null,
+              perIp: (gateway as any).rateLimits?.requestsPerHour ?? null,
+            },
+          }}
+        />
+      )}
 
       {/* Authentication */}
       {gateway.type !== 'skills' && (

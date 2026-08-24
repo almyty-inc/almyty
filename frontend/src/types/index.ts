@@ -170,6 +170,7 @@ export enum GatewayType {
   MATRIX = 'matrix',
   IRC = 'irc',
   CHAT_WIDGET = 'chat_widget',
+  HOSTED_CHAT = 'hosted_chat',
 }
 
 export enum GatewayStatus {

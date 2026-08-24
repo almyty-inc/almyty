@@ -12,11 +12,12 @@ The AI Act classifies systems by risk. Most agents built on almyty (support assi
 
 | AI Act requirement | almyty feature | Where |
 |---|---|---|
-| **Art. 50, transparency**: people must be told they are interacting with an AI | Per-channel **AI disclosure** setting: when enabled, the first message of every conversation on a chat interface carries a disclosure line ("You are chatting with an AI assistant", overridable) | [Chat Interfaces](/interfaces) |
+| **Art. 50, transparency**: people must be told they are interacting with an AI | Per-channel **AI disclosure** setting: when enabled, the first message of every conversation on a chat interface carries a disclosure line ("You are chatting with an AI assistant", overridable). On a [hosted chat app](/hosted-chat) the disclosure is on by default and removing it requires an entitlement and is recorded | [Chat Interfaces](/interfaces), [Hosted chat](/hosted-chat) |
 | **Art. 14, human oversight**: humans must be able to intervene | Built-in `request_approval` tool pauses any run for human sign-off; [approval policies](/enterprise/approval-policies) (multi-step, conditional, quorum) let you require multiple reviewers for sensitive actions | [Approvals](/approvals) |
 | **Art. 12, record-keeping**: automatic logging over the system lifetime | Every run stores its steps, tool calls, cost, and outcome; the audit log records sensitive actions; entity versioning keeps a change history of every agent, tool, and gateway | [Analytics](/analytics), agent run history |
 | **Annex IV, technical documentation** | One-click **technical documentation export** per agent: general description, models and parameters, tools and capabilities, oversight configuration, data governance, logging, and change history, as JSON or Markdown | Agent detail, Export Technical Documentation |
 | **Art. 9, risk management** | Guardrail constraints on agents, the pii-filter and security-scanner plugins, and (Enterprise) the [compliance pack](/enterprise/compliance-pack) that enforces them org-wide with a posture report | Agent constraints, [Plugins](/self-hosting) |
+| **Art. 15, robustness**: high-risk systems need appropriate accuracy, robustness and cybersecurity | Per-agent [run limits](/run-limits) bound steps, tokens, spend and wall clock, resolved min-wins so no agent can raise a ceiling set above it, with an operator-owned floor no in-product role can lift; inbound on every chat channel is authenticated and fails closed | [Run limits](/run-limits), [Chat Interfaces](/interfaces) |
 | **Art. 26, deployer duties** (use per instructions, monitor, retain logs) | Usage monitoring, [spend governance](/cost-governance), per-run traces, and audit retention/[export](/enterprise/audit-export) (Enterprise) give you the operational evidence | [Analytics](/analytics) |
 
 ### What remains yours
@@ -54,3 +55,4 @@ Agent conversations routinely contain personal data, so GDPR applies to almost e
 4. Export the agent's **technical documentation** and file it with your assessment.
 5. Enable the pii-filter where conversations may contain personal data.
 6. Set retention and review the audit/run logs as part of your monitoring duty.
+7. Set [run limits](/run-limits) on any agent facing the public, so a single conversation cannot exhaust your budget. Every run records the ceilings that actually applied to it.

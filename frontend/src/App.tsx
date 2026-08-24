@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
@@ -76,8 +76,14 @@ function DashboardLayoutOutlet() {
   )
 }
 
+import { HostedChatPage } from '@/pages/hosted-chat'
+import { currentTenantSlug } from '@/lib/tenant-host'
+
 function App() {
   const { checkAuth } = useAuthStore()
+
+  // Resolved once: the host cannot change without a page load.
+  const tenantSlug = useMemo(() => currentTenantSlug(), [])
 
   // Emit a PostHog $pageview on each SPA navigation (capture_pageview is
   // disabled at init, so this is what records client-side route changes).
@@ -88,6 +94,13 @@ function App() {
   useEffect(() => {
     checkAuth()
   }, [checkAuth])
+
+  // A tenant subdomain serves the hosted chat app and nothing else: no
+  // dashboard routes, no auth bootstrap, no chance of a stray link
+  // landing a member of the public on someone's settings page.
+  if (tenantSlug) {
+    return <HostedChatPage slug={tenantSlug} />
+  }
 
   return (
     <>

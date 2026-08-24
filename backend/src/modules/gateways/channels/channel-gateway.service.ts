@@ -70,6 +70,9 @@ export class ChannelGatewayService {
   ) {
     this.adapters = new Map<string, BaseAdapter>([
       [GatewayType.CHAT_WIDGET, this.chatWidgetAdapter],
+      // A hosted chat app persists replies exactly like the widget does;
+      // only the front end and the URL differ.
+      [GatewayType.HOSTED_CHAT, this.chatWidgetAdapter],
       [GatewayType.SLACK, this.slackAdapter],
       [GatewayType.DISCORD, this.discordAdapter],
       [GatewayType.TELEGRAM, this.telegramAdapter],

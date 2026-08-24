@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, Optional, forwardRef, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
@@ -7,6 +7,8 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
 import { Agent } from '../../entities/agent.entity';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
 import { EventEmitter } from 'events';
@@ -145,6 +147,11 @@ export class AgentRuntimeService implements OnModuleInit {
     readonly builtInTools: AgentBuiltInToolsHelper,
     readonly events: AgentRuntimeEventsHelper,
     readonly misc: AgentRuntimeMiscHelper,
+    // Optional so the runtime still constructs in tests and in any
+    // context where the audit module is not wired; a missing audit sink
+    // must not stop runs.
+    @Optional()
+    private readonly auditLogService: AuditLogService | undefined,
     @Inject(forwardRef(() => AgentStepProcessor))
     readonly processor: AgentStepProcessor,
     @Inject(forwardRef(() => ApprovalsService))
@@ -283,6 +290,13 @@ export class AgentRuntimeService implements OnModuleInit {
     });
 
     const savedRun = await this.runRepository.save(run);
+    savedRun.agent = agent;
+
+    // Audit the ceilings that actually applied, resolved rather than
+    // requested, so a later question of "which limits governed this run"
+    // has an answer that does not depend on replaying today's policy
+    // against yesterday's run.
+    void this.recordResolvedLimits(savedRun, agent, userId);
 
     // Create event emitter for this run (for SSE streaming)
     this.events.ensureRunEmitter(savedRun.id);
@@ -407,6 +421,34 @@ export class AgentRuntimeService implements OnModuleInit {
   }
 
   /** Get SSE event emitter for a run. */
+  /**
+   * Emit a run_start audit event carrying the resolved limits snapshot.
+   *
+   * Fire and forget: an audit write must never be the reason a run fails
+   * to start, and the ceilings are enforced at the point of use whether
+   * or not this row lands.
+   */
+  private async recordResolvedLimits(
+    run: AgentRun,
+    agent: Agent,
+    userId: string,
+  ): Promise<void> {
+    try {
+      const limits = await this.misc.resolveLimits(run);
+      await this.auditLogService?.log({
+        organizationId: run.organizationId,
+        userId,
+        action: AuditAction.RUN_START,
+        resourceType: AuditResource.AGENT,
+        resourceId: agent.id,
+        resourceName: agent.name,
+        details: { runId: run.id, resolvedLimits: limits },
+      });
+    } catch (err: any) {
+      this.logger.warn(`Could not audit resolved limits for run ${run.id}: ${err.message}`);
+    }
+  }
+
   getRunEmitter(runId: string): EventEmitter | null {
     return this.events.getRunEmitter(runId);
   }

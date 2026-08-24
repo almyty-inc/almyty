@@ -13,6 +13,28 @@ Agents are most useful where your users already are. Deploying an agent to a cha
 
 Messages then round-trip: platform, to adapter (verify, normalize), to agent run, back to adapter (format for the platform), to reply.
 
+## Inbound authentication is required
+
+Every channel refuses inbound messages it cannot authenticate. A gateway whose verification secret is unset accepts nothing, rather than accepting everything.
+
+That is worth stating plainly because it is a change in behaviour: the secret used to be optional, and a channel without one quietly accepted any request that reached its URL. If a channel of yours stops receiving messages after upgrading, a missing secret is the first thing to check. The surface node in the publish canvas names the exact key it is waiting for.
+
+| Channel | What proves the request is genuine | Configure |
+|---|---|---|
+| Slack | `X-Slack-Signature` HMAC | `signing_secret` |
+| Telegram | `X-Telegram-Bot-Api-Secret-Token`, minted for you at registration | automatic |
+| Discord | The authenticated gateway websocket. No HTTP endpoint exists to forge | nothing |
+| WhatsApp, SMS (Twilio) | `X-Twilio-Signature` over the exact callback URL | `twilio_auth_token` and `webhook_url` |
+| WhatsApp Cloud (Meta) | `X-Hub-Signature-256` | `app_secret` |
+| Microsoft Teams | Bot Framework JWT, verified against the published JWKS | `bot_id` |
+| Google Chat | Bearer verification token | `verification_token` |
+| Email | Svix signature on the inbound webhook | `resend_inbound_signing_secret` |
+| Signal, Matrix, IRC | Bearer token from your bridge | `inbound_token` |
+| Generic webhook | HMAC-SHA256 over the body | `secret` |
+| Chat widget | Nothing. Public by design, bounded by rate limits and the cost cap | nothing |
+
+Twilio signs the exact URL it called, so `webhook_url` has to match what is configured in the Twilio console. Automatic registration fills it in; if you registered the webhook by hand, enter it by hand too.
+
 ![The Channel Setup panel: your exact webhook URL or embed snippet, the platform-side checklist, and a live connection test](/screenshots/interfaces-channel-setup.png)
 
 ## Supported channels
@@ -118,6 +140,10 @@ Copy the embed snippet from the setup panel into your site's HTML, just before t
 
 No webhook needed. The widget talks to almyty directly.
 
+## Beyond a widget
+
+The chat widget puts an agent in the corner of a page you already have. If you want the agent to *be* the page, on its own domain with your name on it, see the [hosted chat app](/hosted-chat).
+
 ## Customizing the chat widget
 
 Chat-widget gateways get a **widget builder** on their gateway page: title, color, position, launcher icon, theme, and greeting, with a live preview that runs the exact `widget.js` the gateway serves, and the one-line embed snippet.
@@ -132,8 +158,12 @@ Every channel has an **AI disclosure** setting. In the deploy dialog it is the "
 
 The text is overridable per channel. If you deploy agents to the public in the EU, turn this on; Article 50 of the AI Act requires that people be informed they are interacting with an AI system. See [Compliance](/compliance) for the full mapping.
 
+The [hosted chat app](/hosted-chat) is the exception: it shows the disclosure by default, and removing it needs an entitlement and is recorded.
+
 ## Operational notes
 
 - **Signal and IRC** need a small self-hosted bridge (signal-cli-rest-api, an IRC-to-HTTP bridge); the adapter documents the exact contract it expects.
 - **Rate limits** are the platform's own; the adapter surfaces platform errors on the run rather than retrying blindly.
 - Adapter health and per-channel traffic appear in [Analytics](/analytics); failed deliveries are recorded on the run.
+- A rejected inbound message is recorded as a failed channel event with the reason, so a wrong secret looks different from a quiet channel.
+- How far a run may go once a message arrives is governed by [run limits](/run-limits).
