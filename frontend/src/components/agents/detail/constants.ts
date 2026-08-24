@@ -37,6 +37,7 @@ export const interfaceStatusVariant: Record<string, 'default' | 'secondary' | 'd
 
 export const interfaceTypeIcons: Record<string, string> = {
   chat_widget: '💬',
+  hosted_chat: '🌐',
   slack: '📱',
   discord: '🎮',
   telegram: '✈️',

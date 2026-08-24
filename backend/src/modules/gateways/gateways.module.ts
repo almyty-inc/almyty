@@ -14,6 +14,9 @@ import { ApiKey } from '../../entities/api-key.entity';
 import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { ChannelEvent } from '../../entities/channel-event.entity';
+import { EndUser } from '../../entities/end-user.entity';
+import { Conversation } from '../../entities/conversation.entity';
+import { Message } from '../../entities/message.entity';
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
 import { GatewayRateLimitService } from './gateway-rate-limit.service';
@@ -59,6 +62,8 @@ import { EmailProvisioningService } from './channels/email-provisioning.service'
 import { ChannelEventsController } from './channels/channel-events.controller';
 import { ChannelEmailInboundController } from './channels/channel-email-inbound.controller';
 import { ChannelWidgetController } from './channels/channel-widget.controller';
+import { HostedChatController } from './channels/hosted-chat.controller';
+import { HostedChatService } from './channels/hosted-chat.service';
 // Multi-workspace channel installations (OAuth installs)
 import { ChannelInstallation } from '../../entities/channel-installation.entity';
 import { ChannelInstallationService } from './channels/channel-installation.service';
@@ -81,6 +86,9 @@ import { ChannelInstallationsController } from './channels/channel-installations
       AgentRun,
       ChannelEvent,
       ChannelInstallation,
+      EndUser,
+      Conversation,
+      Message,
     ]),
     JwtModule,
     ToolsModule,
@@ -88,6 +96,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
     AuthorizationModule,
   ],
   providers: [
+    HostedChatService,
     GatewaysService,
     GatewayProtocolService,
     GatewayRateLimitService,
@@ -129,11 +138,13 @@ import { ChannelInstallationsController } from './channels/channel-installations
     ChannelEventsController,
     ChannelEmailInboundController,
     ChannelWidgetController,
+    HostedChatController,
     ChannelInstallController,
     ChannelInstallationsController,
   ],
   exports: [
     GatewaysService,
+    HostedChatService,
     GatewayProtocolService,
     GatewayRateLimitService,
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,
