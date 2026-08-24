@@ -81,9 +81,19 @@ describe('SlackAdapter', () => {
     const signingSecret = 'super-secret-signing-key';
     const config = { signing_secret: signingSecret };
 
-    it('returns true when there is no signing_secret configured', async () => {
+    it('refuses inbound when there is no signing_secret configured', async () => {
+      // Fail closed: with no secret we cannot tell Slack from a forger.
       const ok = await adapter.verifyWebhook(slackEventCallback, {}, {});
-      expect(ok).toBe(true);
+      expect(ok).toBe(false);
+    });
+
+    it('rejects rather than throwing when the signature length differs', async () => {
+      const ok = await adapter.verifyWebhook(
+        slackEventCallback,
+        { 'x-slack-request-timestamp': '1700000000', 'x-slack-signature': 'v0=short' },
+        config,
+      );
+      expect(ok).toBe(false);
     });
 
     it('accepts a correctly-signed request', async () => {

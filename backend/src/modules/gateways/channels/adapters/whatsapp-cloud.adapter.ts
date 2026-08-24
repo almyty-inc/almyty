@@ -84,7 +84,9 @@ export class WhatsAppCloudAdapter extends BaseAdapter {
    */
   async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>, rawBody?: string): Promise<boolean> {
     const appSecret = config.app_secret;
-    if (!appSecret) return true;
+    // Fail closed: Meta always signs inbound with the app secret, so a
+    // missing app_secret is a misconfiguration, not a reason to trust.
+    if (!appSecret) return false;
 
     const signature = headers['x-hub-signature-256'];
     if (!signature) return false;
