@@ -135,7 +135,7 @@ The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt
 | `REDIS_HOST` | Redis hostname | `localhost` |
 | `REDIS_PORT` | Redis port | `6379` |
 | `JWT_SECRET` | Secret for signing JWT tokens | Random 64+ char string |
-| `ENCRYPTION_KEY` | AES-256 key for encrypting stored secrets — credentials and LLM provider API keys | Random 32-byte hex string |
+| `ENCRYPTION_KEY` | AES-256 key for encrypting stored secrets: credentials and LLM provider API keys | Random 32-byte hex string |
 
 ### Optional variables
 
@@ -158,7 +158,7 @@ The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt
 
 ## Local models with Ollama
 
-almyty's SSRF protection refuses private and loopback URLs on outbound LLM calls — the right default for a multi-tenant host, but it also blocks a machine-local [Ollama](https://ollama.com) server. Self-hosted deployments can opt out for the `ollama` provider type only:
+almyty's SSRF protection refuses private and loopback URLs on outbound LLM calls. That is the right default for a multi-tenant host, but it also blocks a machine-local [Ollama](https://ollama.com) server. Self-hosted deployments can opt out for the `ollama` provider type only:
 
 ```bash
 OLLAMA_ALLOW_PRIVATE_URLS=true
@@ -166,7 +166,7 @@ OLLAMA_ALLOW_PRIVATE_URLS=true
 
 Set it on the backend API process, then add an Ollama provider (Models → Add Provider → Ollama). The URL defaults to `http://localhost:11434`; chat and tool calling use Ollama's OpenAI-compatible `/v1` endpoint, the model list comes from `/api/tags`, and memory embeddings use `/api/embed`. No API key is needed.
 
-Networking note for Docker Compose: inside the backend container, `localhost` is the container itself, not your machine. Point the provider at the host instead — `http://host.docker.internal:11434` (on Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the backend service). The escape hatch only relaxes the private-range ban: URLs must still be http(s) with no embedded credentials, and every other provider type keeps the full SSRF gate.
+Networking note for Docker Compose: inside the backend container, `localhost` is the container itself, not your machine. Point the provider at the host instead, `http://host.docker.internal:11434` (on Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the backend service). The escape hatch only relaxes the private-range ban: URLs must still be http(s) with no embedded credentials, and every other provider type keeps the full SSRF gate.
 
 ## Health check endpoints
 
@@ -202,23 +202,23 @@ Kubernetes probes keep a single deployment healthy, but they don't tell *you* wh
 
 ### Uptime checks
 
-External uptime pingers (UptimeRobot, Pingdom, Better Uptime, or a Kubernetes-native probe exporter) can't be provisioned from this repo — configure them in your monitoring tool of choice against these endpoints:
+External uptime pingers (UptimeRobot, Pingdom, Better Uptime, or a Kubernetes-native probe exporter) can't be provisioned from this repo. Configure them in your monitoring tool of choice against these endpoints:
 
 | Endpoint | Purpose | Alert when |
 |----------|---------|------------|
-| `GET /health/ready` | Readiness — API plus its Postgres and Redis dependencies. This is the one to page on. | Non-200, or down for more than one check interval. |
-| `GET /health/live` | Liveness — process is up (does not check dependencies). | Use for restart detection, not paging. |
+| `GET /health/ready` | Readiness: API plus its Postgres and Redis dependencies. This is the one to page on. | Non-200, or down for more than one check interval. |
+| `GET /health/live` | Liveness: process is up (does not check dependencies). | Use for restart detection, not paging. |
 | `GET /health` | Full health report (all indicators). | Useful for a status dashboard. |
 
 Recommended baseline: poll `/health/ready` every 30–60s from at least two regions, alert on two consecutive failures. `/health/ready` returns non-200 when the database or Redis is unreachable, so it catches the dependency outages that a bare liveness check would miss.
 
 ### Deploy smoke gate
 
-The GitHub Actions deploy workflow runs a one-off migration Job to completion and only rolls out new pods if it succeeds (see [Database migrations](#database-migrations) below). A failed migration stops the deploy instead of shipping pods against a schema they don't expect — so a broken release surfaces at deploy time, not in production.
+The GitHub Actions deploy workflow runs a one-off migration Job to completion and only rolls out new pods if it succeeds (see [Database migrations](#database-migrations) below). A failed migration stops the deploy instead of shipping pods against a schema they don't expect, so a broken release surfaces at deploy time, not in production.
 
 ### Error tracking (Sentry)
 
-almyty ships with optional [Sentry](https://sentry.io) integration on both the API and the frontend. It is **off by default** and a complete no-op until you configure a DSN — no client loads, no network calls, no behavior change. Turn it on to have unhandled errors and 5xx responses surface in Sentry instead of buried in logs.
+almyty ships with optional [Sentry](https://sentry.io) integration on both the API and the frontend. It is **off by default** and a complete no-op until you configure a DSN: no client loads, no network calls, no behavior change. Turn it on to have unhandled errors and 5xx responses surface in Sentry instead of buried in logs.
 
 - **Backend:** set `SENTRY_DSN` (and optionally `SENTRY_ENVIRONMENT`, e.g. `production` / `staging`) on the API. The global exception filter reports 5xx responses and unhandled exceptions; client errors (4xx) are never sent. In Kubernetes these are optional keys on the `almyty-secrets` secret.
 - **Frontend:** set the `VITE_SENTRY_DSN` build-arg when building the frontend image. It captures unhandled errors and errors caught by the app's error boundary. The environment tag is inferred from the host (development stays untracked).
@@ -231,7 +231,7 @@ How migrations run depends on how you deploy.
 
 On a single-node or Docker Compose setup the API applies any pending migrations itself when it starts (`DB_MIGRATIONS_RUN` defaults to `true`). There's only one process, so there's nothing to coordinate.
 
-In a cluster you don't want several replicas racing to run the same migrations as they boot. Set `DB_MIGRATIONS_RUN=false` and run migrations once, before the new pods roll out — as a Kubernetes `Job`, an init container, or `npm run typeorm migration:run`. The provided GitHub Actions deploy workflow already does this: it runs a one-off migration Job to completion and only continues the rollout if it succeeds, so a failed migration stops the deploy instead of shipping pods against a schema they don't expect.
+In a cluster you don't want several replicas racing to run the same migrations as they boot. Set `DB_MIGRATIONS_RUN=false` and run migrations once, before the new pods roll out, as a Kubernetes `Job`, an init container, or `npm run typeorm migration:run`. The provided GitHub Actions deploy workflow already does this: it runs a one-off migration Job to completion and only continues the rollout if it succeeds, so a failed migration stops the deploy instead of shipping pods against a schema they don't expect.
 
 Either way, back up the database before upgrading.
 
@@ -241,7 +241,7 @@ Rate limits are backed by Redis, so the configured limit (`RATE_LIMIT_MAX` per `
 
 ## Compliance and data residency
 
-Self-hosting keeps every byte — conversations, memory, credentials, logs — in infrastructure you control, which is the simplest answer to GDPR data-residency questions. Secrets are AES-256-GCM encrypted with your `ENCRYPTION_KEY`; rotate it like any other production secret and never commit it. Remember that BYOK means conversation content flows to your model providers under **your** API keys, so your data-processing agreements with those providers are part of your deployment's compliance story.
+Self-hosting keeps every byte (conversations, memory, credentials, logs) in infrastructure you control, which is the simplest answer to GDPR data-residency questions. Secrets are AES-256-GCM encrypted with your `ENCRYPTION_KEY`; rotate it like any other production secret and never commit it. Remember that BYOK means conversation content flows to your model providers under **your** API keys, so your data-processing agreements with those providers are part of your deployment's compliance story.
 
 The [Compliance](/compliance) page maps platform features to the EU AI Act (transparency disclosure, human oversight, record-keeping, technical documentation export) and the other regimes that typically apply. The repository's `SECURITY.md` documents the vulnerability-disclosure process and how to generate an SBOM for your release.
 

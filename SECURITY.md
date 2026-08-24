@@ -17,7 +17,7 @@ Security fixes land on the latest release line. Self-hosters should track the la
 ## What the platform already enforces
 
 - Credentials and provider secrets are AES-256-GCM encrypted at rest (`ENCRYPTION_KEY`; Enterprise supports customer-managed keys).
-- Auth tokens live in httpOnly cookies only — never in localStorage (regression-tested).
+- Auth tokens live in httpOnly cookies only, never in localStorage (regression-tested).
 - Inbound channel webhooks are authenticated (HMAC signatures, platform JWTs, verification tokens) before any message reaches an agent.
 - JavaScript tools run in a sandboxed `worker_threads` environment with a network guard.
 - CI hard-blocks on `npm audit` findings (backend + frontend) and on secret scanning (gitleaks).
