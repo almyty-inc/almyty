@@ -1,9 +1,15 @@
 import axios from 'axios'
 
-import { getApiBaseUrl } from './api'
-
 /**
  * Client for the public hosted chat app served at {slug}.<base domain>.
+ *
+ * Calls are SAME-ORIGIN under /api, never the dashboard's cross-origin
+ * API host. That is not a style choice: the session cookie identifying
+ * an anonymous visitor is set by the API without an explicit Domain, so
+ * it is scoped to whatever host served the request. Pointing these calls
+ * at api.almyty.com would set the cookie there instead, and every
+ * visitor would look new on every request. The ingress routes /api on a
+ * tenant host to the API service for exactly this reason.
  *
  * Deliberately its own axios instance rather than the dashboard's: the
  * dashboard client carries auth interceptors and redirects to /login on
@@ -19,10 +25,13 @@ let instance: ReturnType<typeof axios.create> | null = null
  * from the dashboard client's runtime config, which is not necessarily
  * settled while modules are still evaluating.
  */
+/** Same-origin API prefix, matched by the hosted-chat ingress rule. */
+export const HOSTED_CHAT_API_PREFIX = '/api'
+
 function client() {
   if (!instance) {
     instance = axios.create({
-      baseURL: getApiBaseUrl(),
+      baseURL: HOSTED_CHAT_API_PREFIX,
       // Carries the anonymous session cookie. Scoped to this tenant's
       // host by the API, so it cannot be replayed against another tenant.
       withCredentials: true,
@@ -75,9 +84,33 @@ export function disclosureLine(branding: Pick<HostedChatBranding, 'aiDisclosure'
 
 const unwrap = <T,>(payload: any): T => (payload?.data ?? payload) as T
 
+/**
+ * A branding payload we can actually render.
+ *
+ * Without this, a response that is not branding at all (an HTML error
+ * page, a proxy 404, a misrouted request) flows through as an object,
+ * the query resolves "successfully", and the first component to touch
+ * a missing field white-screens the whole app. A failed request should
+ * land on the error state, not on a blank page.
+ */
+function assertBranding(value: any): HostedChatBranding {
+  if (!value || typeof value.appName !== 'string' || !value.appName) {
+    throw new Error('Malformed branding response')
+  }
+  return {
+    ...value,
+    primaryColor: typeof value.primaryColor === 'string' ? value.primaryColor : '#8b5cf6',
+    greeting: typeof value.greeting === 'string' ? value.greeting : '',
+    suggestedPrompts: Array.isArray(value.suggestedPrompts) ? value.suggestedPrompts : [],
+    whiteLabel: value.whiteLabel === true,
+  }
+}
+
 export const hostedChatApi = {
   branding: (slug: string) =>
-    client().get(`/public/chat/${slug}`).then((r) => unwrap<HostedChatBranding>(r.data)),
+    client()
+      .get(`/public/chat/${slug}`)
+      .then((r) => assertBranding(unwrap<HostedChatBranding>(r.data))),
 
   conversations: (slug: string) =>
     client()
@@ -96,7 +129,7 @@ export const hostedChatApi = {
       .post(`/public/chat/${slug}/messages`, { message, conversationId })
       .then((r) => unwrap<{ runId: string; conversationId: string }>(r.data)),
 
-  /** SSE endpoint for an in-flight reply. */
+  /** SSE endpoint for an in-flight reply. Same origin, see above. */
   streamUrl: (slug: string, runId: string) =>
-    `${getApiBaseUrl()}/public/chat/${slug}/stream?runId=${encodeURIComponent(runId)}`,
+    `${HOSTED_CHAT_API_PREFIX}/public/chat/${slug}/stream?runId=${encodeURIComponent(runId)}`,
 }

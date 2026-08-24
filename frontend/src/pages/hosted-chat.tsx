@@ -332,10 +332,12 @@ function BrandMark({ branding }: { branding: HostedChatBranding }) {
           className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold"
           style={{ background: 'var(--tenant)', color: 'var(--on-tenant)' }}
         >
-          {branding.appName.charAt(0).toUpperCase()}
+          {(branding.appName || '?').charAt(0).toUpperCase()}
         </span>
       )}
-      <span className="truncate font-heading text-sm font-semibold">{branding.appName}</span>
+      <span className="truncate font-heading text-sm font-semibold">
+        {branding.appName || 'Assistant'}
+      </span>
     </div>
   )
 }
