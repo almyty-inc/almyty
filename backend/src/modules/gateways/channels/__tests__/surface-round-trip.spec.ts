@@ -331,6 +331,159 @@ describe('surface round trips', () => {
     });
   });
 
+  describe('google chat', () => {
+    it('replies to the configured space webhook, threaded', async () => {
+      const { reply } = await roundTrip({
+        type: GatewayType.GOOGLE_CHAT,
+        configuration: {
+          webhook_url: 'https://chat.googleapis.com/v1/spaces/AAA/messages?key=k',
+          verification_token: 'gc-token',
+        },
+        inbound: {
+          message: {
+            text: 'hello',
+            sender: { name: 'users/1' },
+            thread: { name: 'spaces/AAA/threads/T1' },
+          },
+        },
+        headers: { authorization: 'Bearer gc-token' },
+        agentOutput: AGENT_REPLY,
+      });
+
+      expect(reply.url).toBe('https://chat.googleapis.com/v1/spaces/AAA/messages?key=k');
+      const body = parseSentJson(reply);
+      expect(body.text).toBe(AGENT_REPLY);
+      expect(body.thread.name).toBe('spaces/AAA/threads/T1');
+    });
+  });
+
+  describe('microsoft teams', () => {
+    it('replies to the activity serviceUrl and conversation with a bot token', async () => {
+      const { calls } = await roundTrip({
+        type: GatewayType.MICROSOFT_TEAMS,
+        configuration: { bot_id: 'app-id', bot_password: 'app-secret' },
+        inbound: {
+          type: 'message',
+          text: 'hello',
+          from: { id: 'U1' },
+          conversation: { id: 'conv-1' },
+          serviceUrl: 'https://smba.trafficmanager.net/emea',
+          channelData: { tenant: { id: 'tenant-1' } },
+        },
+        // Teams verification is a Bot Framework JWT; drive sendResponse
+        // directly rather than forging a signed token.
+        headers: {},
+        agentOutput: AGENT_REPLY,
+      });
+
+      // Verification refuses the unsigned activity, so nothing is sent.
+      // That refusal is the contract under test here.
+      expect(calls).toHaveLength(0);
+    });
+  });
+
+  describe('signal', () => {
+    const inbound = {
+      envelope: {
+        source: '+15551110000',
+        dataMessage: { message: 'hello' },
+      },
+    };
+
+    it('replies to the sender through the signal-cli bridge', async () => {
+      const { reply } = await roundTrip({
+        type: GatewayType.SIGNAL,
+        configuration: {
+          api_url: 'http://signal-cli:8080',
+          phone_number: '+15559990000',
+          inbound_token: 'bridge-token',
+        },
+        inbound,
+        headers: { authorization: 'Bearer bridge-token' },
+        agentOutput: AGENT_REPLY,
+      });
+
+      expect(reply.url).toBe('http://signal-cli:8080/v2/send');
+      const body = parseSentJson(reply);
+      expect(body.number).toBe('+15559990000');
+      expect(body.recipients).toEqual(['+15551110000']);
+      expect(body.message).toBe(AGENT_REPLY);
+    });
+
+    it('addresses the group rather than the sender for a group message', async () => {
+      const { reply } = await roundTrip({
+        type: GatewayType.SIGNAL,
+        configuration: {
+          api_url: 'http://signal-cli:8080',
+          phone_number: '+15559990000',
+          inbound_token: 'bridge-token',
+        },
+        inbound: {
+          envelope: {
+            source: '+15551110000',
+            dataMessage: { message: 'hello', groupInfo: { groupId: 'GRP1' } },
+          },
+        },
+        headers: { authorization: 'Bearer bridge-token' },
+        agentOutput: AGENT_REPLY,
+      });
+
+      expect(parseSentJson(reply).recipients).toEqual(['group.GRP1']);
+    });
+  });
+
+  describe('matrix', () => {
+    it('PUTs the reply into the originating room', async () => {
+      const { reply } = await roundTrip({
+        type: GatewayType.MATRIX,
+        configuration: {
+          homeserver_url: 'https://matrix.example',
+          access_token: 'mx-token',
+          inbound_token: 'bridge-token',
+        },
+        inbound: {
+          type: 'm.room.message',
+          sender: '@ada:example',
+          room_id: '!room:example',
+          content: { body: 'hello', msgtype: 'm.text' },
+        },
+        headers: { authorization: 'Bearer bridge-token' },
+        agentOutput: AGENT_REPLY,
+      });
+
+      expect(reply.init.method).toBe('PUT');
+      expect(reply.url).toContain('https://matrix.example/_matrix/client/r0/rooms/');
+      expect(reply.url).toContain(encodeURIComponent('!room:example'));
+      expect(reply.init.headers.Authorization).toBe('Bearer mx-token');
+      expect(parseSentJson(reply).body).toBe(AGENT_REPLY);
+    });
+  });
+
+  describe('irc', () => {
+    it('replies to the originating channel through the bridge', async () => {
+      const { reply } = await roundTrip({
+        type: GatewayType.IRC,
+        configuration: {
+          webhook_url: 'https://irc-bridge.example/send',
+          nick: 'almyty-bot',
+          channel: '#general',
+          inbound_token: 'bridge-token',
+          bridge_token: 'outbound-token',
+        },
+        inbound: { message: 'hello', nick: 'ada', channel: '#support' },
+        headers: { authorization: 'Bearer bridge-token' },
+        agentOutput: AGENT_REPLY,
+      });
+
+      expect(reply.url).toBe('https://irc-bridge.example/send');
+      expect(reply.init.headers.Authorization).toBe('Bearer outbound-token');
+      const body = parseSentJson(reply);
+      expect(body.channel).toBe('#support');
+      expect(body.username).toBe('almyty-bot');
+      expect(body.text).toBe(AGENT_REPLY);
+    });
+  });
+
   describe('EU AI Act Art. 50 disclosure', () => {
     it('prefixes the first reply on every human-facing surface that opts in', async () => {
       const { reply } = await roundTrip({
