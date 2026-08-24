@@ -67,6 +67,10 @@ updates:
     labels:
       - "dependencies"
       - "frontend"
+    ignore:
+      # Table v9 is a breaking API (getCoreRowModel is not a function).
+      - dependency-name: "@tanstack/react-table"
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-minor-and-patch:
         applies-to: version-updates
