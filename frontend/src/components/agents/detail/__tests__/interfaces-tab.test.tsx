@@ -43,6 +43,8 @@ describe('InterfacesTab channel setup', () => {
     ;(gatewaysApi.getAll as any).mockResolvedValue({ gateways: [slackGateway] })
     renderWithProviders(<InterfacesTab agentId="agent-1" interfaces={[]} />)
 
+    // The canvas is the default view now; the cards live behind List.
+    fireEvent.click(await screen.findByRole('button', { name: /^List$/ }))
     fireEvent.click(await screen.findByRole('button', { name: /Setup/ }))
 
     expect(await screen.findByTestId('channel-setup-panel')).toBeInTheDocument()
