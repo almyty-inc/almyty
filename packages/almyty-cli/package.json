@@ -46,7 +46,10 @@
     "vitest": "^4.1.0"
   },
   "overrides": {
-    "@hono/node-server": "^2.0.5"
+    "@hono/node-server": "^2.0.5",
+    "fast-uri": "^3.1.5",
+    "ip-address": "^10.4.0",
+    "postcss": "^8.5.23"
   },
   "homepage": "https://almyty.com",
   "repository": {

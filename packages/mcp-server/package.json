@@ -45,7 +45,9 @@
   },
   "overrides": {
     "@hono/node-server": "^2.0.5",
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "fast-uri": "^3.1.5",
+    "ip-address": "^10.4.0"
   },
   "homepage": "https://almyty.com",
   "repository": {
