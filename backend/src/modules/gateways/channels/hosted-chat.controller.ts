@@ -18,7 +18,7 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { HostedChatService } from './hosted-chat.service';
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
-import { hostedChatConfigFrom } from './hosted-chat.config';
+import { hostedChatConfigFrom, slugFromHost } from './hosted-chat.config';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -71,6 +71,41 @@ export class HostedChatController {
       return forwarded.split(',')[0].trim();
     }
     return req.ip;
+  }
+
+  /**
+   * Resolve the surface a request is for, by Host header.
+   *
+   * A Tier 2 custom domain has no slug in its URL, so the browser asks
+   * for `/public/chat/by-host` and the server works out which surface
+   * that hostname belongs to. Declared before the ':slug' route because
+   * Nest matches in declaration order and 'by-host' would otherwise be
+   * read as a slug.
+   */
+  @Get('by-host')
+  @ApiOperation({ summary: 'Resolve a hosted chat surface from the Host header' })
+  async byHost(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || '');
+
+    // A subdomain of our own base domain is Tier 1 and resolves by slug.
+    const slug = slugFromHost(host);
+    const gateway = slug
+      ? await this.hostedChat.findBySlug(slug)
+      : await this.hostedChat.findByCustomDomain(host.split(':')[0]);
+
+    if (!gateway) throw new HttpException('Chat app not found', HttpStatus.NOT_FOUND);
+
+    res.setHeader('Cache-Control', 'public, max-age=30');
+    // Vary on Host: the same path returns a different tenant's branding
+    // per hostname, and a shared cache must not conflate them.
+    res.setHeader('Vary', 'Host, X-Forwarded-Host');
+    return {
+      success: true,
+      data: {
+        ...this.hostedChat.publicBranding(gateway),
+        slug: hostedChatConfigFrom(gateway.configuration).slug,
+      },
+    };
   }
 
   @Get(':slug')

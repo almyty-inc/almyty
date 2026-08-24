@@ -243,4 +243,33 @@ describe('HostedChatService', () => {
       expect(message.content).toBe('from parts');
     });
   });
+
+  describe('findByCustomDomain', () => {
+    it('resolves an active, verified custom domain', async () => {
+      const gw = gateway();
+      qb.getOne.mockResolvedValueOnce(gw);
+      await expect(service.findByCustomDomain('chat.acme.com')).resolves.toBe(gw);
+      expect(qb.andWhere).toHaveBeenCalledWith(expect.any(String), {
+        hostname: 'chat.acme.com',
+      });
+    });
+
+    it('only matches domains whose status is active', async () => {
+      // A row exists for an unverified domain so the tenant can see the
+      // record to publish, but serving under it would mean hosting a
+      // hostname nobody proved they own.
+      await service.findByCustomDomain('chat.acme.com');
+      expect(qb.andWhere).toHaveBeenCalledWith(expect.any(String), { status: 'active' });
+    });
+
+    it('returns null rather than throwing for an unknown domain', async () => {
+      qb.getOne.mockResolvedValueOnce(null);
+      await expect(service.findByCustomDomain('nope.example')).resolves.toBeNull();
+    });
+
+    it('returns null for an empty hostname without touching the database', async () => {
+      await expect(service.findByCustomDomain('')).resolves.toBeNull();
+      expect(gatewayRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
+import { promises as dns } from 'dns';
 
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { EndUser } from '../../../entities/end-user.entity';
@@ -12,6 +13,11 @@ import {
   HostedChatConfig,
   hostedChatConfigFrom,
 } from './hosted-chat.config';
+import {
+  CustomDomainConfig,
+  VERIFICATION_RECORD_PREFIX,
+  isVerified,
+} from './custom-domain';
 
 /**
  * The tenant-facing half of the hosted chat app.
@@ -220,5 +226,61 @@ export class HostedChatService {
         content: typeof m.getTextContent === 'function' ? m.getTextContent() : m.content,
         createdAt: m.createdAt,
       }));
+  }
+
+  /**
+   * Resolve a surface by a customer-owned hostname (Tier 2).
+   *
+   * Only VERIFIED domains resolve. An unverified row exists so the
+   * tenant can see the record they still need to publish, but serving
+   * an agent under a hostname nobody proved they own is how you end up
+   * hosting someone else's phishing page on your certificate.
+   */
+  async findByCustomDomain(hostname: string): Promise<Gateway | null> {
+    const normalized = (hostname || '').trim().toLowerCase();
+    if (!normalized) return null;
+
+    const gateway = await this.gatewayRepository
+      .createQueryBuilder('gateway')
+      .where('gateway.type = :type', { type: GatewayType.HOSTED_CHAT })
+      .andWhere("gateway.configuration -> 'customDomain' ->> 'hostname' = :hostname", {
+        hostname: normalized,
+      })
+      .andWhere("gateway.configuration -> 'customDomain' ->> 'status' = :status", {
+        status: 'active',
+      })
+      .getOne();
+
+    if (!gateway || !gateway.isActive()) return null;
+    return gateway;
+  }
+
+  /**
+   * Look for the tenant's verification TXT record.
+   *
+   * Returns the outcome rather than throwing: "not published yet" is the
+   * expected state for most of a domain's life, not an error, and the
+   * caller shows it as a next step.
+   */
+  async checkDomainVerification(
+    domain: CustomDomainConfig,
+  ): Promise<{ verified: boolean; error: string | null }> {
+    const name = `${VERIFICATION_RECORD_PREFIX}.${domain.hostname}`;
+    try {
+      // resolveTxt returns chunk arrays, since a long TXT value is split
+      // across strings on the wire; join each record before comparing.
+      const records = await dns.resolveTxt(name);
+      const flattened = records.map((chunks) => chunks.join(''));
+      if (isVerified(flattened, domain)) return { verified: true, error: null };
+      return {
+        verified: false,
+        error: 'The TXT record was found but did not match. Check you copied the whole value.',
+      };
+    } catch (err: any) {
+      if (err?.code === 'ENOTFOUND' || err?.code === 'ENODATA') {
+        return { verified: false, error: 'No TXT record found at that name yet.' };
+      }
+      return { verified: false, error: `Could not read DNS: ${err?.message ?? err}` };
+    }
   }
 }
