@@ -425,6 +425,13 @@ export const gatewaysApi = {
 
   getById: (id: string) => apiGet(`/gateways/${id}`),
 
+  /**
+   * The surface catalog: every place an agent can be published to, with
+   * whether it is usable and why not. The publish canvas renders one
+   * node per entry rather than hardcoding the list client-side.
+   */
+  listSurfaces: () => apiGet('/gateways/surfaces'),
+
   create: (data: any) => apiPost('/gateways', data),
 
   update: (id: string, data: any) => apiPatch(`/gateways/${id}`, data),
