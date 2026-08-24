@@ -25,6 +25,8 @@ describe('HostedChatService', () => {
   let gatewayRepository: any;
   let endUserRepository: any;
   let conversationRepository: any;
+  let messageRepository: any;
+  let runRepository: any;
   let service: HostedChatService;
   let qb: any;
 
@@ -46,7 +48,15 @@ describe('HostedChatService', () => {
       create: jest.fn((row: any) => row),
       save: jest.fn(async (row: any) => ({ id: 'conv-1', ...row })),
     };
-    service = new HostedChatService(gatewayRepository, endUserRepository, conversationRepository);
+    messageRepository = { find: jest.fn(async () => []) };
+    runRepository = { findOne: jest.fn(async () => null) };
+    service = new HostedChatService(
+      gatewayRepository,
+      endUserRepository,
+      conversationRepository,
+      messageRepository,
+      runRepository,
+    );
   });
 
   describe('findBySlug', () => {
@@ -169,6 +179,68 @@ describe('HostedChatService', () => {
         'x'.repeat(300),
       );
       expect(conversation.title).toHaveLength(120);
+    });
+  });
+
+  describe('runBelongsToEndUser', () => {
+    it('accepts a run whose conversation belongs to this visitor', async () => {
+      runRepository.findOne.mockResolvedValueOnce({ id: 'run-1', conversationId: 'conv-1' });
+      conversationRepository.findOne.mockResolvedValueOnce({ id: 'conv-1' });
+      await expect(
+        service.runBelongsToEndUser('run-1', { id: 'eu-1' } as EndUser),
+      ).resolves.toBe(true);
+      expect(conversationRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'conv-1', endUserId: 'eu-1' },
+      });
+    });
+
+    it('rejects another visitor run rather than streaming it', async () => {
+      runRepository.findOne.mockResolvedValueOnce({ id: 'run-1', conversationId: 'conv-9' });
+      conversationRepository.findOne.mockResolvedValueOnce(null);
+      await expect(
+        service.runBelongsToEndUser('run-1', { id: 'eu-1' } as EndUser),
+      ).resolves.toBe(false);
+    });
+
+    it('rejects an unknown run id', async () => {
+      await expect(
+        service.runBelongsToEndUser('made-up', { id: 'eu-1' } as EndUser),
+      ).resolves.toBe(false);
+    });
+
+    it('rejects a run with no conversation, which cannot be owned', async () => {
+      runRepository.findOne.mockResolvedValueOnce({ id: 'run-1', conversationId: null });
+      await expect(
+        service.runBelongsToEndUser('run-1', { id: 'eu-1' } as EndUser),
+      ).resolves.toBe(false);
+    });
+  });
+
+  describe('listMessages', () => {
+    it('returns only the turns a person should see', async () => {
+      messageRepository.find.mockResolvedValueOnce([
+        { id: 'm1', role: 'user', content: 'hi', createdAt: new Date() },
+        { id: 'm2', role: 'assistant', content: 'hello', createdAt: new Date() },
+        // Tool and system turns are scaffolding, not transcript.
+        { id: 'm3', role: 'tool', content: '{"rows":[]}', createdAt: new Date() },
+        { id: 'm4', role: 'system', content: 'You are...', createdAt: new Date() },
+      ]);
+      const messages = await service.listMessages({ id: 'conv-1' } as any);
+      expect(messages.map((m) => m.id)).toEqual(['m1', 'm2']);
+    });
+
+    it('prefers the entity text accessor when parts are present', async () => {
+      messageRepository.find.mockResolvedValueOnce([
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: '',
+          getTextContent: () => 'from parts',
+          createdAt: new Date(),
+        },
+      ]);
+      const [message] = await service.listMessages({ id: 'conv-1' } as any);
+      expect(message.content).toBe('from parts');
     });
   });
 });

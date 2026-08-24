@@ -1,7 +1,16 @@
 import { z } from 'zod';
 
 /**
- * Hosted chat: a tenant's own branded chat app on {slug}.almyty.app.
+ * Hosted chat: a tenant's own branded chat app on {slug}.<base domain>.
+ *
+ * The whole feature is Apache core. What almyty.com operates is a base
+ * domain and a wildcard certificate, not a licence gate: a self-hoster
+ * sets HOSTED_CHAT_BASE_DOMAIN to a domain they own, points a wildcard
+ * at their deployment, and gets exactly the same thing. The domain is
+ * never hardcoded, which is why it is read here rather than assumed.
+ *
+ * Only two things are commercial, and both are gated at publish time:
+ * removing the almyty mark (white-label) and the sso auth mode.
  *
  * Branding intentionally reuses the embeddable widget's vocabulary
  * (primaryColor, greeting, title, theme) rather than inventing a second
@@ -13,6 +22,48 @@ import { z } from 'zod';
  */
 
 const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+/**
+ * The domain tenant subdomains hang off. almyty.com's hosted product
+ * runs almyty.app; a self-hoster sets this to a domain they control.
+ * Defaulted rather than required so a fresh local install still boots.
+ */
+export const DEFAULT_HOSTED_CHAT_BASE_DOMAIN = 'almyty.app';
+
+export function hostedChatBaseDomain(
+  env: Record<string, any> = process.env,
+): string {
+  const configured = String(env.HOSTED_CHAT_BASE_DOMAIN ?? '').trim().toLowerCase();
+  return configured || DEFAULT_HOSTED_CHAT_BASE_DOMAIN;
+}
+
+/** Public URL of a hosted chat surface, for display and for links. */
+export function hostedChatUrl(slug: string, env?: Record<string, any>): string {
+  return `https://${slug}.${hostedChatBaseDomain(env)}`;
+}
+
+/**
+ * The slug a request arrived for, derived from its Host header. Returns
+ * null when the host is not a tenant subdomain of the base domain, so
+ * the apex and any unrelated host fall through rather than resolving to
+ * a surface named after whatever the first label happened to be.
+ */
+export function slugFromHost(
+  host: string | undefined,
+  env?: Record<string, any>,
+): string | null {
+  if (!host) return null;
+  const base = hostedChatBaseDomain(env);
+  // Strip the port, and normalise case: Host is not case sensitive.
+  const hostname = host.split(':')[0].trim().toLowerCase();
+  if (!hostname.endsWith(`.${base}`)) return null;
+
+  const label = hostname.slice(0, -(base.length + 1));
+  // Only a single label is a tenant. a.b.almyty.app is not acme.almyty.app.
+  if (!label || label.includes('.')) return null;
+  if (RESERVED_SLUGS.includes(label)) return null;
+  return label;
+}
 
 /** Reserved so a tenant cannot claim a name we route ourselves. */
 export const RESERVED_SLUGS = Object.freeze([
@@ -46,7 +97,7 @@ export type SurfaceAuthMode = (typeof SURFACE_AUTH_MODES)[number];
 export const EE_AUTH_MODES: readonly SurfaceAuthMode[] = Object.freeze(['sso']);
 
 export const hostedChatConfigSchema = z.object({
-  /** Subdomain label: {slug}.almyty.app. */
+  /** Subdomain label, prepended to the deployment's base domain. */
   slug: z
     .string()
     .trim()

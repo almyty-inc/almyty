@@ -1,10 +1,14 @@
 import {
+  DEFAULT_HOSTED_CHAT_BASE_DOMAIN,
   HOSTED_CHAT_DEFAULTS,
   HOSTED_CHAT_REFUSALS,
   RESERVED_SLUGS,
   canPublishHostedChat,
   hostedChatConfigFrom,
   hostedChatConfigSchema,
+  hostedChatBaseDomain,
+  hostedChatUrl,
+  slugFromHost,
   type HostedChatConfig,
 } from '../hosted-chat.config';
 
@@ -167,5 +171,69 @@ describe('canPublishHostedChat', () => {
         }).publishable,
       ).toBe(true);
     });
+  });
+});
+
+describe('base domain is configurable, not hardcoded', () => {
+  it('defaults to the hosted product domain', () => {
+    expect(hostedChatBaseDomain({})).toBe(DEFAULT_HOSTED_CHAT_BASE_DOMAIN);
+  });
+
+  it('lets a self-hoster point it at a domain they own', () => {
+    // The whole feature is Apache core; almyty.app is a domain we
+    // operate, not a licence gate.
+    expect(hostedChatBaseDomain({ HOSTED_CHAT_BASE_DOMAIN: 'chat.acme.com' })).toBe(
+      'chat.acme.com',
+    );
+    expect(hostedChatUrl('support', { HOSTED_CHAT_BASE_DOMAIN: 'chat.acme.com' })).toBe(
+      'https://support.chat.acme.com',
+    );
+  });
+
+  it('ignores a blank setting rather than producing a hostname with no domain', () => {
+    expect(hostedChatBaseDomain({ HOSTED_CHAT_BASE_DOMAIN: '   ' })).toBe(
+      DEFAULT_HOSTED_CHAT_BASE_DOMAIN,
+    );
+  });
+});
+
+describe('slugFromHost', () => {
+  const env = { HOSTED_CHAT_BASE_DOMAIN: 'almyty.app' };
+
+  it('reads the tenant label off the host', () => {
+    expect(slugFromHost('acme.almyty.app', env)).toBe('acme');
+  });
+
+  it('ignores the port and normalises case', () => {
+    expect(slugFromHost('ACME.almyty.app:8080', env)).toBe('acme');
+  });
+
+  it('returns null for the apex, so it can serve something else', () => {
+    expect(slugFromHost('almyty.app', env)).toBeNull();
+  });
+
+  it('returns null for an unrelated host rather than inventing a slug', () => {
+    // Without this, evil.com would resolve to the surface named "evil".
+    expect(slugFromHost('acme.evil.com', env)).toBeNull();
+    expect(slugFromHost('almyty.app.evil.com', env)).toBeNull();
+  });
+
+  it('rejects a nested label, which is not a tenant', () => {
+    expect(slugFromHost('a.b.almyty.app', env)).toBeNull();
+  });
+
+  it('refuses hosts we route ourselves', () => {
+    expect(slugFromHost('www.almyty.app', env)).toBeNull();
+    expect(slugFromHost('api.almyty.app', env)).toBeNull();
+  });
+
+  it('returns null for a missing host', () => {
+    expect(slugFromHost(undefined, env)).toBeNull();
+  });
+
+  it('follows a self-hosted base domain', () => {
+    expect(slugFromHost('support.chat.acme.com', { HOSTED_CHAT_BASE_DOMAIN: 'chat.acme.com' })).toBe(
+      'support',
+    );
   });
 });
