@@ -1,5 +1,7 @@
 import {
   DEFAULT_RUN_LIMITS,
+  TOOL_ERROR_SUMMARY_CHARS,
+  formatToolError,
   HARD_CEILING_ENV_KEYS,
   RUN_LIMIT_REASONS,
   agentRunLimits,
@@ -242,5 +244,41 @@ describe('checkRunLimits', () => {
       expect(describeLimitTrip(code)).toEqual({ code, message: RUN_LIMIT_REASONS[code] });
       expect(RUN_LIMIT_REASONS[code].length).toBeGreaterThan(20);
     }
+  });
+});
+
+describe('formatToolError', () => {
+  const error = 'Upstream 500\nrequest_body={"ssn":"123-45-6789"}\nstack...';
+
+  it('passes the error through verbatim under the full policy', () => {
+    // The model usually needs the real text to correct course.
+    expect(formatToolError(error, 'full')).toBe(`Error: ${error}`);
+  });
+
+  it('keeps only the first line under the summarised policy', () => {
+    const summarised = formatToolError(error, 'summarised');
+    expect(summarised).toBe('Error: Upstream 500');
+    // The payload echo is what the policy exists to keep out of context.
+    expect(summarised).not.toContain('123-45-6789');
+  });
+
+  it('caps a long single-line error rather than pasting it whole', () => {
+    const long = 'x'.repeat(TOOL_ERROR_SUMMARY_CHARS + 50);
+    const summarised = formatToolError(long, 'summarised');
+    expect(summarised.length).toBeLessThan(long.length);
+    expect(summarised.endsWith('...')).toBe(true);
+  });
+
+  it('reports the failure without the text under the suppressed policy', () => {
+    const suppressed = formatToolError(error, 'suppressed');
+    // The model still has to know the call failed, or it will assume
+    // success and carry on.
+    expect(suppressed).toMatch(/failed/);
+    expect(suppressed).not.toContain('Upstream 500');
+  });
+
+  it('handles a missing error without producing "Error: undefined"', () => {
+    expect(formatToolError(undefined, 'full')).toBe('Error: unknown error');
+    expect(formatToolError('   ', 'full')).toBe('Error: unknown error');
   });
 });

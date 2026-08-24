@@ -268,7 +268,11 @@ export class ToolExecutorService {
 
       // Legacy API-operation path (spec-imported tools without a
       // structured *Config). Supports exponential-backoff retries.
-      const maxRetries = options.retries ?? tool.configuration?.retries ?? 3;
+      // A tool that declares its own retry count knows something the
+      // caller does not (a flaky upstream, a slow cold start), so it
+      // wins over the agent-level budget. Order matters: caller default
+      // first would silently discard every per-tool override.
+      const maxRetries = tool.configuration?.retries ?? options.retries ?? 3;
       let lastError: Error | undefined;
 
       while (retryCount <= maxRetries) {

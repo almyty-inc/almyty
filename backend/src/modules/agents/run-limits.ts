@@ -299,3 +299,41 @@ export function checkRunLimits(
   }
   return null;
 }
+
+/**
+ * How a failed tool call's error text re-enters the model's context.
+ *
+ *   full        the error verbatim, which is what the model needs to
+ *               actually correct course
+ *   summarised  first line only, capped, for errors that are large or
+ *               may echo request payloads back into context
+ *   suppressed  the fact of failure without the text, for tools whose
+ *               errors can carry data the model should not see
+ *
+ * Truncation is deliberate rather than clever: a summariser here would
+ * be another model call inside the failure path.
+ */
+export function formatToolError(
+  error: string | undefined,
+  policy: ToolErrorFeedback,
+): string {
+  const text = (error ?? '').trim() || 'unknown error';
+  switch (policy) {
+    case 'suppressed':
+      return 'Error: the tool call failed. Details withheld by policy.';
+    case 'summarised': {
+      const firstLine = text.split('\n')[0];
+      const capped =
+        firstLine.length > TOOL_ERROR_SUMMARY_CHARS
+          ? `${firstLine.slice(0, TOOL_ERROR_SUMMARY_CHARS)}...`
+          : firstLine;
+      return `Error: ${capped}`;
+    }
+    case 'full':
+    default:
+      return `Error: ${text}`;
+  }
+}
+
+/** Cap for the summarised tool-error policy. */
+export const TOOL_ERROR_SUMMARY_CHARS = 200;

@@ -4,6 +4,13 @@ export interface ExecutionContext {
   input: Record<string, any>;
   nodes: Record<string, { output: any }>;
   variables?: Record<string, any>;
+  /**
+   * Ceilings resolved for the run this pipeline belongs to. Present so
+   * a node cannot exceed the run's budget through its own config: a
+   * loop node asking for 100 iterations inside a run capped at 25 steps
+   * would otherwise outlive the budget that governs everything else.
+   */
+  runLimits?: { maxSteps?: number; maxToolCalls?: number };
 }
 
 /** Maximum allowed length for a single template expression (inside {{ }}). */

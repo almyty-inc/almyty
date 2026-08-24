@@ -4,6 +4,13 @@ import { Repository } from 'typeorm';
 
 import { Agent } from '../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { Organization } from '../../entities/organization.entity';
+import {
+  ResolvedRunLimits,
+  RunLimitTrip,
+  checkRunLimits,
+  resolveRunLimits,
+} from './run-limits';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import { Provenance } from '../memory/canonical/canonical.types';
 
@@ -24,6 +31,8 @@ export class AgentRuntimeMiscHelper {
     private readonly agentRepository: Repository<Agent>,
     @InjectRepository(AgentRun)
     private readonly runRepository: Repository<AgentRun>,
+    @InjectRepository(Organization)
+    private readonly organizationRepository: Repository<Organization>,
     @Inject(forwardRef(() => CanonicalMemoryService))
     private readonly memoryService: CanonicalMemoryService,
   ) {}
@@ -107,30 +116,41 @@ export class AgentRuntimeMiscHelper {
   }
 
   /**
-   * Check resource limits.
+   * Resolve the ceilings that apply to a run.
    *
-   * Unit note: `run.totalCost` accumulates values from `llmResponse.cost`, which
-   * `LlmProvidersService.calculateProviderCost` returns in **dollars**. The
-   * `maxCostCents` limit is, per its name, in **cents**. We therefore multiply
-   * `totalCost` by 100 when comparing — previously the comparison was
-   * dollars-vs-cents, which silently allowed a 100x cost overrun.
+   * Min-wins across the operator env floor, the organization, the agent
+   * and the run, so nothing below can raise what something above set.
+   * Resolved at the point of use rather than read off the run, which is
+   * what lets tightening org policy take effect on the next step instead
+   * of only on runs created afterwards.
    */
-  checkLimits(run: AgentRun): string | null {
-    const limits = run.limits || {};
+  async resolveLimits(run: AgentRun): Promise<ResolvedRunLimits> {
+    let organization: Organization | null = null;
+    try {
+      organization = await this.organizationRepository.findOne({
+        where: { id: run.organizationId },
+      });
+    } catch (err: any) {
+      // A ceiling we cannot read must not become a ceiling we ignore;
+      // the env floor still applies because resolveRunLimits clamps to
+      // it regardless.
+      this.logger.warn(`Could not load organization limits for run ${run.id}: ${err.message}`);
+    }
 
-    if (run.currentStep >= (limits.maxSteps || run.maxSteps)) {
-      return 'MAX_STEPS_EXCEEDED';
-    }
-    if (limits.maxCostCents && run.totalCost * 100 >= limits.maxCostCents) {
-      return 'BUDGET_EXCEEDED';
-    }
-    if (limits.maxDurationMs && Date.now() - run.createdAt.getTime() > limits.maxDurationMs) {
-      return 'TIMEOUT';
-    }
-    if (limits.maxTokens && run.totalTokens >= limits.maxTokens) {
-      return 'TOKEN_LIMIT_EXCEEDED';
-    }
-    return null;
+    return resolveRunLimits({ organization, agent: run.agent, run });
+  }
+
+  /**
+   * Check the run ledger against its resolved ceilings.
+   *
+   * Returns a machine-readable code paired with a sentence the caller
+   * can act on, never a bare stop. The dollars-versus-cents conversion
+   * that used to live here now sits in checkRunLimits, next to the
+   * comparison it belongs to.
+   */
+  async checkLimits(run: AgentRun): Promise<RunLimitTrip | null> {
+    const limits = await this.resolveLimits(run);
+    return checkRunLimits(run, limits);
   }
 
   sleep(ms: number): Promise<void> {
