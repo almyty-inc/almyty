@@ -12,6 +12,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useNotifications } from '@/store/app'
+import { credentialsApi } from '@/lib/api'
+import { SigningCredentialDialog } from './signing-credential-dialog'
 import {
   agentAppsApi,
   formatBytes,
@@ -23,7 +25,13 @@ import {
 export interface BuildPanelProps {
   app: AgentApp
   target: DistributionTarget
+  /** The certificate this distribution signs with, if it names one. */
+  signingCredentialId?: string | null
+  onSigningCredentialChange?: (credentialId: string) => void
 }
+
+/** Stands in for "nothing selected", because a Select cannot take ''. */
+const UNSIGNED = 'unsigned'
 
 /** Refetch while anything is in flight; stop once nothing is. */
 const inFlight = (builds: AppBuild[] | undefined) =>
@@ -45,10 +53,16 @@ const STATUS_LABEL: Record<string, string> = {
  * unsigned artifact does to whoever downloads it, which is shown before
  * the build rather than discovered afterwards.
  */
-export function BuildPanel({ app, target }: BuildPanelProps) {
+export function BuildPanel({
+  app,
+  target,
+  signingCredentialId,
+  onSigningCredentialChange,
+}: BuildPanelProps) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
   const [platform, setPlatform] = useState<string>('')
+  const [addingCertificate, setAddingCertificate] = useState(false)
 
   const { data: platforms } = useQuery({
     queryKey: ['app-build-platforms', app.slug, target],
@@ -63,8 +77,18 @@ export function BuildPanel({ app, target }: BuildPanelProps) {
     refetchInterval: (query) => (inFlight(query.state.data as AppBuild[]) ? 4000 : false),
   })
 
+  const { data: certificates } = useQuery({
+    queryKey: ['signing-credentials'],
+    queryFn: async () => {
+      const response: any = await credentialsApi.getAll()
+      const all = (response?.data ?? response ?? []) as any[]
+      return all.filter((c) => c.type === 'code_signing')
+    },
+  })
+
   const forTarget = (builds ?? []).filter((b) => b.target === target)
   const chosen = (platforms ?? []).find((p) => p.id === platform)
+  const willSign = Boolean(signingCredentialId)
 
   // A build records the platform id it was compiled for. Show the name
   // instead, and fall back to the id for a platform we no longer offer
@@ -111,7 +135,7 @@ export function BuildPanel({ app, target }: BuildPanelProps) {
         </Select>
       </div>
 
-      {chosen?.signing && (
+      {chosen?.signing && !willSign && (
         // Said before the build, because the moment to learn that macOS
         // will refuse to open this is not after sending out the link.
         <div className="space-y-2 rounded-md border border-amber-400 bg-amber-50 p-3 dark:bg-amber-950">
@@ -124,6 +148,42 @@ export function BuildPanel({ app, target }: BuildPanelProps) {
             {chosen.signing.note}
           </p>
         </div>
+      )}
+
+      {chosen?.signing && onSigningCredentialChange && (
+        <div className="space-y-1.5">
+          <Label htmlFor="build-signing">Sign with</Label>
+          <Select
+            value={signingCredentialId || UNSIGNED}
+            onValueChange={(value) =>
+              value === 'new'
+                ? setAddingCertificate(true)
+                : onSigningCredentialChange(value === UNSIGNED ? '' : value)
+            }
+          >
+            <SelectTrigger id="build-signing">
+              <SelectValue placeholder="Nothing, ship it unsigned" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={UNSIGNED}>Nothing, ship it unsigned</SelectItem>
+              {(certificates ?? []).map((c: any) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+              <SelectItem value="new">Add a certificate...</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {chosen?.signing && (
+        <SigningCredentialDialog
+          open={addingCertificate}
+          onOpenChange={setAddingCertificate}
+          kind={chosen.signing.kind}
+          onCreated={(id) => onSigningCredentialChange?.(id)}
+        />
       )}
 
       <Button
@@ -189,6 +249,15 @@ export function BuildPanel({ app, target }: BuildPanelProps) {
 
                 {build.error && (
                   <p className="mt-2 break-words text-destructive">{build.error}</p>
+                )}
+
+                {/* A build that worked but could not be signed. Amber
+                    rather than red: the artifact is usable, and this
+                    says what would make it open without a warning. */}
+                {build.signingNote && !build.error && (
+                  <p className="mt-2 break-words text-amber-600 dark:text-amber-400">
+                    {build.signingNote}
+                  </p>
                 )}
               </li>
             ))}

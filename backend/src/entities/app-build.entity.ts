@@ -66,6 +66,18 @@ export class AppBuild {
   @Column({ default: false })
   signed: boolean;
 
+  /**
+   * Why an artifact is not signed, when it could have been.
+   *
+   * Separate from `error`, which means the build failed. A build that
+   * produced a working binary and could not sign it succeeded, and the
+   * operator still needs the sentence: no certificate selected, wrong
+   * password, tool missing. Without this it lives only in the build
+   * log, which is not shown.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  signingNote: string | null;
+
   /** Storage key of the artifact. Null until the build succeeds. */
   @Column({ type: 'varchar', nullable: true })
   artifactKey: string | null;

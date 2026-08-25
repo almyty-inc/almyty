@@ -250,7 +250,13 @@ export class AppBuildsService {
   async succeed(
     build: AppBuild,
     artifact: Buffer,
-    options: { signed: boolean; log: string; macPackaging?: MacPackaging },
+    options: {
+      signed: boolean;
+      log: string;
+      macPackaging?: MacPackaging;
+      /** Why it is unsigned, when it could have been signed. */
+      signingNote?: string | null;
+    },
   ): Promise<AppBuild> {
     // Depends on the target as well as the platform: a terminal app is
     // a bare executable, not a bundle to zip.
@@ -271,6 +277,7 @@ export class AppBuildsService {
     build.artifactBytes = String(artifact.length);
     build.checksum = createHash('sha256').update(artifact).digest('hex');
     build.signed = options.signed;
+    build.signingNote = options.signingNote ?? null;
     build.log = options.log;
     build.error = null;
     build.finishedAt = new Date();

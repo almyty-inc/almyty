@@ -139,7 +139,7 @@ describe('AgentAppsService', () => {
       expect(created.appId).toBe('h-1');
     });
 
-    it('allows only one distribution per target', async () => {
+    it('keeps one distribution per target rather than adding a second', async () => {
       // Naming the platform rather than lumping them under "channel" is
       // what makes this simple: slack and telegram are separate targets.
       for (const target of [
@@ -150,11 +150,72 @@ describe('AgentAppsService', () => {
         DistributionTarget.SLACK,
       ]) {
         appRepository.findOne.mockResolvedValueOnce(app());
-        distributionRepository.findOne.mockResolvedValueOnce({ id: 'existing' });
-        await expect(service.addDistribution(ORG, 'acme-support', target)).rejects.toThrow(
-          ConflictException,
-        );
+        distributionRepository.findOne.mockResolvedValueOnce({ id: 'existing', configuration: {} });
+
+        const result = await service.addDistribution(ORG, 'acme-support', target);
+
+        expect(result.id).toBe('existing');
+        expect(distributionRepository.create).not.toHaveBeenCalled();
       }
+    });
+
+    it('treats shipping somewhere it already ships as a settings change', async () => {
+      // This used to be a 409, which meant every edit to an existing
+      // distribution's settings failed.
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'existing',
+        configuration: { bundleId: 'com.acme.assistant' },
+      });
+
+      const result = await service.addDistribution(ORG, 'acme-support', DistributionTarget.TUI, {
+        signingCredentialId: 'cred-1',
+      });
+
+      expect(result.configuration).toEqual({
+        bundleId: 'com.acme.assistant',
+        signingCredentialId: 'cred-1',
+      });
+    });
+
+    it('does not drop settings a partial update did not mention', async () => {
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'existing',
+        configuration: { bundleId: 'com.acme.assistant', signingCredentialId: 'cred-1' },
+      });
+
+      const result = await service.addDistribution(ORG, 'acme-support', DistributionTarget.TUI, {
+        bundleId: 'com.acme.renamed',
+      });
+
+      expect(result.configuration.signingCredentialId).toBe('cred-1');
+    });
+
+    it('clears a setting when it is sent empty', async () => {
+      // Choosing "ship it unsigned" has to be expressible.
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'existing',
+        configuration: { signingCredentialId: 'cred-1' },
+      });
+
+      const result = await service.addDistribution(ORG, 'acme-support', DistributionTarget.TUI, {
+        signingCredentialId: '',
+      });
+
+      expect(result.configuration.signingCredentialId).toBe('');
+    });
+
+    it('leaves the gateway alone when an update does not name one', async () => {
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'existing',
+        configuration: {},
+        gatewayId: 'gw-1',
+      });
+
+      const result = await service.addDistribution(ORG, 'acme-support', DistributionTarget.SLACK, {
+        bundleId: 'x',
+      });
+
+      expect(result.gatewayId).toBe('gw-1');
     });
 
     it('lets an app ship to several platforms at once', async () => {

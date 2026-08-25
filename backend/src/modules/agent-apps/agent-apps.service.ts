@@ -188,11 +188,20 @@ export class AgentAppsService {
     // rather than lumping them under "channel" is what makes that
     // simple: an app ships to Slack once and to Telegram once, and each
     // is separately addressable by name.
+    //
+    // Shipping somewhere it already ships is a settings change, not a
+    // conflict. This used to reject it, which meant every edit to a
+    // distribution's settings failed once it existed.
     const existing = await this.distributionRepository.findOne({
       where: { appId: app.id, target },
     });
     if (existing) {
-      throw new ConflictException(`This app already ships to ${target}`);
+      // Merged rather than replaced, so a caller that sends one field
+      // does not silently drop the others. Clearing a field is done by
+      // sending it empty, which every reader treats as unset.
+      existing.configuration = { ...(existing.configuration ?? {}), ...configuration };
+      if (gatewayId !== null) existing.gatewayId = gatewayId;
+      return this.distributionRepository.save(existing);
     }
 
     return this.distributionRepository.save(

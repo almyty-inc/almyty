@@ -46,9 +46,19 @@ export function DistributionPanel({ app, distribution, onSaved }: DistributionPa
     queryFn: () => agentAppsApi.checkDistribution(app.slug, distribution.target),
   })
 
+  // The certificate this distribution signs with. Kept on the
+  // distribution rather than the app, because a customer can hold one
+  // identity for macOS and another for Windows.
+  const signingCredentialId =
+    (distribution.configuration?.signingCredentialId as string | undefined) ?? ''
+
   const save = useMutation({
-    mutationFn: () =>
-      agentAppsApi.addDistribution(app.slug, distribution.target, { bundleId }),
+    mutationFn: (patch: Record<string, unknown> = {}) =>
+      agentAppsApi.addDistribution(app.slug, distribution.target, {
+        ...(distribution.configuration ?? {}),
+        bundleId,
+        ...patch,
+      }),
     onSuccess: () => {
       success('Saved', 'Distribution updated.')
       onSaved()
@@ -99,7 +109,7 @@ export function DistributionPanel({ app, distribution, onSaved }: DistributionPa
           <Button
             className="mt-2 w-full"
             disabled={save.isPending}
-            onClick={() => save.mutate()}
+            onClick={() => save.mutate({})}
           >
             {save.isPending ? 'Saving...' : 'Save'}
           </Button>
@@ -116,7 +126,12 @@ export function DistributionPanel({ app, distribution, onSaved }: DistributionPa
       {/* Builds run on our machines, so this is a button rather than a
           command to paste into a terminal. */}
       {isBuildable(distribution.target) && (
-        <BuildPanel app={app} target={distribution.target} />
+        <BuildPanel
+          app={app}
+          target={distribution.target}
+          signingCredentialId={signingCredentialId}
+          onSigningCredentialChange={(id) => save.mutate({ signingCredentialId: id })}
+        />
       )}
 
       {distribution.lastBuild && (

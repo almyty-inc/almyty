@@ -7,11 +7,13 @@ import { AppDistribution } from '../../entities/agent-app-distribution.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
 import { AppBuild } from '../../entities/app-build.entity';
+import { Credential } from '../../entities/credential.entity';
 import { FilesModule } from '../files/files.module';
 import { AgentAppsController } from './agent-apps.controller';
 import { AgentAppsService } from './agent-apps.service';
 import { AppBuildsService, APP_BUILD_QUEUE } from './app-builds.service';
 import { AppBuildProcessor } from './app-build.processor';
+import { BuildSignerService } from './build-signer.service';
 
 /**
  * The agent factory: turning agents into products a customer ships.
@@ -23,7 +25,7 @@ import { AppBuildProcessor } from './app-build.processor';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AgentApp, AppDistribution, Agent, AppBuild]),
+    TypeOrmModule.forFeature([AgentApp, AppDistribution, Agent, AppBuild, Credential]),
     BullModule.registerQueue({ name: APP_BUILD_QUEUE }),
     // Artifacts go through the same storage the rest of the product
     // uses, so a deployment on S3 gets signed download URLs for free.
@@ -31,7 +33,7 @@ import { AppBuildProcessor } from './app-build.processor';
     AuthorizationModule,
   ],
   controllers: [AgentAppsController],
-  providers: [AgentAppsService, AppBuildsService, AppBuildProcessor],
+  providers: [AgentAppsService, AppBuildsService, AppBuildProcessor, BuildSignerService],
   exports: [AgentAppsService, AppBuildsService],
 })
 export class AgentAppsModule {}

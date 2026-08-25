@@ -191,6 +191,8 @@ export interface AppBuild {
   status: BuildStatus
   version: string | null
   signed: boolean
+  /** Why it is unsigned, when it could have been signed. */
+  signingNote: string | null
   artifactBytes: string | null
   checksum: string | null
   error: string | null

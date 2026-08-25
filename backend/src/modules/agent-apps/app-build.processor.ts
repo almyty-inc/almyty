@@ -7,6 +7,7 @@ import { join } from 'path';
 import { randomBytes } from 'crypto';
 
 import { AppBuildsService, APP_BUILD_QUEUE } from './app-builds.service';
+import { BuildSignerService } from './build-signer.service';
 import { BUN_TARGETS, ProcessToolchainRunner, bunCompileArgs } from './build-toolchain';
 import { artifactExtension, type MacPackaging } from './build-targets';
 import { BuildStatus } from '../../entities/app-build.entity';
@@ -49,7 +50,10 @@ export class AppBuildProcessor {
   private readonly logger = new Logger(AppBuildProcessor.name);
   private readonly toolchain = new ProcessToolchainRunner();
 
-  constructor(private readonly builds: AppBuildsService) {}
+  constructor(
+    private readonly builds: AppBuildsService,
+    private readonly signer: BuildSignerService,
+  ) {}
 
   @Process()
   async build(job: Job<BuildJob>): Promise<void> {
@@ -126,11 +130,40 @@ export class AppBuildProcessor {
         return;
       }
 
-      // Signing is not wired yet, so this reports unsigned rather than
-      // claiming otherwise. An artifact that says it is signed when it
-      // is not is how someone ships a binary macOS will refuse to open.
-      await this.builds.succeed(build, artifact, { signed: false, log, macPackaging });
-      this.logger.log(`Built ${build.target} for ${build.platform} (${artifact.length} bytes)`);
+      // Signed with the customer's own certificate when a distribution
+      // names one. `signed` records what the tool actually did rather
+      // than what was attempted: an artifact that claims a signature it
+      // does not carry is how someone ships a binary the target OS
+      // refuses to open.
+      const signing = await this.signer.sign({
+        appId: build.appId,
+        target: build.target,
+        platform: build.platform,
+        artifactPath: outfile,
+        workDir,
+        runner: this.toolchain,
+      });
+
+      if (signing.error) log = `${log}\n${signing.error}`.trim();
+
+      // Re-read after signing: the tools rewrite the file in place, so
+      // the bytes read before this are the unsigned ones.
+      const finished = signing.signed ? await fs.readFile(outfile) : artifact;
+
+      await this.builds.succeed(build, finished, {
+        signed: signing.signed,
+        // Kept out of `error`, which means the build failed. This one
+        // succeeded and is simply not signed, and the operator needs to
+        // know which of those it is.
+        signingNote: signing.error,
+        log,
+        macPackaging,
+      });
+      this.logger.log(
+        `Built ${build.target} for ${build.platform} (${finished.length} bytes, ${
+          signing.signed ? 'signed' : 'unsigned'
+        })`,
+      );
     } catch (err: any) {
       // The full text goes to the log, which stays server side. What
       // reaches the operator is one line with host paths removed: a

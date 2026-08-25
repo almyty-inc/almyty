@@ -29,6 +29,13 @@ export enum CredentialType {
   GOOGLE_SERVICE_ACCOUNT = 'google_service_account',
   MTLS = 'mtls',
   /**
+   * A code-signing identity. `config` carries `certificate` (the .p12
+   * or .pfx, base64) and `certificatePassword`, plus `apiKeyId`,
+   * `apiIssuer` and `apiKey` for Apple notarisation. Consumed only by
+   * the app build, never sent to an API.
+   */
+  CODE_SIGNING = 'code_signing',
+  /**
    * Credentials used by canonical memory backends. The `config`
    * column carries backend-specific fields (`apiKey`, `baseUrl`,
    * `engine`, `bearer`, `project`, `location`) and is consumed
@@ -150,7 +157,7 @@ export class Credential {
    */
   encryptSensitiveData(): void {
     if (this.config && typeof this.config === 'object') {
-      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken', 'headerValue', 'clientSecret', 'bearer', 'serviceAccountJson'];
+      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken', 'headerValue', 'clientSecret', 'bearer', 'serviceAccountJson', 'certificate', 'privateKey', 'certificatePassword'];
       const encrypted = { ...this.config };
 
       for (const field of sensitiveFields) {
@@ -188,6 +195,10 @@ export class Credential {
     'password', 'secret', 'token', 'key', 'client_secret', 'apiKey',
     'accessToken', 'refreshToken', 'headerValue', 'clientSecret', 'bearer',
     'serviceAccountJson',
+    // A code-signing certificate carries a private key. Whoever holds
+    // it can sign software as the customer, so it is no less sensitive
+    // than a password and must not sit in plaintext JSON.
+    'certificate', 'privateKey', 'certificatePassword',
   ];
 
   /**
