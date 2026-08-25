@@ -197,11 +197,23 @@ export const agentAppsApi = {
       unwrap<AppDistribution>(r),
     ),
 
-  checkDistribution: (distributionId: string) =>
-    apiGet(`/apps/distributions/${distributionId}/check`).then((r) => unwrap<AppCheck>(r)),
+  // Addressed by app name plus the platform it ships to, matching the
+  // API. There is one distribution per target, so that pair is enough
+  // and no opaque id has to travel through the UI.
+  checkDistribution: (slug: string, target: DistributionTarget) =>
+    apiGet(`/apps/${slug}/distributions/${target}/check`).then((r) => unwrap<AppCheck>(r)),
 
-  removeDistribution: (distributionId: string) =>
-    apiDel(`/apps/distributions/${distributionId}`),
+  removeDistribution: (slug: string, target: DistributionTarget) =>
+    apiDel(`/apps/${slug}/distributions/${target}`),
+
+  recordBuild: (
+    slug: string,
+    target: DistributionTarget,
+    build: { version?: string; platform?: string; checksum?: string; signed?: boolean; error?: string },
+  ) =>
+    apiPost(`/apps/${slug}/distributions/${target}/build`, build).then((r) =>
+      unwrap<AppDistribution>(r),
+    ),
 }
 
 /** True when the product grants any access to the machine it runs on. */

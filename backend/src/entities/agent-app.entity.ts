@@ -42,7 +42,7 @@ export enum AppAuthMode {
   SSO = 'sso',
 }
 
-@Entity('agentApps')
+@Entity('agent_apps')
 @Index(['organizationId', 'name'])
 @Index(['organizationId', 'slug'], { unique: true })
 export class AgentApp {
