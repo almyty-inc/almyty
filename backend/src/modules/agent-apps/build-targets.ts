@@ -248,3 +248,46 @@ export function describeOutcome(
   if (platform.signing === 'none' || willBeSigned) return { artifact, caveat: null };
   return { artifact, caveat: platform.unsignedConsequence };
 }
+
+/**
+ * The file extension an artifact should carry.
+ *
+ * Depends on the target as well as the platform, which the platform
+ * table alone cannot express. A terminal app is a single executable:
+ * bare on unix, .exe on Windows. Only the desktop app is a bundle, and
+ * only that one is zipped or turned into a disk image.
+ *
+ * Getting this wrong is not cosmetic. A Mach-O executable named .zip
+ * will not open when double-clicked, browsers will try to expand it,
+ * and the person who downloaded it has no way to tell what went wrong.
+ */
+export function artifactExtension(
+  target: DistributionTarget | string,
+  platformId: string,
+  macPackaging: MacPackaging = 'zip',
+): string | null {
+  const isWindows = platformId.startsWith('windows-');
+  const isMac = platformId.startsWith('macos-');
+
+  if (target === DistributionTarget.DESKTOP) {
+    if (isWindows) return 'exe';
+    if (isMac) return MAC_PACKAGING[macPackaging].extension;
+    return 'AppImage';
+  }
+
+  // Terminal apps and standalone binaries are one executable file.
+  // Unix has no extension for that; Windows needs .exe to run it.
+  return isWindows ? 'exe' : null;
+}
+
+/** Filename for an artifact, given the app's name. */
+export function artifactFilename(
+  slug: string,
+  target: DistributionTarget | string,
+  platformId: string,
+  macPackaging: MacPackaging = 'zip',
+): string {
+  const extension = artifactExtension(target, platformId, macPackaging);
+  const base = `${slug}-${platformId}`;
+  return extension ? `${base}.${extension}` : base;
+}

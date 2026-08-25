@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Request,
@@ -16,6 +17,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { DistributionTarget } from '../../entities/agent-app-distribution.entity';
 import { AgentAppsService, CreateAppDto, UpdateAppDto } from './agent-apps.service';
+import { AppBuildsService, RequestBuildDto } from './app-builds.service';
+import { platformsFor, signingRequirementFor } from './build-targets';
 
 /**
  * The agent factory API.
@@ -37,7 +40,10 @@ import { AgentAppsService, CreateAppDto, UpdateAppDto } from './agent-apps.servi
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AgentAppsController {
-  constructor(private readonly apps: AgentAppsService) {}
+  constructor(
+    private readonly apps: AgentAppsService,
+    private readonly builds: AppBuildsService,
+  ) {}
 
   private org(req: any): string {
     return req.user.currentOrganizationId;
@@ -175,5 +181,69 @@ export class AgentAppsController {
   ) {
     await this.apps.removeDistribution(this.org(req), slug, target);
     return { success: true };
+  }
+
+  /**
+   * Which platforms this target can be produced for, and what signing
+   * each would need.
+   *
+   * Read before choosing, so an operator sees that an unsigned macOS
+   * build will not open before they queue one rather than after they
+   * send the link out.
+   */
+  @Get(':slug/distributions/:target/platforms')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Platforms this distribution can be built for' })
+  async platforms(@Param('target') target: DistributionTarget) {
+    return {
+      success: true,
+      data: platformsFor(target).map((platform) => ({
+        ...platform,
+        signing: signingRequirementFor(platform.id),
+      })),
+    };
+  }
+
+  @Post(':slug/builds')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Build a downloadable artifact' })
+  async requestBuild(
+    @Param('slug') slug: string,
+    @Body() body: RequestBuildDto,
+    @Request() req: any,
+  ) {
+    return {
+      success: true,
+      data: await this.builds.request(
+        this.org(req),
+        slug,
+        body,
+        req.user?.email ?? req.user?.id ?? null,
+      ),
+    };
+  }
+
+  @Get(':slug/builds')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Build history for this app' })
+  async listBuilds(@Param('slug') slug: string, @Request() req: any) {
+    return { success: true, data: await this.builds.list(this.org(req), slug) };
+  }
+
+  /**
+   * A link to the artifact.
+   *
+   * Minted per request and short lived rather than stored, so a URL
+   * that ends up in a chat log or a ticket stops working. The artifact
+   * expires on its own schedule.
+   */
+  @Get(':slug/builds/:buildId/download')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Get a download link for a finished build' })
+  async download(
+    @Param('buildId', ParseUUIDPipe) buildId: string,
+    @Request() req: any,
+  ) {
+    return { success: true, data: { url: await this.builds.downloadUrl(this.org(req), buildId) } };
   }
 }

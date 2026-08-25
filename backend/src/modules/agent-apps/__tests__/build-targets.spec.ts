@@ -1,6 +1,8 @@
 import { DistributionTarget } from '../../../entities/agent-app-distribution.entity';
 import {
   BUILD_PLATFORMS,
+  artifactExtension,
+  artifactFilename,
   canBuildHere,
   describeOutcome,
   isBuildable,
@@ -110,5 +112,40 @@ describe('describeOutcome', () => {
   it('names the artifact the operator will actually receive', () => {
     expect(describeOutcome('macos-arm64', true).artifact).toMatch(/\.zip$/);
     expect(describeOutcome('linux-x64', true).artifact).toMatch(/\.AppImage$/);
+  });
+});
+
+describe('artifactExtension', () => {
+  it('gives a terminal app no extension on unix, because it is one executable', () => {
+    // Naming a Mach-O binary .zip stops it opening when double-clicked
+    // and makes browsers try to expand it.
+    expect(artifactExtension('tui', 'macos-arm64')).toBeNull();
+    expect(artifactExtension('tui', 'linux-x64')).toBeNull();
+    expect(artifactExtension('binary', 'macos-x64')).toBeNull();
+  });
+
+  it('gives a terminal app .exe on Windows, which needs it to run', () => {
+    expect(artifactExtension('tui', 'windows-x64')).toBe('exe');
+  });
+
+  it('bundles only the desktop app', () => {
+    expect(artifactExtension('desktop', 'macos-arm64')).toBe('zip');
+    expect(artifactExtension('desktop', 'macos-arm64', 'dmg')).toBe('dmg');
+    expect(artifactExtension('desktop', 'linux-x64')).toBe('AppImage');
+    expect(artifactExtension('desktop', 'windows-x64')).toBe('exe');
+  });
+});
+
+describe('artifactFilename', () => {
+  it('names a download after the app and the platform', () => {
+    expect(artifactFilename('acme-support', 'desktop', 'macos-arm64')).toBe(
+      'acme-support-macos-arm64.zip',
+    );
+  });
+
+  it('leaves a bare executable without a trailing dot', () => {
+    expect(artifactFilename('acme-support', 'tui', 'macos-arm64')).toBe(
+      'acme-support-macos-arm64',
+    );
   });
 });

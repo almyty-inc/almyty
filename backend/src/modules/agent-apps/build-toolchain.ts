@@ -145,3 +145,24 @@ export async function toolchainReadiness(
   }
   return { ready: true, missing: [], reason: null };
 }
+
+/**
+ * Modules the bundler must not try to resolve.
+ *
+ * ink imports react-devtools-core at the top of a devtools module that
+ * only runs when DEV is set. Bun resolves imports statically, so it
+ * fails the whole build over a dependency the artifact never loads.
+ * Marking it external leaves the import in place and unreached.
+ */
+export const BUNDLE_EXTERNALS: readonly string[] = Object.freeze(['react-devtools-core']);
+
+/** Arguments for compiling the terminal client to a single executable. */
+export function bunCompileArgs(
+  entry: string,
+  bunTarget: string,
+  outfile: string,
+): string[] {
+  const args = ['build', entry, '--compile', `--target=${bunTarget}`, '--outfile', outfile];
+  for (const external of BUNDLE_EXTERNALS) args.push('--external', external);
+  return args;
+}
