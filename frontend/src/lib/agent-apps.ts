@@ -11,7 +11,51 @@ import { apiGet, apiPost, apiPatch, apiDel } from './api'
 
 export type AppAuthMode = 'public_link' | 'email_otp' | 'oauth' | 'sso'
 
-export type DistributionTarget = 'web' | 'channel' | 'tui' | 'desktop' | 'binary'
+/**
+ * Where an app ships. Messaging platforms are named individually rather
+ * than collapsed into one "channel" target: an app ships to Slack, not
+ * to an abstraction, and naming the platform is what makes each
+ * distribution addressable as /apps/acme/distributions/slack.
+ */
+export type DistributionTarget =
+  | 'web'
+  | 'tui'
+  | 'desktop'
+  | 'binary'
+  | 'slack'
+  | 'discord'
+  | 'telegram'
+  | 'whatsapp'
+  | 'whatsapp_cloud'
+  | 'sms'
+  | 'microsoft_teams'
+  | 'google_chat'
+  | 'email'
+  | 'signal'
+  | 'matrix'
+  | 'irc'
+  | 'webhook'
+
+/** Targets backed by a messaging gateway holding platform credentials. */
+export const CHANNEL_TARGETS: DistributionTarget[] = [
+  'slack',
+  'discord',
+  'telegram',
+  'whatsapp',
+  'whatsapp_cloud',
+  'sms',
+  'microsoft_teams',
+  'google_chat',
+  'email',
+  'signal',
+  'matrix',
+  'irc',
+  'webhook',
+]
+
+export function isChannelTarget(target: DistributionTarget): boolean {
+  return CHANNEL_TARGETS.includes(target)
+}
 
 export type DistributionStatus = 'draft' | 'building' | 'built' | 'live' | 'failed'
 
@@ -78,18 +122,42 @@ export interface AppCheck {
  */
 export const DISTRIBUTION_LABELS: Record<DistributionTarget, string> = {
   web: 'Web app',
-  channel: 'Messaging',
   tui: 'Terminal app',
   desktop: 'Desktop app',
   binary: 'Standalone binary',
+  slack: 'Slack',
+  discord: 'Discord',
+  telegram: 'Telegram',
+  whatsapp: 'WhatsApp (Twilio)',
+  whatsapp_cloud: 'WhatsApp (Meta)',
+  sms: 'SMS',
+  microsoft_teams: 'Microsoft Teams',
+  google_chat: 'Google Chat',
+  email: 'Email',
+  signal: 'Signal',
+  matrix: 'Matrix',
+  irc: 'IRC',
+  webhook: 'Webhook',
 }
 
 export const DISTRIBUTION_BLURBS: Record<DistributionTarget, string> = {
   web: 'A branded chat app on its own address',
-  channel: 'Slack, WhatsApp, Telegram and the rest',
   tui: 'A command your users run in a terminal',
   desktop: 'An installable windowed app',
   binary: 'One executable, no runtime to install',
+  slack: 'In your Slack workspace',
+  discord: 'In your Discord server',
+  telegram: 'As a Telegram bot',
+  whatsapp: 'On WhatsApp through Twilio',
+  whatsapp_cloud: "On WhatsApp through Meta's Cloud API",
+  sms: 'Over SMS through Twilio',
+  microsoft_teams: 'In Microsoft Teams',
+  google_chat: 'In Google Chat',
+  email: 'By email',
+  signal: 'On Signal through your bridge',
+  matrix: 'On Matrix through your bridge',
+  irc: 'On IRC through your bridge',
+  webhook: 'To any endpoint you own',
 }
 
 /** Targets that produce a file someone installs, so they need signing. */

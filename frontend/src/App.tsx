@@ -77,6 +77,7 @@ function DashboardLayoutOutlet() {
 }
 
 import { HostedChatPage } from '@/pages/hosted-chat'
+import { AppsPage } from '@/pages/apps'
 import { currentTenantSlug } from '@/lib/tenant-host'
 
 function App() {
@@ -119,6 +120,7 @@ function App() {
           <Route path="/tools/:id" element={<ToolDetailPage />} />
           <Route path="/tool-hub" element={<Navigate to="/tools?tab=hub" replace />} />
           <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/apps" element={<AppsPage />} />
           <Route path="/agents/new" element={<AgentBuilderPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
           <Route path="/agents/:id/edit" element={<AgentBuilderPage />} />
