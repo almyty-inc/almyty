@@ -8,8 +8,10 @@ import {
   Patch,
   Post,
   Request,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -245,5 +247,31 @@ export class AgentAppsController {
     @Request() req: any,
   ) {
     return { success: true, data: { url: await this.builds.downloadUrl(this.org(req), buildId) } };
+  }
+
+  /**
+   * The artifact bytes.
+   *
+   * Where the deployment's storage can presign, the link above points
+   * at storage and this is never reached. Where it cannot, this is the
+   * download, and it enforces the same ownership and expiry rules.
+   */
+  @Get(':slug/builds/:buildId/artifact')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Download the artifact a build produced' })
+  async artifact(
+    @Param('buildId', ParseUUIDPipe) buildId: string,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    const { body, filename } = await this.builds.artifact(this.org(req), buildId);
+
+    // An executable is never rendered inline, and the name is quoted
+    // because a product slug can contain characters a bare header
+    // value would end at.
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`);
+    res.setHeader('Content-Length', String(body.length));
+    res.send(body);
   }
 }

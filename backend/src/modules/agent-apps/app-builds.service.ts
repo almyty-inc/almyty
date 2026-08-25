@@ -169,7 +169,59 @@ export class AppBuildsService {
       );
     }
 
-    return this.storage.getSignedUrl(build.artifactKey!, DOWNLOAD_URL_TTL_SECONDS);
+    // Object storage hands the browser a link and keeps the bytes off
+    // the API. A local directory has nothing to sign, so the API serves
+    // the file itself rather than returning a URL that resolves to
+    // nothing, which is what this used to do.
+    if (this.storage.canPresign) {
+      return this.storage.getSignedUrl(build.artifactKey!, DOWNLOAD_URL_TTL_SECONDS);
+    }
+
+    const app = await this.appRepository.findOne({
+      where: { id: build.appId, organizationId },
+    });
+    if (!app) throw new NotFoundException('That app no longer exists.');
+    return `/apps/${app.slug}/builds/${build.id}/artifact`;
+  }
+
+  /**
+   * The artifact itself, for deployments that cannot presign.
+   *
+   * Runs the same ownership and expiry checks as the link, because
+   * this is the link on those deployments rather than a shortcut past
+   * it.
+   */
+  async artifact(
+    organizationId: string,
+    buildId: string,
+  ): Promise<{ body: Buffer; filename: string }> {
+    const build = await this.findOne(organizationId, buildId);
+
+    if (build.status !== BuildStatus.SUCCEEDED) {
+      throw new BadRequestException('That build produced nothing to download.');
+    }
+    if (!build.isDownloadable()) {
+      throw new BadRequestException(
+        'That artifact has expired. Build it again to get a fresh download.',
+      );
+    }
+
+    const app = await this.appRepository.findOne({
+      where: { id: build.appId, organizationId },
+    });
+    if (!app) throw new NotFoundException('That app no longer exists.');
+
+    // Name it after the product, not after a row id, because this
+    // filename is what lands in someone's Downloads folder.
+    const extension = build.artifactKey?.includes('.')
+      ? build.artifactKey.slice(build.artifactKey.lastIndexOf('.') + 1)
+      : null;
+    const stem = `${app.slug}-${build.version ?? '0.0.0'}-${build.platform}`;
+
+    return {
+      body: await this.storage.download(build.artifactKey!),
+      filename: extension ? `${stem}.${extension}` : stem,
+    };
   }
 
   /** Where an artifact lives. Scoped by org so keys cannot collide. */

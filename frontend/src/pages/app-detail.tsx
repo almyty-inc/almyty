@@ -15,7 +15,11 @@ import {
 } from '@/components/ui/sheet'
 import { useNotifications } from '@/store/app'
 import { agentsApi } from '@/lib/api'
-import { agentAppsApi, type DistributionTarget } from '@/lib/agent-apps'
+import {
+  DISTRIBUTION_LABELS,
+  agentAppsApi,
+  type DistributionTarget,
+} from '@/lib/agent-apps'
 import { AppCanvas } from '@/components/agent-apps/app-canvas'
 import { AppAgentsPanel } from '@/components/agent-apps/app-agents-panel'
 import { AppSettingsPanel } from '@/components/agent-apps/app-settings-panel'
@@ -169,8 +173,10 @@ export function AppDetailPage() {
           {panel?.kind === 'distribution' && openDistribution && (
             <>
               <SheetHeader>
-                <SheetTitle>{panel.target}</SheetTitle>
-                <SheetDescription>How this app ships to {panel.target}.</SheetDescription>
+                <SheetTitle>{DISTRIBUTION_LABELS[panel.target]}</SheetTitle>
+                <SheetDescription>
+                  How this app ships to {DISTRIBUTION_LABELS[panel.target]}.
+                </SheetDescription>
               </SheetHeader>
               <DistributionPanel
                 app={app}
@@ -184,7 +190,7 @@ export function AppDetailPage() {
                 onClick={() => removeDistribution.mutate(panel.target)}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                Stop shipping to {panel.target}
+                Stop shipping to {DISTRIBUTION_LABELS[panel.target]}
               </Button>
             </>
           )}

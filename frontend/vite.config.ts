@@ -11,6 +11,16 @@ const bypassHtmlGetRequests = (req) => {
 }
 
 // https://vitejs.dev/config/
+/**
+ * Where the dev proxy sends API traffic.
+ *
+ * One constant rather than a port repeated per rule, so a developer
+ * whose 4000 is already taken sets VITE_API_TARGET once and every path
+ * follows. Previously only /api honoured it and the rest were pinned,
+ * which sent auth to whatever else was listening on 4000.
+ */
+const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:4000'
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -29,7 +39,7 @@ export default defineConfig({
       // every request. VITE_API_TARGET overrides the port for anyone
       // whose 3000 is already taken.
       '/api': {
-        target: process.env.VITE_API_TARGET || 'http://localhost:3000',
+        target: apiTarget,
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ''),
       },
@@ -58,17 +68,17 @@ export default defineConfig({
         rewrite: (p) => p.replace(/^\/ingest/, ''),
       },
       '/auth': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/users': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/organizations': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
@@ -76,57 +86,65 @@ export default defineConfig({
       // flow navigates the BROWSER to /referrals/attribute/:code (an HTML
       // GET) and that must reach the backend so it can set the cookie.
       '/referrals': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
+      // The agent factory. /apps is both an API prefix and a router
+      // path, so HTML GETs stay with the SPA and everything else
+      // (including /apps/:slug/builds) reaches the backend.
+      '/apps': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
       '/gateways': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/tools': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/apis': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/llm-providers': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/memory': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/monitoring': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/analytics': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/mcp': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/utcp': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/a2a': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/docs': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
     },

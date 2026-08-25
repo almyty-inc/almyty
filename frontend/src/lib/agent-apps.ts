@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, apiDel } from './api'
+import { apiGet, apiPost, apiPatch, apiDel, getApiBaseUrl } from './api'
 
 /**
  * The agent factory client.
@@ -170,6 +170,50 @@ export const AUTH_MODE_LABELS: Record<AppAuthMode, string> = {
   sso: 'Enterprise SSO',
 }
 
+export interface BuildPlatform {
+  id: string
+  label: string
+  extension: string
+  unsignedConsequence: string
+  signing: {
+    kind: 'authenticode' | 'apple'
+    needs: string[]
+    note: string
+  } | null
+}
+
+export type BuildStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+
+export interface AppBuild {
+  id: string
+  target: DistributionTarget
+  platform: string
+  status: BuildStatus
+  version: string | null
+  signed: boolean
+  artifactBytes: string | null
+  checksum: string | null
+  error: string | null
+  createdAt: string
+  finishedAt: string | null
+  artifactExpiresAt: string | null
+}
+
+/** Targets that compile to a file someone downloads. */
+export const BUILDABLE_TARGETS: DistributionTarget[] = ['tui', 'desktop', 'binary']
+
+export function isBuildable(target: DistributionTarget): boolean {
+  return BUILDABLE_TARGETS.includes(target)
+}
+
+/** Human size for an artifact, whose byte count arrives as a string. */
+export function formatBytes(bytes: string | null): string {
+  const value = Number(bytes ?? 0)
+  if (!Number.isFinite(value) || value <= 0) return ''
+  const mb = value / 1_000_000
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(value / 1000)} kB`
+}
+
 const unwrap = <T,>(payload: any): T => (payload?.data ?? payload) as T
 
 export const agentAppsApi = {
@@ -205,6 +249,37 @@ export const agentAppsApi = {
 
   removeDistribution: (slug: string, target: DistributionTarget) =>
     apiDel(`/apps/${slug}/distributions/${target}`),
+
+  /** Platforms this target can be built for, and what signing each needs. */
+  platforms: (slug: string, target: DistributionTarget) =>
+    apiGet(`/apps/${slug}/distributions/${target}/platforms`).then((r) =>
+      unwrap<BuildPlatform[]>(r),
+    ),
+
+  requestBuild: (
+    slug: string,
+    body: { target: DistributionTarget; platform: string; version?: string; macPackaging?: 'zip' | 'dmg' },
+  ) => apiPost(`/apps/${slug}/builds`, body).then((r) => unwrap<AppBuild>(r)),
+
+  builds: (slug: string) => apiGet(`/apps/${slug}/builds`).then((r) => unwrap<AppBuild[]>(r)),
+
+  /**
+   * A fresh download link. Minted per request and short lived, so it is
+   * fetched at click time rather than stored with the build.
+   */
+  /**
+   * Where to fetch a finished artifact.
+   *
+   * Object storage answers with its own absolute URL. A deployment that
+   * cannot presign answers with a path on the API, which has to be
+   * resolved against the API host: opening it against the dashboard
+   * origin would land on the SPA router instead of the file.
+   */
+  downloadUrl: (slug: string, buildId: string) =>
+    apiGet(`/apps/${slug}/builds/${buildId}/download`).then((r) => {
+      const url = unwrap<{ url: string }>(r).url
+      return /^https?:\/\//.test(url) ? url : `${getApiBaseUrl()}${url}`
+    }),
 
   recordBuild: (
     slug: string,

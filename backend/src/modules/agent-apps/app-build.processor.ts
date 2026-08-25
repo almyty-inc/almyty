@@ -24,6 +24,26 @@ interface BuildJob {
  * bundle identifier, icon and compiled binary lying around for the next
  * build to find is not acceptable even when nothing reads it.
  */
+/**
+ * One line an operator can read, from whatever the toolchain threw.
+ *
+ * Node errors arrive as a message plus a require stack of absolute
+ * paths. Those say nothing to the person who pressed Build and describe
+ * the build host to anyone who can see the panel.
+ */
+export function operatorMessage(err: any): string {
+  const raw = (err?.message ?? String(err ?? '')).trim();
+  const firstLine = raw.split('\n')[0].trim();
+  if (!firstLine) return 'The build failed.';
+
+  // Only ABSOLUTE paths become a placeholder. A module specifier like
+  // "@almyty/chat/dist/index.js" says which dependency is missing and
+  // reveals nothing about the host, so the lookbehind keeps it.
+  return firstLine
+    .replace(/(?<![\w@.-])(?:[A-Za-z]:)?[\\/](?:[\w.@-]+[\\/])*[\w.@-]+/g, '<path>')
+    .slice(0, 500);
+}
+
 @Processor(APP_BUILD_QUEUE)
 export class AppBuildProcessor {
   private readonly logger = new Logger(AppBuildProcessor.name);
@@ -112,7 +132,11 @@ export class AppBuildProcessor {
       await this.builds.succeed(build, artifact, { signed: false, log, macPackaging });
       this.logger.log(`Built ${build.target} for ${build.platform} (${artifact.length} bytes)`);
     } catch (err: any) {
-      await this.builds.fail(build, err?.message ?? String(err), log);
+      // The full text goes to the log, which stays server side. What
+      // reaches the operator is one line with host paths removed: a
+      // build panel is not the place to publish the layout of the
+      // machine the build ran on.
+      await this.builds.fail(build, operatorMessage(err), log);
     } finally {
       await fs.rm(workDir, { recursive: true, force: true }).catch(() => undefined);
     }

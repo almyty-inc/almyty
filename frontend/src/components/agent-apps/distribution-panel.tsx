@@ -1,21 +1,22 @@
 import React, { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Check, Copy, Terminal } from 'lucide-react'
+import { AlertTriangle, Check } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useCopy } from '@/lib/clipboard'
 import { useNotifications } from '@/store/app'
 import {
   DISTRIBUTION_BLURBS,
   DISTRIBUTION_LABELS,
   PACKAGED_TARGETS,
   agentAppsApi,
+  isBuildable,
   isChannelTarget,
   type AgentApp,
   type AppDistribution,
 } from '@/lib/agent-apps'
+import { BuildPanel } from './build-panel'
 
 export interface DistributionPanelProps {
   app: AgentApp
@@ -32,7 +33,6 @@ export interface DistributionPanelProps {
  */
 export function DistributionPanel({ app, distribution, onSaved }: DistributionPanelProps) {
   const { success, error: errorNotif } = useNotifications()
-  const copy = useCopy()
 
   const [bundleId, setBundleId] = useState(
     (distribution.configuration?.bundleId as string) ?? `com.example.${app.slug}`,
@@ -56,11 +56,6 @@ export function DistributionPanel({ app, distribution, onSaved }: DistributionPa
     onError: (err: any) =>
       errorNotif('Could not save', err?.response?.data?.message || 'Something went wrong.'),
   })
-
-  // The command a build runs on the operator's own machine. It is shown
-  // rather than run for us: signing needs their certificates, and those
-  // must not reach our infrastructure.
-  const buildCommand = `npx @almyty/apps build ${app.slug} --target=${distribution.target}`
 
   return (
     <div className="mt-6 space-y-6">
@@ -118,27 +113,10 @@ export function DistributionPanel({ app, distribution, onSaved }: DistributionPa
         </p>
       )}
 
-      {(packaged || distribution.target === 'tui') && (
-        <div className="space-y-1.5">
-          <Label>Build it</Label>
-          <div className="flex items-center gap-2 rounded-md border bg-muted/40 p-2">
-            <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <code className="min-w-0 flex-1 truncate text-xs">{buildCommand}</code>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 shrink-0"
-              aria-label="Copy build command"
-              onClick={() => copy(buildCommand, 'Build command copied.')}
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Runs on your machine so it can sign with your own certificates. We never see them.
-          </p>
-        </div>
+      {/* Builds run on our machines, so this is a button rather than a
+          command to paste into a terminal. */}
+      {isBuildable(distribution.target) && (
+        <BuildPanel app={app} target={distribution.target} />
       )}
 
       {distribution.lastBuild && (
