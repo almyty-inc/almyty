@@ -1,20 +1,20 @@
-import { HarnessAuthMode } from '../../../entities/harness.entity';
-import { DistributionTarget } from '../../../entities/harness-distribution.entity';
+import { AppAuthMode } from '../../../entities/agent-app.entity';
+import { DistributionTarget } from '../../../entities/agent-app-distribution.entity';
 import {
-  HARNESS_REFUSALS,
-  RESERVED_HARNESS_SLUGS,
+  APP_REFUSALS,
+  RESERVED_APP_SLUGS,
   checkDistribution,
-  checkHarness,
+  checkApp,
   grantsLocalAccess,
-  harnessSlugError,
+  appSlugError,
   isOpenToAnyone,
-  type HarnessShape,
-} from '../harness.rules';
+  type AppShape,
+} from '../agent-app.rules';
 
-const harness = (overrides: Partial<HarnessShape> = {}): HarnessShape => ({
+const app = (overrides: Partial<AppShape> = {}): AppShape => ({
   slug: 'acme-support',
   agentIds: ['agent-1'],
-  authMode: HarnessAuthMode.PUBLIC_LINK,
+  authMode: AppAuthMode.PUBLIC_LINK,
   branding: { aiDisclosure: null, whiteLabel: false },
   capabilities: null,
   ...overrides,
@@ -23,24 +23,24 @@ const harness = (overrides: Partial<HarnessShape> = {}): HarnessShape => ({
 /** An open product with every guard satisfied, for isolating one failure. */
 const SAFE_OPEN = { costCapCents: 500, perUserRateLimit: 20, perIpRateLimit: 60 };
 
-const codes = (result: ReturnType<typeof checkHarness>) => result.refusals.map((r) => r.code);
+const codes = (result: ReturnType<typeof checkApp>) => result.refusals.map((r) => r.code);
 
-describe('harnessSlugError', () => {
+describe('appSlugError', () => {
   it('accepts a usable product name', () => {
-    expect(harnessSlugError('acme-support')).toBeNull();
+    expect(appSlugError('acme-support')).toBeNull();
   });
 
   it('explains each way a name is unusable', () => {
-    expect(harnessSlugError('')).toMatch(/Pick a name/);
-    expect(harnessSlugError('ab')).toMatch(/at least 3/);
-    expect(harnessSlugError('a'.repeat(64))).toMatch(/63 characters/);
-    expect(harnessSlugError('-acme')).toMatch(/cannot start or end/);
-    expect(harnessSlugError('Acme Support')).toMatch(/lowercase/);
+    expect(appSlugError('')).toMatch(/Pick a name/);
+    expect(appSlugError('ab')).toMatch(/at least 3/);
+    expect(appSlugError('a'.repeat(64))).toMatch(/63 characters/);
+    expect(appSlugError('-acme')).toMatch(/cannot start or end/);
+    expect(appSlugError('Acme Support')).toMatch(/lowercase/);
   });
 
   it('refuses names we route ourselves', () => {
-    for (const reserved of RESERVED_HARNESS_SLUGS) {
-      expect(harnessSlugError(reserved)).toMatch(/reserved/);
+    for (const reserved of RESERVED_APP_SLUGS) {
+      expect(appSlugError(reserved)).toMatch(/reserved/);
     }
   });
 });
@@ -63,27 +63,27 @@ describe('grantsLocalAccess', () => {
   });
 });
 
-describe('checkHarness', () => {
+describe('checkApp', () => {
   it('passes an open product with a cost cap and both rate limits', () => {
-    expect(checkHarness(harness(), SAFE_OPEN)).toEqual({ ok: true, refusals: [] });
+    expect(checkApp(app(), SAFE_OPEN)).toEqual({ ok: true, refusals: [] });
   });
 
   it('refuses a product with no agents', () => {
     // Nothing for a user to talk to.
-    expect(codes(checkHarness(harness({ agentIds: [] }), SAFE_OPEN))).toContain('NO_AGENTS');
+    expect(codes(checkApp(app({ agentIds: [] }), SAFE_OPEN))).toContain('NO_AGENTS');
   });
 
   it('refuses an open product with no cost cap', () => {
-    const result = checkHarness(harness(), { ...SAFE_OPEN, costCapCents: null });
+    const result = checkApp(app(), { ...SAFE_OPEN, costCapCents: null });
     expect(result.ok).toBe(false);
     expect(codes(result)).toContain('PUBLIC_NEEDS_COST_CAP');
   });
 
   it('requires both rate limits, not either', () => {
-    expect(codes(checkHarness(harness(), { ...SAFE_OPEN, perIpRateLimit: 0 }))).toContain(
+    expect(codes(checkApp(app(), { ...SAFE_OPEN, perIpRateLimit: 0 }))).toContain(
       'PUBLIC_NEEDS_RATE_LIMIT',
     );
-    expect(codes(checkHarness(harness(), { ...SAFE_OPEN, perUserRateLimit: 0 }))).toContain(
+    expect(codes(checkApp(app(), { ...SAFE_OPEN, perUserRateLimit: 0 }))).toContain(
       'PUBLIC_NEEDS_RATE_LIMIT',
     );
   });
@@ -91,12 +91,12 @@ describe('checkHarness', () => {
   it('does not demand caps for a gated product', () => {
     // An internal product behind a login has a gate between a stranger
     // and the spend.
-    const internal = harness({ authMode: HarnessAuthMode.EMAIL_OTP });
-    expect(checkHarness(internal, {}).ok).toBe(true);
+    const internal = app({ authMode: AppAuthMode.EMAIL_OTP });
+    expect(checkApp(internal, {}).ok).toBe(true);
   });
 
   it('reports every refusal at once rather than one at a time', () => {
-    const result = checkHarness(harness({ slug: '', agentIds: [] }), {});
+    const result = checkApp(app({ slug: '', agentIds: [] }), {});
     expect(codes(result).sort()).toEqual([
       'NO_AGENTS',
       'PUBLIC_NEEDS_COST_CAP',
@@ -106,54 +106,54 @@ describe('checkHarness', () => {
   });
 
   it('pairs every refusal with a sentence an operator can act on', () => {
-    for (const refusal of checkHarness(harness({ slug: '' }), {}).refusals) {
-      expect(refusal.message).toBe(HARNESS_REFUSALS[refusal.code]);
+    for (const refusal of checkApp(app({ slug: '' }), {}).refusals) {
+      expect(refusal.message).toBe(APP_REFUSALS[refusal.code]);
       expect(refusal.message.length).toBeGreaterThan(20);
     }
   });
 
   describe('entitlements', () => {
     it('gates SSO', () => {
-      const sso = harness({ authMode: HarnessAuthMode.SSO });
-      expect(codes(checkHarness(sso, {}))).toContain('SSO_NOT_ENTITLED');
-      expect(checkHarness(sso, { hasEnterpriseAuth: true }).ok).toBe(true);
+      const sso = app({ authMode: AppAuthMode.SSO });
+      expect(codes(checkApp(sso, {}))).toContain('SSO_NOT_ENTITLED');
+      expect(checkApp(sso, { hasEnterpriseAuth: true }).ok).toBe(true);
     });
 
     it('gates white label', () => {
-      const wl = harness({ branding: { whiteLabel: true, aiDisclosure: null } });
-      expect(codes(checkHarness(wl, SAFE_OPEN))).toContain('WHITE_LABEL_NOT_ENTITLED');
-      expect(checkHarness(wl, { ...SAFE_OPEN, hasWhiteLabel: true }).ok).toBe(true);
+      const wl = app({ branding: { whiteLabel: true, aiDisclosure: null } });
+      expect(codes(checkApp(wl, SAFE_OPEN))).toContain('WHITE_LABEL_NOT_ENTITLED');
+      expect(checkApp(wl, { ...SAFE_OPEN, hasWhiteLabel: true }).ok).toBe(true);
     });
 
     it('allows a custom disclosure but gates removing it', () => {
-      const custom = harness({ branding: { aiDisclosure: 'This is a bot.', whiteLabel: false } });
-      expect(checkHarness(custom, SAFE_OPEN).ok).toBe(true);
+      const custom = app({ branding: { aiDisclosure: 'This is a bot.', whiteLabel: false } });
+      expect(checkApp(custom, SAFE_OPEN).ok).toBe(true);
 
-      const removed = harness({ branding: { aiDisclosure: '  ', whiteLabel: false } });
-      expect(codes(checkHarness(removed, SAFE_OPEN))).toContain(
+      const removed = app({ branding: { aiDisclosure: '  ', whiteLabel: false } });
+      expect(codes(checkApp(removed, SAFE_OPEN))).toContain(
         'DISCLOSURE_REMOVAL_NOT_ENTITLED',
       );
     });
   });
 
   describe('local access', () => {
-    const internal = (capabilities: HarnessShape['capabilities']) =>
-      harness({ authMode: HarnessAuthMode.SSO, capabilities });
+    const internal = (capabilities: AppShape['capabilities']) =>
+      app({ authMode: AppAuthMode.SSO, capabilities });
 
     it('refuses local access on a product anyone can download', () => {
       // The artifact runs on someone else's machine: "anyone may use
       // it" and "it may read your disk" must never both be true.
-      const result = checkHarness(harness({ capabilities: { filesystemRead: ['~'] } }), SAFE_OPEN);
+      const result = checkApp(app({ capabilities: { filesystemRead: ['~'] } }), SAFE_OPEN);
       expect(codes(result)).toContain('LOCAL_ACCESS_ON_PUBLIC');
     });
 
     it('requires an approval gate before shell access', () => {
-      const result = checkHarness(internal({ shell: true }), { hasEnterpriseAuth: true });
+      const result = checkApp(internal({ shell: true }), { hasEnterpriseAuth: true });
       expect(codes(result)).toContain('LOCAL_ACCESS_NEEDS_APPROVAL_GATE');
     });
 
     it('allows shell access once approvals are required', () => {
-      const result = checkHarness(
+      const result = checkApp(
         internal({ shell: true, requireApprovalFor: ['shell'] }),
         { hasEnterpriseAuth: true },
       );
@@ -161,7 +161,7 @@ describe('checkHarness', () => {
     });
 
     it('allows read-only filesystem access on a gated product without an approval gate', () => {
-      const result = checkHarness(internal({ filesystemRead: ['~/docs'] }), {
+      const result = checkApp(internal({ filesystemRead: ['~/docs'] }), {
         hasEnterpriseAuth: true,
       });
       expect(result.ok).toBe(true);
@@ -170,14 +170,14 @@ describe('checkHarness', () => {
 });
 
 describe('checkDistribution', () => {
-  it('carries the harness refusals through', () => {
-    const result = checkDistribution(DistributionTarget.WEB, harness({ agentIds: [] }), null, SAFE_OPEN);
+  it('carries the app refusals through', () => {
+    const result = checkDistribution(DistributionTarget.WEB, app({ agentIds: [] }), null, SAFE_OPEN);
     expect(codes(result)).toContain('NO_AGENTS');
   });
 
   it('needs a bundle id for anything someone installs', () => {
     for (const target of [DistributionTarget.DESKTOP, DistributionTarget.BINARY]) {
-      const result = checkDistribution(target, harness(), { bundleId: 'nope' }, SAFE_OPEN);
+      const result = checkDistribution(target, app(), { bundleId: 'nope' }, SAFE_OPEN);
       expect(codes(result)).toContain('BUNDLE_ID_INVALID');
     }
   });
@@ -185,7 +185,7 @@ describe('checkDistribution', () => {
   it('accepts a reverse-domain bundle id', () => {
     const result = checkDistribution(
       DistributionTarget.DESKTOP,
-      harness(),
+      app(),
       { bundleId: 'com.acme.assistant' },
       SAFE_OPEN,
     );
@@ -193,8 +193,8 @@ describe('checkDistribution', () => {
   });
 
   it('does not ask a web or terminal distribution for a bundle id', () => {
-    for (const target of [DistributionTarget.WEB, DistributionTarget.TUI, DistributionTarget.CHANNEL]) {
-      expect(checkDistribution(target, harness(), null, SAFE_OPEN).ok).toBe(true);
+    for (const target of [DistributionTarget.WEB, DistributionTarget.TUI, DistributionTarget.SLACK]) {
+      expect(checkDistribution(target, app(), null, SAFE_OPEN).ok).toBe(true);
     }
   });
 });
@@ -204,7 +204,7 @@ describe('isOpenToAnyone', () => {
     // Defaulting to "gated" would let an unconfigured product skip the
     // cost cap and rate limit checks.
     expect(isOpenToAnyone(undefined)).toBe(true);
-    expect(isOpenToAnyone(HarnessAuthMode.PUBLIC_LINK)).toBe(true);
-    expect(isOpenToAnyone(HarnessAuthMode.SSO)).toBe(false);
+    expect(isOpenToAnyone(AppAuthMode.PUBLIC_LINK)).toBe(true);
+    expect(isOpenToAnyone(AppAuthMode.SSO)).toBe(false);
   });
 });

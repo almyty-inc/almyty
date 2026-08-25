@@ -10,10 +10,10 @@ import {
   Index,
 } from 'typeorm';
 import { Organization } from './organization.entity';
-import { HarnessDistribution } from './harness-distribution.entity';
+import { AppDistribution } from './agent-app-distribution.entity';
 
 /**
- * A harness: an agent product, packaged under someone else's name.
+ * A app: an agent product, packaged under someone else's name.
  *
  * This is the unit a customer ships. It gathers one or more agents, the
  * branding they appear under, who is allowed to talk to them, and what
@@ -24,14 +24,14 @@ import { HarnessDistribution } from './harness-distribution.entity';
  *
  * Deliberately separate from Agent. An agent is a capability: what it
  * knows, which models it uses, which tools it may call, how its loop
- * behaves. A harness is a product decision: what it is called, who may
- * use it, where it ships. One agent can appear in an internal harness
+ * behaves. A app is a product decision: what it is called, who may
+ * use it, where it ships. One agent can appear in an internal app
  * and a customer-facing one at the same time, under different names,
  * different auth and different limits, without being duplicated.
  */
 
-/** How an end user of a distributed harness proves who they are. */
-export enum HarnessAuthMode {
+/** How an end user of a distributed app proves who they are. */
+export enum AppAuthMode {
   /** Anyone with the link or the binary. Requires hard cost caps. */
   PUBLIC_LINK = 'public_link',
   /** One-time code to an email address. */
@@ -42,10 +42,10 @@ export enum HarnessAuthMode {
   SSO = 'sso',
 }
 
-@Entity('harnesses')
+@Entity('agentApps')
 @Index(['organizationId', 'name'])
 @Index(['organizationId', 'slug'], { unique: true })
-export class Harness {
+export class AgentApp {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -68,7 +68,7 @@ export class Harness {
   description: string | null;
 
   /**
-   * The agents this harness exposes. An array rather than a single
+   * The agents this app exposes. An array rather than a single
    * reference because a product is usually more than one specialist,
    * and rather than a join table because that is the convention already
    * used for agent.toolIds. The first entry is the default the user
@@ -101,15 +101,15 @@ export class Harness {
     whiteLabel?: boolean;
   };
 
-  @Column({ type: 'varchar', default: HarnessAuthMode.PUBLIC_LINK })
-  authMode: HarnessAuthMode;
+  @Column({ type: 'varchar', default: AppAuthMode.PUBLIC_LINK })
+  authMode: AppAuthMode;
 
   /**
    * What a distributed artifact may do on the machine it runs on.
    *
    * Off by default and deliberately awkward to widen. A branded binary
    * with shell access, handed to end users, is a supply-chain vector:
-   * whoever controls the harness controls what runs on every machine it
+   * whoever controls the app controls what runs on every machine it
    * was installed on. Nothing here is implied by any other setting.
    */
   @Column({ type: 'json', nullable: true })
@@ -142,6 +142,6 @@ export class Harness {
   @JoinColumn({ name: 'organizationId' })
   organization: Organization;
 
-  @OneToMany(() => HarnessDistribution, (distribution) => distribution.harness)
-  distributions: HarnessDistribution[];
+  @OneToMany(() => AppDistribution, (distribution) => distribution.app)
+  distributions: AppDistribution[];
 }

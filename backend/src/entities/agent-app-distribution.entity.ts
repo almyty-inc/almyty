@@ -8,27 +8,64 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
-import { Harness } from './harness.entity';
+import { AgentApp } from './agent-app.entity';
 
 /**
- * One place a harness ships to.
+ * One place a app ships to.
  *
  * The same product rendered for a different medium: a web app on a
  * subdomain, a Slack workspace, a terminal command, a signed desktop
  * app, a standalone binary. Branding, auth and capabilities come from
- * the harness; what lives here is only what the medium itself forces.
+ * the app; what lives here is only what the medium itself forces.
  */
 export enum DistributionTarget {
-  /** Browser app on a subdomain. */
+  /** Browser app on its own address. */
   WEB = 'web',
-  /** A messaging platform. The channel gateway carries the credentials. */
-  CHANNEL = 'channel',
   /** Terminal UI, run as a command or a compiled executable. */
   TUI = 'tui',
   /** Installable windowed app. */
   DESKTOP = 'desktop',
   /** Standalone executable, no runtime required on the target machine. */
   BINARY = 'binary',
+  // Messaging platforms are listed individually rather than collapsed
+  // into one "channel" target. An app ships to Slack, not to an
+  // abstraction, and naming the platform is what makes a distribution
+  // uniquely addressable as /apps/acme/distributions/slack instead of
+  // needing an opaque id to tell two channel rows apart.
+  SLACK = 'slack',
+  DISCORD = 'discord',
+  TELEGRAM = 'telegram',
+  WHATSAPP = 'whatsapp',
+  WHATSAPP_CLOUD = 'whatsapp_cloud',
+  SMS = 'sms',
+  MICROSOFT_TEAMS = 'microsoft_teams',
+  GOOGLE_CHAT = 'google_chat',
+  EMAIL = 'email',
+  SIGNAL = 'signal',
+  MATRIX = 'matrix',
+  IRC = 'irc',
+  WEBHOOK = 'webhook',
+}
+
+/** Targets backed by a messaging gateway holding platform credentials. */
+export const CHANNEL_TARGETS: readonly DistributionTarget[] = Object.freeze([
+  DistributionTarget.SLACK,
+  DistributionTarget.DISCORD,
+  DistributionTarget.TELEGRAM,
+  DistributionTarget.WHATSAPP,
+  DistributionTarget.WHATSAPP_CLOUD,
+  DistributionTarget.SMS,
+  DistributionTarget.MICROSOFT_TEAMS,
+  DistributionTarget.GOOGLE_CHAT,
+  DistributionTarget.EMAIL,
+  DistributionTarget.SIGNAL,
+  DistributionTarget.MATRIX,
+  DistributionTarget.IRC,
+  DistributionTarget.WEBHOOK,
+]);
+
+export function isChannelTarget(target: DistributionTarget | string): boolean {
+  return (CHANNEL_TARGETS as readonly string[]).includes(target as string);
 }
 
 /**
@@ -47,10 +84,10 @@ export enum DistributionStatus {
   FAILED = 'failed',
 }
 
-@Entity('harness_distributions')
-@Index(['harnessId', 'target'])
+@Entity('agent_app_distributions')
+@Index(['appId', 'target'], { unique: true })
 @Index(['organizationId', 'createdAt'])
-export class HarnessDistribution {
+export class AppDistribution {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -58,7 +95,7 @@ export class HarnessDistribution {
   organizationId: string;
 
   @Column({ type: 'uuid' })
-  harnessId: string;
+  appId: string;
 
   @Column({ type: 'varchar' })
   target: DistributionTarget;
@@ -77,7 +114,7 @@ export class HarnessDistribution {
   /**
    * Medium-specific settings only. Bundle identifier and window size
    * for desktop; prompt string and ANSI accent for a terminal, which
-   * cannot render the harness's hex colour; target triple for a binary.
+   * cannot render the app's hex colour; target triple for a binary.
    */
   @Column({ type: 'json', nullable: true })
   configuration: Record<string, any>;
@@ -110,7 +147,7 @@ export class HarnessDistribution {
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
-  @ManyToOne(() => Harness, (harness) => harness.distributions, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'harnessId' })
-  harness: Harness;
+  @ManyToOne(() => AgentApp, (app) => app.distributions, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'appId' })
+  app: AgentApp;
 }

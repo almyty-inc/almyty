@@ -95,7 +95,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { VersionsModule } from './modules/versions/versions.module';
 import { RunnerModule } from './modules/runner/runner.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
-import { HarnessesModule } from './modules/harnesses/harnesses.module';
+import { AgentAppsModule } from './modules/agent-apps/agent-apps.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LicensingModule } from './modules/licensing/licensing.module';
 import { KmsModule } from './modules/kms/kms.module';
@@ -314,7 +314,7 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     AuditLogModule,
     RunnerModule,
     ApprovalsModule,
-    HarnessesModule,
+    AgentAppsModule,
     RunnerModule,
     WorkspaceModule,
     LicensingModule,
