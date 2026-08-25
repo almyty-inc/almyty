@@ -107,6 +107,8 @@ export class ProcessToolchainRunner implements ToolchainRunner {
 export const TOOL_FOR_TARGET: Record<string, string> = {
   tui: 'bun',
   binary: 'bun',
+  // electron-builder is run through npx so a build host does not have
+  // to carry a global install, but it still has to be reachable.
   desktop: 'npx',
 };
 
@@ -165,4 +167,75 @@ export function bunCompileArgs(
   const args = ['build', entry, '--compile', `--target=${bunTarget}`, '--outfile', outfile];
   for (const external of BUNDLE_EXTERNALS) args.push('--external', external);
   return args;
+}
+
+/**
+ * electron-builder's platform and architecture flags for one of our
+ * platform ids.
+ *
+ * Windows and Linux cross-build from anywhere. macOS does not: Apple's
+ * bundle format needs tooling that only exists on a Mac, which is why
+ * the desktop app on macOS is the one target that wants a Mac host.
+ */
+export const ELECTRON_TARGETS: Record<string, { platform: string; arch: string; format: string }> = {
+  'linux-x64': { platform: '--linux', arch: '--x64', format: 'AppImage' },
+  'linux-arm64': { platform: '--linux', arch: '--arm64', format: 'AppImage' },
+  'windows-x64': { platform: '--win', arch: '--x64', format: 'nsis' },
+  'macos-arm64': { platform: '--mac', arch: '--arm64', format: 'zip' },
+  'macos-x64': { platform: '--mac', arch: '--x64', format: 'zip' },
+};
+
+/**
+ * The Electron release the shell is packaged against.
+ *
+ * Passed explicitly because electron-builder resolves the runtime from
+ * an installed node_modules or a fixed version in package.json, and a
+ * build directory has neither: it is a copy of the shell with no
+ * install step. A range fails outright rather than picking a release.
+ */
+export const ELECTRON_VERSION = '33.2.0';
+
+/**
+ * Arguments for packaging the desktop shell.
+ *
+ * `--publish never` because a build must never push anything anywhere;
+ * this produces a file and stops. `--config.<...>` sets identity from
+ * the app rather than from a checked-in config, so the artifact carries
+ * the customer's name and bundle identifier.
+ */
+export function electronBuilderArgs(options: {
+  platformId: string;
+  projectDir: string;
+  outputDir: string;
+  productName: string;
+  appId: string;
+  version: string;
+}): string[] | null {
+  const target = ELECTRON_TARGETS[options.platformId];
+  if (!target) return null;
+
+  return [
+    '--yes',
+    'electron-builder',
+    target.platform,
+    target.arch,
+    '--projectDir',
+    options.projectDir,
+    '--publish',
+    'never',
+    `--config.productName=${options.productName}`,
+    `--config.appId=${options.appId}`,
+    `--config.directories.output=${options.outputDir}`,
+    `--config.electronVersion=${ELECTRON_VERSION}`,
+    // The build's version, not the shell's. Without this every artifact
+    // carries the shell's package.json version, so an update looks
+    // identical to what it replaces.
+    `--config.extraMetadata.version=${options.version}`,
+    `--config.buildVersion=${options.version}`,
+    // Signing is ours to do afterwards, with the customer's own
+    // certificate. Letting electron-builder attempt it would pick up
+    // whatever identity happens to be in the build host's keychain.
+    '--config.mac.identity=null',
+    '--config.win.signAndEditExecutable=false',
+  ];
 }

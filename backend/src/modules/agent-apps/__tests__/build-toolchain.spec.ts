@@ -1,5 +1,8 @@
 import {
   BUN_TARGETS,
+  ELECTRON_TARGETS,
+  ELECTRON_VERSION,
+  electronBuilderArgs,
   MAX_LOG_CHARS,
   ProcessToolchainRunner,
   TOOL_FOR_TARGET,
@@ -119,5 +122,73 @@ describe('platform mapping', () => {
     expect(TOOL_FOR_TARGET.tui).toBe('bun');
     expect(TOOL_FOR_TARGET.binary).toBe('bun');
     expect(TOOL_FOR_TARGET.desktop).toBe('npx');
+  });
+});
+
+describe('electronBuilderArgs', () => {
+  const base = {
+    projectDir: '/w/shell',
+    outputDir: '/w/out',
+    productName: 'Acme Assistant',
+    appId: 'com.acme.assistant',
+    version: '2.3.0',
+  };
+
+  it('maps a platform id to electron-builder flags', () => {
+    const args = electronBuilderArgs({ ...base, platformId: 'windows-x64' })!;
+    expect(args).toContain('--win');
+    expect(args).toContain('--x64');
+  });
+
+  it('refuses a platform electron-builder has no target for', () => {
+    expect(electronBuilderArgs({ ...base, platformId: 'solaris-sparc' })).toBeNull();
+  });
+
+  it('never publishes, whatever the config says', () => {
+    // A build produces a file. Pushing it anywhere is not its job.
+    const args = electronBuilderArgs({ ...base, platformId: 'linux-x64' })!;
+    expect(args[args.indexOf('--publish') + 1]).toBe('never');
+  });
+
+  it('does not let the packager sign with the build host keychain', () => {
+    // Signing uses the customer's certificate, applied afterwards.
+    // Whatever identity a shared build host happens to hold is not it.
+    const args = electronBuilderArgs({ ...base, platformId: 'macos-arm64' })!;
+    expect(args).toContain('--config.mac.identity=null');
+  });
+
+  it('carries the customer name and bundle id, not ours', () => {
+    const args = electronBuilderArgs({ ...base, platformId: 'linux-x64' })!;
+    expect(args).toContain('--config.productName=Acme Assistant');
+    expect(args).toContain('--config.appId=com.acme.assistant');
+  });
+
+  it('passes a name with spaces as one argument', () => {
+    // These reach a process boundary from a form field.
+    const args = electronBuilderArgs({ ...base, platformId: 'linux-x64' })!;
+    expect(args.filter((a) => a.includes('Acme Assistant'))).toHaveLength(1);
+  });
+
+  it('names the Electron release explicitly', () => {
+    // A build directory is a copy of the shell with no install step, so
+    // electron-builder has no node_modules to resolve a range against
+    // and fails outright rather than choosing one.
+    const args = electronBuilderArgs({ ...base, platformId: 'linux-x64' })!;
+    expect(args).toContain(`--config.electronVersion=${ELECTRON_VERSION}`);
+    expect(ELECTRON_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('stamps the build version, not the shell version', () => {
+    // Otherwise every artifact carries the shell's package.json version
+    // and an update looks identical to what it replaces.
+    const args = electronBuilderArgs({ ...base, platformId: 'linux-x64' })!;
+    expect(args).toContain('--config.extraMetadata.version=2.3.0');
+    expect(args).toContain('--config.buildVersion=2.3.0');
+  });
+
+  it('covers every platform the picker offers', () => {
+    for (const id of Object.keys(BUN_TARGETS)) {
+      expect(ELECTRON_TARGETS[id]).toBeDefined();
+    }
   });
 });

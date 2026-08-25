@@ -46,6 +46,7 @@ function makeService(opts: {
   const service = new AppBuildsService(
     { findOne: jest.fn().mockResolvedValue(opts.build ?? null) } as any,
     { findOne: jest.fn().mockResolvedValue(opts.app ?? { id: 'app-1', slug: 'acme-support' }) } as any,
+    { findOne: jest.fn().mockResolvedValue(null) } as any,
     { add: jest.fn() } as any,
     storage as any,
   );

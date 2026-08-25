@@ -8,9 +8,16 @@ import { randomBytes } from 'crypto';
 
 import { AppBuildsService, APP_BUILD_QUEUE } from './app-builds.service';
 import { BuildSignerService } from './build-signer.service';
-import { BUN_TARGETS, ProcessToolchainRunner, bunCompileArgs } from './build-toolchain';
+import {
+  BUN_TARGETS,
+  ELECTRON_TARGETS,
+  ProcessToolchainRunner,
+  bunCompileArgs,
+  electronBuilderArgs,
+} from './build-toolchain';
 import { artifactExtension, type MacPackaging } from './build-targets';
 import { BuildStatus } from '../../entities/app-build.entity';
+import { hostedChatUrl } from '../gateways/channels/hosted-chat.config';
 
 interface BuildJob {
   buildId: string;
@@ -114,14 +121,16 @@ export class AppBuildProcessor {
           return;
         }
       } else {
-        // Desktop packaging is not wired yet. Failing plainly beats
-        // producing an empty file and calling it a release.
-        await this.builds.fail(
-          build,
-          'Desktop packaging is not available on this deployment yet. Terminal apps and standalone binaries build normally.',
-          log,
-        );
-        return;
+        const distribution = await this.builds.distributionFor(build.appId, build.target);
+        const packaged = await this.packageDesktop(build, workDir, outfile, {
+          bundleId: distribution?.configuration?.bundleId,
+          customDomain: distribution?.configuration?.customDomain,
+        });
+        log = packaged.log;
+        if (!packaged.ok) {
+          await this.builds.fail(build, packaged.error!, log);
+          return;
+        }
       }
 
       const artifact = await fs.readFile(outfile);
@@ -173,6 +182,139 @@ export class AppBuildProcessor {
     } finally {
       await fs.rm(workDir, { recursive: true, force: true }).catch(() => undefined);
     }
+  }
+
+  /**
+   * Package the desktop shell as this app.
+   *
+   * The shell is ours and the same for everyone; what differs is the
+   * config written beside it, which names the product and the address
+   * it connects to. No customer-authored code is packaged.
+   */
+  private async packageDesktop(
+    build: { appId: string; platform: string; target: string; version: string | null },
+    workDir: string,
+    outfile: string,
+    options: { bundleId?: string; customDomain?: string } = {},
+  ): Promise<{ ok: boolean; log: string; error?: string }> {
+    const bundleId = options.bundleId ?? '';
+    const version = build.version ?? '';
+    const target = ELECTRON_TARGETS[build.platform];
+    if (!target) {
+      return { ok: false, log: '', error: `Desktop apps cannot be built for ${build.platform}.` };
+    }
+
+    const shell = await this.resolveDesktopShell();
+    if (!shell) {
+      return {
+        ok: false,
+        log: '',
+        error:
+          'The desktop shell is not available on this build host. Set APP_BUILD_DESKTOP_SHELL to it.',
+      };
+    }
+
+    const app = await this.builds.appFor(build.appId);
+    if (!app) return { ok: false, log: '', error: 'That app no longer exists.' };
+
+    // The address this app already answers on. A desktop app is a
+    // window onto the hosted surface, so the two must agree; computing
+    // it from a second setting is how they drift apart.
+    const url = options.customDomain
+      ? `https://${options.customDomain}`
+      : hostedChatUrl(app.slug);
+
+    const projectDir = join(workDir, 'shell');
+    const outputDir = join(workDir, 'out');
+
+    // Named files rather than the whole directory. The shell has its
+    // own node_modules and tests on a developer machine, and none of
+    // that belongs inside a customer's app.
+    await fs.mkdir(join(projectDir, 'src'), { recursive: true });
+    await fs.copyFile(join(shell, 'package.json'), join(projectDir, 'package.json'));
+    await fs.copyFile(join(shell, 'src', 'main.js'), join(projectDir, 'src', 'main.js'));
+
+    await fs.writeFile(
+      join(projectDir, 'src', 'app-config.json'),
+      JSON.stringify(
+        {
+          appName: app.branding?.appName || app.name,
+          url,
+          primaryColor: app.branding?.primaryColor ?? '#8b5cf6',
+          theme: app.branding?.theme ?? 'auto',
+        },
+        null,
+        2,
+      ),
+    );
+
+    const args = electronBuilderArgs({
+      platformId: build.platform,
+      projectDir,
+      outputDir,
+      productName: app.branding?.appName || app.name,
+      // The identifier the operator set on this distribution, because
+      // it is theirs and has to match what they registered with Apple
+      // or Microsoft. Only fall back when they have not set one.
+      appId: bundleId || this.bundleIdFor(app.slug),
+      version: version || '1.0.0',
+    });
+
+    const result = await this.toolchain.run('npx', args!, { cwd: projectDir });
+    if (!result.ok) {
+      return { ok: false, log: result.output, error: result.error ?? 'Packaging failed.' };
+    }
+
+    // electron-builder names the file after the product and version, so
+    // the one artifact in the output directory is found rather than
+    // guessed at.
+    const produced = await this.findArtifact(outputDir, target.format);
+    if (!produced) {
+      return {
+        ok: false,
+        log: result.output,
+        error: 'Packaging finished without producing an installable file.',
+      };
+    }
+
+    await fs.rename(produced, outfile);
+    return { ok: true, log: result.output };
+  }
+
+  /** The one packaged file, ignoring the working files beside it. */
+  private async findArtifact(outputDir: string, format: string): Promise<string | null> {
+    const entries = await fs.readdir(outputDir, { withFileTypes: true }).catch(() => []);
+    const match = entries.find(
+      (entry) =>
+        entry.isFile() &&
+        (entry.name.endsWith(`.${format}`) ||
+          entry.name.endsWith('.exe') ||
+          entry.name.endsWith('.AppImage')),
+    );
+    return match ? join(outputDir, match.name) : null;
+  }
+
+  /** A bundle identifier every packager will accept. */
+  private bundleIdFor(slug: string): string {
+    const namespace = process.env.APP_BUILD_BUNDLE_NAMESPACE ?? 'app.almyty';
+    return `${namespace}.${slug.replace(/[^a-z0-9]+/gi, '')}`;
+  }
+
+  /**
+   * Where the desktop shell lives on this host.
+   *
+   * Same shape as the terminal client: explicit configuration, then the
+   * monorepo layout. Returns null so the build fails with a sentence
+   * rather than a stack trace.
+   */
+  private async resolveDesktopShell(): Promise<string | null> {
+    const configured = process.env.APP_BUILD_DESKTOP_SHELL;
+    if (configured) {
+      return (await fs.stat(configured).catch(() => null)) ? configured : null;
+    }
+
+    const inRepo = join(process.cwd(), '..', 'packages', 'desktop-shell');
+    return (await fs.stat(inRepo).catch(() => null)) ? inRepo : null;
   }
 
   /**

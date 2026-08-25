@@ -7,7 +7,10 @@ import { createHash } from 'crypto';
 
 import { AppBuild, BuildStatus } from '../../entities/app-build.entity';
 import { AgentApp } from '../../entities/agent-app.entity';
-import { DistributionTarget } from '../../entities/agent-app-distribution.entity';
+import {
+  AppDistribution,
+  DistributionTarget,
+} from '../../entities/agent-app-distribution.entity';
 import { StorageService } from '../files/storage.service';
 import {
   BUILD_PLATFORMS,
@@ -51,6 +54,8 @@ export class AppBuildsService {
     private readonly buildRepository: Repository<AppBuild>,
     @InjectRepository(AgentApp)
     private readonly appRepository: Repository<AgentApp>,
+    @InjectRepository(AppDistribution)
+    private readonly distributionRepository: Repository<AppDistribution>,
     @InjectQueue(APP_BUILD_QUEUE)
     private readonly queue: Queue,
     private readonly storage: StorageService,
@@ -136,6 +141,23 @@ export class AppBuildsService {
    */
   async findByIdUnscoped(buildId: string): Promise<AppBuild | null> {
     return this.buildRepository.findOne({ where: { id: buildId } });
+  }
+
+  /**
+   * The app a build belongs to, unscoped.
+   *
+   * For the queue, which has an id from a row we wrote rather than a
+   * request to authorise.
+   */
+  async appFor(appId: string): Promise<AgentApp | null> {
+    return this.appRepository.findOne({ where: { id: appId } });
+  }
+
+  /** The distribution a build is for, unscoped, for the same reason. */
+  async distributionFor(appId: string, target: string): Promise<AppDistribution | null> {
+    return this.distributionRepository.findOne({
+      where: { appId, target: target as DistributionTarget },
+    });
   }
 
   async findOne(organizationId: string, buildId: string): Promise<AppBuild> {
