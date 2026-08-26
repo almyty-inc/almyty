@@ -14,6 +14,7 @@ import {
   ProcessToolchainRunner,
   bunCompileArgs,
   electronBuilderArgs,
+  safeExecutableName,
 } from './build-toolchain';
 import { artifactExtension, type MacPackaging } from './build-targets';
 import { BuildStatus } from '../../entities/app-build.entity';
@@ -153,6 +154,9 @@ export class AppBuildProcessor {
         runner: this.toolchain,
       });
 
+      // The tool's own output goes in the log, which stays server side
+      // and is the only place a signing failure can be diagnosed from.
+      if (signing.log) log = `${log}\n${signing.log}`.trim();
       if (signing.error) log = `${log}\n${signing.error}`.trim();
 
       // Re-read after signing: the tools rewrite the file in place, so
@@ -258,6 +262,7 @@ export class AppBuildProcessor {
       // or Microsoft. Only fall back when they have not set one.
       appId: bundleId || this.bundleIdFor(app.slug),
       version: version || '1.0.0',
+      executableName: safeExecutableName(app.slug),
     });
 
     const result = await this.toolchain.run('npx', args!, { cwd: projectDir });

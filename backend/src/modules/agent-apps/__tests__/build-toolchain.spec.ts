@@ -3,6 +3,7 @@ import {
   ELECTRON_TARGETS,
   ELECTRON_VERSION,
   electronBuilderArgs,
+  safeExecutableName,
   MAX_LOG_CHARS,
   ProcessToolchainRunner,
   TOOL_FOR_TARGET,
@@ -125,6 +126,26 @@ describe('platform mapping', () => {
   });
 });
 
+describe('ProcessToolchainRunner stdin', () => {
+  const runner = new ProcessToolchainRunner();
+
+  it('gives a tool no stdin to prompt on', async () => {
+    // A pipe nobody writes to reads to OpenSSL as an available console,
+    // so osslsigncode ignored the password it was handed and asked for
+    // one, which fails looking exactly like a bad certificate.
+    const result = await runner.run('sh', ['-c', 'test -t 0 && echo tty || echo no-tty']);
+    expect(result.output.trim()).toBe('no-tty');
+  });
+
+  it('does not hang on a tool that tries to read stdin', async () => {
+    // Reading gets EOF at once rather than waiting for input that will
+    // never come, which would otherwise burn the whole build timeout.
+    const result = await runner.run('sh', ['-c', 'cat; echo done']);
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain('done');
+  });
+});
+
 describe('electronBuilderArgs', () => {
   const base = {
     projectDir: '/w/shell',
@@ -132,6 +153,7 @@ describe('electronBuilderArgs', () => {
     productName: 'Acme Assistant',
     appId: 'com.acme.assistant',
     version: '2.3.0',
+    executableName: 'acme-assistant',
   };
 
   it('maps a platform id to electron-builder flags', () => {
@@ -186,9 +208,51 @@ describe('electronBuilderArgs', () => {
     expect(args).toContain('--config.buildVersion=2.3.0');
   });
 
+  it('names the format, so the platform default cannot add targets', () => {
+    // `--linux` alone builds every default target, which includes a
+    // snap, and a failure there fails the whole build.
+    const args = electronBuilderArgs({ ...base, platformId: 'linux-x64' })!;
+    expect(args[args.indexOf('--linux') + 1]).toBe('AppImage');
+
+    const win = electronBuilderArgs({ ...base, platformId: 'windows-x64' })!;
+    expect(win[win.indexOf('--win') + 1]).toBe('nsis');
+
+    const mac = electronBuilderArgs({ ...base, platformId: 'macos-arm64' })!;
+    expect(mac[mac.indexOf('--mac') + 1]).toBe('zip');
+  });
+
+  it('names the executable after the product, not the npm package', () => {
+    // The shell is published as "@almyty/desktop-shell", and Linux
+    // refuses an executable called "@almytydesktop-shell".
+    const args = electronBuilderArgs({ ...base, platformId: 'linux-x64' })!;
+    expect(args).toContain('--config.executableName=acme-assistant');
+  });
+
   it('covers every platform the picker offers', () => {
     for (const id of Object.keys(BUN_TARGETS)) {
       expect(ELECTRON_TARGETS[id]).toBeDefined();
     }
+  });
+});
+
+describe('safeExecutableName', () => {
+  it('leaves a normal slug alone', () => {
+    expect(safeExecutableName('acme-support')).toBe('acme-support');
+  });
+
+  it('replaces characters a package manager refuses', () => {
+    // Linux allows only letters, digits, hyphens, underscores, dots and
+    // spaces, and a slug can be shaped by a customer.
+    expect(safeExecutableName('@acme/support')).toBe('acme-support');
+    expect(safeExecutableName('acme support!')).toBe('acme-support');
+  });
+
+  it('does not leave a leading or trailing separator', () => {
+    expect(safeExecutableName('///acme///')).toBe('acme');
+  });
+
+  it('falls back rather than returning an empty name', () => {
+    expect(safeExecutableName('///')).toBe('app');
+    expect(safeExecutableName('')).toBe('app');
   });
 });

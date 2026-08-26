@@ -160,8 +160,15 @@ export const DISTRIBUTION_BLURBS: Record<DistributionTarget, string> = {
   webhook: 'To any endpoint you own',
 }
 
-/** Targets that produce a file someone installs, so they need signing. */
-export const PACKAGED_TARGETS: DistributionTarget[] = ['desktop', 'binary']
+/**
+ * Targets that produce a file someone runs, so they need an identity.
+ *
+ * A terminal app is here too. It is not a bundle, but signing one on
+ * macOS still needs an identifier: a bare executable has no Info.plist
+ * to take one from, so without it every customer's binary identifies as
+ * whatever the compiler happened to call it.
+ */
+export const PACKAGED_TARGETS: DistributionTarget[] = ['desktop', 'binary', 'tui']
 
 export const AUTH_MODE_LABELS: Record<AppAuthMode, string> = {
   public_link: 'Anyone with the link',

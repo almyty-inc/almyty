@@ -118,6 +118,25 @@ describe('signing arguments', () => {
     );
   });
 
+  it('identifies the binary as the customer product', () => {
+    // A bare executable has no Info.plist, so without this every
+    // customer's binary identifies as whatever the compiler named it.
+    const args = appleSignArgs('/w/app', '/w/c', '/w/p', 'com.acme.assistant');
+    expect(args).toEqual(expect.arrayContaining(['--binary-identifier', 'com.acme.assistant']));
+  });
+
+  it('omits the identifier rather than passing an empty one', () => {
+    const args = appleSignArgs('/w/app', '/w/c', '/w/p');
+    expect(args).not.toContain('--binary-identifier');
+  });
+
+  it('keeps the artifact last, where the tool expects it', () => {
+    // rcodesign takes the path to sign as a positional argument, so it
+    // must not end up consumed as the value of a preceding flag.
+    const args = appleSignArgs('/w/app', '/w/c', '/w/p', 'com.acme.assistant');
+    expect(args[args.length - 1]).toBe('/w/app');
+  });
+
   it('staples the notarisation ticket so the app works offline', () => {
     // Without the staple, a machine with no network reaches Gatekeeper's
     // fallback and refuses the app.

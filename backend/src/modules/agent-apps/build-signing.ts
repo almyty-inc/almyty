@@ -31,6 +31,14 @@ export interface SigningOutcome {
   notarised: boolean;
   /** A sentence for the operator when it did not work. */
   error: string | null;
+  /**
+   * The tool's own output, for the build log.
+   *
+   * Kept separate from `error` because it names the path the
+   * certificate was written to, and the log is not shown in the panel.
+   * Without it a signing failure is undiagnosable.
+   */
+  log: string;
 }
 
 /** The tool that signs for each platform family. */
@@ -62,8 +70,9 @@ export function appleSignArgs(
   artifactPath: string,
   certificatePath: string,
   passwordFilePath: string,
+  bundleId?: string,
 ): string[] {
-  return [
+  const args = [
     'sign',
     '--p12-file',
     certificatePath,
@@ -71,8 +80,15 @@ export function appleSignArgs(
     passwordFilePath,
     '--code-signature-flags',
     'runtime',
-    artifactPath,
   ];
+
+  // A bare executable has no Info.plist, so without this every
+  // customer's binary identifies as whatever the compiler called it and
+  // two different products are indistinguishable to the OS.
+  if (bundleId) args.push('--binary-identifier', bundleId);
+
+  args.push(artifactPath);
+  return args;
 }
 
 /**

@@ -61,6 +61,11 @@ export class ProcessToolchainRunner implements ToolchainRunner {
         // holds unrelated secrets, and the toolchain only needs what it
         // is explicitly handed.
         env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...(options.env ?? {}) },
+        // No stdin. A build is not interactive, and a pipe nobody writes
+        // to reads to a tool as a console it can prompt on: osslsigncode
+        // ignored the password it was given and asked for one instead,
+        // which fails in a way that looks like a bad certificate.
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
 
       const capture = (chunk: Buffer) => {
@@ -186,6 +191,17 @@ export const ELECTRON_TARGETS: Record<string, { platform: string; arch: string; 
 };
 
 /**
+ * A name a package manager will accept for the executable.
+ *
+ * Linux rejects anything outside letters, digits, hyphens, underscores,
+ * dots and spaces, and a slug can be shaped by a customer.
+ */
+export function safeExecutableName(slug: string): string {
+  const cleaned = slug.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  return cleaned || 'app';
+}
+
+/**
  * The Electron release the shell is packaged against.
  *
  * Passed explicitly because electron-builder resolves the runtime from
@@ -210,6 +226,8 @@ export function electronBuilderArgs(options: {
   productName: string;
   appId: string;
   version: string;
+  /** Filesystem-safe name for the executable inside the package. */
+  executableName: string;
 }): string[] | null {
   const target = ELECTRON_TARGETS[options.platformId];
   if (!target) return null;
@@ -217,7 +235,11 @@ export function electronBuilderArgs(options: {
   return [
     '--yes',
     'electron-builder',
+    // The format is named rather than left to the platform default.
+    // `--linux` alone builds every default target, which on Linux means
+    // it also tries to produce a snap and fails the whole build on it.
     target.platform,
+    target.format,
     target.arch,
     '--projectDir',
     options.projectDir,
@@ -232,6 +254,14 @@ export function electronBuilderArgs(options: {
     // identical to what it replaces.
     `--config.extraMetadata.version=${options.version}`,
     `--config.buildVersion=${options.version}`,
+    // Derived from the product, not from the npm package name. The
+    // shell is published as "@almyty/desktop-shell", and Linux refuses
+    // an executable called "@almytydesktop-shell".
+    `--config.executableName=${options.executableName}`,
+    // Otherwise electron-builder picks Utility and says so on every
+    // build. Choosing it deliberately is the same answer without the
+    // warning.
+    '--config.linux.category=Utility',
     // Signing is ours to do afterwards, with the customer's own
     // certificate. Letting electron-builder attempt it would pick up
     // whatever identity happens to be in the build host's keychain.

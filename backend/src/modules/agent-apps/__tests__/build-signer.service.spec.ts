@@ -91,7 +91,7 @@ describe('BuildSignerService', () => {
 
     const outcome = await service.sign({ ...params(runner), platform: 'linux-x64' });
 
-    expect(outcome).toEqual({ signed: false, notarised: false, error: null });
+    expect(outcome).toEqual({ signed: false, notarised: false, error: null, log: '' });
     // No lookup at all: Linux has no signing story to explain.
     expect(distributions.findOne).not.toHaveBeenCalled();
   });
@@ -116,6 +116,31 @@ describe('BuildSignerService', () => {
     expect(outcome.signed).toBe(false);
   });
 
+  it('reads the distribution once, not once per thing it needs from it', async () => {
+    const { service, distributions } = makeService({ credential: makeCredential(APPLE_CONFIG) });
+
+    await service.sign(params(makeRunner([{ ok: true }, { ok: true }])));
+
+    expect(distributions.findOne).toHaveBeenCalledTimes(1);
+  });
+
+  it('signs a macOS binary under the distribution identifier', async () => {
+    const { service } = makeService({
+      credential: makeCredential(APPLE_CONFIG),
+      distribution: {
+        appId: APP,
+        organizationId: ORG,
+        configuration: { signingCredentialId: 'cred-1', bundleId: 'com.acme.probe' },
+      },
+    });
+    const runner = makeRunner([{ ok: true }, { ok: true }]);
+
+    await service.sign(params(runner));
+
+    const args = runner.run.mock.calls[0][1];
+    expect(args).toEqual(expect.arrayContaining(['--binary-identifier', 'com.acme.probe']));
+  });
+
   it('looks up the certificate scoped to the distribution owner', async () => {
     // An id copied from another tenant must resolve to nothing.
     const { service, credentials } = makeService({ credential: makeCredential(APPLE_CONFIG) });
@@ -137,7 +162,9 @@ describe('BuildSignerService', () => {
 
     const outcome = await service.sign(params(runner));
 
-    expect(outcome).toEqual({ signed: true, notarised: true, error: null });
+    expect(outcome.signed).toBe(true);
+    expect(outcome.notarised).toBe(true);
+    expect(outcome.error).toBeNull();
     expect(runner.run).toHaveBeenCalledTimes(2);
   });
 
@@ -242,7 +269,8 @@ describe('BuildSignerService', () => {
 
     const outcome = await service.sign({ ...params(runner), platform: 'windows-x64' });
 
-    expect(outcome).toEqual({ signed: true, notarised: true, error: null });
+    expect(outcome.signed).toBe(true);
+    expect(outcome.notarised).toBe(true);
     expect(await fs.readFile(artifactPath, 'utf8')).toBe('signed bytes');
   });
 
@@ -261,6 +289,19 @@ describe('BuildSignerService', () => {
 
     expect(outcome.signed).toBe(false);
     expect(await fs.readFile(artifactPath, 'utf8')).toBe('unsigned bytes');
+  });
+
+  it('keeps the tool output for the log, so a failure can be diagnosed', async () => {
+    // The sentence the operator sees is deliberately vague about paths.
+    // Without the raw output somewhere, nobody can tell why it failed.
+    const { service } = makeService({ credential: makeCredential(APPLE_CONFIG) });
+
+    const outcome = await service.sign(
+      params(makeRunner([{ ok: false, output: 'rcodesign: unable to parse certificate' }])),
+    );
+
+    expect(outcome.log).toContain('unable to parse certificate');
+    expect(outcome.error).not.toContain('unable to parse certificate');
   });
 
   describe('kindFor', () => {

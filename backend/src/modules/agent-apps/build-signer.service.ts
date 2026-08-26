@@ -62,15 +62,17 @@ export class BuildSignerService {
   }): Promise<SigningOutcome> {
     const kind = this.kindFor(params.platform);
     if (kind === 'none') {
-      return { signed: false, notarised: false, error: null };
+      return { signed: false, notarised: false, error: null, log: '' };
     }
 
-    const credential = await this.credentialFor(params.appId, params.target);
+    const distribution = await this.distributionFor(params.appId, params.target);
+    const credential = await this.credentialFor(distribution);
     if (!credential) {
       return {
         signed: false,
         notarised: false,
         error: 'No signing certificate is selected for this distribution.',
+        log: '',
       };
     }
 
@@ -80,12 +82,13 @@ export class BuildSignerService {
         signed: false,
         notarised: false,
         error: `That signing credential is missing ${missing.join(', ')}.`,
+        log: '',
       };
     }
 
     const readiness = await signingReadiness(kind, params.runner);
     if (!readiness.ready) {
-      return { signed: false, notarised: false, error: readiness.reason };
+      return { signed: false, notarised: false, error: readiness.reason, log: '' };
     }
 
     const certificatePath = join(params.workDir, CERTIFICATE_FILENAME);
@@ -97,8 +100,10 @@ export class BuildSignerService {
       await fs.writeFile(certificatePath, identity.certificate, { mode: 0o600 });
       await fs.writeFile(passwordPath, identity.certificatePassword, { mode: 0o600 });
 
+      const bundleId = distribution?.configuration?.bundleId;
+
       return kind === 'apple'
-        ? await this.signApple(identity, params, certificatePath, passwordPath)
+        ? await this.signApple(identity, params, certificatePath, passwordPath, bundleId)
         : await this.signAuthenticode(identity, params, certificatePath);
     } finally {
       // Before the scratch directory is removed rather than relying on
@@ -117,16 +122,22 @@ export class BuildSignerService {
     params: { artifactPath: string; workDir: string; runner: ToolchainRunner },
     certificatePath: string,
     passwordPath: string,
+    bundleId?: string,
   ): Promise<SigningOutcome> {
     const tool = SIGNING_TOOL.apple!;
 
     const signed = await params.runner.run(
       tool,
-      appleSignArgs(params.artifactPath, certificatePath, passwordPath),
+      appleSignArgs(params.artifactPath, certificatePath, passwordPath, bundleId),
       { cwd: params.workDir },
     );
     if (!signed.ok) {
-      return { signed: false, notarised: false, error: describeSigningFailure('apple', signed) };
+      return {
+        signed: false,
+        notarised: false,
+        error: describeSigningFailure('apple', signed),
+        log: signed.output,
+      };
     }
 
     // Signing satisfies "who made this". Notarisation satisfies "Apple
@@ -158,10 +169,16 @@ export class BuildSignerService {
         notarised: false,
         error:
           'Signed, but Apple did not accept it for notarisation, so macOS will still warn on download.',
+        log: `${signed.output}\n${notarised.output}`,
       };
     }
 
-    return { signed: true, notarised: true, error: null };
+    return {
+      signed: true,
+      notarised: true,
+      error: null,
+      log: `${signed.output}\n${notarised.output}`,
+    };
   }
 
   private async signAuthenticode(
@@ -189,6 +206,7 @@ export class BuildSignerService {
         signed: false,
         notarised: false,
         error: describeSigningFailure('authenticode', result),
+        log: result.output,
       };
     }
 
@@ -198,7 +216,7 @@ export class BuildSignerService {
 
     // Windows has no separate notarisation step; a timestamped
     // Authenticode signature is the whole of it.
-    return { signed: true, notarised: true, error: null };
+    return { signed: true, notarised: true, error: null, log: result.output };
   }
 
   /**
@@ -208,11 +226,11 @@ export class BuildSignerService {
    * accepted, so an id copied from somewhere else resolves to nothing
    * rather than to another tenant's key.
    */
-  private async credentialFor(appId: string, target: string): Promise<Credential | null> {
-    const distribution = await this.distributions.findOne({
-      where: { appId, target: target as any },
-    });
+  private distributionFor(appId: string, target: string): Promise<AppDistribution | null> {
+    return this.distributions.findOne({ where: { appId, target: target as any } });
+  }
 
+  private async credentialFor(distribution: AppDistribution | null): Promise<Credential | null> {
     const credentialId = distribution?.configuration?.signingCredentialId;
     if (!credentialId || typeof credentialId !== 'string') return null;
 
