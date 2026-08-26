@@ -1,6 +1,6 @@
-import { Process, Processor } from '@nestjs/bull';
-import { Logger } from '@nestjs/common';
-import type { Job } from 'bull';
+import { InjectQueue, Process, Processor } from '@nestjs/bull';
+import { Logger, OnApplicationBootstrap } from '@nestjs/common';
+import type { Job, Queue } from 'bull';
 import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -19,11 +19,28 @@ import {
 import { artifactExtension, type MacPackaging } from './build-targets';
 import { BuildStatus } from '../../entities/app-build.entity';
 import { hostedChatUrl } from '../gateways/channels/hosted-chat.config';
+import { writeIcon } from './build-icon';
 
 interface BuildJob {
   buildId: string;
   macPackaging?: MacPackaging;
 }
+
+/** Job name for the periodic clear-out of expired artifacts. */
+export const ARTIFACT_SWEEP_JOB = 'artifact-sweep';
+
+/**
+ * Stable jobId for the repeatable sweep so restarts do not stack
+ * duplicate schedules, and a changed cron evicts the stale one.
+ */
+const SWEEP_REPEAT_JOB_ID = 'app-artifact-sweep';
+
+/**
+ * Hourly. An artifact's own expiry decides when it stops being
+ * downloadable; this only decides how promptly the bytes stop costing
+ * storage after that.
+ */
+const DEFAULT_SWEEP_CRON = '17 * * * *';
 
 /**
  * Turns a queued build into a file someone can download.
@@ -54,14 +71,60 @@ export function operatorMessage(err: any): string {
 }
 
 @Processor(APP_BUILD_QUEUE)
-export class AppBuildProcessor {
+export class AppBuildProcessor implements OnApplicationBootstrap {
   private readonly logger = new Logger(AppBuildProcessor.name);
   private readonly toolchain = new ProcessToolchainRunner();
 
   constructor(
     private readonly builds: AppBuildsService,
     private readonly signer: BuildSignerService,
+    @InjectQueue(APP_BUILD_QUEUE) private readonly queue: Queue,
   ) {}
+
+  /**
+   * Arm the artifact sweep.
+   *
+   * Without this the expiry was enforced on download and nowhere else:
+   * links stopped working on schedule while the bytes stayed in storage
+   * for ever.
+   */
+  async onApplicationBootstrap(): Promise<void> {
+    if (process.env.NODE_ENV === 'test') return;
+
+    const cron = (process.env.APP_ARTIFACT_SWEEP_CRON || DEFAULT_SWEEP_CRON).trim();
+
+    try {
+      // Repeatable jobs are keyed by their repeat options, so a changed
+      // cron would otherwise leave the old schedule running alongside.
+      for (const repeatable of await this.queue.getRepeatableJobs()) {
+        if (repeatable.id === SWEEP_REPEAT_JOB_ID && repeatable.cron !== cron) {
+          await this.queue.removeRepeatableByKey(repeatable.key);
+        }
+      }
+
+      await this.queue.add(
+        ARTIFACT_SWEEP_JOB,
+        {},
+        {
+          jobId: SWEEP_REPEAT_JOB_ID,
+          repeat: { cron },
+          removeOnComplete: true,
+          removeOnFail: true,
+        },
+      );
+      this.logger.log(`Artifact sweep scheduled: "${cron}"`);
+    } catch (error: any) {
+      // Best-effort: a Redis hiccup at bootstrap must not take the API
+      // down over housekeeping.
+      this.logger.error(`Failed to schedule artifact sweep: ${error.message}`);
+    }
+  }
+
+  @Process(ARTIFACT_SWEEP_JOB)
+  async sweep(): Promise<void> {
+    const removed = await this.builds.sweepExpiredArtifacts();
+    if (removed > 0) this.logger.log(`Cleared ${removed} expired build artifacts`);
+  }
 
   @Process()
   async build(job: Job<BuildJob>): Promise<void> {
@@ -252,6 +315,11 @@ export class AppBuildProcessor {
       ),
     );
 
+    // Without this every customer's app wears the Electron logo, which
+    // undoes most of what a branded build is for. Never fatal: a
+    // default icon beats no artifact.
+    const icon = await writeIcon(app.branding?.iconUrl, projectDir);
+
     const args = electronBuilderArgs({
       platformId: build.platform,
       projectDir,
@@ -269,6 +337,8 @@ export class AppBuildProcessor {
     if (!result.ok) {
       return { ok: false, log: result.output, error: result.error ?? 'Packaging failed.' };
     }
+
+    if (icon.reason) this.logger.log(`Desktop build ${build.appId}: ${icon.reason}`);
 
     // electron-builder names the file after the product and version, so
     // the one artifact in the output directory is found rather than

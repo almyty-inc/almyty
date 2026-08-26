@@ -13,6 +13,7 @@ import {
   agentAppsApi,
   isBuildable,
   isChannelTarget,
+  servesOverGateway,
   type AgentApp,
   type AppDistribution,
 } from '@/lib/agent-apps'
@@ -51,6 +52,29 @@ export function DistributionPanel({ app, distribution, onSaved }: DistributionPa
   // identity for macOS and another for Windows.
   const signingCredentialId =
     (distribution.configuration?.signingCredentialId as string | undefined) ?? ''
+
+  const live = distribution.status === 'live'
+
+  const publish = useMutation({
+    mutationFn: () =>
+      live
+        ? agentAppsApi.unpublishDistribution(app.slug, distribution.target)
+        : agentAppsApi.publishDistribution(app.slug, distribution.target),
+    onSuccess: () => {
+      success(
+        live ? 'Taken down' : 'Published',
+        live
+          ? 'It has stopped answering. Its settings and address are kept.'
+          : 'It is answering now.',
+      )
+      onSaved()
+    },
+    onError: (err: any) =>
+      errorNotif(
+        live ? 'Could not take it down' : 'Could not publish',
+        err?.response?.data?.message || 'Something went wrong.',
+      ),
+  })
 
   const save = useMutation({
     mutationFn: (patch: Record<string, unknown> = {}) =>
@@ -121,6 +145,32 @@ export function DistributionPanel({ app, distribution, onSaved }: DistributionPa
           This platform needs its own credentials. Add them under Gateways, then this
           distribution will use them.
         </p>
+      )}
+
+      {/* Adding a distribution records where a product will ship.
+          Publishing is the separate decision to let people reach it. */}
+      {servesOverGateway(distribution.target) && (
+        <div className="space-y-2">
+          <Button
+            className="w-full"
+            variant={live ? 'outline' : 'default'}
+            disabled={publish.isPending}
+            onClick={() => publish.mutate()}
+          >
+            {publish.isPending
+              ? live
+                ? 'Taking it down...'
+                : 'Publishing...'
+              : live
+                ? 'Take it down'
+                : 'Publish'}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            {live
+              ? 'Taking it down stops it answering and keeps its address, so publishing again needs no re-registration.'
+              : 'Publishing stands up the surface and points it at this product.'}
+          </p>
+        </div>
       )}
 
       {/* Builds run on our machines, so this is a button rather than a

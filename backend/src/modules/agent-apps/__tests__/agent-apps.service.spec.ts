@@ -11,6 +11,7 @@ describe('AgentAppsService', () => {
   let appRepository: any;
   let distributionRepository: any;
   let agentRepository: any;
+  let gateways: any;
   let service: AgentAppsService;
 
   const ORG = 'org-1';
@@ -24,6 +25,10 @@ describe('AgentAppsService', () => {
     branding: {},
     authMode: AppAuthMode.PUBLIC_LINK,
     capabilities: {},
+    // Open to anyone, so the product rules demand these before it can
+    // be published. Set here so publish tests exercise publishing
+    // rather than re-testing the limits rule.
+    limits: { costCapCents: 500, perUserRateLimit: 60, perIpRateLimit: 60 },
     isActive: true,
     ...overrides,
   });
@@ -43,7 +48,16 @@ describe('AgentAppsService', () => {
       remove: jest.fn(async () => undefined),
     };
     agentRepository = { find: jest.fn(async () => [{ id: 'agent-1' }]) };
-    service = new AgentAppsService(appRepository, distributionRepository, agentRepository);
+    gateways = {
+      upsertForDistribution: jest.fn(async () => ({ id: 'gw-1' })),
+      deactivateGateway: jest.fn(async () => ({ id: 'gw-1' })),
+    };
+    service = new AgentAppsService(
+      appRepository,
+      distributionRepository,
+      agentRepository,
+      gateways,
+    );
   });
 
   describe('tenant scoping', () => {
@@ -231,6 +245,127 @@ describe('AgentAppsService', () => {
       );
       expect(created.gatewayId).toBe('gw-telegram');
       expect(created.target).toBe(DistributionTarget.TELEGRAM);
+    });
+
+    it('stands up a gateway and marks the distribution live', async () => {
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        configuration: {},
+      });
+
+      const result = await service.publishDistribution(
+        ORG,
+        'acme-support',
+        DistributionTarget.SLACK,
+        'user-1',
+      );
+
+      expect(gateways.upsertForDistribution).toHaveBeenCalledWith(
+        expect.objectContaining({ endpoint: '/apps/acme-support/slack', agentId: 'agent-1' }),
+        ORG,
+        'user-1',
+      );
+      expect(result.gatewayId).toBe('gw-1');
+      expect(result.status).toBe(DistributionStatus.LIVE);
+    });
+
+    it('gives the surface the product branding rather than a copy to keep in step', async () => {
+      appRepository.findOne.mockResolvedValueOnce(
+        app({ branding: { appName: 'Acme', primaryColor: '#123456' } }),
+      );
+      distributionRepository.findOne.mockResolvedValueOnce({ id: 'd-1', appId: 'h-1' });
+
+      await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
+
+      const dto = gateways.upsertForDistribution.mock.calls[0][0];
+      expect(dto.configuration.branding).toEqual({ appName: 'Acme', primaryColor: '#123456' });
+    });
+
+    it('refuses to publish a product with no agent', async () => {
+      appRepository.findOne.mockResolvedValueOnce(app({ agentIds: [] }));
+      distributionRepository.findOne.mockResolvedValueOnce({ id: 'd-1', appId: 'h-1' });
+
+      await expect(
+        service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(gateways.upsertForDistribution).not.toHaveBeenCalled();
+    });
+
+    it('refuses to publish a target that ships as a file', async () => {
+      distributionRepository.findOne.mockResolvedValueOnce({ id: 'd-1', appId: 'h-1' });
+
+      await expect(
+        service.publishDistribution(ORG, 'acme-support', DistributionTarget.TUI, 'user-1'),
+      ).rejects.toThrow(/download/i);
+    });
+
+    it('refuses to publish a public product with no cost cap', async () => {
+      // The rule exists because an open product is a way to hand a
+      // stranger the customer's model spend.
+      appRepository.findOne.mockResolvedValueOnce(app({ limits: null }));
+      distributionRepository.findOne.mockResolvedValueOnce({ id: 'd-1', appId: 'h-1' });
+
+      await expect(
+        service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1'),
+      ).rejects.toThrow(/cost cap/i);
+    });
+
+    it('carries the product rate limit onto the gateway it stands up', async () => {
+      // Publishing with the limits dropped would make the check theatre.
+      distributionRepository.findOne.mockResolvedValueOnce({ id: 'd-1', appId: 'h-1' });
+
+      await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
+
+      const dto = gateways.upsertForDistribution.mock.calls[0][0];
+      expect(dto.rateLimitConfig).toMatchObject({ enabled: true, requestsPerHour: 60 });
+    });
+
+    it('404s publishing a target this app does not ship to', async () => {
+      distributionRepository.findOne.mockResolvedValueOnce(null);
+
+      await expect(
+        service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('deactivates the gateway rather than deleting it when unpublishing', async () => {
+      // Republishing has to keep the endpoint and whatever credentials
+      // were attached: nobody should re-register a Slack app because
+      // they took a product down for an afternoon.
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        gatewayId: 'gw-1',
+      });
+
+      const result = await service.unpublishDistribution(
+        ORG,
+        'acme-support',
+        DistributionTarget.SLACK,
+        'user-1',
+      );
+
+      expect(gateways.deactivateGateway).toHaveBeenCalledWith('gw-1', ORG, 'user-1');
+      expect(result.status).toBe(DistributionStatus.DRAFT);
+    });
+
+    it('unpublishes a distribution that never had a gateway without failing', async () => {
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        gatewayId: null,
+      });
+
+      const result = await service.unpublishDistribution(
+        ORG,
+        'acme-support',
+        DistributionTarget.SLACK,
+        'user-1',
+      );
+
+      expect(gateways.deactivateGateway).not.toHaveBeenCalled();
+      expect(result.status).toBe(DistributionStatus.DRAFT);
     });
 
     it('404s removing a target this app does not ship to', async () => {

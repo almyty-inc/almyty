@@ -31,6 +31,23 @@ Entities: `agent-app.entity.ts`, `agent-app-distribution.entity.ts`, `app-build.
 
 Everything is addressed by name. `/apps/acme-support`, `/apps/acme-support/distributions/slack`. The slug is unique per organization and is what the product ships under, so it is what an operator recognises and can type. An opaque id in a path is unreadable and unshareable for no gain.
 
+## Publishing
+
+Adding a distribution records where a product will ship. Publishing is the separate decision to let people reach it, and it is what turns a row into something that answers:
+
+```
+POST /apps/:slug/distributions/:target/publish
+POST /apps/:slug/distributions/:target/unpublish
+```
+
+For every target except the three that compile to a file, publishing stands up a gateway of the matching type (`distribution-publish.ts` holds that mapping as one readable table), wired to the app's first agent, at `/apps/:slug/:target` — unique per organization, so it cannot collide with a hand-made gateway or with the same product's other surfaces.
+
+The surface is created with the product's own branding and the product's own rate limits. Publishing with the limits dropped would make the check that allowed it theatre.
+
+Publishing is idempotent: doing it twice re-syncs the existing gateway rather than failing on the unique endpoint, because the second attempt is usually someone reapplying a settings change.
+
+Unpublishing **deactivates** the gateway rather than deleting it. Republishing keeps the same endpoint and whatever credentials were attached, so taking a product down for an afternoon does not mean re-registering a Slack app afterwards.
+
 ## What stops an app from shipping
 
 `agent-app.rules.ts` returns the unmet rules continuously while someone is still editing, rather than letting them discover the list when a publish is rejected. The rules that matter:
@@ -40,6 +57,10 @@ Everything is addressed by name. `/apps/acme-support`, `/apps/acme-support/distr
 - `LOCAL_ACCESS_ON_PUBLIC` — a downloadable artifact that touches the machine it lands on cannot also be open to anyone.
 
 An unset auth mode reads as open, not as unset. The permissive reading of missing configuration is the one that gets someone billed.
+
+The first two are satisfied from the app's own `limits` column: a cost ceiling per run in cents, and per-user and per-IP request ceilings. Cents rather than currency because a ceiling in floating point is a rounding argument later; per-IP separately from per-user because a hosted chat visitor has no account.
+
+A limit left empty is stored as null, not as zero. Zero would read as "no requests allowed" rather than "unset", and the rules treat both as unprotected — but only one of them is what the operator meant.
 
 ## Builds
 
@@ -61,9 +82,19 @@ Everything knowable up front is checked before queueing rather than inside the j
 | `tui`, `binary` | `bun build --compile` | bare executable | `.exe` | bare executable |
 | `desktop` | `electron-builder` | `.AppImage` | NSIS `.exe` | `.app` in a `.zip` |
 
+`binary` compiles to byte-identical output to `tui` — same entry point, same invocation — so it is no longer offered when adding a distribution. The target still works and existing distributions still build; there is simply no reason to ask someone to choose between two names for one thing.
+
 Everything cross-compiles. A Linux x64 ELF and a macOS arm64 Mach-O both build on a macOS host, and vice versa. The one exception is a macOS `.dmg`, which needs Apple tooling; the desktop target ships a zipped `.app` instead, which any Mac opens.
 
 The extension depends on the target as well as the platform, which the platform table alone cannot express (`artifactExtension`). This is not cosmetic: a Mach-O executable named `.zip` does not open when double-clicked and browsers try to expand it.
+
+### The icon
+
+Without one, every customer's app wears the Electron logo, which undoes most of what a branded build is for. `build-icon.ts` fetches `branding.iconUrl` into `build/icon.png`, which electron-builder picks up by convention and derives the platform formats from.
+
+That URL is customer input and the fetch runs from the build host's own network, so it goes through the same SSRF-safe agents the rest of the product uses: a link to `169.254.169.254` or to something on the internal network is refused at connect time. The bytes are checked for a PNG signature rather than trusted on the URL's extension or the server's content-type, and capped, because this file is handed to an image toolchain.
+
+None of it ever fails a build. A default icon is worse than a branded one and far better than no artifact, so every path returns a sentence saying which happened.
 
 ### The desktop shell
 
@@ -74,6 +105,8 @@ It renders remote content under someone else's name, so it is locked down to mat
 That last check compares **origins**, not prefixes — `https://acme.almyty.app.attacker.test` passes a `startsWith` test — and treats a scheme with no host as no origin at all. `data:`, `file:` and `javascript:` URLs all report the origin string `"null"`, so an equality check alone would count them as each other, and as a build that has no address.
 
 The address comes from `hostedChatUrl`, the same function the hosted surface uses. A second setting would drift from it.
+
+`primaryColor` paints the window before the page loads, so a launch shows the customer's brand rather than flashing white, and tints the title bar where the platform supports it. The value is validated as a hex colour rather than passed through — it arrives from a form field and reaches the OS — and the symbol colour is chosen by Rec. 601 luma, whose green weight is what makes pure green read as light and pure blue as dark.
 
 ## Signing
 
@@ -107,7 +140,7 @@ Rules the code holds to:
 
 `StorageService.canPresign` decides the shape. S3 presigns and keeps the bytes off the API. Anything else streams through `GET /apps/:slug/builds/:buildId/artifact`, under the same ownership and expiry checks as the link.
 
-The link is minted per request and short lived rather than stored, so a URL that ends up in a chat log or a ticket stops working. The artifact expires on its own schedule (`ARTIFACT_TTL_DAYS`).
+The link is minted per request and short lived rather than stored, so a URL that ends up in a chat log or a ticket stops working. The artifact expires on its own schedule (`ARTIFACT_TTL_DAYS`), and an hourly repeatable job clears the bytes once it has — the expiry was enforced on download and nowhere else, so links stopped working on time while storage grew for ever. Override the cadence with `APP_ARTIFACT_SWEEP_CRON`.
 
 The filename is the product, the version and the platform — that name lands in someone's Downloads folder next to everything else they have ever downloaded, and a row id tells them nothing.
 

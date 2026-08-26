@@ -36,12 +36,38 @@ function readConfig() {
     return {
       appName: raw.appName || 'almyty',
       url: raw.url || '',
-      primaryColor: raw.primaryColor || '#8b5cf6',
+      primaryColor: isHexColour(raw.primaryColor) ? raw.primaryColor : '#8b5cf6',
       theme: raw.theme === 'dark' || raw.theme === 'light' ? raw.theme : 'system',
     }
   } catch {
     return { appName: 'almyty', url: '', primaryColor: '#8b5cf6', theme: 'system' }
   }
+}
+
+/**
+ * Whether a value is a colour we can hand to the OS.
+ *
+ * The config is written by a build from a form field, and both the
+ * title bar and the pre-paint background take this string. Anything
+ * that is not a hex colour falls back rather than being passed through.
+ */
+function isHexColour(value) {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
+}
+
+/**
+ * Whether a colour is dark enough to need light symbols on it.
+ *
+ * Rec. 601 luma against the conventional midpoint. The green weight is
+ * what makes pure green read as light and pure blue as dark despite the
+ * two carrying the same channel value, which is how eyes work and why a
+ * plain average gets title bars wrong.
+ */
+function isDark(hex) {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5
 }
 
 /**
@@ -85,9 +111,17 @@ function createWindow(config) {
     minWidth: 420,
     minHeight: 480,
     title: config.appName,
-    // Painted before the page loads so a launch does not flash white,
+    // Painted before the page loads, in the product's own colour, so a
+    // launch shows the customer's brand rather than flashing white,
     // which on a dark theme reads as a broken app.
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#09090b' : '#ffffff',
+    backgroundColor: config.primaryColor,
+    // The frame follows suit where the platform allows it, so the
+    // window is theirs from the title bar down rather than only inside
+    // the page. Ignored on platforms that do not support it.
+    titleBarOverlay: {
+      color: config.primaryColor,
+      symbolColor: isDark(config.primaryColor) ? '#ffffff' : '#000000',
+    },
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
@@ -170,4 +204,4 @@ function start() {
 
 if (app) start()
 
-module.exports = { readConfig, originOf, mayNavigateTo, start }
+module.exports = { readConfig, originOf, mayNavigateTo, isHexColour, isDark, start }

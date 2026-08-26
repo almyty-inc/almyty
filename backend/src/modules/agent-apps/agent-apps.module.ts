@@ -9,6 +9,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
 import { AppBuild } from '../../entities/app-build.entity';
 import { Credential } from '../../entities/credential.entity';
 import { FilesModule } from '../files/files.module';
+import { GatewaysModule } from '../gateways/gateways.module';
 import { AgentAppsController } from './agent-apps.controller';
 import { AgentAppsService } from './agent-apps.service';
 import { AppBuildsService, APP_BUILD_QUEUE } from './app-builds.service';
@@ -30,6 +31,10 @@ import { BuildSignerService } from './build-signer.service';
     // Artifacts go through the same storage the rest of the product
     // uses, so a deployment on S3 gets signed download URLs for free.
     FilesModule,
+    // Publishing a distribution stands up a gateway of the matching
+    // type. Gateways does not depend on us, so this is a plain import
+    // rather than a forwardRef.
+    GatewaysModule,
     AuthorizationModule,
   ],
   controllers: [AgentAppsController],

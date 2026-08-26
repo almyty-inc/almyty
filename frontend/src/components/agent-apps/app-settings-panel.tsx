@@ -45,6 +45,18 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
   const [greeting, setGreeting] = useState(app.branding?.greeting ?? '')
   const [aiDisclosure, setAiDisclosure] = useState(app.branding?.aiDisclosure ?? '')
   const [authMode, setAuthMode] = useState<AppAuthMode>(app.authMode)
+
+  // Kept as strings so an empty field stays empty rather than becoming
+  // a zero the moment someone clears it to retype.
+  const [costCap, setCostCap] = useState(
+    app.limits?.costCapCents != null ? String(app.limits.costCapCents / 100) : '',
+  )
+  const [perUser, setPerUser] = useState(
+    app.limits?.perUserRateLimit != null ? String(app.limits.perUserRateLimit) : '',
+  )
+  const [perIp, setPerIp] = useState(
+    app.limits?.perIpRateLimit != null ? String(app.limits.perIpRateLimit) : '',
+  )
   const [shell, setShell] = useState(app.capabilities?.shell === true)
   const [fsRead, setFsRead] = useState((app.capabilities?.filesystemRead ?? []).join(', '))
 
@@ -64,6 +76,13 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
           aiDisclosure: aiDisclosure.trim() ? aiDisclosure.trim() : null,
         },
         authMode,
+        limits: {
+          // Entered in whole currency, stored in cents, because a cost
+          // ceiling in floating point is a rounding argument later.
+          costCapCents: costCap.trim() ? Math.round(Number(costCap) * 100) : null,
+          perUserRateLimit: perUser.trim() ? Number(perUser) : null,
+          perIpRateLimit: perIp.trim() ? Number(perIp) : null,
+        },
         capabilities: {
           ...(app.capabilities ?? {}),
           shell,
@@ -152,6 +171,61 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
             ))}
           </SelectContent>
         </Select>
+      </section>
+
+      <section className="space-y-4">
+        <h3 className="text-sm font-medium">What it may cost</h3>
+
+        {open && (
+          // Said here rather than only at publish time, because this is
+          // the screen where it gets fixed.
+          <p className="text-xs text-muted-foreground">
+            Anyone with the link or the binary can use this, so it spends against your
+            model keys. A product open to anyone needs all three before it can be
+            published.
+          </p>
+        )}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="app-cost-cap">Cost ceiling per run</Label>
+          <Input
+            id="app-cost-cap"
+            inputMode="decimal"
+            value={costCap}
+            onChange={(e) => setCostCap(e.target.value)}
+            placeholder="0.50"
+          />
+          <p className="text-xs text-muted-foreground">
+            In whole currency. A run that would cost more is stopped rather than billed.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="app-per-user">Requests per user, per hour</Label>
+            <Input
+              id="app-per-user"
+              inputMode="numeric"
+              value={perUser}
+              onChange={(e) => setPerUser(e.target.value)}
+              placeholder="60"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="app-per-ip">Requests per IP, per hour</Label>
+            <Input
+              id="app-per-ip"
+              inputMode="numeric"
+              value={perIp}
+              onChange={(e) => setPerIp(e.target.value)}
+              placeholder="60"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          The per-IP ceiling covers surfaces where a visitor has no account, so one
+          person cannot exhaust the product for everyone else.
+        </p>
       </section>
 
       <section className="space-y-4">

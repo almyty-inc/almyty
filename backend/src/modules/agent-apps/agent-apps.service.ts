@@ -20,6 +20,14 @@ import {
   checkApp,
   appSlugError,
 } from './agent-app.rules';
+import {
+  GATEWAY_TYPE_FOR_TARGET,
+  checkPublish,
+  endpointFor,
+  gatewayNameFor,
+  rateLimitFor,
+} from './distribution-publish';
+import { GatewaysService } from '../gateways/gateways.service';
 
 export interface CreateAppDto {
   name: string;
@@ -29,6 +37,7 @@ export interface CreateAppDto {
   branding?: AgentApp['branding'];
   authMode?: AppAuthMode;
   capabilities?: AgentApp['capabilities'];
+  limits?: AgentApp['limits'];
 }
 
 export type UpdateAppDto = Partial<CreateAppDto> & { isActive?: boolean };
@@ -50,6 +59,7 @@ export class AgentAppsService {
     private readonly distributionRepository: Repository<AppDistribution>,
     @InjectRepository(Agent)
     private readonly agentRepository: Repository<Agent>,
+    private readonly gateways: GatewaysService,
   ) {}
 
   async list(organizationId: string): Promise<AgentApp[]> {
@@ -149,6 +159,7 @@ export class AgentAppsService {
     if (dto.branding !== undefined) app.branding = dto.branding;
     if (dto.authMode !== undefined) app.authMode = dto.authMode;
     if (dto.capabilities !== undefined) app.capabilities = dto.capabilities;
+    if (dto.limits !== undefined) app.limits = dto.limits;
     if (dto.isActive !== undefined) app.isActive = dto.isActive;
 
     return this.appRepository.save(app);
@@ -172,7 +183,26 @@ export class AgentAppsService {
     context: Parameters<typeof checkApp>[1] = {},
   ): Promise<AppCheck> {
     const app = await this.findOne(organizationId, slug);
-    return checkApp(app, context);
+    return checkApp(app, this.limitsContext(app, context));
+  }
+
+  /**
+   * The app's own limits, unless the caller knows better.
+   *
+   * Without this the cost-cap and rate-limit rules were checked against
+   * an empty context on every call, so a public product showed both
+   * refusals for ever and no setting could clear them.
+   */
+  private limitsContext(
+    app: AgentApp,
+    context: Parameters<typeof checkApp>[1] = {},
+  ): Parameters<typeof checkApp>[1] {
+    return {
+      costCapCents: app.limits?.costCapCents ?? null,
+      perUserRateLimit: app.limits?.perUserRateLimit ?? null,
+      perIpRateLimit: app.limits?.perIpRateLimit ?? null,
+      ...context,
+    };
   }
 
   async addDistribution(
@@ -216,6 +246,96 @@ export class AgentAppsService {
     );
   }
 
+  /**
+   * Make a distribution answer.
+   *
+   * Until this exists a distribution is a row: adding one to Slack
+   * records an intent and connects nothing. Publishing stands up a
+   * gateway of the matching type, wired to the app's first agent, and
+   * marks the distribution live.
+   *
+   * Idempotent. Publishing something already published re-syncs the
+   * gateway with the app's current name and limits rather than creating
+   * a second one, because the endpoint is unique per organization and
+   * the second attempt is usually someone reapplying a settings change.
+   */
+  async publishDistribution(
+    organizationId: string,
+    slug: string,
+    target: DistributionTarget,
+    userId: string,
+  ): Promise<AppDistribution> {
+    const app = await this.findOne(organizationId, slug);
+    const distribution = await this.distributionRepository.findOne({
+      where: { appId: app.id, target },
+    });
+    if (!distribution) throw new NotFoundException('This app does not ship to that target');
+
+    // Both gates, as one list. The product-wide rules are the reason a
+    // public product needs a cost cap; the publish rules are the ones
+    // that only apply at this moment.
+    const product = checkApp(app, this.limitsContext(app));
+    const publish = checkPublish(target, app);
+    const refusals = [...product.refusals, ...publish.refusals];
+    if (refusals.length) {
+      throw new BadRequestException(refusals.map((r) => r.message).join(' '));
+    }
+
+    const gateway = await this.gateways.upsertForDistribution(
+      {
+        name: gatewayNameFor(app, target),
+        description: app.description ?? undefined,
+        type: GATEWAY_TYPE_FOR_TARGET[target]!,
+        agentId: app.agentIds[0],
+        endpoint: endpointFor(app.slug, target),
+        configuration: {
+          ...(distribution.configuration ?? {}),
+          // The surface renders the product, so it carries the
+          // product's branding rather than a copy someone has to keep
+          // in step by hand.
+          branding: app.branding ?? {},
+          authMode: app.authMode,
+          appId: app.id,
+        },
+        rateLimitConfig: rateLimitFor(app),
+      },
+      organizationId,
+      userId,
+    );
+
+    distribution.gatewayId = gateway.id;
+    distribution.status = DistributionStatus.LIVE;
+    return this.distributionRepository.save(distribution);
+  }
+
+  /**
+   * Stop answering, without forgetting the distribution.
+   *
+   * The gateway is deactivated rather than deleted, so republishing
+   * keeps the same endpoint and whatever credentials were attached to
+   * it. Someone taking a product down for an afternoon should not have
+   * to re-register a Slack app afterwards.
+   */
+  async unpublishDistribution(
+    organizationId: string,
+    slug: string,
+    target: DistributionTarget,
+    userId: string,
+  ): Promise<AppDistribution> {
+    const app = await this.findOne(organizationId, slug);
+    const distribution = await this.distributionRepository.findOne({
+      where: { appId: app.id, target },
+    });
+    if (!distribution) throw new NotFoundException('This app does not ship to that target');
+
+    if (distribution.gatewayId) {
+      await this.gateways.deactivateGateway(distribution.gatewayId, organizationId, userId);
+    }
+
+    distribution.status = DistributionStatus.DRAFT;
+    return this.distributionRepository.save(distribution);
+  }
+
   async removeDistribution(
     organizationId: string,
     slug: string,
@@ -248,7 +368,12 @@ export class AgentAppsService {
     });
     if (!distribution) throw new NotFoundException('This app does not ship to that target');
 
-    return checkDistribution(distribution.target, app, distribution.configuration, context);
+    return checkDistribution(
+      distribution.target,
+      app,
+      distribution.configuration,
+      this.limitsContext(app, context),
+    );
   }
 
   /**

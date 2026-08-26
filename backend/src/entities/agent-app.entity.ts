@@ -105,6 +105,27 @@ export class AgentApp {
   authMode: AppAuthMode;
 
   /**
+   * What a stranger is allowed to cost.
+   *
+   * A product open to anyone is a way to hand the customer's model keys
+   * to the internet, so `checkApp` refuses to publish one without these
+   * set. They live on the app rather than per distribution because the
+   * spend is the same money whichever surface it arrives through.
+   *
+   * Null everywhere means unset, which reads as no protection rather
+   * than as unlimited-by-choice.
+   */
+  @Column({ type: 'json', nullable: true })
+  limits: {
+    /** Ceiling on what one run may cost, in cents. */
+    costCapCents?: number | null;
+    /** Requests per hour per end user. */
+    perUserRateLimit?: number | null;
+    /** Requests per hour per IP, for surfaces with no account. */
+    perIpRateLimit?: number | null;
+  } | null;
+
+  /**
    * What a distributed artifact may do on the machine it runs on.
    *
    * Off by default and deliberately awkward to widen. A branded binary

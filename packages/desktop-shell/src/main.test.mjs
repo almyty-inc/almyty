@@ -3,7 +3,7 @@ import { createRequire } from 'module'
 
 // The shell is CommonJS because Electron's main process is, so it is
 // loaded the way Electron loads it rather than through an import.
-const { originOf, mayNavigateTo } = createRequire(import.meta.url)('./main.js')
+const { originOf, mayNavigateTo, isHexColour, isDark } = createRequire(import.meta.url)('./main.js')
 
 /**
  * The window shows remote content under the customer's name, so the
@@ -79,5 +79,41 @@ describe('mayNavigateTo', () => {
   it('refuses a hostless scheme from inside the app', () => {
     expect(mayNavigateTo(APP, 'javascript:alert(1)')).toBe(false)
     expect(mayNavigateTo(APP, 'file:///etc/passwd')).toBe(false)
+  })
+})
+
+describe('isHexColour', () => {
+  it('accepts a six-digit hex colour', () => {
+    expect(isHexColour('#8b5cf6')).toBe(true)
+    expect(isHexColour('#FFFFFF')).toBe(true)
+  })
+
+  it('refuses anything the OS would not take', () => {
+    // The config is written from a form field and this string reaches
+    // both the title bar and the pre-paint background.
+    expect(isHexColour('#fff')).toBe(false)
+    expect(isHexColour('red')).toBe(false)
+    expect(isHexColour('#8b5cf6; background: url(x)')).toBe(false)
+    expect(isHexColour(undefined)).toBe(false)
+    expect(isHexColour(123)).toBe(false)
+  })
+})
+
+describe('isDark', () => {
+  it('calls a dark brand colour dark, so its symbols go white', () => {
+    expect(isDark('#000000')).toBe(true)
+    expect(isDark('#8b5cf6')).toBe(true)
+  })
+
+  it('calls a light brand colour light, so its symbols go black', () => {
+    expect(isDark('#ffffff')).toBe(false)
+    expect(isDark('#ffe066')).toBe(false)
+  })
+
+  it('weights green over blue, which is how eyes work', () => {
+    // Pure blue is dark to look at; pure green is not, despite the two
+    // having the same channel value.
+    expect(isDark('#00ff00')).toBe(false)
+    expect(isDark('#0000ff')).toBe(true)
   })
 })

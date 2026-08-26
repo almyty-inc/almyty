@@ -37,8 +37,13 @@ const GROUPS: Array<{ title: string; blurb: string; targets: DistributionTarget[
   },
   {
     title: 'They install it',
-    blurb: 'Built on your machine, signed with your certificates',
-    targets: ['tui', 'desktop', 'binary'],
+    blurb: 'Built here, signed with your certificate',
+    // 'binary' is deliberately absent. It compiles to byte-identical
+    // output to 'tui' — same entry point, same bun invocation — so
+    // offering both asked people to choose between two names for one
+    // thing. Existing binary distributions keep working; the API still
+    // accepts the target.
+    targets: ['tui', 'desktop'],
   },
   {
     title: 'Where they already are',

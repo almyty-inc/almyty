@@ -173,6 +173,41 @@ export class AgentAppsController {
     };
   }
 
+  /**
+   * Make this distribution answer.
+   *
+   * Admin-only, and separate from creating the distribution: adding one
+   * records where a product will ship, publishing is the decision to
+   * actually let people reach it.
+   */
+  @Post(':slug/distributions/:target/publish')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Publish this distribution' })
+  async publishDistribution(
+    @Param('slug') slug: string,
+    @Param('target') target: DistributionTarget,
+    @Request() req: any,
+  ) {
+    return {
+      success: true,
+      data: await this.apps.publishDistribution(this.org(req), slug, target, req.user.id),
+    };
+  }
+
+  @Post(':slug/distributions/:target/unpublish')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Stop this distribution answering, keeping its settings' })
+  async unpublishDistribution(
+    @Param('slug') slug: string,
+    @Param('target') target: DistributionTarget,
+    @Request() req: any,
+  ) {
+    return {
+      success: true,
+      data: await this.apps.unpublishDistribution(this.org(req), slug, target, req.user.id),
+    };
+  }
+
   @Delete(':slug/distributions/:target')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Stop shipping to this target' })

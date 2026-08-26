@@ -106,6 +106,7 @@ export interface AgentApp {
   branding: AppBranding | null
   authMode: AppAuthMode
   capabilities: AppCapabilities | null
+  limits: AppLimits | null
   isActive: boolean
   distributions?: AppDistribution[]
 }
@@ -124,6 +125,8 @@ export const DISTRIBUTION_LABELS: Record<DistributionTarget, string> = {
   web: 'Web app',
   tui: 'Terminal app',
   desktop: 'Desktop app',
+  // Kept so an existing distribution still renders. Not offered when
+  // adding one: it compiles to the same artifact as 'tui'.
   binary: 'Standalone binary',
   slack: 'Slack',
   discord: 'Discord',
@@ -215,6 +218,17 @@ export function isBuildable(target: DistributionTarget): boolean {
   return BUILDABLE_TARGETS.includes(target)
 }
 
+/**
+ * Whether publishing this target means standing up a surface.
+ *
+ * The three buildable targets produce a file someone downloads. There
+ * is nothing to publish and nothing to take down; the artifact is the
+ * whole of it.
+ */
+export function servesOverGateway(target: DistributionTarget): boolean {
+  return !isBuildable(target)
+}
+
 /** Human size for an artifact, whose byte count arrives as a string. */
 export function formatBytes(bytes: string | null): string {
   const value = Number(bytes ?? 0)
@@ -255,6 +269,18 @@ export const agentAppsApi = {
   // and no opaque id has to travel through the UI.
   checkDistribution: (slug: string, target: DistributionTarget) =>
     apiGet(`/apps/${slug}/distributions/${target}/check`).then((r) => unwrap<AppCheck>(r)),
+
+  /** Make this distribution answer. */
+  publishDistribution: (slug: string, target: DistributionTarget) =>
+    apiPost(`/apps/${slug}/distributions/${target}/publish`, {}).then((r) =>
+      unwrap<AppDistribution>(r),
+    ),
+
+  /** Stop it answering, keeping its settings and its endpoint. */
+  unpublishDistribution: (slug: string, target: DistributionTarget) =>
+    apiPost(`/apps/${slug}/distributions/${target}/unpublish`, {}).then((r) =>
+      unwrap<AppDistribution>(r),
+    ),
 
   removeDistribution: (slug: string, target: DistributionTarget) =>
     apiDel(`/apps/${slug}/distributions/${target}`),
@@ -301,6 +327,19 @@ export const agentAppsApi = {
 }
 
 /** True when the product grants any access to the machine it runs on. */
+/**
+ * What a stranger is allowed to cost.
+ *
+ * A product open to anyone cannot be published without these, because
+ * an open product is a way to hand the customer's model keys to the
+ * internet.
+ */
+export interface AppLimits {
+  costCapCents?: number | null
+  perUserRateLimit?: number | null
+  perIpRateLimit?: number | null
+}
+
 export function grantsLocalAccess(capabilities: AppCapabilities | null | undefined): boolean {
   if (!capabilities) return false
   return (
