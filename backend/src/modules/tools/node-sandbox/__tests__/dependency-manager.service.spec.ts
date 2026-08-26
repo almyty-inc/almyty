@@ -30,6 +30,13 @@ afterAll(() => {
   delete process.env.SANDBOX_DEPS_PATH;
 });
 
+/**
+ * These run real `npm install` against the network. Jest's 5s default is
+ * shorter than a cold registry lookup, so they fail at random rather
+ * than because anything is wrong.
+ */
+jest.setTimeout(60_000);
+
 describe('DependencyManagerService', () => {
   it('should install a real tiny package (is-odd@3.0.1)', async () => {
     const result = await service.ensureInstalled({ 'is-odd': '3.0.1' });
