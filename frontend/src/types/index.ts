@@ -152,6 +152,7 @@ export enum GatewayKind {
 export enum GatewayType {
   MCP = 'mcp',
   A2A = 'a2a',
+  ACP = 'acp',
   UTCP = 'utcp',
   SKILLS = 'skills',
   OPENAI_CHAT = 'openai_chat',
@@ -159,6 +160,8 @@ export enum GatewayType {
   DISCORD = 'discord',
   TELEGRAM = 'telegram',
   WHATSAPP = 'whatsapp',
+  WHATSAPP_CLOUD = 'whatsapp_cloud',
+  SMS = 'sms',
   EMAIL = 'email',
   WEBHOOK = 'webhook',
   GOOGLE_CHAT = 'google_chat',
@@ -167,6 +170,7 @@ export enum GatewayType {
   MATRIX = 'matrix',
   IRC = 'irc',
   CHAT_WIDGET = 'chat_widget',
+  HOSTED_CHAT = 'hosted_chat',
 }
 
 export enum GatewayStatus {

@@ -12,6 +12,7 @@ import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executo
 import { Agent } from '../../entities/agent.entity';
 import { AgentVerifierHelper, VerifyPanelResult } from './agent-verifier.helper';
 import { AgentContextCompactor } from './agent-context-compactor.helper';
+import { checkRunLimits, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 /**
  * `processStep` was the bulk of AgentRuntimeService — a single 500-line
@@ -54,13 +55,21 @@ export class AgentStepProcessor {
     // cost or steps — the loser's UPDATE matches 0 rows and it aborts.
     const expectedStep = run.currentStep;
 
-    // Enforce limits
-    const limitCheck = this.s.misc.checkLimits(run);
+    // Enforce limits. The trip carries both a machine-readable code and
+    // an explanation, so a caller can decide whether to retry smaller,
+    // raise the ceiling, or escalate, rather than seeing a bare stop.
+    const resolvedLimits = await this.s.misc.resolveLimits(run);
+    const limitCheck = checkRunLimits(run, resolvedLimits);
     if (limitCheck) {
       run.status = AgentRunStatus.FAILED;
-      run.error = limitCheck;
+      run.error = `${limitCheck.code}: ${limitCheck.message}`;
+      run.metadata = { ...(run.metadata || {}), limitTrip: limitCheck };
       await this.s.runRepository.save(run);
-      this.s.emitEvent(runId, 'run.failed', { error: limitCheck });
+      this.s.emitEvent(runId, 'run.failed', {
+        error: run.error,
+        reasonCode: limitCheck.code,
+        reason: limitCheck.message,
+      });
       return 'done';
     }
 
@@ -405,6 +414,13 @@ export class AgentStepProcessor {
             const execOptions: ToolExecutionOptions = {
               userId: run.userId || 'system',
               organizationId: run.organizationId,
+              // Retries are an agent-level budget decision, not a
+              // per-tool default: a run with a tight wall clock cannot
+              // afford a tool quietly retrying three times with
+              // exponential backoff. The tool's own `retries` still wins
+              // when it sets one, so a genuinely flaky integration can
+              // still override.
+              retries: resolvedLimits.toolErrorRetries,
             };
 
             const toolResult: ToolExecutionResult = await this.s.toolExecutorService.executeTool(
@@ -427,9 +443,12 @@ export class AgentStepProcessor {
             });
 
             if (run.conversationId) {
+              // How much of a failure re-enters context is policy, not a
+              // constant: some tools' errors echo the request payload
+              // back, which is not always something the model should see.
               const toolContent = toolResult.success
                 ? (typeof toolResult.data === 'string' ? toolResult.data : JSON.stringify(toolResult.data))
-                : `Error: ${toolResult.error}`;
+                : formatToolError(toolResult.error, resolvedLimits.toolErrorFeedback);
               const toolMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, toolContent, toolResult.success ? undefined : toolResult.error);
               toolMsg.runId = run.id;
               await this.s.messageRepository.save(toolMsg);

@@ -373,7 +373,7 @@ jobs:
   # needs Node + a checkout — no install — so it's cheap enough to run
   # unconditionally on every PR.
   npm-lockstep:
-    name: npm lockstep (version consistency)
+    name: repo invariants (versions, dev proxy)
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -388,3 +388,10 @@ jobs:
 
       - name: Check @almyty/* version lockstep
         run: node scripts/check-npm-lockstep.js
+
+      # A backend controller prefix with no dev-proxy rule answers with
+      # index.html under `npm run dev`, so the page dies parsing HTML as
+      # JSON. Neither test suite notices, because each mocks the other
+      # side. Same shape as the check above: Node + a checkout, no install.
+      - name: Check dev proxy covers every API prefix
+        run: node scripts/check-dev-proxy.js

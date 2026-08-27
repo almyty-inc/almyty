@@ -349,7 +349,7 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="interfaces" className="space-y-4">
-          <InterfacesTab agentId={id!} />
+          <InterfacesTab agentId={id!} agentName={agent?.name} />
         </TabsContent>
 
         <TabsContent value="skills" className="space-y-4">

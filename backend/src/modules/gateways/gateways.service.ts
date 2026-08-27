@@ -629,6 +629,52 @@ export class GatewaysService {
     return updatedGateway;
   }
 
+  /**
+   * The gateway a published app distribution answers on.
+   *
+   * Find-or-create rather than create, because publishing is idempotent:
+   * doing it twice is usually someone reapplying a settings change, and
+   * the endpoint is unique per organization so a second create would
+   * simply fail. An existing one is re-synced with the product's current
+   * name, branding and limits, and reactivated if it had been taken
+   * down.
+   *
+   * Goes through createGateway and updateGateway rather than touching
+   * the repository, so permission checks, organization limits and the
+   * transport sync all still happen.
+   */
+  async upsertForDistribution(
+    dto: CreateGatewayDto,
+    organizationId: string,
+    userId: string,
+  ): Promise<Gateway> {
+    const endpoint = dto.endpoint.startsWith('/') ? dto.endpoint : `/${dto.endpoint}`;
+    const existing = await this.gatewayRepository.findOne({
+      where: { endpoint, organizationId },
+    });
+
+    if (!existing) {
+      return this.createGateway(dto, organizationId, userId);
+    }
+
+    const updated = await this.updateGateway(
+      existing.id,
+      {
+        name: dto.name,
+        description: dto.description,
+        agentId: dto.agentId,
+        configuration: dto.configuration,
+        rateLimitConfig: dto.rateLimitConfig,
+      } as UpdateGatewayDto,
+      organizationId,
+      userId,
+    );
+
+    return updated.status === GatewayStatus.ACTIVE
+      ? updated
+      : this.activateGateway(updated.id, organizationId, userId);
+  }
+
   async deactivateGateway(
     gatewayId: string,
     organizationId: string,

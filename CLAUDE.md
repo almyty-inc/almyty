@@ -41,6 +41,7 @@
 backend/src/
 ├── entities/          # 38 TypeORM entities
 ├── modules/
+│   ├── agent-apps/    # Agent factory (/apps): products, distributions, builds, signing
 │   ├── agents/        # Agent CRUD, DAG execution engine, scheduler, webhooks, OpenAI-compat API
 │   ├── apis/          # API CRUD, schema import
 │   ├── audit-log/     # Audit trail for sensitive actions
@@ -91,6 +92,7 @@ packages/
 ├── skills-cli/        # @almyty/skills — install API skills into 30+ AI coding agents
 ├── mcp-server/        # @almyty/mcp-server — skill-first MCP proxy
 ├── cli-tests/         # Smoke tests gated behind RUN_CLI_SMOKE=1
+├── desktop-shell/     # Electron window an /apps desktop build is packaged into (never published on its own)
 └── runner/            # @almyty/runner — long-running daemon that runs CLI agents on the user's machine
 ```
 
@@ -101,12 +103,13 @@ packages/
 - **Entities**: 38
 - **Agent node types** (10): `input`, `output`, `llm_call`, `tool_call`, `condition`, `transform`, `loop`, `parallel`, `merge`, `sub_agent`
 - **Gateway types**: MCP, A2A, UTCP, Skills
+- **App distribution targets**: `web`, `tui`, `desktop`, `binary` + 13 messaging platforms. `tui`/`binary` compile via `bun --compile`; `desktop` packages via electron-builder. See `docs/agent-factory.md`.
 - **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed via worker_threads), GraphQL, LLM, SDK
 - **LLM Providers**: 15 (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Groq, Together, OpenRouter, Azure OpenAI, AWS Bedrock, Cohere, Hugging Face, Ollama, Custom). Ollama is keyless local inference; private URLs are gated by `OLLAMA_ALLOW_PRIVATE_URLS` (default off).
 - **Chat channel adapters**: 12, in `gateways/channels/adapters/` NOT `interfaces/` (Slack, Discord, Telegram, WhatsApp, Microsoft Teams, Google Chat, Signal, Matrix, IRC, Email, Webhook, Chat Widget). Shared pipeline + AI disclosure in `channel-gateway.service.ts`; Discord inbound via `discord-gateway.transport.ts`. Audit: `docs/interface-adapters-audit.md`
 - **Built-in plugins**: 5 (performance-monitor, rate-limiter, pii-filter, request-logger, security-scanner)
-- **Backend tests**: ~130 spec files, 4,108 passing (NestJS 11, Node 24). Real-integration specs in `src/test/integration/` require `RUN_DB_INTEGRATION=1`.
-- **Frontend tests**: 127 vitest unit/integration tests + Playwright E2E suite (`frontend/tests/e2e/`)
+- **Backend tests**: 316 suites, ~5,770 passing (NestJS 11, Node 24). Real-integration specs in `src/test/integration/` require `RUN_DB_INTEGRATION=1`.
+- **Frontend tests**: 82 vitest files, ~589 tests + Playwright E2E suite (`frontend/tests/e2e/`)
 - **Agent Skills**: Compliant with https://agentskills.io spec
 
 ---
@@ -195,6 +198,8 @@ Tokens live in httpOnly cookies only. `withCredentials: true` on every axios cal
 ## Design Documents
 
 - `docs/architecture.md` — System architecture
+- `docs/agent-factory.md` — `/apps`: builds, signing, distributions
+- `docs/runner.md` — Runner + workspace architecture
 - `docs/brand/` — Color system, logo specs, typography
 
 ---

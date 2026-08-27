@@ -26,6 +26,7 @@ import {
   Database,
   Store,
   Cpu,
+  Package,
   Shield,
 } from 'lucide-react'
 
@@ -85,12 +86,16 @@ interface DashboardLayoutProps {
 // an agent but left newcomers wondering what to click first.
 const navigation: { name: string; href: string; icon: any; dataTour?: string }[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  // Core workflow — follows the APIs → Tools → Gateways → Agents
-  // pipeline narrative.
+  // Core workflow — follows the APIs → Tools → Gateways → Agents → Apps
+  // pipeline narrative. Apps sits directly after Agents because that is
+  // the last link of the chain: you build agents, then you ship them as
+  // a product. Putting it here also keeps it above the fold rather than
+  // buried below Runners.
   { name: 'APIs', href: '/apis', icon: Globe, dataTour: 'nav-api' },
   { name: 'Tools', href: '/tools', icon: Wrench },
   { name: 'Gateways', href: '/gateways', icon: Zap, dataTour: 'nav-gateway' },
   { name: 'Agents', href: '/agents', icon: Bot },
+  { name: 'Apps', href: '/apps', icon: Package, dataTour: 'nav-apps' },
   { name: 'Runners', href: '/runners', icon: Cpu },
   { name: 'Credentials', href: '/credentials', icon: Key },
   { name: 'Approvals', href: '/approvals', icon: Shield },

@@ -41,8 +41,8 @@ describe('GoogleChatAdapter', () => {
   });
 
   describe('verifyWebhook', () => {
-    it('returns true when no verification_token configured', async () => {
-      expect(await adapter.verifyWebhook({}, {}, {})).toBe(true);
+    it('refuses inbound when no verification_token is configured', async () => {
+      expect(await adapter.verifyWebhook({}, {}, {})).toBe(false);
     });
     it('accepts matching bearer token', async () => {
       expect(await adapter.verifyWebhook({}, { authorization: 'Bearer abc' }, { verification_token: 'abc' })).toBe(true);

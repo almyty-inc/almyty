@@ -70,6 +70,9 @@ export class ChannelGatewayService {
   ) {
     this.adapters = new Map<string, BaseAdapter>([
       [GatewayType.CHAT_WIDGET, this.chatWidgetAdapter],
+      // A hosted chat app persists replies exactly like the widget does;
+      // only the front end and the URL differ.
+      [GatewayType.HOSTED_CHAT, this.chatWidgetAdapter],
       [GatewayType.SLACK, this.slackAdapter],
       [GatewayType.DISCORD, this.discordAdapter],
       [GatewayType.TELEGRAM, this.telegramAdapter],
@@ -188,13 +191,20 @@ export class ChannelGatewayService {
       const newRun = await this.agentRuntimeService.startRun(
         gateway.agentId,
         gateway.organizationId,
-        normalized.userId,
+        // Nobody with an account here started this. `normalized.userId`
+        // is the platform's own id for the sender ("U012ABC" on Slack),
+        // and putting it in a column that references `users` made every
+        // conversation write fail, so a channel could not answer at all.
+        // The sender is recorded in metadata below, where the rest of
+        // the channel's facts already live.
+        null,
         normalized.text,
         { maxSteps: 25 },
       );
 
       newRun.metadata = {
         ...(newRun.metadata || {}),
+        channelUserId: normalized.userId,
         threadId: normalized.threadId,
         gatewayId: gateway.id,
         gatewayType: gateway.type,
@@ -256,6 +266,15 @@ export class ChannelGatewayService {
               sendConfig ?? getChannelConfig(gateway.configuration, gateway.organizationId),
               formatted,
               {
+              // Every key normalizeInbound recorded is forwarded, because
+              // adapters read reply-routing hints straight off this object
+              // under the platform's own name: Telegram wants chatId,
+              // Discord wants channelId, email wants messageId/references
+              // for In-Reply-To. Listing them one by one is how those three
+              // ended up undefined at send time, which sent Telegram and
+              // Discord replies to a literal "undefined" id and silently
+              // dropped mail threading.
+              ...(normalized.metadata ?? {}),
               threadId: normalized.threadId,
               channel: normalized.metadata?.channel,
               userId: normalized.userId,
@@ -374,13 +393,20 @@ export class ChannelGatewayService {
       run = await this.agentRuntimeService.startRun(
         gateway.agentId,
         gateway.organizationId,
-        normalized.userId,
+        // Nobody with an account here started this. `normalized.userId`
+        // is the platform's own id for the sender ("U012ABC" on Slack),
+        // and putting it in a column that references `users` made every
+        // conversation write fail, so a channel could not answer at all.
+        // The sender is recorded in metadata below, where the rest of
+        // the channel's facts already live.
+        null,
         normalized.text,
         { maxSteps: 25 },
       );
 
       run.metadata = {
         ...(run.metadata || {}),
+        channelUserId: normalized.userId,
         threadId: normalized.threadId || run.id,
         gatewayId: gateway.id,
         gatewayType: gateway.type,

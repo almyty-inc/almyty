@@ -59,14 +59,28 @@ describe('ChannelWebhookRegistrar', () => {
       await registrar.sync(makeGateway());
 
       expect(fetchMock.calls).toHaveLength(1);
-      expect(fetchMock.calls[0].url).toBe(
-        `https://api.telegram.org/bottg-token/setWebhook?url=${encodeURIComponent(
-          'https://api.almyty.example/acme/support-bot',
-        )}`,
-      );
+      // Telegram has no payload signature, so registration also mints a
+      // secret_token that Telegram echoes back on every update. Without
+      // it the adapter refuses inbound, so the two must be set together.
+      const url = new URL(fetchMock.calls[0].url);
+      expect(url.origin + url.pathname).toBe('https://api.telegram.org/bottg-token/setWebhook');
+      expect(url.searchParams.get('url')).toBe('https://api.almyty.example/acme/support-bot');
+      const secretToken = url.searchParams.get('secret_token');
+      expect(secretToken).toMatch(/^[0-9a-f]{64}$/);
+
+      // Persisted only after Telegram accepted it, so we never end up
+      // checking a token Telegram is not sending.
+      const persisted = gatewayRepository.update.mock.calls
+        .map((call: any[]) => call[1]?.configuration)
+        .find((configuration: any) => configuration?.webhook_secret_token);
+      expect(persisted?.webhook_secret_token).toBe(secretToken);
 
       // Outcome recorded on the gateway row...
-      const meta = gatewayRepository.update.mock.calls[0][1].metadata.webhookRegistration;
+      // persistConfig now also writes the secret token, so the metadata
+      // update is no longer guaranteed to be the first call.
+      const meta = gatewayRepository.update.mock.calls
+        .map((call: any[]) => call[1]?.metadata?.webhookRegistration)
+        .find(Boolean);
       expect(meta.status).toBe('registered');
       expect(meta.url).toBe('https://api.almyty.example/acme/support-bot');
       // ...and in the channel-event log.
@@ -86,7 +100,11 @@ describe('ChannelWebhookRegistrar', () => {
 
       expect(fetchMock.calls).toHaveLength(1);
       expect(fetchMock.calls[0].url).toBe('https://api.telegram.org/bottg-token/deleteWebhook');
-      const meta = gatewayRepository.update.mock.calls[0][1].metadata.webhookRegistration;
+      // persistConfig now also writes the secret token, so the metadata
+      // update is no longer guaranteed to be the first call.
+      const meta = gatewayRepository.update.mock.calls
+        .map((call: any[]) => call[1]?.metadata?.webhookRegistration)
+        .find(Boolean);
       expect(meta.status).toBe('unregistered');
     });
 
@@ -102,7 +120,11 @@ describe('ChannelWebhookRegistrar', () => {
       fetchMock.setNextResponse({ json: { ok: false, description: 'bad webhook url' } });
       await registrar.sync(makeGateway());
 
-      const meta = gatewayRepository.update.mock.calls[0][1].metadata.webhookRegistration;
+      // persistConfig now also writes the secret token, so the metadata
+      // update is no longer guaranteed to be the first call.
+      const meta = gatewayRepository.update.mock.calls
+        .map((call: any[]) => call[1]?.metadata?.webhookRegistration)
+        .find(Boolean);
       expect(meta.status).toBe('failed');
       expect(meta.error).toContain('bad webhook url');
       expect(eventRepository.save).toHaveBeenCalledWith(
@@ -168,7 +190,11 @@ describe('ChannelWebhookRegistrar', () => {
       fetchMock.setNextResponse({ json: { incoming_phone_numbers: [] } });
       await registrar.sync(twilioGateway(GatewayType.SMS));
 
-      const meta = gatewayRepository.update.mock.calls[0][1].metadata.webhookRegistration;
+      // persistConfig now also writes the secret token, so the metadata
+      // update is no longer guaranteed to be the first call.
+      const meta = gatewayRepository.update.mock.calls
+        .map((call: any[]) => call[1]?.metadata?.webhookRegistration)
+        .find(Boolean);
       expect(meta.status).toBe('failed');
       expect(meta.error).toContain('not found');
     });
@@ -183,7 +209,11 @@ describe('ChannelWebhookRegistrar', () => {
 
       expect(fetchMock.calls).toHaveLength(0);
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('PUBLIC_API_URL'));
-      const meta = gatewayRepository.update.mock.calls[0][1].metadata.webhookRegistration;
+      // persistConfig now also writes the secret token, so the metadata
+      // update is no longer guaranteed to be the first call.
+      const meta = gatewayRepository.update.mock.calls
+        .map((call: any[]) => call[1]?.metadata?.webhookRegistration)
+        .find(Boolean);
       expect(meta.status).toBe('skipped');
       warnSpy.mockRestore();
     });
@@ -199,7 +229,11 @@ describe('ChannelWebhookRegistrar', () => {
     it('never throws, even when the platform call blows up', async () => {
       (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('network down'));
       await expect(registrar.sync(makeGateway())).resolves.toBeUndefined();
-      const meta = gatewayRepository.update.mock.calls[0][1].metadata.webhookRegistration;
+      // persistConfig now also writes the secret token, so the metadata
+      // update is no longer guaranteed to be the first call.
+      const meta = gatewayRepository.update.mock.calls
+        .map((call: any[]) => call[1]?.metadata?.webhookRegistration)
+        .find(Boolean);
       expect(meta.status).toBe('failed');
     });
   });

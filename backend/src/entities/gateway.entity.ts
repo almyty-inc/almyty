@@ -48,6 +48,14 @@ export enum GatewayType {
   MATRIX = 'matrix',
   IRC = 'irc',
   CHAT_WIDGET = 'chat_widget',
+  /**
+   * A standalone branded chat app on its own subdomain. Distinct from
+   * CHAT_WIDGET: the widget is a bubble embedded in someone else's page,
+   * this is a site of its own. They share an adapter because both
+   * persist replies rather than pushing them, but they are separate
+   * surfaces with separate configuration and separate URLs.
+   */
+  HOSTED_CHAT = 'hosted_chat',
 }
 
 export enum GatewayStatus {

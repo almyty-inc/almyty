@@ -133,7 +133,7 @@ cd frontend && npx playwright test   # E2E
 
 ## Compliance
 
-almyty ships the operational pieces the EU AI Act asks deployers for: per-channel AI disclosure (Art. 50), human-in-the-loop approvals (Art. 14), run/audit logging (Art. 12), and a per-agent technical-documentation export (Annex IV). The full mapping, including GDPR, CRA, and the enterprise-questionnaire regimes, lives on the docs site under **Compliance**. Vulnerability reporting: see [SECURITY.md](./SECURITY.md).
+almyty ships the operational pieces the EU AI Act asks deployers for: per-channel AI disclosure (Art. 50), human-in-the-loop approvals (Art. 14), with multi-step and quorum approval policies in the commercial edition, run/audit logging (Art. 12), and a per-agent technical-documentation export (Annex IV). The full mapping, including GDPR, CRA, and the enterprise-questionnaire regimes, lives on the docs site under **Compliance**. Vulnerability reporting: see [SECURITY.md](./SECURITY.md).
 
 ## License
 

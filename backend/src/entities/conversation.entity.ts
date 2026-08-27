@@ -53,6 +53,14 @@ export class Conversation {
   @Column({ nullable: true })
   userId: string;
 
+  /**
+   * The outside visitor this conversation belongs to, for hosted chat
+   * and widget surfaces. Null for conversations owned by a logged-in
+   * dashboard user or driven straight through a protocol gateway.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  endUserId: string | null;
+
   @Column()
   organizationId: string;
 
@@ -333,6 +341,7 @@ export class Conversation {
     organizationId: string;
     gatewayId?: string;
     userId?: string;
+    endUserId?: string | null;
     title?: string;
     context?: Conversation['context'];
     metadata?: Conversation['metadata'];
@@ -344,6 +353,7 @@ export class Conversation {
     conversation.organizationId = data.organizationId;
     conversation.gatewayId = data.gatewayId;
     conversation.userId = data.userId;
+    conversation.endUserId = data.endUserId ?? null;
     conversation.title = data.title;
     conversation.context = data.context || {};
     conversation.metadata = data.metadata || {};

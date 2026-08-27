@@ -17,6 +17,13 @@ export class ChatWidgetAdapter extends BaseAdapter {
   private readonly logger = new Logger(ChatWidgetAdapter.name);
   readonly type = 'chat_widget';
 
+  /**
+   * The widget is embedded in a public page and posts from the visitor's
+   * browser, so there is no shared secret to verify. Abuse is bounded by
+   * the surface's rate limits and cost cap, not by inbound auth.
+   */
+  protected readonly inboundIsUnauthenticatedByDesign = true;
+
   constructor(
     @InjectRepository(ChannelEvent)
     private readonly eventRepository: Repository<ChannelEvent>,

@@ -88,6 +88,32 @@
   }
 }
 
+/* React Flow: the Controls ship with hardcoded light colours, so in a
+   dark theme they render as white blocks floating over the canvas.
+   Drive them from the theme tokens instead. Affects every canvas in the
+   app, not only the app factory. */
+.react-flow__controls {
+  box-shadow: none;
+}
+
+.react-flow__controls-button {
+  background: hsl(var(--card));
+  border-bottom: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.react-flow__controls-button:hover {
+  background: hsl(var(--muted));
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
 /* React Flow: remove default node wrapper styling */
 .react-flow__node {
   padding: 0 !important;

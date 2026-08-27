@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import * as crypto from 'crypto';
 
 /**
  * Signal via a self-hosted signal-cli REST bridge
@@ -101,5 +102,33 @@ export class SignalAdapter extends BaseAdapter {
     } catch (error) {
       this.logger.error(`Signal send failed: ${error.message}`);
     }
+  }
+
+  /**
+   * The bridge POSTs envelopes in over HTTP, so it must prove it is the
+   * bridge. Same shared-secret shape the IRC bridge uses: a bearer token
+   * (or X-Bridge-Token) compared in constant time against the gateway's
+   * configured inbound_token.
+   *
+   * Fails closed: no configured token means anyone who can reach the
+   * gateway URL could inject messages as any user.
+   */
+  async verifyWebhook(
+    payload: any,
+    headers: Record<string, string>,
+    config: Record<string, any>,
+  ): Promise<boolean> {
+    const expected = config?.inbound_token;
+    if (!expected) return false;
+
+    const authz = headers['authorization'] || '';
+    const presented = authz.startsWith('Bearer ')
+      ? authz.slice(7).trim()
+      : headers['x-bridge-token'] || '';
+    if (!presented) return false;
+
+    const a = Buffer.from(String(presented));
+    const b = Buffer.from(String(expected));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
   }
 }

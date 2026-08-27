@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class TelegramAdapter extends BaseAdapter {
@@ -34,5 +35,31 @@ export class TelegramAdapter extends BaseAdapter {
     } catch (error) {
       this.logger.error(`Telegram send failed: ${error.message}`);
     }
+  }
+
+  /**
+   * Telegram does not sign webhook payloads. Instead setWebhook accepts
+   * a secret_token which Telegram then echoes back in the
+   * X-Telegram-Bot-Api-Secret-Token header on every inbound update. The
+   * registrar generates one per gateway and stores it as
+   * `webhook_secret_token`; this compares it in constant time.
+   *
+   * Fails closed: no stored token, or no header, means we cannot tell
+   * Telegram from any other caller, so the update is refused.
+   */
+  async verifyWebhook(
+    payload: any,
+    headers: Record<string, string>,
+    config: Record<string, any>,
+  ): Promise<boolean> {
+    const expected = config?.webhook_secret_token;
+    if (!expected) return false;
+
+    const presented = headers['x-telegram-bot-api-secret-token'];
+    if (!presented) return false;
+
+    const a = Buffer.from(String(expected));
+    const b = Buffer.from(String(presented));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
   }
 }

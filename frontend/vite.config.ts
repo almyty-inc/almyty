@@ -11,6 +11,16 @@ const bypassHtmlGetRequests = (req) => {
 }
 
 // https://vitejs.dev/config/
+/**
+ * Where the dev proxy sends API traffic.
+ *
+ * One constant rather than a port repeated per rule, so a developer
+ * whose 4000 is already taken sets VITE_API_TARGET once and every path
+ * follows. Previously only /api honoured it and the rest were pinned,
+ * which sent auth to whatever else was listening on 4000.
+ */
+const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:4000'
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -22,6 +32,17 @@ export default defineConfig({
     host: '0.0.0.0',
     port: parseInt(process.env.PORT || '3000'),
     proxy: {
+      // Same-origin API for the hosted chat app, mirroring the ingress
+      // rule that routes /api on a tenant host to the API service. The
+      // hosted chat client must be same-origin or the anonymous session
+      // cookie lands on the wrong host and every visitor looks new on
+      // every request. VITE_API_TARGET overrides the port for anyone
+      // whose 3000 is already taken.
+      '/api': {
+        target: apiTarget,
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ''),
+      },
       // PostHog reverse proxy for local dev — mirrors the nginx /ingest
       // proxy that runs in production (frontend/nginx.conf). Events go to
       // the same-origin /ingest path so ad blockers can't drop them, and
@@ -47,17 +68,17 @@ export default defineConfig({
         rewrite: (p) => p.replace(/^\/ingest/, ''),
       },
       '/auth': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/users': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/organizations': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
@@ -65,58 +86,187 @@ export default defineConfig({
       // flow navigates the BROWSER to /referrals/attribute/:code (an HTML
       // GET) and that must reach the backend so it can set the cookie.
       '/referrals': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
+      // The agent factory. /apps is both an API prefix and a router
+      // path, so HTML GETs stay with the SPA and everything else
+      // (including /apps/:slug/builds) reaches the backend.
+      '/apps': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
       '/gateways': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/tools': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/apis': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/llm-providers': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/memory': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/monitoring': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/analytics': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
       '/mcp': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/utcp': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/a2a': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/docs': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
+      },
+
+      // The rest of the API. Each of these is a controller prefix the
+      // dashboard calls; without a rule the request reaches vite and
+      // comes back as index.html, so the page fails on a page it cannot
+      // parse. bypassHtmlGetRequests keeps the SPA routes that share a
+      // name (/agents, /apps, /credentials) serving HTML.
+      '/agents': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/approvals': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/audit-logs': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/budgets': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/channels': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/credentials': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/external-agents': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/files': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/health': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/invites': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/kms': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/licensing': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/lifecycle': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/notifications': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/promoted-skills': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/provider-usage': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/public': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/runners': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/tool-hub': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/v1': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/versions': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/workspaces': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/.well-known': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
       },
     },
   },

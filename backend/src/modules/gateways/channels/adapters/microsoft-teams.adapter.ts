@@ -91,7 +91,10 @@ export class MicrosoftTeamsAdapter extends BaseAdapter {
    * verification is skipped (config is incomplete for sending anyway).
    */
   async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>): Promise<boolean> {
-    if (!config.bot_id) return true;
+    // Fail closed: bot_id is the audience the Bot Framework JWT is
+    // checked against, so without it there is nothing to verify the
+    // activity came from Teams rather than from anyone with the URL.
+    if (!config.bot_id) return false;
 
     const authz = headers['authorization'] || (headers as any)['Authorization'] || '';
     if (!authz.startsWith('Bearer ')) return false;
