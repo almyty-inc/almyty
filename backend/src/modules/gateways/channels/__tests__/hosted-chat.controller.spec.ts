@@ -161,13 +161,18 @@ describe('HostedChatController', () => {
 
   describe('sending a message', () => {
     it('starts a run attributed to the visitor, not a dashboard user', async () => {
+      // The visitor id goes in endUserId, never in the userId slot.
+      // `conversations.userId` references `users`, and a visitor has no
+      // row there, so passing it as userId made every conversation
+      // write fail — a hosted chat accepted the message and then died
+      // at the first model call.
       const result = await controller.postMessage('acme', { message: 'hello' }, req(), res);
       expect(agentRuntimeService.startRun).toHaveBeenCalledWith(
         'agent-1',
         'org-1',
-        'eu-1',
+        null,
         'hello',
-        expect.objectContaining({ conversationId: 'conv-1' }),
+        expect.objectContaining({ conversationId: 'conv-1', endUserId: 'eu-1' }),
       );
       expect(result.data).toEqual({ runId: 'run-1', conversationId: 'conv-1' });
     });

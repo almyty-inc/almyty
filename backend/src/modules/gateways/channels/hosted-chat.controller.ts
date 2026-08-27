@@ -181,11 +181,15 @@ export class HostedChatController {
     const run = await this.agentRuntimeService.startRun(
       gateway.agentId,
       gateway.organizationId,
-      // The run is attributed to the visitor, not to a dashboard user,
-      // so a hosted chat run is traceable back to who actually sent it.
-      endUser.id,
+      // No dashboard user started this. Attributing the visitor through
+      // `userId` used to write their id into a column that references
+      // `users`, and every conversation write after it failed, so a
+      // hosted chat could not answer at all.
+      null,
       message,
-      { conversationId: conversation.id },
+      // Still traceable back to whoever actually sent it, in the column
+      // that means a visitor.
+      { conversationId: conversation.id, endUserId: endUser.id },
     );
 
     return {

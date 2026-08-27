@@ -41,6 +41,13 @@ function exec(
   });
 }
 
+/**
+ * These start real worker threads with the permission model on. Spawning
+ * one costs real time, and Jest's 5s default fails them at random when
+ * the whole suite runs in parallel.
+ */
+jest.setTimeout(30_000);
+
 describe('NodeSandboxService', () => {
   it('should execute simple code and return the result', async () => {
     const result = await exec('return parameters.a + parameters.b', {
