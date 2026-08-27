@@ -24,6 +24,7 @@ import {
   GATEWAY_TYPE_FOR_TARGET,
   checkPublish,
   endpointFor,
+  gatewayConfigurationFor,
   gatewayNameFor,
   rateLimitFor,
 } from './distribution-publish';
@@ -275,7 +276,15 @@ export class AgentAppsService {
     // public product needs a cost cap; the publish rules are the ones
     // that only apply at this moment.
     const product = checkApp(app, this.limitsContext(app));
-    const publish = checkPublish(target, app);
+    // The agent that will actually answer, so a surface is not published
+    // in front of one that cannot hold a conversation.
+    const agent = app.agentIds?.length
+      ? await this.agentRepository.findOne({
+          where: { id: app.agentIds[0], organizationId },
+        })
+      : null;
+
+    const publish = checkPublish(target, app, distribution.configuration, agent);
     const refusals = [...product.refusals, ...publish.refusals];
     if (refusals.length) {
       throw new BadRequestException(refusals.map((r) => r.message).join(' '));
@@ -288,15 +297,11 @@ export class AgentAppsService {
         type: GATEWAY_TYPE_FOR_TARGET[target]!,
         agentId: app.agentIds[0],
         endpoint: endpointFor(app.slug, target),
-        configuration: {
-          ...(distribution.configuration ?? {}),
-          // The surface renders the product, so it carries the
-          // product's branding rather than a copy someone has to keep
-          // in step by hand.
-          branding: app.branding ?? {},
-          authMode: app.authMode,
-          appId: app.id,
-        },
+        // Carries the operator's platform credentials, the product's
+        // branding, and for the hosted chat the block it is looked up
+        // by. Without that last one a published web app was a gateway
+        // nothing could find.
+        configuration: gatewayConfigurationFor(target, app, distribution.configuration),
         rateLimitConfig: rateLimitFor(app),
       },
       organizationId,

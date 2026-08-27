@@ -191,13 +191,20 @@ export class ChannelGatewayService {
       const newRun = await this.agentRuntimeService.startRun(
         gateway.agentId,
         gateway.organizationId,
-        normalized.userId,
+        // Nobody with an account here started this. `normalized.userId`
+        // is the platform's own id for the sender ("U012ABC" on Slack),
+        // and putting it in a column that references `users` made every
+        // conversation write fail, so a channel could not answer at all.
+        // The sender is recorded in metadata below, where the rest of
+        // the channel's facts already live.
+        null,
         normalized.text,
         { maxSteps: 25 },
       );
 
       newRun.metadata = {
         ...(newRun.metadata || {}),
+        channelUserId: normalized.userId,
         threadId: normalized.threadId,
         gatewayId: gateway.id,
         gatewayType: gateway.type,
@@ -386,13 +393,20 @@ export class ChannelGatewayService {
       run = await this.agentRuntimeService.startRun(
         gateway.agentId,
         gateway.organizationId,
-        normalized.userId,
+        // Nobody with an account here started this. `normalized.userId`
+        // is the platform's own id for the sender ("U012ABC" on Slack),
+        // and putting it in a column that references `users` made every
+        // conversation write fail, so a channel could not answer at all.
+        // The sender is recorded in metadata below, where the rest of
+        // the channel's facts already live.
+        null,
         normalized.text,
         { maxSteps: 25 },
       );
 
       run.metadata = {
         ...(run.metadata || {}),
+        channelUserId: normalized.userId,
         threadId: normalized.threadId || run.id,
         gatewayId: gateway.id,
         gatewayType: gateway.type,

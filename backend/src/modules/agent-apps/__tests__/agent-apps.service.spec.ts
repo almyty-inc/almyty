@@ -47,7 +47,12 @@ describe('AgentAppsService', () => {
       save: jest.fn(async (row: any) => ({ id: 'd-1', ...row })),
       remove: jest.fn(async () => undefined),
     };
-    agentRepository = { find: jest.fn(async () => [{ id: 'agent-1' }]) };
+    agentRepository = {
+      find: jest.fn(async () => [{ id: 'agent-1' }]),
+      // Publishing resolves the agent that will answer; a workflow one
+      // would be refused, so the default fixture is conversational.
+      findOne: jest.fn(async () => ({ id: 'agent-1', mode: 'autonomous' })),
+    };
     gateways = {
       upsertForDistribution: jest.fn(async () => ({ id: 'gw-1' })),
       deactivateGateway: jest.fn(async () => ({ id: 'gw-1' })),
@@ -247,11 +252,15 @@ describe('AgentAppsService', () => {
       expect(created.target).toBe(DistributionTarget.TELEGRAM);
     });
 
+    // Slack cannot carry a message without these, so publishing refuses
+    // without them and every publish fixture supplies them.
+    const SLACK_CREDS = { bot_token: 'xoxb-1', signing_secret: 's3cret' };
+
     it('stands up a gateway and marks the distribution live', async () => {
       distributionRepository.findOne.mockResolvedValueOnce({
         id: 'd-1',
         appId: 'h-1',
-        configuration: {},
+        configuration: SLACK_CREDS,
       });
 
       const result = await service.publishDistribution(
@@ -274,17 +283,85 @@ describe('AgentAppsService', () => {
       appRepository.findOne.mockResolvedValueOnce(
         app({ branding: { appName: 'Acme', primaryColor: '#123456' } }),
       );
-      distributionRepository.findOne.mockResolvedValueOnce({ id: 'd-1', appId: 'h-1' });
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        configuration: SLACK_CREDS,
+      });
 
       await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
 
       const dto = gateways.upsertForDistribution.mock.calls[0][0];
       expect(dto.configuration.branding).toEqual({ appName: 'Acme', primaryColor: '#123456' });
+      // The credentials survive alongside the branding.
+      expect(dto.configuration).toMatchObject(SLACK_CREDS);
+    });
+
+    it('refuses to publish in front of an agent that cannot hold a conversation', async () => {
+      // The runtime turns every visitor away with "not in autonomous
+      // mode", so the surface would be live and useless.
+      agentRepository.findOne.mockResolvedValueOnce({ id: 'agent-1', mode: 'workflow' });
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        configuration: SLACK_CREDS,
+      });
+
+      await expect(
+        service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1'),
+      ).rejects.toThrow(/workflow/i);
+      expect(gateways.upsertForDistribution).not.toHaveBeenCalled();
+    });
+
+    it('resolves the agent scoped to the organization', async () => {
+      // An agent id copied from another tenant must not be publishable.
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        configuration: SLACK_CREDS,
+      });
+
+      await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
+
+      expect(agentRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'agent-1', organizationId: ORG },
+      });
+    });
+
+    it('refuses to publish a platform whose credentials are missing', async () => {
+      // A gateway created without them says live and answers nothing.
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        configuration: { bot_token: 'xoxb-1' },
+      });
+
+      await expect(
+        service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1'),
+      ).rejects.toThrow(/signing_secret/);
+      expect(gateways.upsertForDistribution).not.toHaveBeenCalled();
+    });
+
+    it('gives a published web surface the block the hosted chat finds it by', async () => {
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        configuration: {},
+      });
+
+      await service.publishDistribution(ORG, 'acme-support', DistributionTarget.WEB, 'user-1');
+
+      const dto = gateways.upsertForDistribution.mock.calls[0][0];
+      expect(dto.configuration.hostedChat.slug).toBe('acme-support');
     });
 
     it('refuses to publish a product with no agent', async () => {
       appRepository.findOne.mockResolvedValueOnce(app({ agentIds: [] }));
-      distributionRepository.findOne.mockResolvedValueOnce({ id: 'd-1', appId: 'h-1' });
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        configuration: SLACK_CREDS,
+      });
 
       await expect(
         service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1'),
@@ -304,7 +381,11 @@ describe('AgentAppsService', () => {
       // The rule exists because an open product is a way to hand a
       // stranger the customer's model spend.
       appRepository.findOne.mockResolvedValueOnce(app({ limits: null }));
-      distributionRepository.findOne.mockResolvedValueOnce({ id: 'd-1', appId: 'h-1' });
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        configuration: SLACK_CREDS,
+      });
 
       await expect(
         service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1'),
@@ -313,7 +394,11 @@ describe('AgentAppsService', () => {
 
     it('carries the product rate limit onto the gateway it stands up', async () => {
       // Publishing with the limits dropped would make the check theatre.
-      distributionRepository.findOne.mockResolvedValueOnce({ id: 'd-1', appId: 'h-1' });
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        configuration: SLACK_CREDS,
+      });
 
       await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
 
