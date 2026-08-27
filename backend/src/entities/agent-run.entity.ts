@@ -38,8 +38,22 @@ export class AgentRun {
   @Column()
   organizationId: string;
 
+  /**
+   * The dashboard user who started this run, when one did.
+   *
+   * Null for a run a visitor started on a published surface. An end
+   * user is not a user: they have no account here, and writing their id
+   * into this column puts a value in it that no `users` row matches.
+   */
   @Column({ nullable: true })
   userId: string;
+
+  /**
+   * The visitor who started this run, when it came from a published
+   * surface rather than the dashboard.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  endUserId: string | null;
 
   @Column({ nullable: true })
   conversationId: string;

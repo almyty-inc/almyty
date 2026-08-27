@@ -87,9 +87,20 @@ describe('StorageService (local provider)', () => {
   });
 
   describe('getSignedUrl', () => {
-    it('should return a download URL for local provider', async () => {
-      const url = await service.getSignedUrl('org-1/test.txt');
-      expect(url).toBe('http://localhost:3000/files/org-1/test.txt/download');
+    // This used to return `<base>/files/<storage-key>/download`, but
+    // that route takes a file record's id rather than a storage key, so
+    // the URL resolved to nothing on every local-storage deployment.
+    // Saying so is better than handing back a link that 404s.
+    it('refuses to invent a link a local directory cannot back', async () => {
+      await expect(service.getSignedUrl('org-1/test.txt')).rejects.toThrow(/locally/i);
+    });
+
+    it('reports that it cannot presign, so callers serve the bytes', () => {
+      expect(service.canPresign).toBe(false);
+    });
+
+    it('still validates the key before answering', async () => {
+      await expect(service.getSignedUrl('../../etc/passwd')).rejects.toThrow(/traversal/i);
     });
   });
 

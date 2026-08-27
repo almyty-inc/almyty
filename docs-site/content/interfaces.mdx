@@ -17,7 +17,7 @@ Messages then round-trip: platform, to adapter (verify, normalize), to agent run
 
 Every channel refuses inbound messages it cannot authenticate. A gateway whose verification secret is unset accepts nothing, rather than accepting everything.
 
-That is worth stating plainly because it is a change in behaviour: the secret used to be optional, and a channel without one quietly accepted any request that reached its URL. If a channel of yours stops receiving messages after upgrading, a missing secret is the first thing to check. The surface node in the publish canvas names the exact key it is waiting for.
+A channel is therefore not usable until its verification secret is set, and the surface node in the publish canvas names the exact key it is waiting for. If a channel is not receiving messages, that key is the first thing to check.
 
 | Channel | What proves the request is genuine | Configure |
 |---|---|---|
@@ -165,5 +165,5 @@ The [hosted chat app](/hosted-chat) is the exception: it shows the disclosure by
 - **Signal and IRC** need a small self-hosted bridge (signal-cli-rest-api, an IRC-to-HTTP bridge); the adapter documents the exact contract it expects.
 - **Rate limits** are the platform's own; the adapter surfaces platform errors on the run rather than retrying blindly.
 - Adapter health and per-channel traffic appear in [Analytics](/analytics); failed deliveries are recorded on the run.
-- A rejected inbound message is recorded as a failed channel event with the reason, so a wrong secret looks different from a quiet channel.
+- A rejected inbound message is recorded as a failed channel event with the reason, so a wrong secret looks different from a channel nobody has written to.
 - How far a run may go once a message arrives is governed by [run limits](/run-limits).

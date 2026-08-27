@@ -196,7 +196,11 @@ export class FilesController {
     try {
       const organizationId = this.getOrgId(req);
       const file = await this.filesService.findById(id, organizationId);
-      const url = await this.filesService.getDownloadUrl(id, organizationId);
+      // Storage that can presign gives a direct URL; otherwise point at
+      // this controller's own download route, which streams the bytes.
+      const url =
+        (await this.filesService.getDownloadUrl(id, organizationId)) ??
+        `/files/${id}/download`;
       return { success: true, data: { ...file, downloadUrl: url } };
     } catch (error) {
       throw new HttpException({ success: false, message: error.message, error: 'FILE_FETCH_FAILED' }, error.status || HttpStatus.NOT_FOUND);

@@ -341,6 +341,7 @@ export class Conversation {
     organizationId: string;
     gatewayId?: string;
     userId?: string;
+    endUserId?: string | null;
     title?: string;
     context?: Conversation['context'];
     metadata?: Conversation['metadata'];
@@ -352,6 +353,7 @@ export class Conversation {
     conversation.organizationId = data.organizationId;
     conversation.gatewayId = data.gatewayId;
     conversation.userId = data.userId;
+    conversation.endUserId = data.endUserId ?? null;
     conversation.title = data.title;
     conversation.context = data.context || {};
     conversation.metadata = data.metadata || {};

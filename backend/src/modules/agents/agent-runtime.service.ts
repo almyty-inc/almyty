@@ -162,10 +162,19 @@ export class AgentRuntimeService implements OnModuleInit {
   /**
    * Start a new autonomous agent run
    */
+  /**
+   * Start an autonomous run.
+   *
+   * `userId` is a dashboard user, or null when a visitor on a published
+   * surface started this. Their identity goes in `options.endUserId`:
+   * an end user has no account here, so putting their id in `userId`
+   * writes a value into a column that references `users` and every
+   * conversation write after it fails.
+   */
   async startRun(
     agentId: string,
     organizationId: string,
-    userId: string,
+    userId: string | null,
     input: any,
     options?: {
       maxSteps?: number;
@@ -173,6 +182,7 @@ export class AgentRuntimeService implements OnModuleInit {
       maxDurationMs?: number;
       parentRunId?: string;
       conversationId?: string;
+      endUserId?: string | null;
     },
   ): Promise<AgentRun> {
     const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
@@ -257,7 +267,8 @@ export class AgentRuntimeService implements OnModuleInit {
       const conversation = Conversation.createConversation({
         agentId,
         organizationId,
-        userId,
+        userId: userId ?? undefined,
+        endUserId: options?.endUserId ?? null,
       });
       savedConversation = await this.conversationRepository.save(conversation);
     }
@@ -272,7 +283,8 @@ export class AgentRuntimeService implements OnModuleInit {
     const run = this.runRepository.create({
       agentId,
       organizationId,
-      userId,
+      userId: userId ?? null,
+      endUserId: options?.endUserId ?? null,
       conversationId: savedConversation.id,
       mode: AgentMode.AUTONOMOUS,
       status: AgentRunStatus.RUNNING,
@@ -431,13 +443,13 @@ export class AgentRuntimeService implements OnModuleInit {
   private async recordResolvedLimits(
     run: AgentRun,
     agent: Agent,
-    userId: string,
+    userId: string | null,
   ): Promise<void> {
     try {
       const limits = await this.misc.resolveLimits(run);
       await this.auditLogService?.log({
         organizationId: run.organizationId,
-        userId,
+        userId: userId ?? undefined,
         action: AuditAction.RUN_START,
         resourceType: AuditResource.AGENT,
         resourceId: agent.id,
