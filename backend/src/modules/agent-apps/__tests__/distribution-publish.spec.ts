@@ -3,6 +3,7 @@ import { GatewayType } from '../../../entities/gateway.entity';
 import {
   GATEWAY_TYPE_FOR_TARGET,
   REQUIRED_CREDENTIALS,
+  agentForDistribution,
   checkPublish,
   endpointFor,
   gatewayConfigurationFor,
@@ -329,5 +330,65 @@ describe('gatewayConfigurationFor', () => {
   it('does not put a hostedChat block on anything else', () => {
     const config = gatewayConfigurationFor(DistributionTarget.SLACK, product, slackCreds);
     expect(config.hostedChat).toBeUndefined();
+  });
+});
+
+describe('agentForDistribution', () => {
+  const twoAgents = { agentIds: ['triage-1', 'billing-2'] } as any;
+
+  it('uses the product default when the surface names nobody', () => {
+    // The entity documents the first agent as the default.
+    expect(agentForDistribution(twoAgents, null)).toBe('triage-1');
+    expect(agentForDistribution(twoAgents, {})).toBe('triage-1');
+  });
+
+  it('lets a surface name its own', () => {
+    // A support product with a triage agent and a billing agent should
+    // be able to put the billing one on the billing channel.
+    expect(agentForDistribution(twoAgents, { agentId: 'billing-2' })).toBe('billing-2');
+  });
+
+  it('ignores a blank choice rather than treating it as one', () => {
+    expect(agentForDistribution(twoAgents, { agentId: '   ' })).toBe('triage-1');
+  });
+
+  it('has nobody to offer when the product has no agents', () => {
+    expect(agentForDistribution({ agentIds: [] } as any, null)).toBeNull();
+  });
+});
+
+describe('checkPublish agent choice', () => {
+  const twoAgents = app({ agentIds: ['triage-1', 'billing-2'] });
+
+  it('accepts an agent that is part of the product', () => {
+    const result = checkPublish(
+      DistributionTarget.SLACK,
+      twoAgents,
+      { ...slackCreds, agentId: 'billing-2' },
+      { mode: 'autonomous' },
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuses one that has since been removed from it', () => {
+    // Otherwise the surface answers with something the operator thinks
+    // is no longer involved.
+    const result = checkPublish(
+      DistributionTarget.SLACK,
+      twoAgents,
+      { ...slackCreds, agentId: 'removed-9' },
+      { mode: 'autonomous' },
+    );
+    expect(result.refusals.map((r) => r.code)).toContain('AGENT_NOT_ON_APP');
+  });
+
+  it('says nothing about the choice when none was made', () => {
+    const codes = checkPublish(
+      DistributionTarget.SLACK,
+      twoAgents,
+      slackCreds,
+      { mode: 'autonomous' },
+    ).refusals.map((r) => r.code);
+    expect(codes).not.toContain('AGENT_NOT_ON_APP');
   });
 });

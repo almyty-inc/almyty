@@ -25,7 +25,17 @@ vi.mock('@/lib/api', async () => {
   return { ...actual, credentialsApi: { getAll: vi.fn().mockResolvedValue({ data: [] }) } }
 })
 
-const app = { slug: 'acme-support', name: 'Acme Support' } as AgentApp
+const app = { slug: 'acme-support', name: 'Acme Support', agentIds: [] } as unknown as AgentApp
+
+const twoAgents = {
+  ...app,
+  agentIds: ['triage-1', 'billing-2'],
+} as unknown as AgentApp
+
+const AGENTS = [
+  { id: 'triage-1', name: 'Triage' },
+  { id: 'billing-2', name: 'Billing' },
+]
 
 const distribution = (over: Partial<AppDistribution> = {}): AppDistribution =>
   ({
@@ -134,6 +144,94 @@ describe('DistributionPanel', () => {
         expect.objectContaining({ signingCredentialId: 'cred-1', bundleId: 'com.acme.app' }),
       ),
     )
+  })
+
+  describe('which agent answers', () => {
+    it('does not ask when the product has only one', async () => {
+      // There is no choice to make.
+      render(
+        <DistributionPanel
+          app={{ ...app, agentIds: ['triage-1'] } as unknown as AgentApp}
+          distribution={distribution()}
+          agents={AGENTS}
+          onSaved={onSaved}
+        />,
+      )
+      await screen.findByRole('button', { name: /^Publish$/ })
+      expect(screen.queryByLabelText('Answered by')).toBeNull()
+    })
+
+    it('offers the product default first, naming it', async () => {
+      render(
+        <DistributionPanel
+          app={twoAgents}
+          distribution={distribution()}
+          agents={AGENTS}
+          onSaved={onSaved}
+        />,
+      )
+      expect(await screen.findByLabelText('Answered by')).toHaveTextContent(
+        /Triage \(the product default\)/,
+      )
+    })
+
+    it('saves the agent this surface should answer with', async () => {
+      // A billing channel should be able to reach the billing agent.
+      render(
+        <DistributionPanel
+          app={twoAgents}
+          distribution={distribution()}
+          agents={AGENTS}
+          onSaved={onSaved}
+        />,
+      )
+
+      fireEvent.click(await screen.findByLabelText('Answered by'))
+      fireEvent.click(await screen.findByText('Billing'))
+
+      await waitFor(() =>
+        expect(agentAppsApi.addDistribution).toHaveBeenCalledWith(
+          'acme-support',
+          'slack',
+          expect.objectContaining({ agentId: 'billing-2' }),
+        ),
+      )
+    })
+
+    it('clears the choice back to the default rather than storing the id', async () => {
+      render(
+        <DistributionPanel
+          app={twoAgents}
+          distribution={distribution({ configuration: { agentId: 'billing-2' } })}
+          agents={AGENTS}
+          onSaved={onSaved}
+        />,
+      )
+
+      fireEvent.click(await screen.findByLabelText('Answered by'))
+      fireEvent.click(await screen.findByText(/the product default/))
+
+      await waitFor(() =>
+        expect(agentAppsApi.addDistribution).toHaveBeenCalledWith(
+          'acme-support',
+          'slack',
+          expect.objectContaining({ agentId: '' }),
+        ),
+      )
+    })
+
+    it('does not ask for something that ships as a file', async () => {
+      render(
+        <DistributionPanel
+          app={twoAgents}
+          distribution={distribution({ target: 'tui' })}
+          agents={AGENTS}
+          onSaved={onSaved}
+        />,
+      )
+      await screen.findByRole('button', { name: /Build/ })
+      expect(screen.queryByLabelText('Answered by')).toBeNull()
+    })
   })
 
   it('tells a channel where its credentials come from', async () => {

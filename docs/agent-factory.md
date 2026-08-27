@@ -46,9 +46,11 @@ POST /apps/:slug/distributions/:target/publish
 POST /apps/:slug/distributions/:target/unpublish
 ```
 
-For every target except the three that compile to a file, publishing stands up a gateway of the matching type (`distribution-publish.ts` holds that mapping as one readable table), wired to the app's first agent, at `/apps/:slug/:target` — unique per organization, so it cannot collide with a hand-made gateway or with the same product's other surfaces.
+For every target except the three that compile to a file, publishing stands up a gateway of the matching type (`distribution-publish.ts` holds that mapping as one readable table) at `/apps/:slug/:target` — unique per organization, so it cannot collide with a hand-made gateway or with the same product's other surfaces.
 
 The surface is created with the product's own branding and the product's own rate limits. Publishing with the limits dropped would make the check that allowed it theatre.
+
+**Which agent answers** is per surface. A product can carry several, and the entity documents the first as the default — a fine default and a bad silent decision, because a support product with a triage agent and a billing agent should be able to put the billing one on the billing channel. A distribution may name its own in `configuration.agentId` and falls back to the default when it does not. Naming one that has since been removed from the product is refused rather than published, so a surface never answers with something the operator believes is no longer involved.
 
 Publishing is idempotent: doing it twice re-syncs the existing gateway rather than failing on the unique endpoint, because the second attempt is usually someone reapplying a settings change.
 

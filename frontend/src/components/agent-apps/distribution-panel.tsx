@@ -17,11 +17,23 @@ import {
   type AgentApp,
   type AppDistribution,
 } from '@/lib/agent-apps'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { BuildPanel } from './build-panel'
+
+/** Stands in for "the product's default", because a Select cannot take ''. */
+const DEFAULT_AGENT = 'default'
 
 export interface DistributionPanelProps {
   app: AgentApp
   distribution: AppDistribution
+  /** Every agent in the org, so this surface can name one of the app's. */
+  agents?: Array<{ id: string; name: string }>
   onSaved: () => void
 }
 
@@ -32,7 +44,12 @@ export interface DistributionPanelProps {
  * looks the same everywhere; this panel carries only what the medium
  * forces, which for a packaged target is an identity to sign under.
  */
-export function DistributionPanel({ app, distribution, onSaved }: DistributionPanelProps) {
+export function DistributionPanel({
+  app,
+  distribution,
+  agents = [],
+  onSaved,
+}: DistributionPanelProps) {
   const { success, error: errorNotif } = useNotifications()
 
   const [bundleId, setBundleId] = useState(
@@ -52,6 +69,13 @@ export function DistributionPanel({ app, distribution, onSaved }: DistributionPa
   // identity for macOS and another for Windows.
   const signingCredentialId =
     (distribution.configuration?.signingCredentialId as string | undefined) ?? ''
+
+  // Which agent answers here. Empty means the product's default, which
+  // is its first — stated rather than left to be inferred.
+  const answeredBy = (distribution.configuration?.agentId as string | undefined) ?? ''
+  const appAgents = app.agentIds
+    .map((id) => agents.find((a) => a.id === id) ?? { id, name: id })
+    .filter(Boolean)
 
   const live = distribution.status === 'live'
 
@@ -145,6 +169,35 @@ export function DistributionPanel({ app, distribution, onSaved }: DistributionPa
           This platform needs its own credentials. Add them under Gateways, then this
           distribution will use them.
         </p>
+      )}
+
+      {/* A product can carry several agents, and which one answers is
+          per surface: a billing channel should be able to reach the
+          billing agent. Only worth asking when there is a choice. */}
+      {servesOverGateway(distribution.target) && appAgents.length > 1 && (
+        <div className="space-y-1.5">
+          <Label htmlFor="dist-agent">Answered by</Label>
+          <Select
+            value={answeredBy || DEFAULT_AGENT}
+            onValueChange={(value) =>
+              save.mutate({ agentId: value === DEFAULT_AGENT ? '' : value })
+            }
+          >
+            <SelectTrigger id="dist-agent">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={DEFAULT_AGENT}>
+                {appAgents[0].name} (the product default)
+              </SelectItem>
+              {appAgents.slice(1).map((agent) => (
+                <SelectItem key={agent.id} value={agent.id}>
+                  {agent.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
 
       {/* Adding a distribution records where a product will ship.

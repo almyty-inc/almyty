@@ -181,6 +181,7 @@ export function AppDetailPage() {
               <DistributionPanel
                 app={app}
                 distribution={openDistribution}
+                agents={agents}
                 onSaved={invalidate}
               />
               <Button
