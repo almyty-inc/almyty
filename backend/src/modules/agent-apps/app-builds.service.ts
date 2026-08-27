@@ -15,10 +15,13 @@ import { StorageService } from '../files/storage.service';
 import {
   BUILD_PLATFORMS,
   MacPackaging,
+  SigningKind,
   artifactExtension,
   canBuildHere,
   describeOutcome,
+  platformsFor,
 } from './build-targets';
+import { signingReadiness } from './build-signing';
 import { ProcessToolchainRunner, toolchainReadiness } from './build-toolchain';
 
 export const APP_BUILD_QUEUE = 'app-build';
@@ -141,6 +144,41 @@ export class AppBuildsService {
    */
   async findByIdUnscoped(buildId: string): Promise<AppBuild | null> {
     return this.buildRepository.findOne({ where: { id: buildId } });
+  }
+
+  /**
+   * What this deployment can actually do for a target.
+   *
+   * Answered before anyone presses Build, because the alternative is
+   * discovering that the host has no `rcodesign` by queueing a build
+   * and reading the result. Nothing here is derived from configuration:
+   * it asks the host whether each tool is present.
+   */
+  async capabilities(target: DistributionTarget): Promise<{
+    canBuild: boolean;
+    buildReason: string | null;
+    signing: Array<{ kind: SigningKind; ready: boolean; reason: string | null }>;
+  }> {
+    const build = await toolchainReadiness(target, this.toolchain);
+
+    // One answer per signing kind the target's platforms use, rather
+    // than per platform, since the tool is what is present or absent.
+    const kinds = [
+      ...new Set(
+        platformsFor(target)
+          .map((platform) => platform.signing)
+          .filter((kind): kind is SigningKind => kind !== 'none'),
+      ),
+    ];
+
+    const signing = await Promise.all(
+      kinds.map(async (kind) => {
+        const readiness = await signingReadiness(kind, this.toolchain);
+        return { kind, ready: readiness.ready, reason: readiness.reason };
+      }),
+    );
+
+    return { canBuild: build.ready, buildReason: build.reason, signing };
   }
 
   /**

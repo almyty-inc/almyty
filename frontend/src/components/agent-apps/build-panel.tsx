@@ -77,6 +77,11 @@ export function BuildPanel({
     refetchInterval: (query) => (inFlight(query.state.data as AppBuild[]) ? 4000 : false),
   })
 
+  const { data: capabilities } = useQuery({
+    queryKey: ['app-build-capabilities', app.slug, target],
+    queryFn: () => agentAppsApi.capabilities(app.slug, target),
+  })
+
   const { data: certificates } = useQuery({
     queryKey: ['signing-credentials'],
     queryFn: async () => {
@@ -117,8 +122,19 @@ export function BuildPanel({
       errorNotif('Could not download', err?.response?.data?.message || 'Link unavailable.'),
   })
 
+  // What the chosen platform would need signed, and whether this
+  // deployment can do it. Read before the build rather than after.
+  const signingHere = capabilities?.signing.find((s) => s.kind === chosen?.signing?.kind)
+
   return (
     <div className="space-y-4">
+      {capabilities && !capabilities.canBuild && (
+        <p className="flex gap-2 rounded-md border border-destructive bg-destructive/10 p-3 text-xs text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{capabilities.buildReason}</span>
+        </p>
+      )}
+
       <div className="space-y-1.5">
         <Label htmlFor="build-platform">Build for</Label>
         <Select value={platform} onValueChange={setPlatform}>
@@ -150,7 +166,16 @@ export function BuildPanel({
         </div>
       )}
 
-      {chosen?.signing && onSigningCredentialChange && (
+      {signingHere && !signingHere.ready && (
+        // A host can compile perfectly well and still not be able to
+        // sign, which is a different problem with a different fix.
+        <p className="flex gap-2 rounded-md border border-amber-400 bg-amber-50 p-3 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{signingHere.reason}</span>
+        </p>
+      )}
+
+      {chosen?.signing && signingHere?.ready !== false && onSigningCredentialChange && (
         <div className="space-y-1.5">
           <Label htmlFor="build-signing">Sign with</Label>
           <Select
@@ -188,7 +213,7 @@ export function BuildPanel({
 
       <Button
         className="w-full"
-        disabled={!platform || start.isPending}
+        disabled={!platform || start.isPending || capabilities?.canBuild === false}
         onClick={() => start.mutate()}
       >
         <Hammer className="mr-2 h-4 w-4" />

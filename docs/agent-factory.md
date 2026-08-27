@@ -46,6 +46,10 @@ The surface is created with the product's own branding and the product's own rat
 
 Publishing is idempotent: doing it twice re-syncs the existing gateway rather than failing on the unique endpoint, because the second attempt is usually someone reapplying a settings change.
 
+Publishing refuses two things that would otherwise produce a surface that is live and useless. A platform whose credentials are absent (`REQUIRED_CREDENTIALS`, read off what each adapter actually uses, never invented) and a workflow agent behind a chat surface, which the runtime turns away at the first message with "not in autonomous mode".
+
+For the hosted chat, publish writes the `hostedChat` block it is looked up by. Without it a published web app is a gateway `findBySlug` cannot see, which is what happened before.
+
 Unpublishing **deactivates** the gateway rather than deleting it. Republishing keeps the same endpoint and whatever credentials were attached, so taking a product down for an afternoon does not mean re-registering a Slack app afterwards.
 
 ## What stops an app from shipping
@@ -144,6 +148,12 @@ The link is minted per request and short lived rather than stored, so a URL that
 
 The filename is the product, the version and the platform — that name lands in someone's Downloads folder next to everything else they have ever downloaded, and a row id tells them nothing.
 
+### Who a run belongs to
+
+`conversations.userId` carries a foreign key to `users`. A visitor on a published surface has no account, so a run they start carries `endUserId` and leaves `userId` null. A channel goes further: the platform's id for a sender (`U012ABC` on Slack) is not a UUID at all, so it lives in the run's metadata beside the thread and gateway ids.
+
+Getting this wrong is not a tidiness problem. Attributing a visitor through `userId` made the insert inside the chat helper fail, so a hosted chat accepted a message, started a run, and died at the first model call with a constraint error nobody would connect to attribution.
+
 ## What a build host needs
 
 | Tool | For |
@@ -154,6 +164,8 @@ The filename is the product, the version and the platform — that name lands in
 | `osslsigncode` | signing Windows executables |
 
 Desktop builds download the pinned Electron release, so the host needs outbound network at build time. `toolchainReadiness` and `signingReadiness` check for each before doing any work, and a deployment missing one says so in a sentence rather than failing obscurely.
+
+`GET /apps/:slug/distributions/:target/capabilities` answers both before anyone presses Build, and the panel disables the button when the host cannot compile and warns separately when it can compile but not sign. Those are different problems with different fixes, so they are said separately.
 
 Two settings point at what the build packages, both falling back to the monorepo layout:
 

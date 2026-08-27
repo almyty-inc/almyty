@@ -23,6 +23,7 @@ vi.mock('@/lib/agent-apps', async () => {
       builds: vi.fn(),
       requestBuild: vi.fn(),
       downloadUrl: vi.fn(),
+      capabilities: vi.fn(),
     },
   }
 })
@@ -78,11 +79,72 @@ describe('BuildPanel', () => {
     vi.clearAllMocks()
     ;(agentAppsApi.platforms as any).mockResolvedValue([macPlatform, linuxPlatform])
     ;(agentAppsApi.builds as any).mockResolvedValue([])
+    ;(agentAppsApi.capabilities as any).mockResolvedValue({
+      canBuild: true,
+      buildReason: null,
+      signing: [{ kind: 'apple', ready: true, reason: null }],
+    })
     ;(credentialsApi.getAll as any).mockResolvedValue({
       data: [
         { id: 'cred-1', name: 'Developer ID', type: 'code_signing' },
         { id: 'cred-2', name: 'An API key', type: 'api_key' },
       ],
+    })
+  })
+
+  describe('what this deployment can do', () => {
+    it('says a host cannot build before anyone presses Build', async () => {
+      // The alternative is finding out from a failed build.
+      ;(agentAppsApi.capabilities as any).mockResolvedValue({
+        canBuild: false,
+        buildReason: 'This deployment cannot build tui because bun is not installed.',
+        signing: [],
+      })
+      render(<BuildPanel app={app} target="tui" />)
+
+      expect(await screen.findByText(/bun is not installed/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Build/ })).toBeDisabled()
+    })
+
+    it('says a host can build but not sign, which is a different problem', async () => {
+      ;(agentAppsApi.capabilities as any).mockResolvedValue({
+        canBuild: true,
+        buildReason: null,
+        signing: [
+          { kind: 'apple', ready: false, reason: 'rcodesign is not installed on the build host.' },
+        ],
+      })
+      render(<BuildPanel app={app} target="tui" onSigningCredentialChange={vi.fn()} />)
+
+      fireEvent.click(await screen.findByLabelText('Build for'))
+      fireEvent.click(await screen.findByText('macOS (Apple silicon)'))
+
+      expect(await screen.findByText(/rcodesign is not installed/)).toBeInTheDocument()
+      // Still buildable: an unsigned artifact is a real artifact.
+      expect(screen.getByRole('button', { name: /Build/ })).toBeEnabled()
+    })
+
+    it('does not offer a certificate the deployment could not use', async () => {
+      ;(agentAppsApi.capabilities as any).mockResolvedValue({
+        canBuild: true,
+        buildReason: null,
+        signing: [{ kind: 'apple', ready: false, reason: 'rcodesign is not installed.' }],
+      })
+      render(<BuildPanel app={app} target="tui" onSigningCredentialChange={vi.fn()} />)
+
+      fireEvent.click(await screen.findByLabelText('Build for'))
+      fireEvent.click(await screen.findByText('macOS (Apple silicon)'))
+      await screen.findByText(/rcodesign is not installed/)
+
+      expect(screen.queryByLabelText('Sign with')).toBeNull()
+    })
+
+    it('says nothing when the host can do everything', async () => {
+      render(<BuildPanel app={app} target="tui" />)
+      await screen.findByRole('button', { name: /Build/ })
+
+      expect(screen.queryByText(/not installed/)).toBeNull()
+      expect(screen.getByRole('button', { name: /Build/ })).toBeDisabled() // no platform yet
     })
   })
 

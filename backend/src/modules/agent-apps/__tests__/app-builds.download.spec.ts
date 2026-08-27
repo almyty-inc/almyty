@@ -201,3 +201,63 @@ describe('AppBuildsService artifact', () => {
     await expect(service.artifact(ORG, 'build-1')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+describe('AppBuildsService capabilities', () => {
+  /** A host where some tools are present and some are not. */
+  function serviceWith(present: string[]) {
+    const { service } = makeService({ canPresign: false });
+    (service as any).toolchain = {
+      available: jest.fn(async (tool: string) => present.includes(tool)),
+      run: jest.fn(),
+    };
+    return service;
+  }
+
+  it('reports a host that can build and sign everything', async () => {
+    const result = await serviceWith(['bun', 'npx', 'rcodesign', 'osslsigncode']).capabilities(
+      'tui' as any,
+    );
+
+    expect(result.canBuild).toBe(true);
+    expect(result.signing.every((s) => s.ready)).toBe(true);
+  });
+
+  it('names the tool a host is missing, before anyone presses Build', async () => {
+    // The alternative is finding out from a failed build twenty minutes
+    // later.
+    const result = await serviceWith([]).capabilities('tui' as any);
+
+    expect(result.canBuild).toBe(false);
+    expect(result.buildReason).toContain('bun');
+  });
+
+  it('reports building and signing separately', async () => {
+    // A host can compile perfectly well and still not be able to sign,
+    // which is a different problem with a different fix.
+    const result = await serviceWith(['bun']).capabilities('tui' as any);
+
+    expect(result.canBuild).toBe(true);
+    expect(result.signing.filter((s) => !s.ready).map((s) => s.kind).sort()).toEqual([
+      'apple',
+      'authenticode',
+    ]);
+  });
+
+  it('answers per signing kind rather than per platform', async () => {
+    // macos-arm64 and macos-x64 need the same tool; saying it twice
+    // reads as two problems.
+    const result = await serviceWith(['bun']).capabilities('tui' as any);
+
+    expect(result.signing).toHaveLength(new Set(result.signing.map((s) => s.kind)).size);
+  });
+
+  it('says nothing about signing a target that needs none', async () => {
+    const result = await serviceWith(['bun', 'npx']).capabilities('web' as any);
+    expect(result.signing).toEqual([]);
+  });
+
+  it('refuses a target that produces no file at all', async () => {
+    const result = await serviceWith(['bun', 'npx']).capabilities('slack' as any);
+    expect(result.canBuild).toBe(false);
+  });
+});

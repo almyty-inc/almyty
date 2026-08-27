@@ -285,6 +285,17 @@ export const agentAppsApi = {
   removeDistribution: (slug: string, target: DistributionTarget) =>
     apiDel(`/apps/${slug}/distributions/${target}`),
 
+  /**
+   * What this deployment can build and sign for a target.
+   *
+   * Read before offering a Build button, so a host with no signing tool
+   * says so rather than letting someone find out from a failed build.
+   */
+  capabilities: (slug: string, target: DistributionTarget) =>
+    apiGet(`/apps/${slug}/distributions/${target}/capabilities`).then((r) =>
+      unwrap<BuildCapabilities>(r),
+    ),
+
   /** Platforms this target can be built for, and what signing each needs. */
   platforms: (slug: string, target: DistributionTarget) =>
     apiGet(`/apps/${slug}/distributions/${target}/platforms`).then((r) =>
@@ -334,6 +345,12 @@ export const agentAppsApi = {
  * an open product is a way to hand the customer's model keys to the
  * internet.
  */
+export interface BuildCapabilities {
+  canBuild: boolean
+  buildReason: string | null
+  signing: Array<{ kind: 'apple' | 'authenticode'; ready: boolean; reason: string | null }>
+}
+
 export interface AppLimits {
   costCapCents?: number | null
   perUserRateLimit?: number | null

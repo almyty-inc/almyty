@@ -241,6 +241,20 @@ export class AgentAppsController {
     };
   }
 
+  /**
+   * What this deployment can build and sign for a target.
+   *
+   * So a missing toolchain is something an operator reads before
+   * pressing Build rather than something they discover from a failed
+   * one twenty minutes later.
+   */
+  @Get(':slug/distributions/:target/capabilities')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'What this deployment can build and sign' })
+  async capabilities(@Param('target') target: DistributionTarget) {
+    return { success: true, data: await this.builds.capabilities(target) };
+  }
+
   @Post(':slug/builds')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Build a downloadable artifact' })
