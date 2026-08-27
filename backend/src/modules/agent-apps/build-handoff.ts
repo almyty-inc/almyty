@@ -15,6 +15,40 @@ import { BUILD_PLATFORMS } from './build-targets';
  * signing and the reason the note says so.
  */
 
+/**
+ * The name a finished artifact downloads as.
+ *
+ * Exported so the download route and the instructions we hand out cannot
+ * drift: a command naming a file that is not there is worse than no
+ * command, because the recipient assumes they did something wrong.
+ */
+export function downloadedFilename(
+  appSlug: string,
+  version: string | null,
+  platform: string,
+  artifactKey: string | null,
+): string {
+  const extension = artifactKey?.includes('.')
+    ? artifactKey.slice(artifactKey.lastIndexOf('.') + 1)
+    : null;
+  const stem = `${appSlug}-${version ?? '0.0.0'}-${platform}`;
+  return extension ? `${stem}.${extension}` : stem;
+}
+
+/**
+ * A value a POSIX shell will read as one literal argument.
+ *
+ * The product name reaches this from a form field and ends up in a
+ * command an operator pastes into a terminal, or passes to the people
+ * they ship to. A name containing a quote would otherwise close the
+ * quoting and everything after it would run.
+ */
+export function shellQuote(value: string): string {
+  // Single quotes are literal in POSIX shells except for the quote
+  // itself, which is closed, escaped, and reopened.
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 export interface Handoff {
   /** One line on what the recipient will meet. */
   summary: string;
@@ -33,7 +67,12 @@ export interface Handoff {
 const MACOS_QUARANTINE_NOTE =
   'Clearing the quarantine flag, which macOS sets on anything downloaded from a browser. Only run this on a file you know the origin of.';
 
-export function handoffFor(platformId: string, signed: boolean, appName = 'the app'): Handoff {
+export function handoffFor(
+  platformId: string,
+  signed: boolean,
+  appName = 'the app',
+  filename = 'the downloaded file',
+): Handoff {
   const platform = BUILD_PLATFORMS[platformId];
 
   if (!platform) {
@@ -69,21 +108,20 @@ export function handoffFor(platformId: string, signed: boolean, appName = 'the a
   // unsigned build is still ad-hoc signed, which is what Apple silicon
   // requires to execute at all. Gatekeeper's download check is the
   // whole of the barrier.
-  const isBundle = platform.extension === 'zip' || platform.extension === 'dmg';
+  //
+  // Whether this is a bundle is read off what was actually produced,
+  // not off the platform: a terminal app and a desktop app for the same
+  // macOS platform are a bare executable and a zipped .app, and the
+  // platform table cannot tell them apart.
+  const isBundle = /\.(zip|dmg)$/i.test(filename);
 
   return {
     summary: isBundle
       ? 'macOS refuses to open this on download. Recipients either right-click and choose Open, or run the command below once after moving it to Applications.'
       : 'macOS refuses to run this on download. Recipients run the command below once, then it works normally.',
     command: isBundle
-      ? `xattr -dr com.apple.quarantine "/Applications/${appName}.app"`
-      : `xattr -d com.apple.quarantine ./${slugForCommand(appName)}`,
+      ? `xattr -dr com.apple.quarantine ${shellQuote(`/Applications/${appName}.app`)}`
+      : `xattr -d com.apple.quarantine ${shellQuote(`./${filename}`)}`,
     commandNote: MACOS_QUARANTINE_NOTE,
   };
-}
-
-/** A filename a shell will accept without quoting gymnastics. */
-function slugForCommand(appName: string): string {
-  const cleaned = appName.trim().replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
-  return cleaned || 'app';
 }
