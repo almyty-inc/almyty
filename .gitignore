@@ -66,3 +66,13 @@ backend/scripts/license/*.pem
 # Local object storage (STORAGE_TYPE=local). Holds uploaded files and
 # built app artifacts, which are large and regenerated on demand.
 backend/uploads/
+
+# Per-agent skill installs. The content lives in .agents/ (ignored above);
+# these are symlink farms one CLI or another expects at its own path, and
+# committing them puts dangling links and a record of which vendors'
+# tooling is installed into a public repo.
+.crush/
+.hermes/
+.vibe/
+/skills/
+skills-lock.json
