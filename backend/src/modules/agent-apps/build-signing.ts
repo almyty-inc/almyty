@@ -92,6 +92,21 @@ export function appleSignArgs(
 }
 
 /**
+ * Arguments for ad-hoc signing, which carries no identity.
+ *
+ * Used when nobody has supplied a certificate. It does not make an
+ * artifact trusted — Gatekeeper still refuses it on download — but it
+ * does give the binary the customer's own identifier instead of
+ * whatever the toolchain left there. An unsigned Electron app reports
+ * itself to macOS as "Electron", so two different customers' products
+ * are the same application as far as the OS is concerned, which affects
+ * anything the OS scopes by identity.
+ */
+export function adhocSignArgs(artifactPath: string, bundleId: string): string[] {
+  return ['sign', '--binary-identifier', bundleId, artifactPath];
+}
+
+/**
  * Arguments for submitting a signed macOS artifact to Apple.
  *
  * Signing alone is not enough: Gatekeeper checks for a notarisation

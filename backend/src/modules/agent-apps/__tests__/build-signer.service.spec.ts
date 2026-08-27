@@ -105,6 +105,78 @@ describe('BuildSignerService', () => {
     expect(outcome.error).toMatch(/no signing certificate is selected/i);
   });
 
+  it('stamps the customer identifier on an unsigned macOS artifact', async () => {
+    // An unsigned Electron app reports itself to macOS as "Electron",
+    // so two customers' products are one application as far as the OS
+    // is concerned. Ad-hoc signing does not make it trusted; it makes
+    // it theirs.
+    const { service } = makeService({
+      distribution: {
+        appId: APP,
+        organizationId: ORG,
+        configuration: { bundleId: 'com.acme.probe' },
+      },
+    });
+    const runner = makeRunner([{ ok: true }]);
+
+    const outcome = await service.sign(params(runner));
+
+    expect(outcome.signed).toBe(false);
+    expect(runner.run.mock.calls[0][1]).toEqual(
+      expect.arrayContaining(['--binary-identifier', 'com.acme.probe']),
+    );
+  });
+
+  it('says unsigned is a choice, not a failure', async () => {
+    const { service } = makeService({ distribution: null });
+    const outcome = await service.sign(params(makeRunner([])));
+    expect(outcome.error).toMatch(/ships unsigned/i);
+  });
+
+  it('does not stamp when no bundle identifier was set', async () => {
+    const { service } = makeService({
+      distribution: { appId: APP, organizationId: ORG, configuration: {} },
+    });
+    const runner = makeRunner([{ ok: true }]);
+
+    await service.sign(params(runner));
+
+    expect(runner.run).not.toHaveBeenCalled();
+  });
+
+  it('does not stamp a platform macOS rules do not apply to', async () => {
+    const { service } = makeService({
+      distribution: {
+        appId: APP,
+        organizationId: ORG,
+        configuration: { bundleId: 'com.acme.probe' },
+      },
+    });
+    const runner = makeRunner([{ ok: true }]);
+
+    await service.sign({ ...params(runner), platform: 'windows-x64' });
+
+    expect(runner.run).not.toHaveBeenCalled();
+  });
+
+  it('ships anyway when the stamping tool is absent', async () => {
+    // A failure here changes nothing about the artifact that was
+    // already going to ship.
+    const { service } = makeService({
+      distribution: {
+        appId: APP,
+        organizationId: ORG,
+        configuration: { bundleId: 'com.acme.probe' },
+      },
+    });
+    const runner = { available: jest.fn().mockResolvedValue(false), run: jest.fn() };
+
+    const outcome = await service.sign(params(runner));
+
+    expect(outcome.signed).toBe(false);
+    expect(runner.run).not.toHaveBeenCalled();
+  });
+
   it('never guesses a certificate the distribution did not name', async () => {
     const { service, credentials } = makeService({
       distribution: { appId: APP, organizationId: ORG, configuration: {} },

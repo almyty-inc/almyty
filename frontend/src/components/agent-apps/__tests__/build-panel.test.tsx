@@ -392,6 +392,63 @@ describe('BuildPanel', () => {
     expect(screen.getByText('65.1 MB')).toBeInTheDocument()
   })
 
+  it('tells the operator what to pass on to whoever gets the file', async () => {
+    // Shipping unsigned is a choice. What is not acceptable is handing
+    // someone a download that refuses to open with no explanation.
+    ;(agentAppsApi.builds as any).mockResolvedValue([
+      {
+        id: 'b-1',
+        target: 'tui',
+        platform: 'macos-arm64',
+        status: 'succeeded',
+        version: '1.0.0',
+        signed: false,
+        signingNote: null,
+        handoff: {
+          summary: 'macOS refuses to run this on download.',
+          command: 'xattr -d com.apple.quarantine ./Acme',
+          commandNote: 'Clearing the quarantine flag.',
+        },
+        artifactBytes: '100',
+        checksum: 'abc',
+        error: null,
+        createdAt: '',
+        finishedAt: '',
+        artifactExpiresAt: null,
+      },
+    ])
+    render(<BuildPanel app={app} target="tui" />)
+
+    expect(await screen.findByText(/refuses to run this on download/)).toBeInTheDocument()
+    expect(screen.getByText('xattr -d com.apple.quarantine ./Acme')).toBeInTheDocument()
+    expect(screen.getByText(/Clearing the quarantine flag/)).toBeInTheDocument()
+  })
+
+  it('does not show a command when the platform has none', async () => {
+    ;(agentAppsApi.builds as any).mockResolvedValue([
+      {
+        id: 'b-1',
+        target: 'tui',
+        platform: 'linux-x64',
+        status: 'succeeded',
+        version: null,
+        signed: false,
+        signingNote: null,
+        handoff: { summary: 'Nothing to do.', command: null, commandNote: null },
+        artifactBytes: '100',
+        checksum: 'abc',
+        error: null,
+        createdAt: '',
+        finishedAt: '',
+        artifactExpiresAt: null,
+      },
+    ])
+    render(<BuildPanel app={app} target="tui" />)
+
+    expect(await screen.findByText('Nothing to do.')).toBeInTheDocument()
+    expect(screen.queryByText(/xattr/)).toBeNull()
+  })
+
   it('says why a working build is unsigned, not only that it is', async () => {
     // "Unsigned" alone leaves the operator with nothing to act on.
     ;(agentAppsApi.builds as any).mockResolvedValue([
@@ -403,6 +460,7 @@ describe('BuildPanel', () => {
         version: '1.0.0',
         signed: false,
         signingNote: 'No signing certificate is selected for this distribution.',
+        handoff: null,
         artifactBytes: '100',
         checksum: 'abc',
         error: null,

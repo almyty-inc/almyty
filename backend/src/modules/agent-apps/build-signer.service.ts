@@ -12,6 +12,7 @@ import {
   APPLE_API_KEY_FILENAME,
   CERTIFICATE_FILENAME,
   SIGNING_TOOL,
+  adhocSignArgs,
   appleNotarizeArgs,
   appleSignArgs,
   authenticodeSignArgs,
@@ -68,11 +69,17 @@ export class BuildSignerService {
     const distribution = await this.distributionFor(params.appId, params.target);
     const credential = await this.credentialFor(distribution);
     if (!credential) {
+      // Shipping unsigned is a legitimate choice, and often the only
+      // one available while a Developer ID is somewhere in Apple's
+      // paperwork. Give the artifact the customer's own identifier
+      // anyway, so it is not one of the world's many applications
+      // called "Electron".
+      const stamped = await this.stampIdentifier(kind, distribution, params);
       return {
         signed: false,
         notarised: false,
-        error: 'No signing certificate is selected for this distribution.',
-        log: '',
+        error: 'No signing certificate is selected, so this ships unsigned.',
+        log: stamped,
       };
     }
 
@@ -115,6 +122,32 @@ export class BuildSignerService {
         .rm(join(params.workDir, APPLE_API_KEY_FILENAME), { force: true })
         .catch(() => undefined);
     }
+  }
+
+  /**
+   * Ad-hoc sign, so an unsigned artifact still identifies as the
+   * customer's product.
+   *
+   * Best effort in every direction: only Apple platforms care, only
+   * when a bundle id was set, and only when the tool is present. A
+   * failure here changes nothing about the artifact that was already
+   * going to ship.
+   */
+  private async stampIdentifier(
+    kind: SigningKind,
+    distribution: AppDistribution | null,
+    params: { artifactPath: string; workDir: string; runner: ToolchainRunner },
+  ): Promise<string> {
+    const bundleId = distribution?.configuration?.bundleId;
+    if (kind !== 'apple' || !bundleId) return '';
+
+    const tool = SIGNING_TOOL.apple!;
+    if (!(await params.runner.available(tool))) return '';
+
+    const result = await params.runner.run(tool, adhocSignArgs(params.artifactPath, bundleId), {
+      cwd: params.workDir,
+    });
+    return result.output;
   }
 
   private async signApple(

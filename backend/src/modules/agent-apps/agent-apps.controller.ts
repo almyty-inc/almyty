@@ -21,6 +21,7 @@ import { DistributionTarget } from '../../entities/agent-app-distribution.entity
 import { AgentAppsService, CreateAppDto, UpdateAppDto } from './agent-apps.service';
 import { AppBuildsService, RequestBuildDto } from './app-builds.service';
 import { platformsFor, signingRequirementFor } from './build-targets';
+import { handoffFor } from './build-handoff';
 
 /**
  * The agent factory API.
@@ -278,7 +279,23 @@ export class AgentAppsController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Build history for this app' })
   async listBuilds(@Param('slug') slug: string, @Request() req: any) {
-    return { success: true, data: await this.builds.list(this.org(req), slug) };
+    const app = await this.apps.findOne(this.org(req), slug);
+    const builds = await this.builds.list(this.org(req), slug);
+
+    // What to tell whoever this artifact is handed to. Computed here
+    // rather than stored, because it depends on how the build turned
+    // out and on what the product is currently called.
+    return {
+      success: true,
+      data: builds.map((build) => ({
+        ...build,
+        handoff: handoffFor(
+          build.platform,
+          build.signed,
+          app.branding?.appName || app.name,
+        ),
+      })),
+    };
   }
 
   /**

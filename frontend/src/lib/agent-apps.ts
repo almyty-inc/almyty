@@ -203,6 +203,8 @@ export interface AppBuild {
   signed: boolean
   /** Why it is unsigned, when it could have been signed. */
   signingNote: string | null
+  /** What to tell whoever this artifact is handed to. */
+  handoff?: BuildHandoff | null
   artifactBytes: string | null
   checksum: string | null
   error: string | null
@@ -345,6 +347,16 @@ export const agentAppsApi = {
  * an open product is a way to hand the customer's model keys to the
  * internet.
  */
+/**
+ * What a recipient of this artifact will meet, and the command that
+ * gets past it when one exists.
+ */
+export interface BuildHandoff {
+  summary: string
+  command: string | null
+  commandNote: string | null
+}
+
 export interface BuildCapabilities {
   canBuild: boolean
   buildReason: string | null

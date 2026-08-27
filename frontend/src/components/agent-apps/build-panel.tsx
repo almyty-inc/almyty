@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Download, Hammer, Lock, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Download, Hammer, Lock, ShieldAlert } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useNotifications } from '@/store/app'
+import { useCopy } from '@/lib/clipboard'
 import { credentialsApi } from '@/lib/api'
 import { SigningCredentialDialog } from './signing-credential-dialog'
 import {
@@ -61,6 +62,7 @@ export function BuildPanel({
 }: BuildPanelProps) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
+  const copy = useCopy()
   const [platform, setPlatform] = useState<string>('')
   const [addingCertificate, setAddingCertificate] = useState(false)
 
@@ -276,10 +278,41 @@ export function BuildPanel({
                   <p className="mt-2 break-words text-destructive">{build.error}</p>
                 )}
 
-                {/* A build that worked but could not be signed. Amber
-                    rather than red: the artifact is usable, and this
-                    says what would make it open without a warning. */}
-                {build.signingNote && !build.error && (
+                {/* What whoever receives this will meet. Shipping
+                    unsigned is a choice, not a failure, so this is the
+                    instruction they need rather than a warning about
+                    something being wrong. */}
+                {build.handoff && !build.error && (
+                  <div className="mt-2 space-y-1.5 rounded-md border bg-muted/40 p-2">
+                    <p className="text-muted-foreground">{build.handoff.summary}</p>
+
+                    {build.handoff.command && (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <code className="min-w-0 flex-1 truncate rounded bg-background px-2 py-1 font-mono text-[11px]">
+                            {build.handoff.command}
+                          </code>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 shrink-0"
+                            onClick={() => copy(build.handoff!.command!, 'Command copied')}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {build.handoff.commandNote}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Only when something could have been signed and was
+                    not for a reason the operator can act on. */}
+                {build.signingNote && !build.error && !build.handoff && (
                   <p className="mt-2 break-words text-amber-600 dark:text-amber-400">
                     {build.signingNote}
                   </p>
