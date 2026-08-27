@@ -100,8 +100,8 @@ describe('IrcAdapter', () => {
       expect(await adapter.verifyWebhook({}, { authorization: 'Bearer wrong' }, config)).toBe(false);
       expect(await adapter.verifyWebhook({}, {}, config)).toBe(false);
     });
-    it('skips verification when inbound_token is not configured', async () => {
-      expect(await adapter.verifyWebhook({}, {}, {})).toBe(true);
+    it('refuses inbound when inbound_token is not configured', async () => {
+      expect(await adapter.verifyWebhook({}, {}, {})).toBe(false);
     });
   });
 });

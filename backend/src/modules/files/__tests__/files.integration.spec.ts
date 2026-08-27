@@ -307,13 +307,15 @@ describe('FilesService (integration)', () => {
       ).resolves.toBeUndefined();
     });
 
-    it('should return a signed URL (local fallback)', async () => {
+    it('says a local directory cannot produce a link, rather than inventing one', async () => {
       const key = 'test-org/general/url-test.txt';
       await storageService.upload(key, Buffer.from('url test'), 'text/plain');
 
-      const signedUrl = await storageService.getSignedUrl(key);
-      expect(signedUrl).toContain(key);
-      expect(signedUrl).toContain('/download');
+      // The URL this used to return pointed at a route keyed by file id,
+      // so it never resolved. Callers now check canPresign and stream
+      // the bytes themselves.
+      expect(storageService.canPresign).toBe(false);
+      await expect(storageService.getSignedUrl(key)).rejects.toThrow(/locally/i);
     });
   });
 

@@ -143,9 +143,11 @@ describe('WhatsAppCloudAdapter', () => {
       expect(ok).toBe(false);
     });
 
-    it('skips verification when app_secret is not configured', async () => {
+    it('refuses inbound when app_secret is not configured', async () => {
+      // Meta always signs inbound, so a missing app_secret is a
+      // misconfiguration rather than a reason to trust the payload.
       const ok = await adapter.verifyWebhook(inboundPayload, {}, {}, '{}');
-      expect(ok).toBe(true);
+      expect(ok).toBe(false);
     });
   });
 

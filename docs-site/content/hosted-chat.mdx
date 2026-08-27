@@ -1,0 +1,78 @@
+# Hosted chat app
+
+Put an agent in front of people as a chat app of its own: your name, your colour, your logo, on your own subdomain. No embedding, no page to build, no front end to deploy.
+
+It is part of the Apache core. Self-hosting gets you the whole feature on a domain you control.
+
+## What a visitor gets
+
+A full-page chat with streaming replies, conversation history, and starter prompts. They do not sign up, and they do not see almyty unless you leave the mark on.
+
+Returning visitors keep their history. That works without a login because an anonymous visitor is still a real record, keyed by a cookie scoped to your surface. If you later turn on email verification or SSO, the same record gains an identity rather than being replaced, so nobody loses their history to a change of settings.
+
+## Setting one up
+
+1. Create a **Hosted chat** surface on the agent you want to publish. On the surfaces canvas it sits under **People**.
+2. Pick a subdomain. Lowercase letters, numbers and hyphens, three characters or more. Some names are reserved.
+3. Set the name, brand colour, greeting, and up to four starter prompts.
+4. Choose who can use it.
+5. Save. The panel tells you if anything is blocking publication.
+
+## Who can use it
+
+| Mode | Who gets in |
+|---|---|
+| `public_link` | Anyone with the URL |
+| `email_otp` | Anyone who can receive a one-time code |
+| `oauth` | Anyone who can sign in with your provider |
+| `sso` | Your enterprise directory (commercial) |
+
+### Public links have two requirements, and they are enforced
+
+A public link cannot be published without:
+
+- a **cost cap** on the surface, and
+- both a **per-visitor** and a **per-IP** rate limit.
+
+This is a refusal in code, not advice in a doc. On bring-your-own-key, a public chat URL with no ceiling is a way for a stranger to spend against your model provider account. If either is missing you get a reason code and a sentence saying which one, before you publish rather than after.
+
+Gated modes do not carry the requirement, because the gate is what stands between a stranger and the spend.
+
+## AI disclosure
+
+Every hosted chat app shows an AI disclosure under the composer by default, which is what the EU AI Act asks of a deployer under Art. 50. You can reword it. Removing it entirely requires the white-label entitlement, and the removal is recorded.
+
+See [Compliance](/compliance) for the full mapping.
+
+## Self-hosting
+
+The feature is Apache-licensed in full. What almyty.com operates is a domain and a wildcard certificate, which is hosting, not licensing.
+
+To run it on your own domain:
+
+1. Point a wildcard DNS record at your deployment, for example `*.chat.acme.com`.
+2. Set `HOSTED_CHAT_BASE_DOMAIN=chat.acme.com` on the API, and `VITE_HOSTED_CHAT_BASE_DOMAIN` on the frontend build.
+3. Issue a wildcard certificate for that domain.
+
+A surface with the slug `support` is then reachable at `https://support.chat.acme.com`.
+
+### A note on wildcard certificates
+
+Let's Encrypt will not issue a wildcard over an HTTP-01 challenge. You need **DNS-01**, which means your certificate tooling has to be able to write TXT records into the zone. If your DNS is hosted somewhere your issuer has no solver for, move the zone or delegate `_acme-challenge` to one that does.
+
+The alternative is a certificate per tenant, which works until you meet the Let's Encrypt limit of 50 certificates per registered domain per week.
+
+## What is commercial
+
+Two things:
+
+- **White-label**: removing the almyty mark.
+- **`sso` auth mode**.
+
+Everything else, including `public_link`, `email_otp` and `oauth`, is core. Both appear in the builder as disabled controls with a line saying what unlocks them, rather than being hidden, so you can always tell the difference between a feature that is missing and one that is locked.
+
+## Related
+
+- [Chat interfaces](/interfaces): the embeddable widget and the messaging platforms
+- [Run limits](/run-limits): the ceilings a run cannot exceed
+- [Compliance](/compliance): Art. 50 and the rest of the mapping

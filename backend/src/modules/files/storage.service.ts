@@ -4,6 +4,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export interface StorageProvider {
+  /**
+   * Whether this provider can hand out a URL the browser fetches
+   * directly. S3 can; the local filesystem cannot, and a caller that
+   * needs a working link has to serve the bytes itself.
+   */
+  readonly canPresign: boolean;
   upload(key: string, data: Buffer, contentType: string): Promise<string>;
   download(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
@@ -50,6 +56,7 @@ function assertSafeStorageKey(key: string): void {
  *      in assertSafeStorageKey still can't escape the uploads dir).
  */
 class LocalStorageProvider implements StorageProvider {
+  readonly canPresign = false;
   private readonly basePath: string;
   private readonly baseUrl: string;
   private readonly resolvedBase: string;
@@ -97,10 +104,17 @@ class LocalStorageProvider implements StorageProvider {
     }
   }
 
+  /**
+   * A local directory has nothing to sign against, and the URL this
+   * used to return pointed at `/files/:id/download`, a route that takes
+   * a file record's id rather than a storage key. It never resolved.
+   * Callers check `canPresign` and serve the bytes themselves.
+   */
   async getSignedUrl(key: string, expiresInSeconds?: number): Promise<string> {
     assertSafeStorageKey(key);
-    // Local doesn't have signed URLs, return direct path
-    return `${this.baseUrl}/files/${key}/download`;
+    throw new BadRequestException(
+      'This deployment stores files locally, which cannot produce a direct link.',
+    );
   }
 }
 
@@ -108,6 +122,7 @@ class LocalStorageProvider implements StorageProvider {
  * S3-compatible storage provider (works with AWS S3, DigitalOcean Spaces, Cloudflare R2, MinIO, etc.)
  */
 class S3StorageProvider implements StorageProvider {
+  readonly canPresign = true;
   private s3Client: any;
   private bucket: string;
   private cdnUrl: string | null;
@@ -244,5 +259,10 @@ export class StorageService {
 
   async getSignedUrl(key: string, expiresInSeconds?: number): Promise<string> {
     return this.provider.getSignedUrl(key, expiresInSeconds);
+  }
+
+  /** Whether getSignedUrl can produce a link, rather than throwing. */
+  get canPresign(): boolean {
+    return this.provider.canPresign;
   }
 }

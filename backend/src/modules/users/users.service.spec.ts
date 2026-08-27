@@ -13,6 +13,14 @@ import { UpdateUserDto } from './dto/update-user.dto';
 // Unmock bcrypt from global setup to test actual hashing
 jest.unmock('bcryptjs');
 
+/**
+ * bcrypt at cost 12 is deliberate work: roughly a quarter second idle,
+ * and several seconds when eight jest workers are competing for the
+ * same cores. Jest's 5s default fails these at random on a busy machine
+ * and says nothing about the code.
+ */
+jest.setTimeout(30_000);
+
 describe('UsersService', () => {
   let service: UsersService;
   let userRepository: any;

@@ -37,10 +37,13 @@ export const interfaceStatusVariant: Record<string, 'default' | 'secondary' | 'd
 
 export const interfaceTypeIcons: Record<string, string> = {
   chat_widget: '💬',
+  hosted_chat: '🌐',
   slack: '📱',
   discord: '🎮',
   telegram: '✈️',
   whatsapp: '📞',
+  whatsapp_cloud: '📗',
+  sms: '💬',
   email: '📧',
   webhook: '🔗',
   google_chat: '🟢',
@@ -48,6 +51,12 @@ export const interfaceTypeIcons: Record<string, string> = {
   signal: '🔵',
   matrix: '🟩',
   irc: '⌨️',
+  mcp: '🔌',
+  a2a: '🤝',
+  acp: '📡',
+  utcp: '🧩',
+  skills: '🎓',
+  openai_chat: '🧠',
 }
 
 /**

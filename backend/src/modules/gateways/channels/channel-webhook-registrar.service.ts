@@ -2,6 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomBytes } from 'crypto';
 
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
@@ -164,17 +165,35 @@ export class ChannelWebhookRegistrar {
   // Platform calls
   // ---------------------------------------------------------------------------
 
+  /**
+   * Register the Telegram webhook and, with it, a per-gateway
+   * secret_token. Telegram echoes that token back in the
+   * X-Telegram-Bot-Api-Secret-Token header on every update, which is the
+   * only inbound authenticity signal the Bot API offers. It is minted
+   * here rather than asked of the user, and persisted so the adapter can
+   * compare it. Reusing an existing token keeps re-registration stable.
+   */
   private async telegramSetWebhook(gateway: Gateway, publicUrl: string): Promise<void> {
-    const token = getChannelConfig(gateway.configuration, gateway.organizationId).bot_token;
+    const config = getChannelConfig(gateway.configuration, gateway.organizationId);
+    const token = config.bot_token;
     if (!token) throw new Error('bot_token not configured');
+
+    // Telegram accepts 1-256 chars of A-Z, a-z, 0-9, _ and -.
+    const secretToken: string = config.webhook_secret_token || randomBytes(32).toString('hex');
+
     const res = await this.fetch(
-      `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(publicUrl)}`,
+      `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(publicUrl)}` +
+        `&secret_token=${encodeURIComponent(secretToken)}`,
       { method: 'POST' },
     );
     const json: any = await res.json().catch(() => ({}));
     if (!res.ok || json?.ok === false) {
       throw new Error(json?.description || `setWebhook failed (${res.status})`);
     }
+
+    // Persist only after Telegram accepted it, so a failed registration
+    // never leaves us checking a token Telegram is not sending.
+    await this.persistConfig(gateway, { webhook_secret_token: secretToken });
   }
 
   private async telegramDeleteWebhook(gateway: Gateway): Promise<void> {

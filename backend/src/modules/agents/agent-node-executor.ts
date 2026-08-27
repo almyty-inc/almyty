@@ -396,7 +396,12 @@ export class AgentNodeExecutor {
     context: ExecutionContext,
   ): Promise<NodeExecutionResult> {
     const config = node.data || node.config || {};
-    const maxIterations = config.maxIterations || 100;
+    // The loop guard and the run budget were two separate mechanisms,
+    // so a loop node could iterate 100 times inside a run allowed 25
+    // steps. The node may still tighten, never loosen.
+    const runCeiling = context.runLimits?.maxSteps;
+    const requested = config.maxIterations || 100;
+    const maxIterations = runCeiling ? Math.min(requested, runCeiling) : requested;
 
     if (!config.iterableExpression) {
       throw new Error(`Loop node '${node.id}' is missing 'iterableExpression' in config`);

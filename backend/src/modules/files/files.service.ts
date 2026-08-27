@@ -95,8 +95,16 @@ export class FilesService {
     return file;
   }
 
-  async getDownloadUrl(id: string, organizationId: string): Promise<string> {
+  /**
+   * A direct link to the stored object, when storage can mint one.
+   *
+   * Local storage cannot, and returns null rather than a URL that
+   * resolves to nothing. Callers fall back to `/files/:id/download`,
+   * which streams the bytes through the API either way.
+   */
+  async getDownloadUrl(id: string, organizationId: string): Promise<string | null> {
     const file = await this.findById(id, organizationId);
+    if (!this.storageService.canPresign) return null;
     return this.storageService.getSignedUrl(file.storageKey);
   }
 
