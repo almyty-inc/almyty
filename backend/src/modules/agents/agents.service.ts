@@ -360,8 +360,12 @@ export class AgentsService {
   async activateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId);
 
-    // Validate pipeline before activating
-    this.validation.validatePipeline(agent.pipeline, agent.id);
+    // Workflow agents need a valid graph. Autonomous agents do not have
+    // one: their "pipeline" is empty and validating it keeps them stuck
+    // in Draft with a refusal about missing output nodes.
+    if (agent.mode !== 'autonomous') {
+      this.validation.validatePipeline(agent.pipeline, agent.id);
+    }
 
     agent.status = AgentStatus.ACTIVE;
     const saved = await this.agentRepository.save(agent);
