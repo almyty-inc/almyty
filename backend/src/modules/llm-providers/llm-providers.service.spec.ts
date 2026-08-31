@@ -38,6 +38,7 @@ jest.mock('axios', () => {
 describe('LlmProvidersService', () => {
   let service: LlmProvidersService;
   let chatHelperInstance: LlmChatHelper;
+  let modelsHelperInstance: LlmModelsHelper;
   let accessPolicy: any;
   let runnerInstance: LlmChatRunnerHelper;
   let llmProviderRepository: any;
@@ -161,6 +162,7 @@ describe('LlmProvidersService', () => {
 
     service = module.get<LlmProvidersService>(LlmProvidersService);
     chatHelperInstance = module.get(LlmChatHelper);
+    modelsHelperInstance = module.get(LlmModelsHelper);
     accessPolicy = module.get(AccessPolicyService);
     runnerInstance = module.get(LlmChatRunnerHelper);
     llmProviderRepository = module.get(getRepositoryToken(LlmProvider));
@@ -926,7 +928,7 @@ describe('LlmProvidersService', () => {
         isHealthy: true,
         id: 'provider-1',
         type: LlmProviderType.OPENAI,
-        configuration: { apiKey: 'test-key' },
+        configuration: { apiKey: 'test-key', model: 'gpt-4o-mini' },
         status: LlmProviderStatus.ACTIVE,
         organizationId: 'org-1',
         updateHealthStatus: jest.fn(),
@@ -953,6 +955,43 @@ describe('LlmProvidersService', () => {
         { id: 'provider-1' },
         expect.objectContaining({ isHealthy: true }),
       );
+      expect(runnerInstance.callLlmProvider).toHaveBeenCalledWith(
+        mockProvider,
+        expect.objectContaining({ model: 'gpt-4o-mini' }),
+        expect.anything(),
+        [],
+      );
+    });
+
+    it('discovers a provider-native model when no default model is configured', async () => {
+      const mockProvider = {
+        id: 'provider-1',
+        type: LlmProviderType.MISTRAL,
+        configuration: { apiKey: 'test-key' },
+        organizationId: 'org-1',
+      };
+
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      jest.spyOn(modelsHelperInstance, 'fetchModelsFromProvider').mockResolvedValue([
+        { id: 'mistral-small-latest', name: 'mistral-small-latest' },
+      ]);
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue({
+        message: { role: MessageRole.ASSISTANT, content: 'Hello' },
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        model: 'mistral-small-latest',
+        cost: 0,
+      });
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.isHealthy).toBe(true);
+      expect(runnerInstance.callLlmProvider).toHaveBeenCalledWith(
+        mockProvider,
+        expect.objectContaining({ model: 'mistral-small-latest' }),
+        expect.anything(),
+        [],
+      );
     });
 
     it('should handle health check failure', async () => {
@@ -960,7 +999,7 @@ describe('LlmProvidersService', () => {
         isHealthy: true,
         id: 'provider-1',
         type: LlmProviderType.OPENAI,
-        configuration: { apiKey: 'invalid-key' },
+        configuration: { apiKey: 'invalid-key', model: 'gpt-4o-mini' },
         status: LlmProviderStatus.ACTIVE,
         organizationId: 'org-1',
         updateHealthStatus: jest.fn(),
@@ -1002,7 +1041,7 @@ describe('LlmProvidersService', () => {
       const mockProvider = {
         id: 'provider-1',
         type: LlmProviderType.OPENAI,
-        configuration: { apiKey: 'invalid-key' },
+        configuration: { apiKey: 'invalid-key', model: 'gpt-4o-mini' },
         organizationId: 'org-1',
       };
 
@@ -1021,7 +1060,7 @@ describe('LlmProvidersService', () => {
       const mockProvider = {
         id: 'provider-1',
         type: LlmProviderType.ANTHROPIC,
-        configuration: { apiKey: 'test-key' },
+        configuration: { apiKey: 'test-key', model: 'claude-3-5-haiku-latest' },
         organizationId: 'org-1',
       };
       Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
@@ -1059,7 +1098,7 @@ describe('LlmProvidersService', () => {
       const mockProvider = {
         id: 'provider-1',
         type: LlmProviderType.OPENAI,
-        configuration: { apiKey: 'test-key' },
+        configuration: { apiKey: 'test-key', model: 'gpt-4o-mini' },
         organizationId: 'org-1',
       };
       Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
@@ -1085,7 +1124,7 @@ describe('LlmProvidersService', () => {
       const mockProvider = {
         id: 'provider-1',
         type: LlmProviderType.ANTHROPIC,
-        configuration: { apiKey: 'test-key' },
+        configuration: { apiKey: 'test-key', model: 'claude-3-5-haiku-latest' },
         organizationId: 'org-1',
       };
       Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
