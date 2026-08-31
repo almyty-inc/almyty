@@ -1,5 +1,6 @@
 import { AppAuthMode } from '../../entities/agent-app.entity';
 import { DistributionTarget } from '../../entities/agent-app-distribution.entity';
+import { missingCredentials, servesOverGateway } from './distribution-publish';
 
 /**
  * The rules that decide whether a app may ship.
@@ -51,6 +52,7 @@ export const APP_REFUSALS = Object.freeze({
     'A product that can run local commands must ask the user before it does. Add an approval requirement, or turn shell access off.',
   LOCAL_ACCESS_ON_PUBLIC:
     'A product anyone can download must not have local filesystem or shell access. Restrict who can use it, or remove the access.',
+  MISSING_CREDENTIALS: 'This platform still needs its credentials before it can go live: ',
   BUNDLE_ID_INVALID:
     'Desktop and binary builds need a reverse-domain identifier such as com.acme.assistant.',
 });
@@ -170,7 +172,7 @@ const PACKAGED_TARGETS: readonly DistributionTarget[] = Object.freeze([
 export function checkDistribution(
   target: DistributionTarget | string,
   app: AppShape,
-  configuration: { bundleId?: string } | null | undefined,
+  configuration: Record<string, any> | null | undefined,
   context: AppContext = {},
 ): AppCheck {
   const base = checkApp(app, context);
@@ -182,6 +184,20 @@ export function checkDistribution(
       refusals.push({
         code: 'BUNDLE_ID_INVALID',
         message: APP_REFUSALS.BUNDLE_ID_INVALID,
+      });
+    }
+  }
+
+  // A channel that ships over a gateway needs its platform credentials.
+  // Checked here as well as at publish so the panel does not say "ready
+  // to ship" while the credential fields are empty — which is exactly
+  // what it did before, and then publish refused.
+  if (servesOverGateway(target)) {
+    const missing = missingCredentials(target, configuration);
+    if (missing.length) {
+      refusals.push({
+        code: 'MISSING_CREDENTIALS',
+        message: `${APP_REFUSALS.MISSING_CREDENTIALS}${missing.join(', ')}`,
       });
     }
   }
