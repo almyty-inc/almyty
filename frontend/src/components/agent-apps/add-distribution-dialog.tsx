@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
-import { interfaceTypeIcons } from '@/components/agents/detail/constants'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import {
   DISTRIBUTION_BLURBS,
   DISTRIBUTION_LABELS,
@@ -129,13 +129,13 @@ export function AddDistributionDialog({
                           : 'hover:border-primary hover:bg-muted/50',
                       )}
                     >
-                      <span aria-hidden className="text-base leading-none">
-                        {interfaceTypeIcons[target] ?? '📦'}
-                      </span>
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">
-                          {DISTRIBUTION_LABELS[target]}
-                          {pending === target && ' ...'}
+                        <span className="mb-1 flex items-center gap-2">
+                          <span className="truncate text-sm font-medium">
+                            {DISTRIBUTION_LABELS[target]}
+                            {pending === target && ' ...'}
+                          </span>
+                          <ProtocolBadge protocol={target} />
                         </span>
                         <span className="block text-xs text-muted-foreground">
                           {already ? 'Already shipping here' : DISTRIBUTION_BLURBS[target]}

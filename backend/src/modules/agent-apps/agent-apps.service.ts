@@ -22,6 +22,7 @@ import {
 } from './agent-app.rules';
 import {
   GATEWAY_TYPE_FOR_TARGET,
+  agentForDistribution,
   checkPublish,
   endpointFor,
   gatewayConfigurationFor,
@@ -276,12 +277,13 @@ export class AgentAppsService {
     // public product needs a cost cap; the publish rules are the ones
     // that only apply at this moment.
     const product = checkApp(app, this.limitsContext(app));
-    // The agent that will actually answer, so a surface is not published
-    // in front of one that cannot hold a conversation.
-    const agent = app.agentIds?.length
-      ? await this.agentRepository.findOne({
-          where: { id: app.agentIds[0], organizationId },
-        })
+    // The agent that will actually answer: the one this surface names,
+    // or the product's default. Resolved before the checks so a surface
+    // is never published in front of an agent that cannot hold a
+    // conversation.
+    const agentId = agentForDistribution(app, distribution.configuration);
+    const agent = agentId
+      ? await this.agentRepository.findOne({ where: { id: agentId, organizationId } })
       : null;
 
     const publish = checkPublish(target, app, distribution.configuration, agent);
@@ -295,7 +297,7 @@ export class AgentAppsService {
         name: gatewayNameFor(app, target),
         description: app.description ?? undefined,
         type: GATEWAY_TYPE_FOR_TARGET[target]!,
-        agentId: app.agentIds[0],
+        agentId: agentId!,
         endpoint: endpointFor(app.slug, target),
         // Carries the operator's platform credentials, the product's
         // branding, and for the hosted chat the block it is looked up
