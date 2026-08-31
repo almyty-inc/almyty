@@ -25,7 +25,17 @@ vi.mock('@/lib/api', async () => {
   return { ...actual, credentialsApi: { getAll: vi.fn().mockResolvedValue({ data: [] }) } }
 })
 
-const app = { slug: 'acme-support', name: 'Acme Support' } as AgentApp
+const app = { slug: 'acme-support', name: 'Acme Support', agentIds: [] } as unknown as AgentApp
+
+const twoAgents = {
+  ...app,
+  agentIds: ['triage-1', 'billing-2'],
+} as unknown as AgentApp
+
+const AGENTS = [
+  { id: 'triage-1', name: 'Triage' },
+  { id: 'billing-2', name: 'Billing' },
+]
 
 const distribution = (over: Partial<AppDistribution> = {}): AppDistribution =>
   ({
@@ -111,9 +121,10 @@ describe('DistributionPanel', () => {
     expect(await screen.findByText('It needs a cost cap first.')).toBeInTheDocument()
   })
 
-  it('keeps the settings it did not touch when saving one of them', async () => {
-    // addDistribution is the save path, and sending only the edited
-    // field used to be enough to drop the rest.
+  it('sends only what changed, not the masked config it was given', async () => {
+    // The API returns stored secrets masked, so re-sending the whole
+    // configuration would write the mask back over the real value. The
+    // backend merges a partial patch, so the client sends just the edit.
     render(
       <DistributionPanel
         app={app}
@@ -127,18 +138,144 @@ describe('DistributionPanel', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /^Save$/ }))
 
-    await waitFor(() =>
-      expect(agentAppsApi.addDistribution).toHaveBeenCalledWith(
-        'acme-support',
-        'desktop',
-        expect.objectContaining({ signingCredentialId: 'cred-1', bundleId: 'com.acme.app' }),
-      ),
-    )
+    await waitFor(() => expect(agentAppsApi.addDistribution).toHaveBeenCalled())
+    const patch = (agentAppsApi.addDistribution as any).mock.calls.at(-1)[2]
+    // The bundle id is the field this button edits; the credential id it
+    // was given is not re-sent.
+    expect(patch).toHaveProperty('bundleId')
+    expect(patch).not.toHaveProperty('signingCredentialId')
   })
 
-  it('tells a channel where its credentials come from', async () => {
-    render(<DistributionPanel app={app} distribution={distribution()} onSaved={onSaved} />)
+  describe('which agent answers', () => {
+    it('does not ask when the product has only one', async () => {
+      // There is no choice to make.
+      render(
+        <DistributionPanel
+          app={{ ...app, agentIds: ['triage-1'] } as unknown as AgentApp}
+          distribution={distribution()}
+          agents={AGENTS}
+          onSaved={onSaved}
+        />,
+      )
+      await screen.findByRole('button', { name: /^Publish$/ })
+      expect(screen.queryByLabelText('Answered by')).toBeNull()
+    })
 
-    expect(await screen.findByText(/needs its own credentials/i)).toBeInTheDocument()
+    it('offers the product default first, naming it', async () => {
+      render(
+        <DistributionPanel
+          app={twoAgents}
+          distribution={distribution()}
+          agents={AGENTS}
+          onSaved={onSaved}
+        />,
+      )
+      expect(await screen.findByLabelText('Answered by')).toHaveTextContent(
+        /Triage \(the product default\)/,
+      )
+    })
+
+    it('saves the agent this surface should answer with', async () => {
+      // A billing channel should be able to reach the billing agent.
+      render(
+        <DistributionPanel
+          app={twoAgents}
+          distribution={distribution()}
+          agents={AGENTS}
+          onSaved={onSaved}
+        />,
+      )
+
+      fireEvent.click(await screen.findByLabelText('Answered by'))
+      fireEvent.click(await screen.findByText('Billing'))
+
+      await waitFor(() =>
+        expect(agentAppsApi.addDistribution).toHaveBeenCalledWith(
+          'acme-support',
+          'slack',
+          expect.objectContaining({ agentId: 'billing-2' }),
+        ),
+      )
+    })
+
+    it('clears the choice back to the default rather than storing the id', async () => {
+      render(
+        <DistributionPanel
+          app={twoAgents}
+          distribution={distribution({ configuration: { agentId: 'billing-2' } })}
+          agents={AGENTS}
+          onSaved={onSaved}
+        />,
+      )
+
+      fireEvent.click(await screen.findByLabelText('Answered by'))
+      fireEvent.click(await screen.findByText(/the product default/))
+
+      await waitFor(() =>
+        expect(agentAppsApi.addDistribution).toHaveBeenCalledWith(
+          'acme-support',
+          'slack',
+          expect.objectContaining({ agentId: '' }),
+        ),
+      )
+    })
+
+    it('does not ask for something that ships as a file', async () => {
+      render(
+        <DistributionPanel
+          app={twoAgents}
+          distribution={distribution({ target: 'tui' })}
+          agents={AGENTS}
+          onSaved={onSaved}
+        />,
+      )
+      await screen.findByRole('button', { name: /Build/ })
+      expect(screen.queryByLabelText('Answered by')).toBeNull()
+    })
+  })
+
+  describe('channel credentials', () => {
+    it('offers a field for each credential the platform needs', async () => {
+      // A publish is refused without these, so the panel has to let the
+      // operator enter them rather than pointing elsewhere.
+      render(<DistributionPanel app={app} distribution={distribution()} onSaved={onSaved} />)
+
+      expect(await screen.findByLabelText('Bot token')).toBeInTheDocument()
+      expect(screen.getByLabelText('Signing secret')).toBeInTheDocument()
+    })
+
+    it('masks the secret fields', async () => {
+      render(<DistributionPanel app={app} distribution={distribution()} onSaved={onSaved} />)
+      const token = (await screen.findByLabelText('Bot token')) as HTMLInputElement
+      expect(token.type).toBe('password')
+    })
+
+    it('saves only the credentials that changed', async () => {
+      // A stored secret comes back masked, so an untouched field must
+      // not be written back over the real value.
+      render(
+        <DistributionPanel
+          app={app}
+          distribution={distribution({ configuration: { signing_secret: '••••' } })}
+          onSaved={onSaved}
+        />,
+      )
+
+      fireEvent.change(await screen.findByLabelText('Bot token'), {
+        target: { value: 'xoxb-real' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /Save credentials/ }))
+
+      await waitFor(() =>
+        expect(agentAppsApi.addDistribution).toHaveBeenCalledWith(
+          'acme-support',
+          'slack',
+          expect.objectContaining({ bot_token: 'xoxb-real' }),
+        ),
+      )
+      // signing_secret was not touched, so it is not in the patch.
+      const patch = (agentAppsApi.addDistribution as any).mock.calls.at(-1)[2]
+      expect(patch).not.toHaveProperty('signing_secret')
+    })
   })
 })

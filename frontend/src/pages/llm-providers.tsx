@@ -104,6 +104,17 @@ export function LlmProvidersPage() {
     onSuccess: (responseData) => {
       // API returns clean data directly
       const result = responseData.data || responseData
+      if (!result?.isHealthy) {
+        const message = result?.error || 'Provider did not report healthy'
+        setTestResult({
+          error: message,
+          timestamp: new Date().toISOString()
+        })
+        setTestLoading(false)
+        notifications.error('Test Failed', message)
+        queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
+        return
+      }
       setTestResult({
         output: {
           response: result.response || result.message || 'Connection successful',
@@ -115,6 +126,7 @@ export function LlmProvidersPage() {
       })
       setTestLoading(false)
       notifications.success('Test Complete', 'Provider connection successful')
+      queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
     },
     onError: (error: any) => {
       setTestResult({
