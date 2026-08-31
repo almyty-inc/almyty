@@ -69,7 +69,7 @@ describe('DistributionPanel', () => {
     )
   })
 
-  it('offers to take down one that is live, not to publish it again', async () => {
+  it('offers to unpublish one that is live, not to publish it again', async () => {
     render(
       <DistributionPanel
         app={app}
@@ -79,14 +79,14 @@ describe('DistributionPanel', () => {
     )
 
     expect(screen.queryByRole('button', { name: /^Publish$/ })).toBeNull()
-    fireEvent.click(await screen.findByRole('button', { name: /Take it down/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Unpublish/ }))
 
     await waitFor(() =>
       expect(agentAppsApi.unpublishDistribution).toHaveBeenCalledWith('acme-support', 'slack'),
     )
   })
 
-  it('says taking it down keeps the address, so nobody re-registers a Slack app', async () => {
+  it('says unpublish keeps the address, so nobody re-registers a Slack app', async () => {
     render(
       <DistributionPanel
         app={app}
@@ -100,7 +100,7 @@ describe('DistributionPanel', () => {
 
   it('does not offer to publish something that ships as a file', async () => {
     // A downloadable artifact has nothing to stand up and nothing to
-    // take down.
+    // unpublish.
     render(
       <DistributionPanel app={app} distribution={distribution({ target: 'tui' })} onSaved={onSaved} />,
     )
@@ -108,7 +108,7 @@ describe('DistributionPanel', () => {
     // Wait for the build controls, which only a buildable target has.
     await screen.findByRole('button', { name: /Build/ })
     expect(screen.queryByRole('button', { name: /^Publish$/ })).toBeNull()
-    expect(screen.queryByRole('button', { name: /Take it down/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Unpublish/ })).toBeNull()
   })
 
   it('shows what is stopping this distribution from shipping', async () => {
