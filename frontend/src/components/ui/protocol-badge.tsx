@@ -24,6 +24,15 @@ const protocolStyles: Record<string, string> = {
   matrix: 'bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/30',
   irc: 'bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-500/20 dark:text-zinc-300 dark:border-zinc-500/30',
   chat_widget: 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/30',
+  whatsapp_cloud: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-500/20 dark:text-green-300 dark:border-green-500/30',
+  sms: 'bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/30',
+  // App distribution mediums (the agent factory), so a Web / Terminal /
+  // Desktop / Binary badge reads on-brand rather than as the unknown
+  // grey fallback.
+  web: 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/30',
+  tui: 'bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/30',
+  desktop: 'bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/30',
+  binary: 'bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/30',
 }
 
 const protocolLabels: Record<string, string> = {
@@ -31,6 +40,9 @@ const protocolLabels: Record<string, string> = {
   google_chat: 'Google Chat',
   microsoft_teams: 'Teams',
   chat_widget: 'Chat Widget',
+  whatsapp_cloud: 'WhatsApp Cloud',
+  tui: 'Terminal',
+  web: 'Web',
 }
 
 interface ProtocolBadgeProps {

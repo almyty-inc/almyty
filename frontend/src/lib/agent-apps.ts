@@ -227,6 +227,74 @@ export function isBuildable(target: DistributionTarget): boolean {
  * is nothing to publish and nothing to take down; the artifact is the
  * whole of it.
  */
+/**
+ * The credentials each channel needs before it can carry a message.
+ *
+ * Mirrors REQUIRED_CREDENTIALS in the backend
+ * (distribution-publish.ts). Kept in step by hand rather than fetched,
+ * because it is a small fixed table and the alternative is a round trip
+ * to render a form. The backend is the authority: it refuses to publish
+ * a distribution missing any of these, so a drift here only ever means
+ * an extra or missing field, never a surface that ships unprotected.
+ */
+export const CHANNEL_CREDENTIAL_FIELDS: Partial<Record<DistributionTarget, Array<{ key: string; label: string; secret?: boolean }>>> = {
+  slack: [
+    { key: 'bot_token', label: 'Bot token', secret: true },
+    { key: 'signing_secret', label: 'Signing secret', secret: true },
+  ],
+  discord: [{ key: 'bot_token', label: 'Bot token', secret: true }],
+  telegram: [{ key: 'bot_token', label: 'Bot token', secret: true }],
+  whatsapp: [
+    { key: 'twilio_account_sid', label: 'Twilio account SID' },
+    { key: 'twilio_auth_token', label: 'Twilio auth token', secret: true },
+    { key: 'phone_number', label: 'Phone number' },
+  ],
+  whatsapp_cloud: [
+    { key: 'access_token', label: 'Access token', secret: true },
+    { key: 'phone_number_id', label: 'Phone number ID' },
+    { key: 'app_secret', label: 'App secret', secret: true },
+    { key: 'verify_token', label: 'Verify token', secret: true },
+  ],
+  sms: [
+    { key: 'twilio_account_sid', label: 'Twilio account SID' },
+    { key: 'twilio_auth_token', label: 'Twilio auth token', secret: true },
+    { key: 'phone_number', label: 'Phone number' },
+  ],
+  email: [
+    { key: 'resend_api_key', label: 'Resend API key', secret: true },
+    { key: 'inbound_address', label: 'Inbound address' },
+    { key: 'reply_from', label: 'Reply-from address' },
+  ],
+  webhook: [
+    { key: 'callback_url', label: 'Callback URL' },
+    { key: 'secret', label: 'Shared secret', secret: true },
+  ],
+  google_chat: [
+    { key: 'webhook_url', label: 'Webhook URL' },
+    { key: 'verification_token', label: 'Verification token', secret: true },
+  ],
+  microsoft_teams: [
+    { key: 'bot_id', label: 'Bot ID' },
+    { key: 'bot_password', label: 'Bot password', secret: true },
+    { key: 'service_url', label: 'Service URL' },
+  ],
+  signal: [
+    { key: 'api_url', label: 'Bridge API URL' },
+    { key: 'phone_number', label: 'Phone number' },
+  ],
+  matrix: [
+    { key: 'homeserver_url', label: 'Homeserver URL' },
+    { key: 'access_token', label: 'Access token', secret: true },
+    { key: 'room_id', label: 'Room ID' },
+  ],
+  irc: [
+    { key: 'webhook_url', label: 'Bridge webhook URL' },
+    { key: 'bridge_token', label: 'Bridge token', secret: true },
+    { key: 'nick', label: 'Nick' },
+    { key: 'channel', label: 'Channel' },
+  ],
+}
+
 export function servesOverGateway(target: DistributionTarget): boolean {
   return !isBuildable(target)
 }

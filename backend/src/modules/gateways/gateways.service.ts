@@ -69,6 +69,14 @@ export interface CreateGatewayDto {
 export interface UpdateGatewayDto {
   name?: string;
   description?: string;
+  /**
+   * Which agent answers here.
+   *
+   * Applied by the Object.assign below and always has been; it was
+   * simply absent from this type, so a caller repointing a gateway had
+   * to cast. Declaring it is what makes that caller's intent checkable.
+   */
+  agentId?: string;
   configuration?: Record<string, any>;
   rateLimitConfig?: {
     enabled: boolean;
@@ -662,10 +670,12 @@ export class GatewaysService {
       {
         name: dto.name,
         description: dto.description,
+        // Repointed on every publish, so changing which agent an app
+        // uses and republishing actually moves the surface.
         agentId: dto.agentId,
         configuration: dto.configuration,
         rateLimitConfig: dto.rateLimitConfig,
-      } as UpdateGatewayDto,
+      },
       organizationId,
       userId,
     );

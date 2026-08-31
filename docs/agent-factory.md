@@ -2,6 +2,8 @@
 
 The screen at `/apps`. It takes agents someone has already built and turns them into a product they ship under their own name: a hosted chat on its own address, a Slack or WhatsApp presence, a terminal command, a desktop app, a standalone binary.
 
+![The Apps list with a customer-facing product](../docs-site/public/screenshots/apps-list.png)
+
 ## Why this exists
 
 Every competitor terminates at a hosted widget, a messaging channel, or an API. All three keep the end user tethered to the vendor. A signed binary the customer hands to their own users does not: it carries their name, their identifier, their signature, and the operating system that asks who published it gets their answer, not ours.
@@ -25,6 +27,10 @@ That is the part nobody else ships, so it is the part this subsystem is built ar
 
 The separation is load-bearing. One agent appears in an internal app and a customer-facing one at the same time, under different names, different auth and different limits, without being duplicated.
 
+The canvas makes that relationship explicit: agents feed one product, and the product fans out to each distribution independently.
+
+![An app canvas connecting one agent to web, terminal, and Slack distributions](../docs-site/public/screenshots/apps-canvas.png)
+
 Entities: `agent-app.entity.ts`, `agent-app-distribution.entity.ts`, `app-build.entity.ts`.
 
 ## Addressing
@@ -40,15 +46,23 @@ POST /apps/:slug/distributions/:target/publish
 POST /apps/:slug/distributions/:target/unpublish
 ```
 
-For every target except the three that compile to a file, publishing stands up a gateway of the matching type (`distribution-publish.ts` holds that mapping as one readable table), wired to the app's first agent, at `/apps/:slug/:target` — unique per organization, so it cannot collide with a hand-made gateway or with the same product's other surfaces.
+For every target except the three that compile to a file, publishing stands up a gateway of the matching type (`distribution-publish.ts` holds that mapping as one readable table) at `/apps/:slug/:target` — unique per organization, so it cannot collide with a hand-made gateway or with the same product's other surfaces.
 
 The surface is created with the product's own branding and the product's own rate limits. Publishing with the limits dropped would make the check that allowed it theatre.
+
+**Which agent answers** is per surface. A product can carry several, and the entity documents the first as the default — a fine default and a bad silent decision, because a support product with a triage agent and a billing agent should be able to put the billing one on the billing channel. A distribution may name its own in `configuration.agentId` and falls back to the default when it does not. Naming one that has since been removed from the product is refused rather than published, so a surface never answers with something the operator believes is no longer involved.
 
 Publishing is idempotent: doing it twice re-syncs the existing gateway rather than failing on the unique endpoint, because the second attempt is usually someone reapplying a settings change.
 
 Publishing refuses two things that would otherwise produce a surface that is live and useless. A platform whose credentials are absent (`REQUIRED_CREDENTIALS`, read off what each adapter actually uses, never invented) and a workflow agent behind a chat surface, which the runtime turns away at the first message with "not in autonomous mode".
 
 For the hosted chat, publish writes the `hostedChat` block it is looked up by. Without it a published web app is a gateway `findBySlug` cannot see, which is what happened before.
+
+![The web distribution after a successful publish](../docs-site/public/screenshots/apps-web-published.png)
+
+The resulting hosted surface carries the product name, greeting, colour, disclosure, and public-session controls rather than the dashboard chrome.
+
+![The branded hosted chat surface](../docs-site/public/screenshots/apps-hosted-chat.png)
 
 Unpublishing **deactivates** the gateway rather than deleting it. Republishing keeps the same endpoint and whatever credentials were attached, so taking a product down for an afternoon does not mean re-registering a Slack app afterwards.
 
@@ -166,6 +180,10 @@ Getting this wrong is not a tidiness problem. Attributing a visitor through `use
 Desktop builds download the pinned Electron release, so the host needs outbound network at build time. `toolchainReadiness` and `signingReadiness` check for each before doing any work, and a deployment missing one says so in a sentence rather than failing obscurely.
 
 `GET /apps/:slug/distributions/:target/capabilities` answers both before anyone presses Build, and the panel disables the button when the host cannot compile and warns separately when it can compile but not sign. Those are different problems with different fixes, so they are said separately.
+
+![A terminal distribution refusing to build because Bun is absent from the staging build host](../docs-site/public/screenshots/apps-build-capabilities.png)
+
+The API image should remain lean. The recommended production layout is a dedicated build worker image, with an eventual option to isolate each build in an ephemeral Kubernetes Job. The trade-offs, security boundary, and rollout are in [Builder image topology](./builder-image-topology.md).
 
 Two settings point at what the build packages, both falling back to the monorepo layout:
 

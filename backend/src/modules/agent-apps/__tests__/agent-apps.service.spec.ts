@@ -313,6 +313,26 @@ describe('AgentAppsService', () => {
       expect(gateways.upsertForDistribution).not.toHaveBeenCalled();
     });
 
+    it('repoints the surface when the app changes which agent answers', async () => {
+      // Republishing is how a settings change is applied, so a gateway
+      // that kept pointing at the old agent would be silently stale.
+      appRepository.findOne.mockResolvedValueOnce(app({ agentIds: ['agent-2'] }));
+      agentRepository.findOne.mockResolvedValueOnce({ id: 'agent-2', mode: 'autonomous' });
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        configuration: SLACK_CREDS,
+      });
+
+      await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
+
+      expect(gateways.upsertForDistribution).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: 'agent-2' }),
+        ORG,
+        'user-1',
+      );
+    });
+
     it('resolves the agent scoped to the organization', async () => {
       // An agent id copied from another tenant must not be publishable.
       distributionRepository.findOne.mockResolvedValueOnce({
