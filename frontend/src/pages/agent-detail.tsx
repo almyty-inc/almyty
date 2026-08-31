@@ -222,6 +222,36 @@ export function AgentDetailPage() {
     },
   })
 
+  const activateMutation = useMutation({
+    mutationFn: () => agentsApi.activate(id!),
+    onSuccess: async () => {
+      success('Agent activated', 'This agent is now active.')
+      await queryClient.invalidateQueries({ queryKey: ['agent', id] })
+      await queryClient.invalidateQueries({ queryKey: ['agents'] })
+    },
+    onError: (err: any) => {
+      errorNotif(
+        'Could not activate',
+        err?.response?.data?.message || err?.message || 'Failed to activate this agent.',
+      )
+    },
+  })
+
+  const deactivateMutation = useMutation({
+    mutationFn: () => agentsApi.deactivate(id!),
+    onSuccess: async () => {
+      success('Agent deactivated', 'This agent is now inactive.')
+      await queryClient.invalidateQueries({ queryKey: ['agent', id] })
+      await queryClient.invalidateQueries({ queryKey: ['agents'] })
+    },
+    onError: (err: any) => {
+      errorNotif(
+        'Could not deactivate',
+        err?.response?.data?.message || err?.message || 'Failed to deactivate this agent.',
+      )
+    },
+  })
+
   // Export handler
   const handleExport = async () => {
     try {
@@ -296,6 +326,8 @@ export function AgentDetailPage() {
         onExportTechDoc={handleExportTechDoc}
         onDuplicate={() => duplicateMutation.mutate()}
         onInvoke={() => setInvokeDialogOpen(true)}
+        onActivate={() => activateMutation.mutate()}
+        onDeactivate={() => deactivateMutation.mutate()}
       />
 
       <AgentStats agent={agent} />
