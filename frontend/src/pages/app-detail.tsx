@@ -1,50 +1,61 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+import { EmptyState } from '@/components/ui/empty-state'
+import { interfaceTypeIcons } from '@/components/agents/detail/constants'
 import { useNotifications } from '@/store/app'
 import { agentsApi } from '@/lib/api'
 import {
+  DISTRIBUTION_BLURBS,
   DISTRIBUTION_LABELS,
   agentAppsApi,
+  type AppDistribution,
+  type DistributionStatus,
   type DistributionTarget,
 } from '@/lib/agent-apps'
-import { AppCanvas } from '@/components/agent-apps/app-canvas'
 import { AppAgentsPanel } from '@/components/agent-apps/app-agents-panel'
 import { AppSettingsPanel } from '@/components/agent-apps/app-settings-panel'
 import { AddDistributionDialog } from '@/components/agent-apps/add-distribution-dialog'
 import { DistributionPanel } from '@/components/agent-apps/distribution-panel'
 
-type OpenPanel =
-  | { kind: 'agents' }
-  | { kind: 'settings' }
-  | { kind: 'distribution'; target: DistributionTarget }
-  | null
+/** How each distribution status reads and colours in a badge. */
+const STATUS: Record<DistributionStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  live: { label: 'Live', variant: 'default' },
+  built: { label: 'Built', variant: 'secondary' },
+  building: { label: 'Building', variant: 'outline' },
+  draft: { label: 'Not shipped yet', variant: 'outline' },
+  failed: { label: 'Build failed', variant: 'destructive' },
+}
 
 /**
  * One app: what it is made of, and everywhere it ships.
  *
- * The canvas is the page rather than a tab on it. Editing happens in
- * panels opened from the node you clicked, so the thing you are
- * changing stays visible in context instead of being replaced by a
- * form.
+ * Structured like every other detail page in the product — a header, a
+ * row of tabbed sections, cards for the things it contains, and dialogs
+ * for editing them. An app is a configuration entity, the same shape as
+ * a gateway, so it is presented the same way rather than as a canvas.
  */
 export function AppDetailPage() {
   const { slug = '' } = useParams<{ slug: string }>()
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
-  const [panel, setPanel] = useState<OpenPanel>(null)
+
+  const [editing, setEditing] = useState<DistributionTarget | null>(null)
   const [addOpen, setAddOpen] = useState(false)
 
   const {
@@ -59,8 +70,6 @@ export function AppDetailPage() {
     enabled: !!slug,
   })
 
-  // Refetched alongside the app so the blockers on the product node
-  // reflect the edit that was just saved, not the previous state.
   const { data: check } = useQuery({
     queryKey: ['agent-app-check', slug],
     queryFn: () => agentAppsApi.check(slug),
@@ -86,7 +95,7 @@ export function AppDetailPage() {
     mutationFn: (target: DistributionTarget) => agentAppsApi.removeDistribution(slug, target),
     onSuccess: () => {
       success('Stopped shipping', 'That distribution has been removed.')
-      setPanel(null)
+      setEditing(null)
       invalidate()
     },
     onError: (err: any) =>
@@ -105,13 +114,15 @@ export function AppDetailPage() {
     return <QueryError error={error} onRetry={() => refetch()} />
   }
 
-  const openDistribution = app.distributions?.find(
-    (d) => panel?.kind === 'distribution' && d.target === panel.target,
-  )
+  const distributions = app.distributions ?? []
+  const openDistribution = distributions.find((d) => d.target === editing)
+  const refusals = check?.refusals ?? []
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between">
+    <div className="space-y-8">
+      {/* Header — matches the other detail pages: back link, name, slug,
+          and the page's primary action on the right. */}
+      <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <Link
             to="/apps"
@@ -120,64 +131,102 @@ export function AppDetailPage() {
             <ArrowLeft className="h-3 w-3" />
             Apps
           </Link>
-          <h1 className="truncate font-heading text-2xl font-semibold">
+          <h1 className="truncate font-heading text-2xl font-extrabold tracking-tight sm:text-4xl">
             {app.branding?.appName || app.name}
           </h1>
           <code className="text-xs text-muted-foreground">{app.slug}</code>
         </div>
+        <Button onClick={() => setAddOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Ship somewhere
+        </Button>
       </div>
 
-      <AppCanvas
-        app={app}
-        agents={agents}
-        check={check}
-        onSelectAgents={() => setPanel({ kind: 'agents' })}
-        onSelectApp={() => setPanel({ kind: 'settings' })}
-        onSelectDistribution={(target) => setPanel({ kind: 'distribution', target })}
-        onAddDistribution={() => setAddOpen(true)}
-      />
+      {/* What is stopping it from shipping, if anything — the same
+          continuously-updated list, but as a banner rather than tucked
+          inside a node. */}
+      {refusals.length > 0 ? (
+        <Card className="border-amber-400 p-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="h-4 w-4" />
+            Not ready to ship yet
+          </div>
+          <ul className="mt-2 space-y-1.5">
+            {refusals.map((r) => (
+              <li key={r.code} className="text-xs text-muted-foreground">
+                {r.message}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : (
+        <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+          <Check className="h-4 w-4" />
+          Ready to ship
+        </p>
+      )}
 
-      <Sheet open={panel !== null} onOpenChange={(open) => !open && setPanel(null)}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-          {panel?.kind === 'agents' && (
-            <>
-              <SheetHeader>
-                <SheetTitle>Agents in this app</SheetTitle>
-                <SheetDescription>
-                  The first one is where a new conversation starts.
-                </SheetDescription>
-              </SheetHeader>
-              <AppAgentsPanel
-                app={app}
-                agents={agents}
-                onSaved={() => {
-                  invalidate()
-                  setPanel(null)
-                }}
-              />
-            </>
+      <Tabs defaultValue="distributions" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="distributions">
+            Distributions ({distributions.length})
+          </TabsTrigger>
+          <TabsTrigger value="agents">Agents ({app.agentIds.length})</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
+        </TabsList>
+
+        {/* Distributions — cards, one per place the product ships, edited
+            through a dialog like every other create/edit surface. */}
+        <TabsContent value="distributions" className="space-y-4">
+          {distributions.length === 0 ? (
+            <EmptyState
+              title="Not shipping anywhere yet"
+              description="Ship this product to a web app, a terminal, a desktop app, or a messaging platform your users already use."
+              action={
+                <Button onClick={() => setAddOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Ship somewhere
+                </Button>
+              }
+            />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {distributions.map((distribution) => (
+                <DistributionCard
+                  key={distribution.target}
+                  distribution={distribution}
+                  onEdit={() => setEditing(distribution.target)}
+                />
+              ))}
+            </div>
           )}
+        </TabsContent>
 
-          {panel?.kind === 'settings' && (
-            <>
-              <SheetHeader>
-                <SheetTitle>App settings</SheetTitle>
-                <SheetDescription>
-                  Branding, who can use it, and what it may touch.
-                </SheetDescription>
-              </SheetHeader>
-              <AppSettingsPanel app={app} onSaved={invalidate} />
-            </>
-          )}
+        <TabsContent value="agents">
+          <Card className="p-6">
+            <AppAgentsPanel app={app} agents={agents} onSaved={invalidate} />
+          </Card>
+        </TabsContent>
 
-          {panel?.kind === 'distribution' && openDistribution && (
+        <TabsContent value="settings">
+          <Card className="p-6">
+            <AppSettingsPanel app={app} onSaved={invalidate} />
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Editing a distribution — a centered dialog, the same pattern as
+          every other edit in the product. */}
+      <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          {openDistribution && (
             <>
-              <SheetHeader>
-                <SheetTitle>{DISTRIBUTION_LABELS[panel.target]}</SheetTitle>
-                <SheetDescription>
-                  How this app ships to {DISTRIBUTION_LABELS[panel.target]}.
-                </SheetDescription>
-              </SheetHeader>
+              <DialogHeader>
+                <DialogTitle>{DISTRIBUTION_LABELS[openDistribution.target]}</DialogTitle>
+                <DialogDescription>
+                  How this app ships to {DISTRIBUTION_LABELS[openDistribution.target]}.
+                </DialogDescription>
+              </DialogHeader>
               <DistributionPanel
                 app={app}
                 distribution={openDistribution}
@@ -186,17 +235,17 @@ export function AppDetailPage() {
               />
               <Button
                 variant="ghost"
-                className="mt-6 w-full text-destructive"
+                className="mt-2 w-full text-destructive"
                 disabled={removeDistribution.isPending}
-                onClick={() => removeDistribution.mutate(panel.target)}
+                onClick={() => removeDistribution.mutate(openDistribution.target)}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                Stop shipping to {DISTRIBUTION_LABELS[panel.target]}
+                Stop shipping to {DISTRIBUTION_LABELS[openDistribution.target]}
               </Button>
             </>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       <AddDistributionDialog
         app={app}
@@ -205,6 +254,47 @@ export function AppDetailPage() {
         onAdded={invalidate}
       />
     </div>
+  )
+}
+
+/** One place the product ships to, as a card in the grid. */
+function DistributionCard({
+  distribution,
+  onEdit,
+}: {
+  distribution: AppDistribution
+  onEdit: () => void
+}) {
+  const status = STATUS[distribution.status] ?? STATUS.draft
+
+  return (
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={onEdit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onEdit()
+        }
+      }}
+      className="cursor-pointer p-4 transition-colors hover:border-primary/50"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="text-lg" aria-hidden>
+            {interfaceTypeIcons[distribution.target] ?? '📦'}
+          </span>
+          <span className="truncate font-medium">
+            {DISTRIBUTION_LABELS[distribution.target]}
+          </span>
+        </div>
+        <Badge variant={status.variant}>{status.label}</Badge>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {DISTRIBUTION_BLURBS[distribution.target]}
+      </p>
+    </Card>
   )
 }
 
