@@ -146,6 +146,27 @@ describe('ProcessToolchainRunner stdin', () => {
   });
 });
 
+describe('targetLabel in readiness reasons', () => {
+  const noBun: ToolchainRunner = {
+    available: jest.fn().mockResolvedValue(false),
+    run: jest.fn(),
+  };
+
+  it('names the medium, not the raw enum value', async () => {
+    // "cannot build tui" reads like a bug; "the Terminal app" reads
+    // like a sentence.
+    const r = await toolchainReadiness('tui', noBun);
+    expect(r.reason).toContain('Terminal app');
+    expect(r.reason).not.toMatch(/build tui\b/);
+  });
+
+  it('says a web distribution produces no file in words', async () => {
+    const r = await toolchainReadiness('web', noBun);
+    expect(r.reason).toContain('Web app');
+    expect(r.reason).not.toMatch(/^web /);
+  });
+});
+
 describe('electronBuilderArgs', () => {
   const base = {
     projectDir: '/w/shell',
