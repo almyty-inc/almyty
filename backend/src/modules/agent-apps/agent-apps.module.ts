@@ -14,6 +14,7 @@ import { AgentAppsController } from './agent-apps.controller';
 import { AgentAppsService } from './agent-apps.service';
 import { AppBuildsService, APP_BUILD_QUEUE } from './app-builds.service';
 import { AppBuildProcessor } from './app-build.processor';
+import { buildProcessingEnabled } from './build-mode';
 import { BuildSignerService } from './build-signer.service';
 
 /**
@@ -38,7 +39,15 @@ import { BuildSignerService } from './build-signer.service';
     AuthorizationModule,
   ],
   controllers: [AgentAppsController],
-  providers: [AgentAppsService, AppBuildsService, AppBuildProcessor, BuildSignerService],
+  providers: [
+    AgentAppsService,
+    AppBuildsService,
+    BuildSignerService,
+    // Only consume build jobs when this process is meant to. An API pod
+    // running alongside a dedicated build worker sets APP_BUILD_MODE=off
+    // so it does not grab a job it cannot fully handle.
+    ...(buildProcessingEnabled() ? [AppBuildProcessor] : []),
+  ],
   exports: [AgentAppsService, AppBuildsService],
 })
 export class AgentAppsModule {}
