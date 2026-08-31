@@ -27,13 +27,13 @@ That is the part nobody else ships, so it is the part this subsystem is built ar
 
 The separation is load-bearing. One agent appears in an internal app and a customer-facing one at the same time, under different names, different auth and different limits, without being duplicated.
 
-An app is a normal detail page: a header, three tabs (Distributions, Agents, Settings), and a card per place the product ships. Each card carries a ProtocolBadge for the medium and a status badge (Live, Building, Not shipped yet). Clicking a card opens a centered dialog — not a canvas, not a drawer.
+An app is a normal detail page: a header, three tabs (Distributions, Agents, Settings), and a card per place the product ships. Each card carries a ProtocolBadge for the medium and a status badge (Live, Building, Draft). Clicking a card opens a centered dialog — not a canvas, not a drawer.
 
 ![An app detail page with Slack, Terminal, and Web distributions as cards](../docs-site/public/screenshots/apps-canvas.png)
 
-A product with no distributions yet shows an EmptyState on the Distributions tab, with the same Ship somewhere action as the header.
+A product with no distributions yet shows an EmptyState on the Distributions tab, with the same Add distribution action as the header.
 
-![Empty app detail: not shipping anywhere yet](../docs-site/public/screenshots/apps-empty.png)
+![Empty app detail: no distributions yet](../docs-site/public/screenshots/apps-empty.png)
 
 Entities: `agent-app.entity.ts`, `agent-app-distribution.entity.ts`, `app-build.entity.ts`.
 
@@ -64,7 +64,7 @@ Channel distributions take those credentials on the distribution itself — Bot 
 
 ![Slack distribution dialog with platform credential fields](../docs-site/public/screenshots/apps-slack-credentials.png)
 
-![Slack published and live, with Take it down instead of a silent fail](../docs-site/public/screenshots/apps-slack-live.png)
+![Slack published and live, with Unpublish instead of a silent fail](../docs-site/public/screenshots/apps-slack-live.png)
 
 For the hosted chat, publish writes the `hostedChat` block it is looked up by. Without it a published web app is a gateway `findBySlug` cannot see, which is what happened before.
 

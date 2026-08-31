@@ -31,12 +31,12 @@ export interface AddDistributionDialogProps {
 /** Grouped so the choice reads as a decision about reach, not a list. */
 const GROUPS: Array<{ title: string; blurb: string; targets: DistributionTarget[] }> = [
   {
-    title: 'You host it',
+    title: 'Hosted',
     blurb: 'Served by almyty, live as soon as you publish',
     targets: ['web'],
   },
   {
-    title: 'They install it',
+    title: 'Installable',
     blurb: 'Built here, signed with your certificate',
     // 'binary' is deliberately absent. It compiles to byte-identical
     // output to 'tui' — same entry point, same bun invocation — so
@@ -46,7 +46,7 @@ const GROUPS: Array<{ title: string; blurb: string; targets: DistributionTarget[
     targets: ['tui', 'desktop'],
   },
   {
-    title: 'Where they already are',
+    title: 'Messaging',
     blurb: 'Needs the platform credentials for each one',
     targets: [
       'slack',
@@ -82,7 +82,7 @@ export function AddDistributionDialog({
   const add = useMutation({
     mutationFn: (target: DistributionTarget) => agentAppsApi.addDistribution(app.slug, target),
     onSuccess: (_data, target) => {
-      success('Added', `This app now ships to ${DISTRIBUTION_LABELS[target] ?? target}.`)
+      success('Added', `${DISTRIBUTION_LABELS[target] ?? target} is on this app.`)
       setPending(null)
       onOpenChange(false)
       onAdded()
@@ -97,9 +97,9 @@ export function AddDistributionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Ship this app somewhere</DialogTitle>
+          <DialogTitle>Add a distribution</DialogTitle>
           <DialogDescription>
-            The same app, reaching people in a different place.
+            Choose where this app is published.
           </DialogDescription>
         </DialogHeader>
 
@@ -138,7 +138,7 @@ export function AddDistributionDialog({
                           <ProtocolBadge protocol={target} />
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          {already ? 'Already shipping here' : DISTRIBUTION_BLURBS[target]}
+                          {already ? 'Already added' : DISTRIBUTION_BLURBS[target]}
                         </span>
                         {!already && isChannelTarget(target) && (
                           <span className="mt-0.5 block text-[11px] text-muted-foreground">

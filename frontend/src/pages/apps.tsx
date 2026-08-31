@@ -37,16 +37,22 @@ export function AppsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-semibold">Apps</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your agents, packaged under your own name and shipped where your users are.
+          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">
+            Apps
+          </h1>
+          <p className="text-muted-foreground">
+            {isLoading ? (
+              <span className="inline-block h-4 w-48 animate-pulse rounded bg-muted" />
+            ) : (
+              `${apps.length} ${apps.length === 1 ? 'app' : 'apps'}`
+            )}
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          New app
+          Create App
         </Button>
       </div>
 
@@ -60,11 +66,11 @@ export function AppsPage() {
         <EmptyState
           icon={Package}
           title="No apps yet"
-          description="An app gathers one or more agents under your branding and ships them to a web address, a messaging platform, a terminal, or an installable binary."
+          description="An app gathers agents under your branding and publishes them as a web app, a messaging channel, a terminal, or a desktop app."
           action={
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Create your first app
+              Create app
             </Button>
           }
         />
