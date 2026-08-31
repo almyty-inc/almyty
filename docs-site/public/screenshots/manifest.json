@@ -1,10 +1,10 @@
 {
-  "capturedAt": "2026-06-11T18:30:00.000Z",
+  "capturedAt": "2026-08-31T11:00:00.000Z",
   "baseUrl": "https://app.staging.almyty.com",
-  "theme": "dark",
+  "theme": "mixed",
   "viewport": {
     "width": 1440,
-    "height": 900
+    "height": 1100
   },
   "screenshots": [
     {
@@ -136,6 +136,41 @@
       "id": "analytics-agents",
       "title": "Analytics \u2192 Agents tab with execution metrics",
       "path": "screenshots/analytics-agents.png"
+    },
+    {
+      "id": "apps-list",
+      "title": "Apps list with a customer-facing product",
+      "path": "screenshots/apps-list.png"
+    },
+    {
+      "id": "apps-canvas",
+      "title": "App canvas with Web, Terminal, and Slack distributions",
+      "path": "screenshots/apps-canvas.png"
+    },
+    {
+      "id": "apps-web-published",
+      "title": "Published Web app distribution",
+      "path": "screenshots/apps-web-published.png"
+    },
+    {
+      "id": "apps-hosted-chat",
+      "title": "Branded hosted chat surface",
+      "path": "screenshots/apps-hosted-chat.png"
+    },
+    {
+      "id": "apps-slack-credentials",
+      "title": "Slack distribution credential handoff",
+      "path": "screenshots/apps-slack-credentials.png"
+    },
+    {
+      "id": "apps-build-capabilities",
+      "title": "Build capability refusal when Bun is unavailable",
+      "path": "screenshots/apps-build-capabilities.png"
+    },
+    {
+      "id": "apps-hosted-chat-routing-failure",
+      "title": "Hosted-chat wildcard routing failure",
+      "path": "screenshots/apps-hosted-chat-routing-failure.png"
     }
   ]
 }

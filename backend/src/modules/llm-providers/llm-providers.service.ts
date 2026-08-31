@@ -424,9 +424,25 @@ export class LlmProvidersService {
 
       const startTime = Date.now();
 
+      // Provider creation validates credentials by listing models, but the
+      // create form does not require a provider-wide default model. Passing
+      // no model here lets the OpenAI-compatible runner fall back to gpt-4o,
+      // which marks Mistral, Groq, DeepSeek, and similar providers unhealthy
+      // even when their key is valid. Prefer an explicit default; otherwise
+      // probe the first chat-capable model returned by that provider.
+      let healthCheckModel = provider.configuration?.model;
+      if (!healthCheckModel) {
+        const availableModels = await this.modelsHelper.fetchModelsFromProvider(provider);
+        healthCheckModel = availableModels[0]?.id;
+      }
+      if (!healthCheckModel) {
+        throw new BadRequestException('Provider returned no chat-capable models');
+      }
+
       // Perform a simple health check request
       const testRequest: ChatRequest = {
         messages: [{ role: MessageRole.USER, content: 'Hello' }],
+        model: healthCheckModel,
         maxTokens: 10,
         temperature: 0.1,
       };
