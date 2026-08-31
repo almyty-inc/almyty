@@ -93,6 +93,25 @@ export function missingCredentials(
 }
 
 /**
+ * Which agent answers on this surface.
+ *
+ * A product can carry several agents, and the entity documents the
+ * first as the default. That is a fine default and a bad silent
+ * decision: a support product with a triage agent and a billing agent
+ * should be able to put the billing one on the billing channel. So a
+ * distribution may name its own, and falls back to the app's default
+ * when it does not.
+ */
+export function agentForDistribution(
+  app: Pick<AgentApp, 'agentIds'>,
+  configuration: Record<string, any> | null | undefined,
+): string | null {
+  const named = configuration?.agentId;
+  if (typeof named === 'string' && named.trim()) return named.trim();
+  return app.agentIds?.[0] ?? null;
+}
+
+/**
  * Why a distribution cannot go live yet, in the operator's words.
  *
  * Separate from `checkApp`, which answers for the product as a whole.
@@ -103,6 +122,8 @@ export const PUBLISH_REFUSALS = Object.freeze({
   NO_AGENT: 'A published product needs an agent to answer. Add one first.',
   APP_INACTIVE: 'This product is switched off. Turn it back on before publishing.',
   MISSING_CREDENTIALS: 'This platform cannot carry a message yet. It still needs: ',
+  AGENT_NOT_ON_APP:
+    'The agent this surface is set to answer with is no longer part of this product. Pick one that is.',
   AGENT_NOT_CONVERSATIONAL:
     'A chat surface needs an agent that holds a conversation. This one runs as a workflow, which answers a call rather than a person, so switch it to autonomous or pick a different agent.',
 });
@@ -135,6 +156,14 @@ export function checkPublish(
   if (!servesOverGateway(target)) refuse('NOT_SERVED');
   if (!app.agentIds?.length) refuse('NO_AGENT');
   if (app.isActive === false) refuse('APP_INACTIVE');
+
+  // A named agent that has since been removed from the product would
+  // otherwise publish a surface answered by something the operator
+  // thinks is no longer involved.
+  const named = configuration?.agentId;
+  if (typeof named === 'string' && named.trim() && !app.agentIds?.includes(named.trim())) {
+    refuse('AGENT_NOT_ON_APP');
+  }
 
   // Only worth saying for something that would otherwise go live.
   if (servesOverGateway(target)) {

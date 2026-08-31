@@ -21,7 +21,7 @@ import { DistributionTarget } from '../../entities/agent-app-distribution.entity
 import { AgentAppsService, CreateAppDto, UpdateAppDto } from './agent-apps.service';
 import { AppBuildsService, RequestBuildDto } from './app-builds.service';
 import { platformsFor, signingRequirementFor } from './build-targets';
-import { handoffFor } from './build-handoff';
+import { downloadedFilename, handoffFor } from './build-handoff';
 
 /**
  * The agent factory API.
@@ -293,6 +293,7 @@ export class AgentAppsController {
           build.platform,
           build.signed,
           app.branding?.appName || app.name,
+          downloadedFilename(app.slug, build.version, build.platform, build.artifactKey),
         ),
       })),
     };

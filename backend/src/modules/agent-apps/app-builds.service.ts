@@ -22,6 +22,7 @@ import {
   platformsFor,
 } from './build-targets';
 import { signingReadiness } from './build-signing';
+import { downloadedFilename } from './build-handoff';
 import { ProcessToolchainRunner, toolchainReadiness } from './build-toolchain';
 
 export const APP_BUILD_QUEUE = 'app-build';
@@ -271,16 +272,18 @@ export class AppBuildsService {
     });
     if (!app) throw new NotFoundException('That app no longer exists.');
 
-    // Name it after the product, not after a row id, because this
-    // filename is what lands in someone's Downloads folder.
-    const extension = build.artifactKey?.includes('.')
-      ? build.artifactKey.slice(build.artifactKey.lastIndexOf('.') + 1)
-      : null;
-    const stem = `${app.slug}-${build.version ?? '0.0.0'}-${build.platform}`;
-
     return {
       body: await this.storage.download(build.artifactKey!),
-      filename: extension ? `${stem}.${extension}` : stem,
+      // Named after the product rather than a row id, because this is
+      // what lands in someone's Downloads folder. Shared with the
+      // instructions we hand out, so the two cannot name different
+      // files.
+      filename: downloadedFilename(
+        app.slug,
+        build.version,
+        build.platform,
+        build.artifactKey,
+      ),
     };
   }
 
