@@ -27,9 +27,13 @@ That is the part nobody else ships, so it is the part this subsystem is built ar
 
 The separation is load-bearing. One agent appears in an internal app and a customer-facing one at the same time, under different names, different auth and different limits, without being duplicated.
 
-The canvas makes that relationship explicit: agents feed one product, and the product fans out to each distribution independently.
+An app is a normal detail page: a header, three tabs (Distributions, Agents, Settings), and a card per place the product ships. Each card carries a ProtocolBadge for the medium and a status badge (Live, Building, Not shipped yet). Clicking a card opens a centered dialog — not a canvas, not a drawer.
 
-![An app canvas connecting one agent to web, terminal, and Slack distributions](../docs-site/public/screenshots/apps-canvas.png)
+![An app detail page with Slack, Terminal, and Web distributions as cards](../docs-site/public/screenshots/apps-canvas.png)
+
+A product with no distributions yet shows an EmptyState on the Distributions tab, with the same Ship somewhere action as the header.
+
+![Empty app detail: not shipping anywhere yet](../docs-site/public/screenshots/apps-empty.png)
 
 Entities: `agent-app.entity.ts`, `agent-app-distribution.entity.ts`, `app-build.entity.ts`.
 
@@ -56,6 +60,12 @@ Publishing is idempotent: doing it twice re-syncs the existing gateway rather th
 
 Publishing refuses two things that would otherwise produce a surface that is live and useless. A platform whose credentials are absent (`REQUIRED_CREDENTIALS`, read off what each adapter actually uses, never invented) and a workflow agent behind a chat surface, which the runtime turns away at the first message with "not in autonomous mode".
 
+Channel distributions take those credentials on the distribution itself — Bot token and Signing secret for Slack — rather than sending the operator to Gateways. Publishing with them filled goes live.
+
+![Slack distribution dialog with platform credential fields](../docs-site/public/screenshots/apps-slack-credentials.png)
+
+![Slack published and live, with Take it down instead of a silent fail](../docs-site/public/screenshots/apps-slack-live.png)
+
 For the hosted chat, publish writes the `hostedChat` block it is looked up by. Without it a published web app is a gateway `findBySlug` cannot see, which is what happened before.
 
 ![The web distribution after a successful publish](../docs-site/public/screenshots/apps-web-published.png)
@@ -77,6 +87,10 @@ Unpublishing **deactivates** the gateway rather than deleting it. Republishing k
 An unset auth mode reads as open, not as unset. The permissive reading of missing configuration is the one that gets someone billed.
 
 The first two are satisfied from the app's own `limits` column: a cost ceiling per run in cents, and per-user and per-IP request ceilings. Cents rather than currency because a ceiling in floating point is a rounding argument later; per-IP separately from per-user because a hosted chat visitor has no account.
+
+Those inputs live on the Settings tab, next to branding and who may use the product.
+
+![App Settings tab with cost ceiling and per-user / per-IP rate limits](../docs-site/public/screenshots/apps-settings.png)
 
 A limit left empty is stored as null, not as zero. Zero would read as "no requests allowed" rather than "unset", and the rules treat both as unprotected — but only one of them is what the operator meant.
 
