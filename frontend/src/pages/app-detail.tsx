@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowLeft, Check, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, Package, Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -17,7 +17,7 @@ import {
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { EmptyState } from '@/components/ui/empty-state'
-import { interfaceTypeIcons } from '@/components/agents/detail/constants'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { useNotifications } from '@/store/app'
 import { agentsApi } from '@/lib/api'
 import {
@@ -34,10 +34,10 @@ import { AddDistributionDialog } from '@/components/agent-apps/add-distribution-
 import { DistributionPanel } from '@/components/agent-apps/distribution-panel'
 
 /** How each distribution status reads and colours in a badge. */
-const STATUS: Record<DistributionStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  live: { label: 'Live', variant: 'default' },
+const STATUS: Record<DistributionStatus, { label: string; variant: 'success' | 'secondary' | 'warning' | 'outline' | 'destructive' }> = {
+  live: { label: 'Live', variant: 'success' },
   built: { label: 'Built', variant: 'secondary' },
-  building: { label: 'Building', variant: 'outline' },
+  building: { label: 'Building', variant: 'warning' },
   draft: { label: 'Not shipped yet', variant: 'outline' },
   failed: { label: 'Build failed', variant: 'destructive' },
 }
@@ -180,6 +180,7 @@ export function AppDetailPage() {
         <TabsContent value="distributions" className="space-y-4">
           {distributions.length === 0 ? (
             <EmptyState
+              icon={Package}
               title="Not shipping anywhere yet"
               description="Ship this product to a web app, a terminal, a desktop app, or a messaging platform your users already use."
               action={
@@ -281,15 +282,13 @@ function DistributionCard({
       className="cursor-pointer p-4 transition-colors hover:border-primary/50"
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="text-lg" aria-hidden>
-            {interfaceTypeIcons[distribution.target] ?? '📦'}
-          </span>
-          <span className="truncate font-medium">
-            {DISTRIBUTION_LABELS[distribution.target]}
-          </span>
-        </div>
+        <span className="truncate font-medium">
+          {DISTRIBUTION_LABELS[distribution.target]}
+        </span>
         <Badge variant={status.variant}>{status.label}</Badge>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <ProtocolBadge protocol={distribution.target} />
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
         {DISTRIBUTION_BLURBS[distribution.target]}
