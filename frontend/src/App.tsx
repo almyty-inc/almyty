@@ -92,10 +92,13 @@ function App() {
   // Mounted here because App renders under <BrowserRouter> (main.tsx).
   usePageviews()
 
-  // Initialize auth state on app start
+  // Tenant hosts are public chat, not the dashboard. checkAuth hits
+  // /auth/profile; a 401 there redirects to /auth/login and is exactly
+  // the dashboard sign-in the hosted URL must never show.
   useEffect(() => {
+    if (tenantSlug) return
     checkAuth()
-  }, [checkAuth])
+  }, [checkAuth, tenantSlug])
 
   // A tenant subdomain serves the hosted chat app and nothing else: no
   // dashboard routes, no auth bootstrap, no chance of a stray link
