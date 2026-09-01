@@ -86,13 +86,23 @@ RUN set -eux; \
     rm -rf /tmp/apple-codesign-*; \
     bun --version; \
     rcodesign --version
+# The terminal client bun compiles. Not a backend Node dependency;
+# the processor only hands bun this path. Pinned to the published
+# @almyty/chat the monorepo currently ships.
+RUN mkdir -p /opt/almyty \
+ && cd /opt/almyty \
+ && npm install --omit=dev --legacy-peer-deps @almyty/chat@1.2.0 \
+ && test -f /opt/almyty/node_modules/@almyty/chat/dist/index.js \
+ && chown -R nestjs:nodejs /opt/almyty
 # -----------------------------------------------------------------------------
+
 
 USER nestjs
 
 EXPOSE 3000
 
 ENV NODE_ENV=production
+ENV APP_BUILD_CLIENT_ENTRY=/opt/almyty/node_modules/@almyty/chat/dist/index.js
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "const http = require('http'); http.get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"

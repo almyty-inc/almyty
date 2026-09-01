@@ -77,7 +77,7 @@ export function CreateAppDialog({ open, onOpenChange }: CreateAppDialogProps) {
         agentIds: [],
       }),
     onSuccess: (app) => {
-      success('App created', 'Add agents and choose where it ships.')
+      success('App created', 'Add agents and a distribution.')
       queryClient.invalidateQueries({ queryKey: ['agent-apps'] })
       onOpenChange(false)
       setName('')
@@ -96,9 +96,9 @@ export function CreateAppDialog({ open, onOpenChange }: CreateAppDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>New app</DialogTitle>
+          <DialogTitle>Create App</DialogTitle>
           <DialogDescription>
-            An app is your agents under your own name. You choose where it ships next.
+            An app is your agents under your own name. Add a distribution after you create it.
           </DialogDescription>
         </DialogHeader>
 

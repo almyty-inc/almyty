@@ -20,6 +20,7 @@ import { artifactExtension, type MacPackaging } from './build-targets';
 import { BuildStatus } from '../../entities/app-build.entity';
 import { hostedChatUrl } from '../gateways/channels/hosted-chat.config';
 import { writeIcon } from './build-icon';
+import { resolveClientEntry } from './build-client-entry';
 
 interface BuildJob {
   buildId: string;
@@ -164,7 +165,7 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
         // Resolved from configuration rather than as an installed
         // dependency, because the backend does not depend on the chat
         // client and should not: it only ever hands the path to bun.
-        const entry = await this.resolveClientEntry();
+        const entry = await resolveClientEntry();
         if (!entry) {
           await this.builds.fail(
             build,
@@ -390,29 +391,5 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
 
     const inRepo = join(process.cwd(), '..', 'packages', 'desktop-shell');
     return (await fs.stat(inRepo).catch(() => null)) ? inRepo : null;
-  }
-
-  /**
-   * Where the terminal client lives on this host.
-   *
-   * Explicit configuration first, then the monorepo layout, then a
-   * normal package resolution. Returns null rather than throwing so the
-   * build fails with a sentence naming the fix instead of a stack
-   * trace about module resolution.
-   */
-  private async resolveClientEntry(): Promise<string | null> {
-    const configured = process.env.APP_BUILD_CLIENT_ENTRY;
-    if (configured) {
-      return (await fs.stat(configured).catch(() => null)) ? configured : null;
-    }
-
-    const inRepo = join(process.cwd(), '..', 'packages', 'chat-cli', 'dist', 'index.js');
-    if (await fs.stat(inRepo).catch(() => null)) return inRepo;
-
-    try {
-      return require.resolve('@almyty/chat/dist/index.js', { paths: [process.cwd()] });
-    } catch {
-      return null;
-    }
   }
 }

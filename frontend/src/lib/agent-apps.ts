@@ -117,9 +117,9 @@ export interface AppCheck {
 }
 
 /**
- * What each target is, in the words an operator would use. The canvas
- * shows these rather than the enum, because "binary" alone does not
- * tell anyone what they get.
+ * What each target is, in the words an operator would use. Cards and
+ * dialogs show these rather than the enum, because "binary" alone does
+ * not tell anyone what they get.
  */
 export const DISTRIBUTION_LABELS: Record<DistributionTarget, string> = {
   web: 'Web app',

@@ -1,6 +1,6 @@
 /**
  * Agent detail page header: breadcrumb, title, status badge,
- * and action buttons (export, duplicate, invoke, edit).
+ * and action buttons (export, duplicate, activate, invoke, edit).
  */
 import React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   Pencil,
   Play,
+  Pause,
   Download,
   Copy,
   ChevronRight,
@@ -25,9 +26,19 @@ interface AgentHeaderProps {
   onExportTechDoc: () => void
   onDuplicate: () => void
   onInvoke: () => void
+  onActivate: () => void
+  onDeactivate: () => void
 }
 
-export function AgentHeader({ agent, onExport, onExportTechDoc, onDuplicate, onInvoke }: AgentHeaderProps) {
+export function AgentHeader({
+  agent,
+  onExport,
+  onExportTechDoc,
+  onDuplicate,
+  onInvoke,
+  onActivate,
+  onDeactivate,
+}: AgentHeaderProps) {
   const navigate = useNavigate()
 
   return (
@@ -48,7 +59,9 @@ export function AgentHeader({ agent, onExport, onExportTechDoc, onDuplicate, onI
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-heading font-bold">{agent.name}</h1>
-              <Badge variant={statusVariant[agent.status] || 'secondary'}>{agent.status}</Badge>
+              <Badge variant={statusVariant[agent.status] || 'secondary'}>
+                {agent.status === 'active' ? 'Active' : agent.status === 'draft' ? 'Draft' : agent.status === 'inactive' ? 'Inactive' : agent.status}
+              </Badge>
             </div>
             {agent.description && (
               <p className="text-muted-foreground mt-0.5">{agent.description}</p>
@@ -73,6 +86,16 @@ export function AgentHeader({ agent, onExport, onExportTechDoc, onDuplicate, onI
             <Copy className="h-4 w-4 mr-2" />
             Duplicate
           </Button>
+          {agent.status === 'active' ? (
+            <Button variant="outline" size="sm" onClick={onDeactivate}>
+              <Pause className="h-4 w-4 mr-2" />
+              Deactivate
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={onActivate}>
+              Activate
+            </Button>
+          )}
           <Button variant="outline" onClick={onInvoke}>
             <Play className="h-4 w-4 mr-2" />
             Invoke
