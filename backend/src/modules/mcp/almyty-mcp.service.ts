@@ -11,6 +11,8 @@ import { ApisService } from '../apis/apis.service';
 import { ToolsService } from '../tools/tools.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { AgentsService } from '../agents/agents.service';
+import { AgentAppsService } from '../agent-apps/agent-apps.service';
+import { AppBuildsService } from '../agent-apps/app-builds.service';
 import { LlmProvidersService } from '../llm-providers/llm-providers.service';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import {
@@ -43,6 +45,19 @@ const TOOLS = [
   { name: 'create_agent', description: 'Create an agent', inputSchema: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, mode: { type: 'string', enum: ['workflow', 'autonomous'] }, instructions: { type: 'string' } }, required: ['name'] } },
   { name: 'list_providers', description: 'List LLM providers', inputSchema: { type: 'object', properties: {} } },
   { name: 'add_provider', description: 'Add an LLM provider', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string' }, apiKey: { type: 'string' } }, required: ['name', 'type', 'apiKey'] } },
+  // -- Agent Factory (/apps): turn an agent into a shipped product --
+  { name: 'list_apps', description: 'List agent-factory apps (products built from your agents)', inputSchema: { type: 'object', properties: {} } },
+  { name: 'create_app', description: 'Create an app: a product built from one or more agents, shipped under its own name. slug is the address it ships under (unique per org, lowercase-kebab).', inputSchema: { type: 'object', properties: { name: { type: 'string' }, slug: { type: 'string', description: 'Lowercase-kebab, unique per org. This is the address the product ships under.' }, description: { type: 'string' }, agentIds: { type: 'array', items: { type: 'string' }, description: 'Agents this product exposes; the first is the default.' }, authMode: { type: 'string', description: 'public_link (default) or sso' } }, required: ['name', 'slug'] } },
+  { name: 'get_app', description: 'Get one app by slug with its distributions', inputSchema: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] } },
+  { name: 'check_app', description: 'What is stopping this app from shipping (unmet rules: cost cap, rate limits, auth). Read this before publishing.', inputSchema: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] } },
+  { name: 'update_app', description: 'Update an app: name, description, agents, branding, auth mode, and the limits a public product needs (costCapCents, perUserRateLimit, perIpRateLimit).', inputSchema: { type: 'object', properties: { slug: { type: 'string', description: 'Current slug of the app to update.' }, name: { type: 'string' }, description: { type: 'string' }, agentIds: { type: 'array', items: { type: 'string' } }, authMode: { type: 'string', description: 'public_link or sso' }, branding: { type: 'object', description: 'appName, greeting, primaryColor, iconUrl, disclosure', additionalProperties: true }, limits: { type: 'object', description: '{costCapCents, perUserRateLimit, perIpRateLimit} — cents, not currency. Null clears a limit.', additionalProperties: true } }, required: ['slug'] } },
+  { name: 'delete_app', description: 'Delete an app by slug', inputSchema: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] } },
+  { name: 'add_distribution', description: 'Ship an app to a target (one per target). web = hosted chat; channels (slack, telegram, ...) take their platform credentials in `configuration`; tui/desktop/binary are downloadable builds.', inputSchema: { type: 'object', properties: { slug: { type: 'string' }, target: { type: 'string', enum: ['web', 'tui', 'desktop', 'binary', 'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms', 'microsoft_teams', 'google_chat', 'email', 'signal', 'matrix', 'irc', 'webhook'] }, configuration: { type: 'object', description: 'Target config, incl. platform credentials for channels (e.g. Slack {botToken, signingSecret}) and configuration.agentId to override the answering agent.', additionalProperties: true }, gatewayId: { type: 'string', description: 'Attach to an existing gateway instead of creating one on publish.' } }, required: ['slug', 'target'] } },
+  { name: 'remove_distribution', description: 'Stop shipping an app to a target', inputSchema: { type: 'object', properties: { slug: { type: 'string' }, target: { type: 'string', enum: ['web', 'tui', 'desktop', 'binary', 'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms', 'microsoft_teams', 'google_chat', 'email', 'signal', 'matrix', 'irc', 'webhook'] } }, required: ['slug', 'target'] } },
+  { name: 'publish_distribution', description: 'Publish a distribution so it answers. Stands up the matching gateway with the product branding and limits. Refuses when required channel credentials are missing, when a public product has no cost cap / rate limit, or when a workflow agent is put behind a chat surface.', inputSchema: { type: 'object', properties: { slug: { type: 'string' }, target: { type: 'string', enum: ['web', 'tui', 'desktop', 'binary', 'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms', 'microsoft_teams', 'google_chat', 'email', 'signal', 'matrix', 'irc', 'webhook'] } }, required: ['slug', 'target'] } },
+  { name: 'unpublish_distribution', description: 'Stop a distribution answering, keeping its settings and credentials (the gateway is deactivated, not deleted).', inputSchema: { type: 'object', properties: { slug: { type: 'string' }, target: { type: 'string', enum: ['web', 'tui', 'desktop', 'binary', 'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms', 'microsoft_teams', 'google_chat', 'email', 'signal', 'matrix', 'irc', 'webhook'] } }, required: ['slug', 'target'] } },
+  { name: 'build_app', description: 'Queue a downloadable build (tui/desktop/binary) on the server for one platform. Returns a build record; poll list_builds for status.', inputSchema: { type: 'object', properties: { slug: { type: 'string' }, target: { type: 'string', enum: ['tui', 'desktop', 'binary'] }, platform: { type: 'string', description: 'e.g. linux-x64, darwin-arm64, win-x64' }, version: { type: 'string' }, macPackaging: { type: 'string', description: 'macOS desktop only: how to package the .app' } }, required: ['slug', 'target', 'platform'] } },
+  { name: 'list_builds', description: 'Build history for an app', inputSchema: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] } },
   // ── Memory (canonical schema v1) ──────────────────────────────
   { name: 'memory_put', description: 'Write a memory or document item. memory mode = agent-written facts/preferences; document mode = chunked imported text.', inputSchema: { type: 'object', properties: { mode: { type: 'string', enum: ['memory', 'document'] }, scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'], description: 'Defaults to workspace if omitted.' }, scope_id: { type: 'string', description: 'Defaults to the calling organization id when scope_type=workspace.' }, content: { type: 'string' }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'], description: 'Memory mode only. Defaults to short.' }, tags: { type: 'array', items: { type: 'string' } }, ttl_seconds: { type: 'number' }, source_uri: { type: 'string', description: 'Document mode: where the text came from.' }, source_version: { type: 'number' } }, required: ['mode', 'content'] } },
   { name: 'memory_search', description: 'Hybrid (vector + FTS) search across a scope.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, scope_id: { type: 'string' }, mode: { type: 'string', enum: ['memory', 'document'] }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'] }, top_k: { type: 'number' }, fts_only: { type: 'boolean' } }, required: ['query'] } },
@@ -245,6 +260,55 @@ export class AlmytyMcpService {
       case 'create_agent': return get(AgentsService).createAgent({ ...args }, orgId, userId);
       case 'list_providers': return get(LlmProvidersService).getProviders({ organizationId: orgId, caller: { id: userId } });
       case 'add_provider': return get(LlmProvidersService).createProvider({ name: args.name, type: args.type, configuration: { apiKey: args.apiKey } }, orgId, userId);
+
+      // -- Agent Factory (/apps) --
+      case 'list_apps': {
+        const apps = await get(AgentAppsService).list(orgId);
+        return { total: apps.length, apps: apps.map((a) => ({ slug: a.slug, name: a.name, authMode: a.authMode, isActive: a.isActive, agentIds: a.agentIds ?? [] })) };
+      }
+      case 'create_app': {
+        const app = await get(AgentAppsService).create(orgId, args);
+        return { slug: app.slug, name: app.name, authMode: app.authMode, agentIds: app.agentIds ?? [] };
+      }
+      case 'get_app': {
+        const app = await get(AgentAppsService).findOne(orgId, args.slug);
+        return { slug: app.slug, name: app.name, description: app.description, authMode: app.authMode, isActive: app.isActive, agentIds: app.agentIds ?? [], branding: app.branding, limits: app.limits, distributions: (app.distributions ?? []).map((d) => ({ target: d.target, status: d.status, gatewayId: d.gatewayId })) };
+      }
+      case 'check_app': return get(AgentAppsService).check(orgId, args.slug);
+      case 'update_app': {
+        const { slug, ...patch } = args;
+        const app = await get(AgentAppsService).update(orgId, slug, patch);
+        return { slug: app.slug, name: app.name, authMode: app.authMode, limits: app.limits };
+      }
+      case 'delete_app': {
+        await get(AgentAppsService).remove(orgId, args.slug);
+        return { deleted: true, slug: args.slug };
+      }
+      case 'add_distribution': {
+        const d = await get(AgentAppsService).addDistribution(orgId, args.slug, args.target, args.configuration ?? {}, args.gatewayId ?? null);
+        return { target: d.target, status: d.status, gatewayId: d.gatewayId };
+      }
+      case 'remove_distribution': {
+        await get(AgentAppsService).removeDistribution(orgId, args.slug, args.target);
+        return { removed: true, target: args.target };
+      }
+      case 'publish_distribution': {
+        const d = await get(AgentAppsService).publishDistribution(orgId, args.slug, args.target, userId);
+        return { target: d.target, status: d.status, gatewayId: d.gatewayId };
+      }
+      case 'unpublish_distribution': {
+        const d = await get(AgentAppsService).unpublishDistribution(orgId, args.slug, args.target, userId);
+        return { target: d.target, status: d.status };
+      }
+      case 'build_app': {
+        const { slug, ...dto } = args;
+        const build: any = await get(AppBuildsService).request(orgId, slug, dto, userId);
+        return { id: build.id, status: build.status, target: build.target, platform: build.platform, version: build.version };
+      }
+      case 'list_builds': {
+        const builds = await get(AppBuildsService).list(orgId, args.slug);
+        return { total: builds.length, builds: builds.map((b: any) => ({ id: b.id, target: b.target, platform: b.platform, version: b.version, status: b.status, signed: b.signed })) };
+      }
 
       // ── Memory (canonical) ─────────────────────────────────────
       case 'memory_put': {
