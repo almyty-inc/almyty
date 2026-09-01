@@ -143,13 +143,8 @@
       "path": "screenshots/apps-list.png"
     },
     {
-      "id": "apps-canvas",
-      "title": "App detail page with Slack, Terminal, and Web distribution cards",
-      "path": "screenshots/apps-canvas.png"
-    },
-    {
       "id": "apps-detail",
-      "title": "App detail page (alias of apps-canvas after the canvas was removed)",
+      "title": "App detail page with Slack, Terminal, and Web distribution cards",
       "path": "screenshots/apps-detail.png"
     },
     {
