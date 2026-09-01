@@ -83,9 +83,9 @@ describe('AppDetailPage', () => {
     expect(await screen.findByText('A product needs at least one agent.')).toBeInTheDocument()
   })
 
-  it('says it is ready to ship when nothing is blocking', async () => {
+  it('says it is ready to publish when nothing is blocking', async () => {
     render(<AppDetailPage />)
-    expect(await screen.findByText(/Ready to ship/)).toBeInTheDocument()
+    expect(await screen.findByText(/Ready to publish/)).toBeInTheDocument()
   })
 
   it('opens a dialog to edit a distribution, not a drawer', async () => {
@@ -101,15 +101,15 @@ describe('AppDetailPage', () => {
     )
   })
 
-  it('offers to ship somewhere from the header', async () => {
+  it('offers to add a distribution from the header', async () => {
     render(<AppDetailPage />)
-    expect(await screen.findAllByRole('button', { name: /Ship somewhere/ })).not.toHaveLength(0)
+    expect(await screen.findAllByRole('button', { name: /Add distribution/ })).not.toHaveLength(0)
   })
 
   it('invites a first distribution when there are none', async () => {
     ;(agentAppsApi.getById as any).mockResolvedValue(app({ distributions: [] }))
     render(<AppDetailPage />)
 
-    expect(await screen.findByText(/Not shipping anywhere yet/)).toBeInTheDocument()
+    expect(await screen.findByText(/No distributions yet/)).toBeInTheDocument()
   })
 })

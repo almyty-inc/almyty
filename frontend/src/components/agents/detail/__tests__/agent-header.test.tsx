@@ -17,6 +17,8 @@ const renderHeader = (overrides: Partial<React.ComponentProps<typeof AgentHeader
     onExportTechDoc: vi.fn(),
     onDuplicate: vi.fn(),
     onInvoke: vi.fn(),
+    onActivate: vi.fn(),
+    onDeactivate: vi.fn(),
   }
   renderWithProviders(<AgentHeader agent={agent} {...handlers} {...overrides} />)
   return handlers
@@ -48,5 +50,14 @@ describe('AgentHeader', () => {
 
     expect(handlers.onExport).toHaveBeenCalledTimes(1)
     expect(handlers.onExportTechDoc).not.toHaveBeenCalled()
+  })
+
+  it('offers Activate when the agent is not active, and fires onActivate', () => {
+    const handlers = renderHeader({ agent: { ...agent, status: 'draft' } as Agent })
+
+    fireEvent.click(screen.getByRole('button', { name: /^activate$/i }))
+
+    expect(handlers.onActivate).toHaveBeenCalledTimes(1)
+    expect(handlers.onDeactivate).not.toHaveBeenCalled()
   })
 })

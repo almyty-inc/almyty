@@ -55,7 +55,7 @@ export function AppAgentsPanel({ app, agents, onSaved }: AppAgentsPanelProps) {
     <div className="mt-6 space-y-4">
       {selected.length === 0 ? (
         <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-          No agents yet. An app with none has nothing for a user to talk to, so it cannot ship.
+          No agents yet. An app with none has nothing for a user to talk to, so it cannot be published.
         </p>
       ) : (
         <ol className="space-y-2">
@@ -123,9 +123,11 @@ export function AppAgentsPanel({ app, agents, onSaved }: AppAgentsPanelProps) {
         </Select>
       )}
 
-      <Button className="w-full" disabled={save.isPending} onClick={() => save.mutate()}>
-        {save.isPending ? 'Saving...' : 'Save agents'}
-      </Button>
+      <div className="flex justify-end">
+        <Button disabled={save.isPending} onClick={() => save.mutate()}>
+          {save.isPending ? 'Saving...' : 'Save'}
+        </Button>
+      </div>
     </div>
   )
 }

@@ -583,6 +583,19 @@ describe('AgentsService', () => {
       await expect(service.activateAgent('agent-1', 'org-1'))
         .rejects.toThrow(BadRequestException);
     });
+
+    it('activates an autonomous agent even with an empty pipeline', async () => {
+      const agent = makeAgent({
+        mode: 'autonomous' as any,
+        pipeline: { nodes: [], edges: [] },
+      });
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const result = await service.activateAgent('agent-1', 'org-1');
+
+      expect(result.status).toBe(AgentStatus.ACTIVE);
+    });
   });
 
   // ── deactivateAgent ───────────────────────────────────────────────────────
