@@ -195,7 +195,7 @@ Desktop builds download the pinned Electron release, so the host needs outbound 
 
 `GET /apps/:slug/distributions/:target/capabilities` answers both before anyone presses Build, and the panel disables the button when the host cannot compile and warns separately when it can compile but not sign. Those are different problems with different fixes, so they are said separately.
 
-![A terminal distribution refusing to build because Bun is absent from the staging build host](../docs-site/public/screenshots/apps-build-capabilities.png)
+![A Terminal app distribution that can build now that bun is on the host](../docs-site/public/screenshots/apps-build-capabilities.png)
 
 The API image should remain lean. The recommended production layout is a dedicated build worker image, with an eventual option to isolate each build in an ephemeral Kubernetes Job. The trade-offs, security boundary, and rollout are in [Builder image topology](./builder-image-topology.md).
 
