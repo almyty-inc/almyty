@@ -1,6 +1,11 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 
-import { slugFromHost, currentTenantSlug, isHostedChatHost } from '../tenant-host'
+import {
+  slugFromHost,
+  currentTenantSlug,
+  isHostedChatHost,
+  hostedChatBaseDomain,
+} from '../tenant-host'
 
 describe('slugFromHost', () => {
   const base = 'almyty.app'
@@ -75,3 +80,46 @@ describe('isHostedChatHost', () => {
   })
 })
 
+
+type RuntimeWindow = typeof window & {
+  __ALMYTY_RUNTIME__?: { hostedChatBaseDomain?: string }
+}
+
+describe('hostedChatBaseDomain (runtime k8s config)', () => {
+  afterEach(() => {
+    delete (window as RuntimeWindow).__ALMYTY_RUNTIME__
+  })
+
+  it('reads the domain the container injected at runtime', () => {
+    ;(window as RuntimeWindow).__ALMYTY_RUNTIME__ = {
+      hostedChatBaseDomain: 'staging.almyty.app',
+    }
+    expect(hostedChatBaseDomain()).toBe('staging.almyty.app')
+  })
+
+  it('normalises case and whitespace on the runtime value', () => {
+    ;(window as RuntimeWindow).__ALMYTY_RUNTIME__ = {
+      hostedChatBaseDomain: '  Staging.Almyty.App ',
+    }
+    expect(hostedChatBaseDomain()).toBe('staging.almyty.app')
+  })
+
+  it('falls back to the default when the runtime value is empty', () => {
+    ;(window as RuntimeWindow).__ALMYTY_RUNTIME__ = { hostedChatBaseDomain: '' }
+    expect(hostedChatBaseDomain()).toBe('almyty.app')
+  })
+
+  it('falls back to the default when no runtime config is present', () => {
+    expect(hostedChatBaseDomain()).toBe('almyty.app')
+  })
+
+  it('drives slugFromHost, so a config change moves the tenant boundary', () => {
+    // This is the whole point of runtime config: change the k8s value and
+    // the tenant host boundary follows, no image rebuild.
+    ;(window as RuntimeWindow).__ALMYTY_RUNTIME__ = {
+      hostedChatBaseDomain: 'staging.almyty.app',
+    }
+    expect(slugFromHost('acme.staging.almyty.app')).toBe('acme')
+    expect(slugFromHost('acme.almyty.app')).toBeNull()
+  })
+})
