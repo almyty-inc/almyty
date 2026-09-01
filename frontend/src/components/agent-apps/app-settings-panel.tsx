@@ -266,9 +266,11 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
         </div>
       </section>
 
-      <Button className="w-full" disabled={save.isPending} onClick={() => save.mutate()}>
-        {save.isPending ? 'Saving...' : 'Save app'}
-      </Button>
+      <div className="flex justify-end">
+        <Button disabled={save.isPending} onClick={() => save.mutate()}>
+          {save.isPending ? 'Saving...' : 'Save'}
+        </Button>
+      </div>
     </div>
   )
 }

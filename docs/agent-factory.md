@@ -27,9 +27,13 @@ That is the part nobody else ships, so it is the part this subsystem is built ar
 
 The separation is load-bearing. One agent appears in an internal app and a customer-facing one at the same time, under different names, different auth and different limits, without being duplicated.
 
-The canvas makes that relationship explicit: agents feed one product, and the product fans out to each distribution independently.
+An app is a normal detail page: a header, three tabs (Distributions, Agents, Settings), and a card per place the product ships. Each card carries a ProtocolBadge for the medium and a status badge (Live, Building, Draft). Clicking a card opens a centered dialog, not a canvas, not a drawer.
 
-![An app canvas connecting one agent to web, terminal, and Slack distributions](../docs-site/public/screenshots/apps-canvas.png)
+![An app detail page with Slack, Terminal, and Web distributions as cards](../docs-site/public/screenshots/apps-canvas.png)
+
+A product with no distributions yet shows an EmptyState on the Distributions tab, with the same Add distribution action as the header.
+
+![Empty app detail: no distributions yet](../docs-site/public/screenshots/apps-empty.png)
 
 Entities: `agent-app.entity.ts`, `agent-app-distribution.entity.ts`, `app-build.entity.ts`.
 
@@ -46,15 +50,21 @@ POST /apps/:slug/distributions/:target/publish
 POST /apps/:slug/distributions/:target/unpublish
 ```
 
-For every target except the three that compile to a file, publishing stands up a gateway of the matching type (`distribution-publish.ts` holds that mapping as one readable table) at `/apps/:slug/:target` — unique per organization, so it cannot collide with a hand-made gateway or with the same product's other surfaces.
+For every target except the three that compile to a file, publishing stands up a gateway of the matching type (`distribution-publish.ts` holds that mapping as one readable table) at `/apps/:slug/:target`, unique per organization, so it cannot collide with a hand-made gateway or with the same product's other surfaces.
 
 The surface is created with the product's own branding and the product's own rate limits. Publishing with the limits dropped would make the check that allowed it theatre.
 
-**Which agent answers** is per surface. A product can carry several, and the entity documents the first as the default — a fine default and a bad silent decision, because a support product with a triage agent and a billing agent should be able to put the billing one on the billing channel. A distribution may name its own in `configuration.agentId` and falls back to the default when it does not. Naming one that has since been removed from the product is refused rather than published, so a surface never answers with something the operator believes is no longer involved.
+**Which agent answers** is per surface. A product can carry several, and the entity documents the first as the default: a fine default and a bad silent decision, because a support product with a triage agent and a billing agent should be able to put the billing one on the billing channel. A distribution may name its own in `configuration.agentId` and falls back to the default when it does not. Naming one that has since been removed from the product is refused rather than published, so a surface never answers with something the operator believes is no longer involved.
 
 Publishing is idempotent: doing it twice re-syncs the existing gateway rather than failing on the unique endpoint, because the second attempt is usually someone reapplying a settings change.
 
 Publishing refuses two things that would otherwise produce a surface that is live and useless. A platform whose credentials are absent (`REQUIRED_CREDENTIALS`, read off what each adapter actually uses, never invented) and a workflow agent behind a chat surface, which the runtime turns away at the first message with "not in autonomous mode".
+
+Channel distributions take those credentials on the distribution itself (Bot token and Signing secret for Slack) rather than sending the operator to Gateways. Publishing with them filled goes live.
+
+![Slack distribution dialog with platform credential fields](../docs-site/public/screenshots/apps-slack-credentials.png)
+
+![Slack published and live, with Unpublish instead of a silent fail](../docs-site/public/screenshots/apps-slack-live.png)
 
 For the hosted chat, publish writes the `hostedChat` block it is looked up by. Without it a published web app is a gateway `findBySlug` cannot see, which is what happened before.
 
@@ -70,15 +80,19 @@ Unpublishing **deactivates** the gateway rather than deleting it. Republishing k
 
 `agent-app.rules.ts` returns the unmet rules continuously while someone is still editing, rather than letting them discover the list when a publish is rejected. The rules that matter:
 
-- `PUBLIC_NEEDS_COST_CAP` — anyone with the link or the binary can spend against the customer's model keys.
-- `PUBLIC_NEEDS_RATE_LIMIT` — one user must not be able to exhaust it for everyone else.
-- `LOCAL_ACCESS_ON_PUBLIC` — a downloadable artifact that touches the machine it lands on cannot also be open to anyone.
+- `PUBLIC_NEEDS_COST_CAP`: anyone with the link or the binary can spend against the customer's model keys.
+- `PUBLIC_NEEDS_RATE_LIMIT`: one user must not be able to exhaust it for everyone else.
+- `LOCAL_ACCESS_ON_PUBLIC`: a downloadable artifact that touches the machine it lands on cannot also be open to anyone.
 
 An unset auth mode reads as open, not as unset. The permissive reading of missing configuration is the one that gets someone billed.
 
 The first two are satisfied from the app's own `limits` column: a cost ceiling per run in cents, and per-user and per-IP request ceilings. Cents rather than currency because a ceiling in floating point is a rounding argument later; per-IP separately from per-user because a hosted chat visitor has no account.
 
-A limit left empty is stored as null, not as zero. Zero would read as "no requests allowed" rather than "unset", and the rules treat both as unprotected — but only one of them is what the operator meant.
+Those inputs live on the Settings tab, next to branding and who may use the product.
+
+![App Settings tab with cost ceiling and per-user / per-IP rate limits](../docs-site/public/screenshots/apps-settings.png)
+
+A limit left empty is stored as null, not as zero. Zero would read as "no requests allowed" rather than "unset", and the rules treat both as unprotected, but only one of them is what the operator meant.
 
 ## Builds
 
@@ -91,7 +105,7 @@ GET  /apps/:slug/builds/:id/download    a link
 GET  /apps/:slug/builds/:id/artifact    the bytes
 ```
 
-Everything knowable up front is checked before queueing rather than inside the job — an unknown platform, a target that produces no file, a missing toolchain. Finding out twenty minutes into a queued job is worse than being told at once.
+Everything knowable up front is checked before queueing rather than inside the job: an unknown platform, a target that produces no file, a missing toolchain. Finding out twenty minutes into a queued job is worse than being told at once.
 
 ### Targets and platforms
 
@@ -100,7 +114,7 @@ Everything knowable up front is checked before queueing rather than inside the j
 | `tui`, `binary` | `bun build --compile` | bare executable | `.exe` | bare executable |
 | `desktop` | `electron-builder` | `.AppImage` | NSIS `.exe` | `.app` in a `.zip` |
 
-`binary` compiles to byte-identical output to `tui` — same entry point, same invocation — so it is no longer offered when adding a distribution. The target still works and existing distributions still build; there is simply no reason to ask someone to choose between two names for one thing.
+`binary` compiles to byte-identical output to `tui` (same entry point, same invocation), so it is no longer offered when adding a distribution. The target still works and existing distributions still build; there is simply no reason to ask someone to choose between two names for one thing.
 
 Everything cross-compiles. A Linux x64 ELF and a macOS arm64 Mach-O both build on a macOS host, and vice versa. The one exception is a macOS `.dmg`, which needs Apple tooling; the desktop target ships a zipped `.app` instead, which any Mac opens.
 
@@ -120,11 +134,11 @@ None of it ever fails a build. A default icon is worse than a branded one and fa
 
 It renders remote content under someone else's name, so it is locked down to match: no Node in the renderer, `contextIsolation` on, permission requests refused outright, and navigation confined to the app's own origin.
 
-That last check compares **origins**, not prefixes — `https://acme.almyty.app.attacker.test` passes a `startsWith` test — and treats a scheme with no host as no origin at all. `data:`, `file:` and `javascript:` URLs all report the origin string `"null"`, so an equality check alone would count them as each other, and as a build that has no address.
+That last check compares **origins**, not prefixes. `https://acme.almyty.app.attacker.test` passes a `startsWith` test. It treats a scheme with no host as no origin at all. `data:`, `file:` and `javascript:` URLs all report the origin string `"null"`, so an equality check alone would count them as each other, and as a build that has no address.
 
 The address comes from `hostedChatUrl`, the same function the hosted surface uses. A second setting would drift from it.
 
-`primaryColor` paints the window before the page loads, so a launch shows the customer's brand rather than flashing white, and tints the title bar where the platform supports it. The value is validated as a hex colour rather than passed through — it arrives from a form field and reaches the OS — and the symbol colour is chosen by Rec. 601 luma, whose green weight is what makes pure green read as light and pure blue as dark.
+`primaryColor` paints the window before the page loads, so a launch shows the customer's brand rather than flashing white, and tints the title bar where the platform supports it. The value is validated as a hex colour rather than passed through (it arrives from a form field and reaches the OS), and the symbol colour is chosen by Rec. 601 luma, whose green weight is what makes pure green read as light and pure blue as dark.
 
 ## Signing
 
@@ -151,16 +165,16 @@ Rules the code holds to:
 - `certificate`, `privateKey` and `certificatePassword` are in `Credential.SENSITIVE_FIELDS`, so they are encrypted at rest like any other secret. Whoever holds a signing certificate can publish software as the customer; it is no less sensitive than a password.
 - Written `0o600` for the length of one build, and removed **before** the scratch directory is, so a failure to clean up the directory does not leave a private key behind.
 - The Apple password goes via `--p12-password-file`. An argument list is readable through `ps` by every process on the host, and a build host runs other tenants' builds.
-- The tool's own output goes to the build log, which stays server side. What reaches the operator is one sentence with absolute paths removed — a build panel is a web page, and the raw output names the path the certificate was written to.
+- The tool's own output goes to the build log, which stays server side. What reaches the operator is one sentence with absolute paths removed, because a build panel is a web page and the raw output names the path the certificate was written to.
 - On macOS, `--binary-identifier` is set from the distribution's bundle id. A bare executable has no `Info.plist`, so without it every customer's binary identifies as whatever the compiler called it.
 
 ## Downloads
 
 `StorageService.canPresign` decides the shape. S3 presigns and keeps the bytes off the API. Anything else streams through `GET /apps/:slug/builds/:buildId/artifact`, under the same ownership and expiry checks as the link.
 
-The link is minted per request and short lived rather than stored, so a URL that ends up in a chat log or a ticket stops working. The artifact expires on its own schedule (`ARTIFACT_TTL_DAYS`), and an hourly repeatable job clears the bytes once it has — the expiry was enforced on download and nowhere else, so links stopped working on time while storage grew for ever. Override the cadence with `APP_ARTIFACT_SWEEP_CRON`.
+The link is minted per request and short lived rather than stored, so a URL that ends up in a chat log or a ticket stops working. The artifact expires on its own schedule (`ARTIFACT_TTL_DAYS`), and an hourly repeatable job clears the bytes once it has. The expiry was enforced on download and nowhere else, so links stopped working on time while storage grew for ever. Override the cadence with `APP_ARTIFACT_SWEEP_CRON`.
 
-The filename is the product, the version and the platform — that name lands in someone's Downloads folder next to everything else they have ever downloaded, and a row id tells them nothing.
+The filename is the product, the version and the platform. That name lands in someone's Downloads folder next to everything else they have ever downloaded, and a row id tells them nothing.
 
 ### Who a run belongs to
 
@@ -181,19 +195,19 @@ Desktop builds download the pinned Electron release, so the host needs outbound 
 
 `GET /apps/:slug/distributions/:target/capabilities` answers both before anyone presses Build, and the panel disables the button when the host cannot compile and warns separately when it can compile but not sign. Those are different problems with different fixes, so they are said separately.
 
-![A terminal distribution refusing to build because Bun is absent from the staging build host](../docs-site/public/screenshots/apps-build-capabilities.png)
+![A Terminal app distribution that can build now that bun is on the host](../docs-site/public/screenshots/apps-build-capabilities.png)
 
 The API image should remain lean. The recommended production layout is a dedicated build worker image, with an eventual option to isolate each build in an ephemeral Kubernetes Job. The trade-offs, security boundary, and rollout are in [Builder image topology](./builder-image-topology.md).
 
 Two settings point at what the build packages, both falling back to the monorepo layout:
 
-- `APP_BUILD_CLIENT_ENTRY` — the built terminal client.
-- `APP_BUILD_DESKTOP_SHELL` — the Electron shell directory.
+- `APP_BUILD_CLIENT_ENTRY`: the built terminal client. The API image installs `@almyty/chat` at `/opt/almyty` and points this at it.
+- `APP_BUILD_DESKTOP_SHELL`: the Electron shell directory.
 
 ### A build is not interactive
 
 `ProcessToolchainRunner` gives every tool `stdio: ['ignore', 'pipe', 'pipe']` and an environment containing only `PATH` and `HOME`.
 
-The stdin part is not incidental. A pipe nobody writes to reads to OpenSSL as a console it can prompt on, so `osslsigncode` ignored the password it was handed and asked for one instead — which fails looking exactly like a bad certificate. The same command worked from a shell, which is what made it hard to see.
+The stdin part is not incidental. A pipe nobody writes to reads to OpenSSL as a console it can prompt on, so `osslsigncode` ignored the password it was handed and asked for one instead, which fails looking exactly like a bad certificate. The same command worked from a shell, which is what made it hard to see.
 
 Nothing shells out to a string built from customer input either. A build takes a product name and a bundle identifier from a form, and those reach a process boundary.

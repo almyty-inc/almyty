@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowLeft, Check, Package, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, ChevronRight, Package, Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -38,7 +38,7 @@ const STATUS: Record<DistributionStatus, { label: string; variant: 'success' | '
   live: { label: 'Live', variant: 'success' },
   built: { label: 'Built', variant: 'secondary' },
   building: { label: 'Building', variant: 'warning' },
-  draft: { label: 'Not shipped yet', variant: 'outline' },
+  draft: { label: 'Draft', variant: 'outline' },
   failed: { label: 'Build failed', variant: 'destructive' },
 }
 
@@ -94,7 +94,7 @@ export function AppDetailPage() {
   const removeDistribution = useMutation({
     mutationFn: (target: DistributionTarget) => agentAppsApi.removeDistribution(slug, target),
     onSuccess: () => {
-      success('Stopped shipping', 'That distribution has been removed.')
+      success('Distribution removed', 'It is no longer on this app.')
       setEditing(null)
       invalidate()
     },
@@ -120,36 +120,44 @@ export function AppDetailPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header — matches the other detail pages: back link, name, slug,
-          and the page's primary action on the right. */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <Link
-            to="/apps"
-            className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            Apps
-          </Link>
-          <h1 className="truncate font-heading text-2xl font-extrabold tracking-tight sm:text-4xl">
-            {app.branding?.appName || app.name}
-          </h1>
-          <code className="text-xs text-muted-foreground">{app.slug}</code>
+      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+        <Link to="/apps" className="hover:text-foreground">
+          Apps
+        </Link>
+        <ChevronRight className="h-3 w-3" />
+        <span className="text-foreground">{app.branding?.appName || app.name}</span>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-y-3">
+        <div className="flex min-w-0 items-center space-x-4">
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/apps" aria-label="Back to apps">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div className="flex min-w-0 items-center space-x-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <Package className="h-6 w-6 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="truncate font-heading text-2xl font-extrabold tracking-tight sm:text-4xl">
+                {app.branding?.appName || app.name}
+              </h1>
+              <code className="text-xs text-muted-foreground">{app.slug}</code>
+            </div>
+          </div>
         </div>
         <Button onClick={() => setAddOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Ship somewhere
+          Add distribution
         </Button>
       </div>
 
-      {/* What is stopping it from shipping, if anything — the same
-          continuously-updated list, but as a banner rather than tucked
-          inside a node. */}
       {refusals.length > 0 ? (
         <Card className="border-amber-400 p-4">
           <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-300">
             <AlertTriangle className="h-4 w-4" />
-            Not ready to ship yet
+            Can't publish yet
           </div>
           <ul className="mt-2 space-y-1.5">
             {refusals.map((r) => (
@@ -162,7 +170,7 @@ export function AppDetailPage() {
       ) : (
         <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
           <Check className="h-4 w-4" />
-          Ready to ship
+          Ready to publish
         </p>
       )}
 
@@ -175,18 +183,16 @@ export function AppDetailPage() {
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
-        {/* Distributions — cards, one per place the product ships, edited
-            through a dialog like every other create/edit surface. */}
         <TabsContent value="distributions" className="space-y-4">
           {distributions.length === 0 ? (
             <EmptyState
               icon={Package}
-              title="Not shipping anywhere yet"
-              description="Ship this product to a web app, a terminal, a desktop app, or a messaging platform your users already use."
+              title="No distributions yet"
+              description="Publish this app as a web app, a terminal, a desktop app, or a messaging channel."
               action={
                 <Button onClick={() => setAddOpen(true)}>
                   <Plus className="mr-2 h-4 w-4" />
-                  Ship somewhere
+                  Add distribution
                 </Button>
               }
             />
@@ -216,8 +222,6 @@ export function AppDetailPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Editing a distribution — a centered dialog, the same pattern as
-          every other edit in the product. */}
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
           {openDistribution && (
@@ -225,7 +229,7 @@ export function AppDetailPage() {
               <DialogHeader>
                 <DialogTitle>{DISTRIBUTION_LABELS[openDistribution.target]}</DialogTitle>
                 <DialogDescription>
-                  How this app ships to {DISTRIBUTION_LABELS[openDistribution.target]}.
+                  Configure the {DISTRIBUTION_LABELS[openDistribution.target]} distribution.
                 </DialogDescription>
               </DialogHeader>
               <DistributionPanel
@@ -241,7 +245,7 @@ export function AppDetailPage() {
                 onClick={() => removeDistribution.mutate(openDistribution.target)}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                Stop shipping to {DISTRIBUTION_LABELS[openDistribution.target]}
+                Remove
               </Button>
             </>
           )}
