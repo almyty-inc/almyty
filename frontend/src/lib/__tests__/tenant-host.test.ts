@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { slugFromHost, currentTenantSlug } from '../tenant-host'
+import { slugFromHost, currentTenantSlug, isHostedChatHost } from '../tenant-host'
 
 describe('slugFromHost', () => {
   const base = 'almyty.app'
@@ -62,3 +62,16 @@ describe('currentTenantSlug', () => {
     expect(currentTenantSlug(location)).toBeNull()
   })
 })
+
+describe('isHostedChatHost', () => {
+  it('is true on a tenant subdomain', () => {
+    const location = { hostname: 'acme.almyty.app', search: '' } as Location
+    expect(isHostedChatHost(location)).toBe(true)
+  })
+
+  it('is false on the dashboard host', () => {
+    const location = { hostname: 'app.almyty.com', search: '' } as Location
+    expect(isHostedChatHost(location)).toBe(false)
+  })
+})
+

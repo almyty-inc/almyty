@@ -1,4 +1,5 @@
 import axios, { AxiosResponse, AxiosError } from 'axios'
+import { isHostedChatHost } from '@/lib/tenant-host'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -191,9 +192,10 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !isRedirectingToLogin) {
       const path = typeof window !== 'undefined' ? window.location.pathname : ''
       const isOnAuthPage = path.startsWith('/auth/') || path === '/cli-login'
-      if (isOnAuthPage) {
-        // Already on an unauthenticated page — surface the 401 to the
-        // caller and stop. No redirect, no logout call, no reload.
+      const isTenantHost = typeof window !== 'undefined' && isHostedChatHost()
+      if (isOnAuthPage || isTenantHost) {
+        // Auth pages and hosted-chat tenant hosts: surface the 401.
+        // A tenant host must never bounce to dashboard /auth/login.
         return Promise.reject(error)
       }
       isRedirectingToLogin = true
