@@ -193,9 +193,45 @@ describe('checkDistribution', () => {
   });
 
   it('does not ask a web or terminal distribution for a bundle id', () => {
-    for (const target of [DistributionTarget.WEB, DistributionTarget.TUI, DistributionTarget.SLACK]) {
+    // Slack is excluded here: it needs credentials, which is a separate
+    // check below.
+    for (const target of [DistributionTarget.WEB, DistributionTarget.TUI]) {
       expect(checkDistribution(target, app(), null, SAFE_OPEN).ok).toBe(true);
     }
+  });
+
+  it('is not ready to ship a channel whose credentials are empty', () => {
+    // The panel calls this. It used to say "ready" with empty fields and
+    // then publish refused — the same answer had to come from both.
+    const result = checkDistribution(DistributionTarget.SLACK, app(), null, SAFE_OPEN);
+    expect(result.ok).toBe(false);
+    expect(codes(result)).toContain('MISSING_CREDENTIALS');
+  });
+
+  it('is ready once the channel credentials are present', () => {
+    const result = checkDistribution(
+      DistributionTarget.SLACK,
+      app(),
+      { bot_token: 'xoxb-1', signing_secret: 's3cret' },
+      SAFE_OPEN,
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('names exactly what a channel is still missing', () => {
+    const result = checkDistribution(
+      DistributionTarget.SLACK,
+      app(),
+      { bot_token: 'xoxb-1' },
+      SAFE_OPEN,
+    );
+    expect(result.refusals.find((r) => r.code === 'MISSING_CREDENTIALS')?.message).toContain(
+      'signing_secret',
+    );
+  });
+
+  it('asks nothing of a web distribution, which we host', () => {
+    expect(checkDistribution(DistributionTarget.WEB, app(), null, SAFE_OPEN).ok).toBe(true);
   });
 });
 

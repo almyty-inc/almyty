@@ -108,6 +108,19 @@ export class ProcessToolchainRunner implements ToolchainRunner {
   }
 }
 
+/** How a target reads to a person, rather than the enum value. */
+export const TARGET_LABEL: Record<string, string> = {
+  tui: 'Terminal app',
+  binary: 'Standalone binary',
+  desktop: 'Desktop app',
+  web: 'Web app',
+};
+
+/** The human name for a target, falling back to the raw value. */
+export function targetLabel(target: string): string {
+  return TARGET_LABEL[target] ?? target;
+}
+
 /** Which tool produces which target. */
 export const TOOL_FOR_TARGET: Record<string, string> = {
   tui: 'bun',
@@ -139,7 +152,11 @@ export async function toolchainReadiness(
 ): Promise<{ ready: boolean; missing: string[]; reason: string | null }> {
   const tool = TOOL_FOR_TARGET[target];
   if (!tool) {
-    return { ready: false, missing: [], reason: `${target} does not produce a downloadable file.` };
+    return {
+      ready: false,
+      missing: [],
+      reason: `${targetLabel(target)} does not produce a downloadable file.`,
+    };
   }
 
   const present = await runner.available(tool);
@@ -147,7 +164,7 @@ export async function toolchainReadiness(
     return {
       ready: false,
       missing: [tool],
-      reason: `This deployment cannot build ${target} because ${tool} is not installed on the build host.`,
+      reason: `This deployment cannot build the ${targetLabel(target)} because ${tool} is not installed on the build host.`,
     };
   }
   return { ready: true, missing: [], reason: null };

@@ -23,7 +23,8 @@ import {
 } from './build-targets';
 import { signingReadiness } from './build-signing';
 import { downloadedFilename } from './build-handoff';
-import { ProcessToolchainRunner, toolchainReadiness } from './build-toolchain';
+import { buildsRunOnWorker } from './build-mode';
+import { ProcessToolchainRunner, TOOL_FOR_TARGET, toolchainReadiness } from './build-toolchain';
 
 export const APP_BUILD_QUEUE = 'app-build';
 
@@ -160,8 +161,6 @@ export class AppBuildsService {
     buildReason: string | null;
     signing: Array<{ kind: SigningKind; ready: boolean; reason: string | null }>;
   }> {
-    const build = await toolchainReadiness(target, this.toolchain);
-
     // One answer per signing kind the target's platforms use, rather
     // than per platform, since the tool is what is present or absent.
     const kinds = [
@@ -172,6 +171,21 @@ export class AppBuildsService {
       ),
     ];
 
+    // When builds run on a dedicated worker, this API pod has no
+    // toolchain of its own to probe — the worker image carries the full
+    // set (bun, npx, rcodesign, osslsigncode), so report that rather
+    // than the API pod's empty result, which would wrongly say nothing
+    // can be built or signed.
+    if (buildsRunOnWorker()) {
+      const known = target in TOOL_FOR_TARGET;
+      return {
+        canBuild: known,
+        buildReason: known ? null : `${target} does not produce a downloadable file.`,
+        signing: kinds.map((kind) => ({ kind, ready: true, reason: null })),
+      };
+    }
+
+    const build = await toolchainReadiness(target, this.toolchain);
     const signing = await Promise.all(
       kinds.map(async (kind) => {
         const readiness = await signingReadiness(kind, this.toolchain);
