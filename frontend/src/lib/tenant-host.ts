@@ -68,3 +68,8 @@ export function devSlugOverride(search: string): string | null {
 export function currentTenantSlug(location: Location = window.location): string | null {
   return devSlugOverride(location.search) ?? slugFromHost(location.hostname)
 }
+
+/** True on {slug}.almyty.app (or a configured base), where the dashboard must not run. */
+export function isHostedChatHost(location: Location = window.location): boolean {
+  return currentTenantSlug(location) !== null
+}

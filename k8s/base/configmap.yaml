@@ -47,3 +47,8 @@ data:
 
   # Base URL (used by MCP discovery, CLI exports, protocol endpoints)
   BASE_URL: "https://api.almyty.com"
+
+  # Hosted chat tenant hosts hang off this domain: {slug}.<base>.
+  # Staging overlays must set staging.almyty.app so published URLs
+  # do not hit production.
+  HOSTED_CHAT_BASE_DOMAIN: "almyty.app"
